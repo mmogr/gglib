@@ -1,0 +1,128 @@
+//! Web server startup and configuration.
+//!
+//! This module handles the initialization and startup of the Axum web server,
+//! including static file serving and graceful shutdown.
+
+use crate::commands::gui_web::{routes, state::AppState};
+use crate::services::gui_backend::GuiBackend;
+use anyhow::Result;
+use axum::Router;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tower_http::services::ServeDir;
+
+/// Static HTML content embedded in the binary
+const INDEX_HTML: &str = include_str!("../../../index.html");
+
+/// Start the web server
+///
+/// # Arguments
+///
+/// * `port` - Port number to listen on
+/// * `base_port` - Base port for llama-server instances
+/// * `max_concurrent` - Maximum concurrent model servers
+///
+/// # Returns
+///
+/// Returns `Result<()>` indicating success or failure
+pub async fn start_web_server(port: u16, base_port: u16, max_concurrent: usize) -> Result<()> {
+    println!("🚀 Starting GGLib Web Server...");
+
+    // Initialize the shared backend
+    let backend = Arc::new(GuiBackend::new(base_port, max_concurrent).await?);
+    println!("✓ Backend initialized (database + process manager)");
+
+    // Create application state
+    let state = Arc::new(AppState::new(backend.clone()));
+
+    // Build the application router
+    let app = build_router(state);
+
+    // Create socket address
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+
+    println!("\n╔════════════════════════════════════════════════════════╗");
+    println!("║  GGLib Web Server Running                              ║");
+    println!("╠════════════════════════════════════════════════════════╣");
+    println!(
+        "║  Local:    http://localhost:{}                      ║",
+        port
+    );
+    println!(
+        "║  Network:  http://0.0.0.0:{}                        ║",
+        port
+    );
+    println!("╠════════════════════════════════════════════════════════╣");
+    println!(
+        "║  Model servers will use ports: {}-{}            ║",
+        base_port,
+        base_port + max_concurrent as u16
+    );
+    println!("╚════════════════════════════════════════════════════════╝\n");
+    println!("Press Ctrl+C to stop the server\n");
+
+    // Start the server with graceful shutdown
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(backend))
+        .await?;
+
+    Ok(())
+}
+
+/// Build the complete application router
+fn build_router(state: Arc<AppState>) -> Router {
+    // Try to serve static files from filesystem first (for development)
+    let serve_dir = ServeDir::new("web_ui");
+
+    Router::new()
+        // API routes
+        .merge(routes::api_routes(state))
+        // Static file serving
+        .nest_service("/", serve_dir)
+        // Fallback to embedded HTML for production
+        .fallback(serve_embedded_html)
+}
+
+/// Serve embedded HTML as fallback
+async fn serve_embedded_html() -> axum::response::Html<&'static str> {
+    axum::response::Html(INDEX_HTML)
+}
+
+/// Handle graceful shutdown signal
+async fn shutdown_signal(backend: Arc<GuiBackend>) {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {
+            println!("\n\n🛑 Shutting down gracefully...");
+        },
+        _ = terminate => {
+            println!("\n\n🛑 Received terminate signal, shutting down...");
+        },
+    }
+
+    // Stop all running servers
+    println!("⏹️  Stopping all model servers...");
+    if let Err(e) = backend.process_manager().stop_all().await {
+        eprintln!("⚠️  Error stopping servers: {}", e);
+    } else {
+        println!("✓ All servers stopped");
+    }
+}

@@ -1,0 +1,67 @@
+/* Header Component */
+
+.headerContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.headerLeft {
+  display: flex;
+  flex-direction: column;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+.headerButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: 0 calc(var(--spacing-lg) + var(--spacing-xs));
+  height: var(--button-height-base);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-elevated);
+  color: inherit;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--transition-all);
+}
+
+.headerButton:hover {
+  border-color: var(--color-border-hover);
+  background: var(--color-background-hover);
+}
+
+.headerButtonActive {
+  border-color: var(--color-primary);
+  color: var(--color-primary-light);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+}
+
+.headerButtonIconOnly {
+  width: var(--button-height-base);
+  padding: 0;
+}
+
+.statusDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-border);
+  box-shadow: 0 0 0 1px var(--color-background);
+  transition: var(--transition-all);
+}
+
+.statusDotActive {
+  background: var(--color-online);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+}

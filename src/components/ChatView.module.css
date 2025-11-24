@@ -1,0 +1,786 @@
+/* Polished chat UI layout */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 4, 10, 0.85);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.modal {
+  width: min(1200px, 96vw);
+  height: min(820px, 92vh);
+  border-radius: 24px;
+  overflow: hidden;
+  background: radial-gradient(circle at top, rgba(47, 63, 255, 0.08), transparent),
+    var(--color-background);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.shell {
+  display: flex;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+  min-height: 0;
+  position: relative;
+}
+
+.sidebar {
+  width: 300px;
+  padding: 24px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(6, 10, 22, 0.85);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebarHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.sidebarLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+}
+
+.sidebarTitle {
+  font-size: 20px;
+  margin: 4px 0 0;
+  color: white;
+}
+
+.sidebarSearch input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  color: white;
+  font-size: 14px;
+  transition: border 0.2s ease;
+}
+
+.sidebarSearch input:focus {
+  outline: none;
+  border-color: rgba(111, 136, 255, 0.8);
+}
+
+.sidebarList {
+  margin-top: 16px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.conversationItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border 0.2s ease, background 0.2s ease;
+}
+
+.conversationItem:hover {
+  border-color: rgba(111, 136, 255, 0.9);
+}
+
+.conversationItemActive {
+  background: linear-gradient(120deg, rgba(111, 136, 255, 0.25), rgba(66, 193, 247, 0.2));
+  border-color: rgba(111, 136, 255, 0.9);
+}
+
+.conversationTitle {
+  margin: 0;
+  font-weight: 600;
+  color: white;
+}
+
+.conversationTimestamp {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.conversationDelete {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  transition: background 0.2s ease;
+}
+
+.conversationDelete:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.emptyState {
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  margin-top: auto;
+}
+
+.chatPane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 16px;
+  min-height: 0;
+}
+
+.chatHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.promptCard {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.promptCardHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.promptLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0 0 4px;
+}
+
+.promptPreview {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.promptActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.promptButton {
+  border-radius: 12px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border 0.2s ease, background 0.2s ease;
+}
+
+.promptButton:hover:not(:disabled) {
+  border-color: rgba(111, 136, 255, 0.8);
+  background: rgba(111, 136, 255, 0.2);
+}
+
+.promptButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.promptPrimary {
+  border-color: rgba(111, 136, 255, 0.8);
+  background: linear-gradient(120deg, #7088ff, #42c1f7);
+}
+
+.promptTextarea {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(5, 8, 18, 0.85);
+  color: white;
+  padding: 12px 14px;
+  font-size: 15px;
+  resize: vertical;
+  min-height: 140px;
+}
+
+.promptTextarea:focus {
+  outline: none;
+  border-color: rgba(111, 136, 255, 0.8);
+}
+
+.promptEditorActions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.promptEditorActionGroup {
+  display: flex;
+  gap: 10px;
+}
+
+.promptResetButton {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.promptResetButton:hover {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.promptEditingBadge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+.chatTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chatTitle {
+  margin: 0;
+  font-size: 24px;
+  color: white;
+}
+
+.titleInput {
+  font-size: 24px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.4);
+  color: white;
+  outline: none;
+}
+
+.statusBadge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+.statusBadgeActive {
+  background: rgba(111, 136, 255, 0.2);
+  color: #9cb9ff;
+}
+
+.chatHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modelSelectorGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+}
+
+.modelSelectorGroup select {
+  min-width: 180px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.serverInfo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(111, 136, 255, 0.12);
+  border: 1px solid rgba(111, 136, 255, 0.3);
+}
+
+.serverLabel {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.serverName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #b8caff;
+}
+
+.serverPort {
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.iconButton {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border 0.2s ease, background 0.2s ease;
+}
+
+.iconButton:hover {
+  border-color: rgba(111, 136, 255, 0.7);
+  background: rgba(111, 136, 255, 0.15);
+}
+
+.errorBanner {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255, 86, 86, 0.15);
+  border: 1px solid rgba(255, 86, 86, 0.4);
+  color: #ff9a9a;
+  font-size: 14px;
+}
+
+.noServersBanner {
+  padding: 20px 24px;
+  border-radius: 16px;
+  background: rgba(111, 136, 255, 0.12);
+  border: 1px solid rgba(111, 136, 255, 0.3);
+  color: #b8caff;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.noServersBanner p {
+  margin: 0 0 8px;
+}
+
+.noServersBanner code {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #9cb9ff;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.chatSurface {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background: rgba(10, 14, 28, 0.85);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0; /* Critical for flex children to respect parent height */
+}
+
+.threadRoot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.viewport {
+  flex: 1;
+  padding: 28px 32px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0; /* Allow scrolling within flex container */
+}
+
+.scrollButton {
+  position: sticky;
+  bottom: 24px;
+  align-self: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  cursor: pointer;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.scrollButton:disabled {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.suggestionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 24px;
+  flex-shrink: 0; /* Don't let this grow and push composer down */
+}
+
+.suggestionRow :global(button) {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: border 0.2s ease, background 0.2s ease;
+}
+
+.suggestionRow :global(button:hover) {
+  border-color: rgba(111, 136, 255, 0.9);
+  background: rgba(111, 136, 255, 0.15);
+}
+
+.composerShell {
+  padding: 20px 24px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(3, 6, 14, 0.85);
+  flex-shrink: 0;
+}
+
+.typingIndicator {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 6px;
+}
+
+.composerRoot {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.composerInput {
+  flex: 1;
+  min-height: 54px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  color: white;
+  padding: 14px 16px;
+  resize: none;
+}
+
+.composerInput:focus {
+  outline: none;
+  border-color: rgba(111, 136, 255, 0.7);
+}
+
+.composerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stopButton {
+  border: 1px solid rgba(255, 120, 120, 0.4);
+  border-radius: 14px;
+  padding: 12px 18px;
+  background: rgba(255, 87, 87, 0.15);
+  color: #ffb3b3;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border 0.2s ease, background 0.2s ease;
+}
+
+.stopButton:hover {
+  border-color: rgba(255, 120, 120, 0.7);
+  background: rgba(255, 87, 87, 0.25);
+}
+
+.sendButton {
+  border: none;
+  border-radius: 16px;
+  padding: 14px 20px;
+  font-weight: 600;
+  background: linear-gradient(120deg, #7088ff, #42c1f7);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(66, 193, 247, 0.25);
+}
+
+.messageBubble {
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistantMessage {
+  background: rgba(58, 72, 146, 0.25);
+}
+
+.userMessage {
+  background: rgba(255, 255, 255, 0.05);
+  margin-left: auto;
+  max-width: 640px;
+}
+
+.systemMessage {
+  background: rgba(255, 255, 255, 0.04);
+  border-style: dashed;
+}
+
+.messageMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.messageAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.messageAuthor {
+  margin: 0;
+  font-weight: 600;
+  color: white;
+}
+
+.messageTimestamp {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.messageContent {
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.markdownBody {
+  font-size: 15px;
+  line-height: 1.65;
+  color: inherit;
+}
+
+.markdownBody p {
+  margin: 0 0 0.9em;
+}
+
+.markdownBody p:last-child {
+  margin-bottom: 0;
+}
+
+.inlineCode {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95em;
+}
+
+.codeBlock {
+  background: rgba(5, 8, 18, 0.95);
+  border-radius: 14px;
+  padding: 14px;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.95em;
+}
+
+.tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin-bottom: 1em;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tableWrapper table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableWrapper th,
+.tableWrapper td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.tableWrapper th {
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 600;
+}
+
+.messageActions {
+  align-self: flex-end;
+}
+
+.messageActions :global(button) {
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+}
+
+.dialogOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 16, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.dialog {
+  width: min(520px, 92vw);
+  background: rgba(8, 12, 24, 0.95);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: 22px;
+  color: white;
+}
+
+.dialogLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.dialogInput,
+.dialogTextarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: white;
+  padding: 12px 14px;
+  font-size: 15px;
+}
+
+.dialogTextarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.dialogHint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 0;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dialogButton {
+  border-radius: 14px;
+  padding: 10px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.dialogButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dialogPrimary {
+  border-color: rgba(111, 136, 255, 0.8);
+  background: linear-gradient(120deg, #7088ff, #42c1f7);
+  color: white;
+}
+
+@media (max-width: 1024px) {
+  .modal {
+    width: 98vw;
+    height: 95vh;
+  }
+
+  .shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-direction: column;
+  }
+
+  .chatPane {
+    padding: 16px;
+  }
+
+  .chatTitle {
+    font-size: 20px;
+  }
+}
+

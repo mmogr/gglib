@@ -1,0 +1,123 @@
+name: Update Badges
+
+on:
+  workflow_run:
+    workflows: ["CI", "Coverage", "Release"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update-badges:
+    name: Update Badges
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate Badge Data
+        id: badges
+        run: |
+          mkdir -p badges
+          
+          # --- VERSION ---
+          VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          echo "Detected version: $VERSION"
+          
+          cat <<JSON > badges/version.json
+          {
+            "schemaVersion": 1,
+            "label": "version",
+            "message": "v$VERSION",
+            "color": "blue"
+          }
+          JSON
+          
+          # --- TESTS ---
+          # Run tests to get numbers
+          cargo test 2>&1 | tee test_output.txt || true
+          PASSED=$(grep -o "test result: ok\. [0-9]* passed" test_output.txt | grep -o "[0-9]*" | awk '{sum += $1} END {print sum}' || echo "0")
+          FAILED=$(grep -o "[0-9]* failed" test_output.txt | grep -o "[0-9]*" | awk '{sum += $1} END {print sum}' || echo "0")
+          TOTAL=$((PASSED + FAILED))
+          
+          if [ $TOTAL -eq 0 ]; then PERCENTAGE=0; else PERCENTAGE=$((PASSED * 100 / TOTAL)); fi
+          
+          if [ "$PERCENTAGE" -eq 100 ]; then COLOR="brightgreen";
+          elif [ "$PERCENTAGE" -gt 90 ]; then COLOR="green";
+          elif [ "$PERCENTAGE" -gt 80 ]; then COLOR="yellowgreen";
+          else COLOR="yellow"; fi
+          
+          cat <<JSON > badges/tests.json
+          {
+            "schemaVersion": 1,
+            "label": "tests",
+            "message": "$PASSED/$TOTAL ($PERCENTAGE%)",
+            "color": "$COLOR"
+          }
+          JSON
+
+          # --- COVERAGE ---
+          COVERAGE="unknown"
+          COLOR="lightgrey"
+          MESSAGE="unknown"
+          
+          # Determine where to get the artifact from
+          # If triggered by Coverage workflow, use this run's ID. 
+          # Otherwise (CI/Release), find the latest successful Coverage run.
+          if [ "${{ github.event.workflow_run.name }}" == "Coverage" ]; then
+            RUN_ID="${{ github.event.workflow_run.id }}"
+          else
+            RUN_ID=$(gh run list --workflow=coverage.yml --branch=main --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+          fi
+          
+          echo "Downloading coverage artifact from run ID: $RUN_ID"
+          
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+             gh run download $RUN_ID --name coverage-report || true
+          fi
+          
+          if [ -f lcov.info ]; then
+            TOTAL_LINES=$(grep -h '^LF:' lcov.info | awk -F ':' '{sum += $2} END {print sum+0}')
+            COVERED_LINES=$(grep -h '^LH:' lcov.info | awk -F ':' '{sum += $2} END {print sum+0}')
+            if [ "$TOTAL_LINES" -gt 0 ]; then
+              COVERAGE=$(awk -v covered="$COVERED_LINES" -v total="$TOTAL_LINES" 'BEGIN { printf "%d", (covered / total) * 100 }')
+            else
+              COVERAGE=0
+            fi
+            
+            if [ "$COVERAGE" -gt 90 ]; then COLOR="brightgreen";
+            elif [ "$COVERAGE" -gt 80 ]; then COLOR="green";
+            elif [ "$COVERAGE" -gt 70 ]; then COLOR="yellowgreen";
+            elif [ "$COVERAGE" -gt 60 ]; then COLOR="yellow";
+            else COLOR="red"; fi
+            
+            MESSAGE="$COVERAGE%"
+          fi
+
+          cat <<JSON > badges/coverage.json
+          {
+            "schemaVersion": 1,
+            "label": "coverage",
+            "message": "$MESSAGE",
+            "color": "$COLOR"
+          }
+          JSON
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to badges branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./badges
+          publish_branch: badges
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Update badges [skip ci]'

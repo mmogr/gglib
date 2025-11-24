@@ -1,0 +1,637 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "🔨 Build (Debug)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"build"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🚀 Build (Release)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"build",
+				"--release"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🧪 Run All Tests",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"--all"
+			],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🧪 Run Tests (Lib Only)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"--lib"
+			],
+			"group": "test",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🧪 Run Integration Tests",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"--test",
+				"*"
+			],
+			"group": "test",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🧪 Run Doc Tests",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"--doc"
+			],
+			"group": "test",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🧪 Run Specific Test",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"test",
+				"${input:testName}"
+			],
+			"group": "test",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "📋 Check (Fast Compile Check)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"check"
+			],
+			"group": "build",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🎨 Format Code",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"fmt",
+				"--all"
+			],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🔍 Check Formatting",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"fmt",
+				"--all",
+				"--",
+				"--check"
+			],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "📎 Clippy (Linter)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"clippy",
+				"--all-targets",
+				"--all-features"
+			],
+			"group": "none",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "📎 Clippy (Strict)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"clippy",
+				"--all-targets",
+				"--all-features",
+				"--",
+				"-D",
+				"warnings"
+			],
+			"group": "none",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🧹 Clean Build Artifacts",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"clean"
+			],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "📦 Install Binary",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"install",
+				"--path",
+				".",
+				"--force"
+			],
+			"group": "none",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "📚 Generate Documentation",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"doc",
+				"--no-deps",
+				"--open"
+			],
+			"group": "none",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🔄 Update Dependencies",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"update"
+			],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🔎 Check Outdated Dependencies",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"outdated"
+			],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🎯 Run Binary (Release)",
+			"type": "shell",
+			"command": "./target/release/gglib",
+			"args": [
+				"${input:cliArgs}"
+			],
+			"group": "none",
+			"dependsOn": [
+				"🚀 Build (Release)"
+			],
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "✅ Pre-commit Check (Format + Clippy + Tests)",
+			"dependsOn": [
+				"🎨 Format Code",
+				"📎 Clippy (Strict)",
+				"🧪 Run All Tests"
+			],
+			"dependsOrder": "sequence",
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🚢 Full CI Pipeline",
+			"dependsOn": [
+				"🔍 Check Formatting",
+				"📎 Clippy (Strict)",
+				"🧪 Run All Tests",
+				"🚀 Build (Release)"
+			],
+			"dependsOrder": "sequence",
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": true,
+				"clear": true
+			}
+		},
+		{
+			"label": "🎬 Run gglib --help",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"run",
+				"--",
+				"--help"
+			],
+			"group": "none",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🎬 Run gglib list",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"run",
+				"--",
+				"list"
+			],
+			"group": "none",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "📥 Install Frontend Dependencies",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"install"
+			],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🎨 Build Frontend",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"group": "build",
+			"dependsOn": [
+				"📥 Install Frontend Dependencies"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🎨 Start Frontend Dev Server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"isBackground": true,
+			"group": "none",
+			"dependsOn": [
+				"📥 Install Frontend Dependencies"
+			],
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^([^\\s].*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+					"file": 1,
+					"line": 2,
+					"column": 3,
+					"severity": 4,
+					"message": 5
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".",
+					"endsPattern": "Local:.*http"
+				}
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🖥️ Build GUI (Debug)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"tauri",
+				"build",
+				"--",
+				"--debug"
+			],
+			"group": "build",
+			"dependsOn": [
+				"🎨 Build Frontend"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🖥️ Build GUI (Release)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"tauri",
+				"build"
+			],
+			"group": "build",
+			"dependsOn": [
+				"🎨 Build Frontend"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🖥️ Run GUI (Dev)",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"tauri:dev"
+			],
+			"isBackground": true,
+			"group": "none",
+			"dependsOn": [
+				"📥 Install Frontend Dependencies"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🚀 Build Everything (Release)",
+			"dependsOn": [
+				"🎨 Build Frontend",
+				"🚀 Build (Release)"
+			],
+			"dependsOrder": "parallel",
+			"group": "build",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🚀 Build & Install Everything",
+			"dependsOn": [
+				"🎨 Build Frontend",
+				"📦 Install Binary"
+			],
+			"dependsOrder": "sequence",
+			"group": "build",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🧹 Clean All (Backend + Frontend)",
+			"type": "shell",
+			"command": "cargo clean && rm -rf node_modules web_ui dist",
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🔄 Sync Versions",
+			"type": "shell",
+			"command": "python3",
+			"args": [
+				"scripts/sync_versions.py"
+			],
+			"isBackground": false,
+			"group": "none"
+		}
+	],
+	"inputs": [
+		{
+			"id": "testName",
+			"type": "promptString",
+			"description": "Enter test name or pattern",
+			"default": ""
+		},
+		{
+			"id": "cliArgs",
+			"type": "promptString",
+			"description": "Enter CLI arguments",
+			"default": "--help"
+		}
+	]
+}
