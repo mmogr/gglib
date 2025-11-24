@@ -110,8 +110,11 @@ export default function ModelControlCenterPage({
   });
 
   const handleModelAdded = async (filePath: string) => {
-    await addModel(filePath);
-    await loadModels();
+    if (filePath) {
+      await addModel(filePath);
+    } else {
+      await loadModels();
+    }
   };
 
   const handleModelDownloaded = async () => {
