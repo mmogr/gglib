@@ -108,12 +108,14 @@ fn find_web_ui_path() -> std::path::PathBuf {
     }
 
     // 3. Check next to executable (pre-built binaries)
-    if let Ok(exe_path) = std::env::current_exe()
-        && let Some(exe_dir) = exe_path.parent()
-    {
-        let exe_path = exe_dir.join("web_ui");
-        if exe_path.exists() && exe_path.join("index.html").exists() {
-            return exe_path;
+    // Note: Cannot use let-chains here as they're unstable on Rust stable
+    #[allow(clippy::collapsible_if)]
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let exe_web_ui_path = exe_dir.join("web_ui");
+            if exe_web_ui_path.exists() && exe_web_ui_path.join("index.html").exists() {
+                return exe_web_ui_path;
+            }
         }
     }
 
