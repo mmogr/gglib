@@ -16,7 +16,7 @@ use anyhow::{Result, anyhow};
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info, warn};
 
 /// Strategy for managing llama-server processes
 #[derive(Clone)]
@@ -136,12 +136,12 @@ impl ProcessManager {
         drop(core);
 
         // Wait for server to be ready by polling health endpoint
-        eprintln!(
-            "⏳ Waiting for llama-server to be ready on port {}...",
-            port
+        debug!(
+            port = %port,
+            "Waiting for llama-server to be ready"
         );
         self.wait_for_health(port).await?;
-        eprintln!("✅ llama-server is ready and accepting requests");
+        debug!("llama-server is ready and accepting requests");
 
         Ok(port)
     }
@@ -434,30 +434,32 @@ impl ProcessManager {
                 .await
             {
                 Ok(response) if response.status().is_success() => {
-                    eprintln!("✅ Health check passed on attempt {}", attempt);
+                    debug!(attempt = %attempt, "Health check passed");
                     return Ok(());
                 }
                 Ok(response) if response.status() == 503 => {
                     // Server is loading model, this is expected
                     if attempt % 5 == 0 {
-                        eprintln!("⏳ Model still loading... (attempt {})", attempt);
+                        debug!(attempt = %attempt, "Model still loading");
                     }
                 }
                 Ok(response) => {
-                    eprintln!(
-                        "⚠️  Unexpected status {}: {:?}",
-                        response.status(),
-                        response.text().await
+                    let status = response.status();
+                    let body = response.text().await;
+                    warn!(
+                        status = %status,
+                        body = ?body,
+                        "Unexpected health check status"
                     );
                 }
                 Err(e) if e.is_connect() || e.is_timeout() => {
                     // Connection refused or timeout - server not ready yet
                     if attempt % 10 == 0 {
-                        eprintln!("⏳ Waiting for server to start... (attempt {})", attempt);
+                        debug!(attempt = %attempt, "Waiting for server to start");
                     }
                 }
                 Err(e) => {
-                    eprintln!("❌ Health check error: {}", e);
+                    warn!(error = %e, "Health check error");
                 }
             }
 

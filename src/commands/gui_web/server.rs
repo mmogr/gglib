@@ -11,6 +11,7 @@ use axum::Router;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
+use tracing::warn;
 
 /// Static HTML content embedded in the binary
 const INDEX_HTML: &str = include_str!("../../../index.html");
@@ -159,7 +160,7 @@ async fn shutdown_signal(backend: Arc<GuiBackend>) {
     // Stop all running servers
     println!("⏹️  Stopping all model servers...");
     if let Err(e) = backend.process_manager().stop_all().await {
-        eprintln!("⚠️  Error stopping servers: {}", e);
+        warn!(error = %e, "Error stopping servers");
     } else {
         println!("✓ All servers stopped");
     }

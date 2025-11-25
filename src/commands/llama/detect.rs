@@ -6,6 +6,8 @@
 use anyhow::Context;
 use anyhow::Result;
 use std::process::Command;
+#[cfg(target_os = "linux")]
+use tracing::warn;
 
 /// Acceleration type for llama.cpp build
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -234,9 +236,9 @@ pub fn select_cuda_compiler_for_build() -> Result<(String, Option<(u32, u32)>)> 
                 return Ok((cc, version));
             } else {
                 // User set a custom compiler (e.g., icc) - respect it but skip validation
-                eprintln!(
-                    "Warning: CC is set to '{}', which is not clang or gcc. Compiler version validation will be skipped.",
-                    cc
+                warn!(
+                    compiler = %cc,
+                    "CC is set to a non-standard compiler, version validation will be skipped"
                 );
                 return Ok((cc, None));
             }

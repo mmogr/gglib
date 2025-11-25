@@ -25,15 +25,19 @@ use gglib::{cli, commands};
 #[tokio::main]
 async fn main() -> Result<()> {
     let _ = dotenvy::dotenv();
+
+    // Parse CLI args first to check for verbose flag
+    let cli = cli::Cli::parse();
+
     // Initialize tracing/logging
+    // Priority: RUST_LOG env var > --verbose flag > default (warn)
+    let default_level = if cli.verbose { "debug" } else { "warn" };
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_level)),
         )
         .init();
-
-    let cli = cli::Cli::parse();
 
     if let Some(ref override_path) = cli.models_dir {
         let resolution = gglib::utils::paths::resolve_models_dir(Some(override_path))?;
