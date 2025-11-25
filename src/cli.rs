@@ -253,6 +253,9 @@ pub enum LlamaCommand {
         /// Force rebuild even if already installed
         #[arg(short, long)]
         force: bool,
+        /// Force building from source instead of downloading pre-built binaries
+        #[arg(long)]
+        build: bool,
     },
     /// Check for llama.cpp updates
     CheckUpdates,

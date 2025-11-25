@@ -144,6 +144,19 @@ fn detect_local_repo() -> Option<PathBuf> {
     }
 }
 
+/// Check if we are running from a pre-built binary (not from the source repo).
+///
+/// Returns `true` if this is a standalone/installed binary (e.g., downloaded release,
+/// `cargo install`). Returns `false` if running from the source repository (e.g.,
+/// `cargo run`, `make setup`).
+///
+/// This is used to determine installation behavior:
+/// - Pre-built binary: Download pre-built llama.cpp binaries (faster, no build tools needed)
+/// - Source build: Clone and build llama.cpp from source (supports all GPU configurations)
+pub fn is_prebuilt_binary() -> bool {
+    detect_local_repo().is_none()
+}
+
 /// Get the root directory for application data (database, config).
 ///
 /// This is unified across Development and Release builds to ensure that

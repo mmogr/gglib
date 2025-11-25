@@ -41,6 +41,7 @@ futures-util = "0.3"
 tokio-stream = { version = "0.1.17", features = ["sync"] }
 which = "5.0"
 tokio-util = "0.7"
+zip = "2.2"
 
 [build-dependencies]
 regex = "1.10"
