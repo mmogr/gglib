@@ -34,6 +34,7 @@ pub struct GuiBackend {
     process_manager: Arc<ProcessManager>,
     proxy_manager: Arc<RwLock<Option<ProcessManager>>>,
     proxy_shutdown: Arc<RwLock<Option<tokio::sync::oneshot::Sender<()>>>>,
+    proxy_port: Arc<RwLock<Option<u16>>>,
     active_downloads: Arc<RwLock<HashMap<String, CancellationToken>>>,
 }
 
@@ -65,6 +66,7 @@ impl GuiBackend {
             process_manager,
             proxy_manager: Arc::new(RwLock::new(None)),
             proxy_shutdown: Arc::new(RwLock::new(None)),
+            proxy_port: Arc::new(RwLock::new(None)),
             active_downloads: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -356,6 +358,9 @@ impl GuiBackend {
         *proxy = Some(manager);
         *shutdown = Some(shutdown_tx);
 
+        // Store the actual proxy port
+        *self.proxy_port.write().await = Some(port);
+
         Ok(format!("Proxy started on {}:{}", host, port))
     }
 
@@ -373,8 +378,9 @@ impl GuiBackend {
             let _ = tx.send(()); // Ignore error if receiver already dropped
         }
 
-        // Clear the manager reference
+        // Clear the manager reference and port
         proxy.take();
+        *self.proxy_port.write().await = None;
 
         Ok("Proxy stopped".to_string())
     }
@@ -382,6 +388,7 @@ impl GuiBackend {
     /// Get proxy status
     pub async fn get_proxy_status(&self) -> Result<serde_json::Value> {
         let proxy = self.proxy_manager.read().await;
+        let port = self.proxy_port.read().await;
 
         if let Some(manager) = proxy.as_ref() {
             let current_model = manager.get_current_model().await;
@@ -389,14 +396,14 @@ impl GuiBackend {
 
             Ok(serde_json::json!({
                 "running": true,
-                "port": 8080, // TODO: Store actual proxy port
+                "port": port.unwrap_or(8080),
                 "current_model": current_model,
                 "model_port": current_port,
             }))
         } else {
             Ok(serde_json::json!({
                 "running": false,
-                "port": 8080,
+                "port": *port,
             }))
         }
     }
