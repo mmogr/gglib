@@ -4,9 +4,12 @@ use super::build::build_llama_cpp;
 use super::config::BuildConfig;
 use super::deps::check_dependencies;
 use super::detect::{Acceleration, detect_optimal_acceleration};
+use super::download::{
+    PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries,
+};
 use crate::utils::paths::{
     get_gglib_data_dir, get_llama_cli_path, get_llama_config_path, get_llama_cpp_dir,
-    get_llama_server_path,
+    get_llama_server_path, is_prebuilt_binary,
 };
 use anyhow::{Context, Result, bail};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -15,7 +18,19 @@ use std::io::{self, Write};
 use std::process::Command;
 
 /// Handle the install command
-pub async fn handle_install(cuda: bool, metal: bool, cpu_only: bool, force: bool) -> Result<()> {
+///
+/// Installation method is determined by context:
+/// - `--build` flag: Always build from source
+/// - Running from source repo: Build from source (existing behavior)
+/// - Pre-built binary + macOS/Windows: Download pre-built binaries
+/// - Pre-built binary + Linux: Build from source (CUDA requires compilation)
+pub async fn handle_install(
+    cuda: bool,
+    metal: bool,
+    cpu_only: bool,
+    force: bool,
+    build_from_source: bool,
+) -> Result<()> {
     // Check if already installed
     let server_path = get_llama_server_path()?;
     let cli_path = get_llama_cli_path()?;
@@ -32,6 +47,37 @@ pub async fn handle_install(cuda: bool, metal: bool, cpu_only: bool, force: bool
         return Ok(());
     }
 
+    // Determine installation method
+    let should_build = build_from_source
+        || !is_prebuilt_binary()  // Running from source repo
+        || cuda || metal || cpu_only  // User specified acceleration flags
+        || matches!(check_prebuilt_availability(), PrebuiltAvailability::NotAvailable { .. });
+
+    if !should_build {
+        // Try downloading pre-built binaries
+        println!("Attempting to download pre-built llama.cpp binaries...");
+        match download_prebuilt_binaries().await {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                println!();
+                println!("⚠️  Failed to download pre-built binaries: {}", e);
+                println!("Falling back to building from source...");
+                println!();
+            }
+        }
+    }
+
+    // Build from source
+    build_from_source_impl(cuda, metal, cpu_only, force).await
+}
+
+/// Build llama.cpp from source (the original installation logic)
+async fn build_from_source_impl(
+    cuda: bool,
+    metal: bool,
+    cpu_only: bool,
+    force: bool,
+) -> Result<()> {
     // Step 1: Check dependencies
     check_dependencies()?;
     println!();
@@ -67,6 +113,8 @@ pub async fn handle_install(cuda: bool, metal: bool, cpu_only: bool, force: bool
     build_llama_cpp(&llama_dir, acceleration)?;
 
     // Step 6: Install binary
+    let server_path = get_llama_server_path()?;
+    let cli_path = get_llama_cli_path()?;
     install_binary(&llama_dir, "llama-server", &server_path)?;
     install_binary(&llama_dir, "llama-cli", &cli_path)?;
 

@@ -323,16 +323,22 @@ jobs:
       - name: Package binary (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz gglib
-          cd ../../..
+          mkdir -p package
+          cp target/${{ matrix.target }}/release/gglib package/
+          cp -r web_ui package/
+          cd package
+          tar czf ../gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz gglib web_ui
+          cd ..
 
       - name: Package binary (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          cd target/${{ matrix.target }}/release
-          7z a ../../../gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip gglib.exe
-          cd ../../..
+          mkdir package
+          copy target\${{ matrix.target }}\release\gglib.exe package\
+          xcopy web_ui package\web_ui\ /E /I /Y
+          cd package
+          7z a ..\gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip gglib.exe web_ui
+          cd ..
 
       - name: Upload binary to release (Unix)
         if: matrix.os != 'windows-latest' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true

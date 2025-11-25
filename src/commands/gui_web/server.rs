@@ -5,6 +5,7 @@
 
 use crate::commands::gui_web::{routes, state::AppState};
 use crate::services::gui_backend::GuiBackend;
+use crate::utils::paths::get_resource_root;
 use anyhow::Result;
 use axum::Router;
 use std::net::SocketAddr;
@@ -73,8 +74,10 @@ pub async fn start_web_server(port: u16, base_port: u16, max_concurrent: usize) 
 
 /// Build the complete application router
 fn build_router(state: Arc<AppState>) -> Router {
-    // Try to serve static files from filesystem first (for development)
-    let serve_dir = ServeDir::new("web_ui");
+    // Determine web_ui path - check multiple locations
+    let web_ui_path = find_web_ui_path();
+
+    let serve_dir = ServeDir::new(&web_ui_path);
 
     Router::new()
         // API routes
@@ -83,6 +86,41 @@ fn build_router(state: Arc<AppState>) -> Router {
         .nest_service("/", serve_dir)
         // Fallback to embedded HTML for production
         .fallback(serve_embedded_html)
+}
+
+/// Find the web_ui directory in order of preference:
+/// 1. Current directory (for development: `cargo run`)
+/// 2. Resource root (for source builds: repo/web_ui)
+/// 3. Next to executable (for pre-built binaries)
+fn find_web_ui_path() -> std::path::PathBuf {
+    // 1. Check current directory first (development)
+    let cwd_path = std::path::PathBuf::from("web_ui");
+    if cwd_path.exists() && cwd_path.join("index.html").exists() {
+        return cwd_path;
+    }
+
+    // 2. Check resource root (source builds)
+    if let Ok(resource_root) = get_resource_root() {
+        let resource_path = resource_root.join("web_ui");
+        if resource_path.exists() && resource_path.join("index.html").exists() {
+            return resource_path;
+        }
+    }
+
+    // 3. Check next to executable (pre-built binaries)
+    // Note: Cannot use let-chains here as they're unstable on Rust stable
+    #[allow(clippy::collapsible_if)]
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let exe_web_ui_path = exe_dir.join("web_ui");
+            if exe_web_ui_path.exists() && exe_web_ui_path.join("index.html").exists() {
+                return exe_web_ui_path;
+            }
+        }
+    }
+
+    // Fallback to current directory (will use embedded fallback if not found)
+    std::path::PathBuf::from("web_ui")
 }
 
 /// Serve embedded HTML as fallback

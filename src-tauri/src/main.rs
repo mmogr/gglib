@@ -371,6 +371,111 @@ async fn update_settings(
         .map_err(|e| format!("Failed to update settings: {}", e))
 }
 
+/// Check if llama.cpp is installed
+#[tauri::command]
+fn check_llama_status() -> Result<LlamaStatus, String> {
+    use gglib::commands::llama::{check_llama_installed, check_prebuilt_availability, PrebuiltAvailability};
+    
+    let installed = check_llama_installed();
+    let can_download = matches!(check_prebuilt_availability(), PrebuiltAvailability::Available { .. });
+    
+    Ok(LlamaStatus {
+        installed,
+        can_download,
+    })
+}
+
+/// Response for check_llama_status
+#[derive(serde::Serialize)]
+struct LlamaStatus {
+    installed: bool,
+    can_download: bool,
+}
+
+/// Install llama.cpp by downloading pre-built binaries
+#[tauri::command]
+async fn install_llama(app: tauri::AppHandle) -> Result<String, String> {
+    use gglib::commands::llama::{check_prebuilt_availability, download_prebuilt_binaries_with_boxed_callback, PrebuiltAvailability};
+    use gglib::commands::download::ProgressThrottle;
+    use std::sync::Arc;
+    
+    // Check if pre-built binaries are available
+    match check_prebuilt_availability() {
+        PrebuiltAvailability::Available { description, .. } => {
+            // Emit started event
+            let _ = app.emit("llama-install-progress", LlamaInstallEvent {
+                status: "started".to_string(),
+                downloaded: 0,
+                total: 0,
+                percentage: 0.0,
+                message: format!("Downloading llama.cpp for {}...", description),
+            });
+            
+            // Create progress callback (boxed, thread-safe)
+            let start_time = std::time::Instant::now();
+            let throttle = Arc::new(ProgressThrottle::responsive_ui());
+            let app_clone = app.clone();
+            
+            let progress_callback: Box<dyn Fn(u64, u64) + Send + Sync> = Box::new(move |downloaded: u64, total: u64| {
+                if !throttle.should_emit(downloaded, total) {
+                    return;
+                }
+                let elapsed = start_time.elapsed().as_secs_f64();
+                let percentage = if total > 0 { (downloaded as f64 / total as f64) * 100.0 } else { 0.0 };
+                let speed = if elapsed > 0.0 { downloaded as f64 / elapsed } else { 0.0 };
+                let eta = if speed > 0.0 && total > downloaded { (total - downloaded) as f64 / speed } else { 0.0 };
+                
+                let _ = app_clone.emit("llama-install-progress", LlamaInstallEvent {
+                    status: "downloading".to_string(),
+                    downloaded,
+                    total,
+                    percentage,
+                    message: format!("Downloading... {:.1}% ({:.1} MB/s, {:.0}s remaining)", 
+                        percentage, speed / 1_000_000.0, eta),
+                });
+            });
+            
+            // Download with progress
+            match download_prebuilt_binaries_with_boxed_callback(progress_callback).await {
+                Ok(()) => {
+                    let _ = app.emit("llama-install-progress", LlamaInstallEvent {
+                        status: "completed".to_string(),
+                        downloaded: 0,
+                        total: 0,
+                        percentage: 100.0,
+                        message: "llama.cpp installed successfully!".to_string(),
+                    });
+                    Ok("llama.cpp installed successfully".to_string())
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to install llama.cpp: {}", e);
+                    let _ = app.emit("llama-install-progress", LlamaInstallEvent {
+                        status: "error".to_string(),
+                        downloaded: 0,
+                        total: 0,
+                        percentage: 0.0,
+                        message: error_msg.clone(),
+                    });
+                    Err(error_msg)
+                }
+            }
+        }
+        PrebuiltAvailability::NotAvailable { reason } => {
+            Err(format!("Cannot auto-install llama.cpp: {}. Please build from source.", reason))
+        }
+    }
+}
+
+/// Progress event for llama installation
+#[derive(Clone, serde::Serialize)]
+struct LlamaInstallEvent {
+    status: String,
+    downloaded: u64,
+    total: u64,
+    percentage: f64,
+    message: String,
+}
+
 #[tauri::command]
 fn get_gui_api_port(state: tauri::State<'_, AppState>) -> u16 {
     state.api_port
@@ -429,7 +534,9 @@ async fn main() {
             get_model_tags,
             get_settings,
             update_settings,
-            get_gui_api_port
+            get_gui_api_port,
+            check_llama_status,
+            install_llama
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

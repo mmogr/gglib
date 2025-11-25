@@ -4,10 +4,17 @@ mod build;
 mod config;
 mod deps;
 mod detect;
+mod download;
 mod ensure;
 mod install;
 mod update;
 mod validate;
+
+pub use download::{
+    LlamaProgressCallback, LlamaProgressCallbackBoxed, PrebuiltAvailability, check_llama_installed,
+    check_prebuilt_availability, download_prebuilt_binaries,
+    download_prebuilt_binaries_with_boxed_callback, download_prebuilt_binaries_with_callback,
+};
 
 pub use ensure::ensure_llama_initialized;
 pub use install::handle_install;
@@ -18,7 +25,8 @@ use anyhow::Result;
 
 /// Handle the rebuild command
 pub async fn handle_rebuild(cuda: bool, metal: bool, cpu_only: bool) -> Result<()> {
-    install::handle_install(cuda, metal, cpu_only, true).await
+    // Rebuild always builds from source (that's the point of rebuild)
+    install::handle_install(cuda, metal, cpu_only, true, true).await
 }
 
 /// Handle the uninstall command
