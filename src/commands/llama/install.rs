@@ -4,7 +4,9 @@ use super::build::build_llama_cpp;
 use super::config::BuildConfig;
 use super::deps::check_dependencies;
 use super::detect::{Acceleration, detect_optimal_acceleration};
-use super::download::{check_prebuilt_availability, download_prebuilt_binaries, PrebuiltAvailability};
+use super::download::{
+    PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries,
+};
 use crate::utils::paths::{
     get_gglib_data_dir, get_llama_cli_path, get_llama_config_path, get_llama_cpp_dir,
     get_llama_server_path, is_prebuilt_binary,
@@ -22,7 +24,13 @@ use std::process::Command;
 /// - Running from source repo: Build from source (existing behavior)
 /// - Pre-built binary + macOS/Windows: Download pre-built binaries
 /// - Pre-built binary + Linux: Build from source (CUDA requires compilation)
-pub async fn handle_install(cuda: bool, metal: bool, cpu_only: bool, force: bool, build_from_source: bool) -> Result<()> {
+pub async fn handle_install(
+    cuda: bool,
+    metal: bool,
+    cpu_only: bool,
+    force: bool,
+    build_from_source: bool,
+) -> Result<()> {
     // Check if already installed
     let server_path = get_llama_server_path()?;
     let cli_path = get_llama_cli_path()?;
@@ -40,7 +48,7 @@ pub async fn handle_install(cuda: bool, metal: bool, cpu_only: bool, force: bool
     }
 
     // Determine installation method
-    let should_build = build_from_source 
+    let should_build = build_from_source
         || !is_prebuilt_binary()  // Running from source repo
         || cuda || metal || cpu_only  // User specified acceleration flags
         || matches!(check_prebuilt_availability(), PrebuiltAvailability::NotAvailable { .. });
@@ -64,7 +72,12 @@ pub async fn handle_install(cuda: bool, metal: bool, cpu_only: bool, force: bool
 }
 
 /// Build llama.cpp from source (the original installation logic)
-async fn build_from_source_impl(cuda: bool, metal: bool, cpu_only: bool, force: bool) -> Result<()> {
+async fn build_from_source_impl(
+    cuda: bool,
+    metal: bool,
+    cpu_only: bool,
+    force: bool,
+) -> Result<()> {
     // Step 1: Check dependencies
     check_dependencies()?;
     println!();

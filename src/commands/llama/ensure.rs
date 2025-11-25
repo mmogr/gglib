@@ -2,7 +2,9 @@ use crate::utils::paths::{get_llama_cli_path, get_llama_server_path, is_prebuilt
 use anyhow::Result;
 use std::io::{self, Write};
 
-use super::download::{check_prebuilt_availability, download_prebuilt_binaries, PrebuiltAvailability};
+use super::download::{
+    PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries,
+};
 
 /// Ensure that llama.cpp binaries are installed.
 ///
@@ -37,7 +39,7 @@ pub async fn ensure_llama_initialized() -> Result<()> {
 }
 
 /// Installation flow for users running from source repository.
-/// 
+///
 /// This preserves the existing behavior: prompt user and build from source.
 async fn ensure_for_source_build() -> Result<()> {
     println!("Running from source repository - will build llama.cpp from source.");
@@ -70,7 +72,10 @@ async fn ensure_for_source_build() -> Result<()> {
 async fn ensure_for_prebuilt_binary() -> Result<()> {
     match check_prebuilt_availability() {
         PrebuiltAvailability::Available { description, .. } => {
-            println!("Pre-built llama.cpp binaries are available for {}.", description);
+            println!(
+                "Pre-built llama.cpp binaries are available for {}.",
+                description
+            );
             println!();
             print!("Would you like to download them now? [Y/n] ");
             io::stdout().flush()?;
@@ -93,7 +98,7 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
                     println!();
                     println!("Falling back to building from source...");
                     println!();
-                    
+
                     // Fall back to building from source
                     super::handle_install(false, false, false, false, true).await
                 }
@@ -105,10 +110,10 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
             println!();
             println!("llama.cpp will be built from source to enable GPU acceleration.");
             println!();
-            
+
             // Show required build tools
             print_build_requirements();
-            
+
             print!("Would you like to build llama.cpp now? [Y/n] ");
             io::stdout().flush()?;
 
@@ -136,7 +141,7 @@ fn print_build_requirements() {
     println!("  • cmake - for build configuration");
     println!("  • g++ or clang++ - for compilation");
     println!();
-    
+
     #[cfg(target_os = "linux")]
     {
         println!("On Ubuntu/Debian, install with:");
@@ -146,7 +151,7 @@ fn print_build_requirements() {
         println!("  sudo dnf install gcc-c++ cmake git");
         println!();
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         println!("On macOS, install with:");
@@ -154,7 +159,7 @@ fn print_build_requirements() {
         println!("  brew install cmake");
         println!();
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         println!("On Windows, install:");

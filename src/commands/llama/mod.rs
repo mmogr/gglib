@@ -10,7 +10,11 @@ mod install;
 mod update;
 mod validate;
 
-pub use download::{check_prebuilt_availability, download_prebuilt_binaries, PrebuiltAvailability};
+pub use download::{
+    LlamaProgressCallback, LlamaProgressCallbackBoxed, PrebuiltAvailability, check_llama_installed,
+    check_prebuilt_availability, download_prebuilt_binaries,
+    download_prebuilt_binaries_with_boxed_callback, download_prebuilt_binaries_with_callback,
+};
 
 pub use ensure::ensure_llama_initialized;
 pub use install::handle_install;

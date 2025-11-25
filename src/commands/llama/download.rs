@@ -19,6 +19,27 @@ use std::path::Path;
 
 use crate::utils::paths::{get_gglib_data_dir, get_llama_cli_path, get_llama_server_path};
 
+/// Progress callback type for llama.cpp downloads.
+/// Called with (downloaded_bytes, total_bytes).
+pub type LlamaProgressCallback<'a> = &'a dyn Fn(u64, u64);
+
+/// Thread-safe progress callback for async contexts.
+pub type LlamaProgressCallbackBoxed = Box<dyn Fn(u64, u64) + Send + Sync>;
+
+/// Check if llama.cpp binaries are installed.
+/// Returns true if both llama-server and llama-cli exist.
+pub fn check_llama_installed() -> bool {
+    let server_path = match get_llama_server_path() {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    let cli_path = match get_llama_cli_path() {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    server_path.exists() && cli_path.exists()
+}
+
 /// GitHub API response for a release
 #[derive(Debug, Deserialize)]
 struct GitHubRelease {
@@ -154,8 +175,28 @@ fn find_platform_asset<'a>(
         .find(|asset| asset.name.contains(asset_pattern))
 }
 
-/// Download a file with progress bar.
+/// Download a file with progress bar (CLI version).
 async fn download_with_progress(client: &Client, url: &str, dest: &Path) -> Result<()> {
+    download_with_callback_internal(client, url, dest, None).await
+}
+
+/// Download a file with progress callback (GUI version).
+async fn download_with_callback(
+    client: &Client,
+    url: &str,
+    dest: &Path,
+    callback: LlamaProgressCallback<'_>,
+) -> Result<()> {
+    download_with_callback_internal(client, url, dest, Some(callback)).await
+}
+
+/// Internal download implementation supporting both CLI progress bar and GUI callback.
+async fn download_with_callback_internal(
+    client: &Client,
+    url: &str,
+    dest: &Path,
+    callback: Option<LlamaProgressCallback<'_>>,
+) -> Result<()> {
     let response = client
         .get(url)
         .header("User-Agent", "gglib")
@@ -169,13 +210,19 @@ async fn download_with_progress(client: &Client, url: &str, dest: &Path) -> Resu
 
     let total_size = response.content_length().unwrap_or(0);
 
-    let pb = ProgressBar::new(total_size);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})")
-            .unwrap()
-            .progress_chars("█▓░"),
-    );
+    // Use progress bar only when no callback provided (CLI mode)
+    let pb = if callback.is_none() {
+        let pb = ProgressBar::new(total_size);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec})")
+                .unwrap()
+                .progress_chars("█▓░"),
+        );
+        Some(pb)
+    } else {
+        None
+    };
 
     // Ensure parent directory exists
     if let Some(parent) = dest.parent() {
@@ -193,10 +240,60 @@ async fn download_with_progress(client: &Client, url: &str, dest: &Path) -> Resu
         file.write_all(&chunk)
             .context("Error writing to download file")?;
         downloaded += chunk.len() as u64;
-        pb.set_position(downloaded);
+
+        if let Some(ref pb) = pb {
+            pb.set_position(downloaded);
+        }
+        if let Some(ref cb) = callback {
+            cb(downloaded, total_size);
+        }
     }
 
-    pb.finish_with_message("Download complete");
+    if let Some(pb) = pb {
+        pb.finish_with_message("Download complete");
+    }
+
+    Ok(())
+}
+
+/// Download a file with boxed progress callback (thread-safe for async contexts).
+async fn download_with_boxed_callback(
+    client: &Client,
+    url: &str,
+    dest: &Path,
+    callback: &LlamaProgressCallbackBoxed,
+) -> Result<()> {
+    let response = client
+        .get(url)
+        .header("User-Agent", "gglib")
+        .send()
+        .await
+        .context("Failed to start download")?;
+
+    if !response.status().is_success() {
+        bail!("Download failed: HTTP {}", response.status());
+    }
+
+    let total_size = response.content_length().unwrap_or(0);
+
+    // Ensure parent directory exists
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).context("Failed to create download directory")?;
+    }
+
+    let mut file = File::create(dest).context("Failed to create download file")?;
+
+    let mut downloaded: u64 = 0;
+    let mut stream = response.bytes_stream();
+
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.context("Error reading download stream")?;
+        file.write_all(&chunk)
+            .context("Error writing to download file")?;
+        downloaded += chunk.len() as u64;
+        callback(downloaded, total_size);
+    }
 
     Ok(())
 }
@@ -221,7 +318,9 @@ fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
     let mut extracted_libs = 0;
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).context("Failed to read archive entry")?;
+        let mut entry = archive
+            .by_index(i)
+            .context("Failed to read archive entry")?;
         let entry_name = entry.name().to_string();
 
         // Skip directories
@@ -241,8 +340,8 @@ fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
         };
 
         // Skip license files and source/header files
-        if file_name.starts_with("LICENSE") 
-            || file_name.ends_with(".h") 
+        if file_name.starts_with("LICENSE")
+            || file_name.ends_with(".h")
             || file_name.ends_with(".metal")
         {
             continue;
@@ -265,7 +364,7 @@ fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
         }
 
         // Track what we extracted
-        if required_binaries.iter().any(|&b| file_name == b) {
+        if required_binaries.contains(&file_name) {
             println!("  ✓ Extracted {}", file_name);
             extracted_binaries += 1;
         } else {
@@ -307,7 +406,10 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
     };
 
     println!();
-    println!("Downloading pre-built llama.cpp binaries for {}...", description);
+    println!(
+        "Downloading pre-built llama.cpp binaries for {}...",
+        description
+    );
     println!();
 
     let client = Client::new();
@@ -326,7 +428,11 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
         )
     })?;
 
-    println!("  Asset: {} ({:.1} MB)", asset.name, asset.size as f64 / 1_000_000.0);
+    println!(
+        "  Asset: {} ({:.1} MB)",
+        asset.name,
+        asset.size as f64 / 1_000_000.0
+    );
     println!();
 
     // Prepare paths
@@ -365,6 +471,144 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
     println!("  Type: Pre-built ({})", description);
     println!();
     println!("You can now use 'gglib serve', 'gglib proxy', and 'gglib chat'.");
+
+    Ok(())
+}
+
+/// Download and install pre-built llama.cpp binaries with progress callback.
+///
+/// This is the GUI-friendly version that accepts a progress callback instead
+/// of printing to stdout. Used by Tauri GUI for showing download progress.
+///
+/// The callback receives (downloaded_bytes, total_bytes).
+pub async fn download_prebuilt_binaries_with_callback(
+    progress_callback: Option<LlamaProgressCallback<'_>>,
+) -> Result<()> {
+    // Check platform availability
+    let availability = check_prebuilt_availability();
+    let (asset_pattern, description) = match availability {
+        PrebuiltAvailability::Available {
+            asset_pattern,
+            description,
+        } => (asset_pattern, description),
+        PrebuiltAvailability::NotAvailable { reason } => {
+            bail!("Pre-built binaries not available: {}", reason);
+        }
+    };
+
+    let client = Client::new();
+
+    // Fetch latest release
+    let release = fetch_latest_release(&client).await?;
+
+    // Find matching asset
+    let asset = find_platform_asset(&release, &asset_pattern).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No matching asset found for pattern '{}' in release {}",
+            asset_pattern,
+            release.tag_name
+        )
+    })?;
+
+    // Prepare paths
+    let gglib_dir = get_gglib_data_dir()?;
+    let download_dir = gglib_dir.join("downloads");
+    let zip_path = download_dir.join(&asset.name);
+    let bin_dir = gglib_dir.join("bin");
+
+    // Download the archive
+    if let Some(callback) = progress_callback {
+        download_with_callback(&client, &asset.browser_download_url, &zip_path, callback).await?;
+    } else {
+        download_with_progress(&client, &asset.browser_download_url, &zip_path).await?;
+    }
+
+    // Extract binaries (quick operation, no progress needed)
+    extract_binaries(&zip_path, &bin_dir)?;
+
+    // Clean up downloaded archive
+    let _ = fs::remove_file(&zip_path);
+    let _ = fs::remove_dir(&download_dir);
+
+    // Save a simple config indicating this was a pre-built install
+    save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
+
+    // Verify installation
+    let server_path = get_llama_server_path()?;
+    let cli_path = get_llama_cli_path()?;
+
+    if !server_path.exists() || !cli_path.exists() {
+        bail!("Installation verification failed: binaries not found after extraction");
+    }
+
+    Ok(())
+}
+
+/// Download and install pre-built llama.cpp binaries with thread-safe progress callback.
+///
+/// This version is designed for use in async contexts where the callback needs to be
+/// Send + Sync (like Tauri commands). The callback receives (downloaded_bytes, total_bytes).
+pub async fn download_prebuilt_binaries_with_boxed_callback(
+    progress_callback: LlamaProgressCallbackBoxed,
+) -> Result<()> {
+    // Check platform availability
+    let availability = check_prebuilt_availability();
+    let (asset_pattern, _description) = match availability {
+        PrebuiltAvailability::Available {
+            asset_pattern,
+            description,
+        } => (asset_pattern, description),
+        PrebuiltAvailability::NotAvailable { reason } => {
+            bail!("Pre-built binaries not available: {}", reason);
+        }
+    };
+
+    let client = Client::new();
+
+    // Fetch latest release
+    let release = fetch_latest_release(&client).await?;
+
+    // Find matching asset
+    let asset = find_platform_asset(&release, &asset_pattern).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No matching asset found for pattern '{}' in release {}",
+            asset_pattern,
+            release.tag_name
+        )
+    })?;
+
+    // Prepare paths
+    let gglib_dir = get_gglib_data_dir()?;
+    let download_dir = gglib_dir.join("downloads");
+    let zip_path = download_dir.join(&asset.name);
+    let bin_dir = gglib_dir.join("bin");
+
+    // Download the archive with boxed callback
+    download_with_boxed_callback(
+        &client,
+        &asset.browser_download_url,
+        &zip_path,
+        &progress_callback,
+    )
+    .await?;
+
+    // Extract binaries (quick operation, no progress needed)
+    extract_binaries(&zip_path, &bin_dir)?;
+
+    // Clean up downloaded archive
+    let _ = fs::remove_file(&zip_path);
+    let _ = fs::remove_dir(&download_dir);
+
+    // Save a simple config indicating this was a pre-built install
+    save_prebuilt_config(&gglib_dir, &release.tag_name, &_description)?;
+
+    // Verify installation
+    let server_path = get_llama_server_path()?;
+    let cli_path = get_llama_cli_path()?;
+
+    if !server_path.exists() || !cli_path.exists() {
+        bail!("Installation verification failed: binaries not found after extraction");
+    }
 
     Ok(())
 }
