@@ -24,6 +24,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
+use tracing::{debug, info};
 
 /// Unified GUI backend service
 ///
@@ -233,7 +234,7 @@ impl GuiBackend {
         id: u32,
         request: StartServerRequest,
     ) -> Result<StartServerResponse> {
-        eprintln!("🔧 Starting server for model ID {}", id);
+        debug!(model_id = %id, "Starting server for model");
 
         // Get model from database
         let identifier = id.to_string();
@@ -241,10 +242,10 @@ impl GuiBackend {
             .await?
             .ok_or_else(|| anyhow!("Model with ID {} not found", id))?;
 
-        eprintln!(
-            "📦 Found model: {} at {}",
-            model.name,
-            model.file_path.display()
+        debug!(
+            model_name = %model.name,
+            model_path = %model.file_path.display(),
+            "Found model"
         );
 
         // Check if model file exists
@@ -261,18 +262,18 @@ impl GuiBackend {
         let jinja_resolution = resolve_jinja_flag(request.jinja, &model.tags);
         match (jinja_resolution.enabled, jinja_resolution.source) {
             (true, JinjaResolutionSource::ExplicitTrue) => {
-                eprintln!("✨ Enabling Jinja templates (user override)");
+                debug!("Enabling Jinja templates (user override)");
             }
             (true, JinjaResolutionSource::AgentTag) => {
-                eprintln!("✨ Enabling Jinja templates due to 'agent' tag");
+                debug!("Enabling Jinja templates due to 'agent' tag");
             }
             (false, JinjaResolutionSource::ExplicitFalse) => {
-                eprintln!("🚫 Jinja templates disabled by user override");
+                debug!("Jinja templates disabled by user override");
             }
             _ => {}
         }
 
-        eprintln!("🚀 Calling ProcessManager.start_server...");
+        debug!("Calling ProcessManager.start_server");
 
         // Start the server
         let port = self
@@ -286,8 +287,8 @@ impl GuiBackend {
             )
             .await?;
 
-        eprintln!("✅ Server started on port {}", port);
-        eprintln!("📤 Returning StartServerResponse with port: {}", port);
+        info!(port = %port, model_id = %id, "Server started");
+        debug!(port = %port, "Returning StartServerResponse");
 
         Ok(StartServerResponse {
             port,
@@ -306,14 +307,16 @@ impl GuiBackend {
         // Update health before listing
         self.process_manager.update_health_status().await;
         let servers = self.process_manager.list_servers().await;
-        eprintln!(
-            "📊 list_servers called, returning {} servers",
-            servers.len()
+        debug!(
+            server_count = %servers.len(),
+            "list_servers called"
         );
         for server in &servers {
-            eprintln!(
-                "   Server: model_id={}, model_name={}, port={}",
-                server.model_id, server.model_name, server.port
+            debug!(
+                model_id = %server.model_id,
+                model_name = %server.model_name,
+                port = %server.port,
+                "Server info"
             );
         }
         Ok(servers)

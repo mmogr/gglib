@@ -27,6 +27,7 @@ use sqlx::Error as SqlxError;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
+use tracing::{debug, error};
 
 /// List all models with their serving status
 pub async fn list_models(
@@ -342,7 +343,7 @@ pub async fn chat_proxy(
     State(_state): State<Arc<AppState>>,
     Json(mut payload): Json<serde_json::Value>,
 ) -> Result<Response, AppError> {
-    eprintln!("📨 Chat proxy request received");
+    debug!("Chat proxy request received");
 
     // Extract the port from the request body
     let port = payload
@@ -351,7 +352,7 @@ pub async fn chat_proxy(
         .ok_or_else(|| AppError::ServerError("Missing 'port' field in request".to_string()))?
         as u16;
 
-    eprintln!("🔌 Forwarding to port {}", port);
+    debug!(port = %port, "Forwarding to llama-server");
 
     // Remove the port field before forwarding
     if let Some(obj) = payload.as_object_mut() {
@@ -360,7 +361,7 @@ pub async fn chat_proxy(
 
     // Build target URL
     let target_url = format!("http://127.0.0.1:{}/v1/chat/completions", port);
-    eprintln!("🎯 Target URL: {}", target_url);
+    debug!(target_url = %target_url, "Proxying request");
 
     // Forward the request
     let client = reqwest::Client::new();
@@ -370,11 +371,11 @@ pub async fn chat_proxy(
         .send()
         .await
         .map_err(|e| {
-            eprintln!("❌ Proxy request failed: {}", e);
+            error!(error = %e, "Proxy request failed");
             AppError::ServerError(format!("Failed to proxy request: {}", e))
         })?;
 
-    eprintln!("✅ Got response with status: {}", response.status());
+    debug!(status = %response.status(), "Got response from llama-server");
 
     let status = response.status();
     if !status.is_success() {
@@ -382,7 +383,7 @@ pub async fn chat_proxy(
             .text()
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
-        eprintln!("❌ llama-server error ({}): {}", status, error_text);
+        error!(status = %status, error = %error_text, "llama-server error");
         return Err(AppError::ServerError(format!(
             "llama-server error ({}): {}",
             status, error_text
@@ -391,11 +392,11 @@ pub async fn chat_proxy(
 
     // Forward the response back to the client
     let response_json: serde_json::Value = response.json().await.map_err(|e| {
-        eprintln!("❌ Failed to parse response: {}", e);
+        error!(error = %e, "Failed to parse response");
         AppError::ServerError(format!("Failed to parse response: {}", e))
     })?;
 
-    eprintln!("✅ Chat proxy successful");
+    debug!("Chat proxy successful");
     Ok(Json(response_json).into_response())
 }
 

@@ -11,6 +11,7 @@ use gglib::{
 };
 use std::sync::Arc;
 use tauri::Emitter;
+use tracing::{debug, error, info};
 
 // Application state with shared backend
 struct AppState {
@@ -93,7 +94,13 @@ async fn serve_model(
     jinja: Option<bool>,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
-    eprintln!("🚀 Serve model command called: id={}, ctx_size={:?}, context_length={:?}, port={:?}", id, ctx_size, context_length, port);
+    debug!(
+        model_id = %id,
+        ctx_size = ?ctx_size,
+        context_length = ?context_length,
+        port = ?port,
+        "Serve model command called"
+    );
     
     // Use context_length if provided, otherwise parse ctx_size
     let context_length = if let Some(len) = context_length {
@@ -123,11 +130,11 @@ async fn serve_model(
         .start_server(id, request)
         .await
         .map(|resp| {
-            eprintln!("✓ Server started successfully on port {}: {}", resp.port, resp.message);
+            info!(port = %resp.port, "Server started successfully");
             resp.message
         })
         .map_err(|e| {
-            eprintln!("✗ Failed to start server: {}", e);
+            error!(error = %e, "Failed to start server");
             format!("Failed to start server: {}", e)
         });
     
@@ -164,14 +171,14 @@ async fn download_model(
     use gglib::commands::download::{DownloadProgressEvent, ProgressThrottle};
 
     // Emit download started event
-    eprintln!("Attempting to emit 'download-progress' (starting) for model: {}", model_id);
+    debug!(model_id = %model_id, "Attempting to emit download-progress (starting)");
     if let Err(err) = app.emit(
         "download-progress",
         DownloadProgressEvent::starting(&model_id),
     ) {
-        eprintln!("Failed to emit start event: {}", err);
+        error!(error = %err, "Failed to emit start event");
     } else {
-        eprintln!("Successfully emitted start event");
+        debug!("Successfully emitted start event");
     }
     
     // Clone for emission in closure
@@ -190,9 +197,9 @@ async fn download_model(
             return;
         }
         let event = DownloadProgressEvent::progress(&model_id_clone, downloaded, total, start_time);
-        // eprintln!("Emitting progress: {}/{}", downloaded, total); // Commented out to avoid spam
+        // debug!(downloaded, total, "Emitting progress"); // Commented out to avoid spam
         if let Err(err) = app_clone.emit("download-progress", event) {
-            eprintln!("Failed to emit progress event: {}", err);
+            tracing::error!(error = %err, "Failed to emit progress event");
         }
     });
     
@@ -208,7 +215,7 @@ async fn download_model(
                 "download-progress",
                 DownloadProgressEvent::completed(&model_id_clone2, Some(&message)),
             ) {
-                eprintln!("Failed to emit completion event: {}", err);
+                error!(error = %err, "Failed to emit completion event");
             }
             Ok(message)
         }
@@ -223,7 +230,7 @@ async fn download_model(
                 "download-progress",
                 DownloadProgressEvent::errored(&model_id_clone2, &error_msg),
             ) {
-                eprintln!("Failed to emit error event: {}", err);
+                error!(error = %err, "Failed to emit error event");
             }
             Err(error_msg)
         }
@@ -484,6 +491,17 @@ fn get_gui_api_port(state: tauri::State<'_, AppState>) -> u16 {
 #[tokio::main]
 async fn main() {
     let _ = dotenv();
+
+    // Initialize tracing/logging for the Tauri GUI
+    // Priority: RUST_LOG env var > default (warn)
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+        )
+        .try_init()
+        .ok(); // Ignore error if already initialized
+
     // Initialize the shared backend (same as Web GUI!)
     let backend = Arc::new(
         GuiBackend::new(9000, 5)
@@ -507,7 +525,7 @@ async fn main() {
 
     tokio::spawn(async move {
         if let Err(e) = start_embedded_api_server(backend_for_server, embedded_api_port).await {
-            eprintln!("Failed to start embedded API server: {}", e);
+            error!(error = %e, "Failed to start embedded API server");
         }
     });
 

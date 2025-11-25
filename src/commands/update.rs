@@ -9,6 +9,7 @@ use anyhow::{Result, anyhow};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::io::{self, Write};
+use tracing::warn;
 
 /// Arguments for the update command
 pub struct UpdateArgs {
@@ -83,9 +84,9 @@ pub async fn execute(pool: &SqlitePool, args: UpdateArgs) -> Result<()> {
 
     // Verify the file still exists
     if !existing_model.file_path.exists() && !args.force {
-        eprintln!(
-            "Warning: Model file '{}' no longer exists",
-            existing_model.file_path.display()
+        warn!(
+            file_path = %existing_model.file_path.display(),
+            "Model file no longer exists"
         );
         if !args.dry_run {
             print!("Continue with metadata update anyway? [y/N]: ");

@@ -18,6 +18,11 @@ pub struct Cli {
     /// Override the models directory for this invocation
     #[arg(long = "models-dir", global = true)]
     pub models_dir: Option<String>,
+
+    /// Enable verbose/debug output
+    #[arg(short = 'v', long = "verbose", global = true)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

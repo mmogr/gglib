@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::{debug, warn};
 
 /// Core process lifecycle manager
 ///
@@ -84,7 +85,7 @@ impl ProcessCore {
             .ok();
 
         if let Some(file) = log_file {
-            eprintln!("📝 Logging llama-server output to: {}", log_path.display());
+            debug!(log_path = %log_path.display(), "Logging llama-server output");
             cmd.stdout(file.try_clone().unwrap()).stderr(file);
         } else {
             // Fallback: suppress output if logging fails
@@ -116,9 +117,11 @@ impl ProcessCore {
         {
             if let Some(running) = self.processes.remove(&model_id) {
                 let pid = running.info.pid;
-                eprintln!(
-                    "💀 Found process to kill: model_id={}, pid={}, port={}",
-                    model_id, pid, running.info.port
+                debug!(
+                    model_id = %model_id,
+                    pid = %pid,
+                    port = %running.info.port,
+                    "Found process to kill"
                 );
                 use std::process::Command as SysCommand;
                 tracing::debug!("Sending SIGKILL to process {}", pid);
@@ -169,9 +172,9 @@ impl ProcessCore {
 
     /// List all running processes
     pub fn list_all(&self) -> Vec<&ServerInfo> {
-        eprintln!(
-            "📋 ProcessCore: list_all called. Total processes in map: {}",
-            self.processes.len()
+        debug!(
+            process_count = %self.processes.len(),
+            "ProcessCore: list_all called"
         );
         self.processes.values().map(|p| &p.info).collect()
     }
@@ -223,10 +226,10 @@ impl ProcessCore {
 
                 // Check if port is actually available
                 if Self::is_port_available(port) {
-                    eprintln!(
-                        "✅ Allocated available port: {} (attempt {})",
-                        port,
-                        attempt + 1
+                    debug!(
+                        port = %port,
+                        attempt = %(attempt + 1),
+                        "Allocated available port"
                     );
 
                     // Double-check availability immediately before returning
@@ -234,10 +237,10 @@ impl ProcessCore {
                     if Self::is_port_available(port) {
                         return Ok(port);
                     } else {
-                        eprintln!("⚠️  Port {} became unavailable, retrying...", port);
+                        debug!(port = %port, "Port became unavailable, retrying");
                     }
                 } else {
-                    eprintln!("⚠️  Port {} unavailable on system, skipping", port);
+                    debug!(port = %port, "Port unavailable on system, skipping");
                 }
             }
 
@@ -256,9 +259,9 @@ impl ProcessCore {
 
     /// Remove dead processes from tracking
     pub fn cleanup_dead(&mut self) -> Vec<u32> {
-        eprintln!(
-            "🧹 cleanup_dead called. Current processes in map: {}",
-            self.processes.len()
+        debug!(
+            process_count = %self.processes.len(),
+            "cleanup_dead called"
         );
         let dead: Vec<u32> = self
             .processes
@@ -267,15 +270,15 @@ impl ProcessCore {
                 // Check if process is still alive
                 match running.child.try_wait() {
                     Ok(Some(status)) => {
-                        eprintln!("💀 Process {} exited with status: {:?}", id, status);
+                        debug!(id = %id, status = ?status, "Process exited");
                         Some(*id) // Process has exited
                     }
                     Ok(None) => {
-                        eprintln!("✅ Process {} still running", id);
+                        debug!(id = %id, "Process still running");
                         None // Still running
                     }
                     Err(e) => {
-                        eprintln!("❌ Error checking process {}: {}", id, e);
+                        warn!(id = %id, error = %e, "Error checking process");
                         Some(*id) // Error checking, assume dead
                     }
                 }
@@ -284,14 +287,14 @@ impl ProcessCore {
 
         // Remove dead processes
         for id in &dead {
-            eprintln!("🗑️  Removing dead process {} from map", id);
+            debug!(id = %id, "Removing dead process from map");
             self.processes.remove(id);
         }
 
-        eprintln!(
-            "🧹 cleanup_dead finished. Removed {} processes. Remaining: {}",
-            dead.len(),
-            self.processes.len()
+        debug!(
+            removed_count = %dead.len(),
+            remaining_count = %self.processes.len(),
+            "cleanup_dead finished"
         );
         dead
     }
