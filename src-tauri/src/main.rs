@@ -7,7 +7,8 @@ use gglib::{
         AddModelRequest, AppSettings, GuiModel, RemoveModelRequest, StartServerRequest,
         UpdateModelRequest, UpdateSettingsRequest,
     },
-    services::gui_backend::{DownloadTaskError, GuiBackend},
+    services::core::download_service::DownloadError,
+    services::gui_backend::GuiBackend,
 };
 use std::sync::Arc;
 use tauri::Emitter;
@@ -220,7 +221,7 @@ async fn download_model(
             Ok(message)
         }
         Err(e) => {
-            let is_cancelled = e.downcast_ref::<DownloadTaskError>().is_some();
+            let is_cancelled = e.downcast_ref::<DownloadError>().is_some();
             let error_msg = if is_cancelled {
                 format!("Download '{}' was cancelled", model_id_clone2)
             } else {
