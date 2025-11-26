@@ -5,9 +5,8 @@
 
 use crate::commands::common::{ContextResolution, ContextResolutionSource};
 use crate::models::Gguf;
-use crate::services::database;
+use crate::services::AppCore;
 use anyhow::{Result, anyhow};
-use sqlx::SqlitePool;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -141,16 +140,18 @@ pub struct ResolvedModel {
 /// 3. Validating the file exists
 ///
 /// # Arguments
-/// * `pool` - Database connection pool
+/// * `core` - AppCore service layer
 /// * `identifier` - Model name or ID
 ///
 /// # Returns
 /// Returns `Ok(ResolvedModel)` if found and valid, otherwise an error.
 pub async fn resolve_model_for_invocation(
-    pool: &SqlitePool,
+    core: &AppCore,
     identifier: &str,
 ) -> Result<ResolvedModel> {
-    let model = database::find_model_by_identifier(pool, identifier)
+    let model = core
+        .models()
+        .find_by_identifier(identifier)
         .await?
         .ok_or_else(|| anyhow!("Model '{}' not found in database", identifier))?;
 

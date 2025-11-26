@@ -6,7 +6,7 @@
 
 use crate::{
     models,
-    services::database,
+    services::{AppCore, database},
     utils::{input, validation},
 };
 use anyhow::Result;
@@ -52,8 +52,9 @@ pub async fn handle_add(file_path: String) -> Result<()> {
     let gguf_metadata = validation::validate_and_parse_gguf(&file_path)?;
     println!("File validation and metadata extraction successful.");
 
-    // Set up database connection
-    let pool: sqlx::Pool<sqlx::Sqlite> = database::setup_database().await?;
+    // Set up AppCore with database connection
+    let pool = database::setup_database().await?;
+    let core = AppCore::new(pool);
 
     // Display extracted metadata to the user
     println!("\nExtracted metadata:");
@@ -132,8 +133,8 @@ pub async fn handle_add(file_path: String) -> Result<()> {
     }
     println!("  File: {}", new_model.file_path.display());
 
-    // Save to database
-    database::add_model(&pool, &new_model).await?;
+    // Save to database via AppCore
+    core.models().add(&new_model).await?;
 
     println!("Model successfully added to database!");
     Ok(())

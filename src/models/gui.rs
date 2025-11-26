@@ -117,14 +117,6 @@ pub struct CancelDownloadRequest {
     pub model_id: String,
 }
 
-/// Response for download progress updates
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DownloadProgressEvent {
-    pub status: String, // "started", "downloading", "completed", "error"
-    pub model_id: String,
-    pub message: String,
-}
-
 /// Current configuration for the models directory shown in settings UI
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelsDirectoryInfo {

@@ -4,7 +4,10 @@
 //! model entries from the database. The actual model files remain on disk
 //! unchanged - only the database entries are removed.
 
-use crate::{models::Gguf, services::database, utils::input};
+use crate::models::Gguf;
+use crate::services::core::AppCore;
+use crate::services::database;
+use crate::utils::input;
 use anyhow::{Result, anyhow};
 
 /// Handles the "remove" command to delete a GGUF model from the database.
@@ -47,12 +50,13 @@ use anyhow::{Result, anyhow};
 /// ```
 pub async fn handle_remove(identifier: String, force: bool) -> Result<()> {
     let pool = database::setup_database().await?;
+    let core = AppCore::new(pool);
 
-    if let Some(model) = database::find_model_by_identifier(&pool, &identifier).await? {
-        remove_with_confirmation(&pool, model, force).await
+    if let Some(model) = core.models().find_by_identifier(&identifier).await? {
+        remove_with_confirmation(&core, model, force).await
     } else {
         // Fall back to partial matches for convenience
-        let models = database::find_models_by_name(&pool, &identifier).await?;
+        let models = core.models().find_by_name(&identifier).await?;
         match models.len() {
             0 => {
                 println!("No model found matching: '{identifier}'");
@@ -61,7 +65,7 @@ pub async fn handle_remove(identifier: String, force: bool) -> Result<()> {
             }
             1 => {
                 let model = models.into_iter().next().unwrap();
-                remove_with_confirmation(&pool, model, force).await
+                remove_with_confirmation(&core, model, force).await
             }
             _ => {
                 println!("Multiple models found matching '{identifier}'. Please be more specific:");
@@ -82,7 +86,7 @@ pub async fn handle_remove(identifier: String, force: bool) -> Result<()> {
     }
 }
 
-async fn remove_with_confirmation(pool: &sqlx::SqlitePool, model: Gguf, force: bool) -> Result<()> {
+async fn remove_with_confirmation(core: &AppCore, model: Gguf, force: bool) -> Result<()> {
     let model_id = model
         .id
         .ok_or_else(|| anyhow!("Model '{}' does not have an ID", model.name))?;
@@ -114,7 +118,7 @@ async fn remove_with_confirmation(pool: &sqlx::SqlitePool, model: Gguf, force: b
         }
     }
 
-    database::remove_model_by_id(pool, model_id).await?;
+    core.models().remove(model_id).await?;
     println!(
         "✅ Model '{}' (ID {}) successfully removed from database.",
         model.name, model_id

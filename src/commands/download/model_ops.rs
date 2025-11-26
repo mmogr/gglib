@@ -274,7 +274,7 @@ pub async fn add_to_database(
     file_path: &Path,
     quantization: &str,
 ) -> Result<()> {
-    use crate::services::database;
+    use crate::services::{AppCore, database};
 
     let mut model = Gguf::new(
         model_id.to_string(),
@@ -292,7 +292,8 @@ pub async fn add_to_database(
     println!("Adding model to database...");
 
     let pool = database::setup_database().await?;
-    database::add_model(&pool, &model).await?;
+    let core = AppCore::new(pool);
+    core.models().add(&model).await?;
 
     println!("✓ Successfully added model to database:");
     println!("  Model: {}", model.name);
@@ -345,13 +346,14 @@ pub async fn check_model_update(model: &Gguf, hf_repo: &str) -> Result<()> {
 
 /// Handle check updates command
 pub async fn handle_check_updates(model_id: Option<u32>, all: bool) -> Result<()> {
-    use crate::services::database;
+    use crate::services::{AppCore, database};
 
     let pool = database::setup_database().await?;
+    let core = AppCore::new(pool);
 
     if all {
         println!("Checking updates for all models...");
-        let models = database::list_models(&pool).await?;
+        let models = core.models().list().await?;
 
         if models.is_empty() {
             println!("No models found in database.");
@@ -369,17 +371,20 @@ pub async fn handle_check_updates(model_id: Option<u32>, all: bool) -> Result<()
             }
         }
     } else if let Some(id) = model_id {
-        if let Some(model) = database::get_model_by_id(&pool, id).await? {
-            if let Some(hf_repo) = &model.hf_repo_id {
-                check_model_update(&model, hf_repo).await?;
-            } else {
-                println!(
-                    "Model '{}' is not from HuggingFace, cannot check for updates.",
-                    model.name
-                );
+        match core.models().get_by_id(id).await {
+            Ok(model) => {
+                if let Some(hf_repo) = &model.hf_repo_id {
+                    check_model_update(&model, hf_repo).await?;
+                } else {
+                    println!(
+                        "Model '{}' is not from HuggingFace, cannot check for updates.",
+                        model.name
+                    );
+                }
             }
-        } else {
-            println!("Model with ID {} not found.", id);
+            Err(_) => {
+                println!("Model with ID {} not found.", id);
+            }
         }
     } else {
         println!("Please specify --model-id <ID> or --all to check for updates.");
@@ -390,51 +395,55 @@ pub async fn handle_check_updates(model_id: Option<u32>, all: bool) -> Result<()
 
 /// Handle update model command  
 pub async fn handle_update_model(model_id: u32, force: bool) -> Result<()> {
-    use crate::services::database;
+    use crate::services::{AppCore, database};
 
     let pool = database::setup_database().await?;
+    let core = AppCore::new(pool);
 
-    if let Some(model) = database::get_model_by_id(&pool, model_id).await? {
-        if let Some(hf_repo) = &model.hf_repo_id {
-            if let Some(quantization) = &model.quantization {
-                println!("Updating model: {}", model.name);
+    match core.models().get_by_id(model_id).await {
+        Ok(model) => {
+            if let Some(hf_repo) = &model.hf_repo_id {
+                if let Some(quantization) = &model.quantization {
+                    println!("Updating model: {}", model.name);
 
-                if !force {
-                    print!("This will re-download the model. Continue? [y/N]: ");
-                    std::io::stdout().flush()?;
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input)?;
-                    if !input.trim().to_lowercase().starts_with('y') {
-                        println!("Update cancelled.");
-                        return Ok(());
+                    if !force {
+                        print!("This will re-download the model. Continue? [y/N]: ");
+                        std::io::stdout().flush()?;
+                        let mut input = String::new();
+                        std::io::stdin().read_line(&mut input)?;
+                        if !input.trim().to_lowercase().starts_with('y') {
+                            println!("Update cancelled.");
+                            return Ok(());
+                        }
                     }
+
+                    // Get models directory
+                    let models_dir = get_models_directory()?;
+
+                    // Re-download the model
+                    let api = create_hf_api(None, &models_dir)?;
+                    let context = DownloadContext {
+                        model_id: hf_repo,
+                        quantization: Some(quantization.as_str()),
+                        models_dir: &models_dir,
+                        force: true,
+                        add_to_db: true,
+                        session: SessionOptions::default(),
+                    };
+
+                    download_model(&api, context).await?;
+
+                    println!("✓ Model updated successfully!");
+                } else {
+                    println!("Cannot update model: no quantization information stored");
                 }
-
-                // Get models directory
-                let models_dir = get_models_directory()?;
-
-                // Re-download the model
-                let api = create_hf_api(None, &models_dir)?;
-                let context = DownloadContext {
-                    model_id: hf_repo,
-                    quantization: Some(quantization.as_str()),
-                    models_dir: &models_dir,
-                    force: true,
-                    add_to_db: true,
-                    session: SessionOptions::default(),
-                };
-
-                download_model(&api, context).await?;
-
-                println!("✓ Model updated successfully!");
             } else {
-                println!("Cannot update model: no quantization information stored");
+                println!("Cannot update model: not downloaded from HuggingFace");
             }
-        } else {
-            println!("Cannot update model: not downloaded from HuggingFace");
         }
-    } else {
-        println!("Model with ID {} not found.", model_id);
+        Err(_) => {
+            println!("Model with ID {} not found.", model_id);
+        }
     }
 
     Ok(())

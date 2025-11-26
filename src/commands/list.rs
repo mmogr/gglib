@@ -3,6 +3,7 @@
 //! This module handles retrieving and displaying all models from the
 //! database in a formatted table with key metadata.
 
+use crate::services::core::AppCore;
 use crate::services::database;
 use anyhow::Result;
 
@@ -34,11 +35,12 @@ use anyhow::Result;
 /// }
 /// ```
 pub async fn handle_list() -> Result<()> {
-    // Set up database connection
-    let pool: sqlx::Pool<sqlx::Sqlite> = database::setup_database().await?;
+    // Set up database and AppCore
+    let pool = database::setup_database().await?;
+    let core = AppCore::new(pool);
 
-    // Retrieve all models from database
-    let models: Vec<crate::Gguf> = database::list_models(&pool).await?;
+    // Retrieve all models via AppCore
+    let models = core.models().list().await?;
 
     if models.is_empty() {
         println!("No models found in the database.");

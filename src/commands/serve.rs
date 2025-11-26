@@ -11,7 +11,7 @@ use crate::commands::llama_invocation::{
     LlamaCommandBuilder, log_command_execution, log_context_info, log_mlock_info, log_model_info,
     resolve_model_for_invocation,
 };
-use crate::services::database;
+use crate::services::{AppCore, database};
 use crate::utils::paths::get_llama_server_path;
 use anyhow::Result;
 use std::process::Stdio;
@@ -55,11 +55,12 @@ pub async fn handle_serve(
     // Get llama-server binary path
     let llama_server_path = get_llama_server_path()?;
 
-    // Set up database connection
+    // Set up AppCore with database connection
     let pool = database::setup_database().await?;
+    let core = AppCore::new(pool);
 
     // Use shared model resolution helper
-    let resolved = resolve_model_for_invocation(&pool, &id.to_string()).await?;
+    let resolved = resolve_model_for_invocation(&core, &id.to_string()).await?;
     let model = resolved.model;
 
     log_model_info(&model, "llama-server");

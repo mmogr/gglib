@@ -6,7 +6,7 @@ use crate::commands::llama_invocation::{
     LlamaCommandBuilder, log_command_execution, log_context_info, log_mlock_info, log_model_info,
     resolve_model_for_invocation,
 };
-use crate::services::database;
+use crate::services::{AppCore, database};
 use crate::utils::paths::get_llama_cli_path;
 use anyhow::Result;
 use std::process::Stdio;
@@ -34,6 +34,7 @@ pub async fn handle_chat(args: ChatCommandArgs) -> Result<()> {
     let llama_cli_path = get_llama_cli_path()?;
 
     let pool = database::setup_database().await?;
+    let core = AppCore::new(pool);
     let ChatCommandArgs {
         identifier,
         ctx_size,
@@ -47,7 +48,7 @@ pub async fn handle_chat(args: ChatCommandArgs) -> Result<()> {
     } = args;
 
     // Use shared model resolution helper
-    let resolved = resolve_model_for_invocation(&pool, &identifier).await?;
+    let resolved = resolve_model_for_invocation(&core, &identifier).await?;
     let model = resolved.model;
 
     log_model_info(&model, "llama-cli");
