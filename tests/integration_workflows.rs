@@ -140,8 +140,12 @@ async fn test_complete_model_lifecycle_workflow() {
         Some(&"new_value".to_string())
     ); // New
 
-    // Step 4: Remove the model (simulating remove command)
-    let remove_result = database::remove_model(&pool, "Updated Lifecycle Model").await;
+    // Step 4: Remove the model (simulating remove command - find by name, then remove by ID)
+    let model_to_remove = database::find_model_by_identifier(&pool, "Updated Lifecycle Model")
+        .await
+        .unwrap()
+        .expect("Model should exist");
+    let remove_result = database::remove_model_by_id(&pool, model_to_remove.id.unwrap()).await;
     assert!(remove_result.is_ok(), "Model removal should succeed");
 
     // Verify removal
@@ -244,7 +248,13 @@ async fn test_multi_model_operations_workflow() {
     ); // Added
 
     // Remove one model and verify others remain
-    database::remove_model(&pool, "Model Alpha").await.unwrap();
+    let alpha = database::find_model_by_identifier(&pool, "Model Alpha")
+        .await
+        .unwrap()
+        .expect("Model Alpha should exist");
+    database::remove_model_by_id(&pool, alpha.id.unwrap())
+        .await
+        .unwrap();
 
     let remaining_models = database::list_models(&pool).await.unwrap();
     assert_eq!(
@@ -414,13 +424,13 @@ async fn test_error_handling_across_modules() {
     assert!(update_result.unwrap_err().to_string().contains("not found"));
 
     // Test remove on nonexistent model (should error)
-    let remove_result = database::remove_model(&pool, "nonexistent").await;
+    let remove_result = database::remove_model_by_id(&pool, 999).await;
     assert!(remove_result.is_err());
     assert!(
         remove_result
             .unwrap_err()
             .to_string()
-            .contains("No model found")
+            .contains("not found")
     );
 }
 

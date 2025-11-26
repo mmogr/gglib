@@ -170,9 +170,10 @@ async fn test_remove_model() {
     database::add_model(&pool, &model).await.unwrap();
     let models_before = database::list_models(&pool).await.unwrap();
     assert_eq!(models_before.len(), 1);
+    let model_id = models_before[0].id.unwrap();
 
-    // Remove model
-    let remove_result = database::remove_model(&pool, "to-be-removed").await;
+    // Remove model by ID
+    let remove_result = database::remove_model_by_id(&pool, model_id).await;
     assert!(remove_result.is_ok());
 
     // Verify removal
@@ -184,9 +185,9 @@ async fn test_remove_model() {
 async fn test_remove_nonexistent_model() {
     let pool = create_test_database().await.unwrap();
 
-    let result = database::remove_model(&pool, "does-not-exist").await;
+    let result = database::remove_model_by_id(&pool, 999).await;
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("No model found"));
+    assert!(result.unwrap_err().to_string().contains("not found"));
 }
 
 #[tokio::test]

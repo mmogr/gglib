@@ -100,8 +100,8 @@ async fn test_list_command_with_models() {
 async fn test_remove_command_scenarios() {
     let pool = create_test_database().await.unwrap();
 
-    // Test removing non-existent model
-    let result = database::remove_model(&pool, "non-existent").await;
+    // Test removing non-existent model by ID
+    let result = database::remove_model_by_id(&pool, 999).await;
     assert!(result.is_err());
 
     // Add a model and then remove it
@@ -110,8 +110,9 @@ async fn test_remove_command_scenarios() {
 
     let models_before = database::list_models(&pool).await.unwrap();
     assert_eq!(models_before.len(), 1);
+    let model_id = models_before[0].id.unwrap();
 
-    let remove_result = database::remove_model(&pool, "to-remove").await;
+    let remove_result = database::remove_model_by_id(&pool, model_id).await;
     assert!(remove_result.is_ok());
 
     let models_after = database::list_models(&pool).await.unwrap();
@@ -183,8 +184,12 @@ async fn test_model_lifecycle_workflow() {
         .unwrap();
     assert_eq!(found_models.len(), 1);
 
-    // 5. Remove the model (simulating remove command)
-    let remove_result = database::remove_model(&pool, "lifecycle-test-model").await;
+    // 5. Remove the model (simulating remove command - find by name, remove by ID)
+    let model_to_remove = database::find_model_by_identifier(&pool, "lifecycle-test-model")
+        .await
+        .unwrap()
+        .expect("Model should exist");
+    let remove_result = database::remove_model_by_id(&pool, model_to_remove.id.unwrap()).await;
     assert!(remove_result.is_ok());
 
     // 6. Verify removal
@@ -198,14 +203,14 @@ async fn test_command_error_scenarios() {
 
     // Test error scenarios that commands need to handle
 
-    // 1. Remove non-existent model
-    let remove_error = database::remove_model(&pool, "does-not-exist").await;
+    // 1. Remove non-existent model by ID
+    let remove_error = database::remove_model_by_id(&pool, 999).await;
     assert!(remove_error.is_err());
     assert!(
         remove_error
             .unwrap_err()
             .to_string()
-            .contains("No model found")
+            .contains("not found")
     );
 
     // 2. Search for non-existent model
@@ -231,6 +236,7 @@ async fn test_command_error_scenarios() {
         ModelStoreError::DuplicateModel { model_name, .. } => {
             assert_eq!(model_name, "duplicate-name");
         }
+        other => panic!("Expected DuplicateModel error, got {:?}", other),
     }
 }
 

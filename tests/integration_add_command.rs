@@ -234,6 +234,7 @@ async fn test_add_command_duplicate_model_handling() {
         ModelStoreError::DuplicateModel { file_path, .. } => {
             assert!(file_path.contains("duplicate_test"));
         }
+        other => panic!("Expected DuplicateModel error, got {:?}", other),
     }
 
     // Verify only the first model exists
