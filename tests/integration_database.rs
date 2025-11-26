@@ -12,24 +12,18 @@ use chrono::Utc;
 use common::database::setup_test_pool;
 use common::fixtures::create_test_model_with_params as create_test_model;
 use gglib::{models::Gguf, services::database};
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Create a test database with a unique temporary database
-async fn create_test_database() -> anyhow::Result<SqlitePool> {
-    setup_test_pool().await
-}
-
 #[tokio::test]
 async fn test_database_setup() {
-    let pool = create_test_database().await;
+    let pool = setup_test_pool().await;
     assert!(pool.is_ok(), "Database setup should succeed");
 }
 
 #[tokio::test]
 async fn test_add_and_retrieve_model() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let model = create_test_model("llama-7b-test", 7.0);
 
     // Add model
@@ -55,7 +49,7 @@ async fn test_add_and_retrieve_model() {
 
 #[tokio::test]
 async fn test_multiple_models_ordered_by_date() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Add models with slight delay to ensure different timestamps
     let model1 = create_test_model("model-1", 1.0);
@@ -81,7 +75,7 @@ async fn test_multiple_models_ordered_by_date() {
 
 #[tokio::test]
 async fn test_find_models_by_name() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Add various models
     let models = vec![
@@ -117,7 +111,7 @@ async fn test_find_models_by_name() {
 
 #[tokio::test]
 async fn test_remove_model() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let model = create_test_model("to-be-removed", 1.0);
 
     // Add model
@@ -137,7 +131,7 @@ async fn test_remove_model() {
 
 #[tokio::test]
 async fn test_remove_nonexistent_model() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     let result = database::remove_model_by_id(&pool, 999).await;
     assert!(result.is_err());
@@ -146,7 +140,7 @@ async fn test_remove_nonexistent_model() {
 
 #[tokio::test]
 async fn test_model_with_complex_metadata() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     let mut complex_metadata = HashMap::new();
     complex_metadata.insert("general.name".to_string(), "Complex Model".to_string());
@@ -202,7 +196,7 @@ async fn test_model_with_complex_metadata() {
 
 #[tokio::test]
 async fn test_model_with_minimal_fields() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     let model = Gguf {
         id: None,
@@ -238,7 +232,7 @@ async fn test_model_with_minimal_fields() {
 
 #[tokio::test]
 async fn test_concurrent_database_operations() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Spawn multiple concurrent tasks
     let mut handles = vec![];

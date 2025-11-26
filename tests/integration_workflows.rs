@@ -5,9 +5,8 @@
 
 mod common;
 
-use anyhow::Result;
 use chrono::Utc;
-use sqlx::SqlitePool;
+use common::database::setup_test_pool;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
@@ -17,15 +16,10 @@ use gglib::models::Gguf;
 use gglib::services::core::AppCore;
 use gglib::services::database;
 
-/// Create an isolated test database pool with the proper schema
-async fn create_test_pool() -> Result<SqlitePool> {
-    common::database::setup_test_pool().await
-}
-
 #[tokio::test]
 async fn test_complete_model_lifecycle_workflow() {
     // Test the complete lifecycle: Add -> List -> Update -> Remove
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     // Step 1: Simulate adding a model (like add command would do)
@@ -132,7 +126,7 @@ async fn test_complete_model_lifecycle_workflow() {
 #[tokio::test]
 async fn test_multi_model_operations_workflow() {
     // Test operations on multiple models
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     // Add multiple models
@@ -248,7 +242,7 @@ async fn test_multi_model_operations_workflow() {
 #[tokio::test]
 async fn test_metadata_manipulation_workflow() {
     // Test complex metadata operations across commands
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     let file_path = temp_dir.path().join("metadata_workflow.gguf");
@@ -365,7 +359,7 @@ async fn test_metadata_manipulation_workflow() {
 #[tokio::test]
 async fn test_error_handling_across_modules() {
     // Test error handling in various workflow scenarios
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test operations on empty database
     let empty_list = database::list_models(&pool).await.unwrap();
@@ -408,7 +402,7 @@ async fn test_error_handling_across_modules() {
 #[tokio::test]
 async fn test_data_consistency_across_operations() {
     // Test that data remains consistent across different operations
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     let file_path = temp_dir.path().join("consistency_test.gguf");

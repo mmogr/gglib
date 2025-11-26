@@ -74,3 +74,43 @@ pub fn create_model_with_metadata(name: &str, metadata: HashMap<String, String>)
     model.metadata = metadata;
     model
 }
+
+/// Creates a model with complex metadata for testing edge cases.
+pub fn create_complex_metadata_model(name: &str) -> Gguf {
+    let mut metadata = HashMap::new();
+    metadata.insert("general.name".to_string(), name.to_string());
+    metadata.insert(
+        "general.description".to_string(),
+        "A complex test model with extensive metadata".to_string(),
+    );
+    metadata.insert("general.author".to_string(), "Test Suite".to_string());
+    metadata.insert("general.version".to_string(), "1.0.0".to_string());
+    metadata.insert("llama.vocab_size".to_string(), "32000".to_string());
+    metadata.insert("llama.attention.head_count".to_string(), "32".to_string());
+    metadata.insert("llama.attention.head_count_kv".to_string(), "32".to_string());
+    metadata.insert("unicode_test".to_string(), "测试数据 🦙 émojis".to_string());
+    metadata.insert("special_chars".to_string(), "!@#$%^&*()[]{}|\\:;\"'<>,.?/~`".to_string());
+
+    let mut model = Gguf::new(
+        name.to_string(),
+        PathBuf::from(format!("/test/complex/{}.gguf", name)),
+        7.0,
+        Utc::now(),
+    );
+    model.architecture = Some("llama".to_string());
+    model.quantization = Some("Q4_K_M".to_string());
+    model.context_length = Some(8192);
+    model.metadata = metadata;
+    model
+}
+
+/// Assert that two models are equal, ignoring the added_at timestamp.
+pub fn assert_models_equal_ignore_timestamp(model1: &Gguf, model2: &Gguf) {
+    assert_eq!(model1.name, model2.name);
+    assert_eq!(model1.file_path, model2.file_path);
+    assert_eq!(model1.param_count_b, model2.param_count_b);
+    assert_eq!(model1.architecture, model2.architecture);
+    assert_eq!(model1.quantization, model2.quantization);
+    assert_eq!(model1.context_length, model2.context_length);
+    assert_eq!(model1.metadata, model2.metadata);
+}

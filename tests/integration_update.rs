@@ -5,9 +5,8 @@
 
 mod common;
 
-use anyhow::Result;
 use chrono::Utc;
-use sqlx::SqlitePool;
+use common::database::setup_test_pool;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
@@ -17,14 +16,9 @@ use gglib::models::Gguf;
 use gglib::services::core::AppCore;
 use gglib::services::database;
 
-/// Create an isolated test database pool with the proper schema
-async fn create_test_pool() -> Result<SqlitePool> {
-    common::database::setup_test_pool().await
-}
-
 /// Create a test database with a sample model
 async fn setup_test_database_with_model() -> (sqlx::SqlitePool, Gguf, tempfile::TempDir) {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     let mut metadata = HashMap::new();
     metadata.insert("general.name".to_string(), "Test Model".to_string());

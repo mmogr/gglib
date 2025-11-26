@@ -12,21 +12,15 @@ use gglib::{
     models::Gguf,
     services::database::{self, ModelStoreError},
 };
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::PathBuf;
-
-/// Create a test database pool for command testing
-async fn create_test_database() -> anyhow::Result<SqlitePool> {
-    setup_test_pool().await
-}
 
 #[tokio::test]
 async fn test_list_command_with_no_models() {
     // This test would require mocking database::setup_database() to return our test pool
     // For now, we test the command logic indirectly through the database functions
 
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let models = database::list_models(&pool).await.unwrap();
 
     // Empty database should return empty list
@@ -35,7 +29,7 @@ async fn test_list_command_with_no_models() {
 
 #[tokio::test]
 async fn test_list_command_with_models() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Add some test models
     let model1 = create_test_model("test-model-1");
@@ -50,7 +44,7 @@ async fn test_list_command_with_models() {
 
 #[tokio::test]
 async fn test_remove_command_scenarios() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test removing non-existent model by ID
     let result = database::remove_model_by_id(&pool, 999).await;
@@ -73,7 +67,7 @@ async fn test_remove_command_scenarios() {
 
 #[tokio::test]
 async fn test_find_models_for_remove_command() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Add models with similar names
     let models = vec![
@@ -113,7 +107,7 @@ async fn test_find_models_for_remove_command() {
 
 #[tokio::test]
 async fn test_model_lifecycle_workflow() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Simulate the full workflow: add -> list -> find -> remove
 
@@ -151,7 +145,7 @@ async fn test_model_lifecycle_workflow() {
 
 #[tokio::test]
 async fn test_command_error_scenarios() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test error scenarios that commands need to handle
 
@@ -189,7 +183,7 @@ async fn test_command_error_scenarios() {
 
 #[tokio::test]
 async fn test_models_with_various_metadata() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test models with different metadata configurations
     let models = vec![

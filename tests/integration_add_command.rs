@@ -5,9 +5,8 @@
 
 mod common;
 
-use anyhow::Result;
 use chrono::Utc;
-use sqlx::SqlitePool;
+use common::database::setup_test_pool;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
@@ -15,11 +14,6 @@ use tempfile::tempdir;
 use gglib::models::Gguf;
 use gglib::services::database::{self, ModelStoreError};
 use gglib::utils::validation;
-
-/// Create an isolated test database pool with the proper schema
-async fn create_test_pool() -> Result<SqlitePool> {
-    common::database::setup_test_pool().await
-}
 
 /// Create a test GGUF file with minimal valid header
 fn create_test_gguf_file(temp_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
@@ -100,7 +94,7 @@ async fn test_add_command_wrong_extension() {
 
 #[tokio::test]
 async fn test_add_command_database_integration() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
     let file_path = create_test_gguf_file(temp_dir.path(), "integration_test");
 
@@ -149,7 +143,7 @@ async fn test_add_command_database_integration() {
 
 #[tokio::test]
 async fn test_add_command_duplicate_model_handling() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
     let file_path = create_test_gguf_file(temp_dir.path(), "duplicate_test");
 
@@ -220,7 +214,7 @@ async fn test_add_command_duplicate_model_handling() {
 
 #[tokio::test]
 async fn test_add_command_with_complex_metadata() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
     let file_path = create_test_gguf_file(temp_dir.path(), "metadata_test");
 
@@ -281,7 +275,7 @@ async fn test_add_command_with_complex_metadata() {
 
 #[tokio::test]
 async fn test_add_command_with_minimal_data() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
     let file_path = create_test_gguf_file(temp_dir.path(), "minimal_test");
 

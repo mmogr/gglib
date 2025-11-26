@@ -5,8 +5,8 @@
 
 mod common;
 
-use anyhow::Result;
 use chrono::Utc;
+use common::database::setup_test_pool;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::fs;
@@ -15,14 +15,9 @@ use tempfile::tempdir;
 use gglib::models::Gguf;
 use gglib::services::database;
 
-/// Create an isolated test database pool with the proper schema
-async fn create_test_pool() -> Result<SqlitePool> {
-    common::database::setup_test_pool().await
-}
-
 /// Create a test database with sample models for serve testing
 async fn setup_test_database_with_models() -> (SqlitePool, Vec<Gguf>, tempfile::TempDir) {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     // Create test GGUF files
@@ -300,7 +295,7 @@ async fn test_serve_command_parameter_combinations() {
 
 #[tokio::test]
 async fn test_serve_command_error_scenarios() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test empty database scenario
     let result = database::find_model_by_identifier(&pool, "1")
