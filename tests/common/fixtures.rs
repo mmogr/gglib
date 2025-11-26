@@ -87,9 +87,15 @@ pub fn create_complex_metadata_model(name: &str) -> Gguf {
     metadata.insert("general.version".to_string(), "1.0.0".to_string());
     metadata.insert("llama.vocab_size".to_string(), "32000".to_string());
     metadata.insert("llama.attention.head_count".to_string(), "32".to_string());
-    metadata.insert("llama.attention.head_count_kv".to_string(), "32".to_string());
+    metadata.insert(
+        "llama.attention.head_count_kv".to_string(),
+        "32".to_string(),
+    );
     metadata.insert("unicode_test".to_string(), "测试数据 🦙 émojis".to_string());
-    metadata.insert("special_chars".to_string(), "!@#$%^&*()[]{}|\\:;\"'<>,.?/~`".to_string());
+    metadata.insert(
+        "special_chars".to_string(),
+        "!@#$%^&*()[]{}|\\:;\"'<>,.?/~`".to_string(),
+    );
 
     let mut model = Gguf::new(
         name.to_string(),
