@@ -3,6 +3,8 @@
 //! This module tests the complete add workflow including file validation,
 //! metadata extraction, database operations, and error handling.
 
+mod common;
+
 use anyhow::Result;
 use chrono::Utc;
 use sqlx::SqlitePool;
@@ -16,37 +18,7 @@ use gglib::utils::validation;
 
 /// Create an isolated test database pool with the proper schema
 async fn create_test_pool() -> Result<SqlitePool> {
-    // Use in-memory database for testing to avoid interference
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    // Create the table with enhanced metadata fields
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY, 
-            name TEXT NOT NULL, 
-            file_path TEXT NOT NULL, 
-            param_count_b REAL NOT NULL,
-            architecture TEXT,
-            quantization TEXT,
-            context_length INTEGER,
-            metadata TEXT,
-            added_at TEXT NOT NULL,
-            hf_repo_id TEXT,
-            hf_commit_sha TEXT,
-            hf_filename TEXT,
-            download_date TEXT,
-            last_update_check TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
-            )",
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")
-        .execute(&pool)
-        .await?;
-
-    Ok(pool)
+    common::database::setup_test_pool().await
 }
 
 /// Create a test GGUF file with minimal valid header

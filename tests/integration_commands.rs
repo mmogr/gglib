@@ -3,7 +3,11 @@
 //! These tests verify the end-to-end functionality of CLI commands
 //! including database interactions, user workflows, and error handling.
 
+mod common;
+
 use chrono::Utc;
+use common::database::setup_test_pool;
+use common::fixtures::create_test_model;
 use gglib::{
     models::Gguf,
     services::database::{self, ModelStoreError},
@@ -14,59 +18,7 @@ use std::path::PathBuf;
 
 /// Create a test database pool for command testing
 async fn create_test_database() -> anyhow::Result<SqlitePool> {
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY, 
-            name TEXT NOT NULL, 
-            file_path TEXT NOT NULL, 
-            param_count_b REAL NOT NULL,
-            architecture TEXT,
-            quantization TEXT,
-            context_length INTEGER,
-            metadata TEXT,
-            added_at TEXT NOT NULL,
-            hf_repo_id TEXT,
-            hf_commit_sha TEXT,
-            hf_filename TEXT,
-            download_date TEXT,
-            last_update_check TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
-            )",
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")
-        .execute(&pool)
-        .await?;
-
-    Ok(pool)
-}
-
-/// Create a test model for command testing
-fn create_test_model(name: &str) -> Gguf {
-    let mut metadata = HashMap::new();
-    metadata.insert("general.name".to_string(), name.to_string());
-
-    Gguf {
-        id: None,
-        name: name.to_string(),
-        file_path: PathBuf::from(format!("/test/{}.gguf", name)),
-        param_count_b: 7.0,
-        architecture: Some("llama".to_string()),
-        quantization: Some("Q4_0".to_string()),
-        context_length: Some(4096),
-        metadata,
-        added_at: Utc::now(),
-        hf_repo_id: None,
-        hf_commit_sha: None,
-        hf_filename: None,
-        download_date: None,
-        last_update_check: None,
-        tags: Vec::new(),
-    }
+    setup_test_pool().await
 }
 
 #[tokio::test]

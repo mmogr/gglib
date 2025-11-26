@@ -2,6 +2,8 @@
 //!
 //! Provides helper functions for creating test models with various configurations.
 
+#![allow(dead_code)]
+
 use chrono::Utc;
 use gglib::models::Gguf;
 use std::collections::HashMap;
@@ -22,13 +24,24 @@ use std::path::PathBuf;
 /// assert_eq!(model.name, "my-test-model");
 /// ```
 pub fn create_test_model(name: &str) -> Gguf {
+    create_test_model_with_params(name, 7.0)
+}
+
+/// Creates a test model with custom parameter count.
+///
+/// # Arguments
+///
+/// * `name` - The name for the test model
+/// * `param_count` - The parameter count in billions
+pub fn create_test_model_with_params(name: &str, param_count: f64) -> Gguf {
     let mut metadata = HashMap::new();
+    metadata.insert("general.name".to_string(), name.to_string());
     metadata.insert("test_key".to_string(), "test_value".to_string());
 
     let mut model = Gguf::new(
         name.to_string(),
         PathBuf::from(format!("/test/{}.gguf", name)),
-        7.0,
+        param_count,
         Utc::now(),
     );
     model.architecture = Some("llama".to_string());

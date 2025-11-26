@@ -3,40 +3,18 @@
 //! This module provides common test utilities, fixtures, and helper functions
 //! that can be shared across different test modules.
 
+mod common;
+
 use chrono::Utc;
-use gglib::{models::Gguf, services::database};
+use gglib::models::Gguf;
+use gglib::services::database;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Create a test database with a unique temporary file
+/// Create a test database with production-identical schema
 pub async fn create_test_database() -> anyhow::Result<SqlitePool> {
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    // Create the table schema with enhanced metadata fields
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY, 
-            name TEXT NOT NULL, 
-            file_path TEXT NOT NULL, 
-            param_count_b REAL NOT NULL,
-            architecture TEXT,
-            quantization TEXT,
-            context_length INTEGER,
-            metadata TEXT,
-            added_at TEXT NOT NULL,
-            hf_repo_id TEXT,
-            hf_commit_sha TEXT,
-            hf_filename TEXT,
-            download_date TEXT,
-            last_update_check TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
-            )",
-    )
-    .execute(&pool)
-    .await?;
-
-    Ok(pool)
+    common::database::setup_test_pool().await
 }
 
 /// Create a test model with default values

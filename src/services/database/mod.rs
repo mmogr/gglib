@@ -18,8 +18,9 @@ pub use models::{
 pub use schema::ensure_column_exists;
 pub use tags::{add_model_tag, get_model_tags, get_models_by_tag, list_tags, remove_model_tag};
 
-// Re-export for internal use (tests)
-pub(crate) use schema::create_schema;
+// Re-export create_schema for test infrastructure
+// This allows tests to create in-memory databases with production-identical schema
+pub use schema::create_schema;
 
 /// Sets up the SQLite database connection and ensures the database schema exists.
 ///

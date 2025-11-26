@@ -19,7 +19,7 @@ pub const VALID_COLUMN_TYPES: [&str; 4] = ["TEXT", "INTEGER", "REAL", "BLOB"];
 ///
 /// Used by both production `setup_database()` and test helpers to ensure
 /// schema parity between production and test environments.
-pub(crate) async fn create_schema(pool: &SqlitePool) -> Result<()> {
+pub async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // Create the models table with enhanced metadata fields
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS models (
