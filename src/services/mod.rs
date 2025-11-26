@@ -12,6 +12,3 @@ pub use chat_history::*;
 pub use core::AppCore;
 pub use database::*;
 pub use process_manager::ProcessManager;
-
-// Explicitly re-export specific functions for visibility
-pub use database::{add_model, find_models_by_name, get_model_by_id, setup_database};
