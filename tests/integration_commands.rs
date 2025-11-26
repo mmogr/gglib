@@ -206,12 +206,7 @@ async fn test_command_error_scenarios() {
     // 1. Remove non-existent model by ID
     let remove_error = database::remove_model_by_id(&pool, 999).await;
     assert!(remove_error.is_err());
-    assert!(
-        remove_error
-            .unwrap_err()
-            .to_string()
-            .contains("not found")
-    );
+    assert!(remove_error.unwrap_err().to_string().contains("not found"));
 
     // 2. Search for non-existent model
     let search_result = database::find_models_by_name(&pool, "non-existent")

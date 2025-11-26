@@ -426,12 +426,7 @@ async fn test_error_handling_across_modules() {
     // Test remove on nonexistent model (should error)
     let remove_result = database::remove_model_by_id(&pool, 999).await;
     assert!(remove_result.is_err());
-    assert!(
-        remove_result
-            .unwrap_err()
-            .to_string()
-            .contains("not found")
-    );
+    assert!(remove_result.unwrap_err().to_string().contains("not found"));
 }
 
 #[tokio::test]

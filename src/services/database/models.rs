@@ -12,8 +12,7 @@ use super::error::ModelStoreError;
 
 /// Shared SELECT column list for model queries.
 /// This eliminates duplication across query functions.
-pub(crate) const MODEL_SELECT_COLUMNS: &str = 
-    "id, name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags";
+pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags";
 
 /// Internal record for duplicate checking.
 struct ExistingModelRecord {
@@ -116,9 +115,7 @@ pub async fn list_models(pool: &SqlitePool) -> Result<Vec<Gguf>> {
         "SELECT {} FROM models ORDER BY added_at DESC",
         MODEL_SELECT_COLUMNS
     );
-    let models = sqlx::query_as::<_, Gguf>(&query)
-        .fetch_all(pool)
-        .await?;
+    let models = sqlx::query_as::<_, Gguf>(&query).fetch_all(pool).await?;
 
     Ok(models)
 }
@@ -146,10 +143,7 @@ pub async fn find_models_by_name(pool: &SqlitePool, name: &str) -> Result<Vec<Gg
 /// Returns `Ok(Some(Gguf))` if the model is found, `Ok(None)` if not found,
 /// or an error if the database operation fails.
 pub async fn get_model_by_id(pool: &SqlitePool, id: u32) -> Result<Option<Gguf>> {
-    let query = format!(
-        "SELECT {} FROM models WHERE id = ?",
-        MODEL_SELECT_COLUMNS
-    );
+    let query = format!("SELECT {} FROM models WHERE id = ?", MODEL_SELECT_COLUMNS);
     let model = sqlx::query_as::<_, Gguf>(&query)
         .bind(id as i64)
         .fetch_optional(pool)
@@ -164,10 +158,7 @@ pub async fn get_model_by_id(pool: &SqlitePool, id: u32) -> Result<Option<Gguf>>
 /// if the identifier is numeric.
 pub async fn find_model_by_identifier(pool: &SqlitePool, identifier: &str) -> Result<Option<Gguf>> {
     // First try to find by exact name match
-    let query = format!(
-        "SELECT {} FROM models WHERE name = ?",
-        MODEL_SELECT_COLUMNS
-    );
+    let query = format!("SELECT {} FROM models WHERE name = ?", MODEL_SELECT_COLUMNS);
     let exact_match = sqlx::query_as::<_, Gguf>(&query)
         .bind(identifier)
         .fetch_optional(pool)
