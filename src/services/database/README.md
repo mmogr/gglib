@@ -122,24 +122,25 @@ The module manages the following tables:
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER | Primary key (auto-increment) |
-| `name` | TEXT | Model display name (unique) |
-| `path` | TEXT | Absolute path to GGUF file |
-| `size` | INTEGER | File size in bytes |
+| `name` | TEXT | Model display name |
+| `file_path` | TEXT | Absolute path to GGUF file (unique) |
+| `param_count_b` | REAL | Parameter count in billions |
+| `architecture` | TEXT | Model architecture (llama, mistral, etc.) |
 | `quantization` | TEXT | Quantization format (e.g., Q4_K_M) |
-| `parameters` | TEXT | Parameter count string |
 | `context_length` | INTEGER | Maximum context length |
-| `embedding_length` | INTEGER | Embedding dimension |
-| `architecture` | TEXT | Model architecture (llama, etc.) |
 | `metadata` | TEXT | JSON blob with additional GGUF metadata |
-| `created_at` | TEXT | ISO8601 timestamp |
-| `updated_at` | TEXT | ISO8601 timestamp |
-| `tags` | TEXT | JSON array of tag strings |
-| `huggingface_id` | TEXT | Optional HuggingFace model ID |
+| `added_at` | TEXT | ISO8601 timestamp when added |
+| `hf_repo_id` | TEXT | Optional HuggingFace repository ID |
+| `hf_commit_sha` | TEXT | Optional HuggingFace commit SHA |
+| `hf_filename` | TEXT | Optional HuggingFace filename |
+| `download_date` | TEXT | Optional download timestamp |
+| `last_update_check` | TEXT | Optional last update check timestamp |
+| `tags` | TEXT | JSON array of tag strings (default: '[]') |
 
 ### Indexes
 
+- `idx_models_file_path` - Unique index on file path (prevents duplicates)
 - `idx_models_name` - Fast lookup by name
-- `idx_models_tags` - Full-text search on tags JSON
 
 ## Testing
 
@@ -147,16 +148,23 @@ For testing, use the shared test infrastructure in `tests/common/`:
 
 ```rust,ignore
 use crate::common::database::setup_test_pool;
-use crate::common::fixtures::{create_test_model, create_model_with_tags};
+use crate::common::fixtures::{create_test_model, create_test_model_with_params};
 
 #[tokio::test]
 async fn test_example() {
     let pool = setup_test_pool().await.unwrap();
+    
+    // Basic model with defaults (7B params)
     let model = create_test_model("test-model");
     
-    let id = database::add_model(&pool, &model).await.unwrap();
+    // Model with custom param count
+    let large_model = create_test_model_with_params("large-model", 70.0);
+    
+    database::add_model(&pool, &model).await.unwrap();
     // ... assertions
 }
 ```
+
+The test pool uses the production `create_schema()` function to ensure schema parity between tests and production.
 
 <!-- module-docs:end -->
