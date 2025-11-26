@@ -37,9 +37,9 @@ impl ModelService {
     /// # async fn example(service: &ModelService) -> anyhow::Result<()> {
     /// let models = service.list().await?;
     /// for model in models {
-    ///     println!("{}: {} ({}B params)", 
-    ///         model.id.unwrap_or(0), 
-    ///         model.name, 
+    ///     println!("{}: {} ({}B params)",
+    ///         model.id.unwrap_or(0),
+    ///         model.name,
     ///         model.param_count_b
     ///     );
     /// }
@@ -259,7 +259,7 @@ mod tests {
     async fn test_model_service_list() {
         let pool = database::setup_database().await.unwrap();
         let service = ModelService::new(pool);
-        
+
         // Should not panic, returns empty or existing models
         let result = service.list().await;
         assert!(result.is_ok());
@@ -269,7 +269,7 @@ mod tests {
     async fn test_model_service_get_nonexistent() {
         let pool = database::setup_database().await.unwrap();
         let service = ModelService::new(pool);
-        
+
         // Should return error for non-existent ID
         let result = service.get_by_id(999999).await;
         assert!(result.is_err());
@@ -279,7 +279,7 @@ mod tests {
     async fn test_model_service_find_by_identifier_nonexistent() {
         let pool = database::setup_database().await.unwrap();
         let service = ModelService::new(pool);
-        
+
         // Should return None for non-existent identifier
         let result = service.find_by_identifier("nonexistent-model-xyz").await;
         assert!(result.is_ok());

@@ -132,11 +132,15 @@ impl GuiBackend {
     /// Add a model to the database
     pub async fn add_model(&self, request: AddModelRequest) -> Result<GuiModel> {
         // Use AppCore's add_from_file which handles validation and metadata extraction
-        let model = self.core.models().add_from_file(
-            &request.file_path,
-            None, // No name override from GUI request
-            None, // No param count override
-        ).await?;
+        let model = self
+            .core
+            .models()
+            .add_from_file(
+                &request.file_path,
+                None, // No name override from GUI request
+                None, // No param count override
+            )
+            .await?;
 
         Ok(GuiModel::from_gguf(model))
     }
