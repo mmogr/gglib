@@ -338,7 +338,7 @@ pub async fn stop_proxy(
 /// Proxy chat completions to a running llama-server
 ///
 /// Forwards POST requests from the frontend to the llama-server's OpenAI-compatible
-/// /v1/chat/completions endpoint.
+/// /v1/chat/completions endpoint. Supports both streaming and non-streaming responses.
 pub async fn chat_proxy(
     State(_state): State<Arc<AppState>>,
     Json(mut payload): Json<serde_json::Value>,
@@ -352,7 +352,13 @@ pub async fn chat_proxy(
         .ok_or_else(|| AppError::ServerError("Missing 'port' field in request".to_string()))?
         as u16;
 
-    debug!(port = %port, "Forwarding to llama-server");
+    // Check if streaming is requested
+    let is_streaming = payload
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    debug!(port = %port, streaming = %is_streaming, "Forwarding to llama-server");
 
     // Remove the port field before forwarding
     if let Some(obj) = payload.as_object_mut() {
@@ -390,14 +396,39 @@ pub async fn chat_proxy(
         )));
     }
 
-    // Forward the response back to the client
-    let response_json: serde_json::Value = response.json().await.map_err(|e| {
-        error!(error = %e, "Failed to parse response");
-        AppError::ServerError(format!("Failed to parse response: {}", e))
-    })?;
+    if is_streaming {
+        // Stream the response back to the client using SSE
+        debug!("Streaming chat response");
 
-    debug!("Chat proxy successful");
-    Ok(Json(response_json).into_response())
+        let byte_stream = response.bytes_stream();
+
+        // Convert the byte stream to a stream of strings for SSE forwarding
+        let sse_stream = byte_stream.map(|result| {
+            result
+                .map(|bytes| {
+                    // Forward the raw SSE data as-is
+                    let data = String::from_utf8_lossy(&bytes);
+                    Event::default().data(data.trim())
+                })
+                .map_err(|e| {
+                    error!(error = %e, "Stream error");
+                    std::io::Error::other(e)
+                })
+        });
+
+        Ok(Sse::new(sse_stream)
+            .keep_alive(axum::response::sse::KeepAlive::default())
+            .into_response())
+    } else {
+        // Non-streaming: forward the complete JSON response
+        let response_json: serde_json::Value = response.json().await.map_err(|e| {
+            error!(error = %e, "Failed to parse response");
+            AppError::ServerError(format!("Failed to parse response: {}", e))
+        })?;
+
+        debug!("Chat proxy successful");
+        Ok(Json(response_json).into_response())
+    }
 }
 
 // Tag Management Handlers
