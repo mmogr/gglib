@@ -4,7 +4,7 @@
 //! including model metadata, architecture information, and custom key-value pairs.
 
 use crate::models::Gguf;
-use crate::services::{database, AppCore};
+use crate::services::{AppCore, database};
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::io::{self, Write};

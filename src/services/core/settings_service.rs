@@ -52,10 +52,10 @@ impl SettingsService {
     /// Other fields retain their current values.
     pub async fn update(&self, update: SettingsUpdate) -> Result<Settings> {
         let updated = settings::update_settings(&self.db_pool, update).await?;
-        
+
         // Validate the updated settings
         settings::validate_settings(&updated)?;
-        
+
         Ok(updated)
     }
 
@@ -93,7 +93,7 @@ impl SettingsService {
         let resolution = resolve_models_dir(Some(new_path))?;
         ensure_directory(&resolution.path, DirectoryCreationStrategy::AutoCreate)?;
         persist_models_dir(&resolution.path)?;
-        
+
         // SAFETY: This modifies global environment state in a multi-threaded context.
         // While inherently unsafe, it maintains consistency between the persisted configuration
         // and runtime state. The value is only read during path resolution operations which
@@ -127,7 +127,7 @@ mod tests {
     async fn test_settings_service_get() {
         let pool = database::setup_database().await.unwrap();
         let service = SettingsService::new(pool);
-        
+
         let settings = service.get().await.unwrap();
         // Should return defaults or existing settings
         assert!(settings.default_context_size.is_some() || settings.default_context_size.is_none());
@@ -137,14 +137,14 @@ mod tests {
     async fn test_settings_service_update() {
         let pool = database::setup_database().await.unwrap();
         let service = SettingsService::new(pool);
-        
+
         let update = SettingsUpdate {
             default_context_size: Some(Some(8192)),
             default_download_path: None,
             proxy_port: None,
             server_port: None,
         };
-        
+
         let result = service.update(update).await;
         assert!(result.is_ok());
     }
@@ -155,7 +155,7 @@ mod tests {
         let pool_result = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(crate::services::database::setup_database());
-        
+
         if let Ok(pool) = pool_result {
             let service = SettingsService::new(pool);
             let result = service.get_models_directory_info();

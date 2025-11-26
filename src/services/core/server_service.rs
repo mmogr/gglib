@@ -196,7 +196,7 @@ impl ServerService {
         // Update health before listing
         self.process_manager.update_health_status().await;
         let servers = self.process_manager.list_servers().await;
-        
+
         debug!(server_count = %servers.len(), "list_servers called");
         for server in &servers {
             debug!(
@@ -206,7 +206,7 @@ impl ServerService {
                 "Server info"
             );
         }
-        
+
         servers
     }
 
@@ -253,7 +253,7 @@ mod tests {
     async fn test_server_service_creation() {
         let pool = database::setup_database().await.unwrap();
         let model_service = ModelService::new(pool);
-        
+
         let result = ServerService::new_concurrent(model_service, 9000, 5);
         assert!(result.is_ok());
     }
@@ -263,7 +263,7 @@ mod tests {
         let pool = database::setup_database().await.unwrap();
         let model_service = ModelService::new(pool);
         let service = ServerService::new_concurrent(model_service, 9000, 5).unwrap();
-        
+
         let servers = service.list().await;
         // Should return empty list when no servers running
         assert!(servers.is_empty());

@@ -175,7 +175,7 @@ mod tests {
     async fn test_proxy_service_creation() {
         let pool = database::setup_database().await.unwrap();
         let service = ProxyService::new(pool);
-        
+
         // Should not be running initially
         assert!(!service.is_running().await);
     }
@@ -184,7 +184,7 @@ mod tests {
     async fn test_proxy_status_not_running() {
         let pool = database::setup_database().await.unwrap();
         let service = ProxyService::new(pool);
-        
+
         let status = service.status().await;
         assert!(!status.running);
         assert!(status.port.is_none());
@@ -195,7 +195,7 @@ mod tests {
     async fn test_proxy_stop_when_not_running() {
         let pool = database::setup_database().await.unwrap();
         let service = ProxyService::new(pool);
-        
+
         // Should error when trying to stop a non-running proxy
         let result = service.stop().await;
         assert!(result.is_err());

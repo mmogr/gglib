@@ -285,4 +285,3 @@ mod tests {
         let _ = core.db_pool();
     }
 }
-

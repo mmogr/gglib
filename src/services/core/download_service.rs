@@ -15,10 +15,10 @@ use tokio_util::sync::CancellationToken;
 pub enum DownloadError {
     #[error("Download '{model_id}' was cancelled by the user")]
     Cancelled { model_id: String },
-    
+
     #[error("A download for '{model_id}' is already running")]
     AlreadyRunning { model_id: String },
-    
+
     #[error("No active download for '{model_id}'")]
     NotFound { model_id: String },
 }
@@ -71,9 +71,10 @@ impl DownloadService {
         {
             let mut downloads = self.active_downloads.write().await;
             if downloads.contains_key(&model_id) {
-                return Err(DownloadError::AlreadyRunning { 
-                    model_id: model_id.clone() 
-                }.into());
+                return Err(DownloadError::AlreadyRunning {
+                    model_id: model_id.clone(),
+                }
+                .into());
             }
             downloads.insert(model_id.clone(), cancel_token.clone());
         }
@@ -82,10 +83,10 @@ impl DownloadService {
         let download_future = crate::commands::download::execute(
             model_id.clone(),
             quantization,
-            false,  // list_quants
-            true,   // add_to_db
-            None,   // token
-            false,  // force
+            false, // list_quants
+            true,  // add_to_db
+            None,  // token
+            false, // force
             progress_callback,
         );
         tokio::pin!(download_future);
@@ -124,9 +125,10 @@ impl DownloadService {
             token.cancel();
             Ok(())
         } else {
-            Err(DownloadError::NotFound { 
-                model_id: model_id.to_string() 
-            }.into())
+            Err(DownloadError::NotFound {
+                model_id: model_id.to_string(),
+            }
+            .into())
         }
     }
 

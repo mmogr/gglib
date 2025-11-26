@@ -274,7 +274,7 @@ pub async fn add_to_database(
     file_path: &Path,
     quantization: &str,
 ) -> Result<()> {
-    use crate::services::{database, AppCore};
+    use crate::services::{AppCore, database};
 
     let mut model = Gguf::new(
         model_id.to_string(),
@@ -346,7 +346,7 @@ pub async fn check_model_update(model: &Gguf, hf_repo: &str) -> Result<()> {
 
 /// Handle check updates command
 pub async fn handle_check_updates(model_id: Option<u32>, all: bool) -> Result<()> {
-    use crate::services::{database, AppCore};
+    use crate::services::{AppCore, database};
 
     let pool = database::setup_database().await?;
     let core = AppCore::new(pool);
@@ -395,7 +395,7 @@ pub async fn handle_check_updates(model_id: Option<u32>, all: bool) -> Result<()
 
 /// Handle update model command  
 pub async fn handle_update_model(model_id: u32, force: bool) -> Result<()> {
-    use crate::services::{database, AppCore};
+    use crate::services::{AppCore, database};
 
     let pool = database::setup_database().await?;
     let core = AppCore::new(pool);

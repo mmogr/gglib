@@ -113,7 +113,9 @@ async fn test_complete_model_lifecycle_workflow() {
         force: true, // Skip confirmation
     };
 
-    update_execute(&AppCore::new(pool.clone()), update_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), update_args)
+        .await
+        .unwrap();
 
     // Verify update worked
     let updated_model = database::get_model_by_id(&pool, model_id)
@@ -222,7 +224,9 @@ async fn test_multi_model_operations_workflow() {
         force: true,
     };
 
-    update_execute(&AppCore::new(pool.clone()), update_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), update_args)
+        .await
+        .unwrap();
 
     // Verify selective update
     let updated_gamma = database::get_model_by_id(&pool, gamma_model.id.unwrap())
@@ -320,7 +324,9 @@ async fn test_metadata_manipulation_workflow() {
         force: true,
     };
 
-    update_execute(&AppCore::new(pool.clone()), update_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), update_args)
+        .await
+        .unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -355,7 +361,9 @@ async fn test_metadata_manipulation_workflow() {
         force: true,
     };
 
-    update_execute(&AppCore::new(pool.clone()), remove_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), remove_args)
+        .await
+        .unwrap();
 
     let final_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -480,7 +488,9 @@ async fn test_data_consistency_across_operations() {
         force: true,
     };
 
-    update_execute(&AppCore::new(pool.clone()), update_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), update_args)
+        .await
+        .unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await

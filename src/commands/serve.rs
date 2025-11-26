@@ -11,7 +11,7 @@ use crate::commands::llama_invocation::{
     LlamaCommandBuilder, log_command_execution, log_context_info, log_mlock_info, log_model_info,
     resolve_model_for_invocation,
 };
-use crate::services::{database, AppCore};
+use crate::services::{AppCore, database};
 use crate::utils::paths::get_llama_server_path;
 use anyhow::Result;
 use std::process::Stdio;
