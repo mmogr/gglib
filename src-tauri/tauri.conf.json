@@ -1,6 +1,6 @@
 {
   "productName": "GGLib GUI",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "com.gglib.gui",
   "build": {
     "beforeBuildCommand": "npm run build",
