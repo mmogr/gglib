@@ -412,7 +412,7 @@ pub async fn chat_proxy(
                 })
                 .map_err(|e| {
                     error!(error = %e, "Stream error");
-                    std::io::Error::new(std::io::ErrorKind::Other, e)
+                    std::io::Error::other(e)
                 })
         });
 
