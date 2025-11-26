@@ -1,10 +1,12 @@
 # AppCore Service Layer
 
+<!-- module-docs:start -->
+
 The `core` module provides a unified service layer for gglib that can be used by both CLI and GUI interfaces.
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                        AppCore                          │
 │  (Facade holding SqlitePool + service accessors)        │
@@ -24,7 +26,7 @@ The `core` module provides a unified service layer for gglib that can be used by
 
 ### CLI Commands
 
-```rust
+```rust,ignore
 use crate::services::{database, AppCore};
 
 pub async fn handle_command(id: u32) -> Result<()> {
@@ -41,7 +43,7 @@ pub async fn handle_command(id: u32) -> Result<()> {
 
 ### GUI Backend
 
-```rust
+```rust,ignore
 use crate::services::core::AppCore;
 
 pub struct GuiBackend {
@@ -113,14 +115,16 @@ HuggingFace downloads with cancellation:
 ## Migration from Direct Database Calls
 
 Before:
-```rust
+```rust,ignore
 let pool = database::setup_database().await?;
 let model = database::get_model_by_id(&pool, id).await?;
 ```
 
 After:
-```rust
+```rust,ignore
 let pool = database::setup_database().await?;
 let core = AppCore::new(pool);
 let model = core.models().get_by_id(id).await?;
 ```
+
+<!-- module-docs:end -->

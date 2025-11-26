@@ -1,4 +1,4 @@
-//! Unified application core service layer.
+#![doc = include_str!(concat!(env!("OUT_DIR"), "/services_core_docs.md"))]
 //!
 //! This module provides a modular `AppCore` facade that serves as the single entry point
 //! for all business logic, used by both CLI commands and GUI backends (Tauri/Web).

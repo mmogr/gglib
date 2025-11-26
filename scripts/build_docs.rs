@@ -67,6 +67,12 @@ const DOC_SPECS: &[DocSpec] = &[
         start_marker: "<!-- module-docs:start -->",
         end_marker: "<!-- module-docs:end -->",
     },
+    DocSpec {
+        input: "src/services/core/README.md",
+        output: "services_core_docs.md",
+        start_marker: "<!-- module-docs:start -->",
+        end_marker: "<!-- module-docs:end -->",
+    },
 ];
 
 /// Process all documentation sources and emit curated markdown files in OUT_DIR.
