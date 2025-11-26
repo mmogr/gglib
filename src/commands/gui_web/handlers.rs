@@ -399,9 +399,9 @@ pub async fn chat_proxy(
     if is_streaming {
         // Stream the response back to the client using SSE
         debug!("Streaming chat response");
-        
+
         let byte_stream = response.bytes_stream();
-        
+
         // Convert the byte stream to a stream of strings for SSE forwarding
         let sse_stream = byte_stream.map(|result| {
             result
