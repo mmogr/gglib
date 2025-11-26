@@ -12,6 +12,7 @@ use tempfile::tempdir;
 
 use gglib::commands::{UpdateArgs, update_execute};
 use gglib::models::Gguf;
+use gglib::services::core::AppCore;
 use gglib::services::database;
 
 /// Create an isolated test database pool with the proper schema
@@ -105,7 +106,7 @@ async fn test_update_basic_fields() {
         force: true, // Skip confirmation
     };
 
-    update_execute(&pool, args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), args).await.unwrap();
 
     // Verify the updates
     let updated_model = database::get_model_by_id(&pool, model_id)
@@ -145,7 +146,7 @@ async fn test_update_metadata_merge() {
         force: true,
     };
 
-    update_execute(&pool, args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), args).await.unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -185,7 +186,7 @@ async fn test_update_metadata_replace() {
         force: true,
     };
 
-    update_execute(&pool, args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), args).await.unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -220,7 +221,7 @@ async fn test_update_metadata_removal() {
         force: true,
     };
 
-    update_execute(&pool, args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), args).await.unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -252,7 +253,7 @@ async fn test_update_nonexistent_model() {
         force: true,
     };
 
-    let result = update_execute(&pool, args).await;
+    let result = update_execute(&AppCore::new(pool.clone()), args).await;
     assert!(result.is_err());
     assert!(
         result
@@ -285,7 +286,7 @@ async fn test_update_with_missing_file() {
     };
 
     // Should succeed with force=true
-    update_execute(&pool, args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), args).await.unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -314,7 +315,7 @@ async fn test_update_dry_run() {
         force: true,
     };
 
-    update_execute(&pool, args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), args).await.unwrap();
 
     // Model should be unchanged
     let unchanged_model = database::get_model_by_id(&pool, model_id)
@@ -349,7 +350,7 @@ async fn test_update_complex_metadata_operations() {
         force: true,
     };
 
-    update_execute(&pool, args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), args).await.unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -395,7 +396,7 @@ async fn test_update_partial_fields_only() {
         force: true,
     };
 
-    update_execute(&pool, args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), args).await.unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await

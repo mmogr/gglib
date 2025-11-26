@@ -12,6 +12,7 @@ use tempfile::tempdir;
 
 use gglib::commands::{UpdateArgs, update_execute};
 use gglib::models::Gguf;
+use gglib::services::core::AppCore;
 use gglib::services::database;
 
 /// Create an isolated test database pool with the proper schema
@@ -112,7 +113,7 @@ async fn test_complete_model_lifecycle_workflow() {
         force: true, // Skip confirmation
     };
 
-    update_execute(&pool, update_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), update_args).await.unwrap();
 
     // Verify update worked
     let updated_model = database::get_model_by_id(&pool, model_id)
@@ -221,7 +222,7 @@ async fn test_multi_model_operations_workflow() {
         force: true,
     };
 
-    update_execute(&pool, update_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), update_args).await.unwrap();
 
     // Verify selective update
     let updated_gamma = database::get_model_by_id(&pool, gamma_model.id.unwrap())
@@ -319,7 +320,7 @@ async fn test_metadata_manipulation_workflow() {
         force: true,
     };
 
-    update_execute(&pool, update_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), update_args).await.unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -354,7 +355,7 @@ async fn test_metadata_manipulation_workflow() {
         force: true,
     };
 
-    update_execute(&pool, remove_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), remove_args).await.unwrap();
 
     let final_model = database::get_model_by_id(&pool, model_id)
         .await
@@ -399,7 +400,7 @@ async fn test_error_handling_across_modules() {
         force: true,
     };
 
-    let update_result = update_execute(&pool, update_args).await;
+    let update_result = update_execute(&AppCore::new(pool.clone()), update_args).await;
     // This should error because model with ID 999 doesn't exist
     assert!(update_result.is_err());
     assert!(update_result.unwrap_err().to_string().contains("not found"));
@@ -479,7 +480,7 @@ async fn test_data_consistency_across_operations() {
         force: true,
     };
 
-    update_execute(&pool, update_args).await.unwrap();
+    update_execute(&AppCore::new(pool.clone()), update_args).await.unwrap();
 
     let updated_model = database::get_model_by_id(&pool, model_id)
         .await

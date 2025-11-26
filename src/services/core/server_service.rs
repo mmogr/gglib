@@ -229,6 +229,15 @@ impl ServerService {
         self.process_manager.get_server(model_id).await.is_some()
     }
 
+    /// Update health status for all running servers.
+    ///
+    /// Checks each server's health endpoint and updates status accordingly.
+    /// Called automatically by `list()`, but can be called explicitly before
+    /// `get()` if you need fresh status.
+    pub async fn update_health(&self) {
+        self.process_manager.update_health_status().await;
+    }
+
     /// Shutdown all running servers.
     pub async fn shutdown_all(&self) -> Result<()> {
         self.process_manager.shutdown().await
