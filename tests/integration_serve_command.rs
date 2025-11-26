@@ -3,8 +3,10 @@
 //! This module tests the serve command workflow including model lookup,
 //! file validation, and command building (without actually starting servers).
 
-use anyhow::Result;
+mod common;
+
 use chrono::Utc;
+use common::database::setup_test_pool;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::fs;
@@ -13,40 +15,9 @@ use tempfile::tempdir;
 use gglib::models::Gguf;
 use gglib::services::database;
 
-/// Create an isolated test database pool with the proper schema
-async fn create_test_pool() -> Result<SqlitePool> {
-    // Use in-memory database for testing to avoid interference
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    // Create the table with enhanced metadata fields
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY, 
-            name TEXT NOT NULL, 
-            file_path TEXT NOT NULL, 
-            param_count_b REAL NOT NULL,
-            architecture TEXT,
-            quantization TEXT,
-            context_length INTEGER,
-            metadata TEXT,
-            added_at TEXT NOT NULL,
-            hf_repo_id TEXT,
-            hf_commit_sha TEXT,
-            hf_filename TEXT,
-            download_date TEXT,
-            last_update_check TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
-            )",
-    )
-    .execute(&pool)
-    .await?;
-
-    Ok(pool)
-}
-
 /// Create a test database with sample models for serve testing
 async fn setup_test_database_with_models() -> (SqlitePool, Vec<Gguf>, tempfile::TempDir) {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     // Create test GGUF files
@@ -324,7 +295,7 @@ async fn test_serve_command_parameter_combinations() {
 
 #[tokio::test]
 async fn test_serve_command_error_scenarios() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test empty database scenario
     let result = database::find_model_by_identifier(&pool, "1")

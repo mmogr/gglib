@@ -6,46 +6,16 @@
 //! - Download workflow simulation
 //! - Database integration with HuggingFace metadata
 
-use anyhow::Result;
+mod common;
+
 use chrono::Utc;
-use sqlx::SqlitePool;
+use common::database::setup_test_pool;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
 use gglib::models::Gguf;
 use gglib::services::database;
-
-/// Create an isolated test database pool with the proper schema
-async fn create_test_pool() -> Result<SqlitePool> {
-    // Use in-memory database for testing to avoid interference
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    // Create the table with enhanced metadata fields
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY, 
-            name TEXT NOT NULL, 
-            file_path TEXT NOT NULL, 
-            param_count_b REAL NOT NULL,
-            architecture TEXT,
-            quantization TEXT,
-            context_length INTEGER,
-            metadata TEXT,
-            added_at TEXT NOT NULL,
-            hf_repo_id TEXT,
-            hf_commit_sha TEXT,
-            hf_filename TEXT,
-            download_date TEXT,
-            last_update_check TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
-            )",
-    )
-    .execute(&pool)
-    .await?;
-
-    Ok(pool)
-}
 
 /// Create a test model simulating a downloaded model from HuggingFace
 fn create_downloaded_model(repo_id: &str, quantization: &str) -> Gguf {
@@ -81,7 +51,7 @@ fn create_downloaded_model(repo_id: &str, quantization: &str) -> Gguf {
 
 #[tokio::test]
 async fn test_download_model_database_integration() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let model = create_downloaded_model("test/llama-7b", "Q4_K_M");
 
     // Test adding downloaded model to database
@@ -105,7 +75,7 @@ async fn test_download_model_database_integration() {
 
 #[tokio::test]
 async fn test_download_model_with_various_quantizations() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     let quantizations = vec!["Q4_K_M", "Q8_0", "F16", "Q4_0"];
 
@@ -127,7 +97,7 @@ async fn test_download_model_with_various_quantizations() {
 
 #[tokio::test]
 async fn test_downloaded_model_update_tracking() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let mut model = create_downloaded_model("test/updateable-model", "Q8_0");
 
     // Initial download
@@ -229,7 +199,7 @@ fn sanitize_model_name_test_helper(name: &str) -> String {
 
 #[tokio::test]
 async fn test_download_error_handling() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test handling of model without HuggingFace metadata
     let mut model = create_downloaded_model("test/error-model", "Q4_0");
@@ -247,7 +217,7 @@ async fn test_download_error_handling() {
 
 #[tokio::test]
 async fn test_multiple_versions_same_model() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Simulate downloading different quantizations of the same model
     let repo_id = "test/multi-quant-model";
@@ -295,7 +265,7 @@ fn test_models_directory_env_override_integration() {
 
 #[tokio::test]
 async fn test_download_timestamp_tracking() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     let now = Utc::now();
     let mut model = create_downloaded_model("test/timestamp-model", "Q4_0");
@@ -522,7 +492,7 @@ async fn test_unknown_quantization_formats() {
 
 #[tokio::test]
 async fn test_hf_sharded_model_database_integration() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Create a sharded model entry
     let mut model =
@@ -559,7 +529,7 @@ async fn test_hf_sharded_model_database_integration() {
 
 #[tokio::test]
 async fn test_hf_model_with_modern_quantizations() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test modern quantization formats in database
     let modern_quants = vec![
@@ -587,7 +557,7 @@ async fn test_hf_model_with_modern_quantizations() {
 
 #[tokio::test]
 async fn test_hf_repo_id_validation() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test various HuggingFace repository ID formats
     let valid_repo_ids = vec![

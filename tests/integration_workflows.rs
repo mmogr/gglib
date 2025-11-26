@@ -3,9 +3,10 @@
 //! This module tests complete end-to-end workflows that span multiple
 //! modules and commands, ensuring the entire system works together.
 
-use anyhow::Result;
+mod common;
+
 use chrono::Utc;
-use sqlx::SqlitePool;
+use common::database::setup_test_pool;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
@@ -15,41 +16,10 @@ use gglib::models::Gguf;
 use gglib::services::core::AppCore;
 use gglib::services::database;
 
-/// Create an isolated test database pool with the proper schema
-async fn create_test_pool() -> Result<SqlitePool> {
-    // Use in-memory database for testing to avoid interference
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    // Create the table with enhanced metadata fields
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY, 
-            name TEXT NOT NULL, 
-            file_path TEXT NOT NULL, 
-            param_count_b REAL NOT NULL,
-            architecture TEXT,
-            quantization TEXT,
-            context_length INTEGER,
-            metadata TEXT,
-            added_at TEXT NOT NULL,
-            hf_repo_id TEXT,
-            hf_commit_sha TEXT,
-            hf_filename TEXT,
-            download_date TEXT,
-            last_update_check TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
-            )",
-    )
-    .execute(&pool)
-    .await?;
-
-    Ok(pool)
-}
-
 #[tokio::test]
 async fn test_complete_model_lifecycle_workflow() {
     // Test the complete lifecycle: Add -> List -> Update -> Remove
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     // Step 1: Simulate adding a model (like add command would do)
@@ -140,8 +110,12 @@ async fn test_complete_model_lifecycle_workflow() {
         Some(&"new_value".to_string())
     ); // New
 
-    // Step 4: Remove the model (simulating remove command)
-    let remove_result = database::remove_model(&pool, "Updated Lifecycle Model").await;
+    // Step 4: Remove the model (simulating remove command - find by name, then remove by ID)
+    let model_to_remove = database::find_model_by_identifier(&pool, "Updated Lifecycle Model")
+        .await
+        .unwrap()
+        .expect("Model should exist");
+    let remove_result = database::remove_model_by_id(&pool, model_to_remove.id.unwrap()).await;
     assert!(remove_result.is_ok(), "Model removal should succeed");
 
     // Verify removal
@@ -152,7 +126,7 @@ async fn test_complete_model_lifecycle_workflow() {
 #[tokio::test]
 async fn test_multi_model_operations_workflow() {
     // Test operations on multiple models
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     // Add multiple models
@@ -244,7 +218,13 @@ async fn test_multi_model_operations_workflow() {
     ); // Added
 
     // Remove one model and verify others remain
-    database::remove_model(&pool, "Model Alpha").await.unwrap();
+    let alpha = database::find_model_by_identifier(&pool, "Model Alpha")
+        .await
+        .unwrap()
+        .expect("Model Alpha should exist");
+    database::remove_model_by_id(&pool, alpha.id.unwrap())
+        .await
+        .unwrap();
 
     let remaining_models = database::list_models(&pool).await.unwrap();
     assert_eq!(
@@ -262,7 +242,7 @@ async fn test_multi_model_operations_workflow() {
 #[tokio::test]
 async fn test_metadata_manipulation_workflow() {
     // Test complex metadata operations across commands
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     let file_path = temp_dir.path().join("metadata_workflow.gguf");
@@ -379,7 +359,7 @@ async fn test_metadata_manipulation_workflow() {
 #[tokio::test]
 async fn test_error_handling_across_modules() {
     // Test error handling in various workflow scenarios
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test operations on empty database
     let empty_list = database::list_models(&pool).await.unwrap();
@@ -414,20 +394,15 @@ async fn test_error_handling_across_modules() {
     assert!(update_result.unwrap_err().to_string().contains("not found"));
 
     // Test remove on nonexistent model (should error)
-    let remove_result = database::remove_model(&pool, "nonexistent").await;
+    let remove_result = database::remove_model_by_id(&pool, 999).await;
     assert!(remove_result.is_err());
-    assert!(
-        remove_result
-            .unwrap_err()
-            .to_string()
-            .contains("No model found")
-    );
+    assert!(remove_result.unwrap_err().to_string().contains("not found"));
 }
 
 #[tokio::test]
 async fn test_data_consistency_across_operations() {
     // Test that data remains consistent across different operations
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
 
     let file_path = temp_dir.path().join("consistency_test.gguf");

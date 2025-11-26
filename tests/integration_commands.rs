@@ -3,78 +3,24 @@
 //! These tests verify the end-to-end functionality of CLI commands
 //! including database interactions, user workflows, and error handling.
 
+mod common;
+
 use chrono::Utc;
+use common::database::setup_test_pool;
+use common::fixtures::create_test_model;
 use gglib::{
     models::Gguf,
     services::database::{self, ModelStoreError},
 };
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::PathBuf;
-
-/// Create a test database pool for command testing
-async fn create_test_database() -> anyhow::Result<SqlitePool> {
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY, 
-            name TEXT NOT NULL, 
-            file_path TEXT NOT NULL, 
-            param_count_b REAL NOT NULL,
-            architecture TEXT,
-            quantization TEXT,
-            context_length INTEGER,
-            metadata TEXT,
-            added_at TEXT NOT NULL,
-            hf_repo_id TEXT,
-            hf_commit_sha TEXT,
-            hf_filename TEXT,
-            download_date TEXT,
-            last_update_check TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
-            )",
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")
-        .execute(&pool)
-        .await?;
-
-    Ok(pool)
-}
-
-/// Create a test model for command testing
-fn create_test_model(name: &str) -> Gguf {
-    let mut metadata = HashMap::new();
-    metadata.insert("general.name".to_string(), name.to_string());
-
-    Gguf {
-        id: None,
-        name: name.to_string(),
-        file_path: PathBuf::from(format!("/test/{}.gguf", name)),
-        param_count_b: 7.0,
-        architecture: Some("llama".to_string()),
-        quantization: Some("Q4_0".to_string()),
-        context_length: Some(4096),
-        metadata,
-        added_at: Utc::now(),
-        hf_repo_id: None,
-        hf_commit_sha: None,
-        hf_filename: None,
-        download_date: None,
-        last_update_check: None,
-        tags: Vec::new(),
-    }
-}
 
 #[tokio::test]
 async fn test_list_command_with_no_models() {
     // This test would require mocking database::setup_database() to return our test pool
     // For now, we test the command logic indirectly through the database functions
 
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let models = database::list_models(&pool).await.unwrap();
 
     // Empty database should return empty list
@@ -83,7 +29,7 @@ async fn test_list_command_with_no_models() {
 
 #[tokio::test]
 async fn test_list_command_with_models() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Add some test models
     let model1 = create_test_model("test-model-1");
@@ -98,10 +44,10 @@ async fn test_list_command_with_models() {
 
 #[tokio::test]
 async fn test_remove_command_scenarios() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
-    // Test removing non-existent model
-    let result = database::remove_model(&pool, "non-existent").await;
+    // Test removing non-existent model by ID
+    let result = database::remove_model_by_id(&pool, 999).await;
     assert!(result.is_err());
 
     // Add a model and then remove it
@@ -110,8 +56,9 @@ async fn test_remove_command_scenarios() {
 
     let models_before = database::list_models(&pool).await.unwrap();
     assert_eq!(models_before.len(), 1);
+    let model_id = models_before[0].id.unwrap();
 
-    let remove_result = database::remove_model(&pool, "to-remove").await;
+    let remove_result = database::remove_model_by_id(&pool, model_id).await;
     assert!(remove_result.is_ok());
 
     let models_after = database::list_models(&pool).await.unwrap();
@@ -120,7 +67,7 @@ async fn test_remove_command_scenarios() {
 
 #[tokio::test]
 async fn test_find_models_for_remove_command() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Add models with similar names
     let models = vec![
@@ -160,7 +107,7 @@ async fn test_find_models_for_remove_command() {
 
 #[tokio::test]
 async fn test_model_lifecycle_workflow() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Simulate the full workflow: add -> list -> find -> remove
 
@@ -183,8 +130,12 @@ async fn test_model_lifecycle_workflow() {
         .unwrap();
     assert_eq!(found_models.len(), 1);
 
-    // 5. Remove the model (simulating remove command)
-    let remove_result = database::remove_model(&pool, "lifecycle-test-model").await;
+    // 5. Remove the model (simulating remove command - find by name, remove by ID)
+    let model_to_remove = database::find_model_by_identifier(&pool, "lifecycle-test-model")
+        .await
+        .unwrap()
+        .expect("Model should exist");
+    let remove_result = database::remove_model_by_id(&pool, model_to_remove.id.unwrap()).await;
     assert!(remove_result.is_ok());
 
     // 6. Verify removal
@@ -194,19 +145,14 @@ async fn test_model_lifecycle_workflow() {
 
 #[tokio::test]
 async fn test_command_error_scenarios() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test error scenarios that commands need to handle
 
-    // 1. Remove non-existent model
-    let remove_error = database::remove_model(&pool, "does-not-exist").await;
+    // 1. Remove non-existent model by ID
+    let remove_error = database::remove_model_by_id(&pool, 999).await;
     assert!(remove_error.is_err());
-    assert!(
-        remove_error
-            .unwrap_err()
-            .to_string()
-            .contains("No model found")
-    );
+    assert!(remove_error.unwrap_err().to_string().contains("not found"));
 
     // 2. Search for non-existent model
     let search_result = database::find_models_by_name(&pool, "non-existent")
@@ -231,12 +177,13 @@ async fn test_command_error_scenarios() {
         ModelStoreError::DuplicateModel { model_name, .. } => {
             assert_eq!(model_name, "duplicate-name");
         }
+        other => panic!("Expected DuplicateModel error, got {:?}", other),
     }
 }
 
 #[tokio::test]
 async fn test_models_with_various_metadata() {
-    let pool = create_test_database().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
 
     // Test models with different metadata configurations
     let models = vec![

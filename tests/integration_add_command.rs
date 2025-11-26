@@ -3,9 +3,10 @@
 //! This module tests the complete add workflow including file validation,
 //! metadata extraction, database operations, and error handling.
 
-use anyhow::Result;
+mod common;
+
 use chrono::Utc;
-use sqlx::SqlitePool;
+use common::database::setup_test_pool;
 use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
@@ -13,41 +14,6 @@ use tempfile::tempdir;
 use gglib::models::Gguf;
 use gglib::services::database::{self, ModelStoreError};
 use gglib::utils::validation;
-
-/// Create an isolated test database pool with the proper schema
-async fn create_test_pool() -> Result<SqlitePool> {
-    // Use in-memory database for testing to avoid interference
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    // Create the table with enhanced metadata fields
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS models (
-            id INTEGER PRIMARY KEY, 
-            name TEXT NOT NULL, 
-            file_path TEXT NOT NULL, 
-            param_count_b REAL NOT NULL,
-            architecture TEXT,
-            quantization TEXT,
-            context_length INTEGER,
-            metadata TEXT,
-            added_at TEXT NOT NULL,
-            hf_repo_id TEXT,
-            hf_commit_sha TEXT,
-            hf_filename TEXT,
-            download_date TEXT,
-            last_update_check TEXT,
-            tags TEXT NOT NULL DEFAULT '[]'
-            )",
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")
-        .execute(&pool)
-        .await?;
-
-    Ok(pool)
-}
 
 /// Create a test GGUF file with minimal valid header
 fn create_test_gguf_file(temp_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
@@ -128,7 +94,7 @@ async fn test_add_command_wrong_extension() {
 
 #[tokio::test]
 async fn test_add_command_database_integration() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
     let file_path = create_test_gguf_file(temp_dir.path(), "integration_test");
 
@@ -177,7 +143,7 @@ async fn test_add_command_database_integration() {
 
 #[tokio::test]
 async fn test_add_command_duplicate_model_handling() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
     let file_path = create_test_gguf_file(temp_dir.path(), "duplicate_test");
 
@@ -234,6 +200,7 @@ async fn test_add_command_duplicate_model_handling() {
         ModelStoreError::DuplicateModel { file_path, .. } => {
             assert!(file_path.contains("duplicate_test"));
         }
+        other => panic!("Expected DuplicateModel error, got {:?}", other),
     }
 
     // Verify only the first model exists
@@ -247,7 +214,7 @@ async fn test_add_command_duplicate_model_handling() {
 
 #[tokio::test]
 async fn test_add_command_with_complex_metadata() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
     let file_path = create_test_gguf_file(temp_dir.path(), "metadata_test");
 
@@ -308,7 +275,7 @@ async fn test_add_command_with_complex_metadata() {
 
 #[tokio::test]
 async fn test_add_command_with_minimal_data() {
-    let pool = create_test_pool().await.unwrap();
+    let pool = setup_test_pool().await.unwrap();
     let temp_dir = tempdir().unwrap();
     let file_path = create_test_gguf_file(temp_dir.path(), "minimal_test");
 
