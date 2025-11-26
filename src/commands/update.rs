@@ -4,9 +4,8 @@
 //! including model metadata, architecture information, and custom key-value pairs.
 
 use crate::models::Gguf;
-use crate::services::database;
+use crate::services::{database, AppCore};
 use anyhow::{Result, anyhow};
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use tracing::warn;
@@ -29,7 +28,8 @@ pub struct UpdateArgs {
 /// Handle the update command from the CLI
 pub async fn handle_update(args: UpdateArgs) -> Result<()> {
     let pool = database::setup_database().await?;
-    execute(&pool, args).await
+    let core = AppCore::new(pool);
+    execute(&core, args).await
 }
 
 /// Execute the update command
@@ -39,7 +39,7 @@ pub async fn handle_update(args: UpdateArgs) -> Result<()> {
 ///
 /// # Arguments
 ///
-/// * `pool` - A reference to the SQLite connection pool
+/// * `core` - A reference to the AppCore service layer
 /// * `args` - The update command arguments
 ///
 /// # Returns
@@ -50,11 +50,12 @@ pub async fn handle_update(args: UpdateArgs) -> Result<()> {
 ///
 /// ```rust,no_run
 /// use gglib::commands::update::{execute, UpdateArgs};
-/// use gglib::services::database;
+/// use gglib::services::{database, AppCore};
 ///
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {
 ///     let pool = database::setup_database().await?;
+///     let core = AppCore::new(pool);
 ///     
 ///     let update_args = UpdateArgs {
 ///         id: 1,
@@ -70,17 +71,15 @@ pub async fn handle_update(args: UpdateArgs) -> Result<()> {
 ///         force: true, // Skip confirmation prompts
 ///     };
 ///     
-///     execute(&pool, update_args).await?;
+///     execute(&core, update_args).await?;
 ///     println!("Model updated successfully!");
 ///     
 ///     Ok(())
 /// }
 /// ```
-pub async fn execute(pool: &SqlitePool, args: UpdateArgs) -> Result<()> {
-    // First, get the existing model
-    let existing_model = database::get_model_by_id(pool, args.id)
-        .await?
-        .ok_or_else(|| anyhow!("Model with ID {} not found", args.id))?;
+pub async fn execute(core: &AppCore, args: UpdateArgs) -> Result<()> {
+    // First, get the existing model (returns error if not found)
+    let existing_model = core.models().get_by_id(args.id).await?;
 
     // Verify the file still exists
     if !existing_model.file_path.exists() && !args.force {
@@ -133,7 +132,7 @@ pub async fn execute(pool: &SqlitePool, args: UpdateArgs) -> Result<()> {
     }
 
     // Apply the updates
-    database::update_model(pool, args.id, &updated_model).await?;
+    core.models().update(args.id, &updated_model).await?;
 
     println!("✅ Model updated successfully!");
     Ok(())

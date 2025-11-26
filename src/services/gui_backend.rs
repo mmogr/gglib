@@ -199,11 +199,8 @@ impl GuiBackend {
     ) -> Result<StartServerResponse> {
         debug!(model_id = %id, "Starting server for model");
 
-        // Get model from database
-        let identifier = id.to_string();
-        let model = database::find_model_by_identifier(&self.db_pool, &identifier)
-            .await?
-            .ok_or_else(|| anyhow!("Model with ID {} not found", id))?;
+        // Get model via AppCore
+        let model = self.core.models().get_by_id(id).await?;
 
         debug!(
             model_name = %model.name,
