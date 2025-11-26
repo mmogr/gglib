@@ -9,6 +9,7 @@
 //! use this service.
 
 use crate::commands::common::{JinjaResolutionSource, resolve_jinja_flag};
+use crate::models::gui::StartServerResponse;
 use crate::services::core::ModelService;
 use crate::services::process_manager::ProcessManager;
 use crate::utils::paths::get_llama_server_path;
@@ -26,15 +27,6 @@ pub struct StartServerConfig {
     pub context_length: Option<u64>,
     /// Optional explicit jinja flag (None = auto-detect from tags)
     pub jinja: Option<bool>,
-}
-
-/// Response from starting a server
-#[derive(Debug, Clone)]
-pub struct StartServerResult {
-    /// Port the server is running on
-    pub port: u16,
-    /// Human-readable message
-    pub message: String,
 }
 
 /// Service for managing background llama-server instances.
@@ -114,7 +106,7 @@ impl ServerService {
     /// - Model file doesn't exist on disk
     /// - Server fails to start
     /// - Maximum concurrent servers reached (for concurrent strategy)
-    pub async fn start(&self, config: StartServerConfig) -> Result<StartServerResult> {
+    pub async fn start(&self, config: StartServerConfig) -> Result<StartServerResponse> {
         let model_id = config.model_id;
         debug!(model_id = %model_id, "Starting server for model");
 
@@ -169,7 +161,7 @@ impl ServerService {
 
         info!(port = %port, model_id = %model_id, "Server started");
 
-        Ok(StartServerResult {
+        Ok(StartServerResponse {
             port,
             message: format!("Server started for model '{}' on port {}", model.name, port),
         })

@@ -3,6 +3,7 @@
 //! This service wraps the existing settings module to provide a clean API
 //! for getting and updating application settings.
 
+use crate::models::gui::ModelsDirectoryInfo;
 use crate::services::settings::{self, Settings, SettingsUpdate};
 use crate::utils::paths::{
     DirectoryCreationStrategy, ModelsDirSource, default_models_dir, ensure_directory,
@@ -10,21 +11,6 @@ use crate::utils::paths::{
 };
 use anyhow::{Result, bail};
 use sqlx::SqlitePool;
-
-/// Information about the models directory configuration
-#[derive(Debug, Clone)]
-pub struct ModelsDirectoryInfo {
-    /// Current path to the models directory
-    pub path: String,
-    /// Source of the path (explicit, env, or default)
-    pub source: String,
-    /// Default path if no override is set
-    pub default_path: String,
-    /// Whether the directory exists
-    pub exists: bool,
-    /// Whether the directory is writable
-    pub writable: bool,
-}
 
 /// Service for managing application settings.
 ///

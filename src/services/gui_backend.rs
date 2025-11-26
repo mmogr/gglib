@@ -189,12 +189,7 @@ impl GuiBackend {
             jinja: request.jinja,
         };
 
-        let result = self.core.servers().start(config).await?;
-
-        Ok(StartServerResponse {
-            port: result.port,
-            message: result.message,
-        })
+        self.core.servers().start(config).await
     }
 
     /// Stop serving a model
@@ -270,28 +265,12 @@ impl GuiBackend {
 
     /// Return current models directory information for the settings UI.
     pub fn get_models_directory_info(&self) -> Result<ModelsDirectoryInfo> {
-        let info = self.core.settings().get_models_directory_info()?;
-
-        Ok(ModelsDirectoryInfo {
-            path: info.path,
-            source: info.source,
-            default_path: info.default_path,
-            exists: info.exists,
-            writable: info.writable,
-        })
+        self.core.settings().get_models_directory_info()
     }
 
     /// Update, validate, and persist the models directory selection.
     pub fn update_models_directory(&self, new_path: String) -> Result<ModelsDirectoryInfo> {
-        let info = self.core.settings().update_models_directory(&new_path)?;
-
-        Ok(ModelsDirectoryInfo {
-            path: info.path,
-            source: info.source,
-            default_path: info.default_path,
-            exists: info.exists,
-            writable: info.writable,
-        })
+        self.core.settings().update_models_directory(&new_path)
     }
 
     /// Get current application settings

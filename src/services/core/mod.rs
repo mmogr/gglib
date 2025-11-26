@@ -52,8 +52,11 @@ use std::sync::Arc;
 pub use download_service::DownloadService;
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
-pub use server_service::{ServerService, StartServerConfig, StartServerResult};
-pub use settings_service::{ModelsDirectoryInfo, SettingsService};
+pub use server_service::{ServerService, StartServerConfig};
+pub use settings_service::SettingsService;
+
+// Re-export types from canonical locations
+pub use crate::models::gui::{ModelsDirectoryInfo, StartServerResponse};
 
 /// Unified application core providing access to all services.
 ///
