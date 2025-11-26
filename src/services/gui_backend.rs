@@ -2,12 +2,16 @@
 //!
 //! This module provides unified backend logic for both Tauri desktop and Web GUI,
 //! eliminating code duplication and ensuring consistent behavior across both interfaces.
+//!
+//! The `GuiBackend` now delegates to `AppCore` for core operations while adding
+//! GUI-specific functionality like server status tracking and process management.
 
 use crate::commands::common::{JinjaResolutionSource, resolve_jinja_flag};
 use crate::models::gui::{
     AddModelRequest, AppSettings, GuiModel, ModelsDirectoryInfo, RemoveModelRequest,
     StartServerRequest, StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
 };
+use crate::services::core::AppCore;
 use crate::services::database;
 use crate::services::process_manager::ProcessManager;
 use crate::services::settings;
@@ -30,7 +34,12 @@ use tracing::{debug, info};
 ///
 /// This service provides a consistent API for both Tauri and Web GUI implementations,
 /// eliminating code duplication and ensuring both interfaces have identical functionality.
+///
+/// Internally delegates to `AppCore` for core operations while adding GUI-specific
+/// features like server status tracking and process management.
 pub struct GuiBackend {
+    /// Core application services (model CRUD, etc.)
+    core: AppCore,
     db_pool: SqlitePool,
     process_manager: Arc<ProcessManager>,
     proxy_manager: Arc<RwLock<Option<ProcessManager>>>,
@@ -50,6 +59,7 @@ impl GuiBackend {
     /// Create a new GUI backend service
     pub async fn new(base_port: u16, max_concurrent: usize) -> Result<Self> {
         let db_pool = database::setup_database().await?;
+        let core = AppCore::new(db_pool.clone());
 
         // Get llama-server path
         let llama_server_path = get_llama_server_path()
@@ -63,6 +73,7 @@ impl GuiBackend {
         ));
 
         Ok(Self {
+            core,
             db_pool,
             process_manager,
             proxy_manager: Arc::new(RwLock::new(None)),
@@ -70,6 +81,11 @@ impl GuiBackend {
             proxy_port: Arc::new(RwLock::new(None)),
             active_downloads: Arc::new(RwLock::new(HashMap::new())),
         })
+    }
+
+    /// Get the AppCore for direct access to core services
+    pub fn core(&self) -> &AppCore {
+        &self.core
     }
 
     /// Get the database pool (for custom operations)
@@ -84,7 +100,8 @@ impl GuiBackend {
 
     /// List all models with their serving status
     pub async fn list_models(&self) -> Result<Vec<GuiModel>> {
-        let models = database::list_models(&self.db_pool).await?;
+        // Use AppCore for base model list
+        let models = self.core.models().list().await?;
 
         // Update health status before listing
         self.process_manager.update_health_status().await;
@@ -103,10 +120,7 @@ impl GuiBackend {
 
     /// Get a specific model by ID
     pub async fn get_model(&self, id: u32) -> Result<GuiModel> {
-        let identifier = id.to_string();
-        let model = database::find_model_by_identifier(&self.db_pool, &identifier)
-            .await?
-            .ok_or_else(|| anyhow!("Model with ID {} not found", id))?;
+        let model = self.core.models().get_by_id(id).await?;
 
         let server_info = self.process_manager.get_server(id).await;
         let is_serving = server_info.is_some();
@@ -117,74 +131,20 @@ impl GuiBackend {
 
     /// Add a model to the database
     pub async fn add_model(&self, request: AddModelRequest) -> Result<GuiModel> {
-        use crate::models::Gguf;
-        use crate::utils::validation;
-
-        let file_path = PathBuf::from(&request.file_path);
-
-        // Validate file exists
-        if !file_path.exists() {
-            return Err(anyhow!("File not found: {}", request.file_path));
-        }
-
-        // Validate it's a GGUF file
-        if !request.file_path.to_lowercase().ends_with(".gguf") {
-            return Err(anyhow!("File must have .gguf extension"));
-        }
-
-        // Validate the GGUF file and extract metadata (non-interactive)
-        let gguf_metadata = validation::validate_and_parse_gguf(&request.file_path)?;
-
-        // Use extracted metadata with sensible defaults (no user prompts)
-        let name = gguf_metadata.name.unwrap_or_else(|| {
-            // Fallback: use filename without extension
-            file_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Unknown Model")
-                .to_string()
-        });
-
-        let param_count_b = gguf_metadata.param_count_b.unwrap_or(0.0); // Will be 0 if not available
-
-        // Create the model instance with extracted metadata
-        let new_model = Gguf {
-            id: None, // Will be set by the database
-            name,
-            file_path: file_path.clone(),
-            param_count_b,
-            architecture: gguf_metadata.architecture,
-            quantization: gguf_metadata.quantization,
-            context_length: gguf_metadata.context_length,
-            metadata: gguf_metadata.metadata,
-            added_at: chrono::Utc::now(),
-            hf_repo_id: None,
-            hf_commit_sha: None,
-            hf_filename: None,
-            download_date: None,
-            last_update_check: None,
-            tags: Vec::new(),
-        };
-
-        // Save to database
-        database::add_model(&self.db_pool, &new_model).await?;
-
-        // Retrieve the newly added model
-        let models = database::list_models(&self.db_pool).await?;
-        let model = models
-            .into_iter()
-            .find(|m| m.file_path == file_path)
-            .ok_or_else(|| anyhow!("Model was added but could not be retrieved"))?;
+        // Use AppCore's add_from_file which handles validation and metadata extraction
+        let model = self.core.models().add_from_file(
+            &request.file_path,
+            None, // No name override from GUI request
+            None, // No param count override
+        ).await?;
 
         Ok(GuiModel::from_gguf(model))
     }
 
     /// Update a model in the database
     pub async fn update_model(&self, id: u32, request: UpdateModelRequest) -> Result<GuiModel> {
-        // Get the existing model
-        let mut model = database::get_model_by_id(&self.db_pool, id)
-            .await?
-            .ok_or_else(|| anyhow!("Model {} not found", id))?;
+        // Get the existing model via AppCore
+        let mut model = self.core.models().get_by_id(id).await?;
 
         // Update fields if provided
         if let Some(name) = request.name {
@@ -197,8 +157,8 @@ impl GuiBackend {
             model.file_path = PathBuf::from(file_path);
         }
 
-        // Save to database
-        database::update_model(&self.db_pool, id, &model).await?;
+        // Save via AppCore
+        self.core.models().update(id, &model).await?;
 
         // Return updated model as GuiModel
         Ok(GuiModel::from_gguf(model))
@@ -206,9 +166,7 @@ impl GuiBackend {
 
     /// Remove a model from the database
     pub async fn remove_model(&self, id: u32, request: RemoveModelRequest) -> Result<String> {
-        let model = database::get_model_by_id(&self.db_pool, id)
-            .await?
-            .ok_or_else(|| anyhow!("Model {} not found", id))?;
+        let model = self.core.models().get_by_id(id).await?;
 
         // Check if model is currently serving
         let server_running = self.process_manager.get_server(id).await.is_some();
@@ -223,7 +181,8 @@ impl GuiBackend {
             self.process_manager.stop_server(id).await?;
         }
 
-        database::remove_model_by_id(&self.db_pool, id).await?;
+        // Remove via AppCore
+        self.core.models().remove(id).await?;
 
         Ok(format!("Model '{}' removed successfully", model.name))
     }
@@ -469,31 +428,31 @@ impl GuiBackend {
         }
     }
 
-    // Tag Management Operations
+    // Tag Management Operations (delegated to AppCore)
 
     /// List all unique tags used across all models
     pub async fn list_tags(&self) -> Result<Vec<String>> {
-        database::list_tags(&self.db_pool).await
+        self.core.models().list_tags().await
     }
 
     /// Add a tag to a model
     pub async fn add_model_tag(&self, model_id: u32, tag: String) -> Result<()> {
-        database::add_model_tag(&self.db_pool, model_id, tag).await
+        self.core.models().add_tag(model_id, tag).await
     }
 
     /// Remove a tag from a model
     pub async fn remove_model_tag(&self, model_id: u32, tag: String) -> Result<()> {
-        database::remove_model_tag(&self.db_pool, model_id, tag).await
+        self.core.models().remove_tag(model_id, tag).await
     }
 
     /// Get all tags for a specific model
     pub async fn get_model_tags(&self, model_id: u32) -> Result<Vec<String>> {
-        database::get_model_tags(&self.db_pool, model_id).await
+        self.core.models().get_tags(model_id).await
     }
 
     /// Get all models that have a specific tag
     pub async fn get_models_by_tag(&self, tag: String) -> Result<Vec<u32>> {
-        database::get_models_by_tag(&self.db_pool, tag).await
+        self.core.models().get_by_tag(&tag).await
     }
 
     /// Return current models directory information for the settings UI.
