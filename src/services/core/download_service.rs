@@ -1107,4 +1107,139 @@ mod tests {
         assert_eq!(status.pending[0].model_id, "model1");
         assert_eq!(status.pending[0].position, 2); // Position starts at 2 (1 is for current)
     }
+
+    #[tokio::test]
+    async fn test_queue_sharded_download() {
+        let service = DownloadService::new();
+        let shard_files = vec![
+            "Q4_K_M/model-00001-of-00003.gguf".to_string(),
+            "Q4_K_M/model-00002-of-00003.gguf".to_string(),
+            "Q4_K_M/model-00003-of-00003.gguf".to_string(),
+        ];
+
+        let result = service
+            .queue_sharded_download("test/model".to_string(), "Q4_K_M".to_string(), shard_files)
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1); // First position
+
+        let status = service.get_queue_status().await;
+        assert_eq!(status.pending.len(), 3); // 3 shards
+
+        // Verify shard info is set correctly
+        assert!(status.pending[0].shard_info.is_some());
+        let shard = status.pending[0].shard_info.as_ref().unwrap();
+        assert_eq!(shard.shard_index, 0);
+        assert_eq!(shard.total_shards, 3);
+
+        // All items should share the same group_id
+        let group_id = status.pending[0].group_id.as_ref().unwrap();
+        assert!(status.pending.iter().all(|p| p.group_id.as_ref() == Some(group_id)));
+    }
+
+    #[tokio::test]
+    async fn test_remove_shard_group() {
+        let service = DownloadService::new();
+        let shard_files = vec![
+            "model-00001.gguf".to_string(),
+            "model-00002.gguf".to_string(),
+        ];
+
+        service
+            .queue_sharded_download("test/model".to_string(), "Q4_K_M".to_string(), shard_files)
+            .await
+            .unwrap();
+
+        let status = service.get_queue_status().await;
+        let group_id = status.pending[0].group_id.clone().unwrap();
+
+        // Remove all shards in the group
+        let removed = service.remove_shard_group(&group_id).await;
+        assert_eq!(removed, 2);
+
+        let status_after = service.get_queue_status().await;
+        assert_eq!(status_after.pending.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_fail_shard_group() {
+        let service = DownloadService::new();
+        let shard_files = vec![
+            "model-00001.gguf".to_string(),
+            "model-00002.gguf".to_string(),
+        ];
+
+        service
+            .queue_sharded_download("test/model".to_string(), "Q4_K_M".to_string(), shard_files)
+            .await
+            .unwrap();
+
+        let status = service.get_queue_status().await;
+        let group_id = status.pending[0].group_id.clone().unwrap();
+
+        // Fail all shards in the group
+        let failed_count = service.fail_shard_group(&group_id).await;
+        assert_eq!(failed_count, 2);
+
+        let status_after = service.get_queue_status().await;
+        assert_eq!(status_after.pending.len(), 0);
+        assert_eq!(status_after.failed.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_queue_capacity_for_shards() {
+        let service = DownloadService::new();
+        service.set_max_queue_size(3).await;
+
+        // Queue 1 regular download
+        service
+            .queue_download("model1".to_string(), None)
+            .await
+            .unwrap();
+
+        // Try to queue 3 shards - should fail (would exceed max of 3)
+        let shard_files = vec![
+            "model-00001.gguf".to_string(),
+            "model-00002.gguf".to_string(),
+            "model-00003.gguf".to_string(),
+        ];
+
+        let result = service
+            .queue_sharded_download("test/sharded".to_string(), "Q4_K_M".to_string(), shard_files)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("full"));
+    }
+
+    #[tokio::test]
+    async fn test_create_shard_batch() {
+        let (group_id, shards) = QueuedDownload::create_shard_batch(
+            "test/model",
+            "Q4_K_M",
+            &[
+                "model-00001.gguf".to_string(),
+                "model-00002.gguf".to_string(),
+            ],
+        );
+
+        assert!(!group_id.is_empty());
+        assert_eq!(shards.len(), 2);
+
+        // Check first shard
+        assert_eq!(shards[0].model_id, "test/model");
+        assert_eq!(shards[0].quantization, Some("Q4_K_M".to_string()));
+        assert_eq!(shards[0].group_id, Some(group_id.clone()));
+        let info0 = shards[0].shard_info.as_ref().unwrap();
+        assert_eq!(info0.shard_index, 0);
+        assert_eq!(info0.total_shards, 2);
+        assert_eq!(info0.filename, "model-00001.gguf");
+
+        // Check second shard
+        let info1 = shards[1].shard_info.as_ref().unwrap();
+        assert_eq!(info1.shard_index, 1);
+        assert_eq!(info1.total_shards, 2);
+        assert_eq!(info1.filename, "model-00002.gguf");
+    }
 }

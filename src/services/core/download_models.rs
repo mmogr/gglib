@@ -38,7 +38,7 @@ pub enum DownloadError {
 /// Used to track individual parts of a multi-file GGUF model.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ShardInfo {
-    /// 1-based index of this shard (e.g., 1 for "Part 1/3")
+    /// 0-based index of this shard (e.g., 0 for "Part 1/3")
     pub shard_index: usize,
     /// Total number of shards in this model
     pub total_shards: usize,
@@ -58,7 +58,7 @@ impl ShardInfo {
 
     /// Format as display string (e.g., "Part 1/3")
     pub fn display(&self) -> String {
-        format!("Part {}/{}", self.shard_index, self.total_shards)
+        format!("Part {}/{}", self.shard_index + 1, self.total_shards)
     }
 }
 
@@ -143,7 +143,7 @@ impl QueuedDownload {
                     model_id.to_string(),
                     quantization.to_string(),
                     group_id.clone(),
-                    ShardInfo::new(idx + 1, total_shards, filename.clone()),
+                    ShardInfo::new(idx, total_shards, filename.clone()),
                 )
             })
             .collect();
