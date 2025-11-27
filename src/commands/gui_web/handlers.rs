@@ -294,9 +294,25 @@ pub async fn queue_download(
 ) -> Result<Json<ApiResponse<usize>>, AppError> {
     let position = state
         .backend
-        .queue_download(payload.model_id, payload.quantization)
+        .queue_download(payload.model_id.clone(), payload.quantization.clone())
         .await
         .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    // Start the queue processor in a background task (if not already running)
+    let backend = state.backend.clone();
+    let progress_tx = state.progress_tx.clone();
+
+    tokio::spawn(async move {
+        let progress_callback = move |event: DownloadProgressEvent| {
+            let _ = progress_tx.send(event.to_json_string());
+        };
+
+        backend
+            .core()
+            .downloads()
+            .process_queue(progress_callback)
+            .await;
+    });
 
     Ok(Json(ApiResponse::success(position)))
 }
