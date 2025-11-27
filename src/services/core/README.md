@@ -115,7 +115,7 @@ When downloading sharded models (models split into multiple GGUF files), each sh
 
 ```rust,ignore
 pub struct ShardInfo {
-    pub shard_index: usize,    // 1-based (e.g., 1 for "Part 1/3")
+    pub shard_index: usize,    // 0-based index (0, 1, 2, ...)
     pub total_shards: usize,   // Total count (e.g., 3)
     pub filename: String,      // Shard filename
 }
