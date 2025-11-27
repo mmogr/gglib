@@ -42,6 +42,7 @@ tokio-stream = { version = "0.1.17", features = ["sync"] }
 which = "5.0"
 tokio-util = "0.7"
 zip = "2.2"
+uuid = { version = "1.18.1", features = ["v4"] }
 
 [build-dependencies]
 regex = "1.10"

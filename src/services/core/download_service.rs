@@ -2,104 +2,18 @@
 //!
 //! This service provides managed downloads with progress tracking,
 //! cancellation support, and download queue management.
+//!
+//! Types are defined in the `download_models` module for better organization.
 
+use super::download_models::{
+    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
+};
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
-use thiserror::Error;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-
-/// Errors related to download operations.
-#[derive(Debug, Error)]
-pub enum DownloadError {
-    #[error("Download '{model_id}' was cancelled by the user")]
-    Cancelled { model_id: String },
-
-    #[error("A download for '{model_id}' is already running or queued")]
-    AlreadyRunning { model_id: String },
-
-    #[error("No active download for '{model_id}'")]
-    NotFound { model_id: String },
-
-    #[error("Download queue is full (max {max_size} items)")]
-    QueueFull { max_size: u32 },
-
-    #[error("Item '{model_id}' not found in queue")]
-    NotInQueue { model_id: String },
-}
-
-/// Information about a shard within a sharded model download.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct ShardInfo {
-    /// 1-based index of this shard (e.g., 1 for "Part 1/3")
-    pub shard_index: usize,
-    /// Total number of shards in this model
-    pub total_shards: usize,
-    /// The specific filename for this shard (e.g., "model-00001-of-00003.gguf")
-    pub filename: String,
-}
-
-/// A queued download item waiting to be processed.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct QueuedDownload {
-    pub model_id: String,
-    pub quantization: Option<String>,
-    /// Links shards of the same model together for group operations
-    pub group_id: Option<String>,
-    /// Shard-specific information if this is part of a sharded model
-    pub shard_info: Option<ShardInfo>,
-    #[serde(skip)]
-    pub queued_at: Option<Instant>,
-}
-
-/// Status of a download in the queue.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum DownloadStatus {
-    /// Currently being downloaded
-    Downloading,
-    /// Waiting in queue
-    Queued,
-    /// Completed successfully
-    Completed,
-    /// Failed with an error
-    Failed,
-}
-
-/// Information about a download in the queue.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DownloadQueueItem {
-    pub model_id: String,
-    pub quantization: Option<String>,
-    pub status: DownloadStatus,
-    /// Position in queue (1 = currently downloading)
-    pub position: usize,
-    /// Error message if status is Failed
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    /// Links shards of the same model together for group operations
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub group_id: Option<String>,
-    /// Shard-specific information if this is part of a sharded model
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shard_info: Option<ShardInfo>,
-}
-
-/// Complete queue status including current download and pending items.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DownloadQueueStatus {
-    /// Currently downloading item (if any)
-    pub current: Option<DownloadQueueItem>,
-    /// Items waiting in the queue
-    pub pending: Vec<DownloadQueueItem>,
-    /// Recently failed downloads (for retry)
-    pub failed: Vec<DownloadQueueItem>,
-    /// Maximum queue size
-    pub max_size: u32,
-}
 
 /// Service for managing HuggingFace model downloads.
 ///
@@ -195,13 +109,7 @@ impl DownloadService {
         }
 
         // Add to queue
-        let queued_item = QueuedDownload {
-            model_id: model_id.clone(),
-            quantization,
-            group_id: None,
-            shard_info: None,
-            queued_at: Some(Instant::now()),
-        };
+        let queued_item = QueuedDownload::new(model_id.clone(), quantization);
 
         let position = {
             let mut queue = self.pending_queue.write().await;
@@ -210,6 +118,127 @@ impl DownloadService {
         };
 
         Ok(position)
+    }
+
+    /// Add a sharded model download to the queue, creating one entry per shard.
+    ///
+    /// Each shard is queued as a separate item with a shared `group_id` for
+    /// group operations (cancel all, fail all, retry all).
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID (e.g., "unsloth/Llama-3.2-1B-Instruct-GGUF")
+    /// * `quantization` - Quantization type (e.g., "Q4_K_M")
+    /// * `shard_filenames` - Ordered list of shard filenames to download
+    ///
+    /// # Returns
+    ///
+    /// Returns the queue position of the first shard.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Any shard is already downloading or queued
+    /// - The queue doesn't have room for all shards
+    pub async fn queue_sharded_download(
+        &self,
+        model_id: String,
+        quantization: String,
+        shard_filenames: Vec<String>,
+    ) -> Result<usize> {
+        let shard_count = shard_filenames.len();
+        if shard_count == 0 {
+            return Err(anyhow::anyhow!("No shard filenames provided").into());
+        }
+
+        // Check queue capacity for all shards
+        let active_count = self.active_downloads.read().await.len();
+        let pending_count = self.pending_queue.read().await.len();
+        let max_size = *self.max_queue_size.read().await;
+
+        if (active_count + pending_count + shard_count) as u32 > max_size {
+            return Err(DownloadError::QueueFull { max_size }.into());
+        }
+
+        // Check if model is already in queue or downloading
+        {
+            let queue = self.pending_queue.read().await;
+            if queue.iter().any(|item| item.model_id == model_id) {
+                return Err(DownloadError::AlreadyRunning {
+                    model_id: model_id.clone(),
+                }
+                .into());
+            }
+        }
+
+        if self.active_downloads.read().await.contains_key(&model_id) {
+            return Err(DownloadError::AlreadyRunning {
+                model_id: model_id.clone(),
+            }
+            .into());
+        }
+
+        // Remove from failed list if retrying (by model_id since group_id changes each time)
+        {
+            let mut failed = self.failed_downloads.write().await;
+            failed.retain(|item| item.model_id != model_id);
+        }
+
+        // Add all shards to queue using create_shard_batch
+        let first_position = {
+            let mut queue = self.pending_queue.write().await;
+            let base_position = active_count + queue.len() + 1;
+
+            let (_, shard_items) =
+                QueuedDownload::create_shard_batch(&model_id, &quantization, &shard_filenames);
+
+            for item in shard_items {
+                queue.push_back(item);
+            }
+
+            base_position
+        };
+
+        Ok(first_position)
+    }
+
+    /// Remove all items belonging to a shard group from the pending queue.
+    ///
+    /// This is used when cancelling or failing a sharded download to remove
+    /// all remaining shards from the queue.
+    pub async fn remove_shard_group(&self, group_id: &str) -> usize {
+        let mut queue = self.pending_queue.write().await;
+        let initial_len = queue.len();
+        queue.retain(|item| item.group_id.as_deref() != Some(group_id));
+        initial_len - queue.len()
+    }
+
+    /// Cancel an active download and remove all related shards from queue.
+    ///
+    /// If the active download belongs to a shard group, this will also
+    /// remove all pending shards in that group.
+    pub async fn cancel_shard_group(&self, group_id: &str) -> Result<()> {
+        // First, find and cancel any active download in this group
+        let active_model_id = {
+            let queue = self.pending_queue.read().await;
+            // Check if any pending item in this group gives us information
+            // about what might be actively downloading
+            queue
+                .iter()
+                .find(|item| item.group_id.as_deref() == Some(group_id))
+                .map(|item| item.model_id.clone())
+        };
+
+        // Remove all pending shards in this group
+        self.remove_shard_group(group_id).await;
+
+        // Try to cancel active download if it belongs to this group
+        if let Some(model_id) = active_model_id {
+            // Ignore errors - the download might have already completed
+            let _ = self.cancel(&model_id).await;
+        }
+
+        Ok(())
     }
 
     /// Get the current status of the download queue.
@@ -454,15 +483,10 @@ impl DownloadService {
                         );
                         progress_callback(skip_event);
                     } else {
-                        // Mark as failed and emit error event
-                        self.mark_failed(QueuedDownload {
-                            model_id: model_id.clone(),
-                            quantization,
-                            group_id: item.group_id.clone(),
-                            shard_info: item.shard_info.clone(),
-                            queued_at: None,
-                        })
-                        .await;
+                        // Mark as failed - clone the item to preserve shard info
+                        let mut failed_item = item.clone();
+                        failed_item.queued_at = None;
+                        self.mark_failed(failed_item).await;
 
                         let error_event = crate::commands::download::DownloadProgressEvent::errored(
                             &model_id, &error_msg,
