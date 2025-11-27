@@ -7,7 +7,7 @@ use gglib::{
         AddModelRequest, AppSettings, GuiModel, RemoveModelRequest, StartServerRequest,
         UpdateModelRequest, UpdateSettingsRequest,
     },
-    services::core::{DownloadQueueStatus, download_service::DownloadError},
+    services::core::{DownloadError, DownloadQueueStatus},
     services::gui_backend::GuiBackend,
 };
 use std::sync::Arc;
@@ -435,6 +435,19 @@ async fn remove_from_download_queue(
 }
 
 #[tauri::command]
+async fn cancel_shard_group(
+    group_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    state
+        .backend
+        .cancel_shard_group(&group_id)
+        .await
+        .map(|_| format!("Cancelled shard group '{}'", group_id))
+        .map_err(|e| format!("Failed to cancel shard group: {}", e))
+}
+
+#[tauri::command]
 async fn clear_failed_downloads(
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
@@ -619,6 +632,7 @@ async fn main() {
             queue_download,
             get_download_queue,
             remove_from_download_queue,
+            cancel_shard_group,
             clear_failed_downloads,
             get_gui_api_port,
             check_llama_status,

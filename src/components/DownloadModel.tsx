@@ -210,6 +210,15 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
     }
   };
 
+  const handleCancelShardGroup = async (groupId: string) => {
+    try {
+      await TauriService.cancelShardGroup(groupId);
+      await fetchQueueStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to cancel shard group");
+    }
+  };
+
   const handleClearFailed = async () => {
     try {
       await TauriService.clearFailedDownloads();
@@ -406,28 +415,47 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
                 Queued Downloads ({queueStatus.pending.length})
               </h3>
               <ul className={styles.queueList}>
-                {queueStatus.pending.map((item, index) => (
-                  <li key={`${item.model_id}-${index}`} className={styles.queueItem}>
-                    <div className={styles.queueItemInfo}>
-                      <span className={styles.queuePosition}>#{item.position}</span>
-                      <span className={styles.queueModelId}>{item.model_id}</span>
-                      {item.quantization && (
-                        <span className={styles.queueQuant}>{item.quantization}</span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${styles.removeBtn}`}
-                      onClick={() => handleRemoveFromQueue(item.model_id)}
-                      aria-label={`Remove ${item.model_id} from queue`}
-                    >
-                      ✕
-                    </button>
-                  </li>
-                ))}
+                {queueStatus.pending.map((item, index) => {
+                  const isShard = item.shard_info !== null && item.shard_info !== undefined;
+                  const shardLabel = isShard
+                    ? `shard ${item.shard_info!.shard_index + 1}/${item.shard_info!.total_shards}`
+                    : null;
+                  
+                  return (
+                    <li key={`${item.model_id}-${index}`} className={styles.queueItem}>
+                      <div className={styles.queueItemInfo}>
+                        <span className={styles.queuePosition}>#{item.position}</span>
+                        <span className={styles.queueModelId}>
+                          {item.model_id}
+                          {shardLabel && (
+                            <span className={styles.shardBadge}>{shardLabel}</span>
+                          )}
+                        </span>
+                        {item.quantization && (
+                          <span className={styles.queueQuant}>{item.quantization}</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${styles.removeBtn}`}
+                        onClick={() => item.group_id 
+                          ? handleCancelShardGroup(item.group_id)
+                          : handleRemoveFromQueue(item.model_id)
+                        }
+                        aria-label={item.group_id 
+                          ? `Cancel all shards for ${item.model_id}`
+                          : `Remove ${item.model_id} from queue`
+                        }
+                        title={item.group_id ? "Cancel all shards" : "Remove from queue"}
+                      >
+                        {item.group_id ? "Cancel All" : "✕"}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </>
-          )}
+          )}}
 
           {/* Failed Downloads */}
           {hasFailedDownloads && (
@@ -445,40 +473,52 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
                 </button>
               </div>
               <ul className={styles.queueList}>
-                {queueStatus.failed.map((item, index) => (
-                  <li key={`failed-${item.model_id}-${index}`} className={`${styles.queueItem} ${styles.queueItemFailed}`}>
-                    <div className={styles.queueItemInfo}>
-                      <span className={styles.failedIcon}>❌</span>
-                      <span className={styles.queueModelId}>{item.model_id}</span>
-                      {item.quantization && (
-                        <span className={styles.queueQuant}>{item.quantization}</span>
-                      )}
-                      {item.error && (
-                        <span className={styles.errorText} title={item.error}>
-                          {item.error.length > 40 ? item.error.substring(0, 40) + '...' : item.error}
+                {queueStatus.failed.map((item, index) => {
+                  const isShard = item.shard_info !== null && item.shard_info !== undefined;
+                  const shardLabel = isShard
+                    ? `shard ${item.shard_info!.shard_index + 1}/${item.shard_info!.total_shards}`
+                    : null;
+
+                  return (
+                    <li key={`failed-${item.model_id}-${index}`} className={`${styles.queueItem} ${styles.queueItemFailed}`}>
+                      <div className={styles.queueItemInfo}>
+                        <span className={styles.failedIcon}>❌</span>
+                        <span className={styles.queueModelId}>
+                          {item.model_id}
+                          {shardLabel && (
+                            <span className={styles.shardBadge}>{shardLabel}</span>
+                          )}
                         </span>
-                      )}
-                    </div>
-                    <div className={styles.failedActions}>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${styles.retryBtn}`}
-                        onClick={() => handleRetry(item)}
-                        aria-label={`Retry ${item.model_id}`}
-                      >
-                        Retry
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${styles.removeBtn}`}
-                        onClick={() => handleRemoveFromQueue(item.model_id)}
-                        aria-label={`Remove ${item.model_id} from failed list`}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                        {item.quantization && (
+                          <span className={styles.queueQuant}>{item.quantization}</span>
+                        )}
+                        {item.error && (
+                          <span className={styles.errorText} title={item.error}>
+                            {item.error.length > 40 ? item.error.substring(0, 40) + '...' : item.error}
+                          </span>
+                        )}
+                      </div>
+                      <div className={styles.failedActions}>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${styles.retryBtn}`}
+                          onClick={() => handleRetry(item)}
+                          aria-label={`Retry ${item.model_id}`}
+                        >
+                          Retry
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${styles.removeBtn}`}
+                          onClick={() => handleRemoveFromQueue(item.model_id)}
+                          aria-label={`Remove ${item.model_id} from failed list`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </>
           )}

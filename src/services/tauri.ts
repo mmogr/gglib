@@ -493,6 +493,30 @@ export class TauriService {
   }
 
   /**
+   * Cancel all shards in a shard group (for sharded model downloads).
+   * This removes all pending shards and cancels any active download in the group.
+   */
+  static async cancelShardGroup(groupId: string): Promise<string> {
+    if (isTauriApp) {
+      return await invoke<string>('cancel_shard_group', { groupId });
+    } else {
+      const response = await apiFetch(`/models/download/queue/cancel-group`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_id: groupId }),
+      });
+
+      if (!response.ok) {
+        const error: ApiResponse<any> = await response.json();
+        throw new Error(error.error || 'Failed to cancel shard group');
+      }
+
+      const data: ApiResponse<string> = await response.json();
+      return data.data || 'Cancelled shard group';
+    }
+  }
+
+  /**
    * Clear all failed downloads from the queue.
    */
   static async clearFailedDownloads(): Promise<string> {

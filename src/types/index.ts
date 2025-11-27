@@ -63,12 +63,29 @@ export interface UpdateSettingsRequest {
 
 export type DownloadStatus = 'downloading' | 'queued' | 'completed' | 'failed';
 
+/**
+ * Information about a shard in a sharded model download.
+ * Sharded models are split across multiple files that must be downloaded together.
+ */
+export interface ShardInfo {
+  /** Zero-based index of this shard (0, 1, 2, ...) */
+  shard_index: number;
+  /** Total number of shards in the group */
+  total_shards: number;
+  /** Filename of this specific shard (e.g., "Q4_K_M/model-00001-of-00003.gguf") */
+  filename: string;
+}
+
 export interface DownloadQueueItem {
   model_id: string;
   quantization?: string | null;
   status: DownloadStatus;
   position: number;
   error?: string | null;
+  /** Shared identifier for all shards of a sharded model download */
+  group_id?: string | null;
+  /** Shard information if this item is part of a sharded model download */
+  shard_info?: ShardInfo | null;
 }
 
 export interface DownloadQueueStatus {

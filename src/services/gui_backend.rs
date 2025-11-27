@@ -339,6 +339,14 @@ impl GuiBackend {
         self.core.downloads().remove_from_queue(model_id).await
     }
 
+    /// Cancel all shards in a shard group (for sharded model downloads).
+    ///
+    /// This removes all pending shards in the group and cancels any active
+    /// download belonging to the group.
+    pub async fn cancel_shard_group(&self, group_id: &str) -> Result<()> {
+        self.core.downloads().cancel_shard_group(group_id).await
+    }
+
     /// Clear all failed downloads from the list.
     pub async fn clear_failed_downloads(&self) {
         self.core.downloads().clear_failed().await
