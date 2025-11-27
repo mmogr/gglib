@@ -98,7 +98,10 @@ impl DownloadProgressEvent {
             0.0
         };
 
-        event.message = Some(format!("Downloading: {} ({:.1}%)", model_id, event.percentage));
+        event.message = Some(format!(
+            "Downloading: {} ({:.1}%)",
+            model_id, event.percentage
+        ));
         event
     }
 
