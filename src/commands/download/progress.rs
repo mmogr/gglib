@@ -13,6 +13,12 @@ pub struct DownloadProgressEvent {
     pub speed: f64,
     pub eta: f64,
     pub message: Option<String>,
+    /// Position in the download queue (1 = currently downloading, 2+ = waiting)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_position: Option<usize>,
+    /// Total number of items in the queue (including current download)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_length: Option<usize>,
 }
 
 impl DownloadProgressEvent {
@@ -26,6 +32,8 @@ impl DownloadProgressEvent {
             speed: 0.0,
             eta: 0.0,
             message: None,
+            queue_position: None,
+            queue_length: None,
         }
     }
 
@@ -44,6 +52,22 @@ impl DownloadProgressEvent {
     pub fn errored(model_id: &str, message: &str) -> Self {
         let mut event = Self::base(model_id, "error");
         event.message = Some(message.to_string());
+        event
+    }
+
+    /// Create a "queued" status event for items waiting in the download queue.
+    pub fn queued(model_id: &str, position: usize, queue_length: usize) -> Self {
+        let mut event = Self::base(model_id, "queued");
+        event.queue_position = Some(position);
+        event.queue_length = Some(queue_length);
+        event.message = Some(format!("Queued (position {} of {})", position, queue_length));
+        event
+    }
+
+    /// Create a "skipped" status event for downloads that failed and were skipped.
+    pub fn skipped(model_id: &str, reason: &str) -> Self {
+        let mut event = Self::base(model_id, "skipped");
+        event.message = Some(format!("Skipped: {}", reason));
         event
     }
 
@@ -73,6 +97,13 @@ impl DownloadProgressEvent {
 
         event.message = Some(format!("Downloading... {:.1}%", event.percentage));
         event
+    }
+
+    /// Add queue information to an existing event.
+    pub fn with_queue_info(mut self, position: usize, queue_length: usize) -> Self {
+        self.queue_position = Some(position);
+        self.queue_length = Some(queue_length);
+        self
     }
 }
 
