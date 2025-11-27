@@ -914,6 +914,88 @@ impl DownloadService {
             Ok((position, shard_count))
         }
     }
+
+    /// Retry a failed download by model_id.
+    ///
+    /// For sharded models, this re-queues all shards. The download_specific_file
+    /// function will automatically skip shards that have already been downloaded.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID to retry
+    ///
+    /// # Returns
+    ///
+    /// Returns `(queue_position, shard_count)` on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model is not in the failed list or if re-queuing fails.
+    pub async fn retry_failed_download(&self, model_id: &str) -> Result<(usize, usize)> {
+        // Find the failed item(s) for this model
+        let failed_item = {
+            let failed = self.failed_downloads.read().await;
+            failed.iter().find(|item| item.model_id == model_id).cloned()
+        };
+
+        let Some(item) = failed_item else {
+            return Err(anyhow::anyhow!(
+                "No failed download found for model '{}'",
+                model_id
+            ));
+        };
+
+        // Use quantization from failed item if available
+        let quantization = item.quantization.clone().unwrap_or_default();
+
+        // Re-queue using auto-detect (handles both sharded and non-sharded)
+        // This will:
+        // 1. Remove from failed list (via queue_download/queue_sharded_download)
+        // 2. Re-detect shard files
+        // 3. Queue appropriately
+        // 4. During download, already-completed shards will be skipped
+        self.queue_download_auto(model_id.to_string(), quantization)
+            .await
+    }
+
+    /// Get information about which shards are already downloaded for a model.
+    ///
+    /// This can be used to show users which shards will be skipped on retry.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    /// * `quantization` - Quantization type
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple of `(completed_shards, total_shards, completed_filenames)`.
+    pub async fn get_shard_download_status(
+        &self,
+        model_id: &str,
+        quantization: &str,
+    ) -> Result<(usize, usize, Vec<String>)> {
+        use crate::commands::download::{get_models_directory, sanitize_model_name};
+
+        // Detect all shard files from HuggingFace
+        let shard_files = self.detect_shard_files(model_id, quantization).await?;
+        let total_shards = shard_files.len();
+
+        // Get models directory
+        let models_dir = get_models_directory()?;
+        let model_dir = models_dir.join(sanitize_model_name(model_id));
+
+        // Check which shards already exist locally
+        let mut completed = Vec::new();
+        for filename in &shard_files {
+            let local_path = model_dir.join(filename);
+            if local_path.exists() {
+                completed.push(filename.clone());
+            }
+        }
+
+        Ok((completed.len(), total_shards, completed))
+    }
 }
 
 impl Default for DownloadService {
