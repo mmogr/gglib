@@ -381,15 +381,22 @@ async fn update_settings(
 
 // Download Queue Commands
 
+/// Response for queue_download command
+#[derive(serde::Serialize)]
+struct QueueDownloadResponse {
+    position: usize,
+    shard_count: usize,
+}
+
 #[tauri::command]
 async fn queue_download(
     app: tauri::AppHandle,
     model_id: String,
     quantization: Option<String>,
     state: tauri::State<'_, AppState>,
-) -> Result<usize, String> {
-    // Add to queue
-    let position = state
+) -> Result<QueueDownloadResponse, String> {
+    // Add to queue (auto-detects and handles sharded models)
+    let (position, shard_count) = state
         .backend
         .queue_download(model_id.clone(), quantization)
         .await
@@ -411,7 +418,7 @@ async fn queue_download(
         backend.core().downloads().process_queue(progress_callback).await;
     });
 
-    Ok(position)
+    Ok(QueueDownloadResponse { position, shard_count })
 }
 
 #[tauri::command]

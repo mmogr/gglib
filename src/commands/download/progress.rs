@@ -2,6 +2,25 @@ use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// Information about shard progress in a sharded download
+#[derive(Clone, Debug, Serialize)]
+pub struct ShardProgressInfo {
+    /// Current shard index (0-based)
+    pub current_shard: usize,
+    /// Total number of shards
+    pub total_shards: usize,
+    /// Filename of the current shard
+    pub current_filename: String,
+    /// Bytes downloaded for this shard
+    pub shard_downloaded: u64,
+    /// Total bytes for this shard
+    pub shard_total: u64,
+    /// Aggregate bytes downloaded across all shards so far
+    pub aggregate_downloaded: u64,
+    /// Aggregate total bytes across all shards
+    pub aggregate_total: u64,
+}
+
 /// Shared progress payload for desktop and web download UIs
 #[derive(Clone, Debug, Serialize)]
 pub struct DownloadProgressEvent {
@@ -19,6 +38,9 @@ pub struct DownloadProgressEvent {
     /// Total number of items in the queue (including current download)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub queue_length: Option<usize>,
+    /// Shard progress information for sharded model downloads
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shard_progress: Option<ShardProgressInfo>,
 }
 
 impl DownloadProgressEvent {
@@ -34,6 +56,7 @@ impl DownloadProgressEvent {
             message: None,
             queue_position: None,
             queue_length: None,
+            shard_progress: None,
         }
     }
 
@@ -105,10 +128,71 @@ impl DownloadProgressEvent {
         event
     }
 
+    /// Create a progress event with shard information for sharded model downloads.
+    pub fn progress_with_shard(
+        model_id: &str,
+        shard_downloaded: u64,
+        shard_total: u64,
+        current_shard: usize,
+        total_shards: usize,
+        current_filename: &str,
+        aggregate_downloaded: u64,
+        aggregate_total: u64,
+        start_time: Instant,
+    ) -> Self {
+        let mut event = Self::base(model_id, "progress");
+        
+        // Use aggregate values for the main progress
+        event.downloaded = aggregate_downloaded;
+        event.total = aggregate_total;
+
+        event.percentage = if aggregate_total > 0 {
+            (aggregate_downloaded as f64 / aggregate_total as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let elapsed = start_time.elapsed().as_secs_f64();
+        event.speed = if elapsed > 0.0 {
+            aggregate_downloaded as f64 / elapsed
+        } else {
+            0.0
+        };
+
+        event.eta = if event.speed > 0.0 && aggregate_total > aggregate_downloaded {
+            (aggregate_total - aggregate_downloaded) as f64 / event.speed
+        } else {
+            0.0
+        };
+
+        event.message = Some(format!(
+            "Downloading shard {}/{}: {} ({:.1}%)",
+            current_shard + 1, total_shards, model_id, event.percentage
+        ));
+
+        event.shard_progress = Some(ShardProgressInfo {
+            current_shard,
+            total_shards,
+            current_filename: current_filename.to_string(),
+            shard_downloaded,
+            shard_total,
+            aggregate_downloaded,
+            aggregate_total,
+        });
+
+        event
+    }
+
     /// Add queue information to an existing event.
     pub fn with_queue_info(mut self, position: usize, queue_length: usize) -> Self {
         self.queue_position = Some(position);
         self.queue_length = Some(queue_length);
+        self
+    }
+
+    /// Add shard progress information to an existing event.
+    pub fn with_shard_progress(mut self, shard_progress: ShardProgressInfo) -> Self {
+        self.shard_progress = Some(shard_progress);
         self
     }
 }

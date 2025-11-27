@@ -27,6 +27,14 @@ interface ApiResponse<T> {
   error?: string;
 }
 
+/**
+ * Response from queue_download containing position and shard count.
+ */
+interface QueueDownloadResponse {
+  position: number;
+  shard_count: number;
+}
+
 export class TauriService {
   // Model operations
   static async listModels(): Promise<GgufModel[]> {
@@ -431,11 +439,12 @@ export class TauriService {
   // Download Queue operations
 
   /**
-   * Add a download to the queue. Returns the queue position (1 = will start immediately).
+   * Add a download to the queue. Returns the queue position and shard count.
+   * Position 1 means will start immediately. Shard count > 1 indicates a sharded model.
    */
-  static async queueDownload(modelId: string, quantization?: string): Promise<number> {
+  static async queueDownload(modelId: string, quantization?: string): Promise<QueueDownloadResponse> {
     if (isTauriApp) {
-      return await invoke<number>('queue_download', { modelId, quantization });
+      return await invoke<QueueDownloadResponse>('queue_download', { modelId, quantization });
     } else {
       const response = await apiFetch(`/models/download/queue`, {
         method: 'POST',
@@ -448,8 +457,8 @@ export class TauriService {
         throw new Error(error.error || 'Failed to queue download');
       }
 
-      const data: ApiResponse<number> = await response.json();
-      return data.data || 1;
+      const data: ApiResponse<QueueDownloadResponse> = await response.json();
+      return data.data || { position: 1, shard_count: 1 };
     }
   }
 

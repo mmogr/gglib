@@ -44,6 +44,9 @@ pub struct ShardInfo {
     pub total_shards: usize,
     /// The specific filename for this shard (e.g., "model-00001-of-00003.gguf")
     pub filename: String,
+    /// Size of this shard file in bytes (fetched from HuggingFace API)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_size: Option<u64>,
 }
 
 impl ShardInfo {
@@ -53,6 +56,17 @@ impl ShardInfo {
             shard_index,
             total_shards,
             filename,
+            file_size: None,
+        }
+    }
+
+    /// Create a new ShardInfo instance with file size.
+    pub fn with_size(shard_index: usize, total_shards: usize, filename: String, file_size: u64) -> Self {
+        Self {
+            shard_index,
+            total_shards,
+            filename,
+            file_size: Some(file_size),
         }
     }
 
@@ -149,6 +163,44 @@ impl QueuedDownload {
             .collect();
 
         (group_id, items)
+    }
+
+    /// Create QueuedDownload items for all shards with file size information.
+    ///
+    /// Similar to `create_shard_batch` but includes file sizes for aggregate progress tracking.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    /// * `quantization` - Quantization type (e.g., "Q4_K_M")
+    /// * `shard_files` - Ordered list of (filename, file_size) tuples
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (group_id, Vec<QueuedDownload>, total_size)
+    pub fn create_shard_batch_with_sizes(
+        model_id: &str,
+        quantization: &str,
+        shard_files: &[(String, u64)],
+    ) -> (String, Vec<Self>, u64) {
+        let group_id = Self::generate_group_id(model_id, quantization);
+        let total_shards = shard_files.len();
+        let total_size: u64 = shard_files.iter().map(|(_, size)| size).sum();
+
+        let items: Vec<Self> = shard_files
+            .iter()
+            .enumerate()
+            .map(|(idx, (filename, size))| {
+                Self::new_shard(
+                    model_id.to_string(),
+                    quantization.to_string(),
+                    group_id.clone(),
+                    ShardInfo::with_size(idx, total_shards, filename.clone(), *size),
+                )
+            })
+            .collect();
+
+        (group_id, items, total_size)
     }
 }
 

@@ -317,15 +317,20 @@ impl GuiBackend {
     // =========================================================================
 
     /// Add a download to the queue or start immediately if nothing is running.
-    /// Returns the queue position (1 = will start immediately).
+    /// Returns `(queue_position, shard_count)` - position 1 means will start immediately.
+    /// 
+    /// This method auto-detects sharded models from HuggingFace and creates
+    /// individual queue entries for each shard with a shared group_id.
     pub async fn queue_download(
         &self,
         model_id: String,
         quantization: Option<String>,
-    ) -> Result<usize> {
+    ) -> Result<(usize, usize)> {
+        // Use queue_download_auto to auto-detect and handle sharded models
+        let quant = quantization.unwrap_or_default();
         self.core
             .downloads()
-            .queue_download(model_id, quantization)
+            .queue_download_auto(model_id, quant)
             .await
     }
 
