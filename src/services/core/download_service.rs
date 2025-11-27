@@ -840,10 +840,11 @@ impl DownloadService {
         // Add sizes from remaining pending shards in the same group
         let queue = self.pending_queue.read().await;
         for pending in queue.iter() {
-            if pending.group_id.as_ref() == Some(group_id)
-                && let Some(ref pending_shard) = pending.shard_info
-            {
-                total += pending_shard.file_size.unwrap_or(0);
+            #[allow(clippy::collapsible_if)]
+            if pending.group_id.as_ref() == Some(group_id) {
+                if let Some(ref pending_shard) = pending.shard_info {
+                    total += pending_shard.file_size.unwrap_or(0);
+                }
             }
         }
 
