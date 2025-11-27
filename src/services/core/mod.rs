@@ -49,7 +49,10 @@ use crate::utils::paths::get_llama_server_path;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
-pub use download_service::DownloadService;
+pub use download_service::{
+    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadService, DownloadStatus,
+    QueuedDownload,
+};
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};
