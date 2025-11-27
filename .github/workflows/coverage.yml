@@ -57,8 +57,11 @@ jobs:
           npm install
           npm run build
 
-      - name: Run tests with coverage
+      - name: Run Rust tests with coverage
         run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Run TypeScript tests with coverage
+        run: npm run test:coverage
 
       - name: Generate HTML report
         run: cargo llvm-cov --all-features --workspace --html
@@ -71,4 +74,5 @@ jobs:
           path: |
             target/llvm-cov/html/
             lcov.info
+            coverage/
           retention-days: 30

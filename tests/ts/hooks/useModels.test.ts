@@ -1,0 +1,259 @@
+/**
+ * Tests for useModels hook.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, waitFor, act } from '@testing-library/react';
+import { useModels } from '../../../src/hooks/useModels';
+import { GgufModel } from '../../../src/types';
+
+// Mock the TauriService
+vi.mock('../../../src/services/tauri', () => ({
+  TauriService: {
+    listModels: vi.fn(),
+    addModel: vi.fn(),
+    removeModel: vi.fn(),
+    updateModel: vi.fn(),
+  },
+}));
+
+import { TauriService } from '../../../src/services/tauri';
+
+const mockModels: GgufModel[] = [
+  {
+    id: 1,
+    name: 'llama-7b',
+    file_path: '/models/llama-7b.gguf',
+    param_count_b: 7.0,
+    architecture: 'llama',
+    quantization: 'Q4_K_M',
+    context_length: 4096,
+    added_at: '2024-01-01T00:00:00Z',
+  },
+  {
+    id: 2,
+    name: 'mistral-7b',
+    file_path: '/models/mistral-7b.gguf',
+    param_count_b: 7.0,
+    architecture: 'mistral',
+    quantization: 'Q5_K_S',
+    context_length: 8192,
+    added_at: '2024-01-02T00:00:00Z',
+  },
+];
+
+describe('useModels', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(TauriService.listModels).mockResolvedValue(mockModels);
+  });
+
+  it('loads models on mount', async () => {
+    const { result } = renderHook(() => useModels());
+
+    // Initially loading
+    expect(result.current.loading).toBe(true);
+    expect(result.current.models).toEqual([]);
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.models).toEqual(mockModels);
+    expect(result.current.error).toBeNull();
+    expect(TauriService.listModels).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles error when loading models fails', async () => {
+    const error = new Error('Network error');
+    vi.mocked(TauriService.listModels).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBe('Failed to load models: Network error');
+    expect(result.current.models).toEqual([]);
+  });
+
+  it('selects a model by id', async () => {
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.selectModel(1);
+    });
+
+    expect(result.current.selectedModelId).toBe(1);
+    expect(result.current.selectedModel).toEqual(mockModels[0]);
+  });
+
+  it('clears selection when selecting null', async () => {
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.selectModel(1);
+    });
+
+    expect(result.current.selectedModel).not.toBeNull();
+
+    act(() => {
+      result.current.selectModel(null);
+    });
+
+    expect(result.current.selectedModelId).toBeNull();
+    expect(result.current.selectedModel).toBeNull();
+  });
+
+  it('returns null for selectedModel when id not found', async () => {
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.selectModel(999);
+    });
+
+    expect(result.current.selectedModelId).toBe(999);
+    expect(result.current.selectedModel).toBeNull();
+  });
+
+  it('adds a model and reloads the list', async () => {
+    vi.mocked(TauriService.addModel).mockResolvedValue('Model added');
+
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.addModel('/path/to/new-model.gguf');
+    });
+
+    expect(TauriService.addModel).toHaveBeenCalledWith('/path/to/new-model.gguf');
+    // Should have reloaded models
+    expect(TauriService.listModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('removes a model and reloads the list', async () => {
+    vi.mocked(TauriService.removeModel).mockResolvedValue('Model removed');
+
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.removeModel(1, false);
+    });
+
+    expect(TauriService.removeModel).toHaveBeenCalledWith('1', false);
+    expect(TauriService.listModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears selection when removing selected model', async () => {
+    vi.mocked(TauriService.removeModel).mockResolvedValue('Model removed');
+
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.selectModel(1);
+    });
+
+    expect(result.current.selectedModelId).toBe(1);
+
+    await act(async () => {
+      await result.current.removeModel(1, false);
+    });
+
+    expect(result.current.selectedModelId).toBeNull();
+  });
+
+  it('keeps selection when removing different model', async () => {
+    vi.mocked(TauriService.removeModel).mockResolvedValue('Model removed');
+
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    act(() => {
+      result.current.selectModel(1);
+    });
+
+    await act(async () => {
+      await result.current.removeModel(2, false);
+    });
+
+    // Selection should be preserved (though model may not exist after reload)
+    expect(result.current.selectedModelId).toBe(1);
+  });
+
+  it('updates a model and reloads the list', async () => {
+    const updatedModel = { ...mockModels[0], name: 'updated-name' };
+    vi.mocked(TauriService.updateModel).mockResolvedValue(updatedModel);
+
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.updateModel(1, { name: 'updated-name' });
+    });
+
+    expect(TauriService.updateModel).toHaveBeenCalledWith(1, { name: 'updated-name' });
+    expect(TauriService.listModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('can force remove a model', async () => {
+    vi.mocked(TauriService.removeModel).mockResolvedValue('Model force removed');
+
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.removeModel(1, true);
+    });
+
+    expect(TauriService.removeModel).toHaveBeenCalledWith('1', true);
+  });
+
+  it('manually reloads models', async () => {
+    const { result } = renderHook(() => useModels());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(TauriService.listModels).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.loadModels();
+    });
+
+    expect(TauriService.listModels).toHaveBeenCalledTimes(2);
+  });
+});

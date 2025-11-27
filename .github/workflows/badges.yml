@@ -21,6 +21,14 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
       - name: Generate Badge Data
         id: badges
         run: |
@@ -106,6 +114,57 @@ jobs:
             "label": "coverage",
             "message": "$MESSAGE",
             "color": "$COLOR"
+          }
+          JSON
+
+          # --- TYPESCRIPT TESTS ---
+          npm run test:run 2>&1 | tee ts_test_output.txt || true
+          TS_PASSED=$(grep -o "[0-9]* passed" ts_test_output.txt | grep -o "[0-9]*" | head -1 || echo "0")
+          
+          if [ -z "$TS_PASSED" ] || [ "$TS_PASSED" = "0" ]; then
+            TS_PASSED="0"
+            TS_COLOR="red"
+          else
+            TS_COLOR="brightgreen"
+          fi
+          
+          cat <<JSON > badges/ts-tests.json
+          {
+            "schemaVersion": 1,
+            "label": "TS tests",
+            "message": "$TS_PASSED passed",
+            "color": "$TS_COLOR"
+          }
+          JSON
+
+          # --- TYPESCRIPT COVERAGE ---
+          TS_COVERAGE="unknown"
+          TS_COV_COLOR="lightgrey"
+          TS_COV_MESSAGE="unknown"
+          
+          # Download coverage artifact if available
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+            if [ -f coverage/coverage-summary.json ]; then
+              TS_COVERAGE=$(jq -r '.total.lines.pct // 0' coverage/coverage-summary.json 2>/dev/null || echo "0")
+              # Round to integer
+              TS_COVERAGE=$(printf "%.0f" "$TS_COVERAGE" 2>/dev/null || echo "0")
+              
+              if [ "$TS_COVERAGE" -gt 90 ]; then TS_COV_COLOR="brightgreen";
+              elif [ "$TS_COVERAGE" -gt 80 ]; then TS_COV_COLOR="green";
+              elif [ "$TS_COVERAGE" -gt 70 ]; then TS_COV_COLOR="yellowgreen";
+              elif [ "$TS_COVERAGE" -gt 60 ]; then TS_COV_COLOR="yellow";
+              else TS_COV_COLOR="red"; fi
+              
+              TS_COV_MESSAGE="$TS_COVERAGE%"
+            fi
+          fi
+          
+          cat <<JSON > badges/ts-coverage.json
+          {
+            "schemaVersion": 1,
+            "label": "TS coverage",
+            "message": "$TS_COV_MESSAGE",
+            "color": "$TS_COV_COLOR"
           }
           JSON
         env:
