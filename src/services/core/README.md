@@ -100,11 +100,31 @@ Application settings:
 
 HuggingFace downloads with queue management:
 - `queue_download(repo_id, quant, token)` - Add download to queue
+- `queue_sharded_download(repo_id, quant, shards)` - Add sharded model to queue (creates one entry per shard)
 - `get_queue_status()` - Get current queue status (pending, active, failed items)
 - `remove_from_queue(id)` - Remove pending download from queue
+- `remove_shard_group(group_id)` - Remove all shards in a group from queue
 - `clear_failed()` - Clear all failed downloads
 - `cancel(model_id)` - Cancel active download
+- `cancel_shard_group(group_id)` - Cancel active download and remove all related shards
 - `is_downloading(model_id)` - Check if model is currently downloading
+
+#### Sharded Model Support
+
+When downloading sharded models (models split into multiple GGUF files), each shard appears as a separate queue item with linked `group_id` and `ShardInfo`:
+
+```rust,ignore
+pub struct ShardInfo {
+    pub shard_index: usize,    // 1-based (e.g., 1 for "Part 1/3")
+    pub total_shards: usize,   // Total count (e.g., 3)
+    pub filename: String,      // Shard filename
+}
+```
+
+- Shards download sequentially (one at a time)
+- Cancelling or failing any shard cancels the entire group
+- Failed sharded models appear as a single retry entry
+- On retry, only missing shards are re-downloaded
 
 ## Design Principles
 

@@ -31,11 +31,26 @@ pub enum DownloadError {
     NotInQueue { model_id: String },
 }
 
+/// Information about a shard within a sharded model download.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ShardInfo {
+    /// 1-based index of this shard (e.g., 1 for "Part 1/3")
+    pub shard_index: usize,
+    /// Total number of shards in this model
+    pub total_shards: usize,
+    /// The specific filename for this shard (e.g., "model-00001-of-00003.gguf")
+    pub filename: String,
+}
+
 /// A queued download item waiting to be processed.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueuedDownload {
     pub model_id: String,
     pub quantization: Option<String>,
+    /// Links shards of the same model together for group operations
+    pub group_id: Option<String>,
+    /// Shard-specific information if this is part of a sharded model
+    pub shard_info: Option<ShardInfo>,
     #[serde(skip)]
     pub queued_at: Option<Instant>,
 }
@@ -65,6 +80,12 @@ pub struct DownloadQueueItem {
     /// Error message if status is Failed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Links shards of the same model together for group operations
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
+    /// Shard-specific information if this is part of a sharded model
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shard_info: Option<ShardInfo>,
 }
 
 /// Complete queue status including current download and pending items.
@@ -177,6 +198,8 @@ impl DownloadService {
         let queued_item = QueuedDownload {
             model_id: model_id.clone(),
             quantization,
+            group_id: None,
+            shard_info: None,
             queued_at: Some(Instant::now()),
         };
 
@@ -203,6 +226,8 @@ impl DownloadService {
             status: DownloadStatus::Downloading,
             position: 1,
             error: None,
+            group_id: None,
+            shard_info: None,
         });
 
         // Pending items
@@ -215,6 +240,8 @@ impl DownloadService {
                 status: DownloadStatus::Queued,
                 position: idx + 2, // 1 is for current download
                 error: None,
+                group_id: item.group_id.clone(),
+                shard_info: item.shard_info.clone(),
             })
             .collect();
 
@@ -228,6 +255,8 @@ impl DownloadService {
                 status: DownloadStatus::Failed,
                 position: idx + 1,
                 error: None,
+                group_id: item.group_id.clone(),
+                shard_info: item.shard_info.clone(),
             })
             .collect();
 
@@ -429,6 +458,8 @@ impl DownloadService {
                         self.mark_failed(QueuedDownload {
                             model_id: model_id.clone(),
                             quantization,
+                            group_id: item.group_id.clone(),
+                            shard_info: item.shard_info.clone(),
                             queued_at: None,
                         })
                         .await;

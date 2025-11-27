@@ -51,7 +51,7 @@ use std::sync::Arc;
 
 pub use download_service::{
     DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadService, DownloadStatus,
-    QueuedDownload,
+    QueuedDownload, ShardInfo,
 };
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
