@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "label": "tests",
-  "message": "368/368 (100%)",
+  "label": "TS tests",
+  "message": "6 passed",
   "color": "brightgreen"
 }
