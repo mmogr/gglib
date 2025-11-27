@@ -60,7 +60,10 @@ impl DownloadProgressEvent {
         let mut event = Self::base(model_id, "queued");
         event.queue_position = Some(position);
         event.queue_length = Some(queue_length);
-        event.message = Some(format!("Queued (position {} of {})", position, queue_length));
+        event.message = Some(format!(
+            "Queued (position {} of {})",
+            position, queue_length
+        ));
         event
     }
 

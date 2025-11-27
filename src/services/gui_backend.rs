@@ -330,9 +330,7 @@ impl GuiBackend {
     }
 
     /// Get the current status of the download queue.
-    pub async fn get_download_queue(
-        &self,
-    ) -> crate::services::core::DownloadQueueStatus {
+    pub async fn get_download_queue(&self) -> crate::services::core::DownloadQueueStatus {
         self.core.downloads().get_queue_status().await
     }
 

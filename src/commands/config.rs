@@ -72,11 +72,20 @@ async fn handle_settings(command: SettingsCommand) -> Result<()> {
         SettingsCommand::Show => {
             let settings = core.settings().get().await?;
             println!("Current application settings:");
-            println!("  default_download_path:   {:?}", settings.default_download_path);
-            println!("  default_context_size:    {:?}", settings.default_context_size);
+            println!(
+                "  default_download_path:   {:?}",
+                settings.default_download_path
+            );
+            println!(
+                "  default_context_size:    {:?}",
+                settings.default_context_size
+            );
             println!("  proxy_port:              {:?}", settings.proxy_port);
             println!("  server_port:             {:?}", settings.server_port);
-            println!("  max_download_queue_size: {:?}", settings.max_download_queue_size);
+            println!(
+                "  max_download_queue_size: {:?}",
+                settings.max_download_queue_size
+            );
             Ok(())
         }
         SettingsCommand::Set {
@@ -137,7 +146,10 @@ async fn handle_settings(command: SettingsCommand) -> Result<()> {
             let updated = core.settings().update(update).await?;
             println!("✓ Settings updated successfully:");
             if has_default_download_path {
-                println!("  default_download_path: {:?}", updated.default_download_path);
+                println!(
+                    "  default_download_path: {:?}",
+                    updated.default_download_path
+                );
             }
             if has_default_context_size {
                 println!("  default_context_size: {:?}", updated.default_context_size);
@@ -149,7 +161,10 @@ async fn handle_settings(command: SettingsCommand) -> Result<()> {
                 println!("  server_port: {:?}", updated.server_port);
             }
             if has_max_download_queue_size {
-                println!("  max_download_queue_size: {:?}", updated.max_download_queue_size);
+                println!(
+                    "  max_download_queue_size: {:?}",
+                    updated.max_download_queue_size
+                );
             }
             Ok(())
         }
@@ -165,11 +180,20 @@ async fn handle_settings(command: SettingsCommand) -> Result<()> {
             let defaults = Settings::default();
             core.settings().save(&defaults).await?;
             println!("✓ Settings reset to defaults:");
-            println!("  default_download_path:   {:?}", defaults.default_download_path);
-            println!("  default_context_size:    {:?}", defaults.default_context_size);
+            println!(
+                "  default_download_path:   {:?}",
+                defaults.default_download_path
+            );
+            println!(
+                "  default_context_size:    {:?}",
+                defaults.default_context_size
+            );
             println!("  proxy_port:              {:?}", defaults.proxy_port);
             println!("  server_port:             {:?}", defaults.server_port);
-            println!("  max_download_queue_size: {:?}", defaults.max_download_queue_size);
+            println!(
+                "  max_download_queue_size: {:?}",
+                defaults.max_download_queue_size
+            );
             Ok(())
         }
     }

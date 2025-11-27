@@ -388,30 +388,31 @@ impl DownloadService {
             let model_id_for_callback = model_id.clone();
             let queue_len_for_callback = queue_len;
             let download_start_time = Instant::now();
-            let progress_cb: crate::commands::download::ProgressCallback = Box::new(move |downloaded: u64, total: u64| {
-                let event = crate::commands::download::DownloadProgressEvent::progress(
-                    &model_id_for_callback,
-                    downloaded,
-                    total,
-                    download_start_time,
-                ).with_queue_info(1, queue_len_for_callback);
-                callback_clone(event);
-            });
+            let progress_cb: crate::commands::download::ProgressCallback =
+                Box::new(move |downloaded: u64, total: u64| {
+                    let event = crate::commands::download::DownloadProgressEvent::progress(
+                        &model_id_for_callback,
+                        downloaded,
+                        total,
+                        download_start_time,
+                    )
+                    .with_queue_info(1, queue_len_for_callback);
+                    callback_clone(event);
+                });
 
             // Execute download
-            let result = self.download(
-                model_id.clone(),
-                quantization.clone(),
-                Some(&progress_cb),
-            ).await;
+            let result = self
+                .download(model_id.clone(), quantization.clone(), Some(&progress_cb))
+                .await;
 
             match result {
                 Ok(_) => {
                     // Emit completed event
-                    let complete_event = crate::commands::download::DownloadProgressEvent::completed(
-                        &model_id,
-                        Some("Download completed successfully"),
-                    );
+                    let complete_event =
+                        crate::commands::download::DownloadProgressEvent::completed(
+                            &model_id,
+                            Some("Download completed successfully"),
+                        );
                     progress_callback(complete_event);
                 }
                 Err(e) => {
@@ -429,11 +430,11 @@ impl DownloadService {
                             model_id: model_id.clone(),
                             quantization,
                             queued_at: None,
-                        }).await;
+                        })
+                        .await;
 
                         let error_event = crate::commands::download::DownloadProgressEvent::errored(
-                            &model_id,
-                            &error_msg,
+                            &model_id, &error_msg,
                         );
                         progress_callback(error_event);
 
@@ -453,7 +454,12 @@ impl DownloadService {
                 let queued_event = crate::commands::download::DownloadProgressEvent::queued(
                     &pending_item.model_id,
                     pending_item.position,
-                    remaining_status.pending.len() + if remaining_status.current.is_some() { 1 } else { 0 },
+                    remaining_status.pending.len()
+                        + if remaining_status.current.is_some() {
+                            1
+                        } else {
+                            0
+                        },
                 );
                 progress_callback(queued_event);
             }
@@ -579,9 +585,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = service
-            .queue_download("test/model".to_string(), None)
-            .await;
+        let result = service.queue_download("test/model".to_string(), None).await;
         assert!(result.is_err());
     }
 
@@ -590,8 +594,14 @@ mod tests {
         let service = DownloadService::new();
         service.set_max_queue_size(2).await;
 
-        service.queue_download("model1".to_string(), None).await.unwrap();
-        service.queue_download("model2".to_string(), None).await.unwrap();
+        service
+            .queue_download("model1".to_string(), None)
+            .await
+            .unwrap();
+        service
+            .queue_download("model2".to_string(), None)
+            .await
+            .unwrap();
 
         let result = service.queue_download("model3".to_string(), None).await;
         assert!(result.is_err());
@@ -601,8 +611,14 @@ mod tests {
     #[tokio::test]
     async fn test_remove_from_queue() {
         let service = DownloadService::new();
-        service.queue_download("model1".to_string(), None).await.unwrap();
-        service.queue_download("model2".to_string(), None).await.unwrap();
+        service
+            .queue_download("model1".to_string(), None)
+            .await
+            .unwrap();
+        service
+            .queue_download("model2".to_string(), None)
+            .await
+            .unwrap();
 
         let result = service.remove_from_queue("model2").await;
         assert!(result.is_ok());
@@ -614,8 +630,14 @@ mod tests {
     #[tokio::test]
     async fn test_get_queue_status() {
         let service = DownloadService::new();
-        service.queue_download("model1".to_string(), Some("Q4_K_M".to_string())).await.unwrap();
-        service.queue_download("model2".to_string(), None).await.unwrap();
+        service
+            .queue_download("model1".to_string(), Some("Q4_K_M".to_string()))
+            .await
+            .unwrap();
+        service
+            .queue_download("model2".to_string(), None)
+            .await
+            .unwrap();
 
         let status = service.get_queue_status().await;
         assert!(status.current.is_none()); // Nothing actively downloading

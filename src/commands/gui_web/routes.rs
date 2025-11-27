@@ -41,7 +41,10 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             get(handlers::stream_progress),
         )
         // Download queue routes
-        .route("/api/models/download/queue", get(handlers::get_download_queue))
+        .route(
+            "/api/models/download/queue",
+            get(handlers::get_download_queue),
+        )
         .route("/api/models/download/queue", post(handlers::queue_download))
         .route(
             "/api/models/download/queue/remove",

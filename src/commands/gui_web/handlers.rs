@@ -9,8 +9,8 @@
 use crate::commands::download::{DownloadProgressEvent, ProgressThrottle};
 use crate::commands::gui_web::state::AppState;
 use crate::models::gui::{
-    AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest,
-    GuiModel, ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest, StartServerResponse,
+    AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
+    ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest, StartServerResponse,
     UpdateModelRequest, UpdateModelsDirectoryRequest, UpdateSettingsRequest,
 };
 use crate::services::core::DownloadQueueStatus;
