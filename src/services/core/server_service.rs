@@ -243,7 +243,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_service_creation() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let model_service = ModelService::new(pool);
 
         let result = ServerService::new_concurrent(model_service, 9000, 5);
@@ -252,7 +252,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_service_list_empty() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let model_service = ModelService::new(pool);
         let service = ServerService::new_concurrent(model_service, 9000, 5).unwrap();
 

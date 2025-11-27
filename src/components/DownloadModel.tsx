@@ -134,6 +134,10 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
         
         eventSource.onmessage = (event) => {
           try {
+            // Skip empty data (can happen with keep-alive or connection events)
+            if (!event.data || event.data.trim() === '') {
+              return;
+            }
             const progressData = JSON.parse(event.data) as DownloadProgress;
             
             setProgress(progressData);

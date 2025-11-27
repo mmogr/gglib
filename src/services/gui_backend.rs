@@ -41,6 +41,13 @@ impl GuiBackend {
         Ok(Self { core })
     }
 
+    /// Create a GUI backend with a pre-configured database pool (for testing)
+    #[cfg(test)]
+    pub fn with_pool(db_pool: sqlx::SqlitePool, base_port: u16, max_concurrent: usize) -> Self {
+        let core = AppCore::with_config(db_pool, base_port, max_concurrent);
+        Self { core }
+    }
+
     /// Get the AppCore for direct access to core services
     pub fn core(&self) -> &AppCore {
         &self.core
@@ -366,16 +373,20 @@ pub async fn create_default_backend() -> Result<GuiBackend> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::database;
 
     #[tokio::test]
     async fn test_backend_creation() {
-        let result = GuiBackend::new(5000, 5).await;
-        assert!(result.is_ok(), "Should create backend successfully");
+        let pool = database::setup_test_database().await.unwrap();
+        let backend = GuiBackend::with_pool(pool, 5000, 5);
+        // Just verify it doesn't panic
+        let _ = backend.core();
     }
 
     #[tokio::test]
     async fn test_list_models_empty() {
-        let backend = GuiBackend::new(5000, 5).await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
+        let backend = GuiBackend::with_pool(pool, 5000, 5);
         let models = backend.list_models().await.unwrap();
         // Just check it doesn't crash - actual models depend on database state
         assert!(models.is_empty() || !models.is_empty());

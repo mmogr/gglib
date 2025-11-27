@@ -106,7 +106,7 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
         #[cfg(target_arch = "x86_64")]
         {
             PrebuiltAvailability::Available {
-                asset_pattern: "cudart-llama-bin-win-cuda-12.4-x64.zip".to_string(),
+                asset_pattern: "bin-win-cuda-12.4-x64.zip".to_string(),
                 description: "Windows x64 (CUDA 12.4)".to_string(),
             }
         }
@@ -298,7 +298,11 @@ async fn download_with_boxed_callback(
     Ok(())
 }
 
-/// Extract all files from the zip archive's build/bin/ directory.
+/// Extract all files from the zip archive.
+///
+/// For macOS: extracts from build/bin/ directory
+/// For Windows: extracts from root level (Windows packages have flat structure)
+///
 /// This includes the main binaries (llama-server, llama-cli) and all required
 /// shared libraries (.dylib on macOS, .dll on Windows, .so on Linux).
 fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
@@ -328,7 +332,10 @@ fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
             continue;
         }
 
-        // Only extract files from build/bin/ directory
+        // Platform-specific path filtering:
+        // - macOS packages have binaries in build/bin/
+        // - Windows packages have binaries at root level
+        #[cfg(not(target_os = "windows"))]
         if !entry_name.contains("build/bin/") {
             continue;
         }
@@ -381,6 +388,83 @@ fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
     }
 
     println!("  ✓ Extracted {} shared libraries", extracted_libs);
+
+    Ok(())
+}
+
+/// Windows-only: Download and extract CUDA runtime DLLs.
+/// These are required for llama.cpp CUDA builds to work on systems without CUDA installed.
+#[cfg(target_os = "windows")]
+async fn download_cuda_runtime(
+    client: &Client,
+    release: &GitHubRelease,
+    bin_dir: &Path,
+    download_dir: &Path,
+) -> Result<()> {
+    const CUDART_PATTERN: &str = "cudart-llama-bin-win-cuda";
+
+    // Find the CUDA runtime asset
+    let cudart_asset = release
+        .assets
+        .iter()
+        .find(|asset| asset.name.contains(CUDART_PATTERN));
+
+    let cudart_asset = match cudart_asset {
+        Some(asset) => asset,
+        None => {
+            // Not a fatal error - user might have CUDA installed
+            println!("  ⚠ CUDA runtime package not found (optional if CUDA is installed)");
+            return Ok(());
+        }
+    };
+
+    println!(
+        "  Downloading CUDA runtime DLLs ({:.1} MB)...",
+        cudart_asset.size as f64 / 1_000_000.0
+    );
+
+    let cudart_zip_path = download_dir.join(&cudart_asset.name);
+
+    // Download silently (no progress bar for this smaller download)
+    let response = client
+        .get(&cudart_asset.browser_download_url)
+        .header("User-Agent", "gglib")
+        .send()
+        .await
+        .context("Failed to download CUDA runtime")?;
+
+    if !response.status().is_success() {
+        println!("  ⚠ Failed to download CUDA runtime (optional if CUDA is installed)");
+        return Ok(());
+    }
+
+    let bytes = response.bytes().await?;
+    fs::write(&cudart_zip_path, &bytes)?;
+
+    // Extract CUDA DLLs
+    let file = File::open(&cudart_zip_path)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)?;
+        let entry_name = entry.name().to_string();
+
+        if entry.is_dir() {
+            continue;
+        }
+
+        // Extract DLL files
+        if entry_name.ends_with(".dll") {
+            let file_name = entry_name.rsplit('/').next().unwrap_or(&entry_name);
+            let dest_path = bin_dir.join(file_name);
+            let mut dest_file = File::create(&dest_path)?;
+            io::copy(&mut entry, &mut dest_file)?;
+            println!("  ✓ Extracted {}", file_name);
+        }
+    }
+
+    // Clean up
+    let _ = fs::remove_file(&cudart_zip_path);
 
     Ok(())
 }
@@ -447,6 +531,10 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
 
     // Extract binaries
     extract_binaries(&zip_path, &bin_dir)?;
+
+    // Windows: Also download CUDA runtime DLLs
+    #[cfg(target_os = "windows")]
+    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
 
     // Clean up downloaded archive
     let _ = fs::remove_file(&zip_path);
@@ -526,6 +614,10 @@ pub async fn download_prebuilt_binaries_with_callback(
     // Extract binaries (quick operation, no progress needed)
     extract_binaries(&zip_path, &bin_dir)?;
 
+    // Windows: Also download CUDA runtime DLLs
+    #[cfg(target_os = "windows")]
+    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+
     // Clean up downloaded archive
     let _ = fs::remove_file(&zip_path);
     let _ = fs::remove_dir(&download_dir);
@@ -594,6 +686,10 @@ pub async fn download_prebuilt_binaries_with_boxed_callback(
 
     // Extract binaries (quick operation, no progress needed)
     extract_binaries(&zip_path, &bin_dir)?;
+
+    // Windows: Also download CUDA runtime DLLs
+    #[cfg(target_os = "windows")]
+    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
 
     // Clean up downloaded archive
     let _ = fs::remove_file(&zip_path);
