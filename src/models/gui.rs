@@ -140,6 +140,7 @@ pub struct AppSettings {
     pub default_context_size: Option<u64>,
     pub proxy_port: Option<u16>,
     pub server_port: Option<u16>,
+    pub max_download_queue_size: Option<u32>,
 }
 
 /// Request body for updating application settings
@@ -149,6 +150,7 @@ pub struct UpdateSettingsRequest {
     pub default_context_size: Option<Option<u64>>,
     pub proxy_port: Option<Option<u16>>,
     pub server_port: Option<Option<u16>>,
+    pub max_download_queue_size: Option<Option<u32>>,
 }
 
 /// Standard API response wrapper
