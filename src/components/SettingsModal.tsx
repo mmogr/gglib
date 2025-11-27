@@ -23,6 +23,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [contextSizeInput, setContextSizeInput] = useState("");
   const [proxyPortInput, setProxyPortInput] = useState("");
   const [serverPortInput, setServerPortInput] = useState("");
+  const [maxQueueSizeInput, setMaxQueueSizeInput] = useState("");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const loading = loadingDir || loadingSettings;
@@ -40,6 +41,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setContextSizeInput(settings.default_context_size?.toString() || "");
       setProxyPortInput(settings.proxy_port?.toString() || "");
       setServerPortInput(settings.server_port?.toString() || "");
+      setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "");
     }
   }, [settings]);
 
@@ -72,13 +74,15 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           default_context_size: parseNumericInput(contextSizeInput),
           proxy_port: parseNumericInput(proxyPortInput),
           server_port: parseNumericInput(serverPortInput),
+          max_download_queue_size: parseNumericInput(maxQueueSizeInput),
         };
 
         // Check if any updates were made
         const hasUpdates = 
           updates.default_context_size !== undefined ||
           updates.proxy_port !== undefined ||
-          updates.server_port !== undefined;
+          updates.server_port !== undefined ||
+          updates.max_download_queue_size !== undefined;
 
         if (hasUpdates) {
           await saveSettings(updates);
@@ -89,7 +93,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         console.error("Failed to update settings", err);
       }
     },
-    [pathInput, contextSizeInput, proxyPortInput, serverPortInput, info, saveDir, saveSettings]
+    [pathInput, contextSizeInput, proxyPortInput, serverPortInput, maxQueueSizeInput, info, saveDir, saveSettings]
   );
 
   const handleReset = useCallback(() => {
@@ -100,6 +104,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setContextSizeInput(settings.default_context_size?.toString() || "4096");
       setProxyPortInput(settings.proxy_port?.toString() || "8080");
       setServerPortInput(settings.server_port?.toString() || "9000");
+      setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "10");
     }
   }, [info, settings]);
 
@@ -229,6 +234,24 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               />
               <div className={styles.helperText}>
                 <span>Starting port for llama-server instances</span>
+              </div>
+
+              <label className={styles.label} htmlFor="max-queue-size-input">
+                Max Download Queue Size
+              </label>
+              <input
+                id="max-queue-size-input"
+                type="number"
+                className={styles.input}
+                value={maxQueueSizeInput}
+                onChange={(event) => setMaxQueueSizeInput(event.target.value)}
+                placeholder="10"
+                min="1"
+                max="50"
+                disabled={saving}
+              />
+              <div className={styles.helperText}>
+                <span>Maximum number of models that can be queued for download (1-50)</span>
               </div>
 
               {error && <p className={styles.error} role="alert">{error}</p>}
