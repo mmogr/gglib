@@ -1,5 +1,6 @@
-import { useState, FC, FormEvent, useEffect } from "react";
+import { useState, FC, FormEvent, useEffect, useCallback } from "react";
 import { TauriService } from "../services/tauri";
+import { DownloadQueueStatus, DownloadQueueItem } from "../types";
 import styles from "./DownloadModel.module.css";
 
 interface DownloadModelProps {
@@ -7,7 +8,7 @@ interface DownloadModelProps {
 }
 
 interface DownloadProgress {
-  status: "started" | "downloading" | "progress" | "completed" | "error";
+  status: "started" | "downloading" | "progress" | "completed" | "error" | "queued" | "skipped";
   model_id: string;
   message?: string;
   progress?: number;
@@ -16,6 +17,8 @@ interface DownloadProgress {
   percentage?: number;
   speed?: number; // bytes per second
   eta?: number;   // seconds remaining
+  queue_position?: number;
+  queue_length?: number;
 }
 
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -38,11 +41,11 @@ const formatTime = (seconds: number) => {
 const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
   const [repoId, setRepoId] = useState("");
   const [quantization, setQuantization] = useState("");
-  const [downloading, setDownloading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [connectionMode, setConnectionMode] = useState<string>("Initializing...");
-  const [activeDownloadId, setActiveDownloadId] = useState<string | null>(null);
+  const [queueStatus, setQueueStatus] = useState<DownloadQueueStatus | null>(null);
 
   const commonQuantizations = [
     "Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0",
@@ -50,6 +53,23 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
     "Q4_K_S", "Q4_K_M", "Q5_K_S", "Q5_K_M",
     "Q6_K", "Q8_K"
   ];
+
+  // Fetch the current queue status
+  const fetchQueueStatus = useCallback(async () => {
+    try {
+      const status = await TauriService.getDownloadQueue();
+      setQueueStatus(status);
+    } catch (err) {
+      console.error("Failed to fetch queue status:", err);
+    }
+  }, []);
+
+  // Initial fetch and periodic refresh of queue status
+  useEffect(() => {
+    fetchQueueStatus();
+    const interval = setInterval(fetchQueueStatus, 2000);
+    return () => clearInterval(interval);
+  }, [fetchQueueStatus]);
 
   // Listen for download progress events from Tauri or Web SSE
   useEffect(() => {
@@ -76,19 +96,17 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
             console.log("[DownloadModel] Received Tauri event:", event);
             const progressData = event.payload;
             
-             setProgress(progressData);
-
-            if (progressData.status === 'completed' || progressData.status === 'error') {
-              setActiveDownloadId(null);
-            }
+            setProgress(progressData);
+            // Refresh queue status on any progress event
+            fetchQueueStatus();
 
             if (progressData.status === 'completed') {
+              onModelDownloaded();
               setTimeout(() => {
                 setProgress(null);
-                setDownloading(false);
               }, 2000);
-            } else if (progressData.status === 'error') {
-              setDownloading(false);
+            } else if (progressData.status === 'error' || progressData.status === 'skipped') {
+              // Keep progress visible for errors but allow new submissions
             }
           });
           console.log("[DownloadModel] Tauri event listener registered.");
@@ -99,7 +117,6 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
       } else {
         setConnectionMode("Web (SSE)");
         // Web Environment - Use SSE
-        // Web Environment - Use SSE
         // Determine API base URL (same origin for production, localhost:9887 for dev)
         const baseUrl = import.meta.env.DEV ? 'http://localhost:9887' : '';
         eventSource = new EventSource(`${baseUrl}/api/models/download/progress`);
@@ -109,18 +126,16 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
             const progressData = JSON.parse(event.data) as DownloadProgress;
             
             setProgress(progressData);
-
-            if (progressData.status === 'completed' || progressData.status === 'error') {
-              setActiveDownloadId(null);
-            }
+            // Refresh queue status on any progress event
+            fetchQueueStatus();
 
             if (progressData.status === 'completed') {
+              onModelDownloaded();
               setTimeout(() => {
                 setProgress(null);
-                setDownloading(false);
               }, 2000);
-            } else if (progressData.status === 'error') {
-              setDownloading(false);
+            } else if (progressData.status === 'error' || progressData.status === 'skipped') {
+              // Keep progress visible for errors but allow new submissions
             }
           } catch (e) {
             console.error("Failed to parse progress event", e);
@@ -144,7 +159,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
         eventSource.close();
       }
     };
-  }, []);
+  }, [fetchQueueStatus, onModelDownloaded]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -154,58 +169,100 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
       return;
     }
 
+    // Check if queue is full
+    if (queueStatus) {
+      const currentCount = (queueStatus.current ? 1 : 0) + queueStatus.pending.length;
+      if (currentCount >= queueStatus.max_size) {
+        setError(`Queue is full (max ${queueStatus.max_size}). Please wait for a download to complete.`);
+        return;
+      }
+    }
+
     try {
-      setDownloading(true);
+      setSubmitting(true);
       setError(null);
       const trimmedRepoId = repoId.trim();
-      setActiveDownloadId(trimmedRepoId);
       
-      await TauriService.downloadModel({
-        repo_id: trimmedRepoId,
-        quantization: quantization || undefined,
-      });
+      await TauriService.queueDownload(
+        trimmedRepoId,
+        quantization || undefined,
+      );
       
-      setTimeout(() => {
-        setRepoId("");
-        setQuantization("");
-      }, 500);
-      setDownloading(false);
-      setActiveDownloadId(null);
+      // Clear form after successful queue
+      setRepoId("");
+      setQuantization("");
       
-      onModelDownloaded();
+      // Refresh queue status
+      await fetchQueueStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to download model");
-      setProgress({
-        status: "error",
-        model_id: repoId.trim(),
-        message: err instanceof Error ? err.message : "Failed to download model"
-      });
-      setDownloading(false);
-      setActiveDownloadId(null);
+      setError(err instanceof Error ? err.message : "Failed to queue download");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRemoveFromQueue = async (modelId: string) => {
+    try {
+      await TauriService.removeFromDownloadQueue(modelId);
+      await fetchQueueStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove from queue");
+    }
+  };
+
+  const handleClearFailed = async () => {
+    try {
+      await TauriService.clearFailedDownloads();
+      await fetchQueueStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear failed downloads");
+    }
+  };
+
+  const handleRetry = async (item: DownloadQueueItem) => {
+    try {
+      // First remove from failed, then re-queue
+      await TauriService.removeFromDownloadQueue(item.model_id);
+      await TauriService.queueDownload(
+        item.model_id,
+        item.quantization || undefined,
+      );
+      await fetchQueueStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to retry download");
     }
   };
 
   const handleCancel = async () => {
-    if (!activeDownloadId) {
+    if (!queueStatus?.current) {
       return;
     }
 
     try {
-      await TauriService.cancelDownload(activeDownloadId);
+      await TauriService.cancelDownload(queueStatus.current.model_id);
       setError("Download cancelled");
       setProgress(null);
-      setActiveDownloadId(null);
-      setDownloading(false);
+      await fetchQueueStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to cancel download");
     }
   };
+
+  // Check if we're currently downloading
+  const isDownloading = queueStatus?.current !== null && queueStatus?.current !== undefined;
+  const queueCount = (queueStatus?.pending.length || 0) + (isDownloading ? 1 : 0);
+  const hasFailedDownloads = (queueStatus?.failed.length || 0) > 0;
 
   return (
     <div className="download-model-container">
       <h2>Download from HuggingFace</h2>
       <div style={{ fontSize: '0.8em', color: '#666', marginBottom: '10px' }}>
         Mode: {connectionMode}
+        {queueStatus && (
+          <span style={{ marginLeft: '12px' }}>
+            Queue: {queueCount}/{queueStatus.max_size}
+          </span>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="download-form">
@@ -219,6 +276,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
             placeholder="e.g. microsoft/DialoGPT-medium"
             className="form-input"
             required
+            disabled={submitting}
           />
           <small className="form-hint">
             Format: username/repository-name or organization/repository-name
@@ -235,6 +293,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
             onChange={(e) => setQuantization(e.target.value)}
             placeholder="Auto-detect or enter custom (e.g., Q4_K_M)"
             className="form-input"
+            disabled={submitting}
           />
           <datalist id="quantization-options">
             {commonQuantizations.map((quant) => (
@@ -248,76 +307,169 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
 
         {error && <div className="error-message">{error}</div>}
 
-        {progress && (
-          <div className={styles.progressContainer}>
+        <div className="form-actions">
+          <button
+            type="submit"
+            disabled={submitting || !repoId.trim() || (queueStatus !== null && queueCount >= queueStatus.max_size)}
+            className="btn btn-primary"
+          >
+            {submitting ? "Adding to Queue..." : isDownloading ? "Add to Queue" : "Download Model"}
+          </button>
+        </div>
+      </form>
+
+      {/* Current Download Progress */}
+      {progress && (
+        <div className={styles.progressContainer}>
+          <div className={styles.progressHeader}>
             <div className={styles.progressStatus}>
               {progress.status === 'started' && '⏳ '}
               {(progress.status === 'downloading' || progress.status === 'progress') && '📥 '}
               {progress.status === 'completed' && '✅ '}
               {progress.status === 'error' && '❌ '}
+              {progress.status === 'queued' && '🕐 '}
+              {progress.status === 'skipped' && '⏭️ '}
               <span>{progress.message}</span>
             </div>
             {(progress.status === 'started' || progress.status === 'downloading' || progress.status === 'progress') && (
-              <div className={styles.progressBarContainer}>
-                <div className={styles.progressBar}>
-                  <div 
-                      className={`${styles.progressBarFill} ${progress.percentage !== undefined ? '' : styles.indeterminate}`}
-                      style={progress.percentage !== undefined ? { width: `${progress.percentage}%` } : {}}
-                  ></div>
-                </div>
-                {progress.percentage !== undefined && (
-                  <div className={styles.progressDetails}>
-                    <div>
-                      <span className={styles.progressLabel}>Progress</span>
-                      <span className={styles.progressPercentage}>{progress.percentage.toFixed(1)}%</span>
-                    </div>
-                    {progress.downloaded !== undefined && progress.total !== undefined && (
-                      <div>
-                        <span className={styles.progressLabel}>Size</span>
-                        <span className={styles.progressMetric}>
-                          {formatBytes(progress.downloaded)} / {formatBytes(progress.total)}
-                        </span>
-                      </div>
-                    )}
-                    {progress.speed !== undefined && (
-                      <div>
-                        <span className={styles.progressLabel}>Speed</span>
-                        <span className={styles.progressMetric}>{formatBytes(progress.speed)}/s</span>
-                      </div>
-                    )}
-                    {progress.eta !== undefined && (
-                      <div>
-                        <span className={styles.progressLabel}>ETA</span>
-                        <span className={styles.progressMetric}>{formatTime(progress.eta)}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <button
+                type="button"
+                className={`btn btn-sm ${styles.cancelBtn}`}
+                onClick={handleCancel}
+              >
+                Cancel
+              </button>
             )}
           </div>
-        )}
-
-        <div className="form-actions">
-          <button
-            type="submit"
-            disabled={downloading || !repoId.trim()}
-            className="btn btn-primary"
-          >
-            {downloading ? "Downloading..." : "Download Model"}
-          </button>
-          {downloading && (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleCancel}
-              style={{ marginLeft: '8px' }}
-            >
-              Stop
-            </button>
+          {(progress.status === 'started' || progress.status === 'downloading' || progress.status === 'progress') && (
+            <div className={styles.progressBarContainer}>
+              <div className={styles.progressBar}>
+                <div 
+                    className={`${styles.progressBarFill} ${progress.percentage !== undefined ? '' : styles.indeterminate}`}
+                    style={progress.percentage !== undefined ? { width: `${progress.percentage}%` } : {}}
+                ></div>
+              </div>
+              {progress.percentage !== undefined && (
+                <div className={styles.progressDetails}>
+                  <div>
+                    <span className={styles.progressLabel}>Progress</span>
+                    <span className={styles.progressPercentage}>{progress.percentage.toFixed(1)}%</span>
+                  </div>
+                  {progress.downloaded !== undefined && progress.total !== undefined && (
+                    <div>
+                      <span className={styles.progressLabel}>Size</span>
+                      <span className={styles.progressMetric}>
+                        {formatBytes(progress.downloaded)} / {formatBytes(progress.total)}
+                      </span>
+                    </div>
+                  )}
+                  {progress.speed !== undefined && (
+                    <div>
+                      <span className={styles.progressLabel}>Speed</span>
+                      <span className={styles.progressMetric}>{formatBytes(progress.speed)}/s</span>
+                    </div>
+                  )}
+                  {progress.eta !== undefined && (
+                    <div>
+                      <span className={styles.progressLabel}>ETA</span>
+                      <span className={styles.progressMetric}>{formatTime(progress.eta)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
-      </form>
+      )}
+
+      {/* Download Queue */}
+      {queueStatus && (queueStatus.pending.length > 0 || hasFailedDownloads) && (
+        <div className={styles.queueSection}>
+          {/* Pending Queue */}
+          {queueStatus.pending.length > 0 && (
+            <>
+              <h3 className={styles.queueTitle}>
+                Queued Downloads ({queueStatus.pending.length})
+              </h3>
+              <ul className={styles.queueList}>
+                {queueStatus.pending.map((item, index) => (
+                  <li key={`${item.model_id}-${index}`} className={styles.queueItem}>
+                    <div className={styles.queueItemInfo}>
+                      <span className={styles.queuePosition}>#{item.position}</span>
+                      <span className={styles.queueModelId}>{item.model_id}</span>
+                      {item.quantization && (
+                        <span className={styles.queueQuant}>{item.quantization}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${styles.removeBtn}`}
+                      onClick={() => handleRemoveFromQueue(item.model_id)}
+                      aria-label={`Remove ${item.model_id} from queue`}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {/* Failed Downloads */}
+          {hasFailedDownloads && (
+            <>
+              <div className={styles.failedHeader}>
+                <h3 className={styles.queueTitle}>
+                  Failed Downloads ({queueStatus.failed.length})
+                </h3>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${styles.clearFailedBtn}`}
+                  onClick={handleClearFailed}
+                >
+                  Clear All
+                </button>
+              </div>
+              <ul className={styles.queueList}>
+                {queueStatus.failed.map((item, index) => (
+                  <li key={`failed-${item.model_id}-${index}`} className={`${styles.queueItem} ${styles.queueItemFailed}`}>
+                    <div className={styles.queueItemInfo}>
+                      <span className={styles.failedIcon}>❌</span>
+                      <span className={styles.queueModelId}>{item.model_id}</span>
+                      {item.quantization && (
+                        <span className={styles.queueQuant}>{item.quantization}</span>
+                      )}
+                      {item.error && (
+                        <span className={styles.errorText} title={item.error}>
+                          {item.error.length > 40 ? item.error.substring(0, 40) + '...' : item.error}
+                        </span>
+                      )}
+                    </div>
+                    <div className={styles.failedActions}>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${styles.retryBtn}`}
+                        onClick={() => handleRetry(item)}
+                        aria-label={`Retry ${item.model_id}`}
+                      >
+                        Retry
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${styles.removeBtn}`}
+                        onClick={() => handleRemoveFromQueue(item.model_id)}
+                        aria-label={`Remove ${item.model_id} from failed list`}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
