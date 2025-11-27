@@ -74,6 +74,8 @@ export interface ShardInfo {
   total_shards: number;
   /** Filename of this specific shard (e.g., "Q4_K_M/model-00001-of-00003.gguf") */
   filename: string;
+  /** Size of this shard in bytes (if available from HuggingFace API) */
+  file_size?: number | null;
 }
 
 export interface DownloadQueueItem {

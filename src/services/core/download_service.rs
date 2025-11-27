@@ -202,6 +202,75 @@ impl DownloadService {
         Ok(first_position)
     }
 
+    /// Add a sharded model download to the queue with file size information.
+    ///
+    /// Similar to `queue_sharded_download` but includes file sizes for aggregate
+    /// progress tracking in the UI.
+    pub async fn queue_sharded_download_with_sizes(
+        &self,
+        model_id: String,
+        quantization: String,
+        shard_files: Vec<(String, u64)>,
+    ) -> Result<usize> {
+        let shard_count = shard_files.len();
+        if shard_count == 0 {
+            return Err(anyhow::anyhow!("No shard files provided"));
+        }
+
+        // Check queue capacity for all shards
+        let active_count = self.active_downloads.read().await.len();
+        let pending_count = self.pending_queue.read().await.len();
+        let max_size = *self.max_queue_size.read().await;
+
+        if (active_count + pending_count + shard_count) as u32 > max_size {
+            return Err(DownloadError::QueueFull { max_size }.into());
+        }
+
+        // Check if model is already in queue or downloading
+        {
+            let queue = self.pending_queue.read().await;
+            if queue.iter().any(|item| item.model_id == model_id) {
+                return Err(DownloadError::AlreadyRunning {
+                    model_id: model_id.clone(),
+                }
+                .into());
+            }
+        }
+
+        if self.active_downloads.read().await.contains_key(&model_id) {
+            return Err(DownloadError::AlreadyRunning {
+                model_id: model_id.clone(),
+            }
+            .into());
+        }
+
+        // Remove from failed list if retrying
+        {
+            let mut failed = self.failed_downloads.write().await;
+            failed.retain(|item| item.model_id != model_id);
+        }
+
+        // Add all shards to queue with size information
+        let first_position = {
+            let mut queue = self.pending_queue.write().await;
+            let base_position = active_count + queue.len() + 1;
+
+            let (_, shard_items, _total_size) = QueuedDownload::create_shard_batch_with_sizes(
+                &model_id,
+                &quantization,
+                &shard_files,
+            );
+
+            for item in shard_items {
+                queue.push_back(item);
+            }
+
+            base_position
+        };
+
+        Ok(first_position)
+    }
+
     /// Remove all items belonging to a shard group from the pending queue.
     ///
     /// This is used when cancelling or failing a sharded download to remove
@@ -544,20 +613,78 @@ impl DownloadService {
                     .with_queue_info(1, queue_len);
             progress_callback(start_event);
 
+            // Calculate aggregate information for sharded downloads
+            let (shard_index, total_shards, shard_filename, _shard_size, completed_shards_size) =
+                if let Some(ref shard) = item.shard_info {
+                    // Calculate size of already completed shards by looking at queue status
+                    // (all shards before this one in the same group are completed)
+                    let completed_size = self.get_completed_shards_size(&item).await;
+                    (
+                        shard.shard_index,
+                        shard.total_shards,
+                        shard.filename.clone(),
+                        shard.file_size.unwrap_or(0),
+                        completed_size,
+                    )
+                } else {
+                    (0, 1, String::new(), 0, 0)
+                };
+
+            // Get total size across all shards for this model
+            let aggregate_total = if is_shard {
+                self.get_shard_group_total_size(&item).await
+            } else {
+                0
+            };
+
             // Create a wrapper callback that converts (u64, u64) to DownloadProgressEvent
             let callback_clone = progress_callback.clone();
-            let display_name_for_callback = display_name.clone();
+            let display_name_for_callback = model_id.clone(); // Use model_id, not display_name with shard info
             let queue_len_for_callback = queue_len;
             let download_start_time = Instant::now();
+
+            // Capture shard info for the callback
+            let shard_index_for_cb = shard_index;
+            let total_shards_for_cb = total_shards;
+            let shard_filename_for_cb = shard_filename.clone();
+            let completed_shards_size_for_cb = completed_shards_size;
+            let aggregate_total_for_cb = aggregate_total;
+            let is_shard_for_cb = is_shard;
+
             let progress_cb: crate::commands::download::ProgressCallback =
                 Box::new(move |downloaded: u64, total: u64| {
-                    let event = crate::commands::download::DownloadProgressEvent::progress(
-                        &display_name_for_callback,
-                        downloaded,
-                        total,
-                        download_start_time,
-                    )
-                    .with_queue_info(1, queue_len_for_callback);
+                    let event = if is_shard_for_cb && total_shards_for_cb > 1 {
+                        // For sharded downloads, include aggregate progress
+                        let aggregate_downloaded = completed_shards_size_for_cb + downloaded;
+                        let aggregate_total_effective = if aggregate_total_for_cb > 0 {
+                            aggregate_total_for_cb
+                        } else {
+                            // Fall back to current shard total * shard count as estimate
+                            total * total_shards_for_cb as u64
+                        };
+
+                        crate::commands::download::DownloadProgressEvent::progress_with_shard(
+                            &display_name_for_callback,
+                            downloaded,
+                            total,
+                            shard_index_for_cb,
+                            total_shards_for_cb,
+                            &shard_filename_for_cb,
+                            aggregate_downloaded,
+                            aggregate_total_effective,
+                            download_start_time,
+                        )
+                        .with_queue_info(1, queue_len_for_callback)
+                    } else {
+                        // Non-sharded download
+                        crate::commands::download::DownloadProgressEvent::progress(
+                            &display_name_for_callback,
+                            downloaded,
+                            total,
+                            download_start_time,
+                        )
+                        .with_queue_info(1, queue_len_for_callback)
+                    };
                     callback_clone(event);
                 });
 
@@ -668,6 +795,75 @@ impl DownloadService {
 
         let queue = self.pending_queue.read().await;
         !queue.iter().any(|q| q.group_id.as_ref() == Some(group_id))
+    }
+
+    /// Get the total size of already completed shards in the same group.
+    ///
+    /// This is used to calculate aggregate progress for sharded downloads.
+    /// Completed shards are those with a lower shard_index than the current item.
+    async fn get_completed_shards_size(&self, item: &QueuedDownload) -> u64 {
+        let Some(ref shard_info) = item.shard_info else {
+            return 0;
+        };
+        let Some(ref _group_id) = item.group_id else {
+            return 0;
+        };
+
+        // The current shard's index tells us how many shards have been completed
+        // Sum up the sizes of shards 0 to shard_index-1
+        // Since we process shards in order and they're no longer in the queue once completed,
+        // we need to estimate based on the current shard's size and position
+
+        // If we have file_size info for the current shard, estimate that all previous
+        // shards are roughly the same size (common for sharded GGUF models)
+        let current_size = shard_info.file_size.unwrap_or(0);
+        let completed_count = shard_info.shard_index;
+
+        current_size * completed_count as u64
+    }
+
+    /// Get the total size across all shards in a shard group.
+    ///
+    /// This calculates the aggregate total by summing file sizes from the current
+    /// item's shard_info and remaining pending shards in the same group.
+    async fn get_shard_group_total_size(&self, item: &QueuedDownload) -> u64 {
+        let Some(ref shard_info) = item.shard_info else {
+            return 0;
+        };
+        let Some(ref group_id) = item.group_id else {
+            return 0;
+        };
+
+        // Start with the current item's size
+        let mut total = shard_info.file_size.unwrap_or(0);
+
+        // Add sizes from remaining pending shards in the same group
+        let queue = self.pending_queue.read().await;
+        for pending in queue.iter() {
+            #[allow(clippy::collapsible_if)]
+            if pending.group_id.as_ref() == Some(group_id) {
+                if let Some(ref pending_shard) = pending.shard_info {
+                    total += pending_shard.file_size.unwrap_or(0);
+                }
+            }
+        }
+
+        // If we have the current shard's size, estimate total for all shards
+        // (including completed ones) based on average shard size
+        if total > 0 && shard_info.total_shards > 0 {
+            let current_size = shard_info.file_size.unwrap_or(0);
+            let remaining_count = queue
+                .iter()
+                .filter(|p| p.group_id.as_ref() == Some(group_id))
+                .count()
+                + 1; // +1 for current
+
+            // Estimate completed shards size
+            let completed_count = shard_info.total_shards - remaining_count;
+            total += current_size * completed_count as u64;
+        }
+
+        total
     }
 
     /// Move all remaining items in a shard group to the failed list.
@@ -789,6 +985,25 @@ impl DownloadService {
         model_id: &str,
         quantization: &str,
     ) -> Result<Vec<String>> {
+        let files_with_sizes = self
+            .detect_shard_files_with_sizes(model_id, quantization)
+            .await?;
+        Ok(files_with_sizes.into_iter().map(|(name, _)| name).collect())
+    }
+
+    /// Detect shard files with their sizes for a model/quantization from HuggingFace.
+    ///
+    /// Similar to `detect_shard_files` but also returns file sizes for aggregate
+    /// progress tracking in the UI.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Vec<(filename, size_bytes)>)` containing ordered shard info.
+    pub async fn detect_shard_files_with_sizes(
+        &self,
+        model_id: &str,
+        quantization: &str,
+    ) -> Result<Vec<(String, u64)>> {
         use crate::commands::download::extract_quantization_from_filename;
 
         let quant_upper = quantization.to_uppercase();
@@ -814,7 +1029,7 @@ impl DownloadService {
             .as_array()
             .ok_or_else(|| anyhow::anyhow!("Invalid API response format"))?;
 
-        let mut matching_files: Vec<String> = Vec::new();
+        let mut matching_files: Vec<(String, u64)> = Vec::new();
 
         // Check top-level files
         for file in files {
@@ -825,7 +1040,8 @@ impl DownloadService {
                 if entry_type == "file" && filename.ends_with(".gguf") {
                     let file_quant = extract_quantization_from_filename(filename);
                     if file_quant.to_uppercase() == quant_upper {
-                        matching_files.push(filename.to_string());
+                        let file_size = file.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+                        matching_files.push((filename.to_string(), file_size));
                     }
                 }
 
@@ -850,7 +1066,12 @@ impl DownloadService {
                                                 let sub_quant =
                                                     extract_quantization_from_filename(sub_path);
                                                 if sub_quant.to_uppercase() == quant_upper {
-                                                    matching_files.push(sub_path.to_string());
+                                                    let file_size = sub_file
+                                                        .get("size")
+                                                        .and_then(|v| v.as_u64())
+                                                        .unwrap_or(0);
+                                                    matching_files
+                                                        .push((sub_path.to_string(), file_size));
                                                 }
                                             }
                                         }
@@ -871,7 +1092,7 @@ impl DownloadService {
         }
 
         // Sort to ensure proper shard order (00001, 00002, etc.)
-        matching_files.sort();
+        matching_files.sort_by(|a, b| a.0.cmp(&b.0));
 
         Ok(matching_files)
     }
@@ -898,17 +1119,20 @@ impl DownloadService {
         quantization: String,
     ) -> Result<(usize, usize)> {
         // Detect shard files from HuggingFace
-        let shard_files = self.detect_shard_files(&model_id, &quantization).await?;
-        let shard_count = shard_files.len();
+        // Detect shard files with sizes from HuggingFace
+        let shard_files_with_sizes = self
+            .detect_shard_files_with_sizes(&model_id, &quantization)
+            .await?;
+        let shard_count = shard_files_with_sizes.len();
 
         if shard_count == 1 {
             // Non-sharded model - use regular queue method
             let position = self.queue_download(model_id, Some(quantization)).await?;
             Ok((position, 1))
         } else {
-            // Sharded model - queue each shard separately
+            // Sharded model - queue each shard separately with sizes
             let position = self
-                .queue_sharded_download(model_id, quantization, shard_files)
+                .queue_sharded_download_with_sizes(model_id, quantization, shard_files_with_sizes)
                 .await?;
             Ok((position, shard_count))
         }

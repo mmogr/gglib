@@ -7,6 +7,16 @@ interface DownloadModelProps {
   onModelDownloaded: () => void;
 }
 
+interface ShardProgressInfo {
+  current_shard: number;
+  total_shards: number;
+  current_filename: string;
+  shard_downloaded: number;
+  shard_total: number;
+  aggregate_downloaded: number;
+  aggregate_total: number;
+}
+
 interface DownloadProgress {
   status: "started" | "downloading" | "progress" | "completed" | "error" | "queued" | "skipped";
   model_id: string;
@@ -19,6 +29,7 @@ interface DownloadProgress {
   eta?: number;   // seconds remaining
   queue_position?: number;
   queue_length?: number;
+  shard_progress?: ShardProgressInfo | null;
 }
 
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -341,7 +352,9 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
                 {progress.status === 'skipped' && '⏭️ '}
                 <span>
                   {(progress.status === 'downloading' || progress.status === 'progress') 
-                    ? `Downloading... ${progress.percentage?.toFixed(1) || 0}%`
+                    ? progress.shard_progress && progress.shard_progress.total_shards > 1
+                      ? `Downloading shard ${progress.shard_progress.current_shard + 1}/${progress.shard_progress.total_shards}... ${progress.percentage?.toFixed(1) || 0}%`
+                      : `Downloading... ${progress.percentage?.toFixed(1) || 0}%`
                     : progress.message}
                 </span>
               </div>
@@ -366,21 +379,58 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
           </div>
           {(progress.status === 'started' || progress.status === 'downloading' || progress.status === 'progress') && (
             <div className={styles.progressBarContainer}>
+              {/* Overall progress bar for sharded downloads */}
               <div className={styles.progressBar}>
                 <div 
                     className={`${styles.progressBarFill} ${progress.percentage !== undefined ? '' : styles.indeterminate}`}
                     style={progress.percentage !== undefined ? { width: `${progress.percentage}%` } : {}}
                 ></div>
               </div>
+              
+              {/* Shard-specific progress for sharded downloads */}
+              {progress.shard_progress && progress.shard_progress.total_shards > 1 && (
+                <div className={styles.shardProgressSection}>
+                  <div className={styles.shardProgressHeader}>
+                    <span className={styles.shardLabel}>
+                      Shard {progress.shard_progress.current_shard + 1}/{progress.shard_progress.total_shards}
+                    </span>
+                    <span className={styles.shardFilename} title={progress.shard_progress.current_filename}>
+                      {progress.shard_progress.current_filename.length > 30 
+                        ? '...' + progress.shard_progress.current_filename.slice(-27)
+                        : progress.shard_progress.current_filename}
+                    </span>
+                  </div>
+                  <div className={styles.shardProgressBar}>
+                    <div 
+                      className={styles.shardProgressBarFill}
+                      style={{ 
+                        width: progress.shard_progress.shard_total > 0 
+                          ? `${(progress.shard_progress.shard_downloaded / progress.shard_progress.shard_total) * 100}%` 
+                          : '0%' 
+                      }}
+                    ></div>
+                  </div>
+                  <div className={styles.shardProgressDetails}>
+                    <span>
+                      {formatBytes(progress.shard_progress.shard_downloaded)} / {formatBytes(progress.shard_progress.shard_total)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {progress.percentage !== undefined && (
                 <div className={styles.progressDetails}>
                   <div>
-                    <span className={styles.progressLabel}>Progress</span>
+                    <span className={styles.progressLabel}>
+                      {progress.shard_progress && progress.shard_progress.total_shards > 1 ? 'Overall' : 'Progress'}
+                    </span>
                     <span className={styles.progressPercentage}>{progress.percentage.toFixed(1)}%</span>
                   </div>
                   {progress.downloaded !== undefined && progress.total !== undefined && (
                     <div>
-                      <span className={styles.progressLabel}>Size</span>
+                      <span className={styles.progressLabel}>
+                        {progress.shard_progress && progress.shard_progress.total_shards > 1 ? 'Total Size' : 'Size'}
+                      </span>
                       <span className={styles.progressMetric}>
                         {formatBytes(progress.downloaded)} / {formatBytes(progress.total)}
                       </span>

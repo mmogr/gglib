@@ -23,7 +23,7 @@ use axum::{
         sse::{Event, Sse},
     },
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::Error as SqlxError;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
@@ -287,12 +287,19 @@ pub struct QueueDownloadRequest {
     pub quantization: Option<String>,
 }
 
+/// Response for queue download containing position and shard count
+#[derive(Debug, Serialize)]
+pub struct QueueDownloadResponse {
+    pub position: usize,
+    pub shard_count: usize,
+}
+
 /// Add a download to the queue
 pub async fn queue_download(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<QueueDownloadRequest>,
-) -> Result<Json<ApiResponse<usize>>, AppError> {
-    let position = state
+) -> Result<Json<ApiResponse<QueueDownloadResponse>>, AppError> {
+    let (position, shard_count) = state
         .backend
         .queue_download(payload.model_id.clone(), payload.quantization.clone())
         .await
@@ -314,7 +321,10 @@ pub async fn queue_download(
             .await;
     });
 
-    Ok(Json(ApiResponse::success(position)))
+    Ok(Json(ApiResponse::success(QueueDownloadResponse {
+        position,
+        shard_count,
+    })))
 }
 
 /// Get the current download queue status
