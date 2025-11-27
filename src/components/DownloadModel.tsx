@@ -455,7 +455,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
                 })}
               </ul>
             </>
-          )}}
+          )}
 
           {/* Failed Downloads */}
           {hasFailedDownloads && (

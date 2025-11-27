@@ -148,7 +148,7 @@ impl DownloadService {
     ) -> Result<usize> {
         let shard_count = shard_filenames.len();
         if shard_count == 0 {
-            return Err(anyhow::anyhow!("No shard filenames provided").into());
+            return Err(anyhow::anyhow!("No shard filenames provided"));
         }
 
         // Check queue capacity for all shards
@@ -423,7 +423,7 @@ impl DownloadService {
         progress_callback: Option<&crate::commands::download::ProgressCallback>,
     ) -> Result<String> {
         use crate::commands::download::{
-            download_specific_file, get_models_directory, DownloadContext, SessionOptions,
+            DownloadContext, SessionOptions, download_specific_file, get_models_directory,
         };
 
         let cancel_token = CancellationToken::new();
@@ -613,10 +613,8 @@ impl DownloadService {
                             // Move remaining shards to failed list
                             let removed = self.fail_shard_group(group_id).await;
                             if removed > 0 {
-                                let group_msg = format!(
-                                    "Shard failed, {} remaining shards cancelled",
-                                    removed
-                                );
+                                let group_msg =
+                                    format!("Shard failed, {} remaining shards cancelled", removed);
                                 let group_event =
                                     crate::commands::download::DownloadProgressEvent::errored(
                                         &model_id, &group_msg,
@@ -626,7 +624,8 @@ impl DownloadService {
                         }
 
                         let error_event = crate::commands::download::DownloadProgressEvent::errored(
-                            &display_name, &error_msg,
+                            &display_name,
+                            &error_msg,
                         );
                         progress_callback(error_event);
 
@@ -837,27 +836,22 @@ impl DownloadService {
                         model_id, filename
                     );
 
-                    if let Ok(sub_response) = reqwest::get(&sub_api_url).await {
-                        if sub_response.status().is_success() {
-                            if let Ok(sub_data) = sub_response.json::<serde_json::Value>().await {
-                                if let Some(sub_files) = sub_data.as_array() {
+                    if let Ok(sub_response) = reqwest::get(&sub_api_url).await
+                        && sub_response.status().is_success()
+                            && let Ok(sub_data) = sub_response.json::<serde_json::Value>().await
+                                && let Some(sub_files) = sub_data.as_array() {
                                     for sub_file in sub_files {
                                         if let Some(sub_path) =
                                             sub_file.get("path").and_then(|v| v.as_str())
-                                        {
-                                            if sub_path.ends_with(".gguf") {
+                                            && sub_path.ends_with(".gguf") {
                                                 let sub_quant =
                                                     extract_quantization_from_filename(sub_path);
                                                 if sub_quant.to_uppercase() == quant_upper {
                                                     matching_files.push(sub_path.to_string());
                                                 }
                                             }
-                                        }
                                     }
                                 }
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -902,9 +896,7 @@ impl DownloadService {
 
         if shard_count == 1 {
             // Non-sharded model - use regular queue method
-            let position = self
-                .queue_download(model_id, Some(quantization))
-                .await?;
+            let position = self.queue_download(model_id, Some(quantization)).await?;
             Ok((position, 1))
         } else {
             // Sharded model - queue each shard separately
@@ -935,7 +927,10 @@ impl DownloadService {
         // Find the failed item(s) for this model
         let failed_item = {
             let failed = self.failed_downloads.read().await;
-            failed.iter().find(|item| item.model_id == model_id).cloned()
+            failed
+                .iter()
+                .find(|item| item.model_id == model_id)
+                .cloned()
         };
 
         let Some(item) = failed_item else {

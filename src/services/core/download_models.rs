@@ -258,7 +258,8 @@ mod tests {
             "model-00003-of-00003.gguf".to_string(),
         ];
 
-        let (group_id, items) = QueuedDownload::create_shard_batch("test/model", "Q4_K_M", &filenames);
+        let (group_id, items) =
+            QueuedDownload::create_shard_batch("test/model", "Q4_K_M", &filenames);
 
         assert!(!group_id.is_empty());
         assert!(group_id.contains("test/model"));
