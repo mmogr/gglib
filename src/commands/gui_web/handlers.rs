@@ -13,6 +13,7 @@ use crate::models::gui::{
     ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest, StartServerResponse,
     UpdateModelRequest, UpdateModelsDirectoryRequest, UpdateSettingsRequest,
 };
+use crate::services::core::DownloadQueueStatus;
 use axum::{
     Json,
     extract::{Path, State},
@@ -275,6 +276,85 @@ pub async fn cancel_download(
         "Download '{}' cancelled",
         model_id
     ))))
+}
+
+// Download Queue Handlers
+
+/// Queue a download to be processed
+#[derive(Debug, Deserialize)]
+pub struct QueueDownloadRequest {
+    pub model_id: String,
+    pub quantization: Option<String>,
+}
+
+/// Add a download to the queue
+pub async fn queue_download(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<QueueDownloadRequest>,
+) -> Result<Json<ApiResponse<usize>>, AppError> {
+    let position = state
+        .backend
+        .queue_download(payload.model_id.clone(), payload.quantization.clone())
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    // Start the queue processor in a background task (if not already running)
+    let backend = state.backend.clone();
+    let progress_tx = state.progress_tx.clone();
+
+    tokio::spawn(async move {
+        let progress_callback = move |event: DownloadProgressEvent| {
+            let _ = progress_tx.send(event.to_json_string());
+        };
+
+        backend
+            .core()
+            .downloads()
+            .process_queue(progress_callback)
+            .await;
+    });
+
+    Ok(Json(ApiResponse::success(position)))
+}
+
+/// Get the current download queue status
+pub async fn get_download_queue(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<DownloadQueueStatus>>, AppError> {
+    let status = state.backend.get_download_queue().await;
+    Ok(Json(ApiResponse::success(status)))
+}
+
+/// Remove an item from the download queue
+#[derive(Debug, Deserialize)]
+pub struct RemoveFromQueueRequest {
+    pub model_id: String,
+}
+
+pub async fn remove_from_download_queue(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RemoveFromQueueRequest>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    state
+        .backend
+        .remove_from_download_queue(&payload.model_id)
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(format!(
+        "Removed '{}' from download queue",
+        payload.model_id
+    ))))
+}
+
+/// Clear all failed downloads
+pub async fn clear_failed_downloads(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    state.backend.clear_failed_downloads().await;
+    Ok(Json(ApiResponse::success(
+        "Cleared failed downloads".to_string(),
+    )))
 }
 
 /// Stream download progress events via SSE

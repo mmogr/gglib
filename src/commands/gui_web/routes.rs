@@ -40,6 +40,20 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             "/api/models/download/progress",
             get(handlers::stream_progress),
         )
+        // Download queue routes
+        .route(
+            "/api/models/download/queue",
+            get(handlers::get_download_queue),
+        )
+        .route("/api/models/download/queue", post(handlers::queue_download))
+        .route(
+            "/api/models/download/queue/remove",
+            post(handlers::remove_from_download_queue),
+        )
+        .route(
+            "/api/models/download/queue/clear-failed",
+            post(handlers::clear_failed_downloads),
+        )
         .route("/api/models/:id", get(handlers::get_model))
         .route("/api/models/:id", put(handlers::update_model))
         .route("/api/models/:id", delete(handlers::remove_model))

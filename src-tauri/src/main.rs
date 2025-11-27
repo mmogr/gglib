@@ -7,7 +7,7 @@ use gglib::{
         AddModelRequest, AppSettings, GuiModel, RemoveModelRequest, StartServerRequest,
         UpdateModelRequest, UpdateSettingsRequest,
     },
-    services::core::download_service::DownloadError,
+    services::core::{DownloadQueueStatus, download_service::DownloadError},
     services::gui_backend::GuiBackend,
 };
 use std::sync::Arc;
@@ -379,6 +379,69 @@ async fn update_settings(
         .map_err(|e| format!("Failed to update settings: {}", e))
 }
 
+// Download Queue Commands
+
+#[tauri::command]
+async fn queue_download(
+    app: tauri::AppHandle,
+    model_id: String,
+    quantization: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    // Add to queue
+    let position = state
+        .backend
+        .queue_download(model_id.clone(), quantization)
+        .await
+        .map_err(|e| format!("Failed to queue download: {}", e))?;
+
+    // Start the queue processor in a background task (if not already running)
+    let backend = state.backend.clone();
+    let app_clone = app.clone();
+    
+    tokio::spawn(async move {
+        use gglib::commands::download::DownloadProgressEvent;
+        
+        let progress_callback = move |event: DownloadProgressEvent| {
+            if let Err(err) = app_clone.emit("download-progress", &event) {
+                tracing::error!(error = %err, "Failed to emit download progress event");
+            }
+        };
+        
+        backend.core().downloads().process_queue(progress_callback).await;
+    });
+
+    Ok(position)
+}
+
+#[tauri::command]
+async fn get_download_queue(
+    state: tauri::State<'_, AppState>,
+) -> Result<DownloadQueueStatus, String> {
+    Ok(state.backend.get_download_queue().await)
+}
+
+#[tauri::command]
+async fn remove_from_download_queue(
+    model_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    state
+        .backend
+        .remove_from_download_queue(&model_id)
+        .await
+        .map(|_| format!("Removed '{}' from download queue", model_id))
+        .map_err(|e| format!("Failed to remove from queue: {}", e))
+}
+
+#[tauri::command]
+async fn clear_failed_downloads(
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    state.backend.clear_failed_downloads().await;
+    Ok("Cleared failed downloads".to_string())
+}
+
 /// Check if llama.cpp is installed
 #[tauri::command]
 fn check_llama_status() -> Result<LlamaStatus, String> {
@@ -553,6 +616,10 @@ async fn main() {
             get_model_tags,
             get_settings,
             update_settings,
+            queue_download,
+            get_download_queue,
+            remove_from_download_queue,
+            clear_failed_downloads,
             get_gui_api_port,
             check_llama_status,
             install_llama

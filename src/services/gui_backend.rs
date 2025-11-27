@@ -282,6 +282,7 @@ impl GuiBackend {
             default_context_size: settings.default_context_size,
             proxy_port: settings.proxy_port,
             server_port: settings.server_port,
+            max_download_queue_size: settings.max_download_queue_size,
         })
     }
 
@@ -292,16 +293,55 @@ impl GuiBackend {
             default_context_size: request.default_context_size,
             proxy_port: request.proxy_port,
             server_port: request.server_port,
+            max_download_queue_size: request.max_download_queue_size,
         };
 
         let settings = self.core.settings().update(update).await?;
+
+        // Update download service queue size if changed
+        if let Some(Some(queue_size)) = request.max_download_queue_size {
+            self.core.downloads().set_max_queue_size(queue_size).await;
+        }
 
         Ok(AppSettings {
             default_download_path: settings.default_download_path,
             default_context_size: settings.default_context_size,
             proxy_port: settings.proxy_port,
             server_port: settings.server_port,
+            max_download_queue_size: settings.max_download_queue_size,
         })
+    }
+
+    // =========================================================================
+    // Download Queue Operations
+    // =========================================================================
+
+    /// Add a download to the queue or start immediately if nothing is running.
+    /// Returns the queue position (1 = will start immediately).
+    pub async fn queue_download(
+        &self,
+        model_id: String,
+        quantization: Option<String>,
+    ) -> Result<usize> {
+        self.core
+            .downloads()
+            .queue_download(model_id, quantization)
+            .await
+    }
+
+    /// Get the current status of the download queue.
+    pub async fn get_download_queue(&self) -> crate::services::core::DownloadQueueStatus {
+        self.core.downloads().get_queue_status().await
+    }
+
+    /// Remove an item from the pending download queue.
+    pub async fn remove_from_download_queue(&self, model_id: &str) -> Result<()> {
+        self.core.downloads().remove_from_queue(model_id).await
+    }
+
+    /// Clear all failed downloads from the list.
+    pub async fn clear_failed_downloads(&self) {
+        self.core.downloads().clear_failed().await
     }
 }
 

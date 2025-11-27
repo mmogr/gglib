@@ -98,11 +98,13 @@ Application settings:
 
 ### DownloadService
 
-HuggingFace downloads with cancellation:
-- `download(model_id, quant, callback)` - Download model
-- `cancel(model_id)` - Cancel download
-- `is_downloading(model_id)` - Check download status
-- `active_downloads()` - List active downloads
+HuggingFace downloads with queue management:
+- `queue_download(repo_id, quant, token)` - Add download to queue
+- `get_queue_status()` - Get current queue status (pending, active, failed items)
+- `remove_from_queue(id)` - Remove pending download from queue
+- `clear_failed()` - Clear all failed downloads
+- `cancel(model_id)` - Cancel active download
+- `is_downloading(model_id)` - Check if model is currently downloading
 
 ## Design Principles
 

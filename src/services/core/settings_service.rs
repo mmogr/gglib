@@ -129,6 +129,7 @@ mod tests {
             default_download_path: None,
             proxy_port: None,
             server_port: None,
+            max_download_queue_size: None,
         };
 
         let result = service.update(update).await;

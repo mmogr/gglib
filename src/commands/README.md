@@ -335,11 +335,34 @@ gglib config models-dir prompt
 
 # Force a specific path
 gglib config models-dir set /fast-ssd/llama_models
+```
 
-> Changing this configuration only affects future downloads; it does **not** move GGUF files that are already on disk. Move any existing models yourself if you want them to live in the new directory.
+#### `config settings <action>`
+Manage application settings including download queue configuration.
+
+**Actions:**
+- `show` – display current settings
+- `set --max-queue-size <N>` – set maximum download queue size (1-50)
+- `reset` – reset all settings to defaults
+
+**Examples:**
+```bash
+# View current settings
+gglib config settings show
+
+# Set max download queue size
+gglib config settings set --max-queue-size 20
+
+# Reset to defaults
+gglib config settings reset
+```
+
+> Changing settings only affects application behavior; it does **not** affect existing downloads or models.
 
 
 ## See Also
+
+> Changing this configuration only affects future downloads; it does **not** move GGUF files that are already on disk. Move any existing models yourself if you want them to live in the new directory.
 
 - [Main README](../README.md) - Overview and getting started
 - [Interfaces & Modes](../README.md#interfaces--modes) - Understanding CLI, Desktop GUI, and Web UI

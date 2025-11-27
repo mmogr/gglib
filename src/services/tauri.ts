@@ -7,6 +7,7 @@ import {
   GgufModel,
   DownloadConfig,
   ServeConfig,
+  DownloadQueueStatus,
 } from "../types";
 import { getApiBase } from "../utils/apiBase";
 
@@ -424,6 +425,91 @@ export class TauriService {
       }
       const data: ApiResponse<string[]> = await response.json();
       return data.data || [];
+    }
+  }
+
+  // Download Queue operations
+
+  /**
+   * Add a download to the queue. Returns the queue position (1 = will start immediately).
+   */
+  static async queueDownload(modelId: string, quantization?: string): Promise<number> {
+    if (isTauriApp) {
+      return await invoke<number>('queue_download', { modelId, quantization });
+    } else {
+      const response = await apiFetch(`/models/download/queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId, quantization }),
+      });
+
+      if (!response.ok) {
+        const error: ApiResponse<any> = await response.json();
+        throw new Error(error.error || 'Failed to queue download');
+      }
+
+      const data: ApiResponse<number> = await response.json();
+      return data.data || 1;
+    }
+  }
+
+  /**
+   * Get the current status of the download queue.
+   */
+  static async getDownloadQueue(): Promise<DownloadQueueStatus> {
+    if (isTauriApp) {
+      return await invoke<DownloadQueueStatus>('get_download_queue');
+    } else {
+      const response = await apiFetch(`/models/download/queue`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch download queue: ${response.statusText}`);
+      }
+      const data: ApiResponse<DownloadQueueStatus> = await response.json();
+      return data.data || { pending: [], failed: [], max_size: 10 };
+    }
+  }
+
+  /**
+   * Remove a pending download from the queue.
+   */
+  static async removeFromDownloadQueue(modelId: string): Promise<string> {
+    if (isTauriApp) {
+      return await invoke<string>('remove_from_download_queue', { modelId });
+    } else {
+      const response = await apiFetch(`/models/download/queue/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId }),
+      });
+
+      if (!response.ok) {
+        const error: ApiResponse<any> = await response.json();
+        throw new Error(error.error || 'Failed to remove from queue');
+      }
+
+      const data: ApiResponse<string> = await response.json();
+      return data.data || 'Removed from queue';
+    }
+  }
+
+  /**
+   * Clear all failed downloads from the queue.
+   */
+  static async clearFailedDownloads(): Promise<string> {
+    if (isTauriApp) {
+      return await invoke<string>('clear_failed_downloads');
+    } else {
+      const response = await apiFetch(`/models/download/queue/clear-failed`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const error: ApiResponse<any> = await response.json();
+        throw new Error(error.error || 'Failed to clear failed downloads');
+      }
+
+      const data: ApiResponse<string> = await response.json();
+      return data.data || 'Cleared failed downloads';
     }
   }
 }
