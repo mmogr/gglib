@@ -3,10 +3,7 @@
 //! Tests conversation and message CRUD operations, validation,
 //! and database interactions.
 
-#[path = "../../common/mod.rs"]
-mod common;
-
-use common::database::setup_test_pool;
+use crate::common::database::setup_test_pool;
 use gglib::services::chat_history::{
     create_conversation, delete_conversation, get_conversation, get_conversation_count,
     get_conversations, get_message_count, get_messages, save_message, update_conversation,
@@ -37,7 +34,9 @@ async fn test_create_conversation_with_model() {
         7.0,
         chrono::Utc::now(),
     );
-    gglib::services::database::add_model(&pool, &model).await.unwrap();
+    gglib::services::database::add_model(&pool, &model)
+        .await
+        .unwrap();
     let models = gglib::services::database::list_models(&pool).await.unwrap();
     let model_id = models[0].id.unwrap() as i64;
 
@@ -208,13 +207,21 @@ async fn test_save_message_invalid_role() {
         .await
         .unwrap();
 
-    let result = save_message(&pool, conv_id, "invalid_role".to_string(), "Test".to_string()).await;
+    let result = save_message(
+        &pool,
+        conv_id,
+        "invalid_role".to_string(),
+        "Test".to_string(),
+    )
+    .await;
 
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Invalid role: must be system, user, or assistant"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid role: must be system, user, or assistant")
+    );
 }
 
 /// Test message ordering (chronological)

@@ -8,10 +8,7 @@ use gglib::models::Gguf;
 use gglib::services::database;
 use std::path::PathBuf;
 
-#[path = "../../common/mod.rs"]
-mod common;
-
-use common::database::setup_test_pool;
+use crate::common::database::setup_test_pool;
 
 /// Helper to create a test model for proxy tests
 fn create_proxy_test_model(name: &str) -> Gguf {
@@ -166,10 +163,12 @@ async fn test_model_not_found_for_chat() {
     let json = serde_json::to_string(&error).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("nonexistent-model"));
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("nonexistent-model")
+    );
     assert_eq!(parsed["error"]["type"], "model_not_found");
 }
 
@@ -257,10 +256,12 @@ fn test_upstream_error_response() {
     let json = serde_json::to_string(&error).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("Connection refused"));
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Connection refused")
+    );
     assert_eq!(parsed["error"]["type"], "upstream_error");
 }
 

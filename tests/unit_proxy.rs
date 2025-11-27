@@ -2,5 +2,5 @@
 //!
 //! These tests verify the proxy API models and handler functionality.
 
-mod common;
+pub mod common;
 mod unit;

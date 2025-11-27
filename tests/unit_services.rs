@@ -2,5 +2,5 @@
 //!
 //! These tests verify the chat history and other service functionality.
 
-mod common;
+pub mod common;
 mod unit;
