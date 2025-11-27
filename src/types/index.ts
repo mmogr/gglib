@@ -48,6 +48,7 @@ export interface AppSettings {
   default_context_size?: number | null;
   proxy_port?: number | null;
   server_port?: number | null;
+  max_download_queue_size?: number | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -55,4 +56,24 @@ export interface UpdateSettingsRequest {
   default_context_size?: number | null | undefined;
   proxy_port?: number | null | undefined;
   server_port?: number | null | undefined;
+  max_download_queue_size?: number | null | undefined;
+}
+
+// Download Queue Types
+
+export type DownloadStatus = 'downloading' | 'queued' | 'completed' | 'failed';
+
+export interface DownloadQueueItem {
+  model_id: string;
+  quantization?: string | null;
+  status: DownloadStatus;
+  position: number;
+  error?: string | null;
+}
+
+export interface DownloadQueueStatus {
+  current?: DownloadQueueItem | null;
+  pending: DownloadQueueItem[];
+  failed: DownloadQueueItem[];
+  max_size: number;
 }
