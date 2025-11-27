@@ -12,6 +12,7 @@ export type WorkPanelTab = 'add-download' | 'runs';
 interface ModelControlCenterPageProps {
   servers: ServerInfo[];
   loadServers: () => Promise<void>;
+  stopServer: (modelId: number) => Promise<void>;
   isWorkPanelVisible: boolean;
   onShowWorkPanel: () => void;
 }
@@ -19,6 +20,7 @@ interface ModelControlCenterPageProps {
 export default function ModelControlCenterPage({
   servers,
   loadServers,
+  stopServer,
   isWorkPanelVisible,
   onShowWorkPanel,
 }: ModelControlCenterPageProps) {
@@ -131,19 +133,6 @@ export default function ModelControlCenterPage({
     }
   };
 
-  const handleStopServer = async (modelId: number) => {
-    try {
-      const response = await fetch(`http://localhost:9887/api/models/${modelId}/stop`, {
-        method: 'POST',
-      });
-      if (!response.ok) throw new Error('Failed to stop server');
-      await loadServers();
-    } catch (err) {
-      console.error('Failed to stop server:', err);
-      throw err;
-    }
-  };
-
   const handleSelectModel = (modelId: number) => {
     selectModel(modelId);
   };
@@ -187,7 +176,7 @@ export default function ModelControlCenterPage({
           <ModelInspectorPanel
             model={selectedModel}
             onStartServer={loadServers}
-            onStopServer={handleStopServer}
+            onStopServer={stopServer}
             servers={servers}
             onRemoveModel={removeModel}
             onUpdateModel={updateModel}
@@ -211,7 +200,7 @@ export default function ModelControlCenterPage({
             onModelAdded={handleModelAdded}
             onModelDownloaded={handleModelDownloaded}
             servers={servers}
-            onStopServer={handleStopServer}
+            onStopServer={stopServer}
             onRefreshServers={loadServers}
             onSelectModel={handleSelectModel}
             activeSubTab={activeSubTab}

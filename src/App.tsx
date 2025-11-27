@@ -16,7 +16,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isWorkPanelVisible, setIsWorkPanelVisible] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
-  const { servers, loadServers } = useServers();
+  const { servers, loadServers, stopServer } = useServers();
   const { 
     status: llamaStatus, 
     loading: llamaLoading,
@@ -59,6 +59,7 @@ function App() {
         <ModelControlCenterPage
           servers={servers}
           loadServers={loadServers}
+          stopServer={stopServer}
           isWorkPanelVisible={isWorkPanelVisible}
           onShowWorkPanel={showWorkPanel}
         />
