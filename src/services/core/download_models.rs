@@ -232,7 +232,8 @@ mod tests {
 
     #[test]
     fn test_shard_info_display() {
-        let shard = ShardInfo::new(2, 5, "model-00002-of-00005.gguf".to_string());
+        // shard_index is 0-based, but display shows 1-based for humans
+        let shard = ShardInfo::new(1, 5, "model-00002-of-00005.gguf".to_string());
         assert_eq!(shard.display(), "Part 2/5");
     }
 
@@ -245,7 +246,7 @@ mod tests {
             "test/model".to_string(),
             "Q4_K_M".to_string(),
             "group-123".to_string(),
-            ShardInfo::new(1, 3, "file.gguf".to_string()),
+            ShardInfo::new(0, 3, "file.gguf".to_string()),
         );
         assert!(shard.is_shard());
     }
@@ -266,18 +267,18 @@ mod tests {
         assert!(group_id.contains("Q4_K_M"));
         assert_eq!(items.len(), 3);
 
-        // Check first shard
+        // Check first shard (0-based index)
         assert_eq!(items[0].model_id, "test/model");
         assert_eq!(items[0].quantization, Some("Q4_K_M".to_string()));
         assert_eq!(items[0].group_id, Some(group_id.clone()));
         let shard0 = items[0].shard_info.as_ref().unwrap();
-        assert_eq!(shard0.shard_index, 1);
+        assert_eq!(shard0.shard_index, 0);
         assert_eq!(shard0.total_shards, 3);
         assert_eq!(shard0.filename, "model-00001-of-00003.gguf");
 
-        // Check last shard
+        // Check last shard (0-based index)
         let shard2 = items[2].shard_info.as_ref().unwrap();
-        assert_eq!(shard2.shard_index, 3);
+        assert_eq!(shard2.shard_index, 2);
         assert_eq!(shard2.total_shards, 3);
     }
 }
