@@ -301,6 +301,7 @@ mod tests {
             default_context_size: Some(8192),
             proxy_port: Some(8081),
             server_port: Some(9001),
+            max_download_queue_size: Some(10),
         };
         save_settings(&pool, &settings).await.unwrap();
 
