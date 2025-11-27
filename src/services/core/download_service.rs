@@ -830,24 +830,31 @@ impl DownloadService {
                 }
 
                 // Sharded GGUF files in per-quant directories
+                // Note: Nested ifs required for CI compatibility (let-chains with await unstable in Rust 1.86)
+                #[allow(clippy::collapsible_if)]
                 if entry_type == "directory" && filename.to_uppercase().contains(&quant_upper) {
                     let sub_api_url = format!(
                         "https://huggingface.co/api/models/{}/tree/main/{}",
                         model_id, filename
                     );
 
-                    if let Ok(sub_response) = reqwest::get(&sub_api_url).await
-                        && sub_response.status().is_success()
-                        && let Ok(sub_data) = sub_response.json::<serde_json::Value>().await
-                        && let Some(sub_files) = sub_data.as_array()
-                    {
-                        for sub_file in sub_files {
-                            if let Some(sub_path) = sub_file.get("path").and_then(|v| v.as_str())
-                                && sub_path.ends_with(".gguf")
-                            {
-                                let sub_quant = extract_quantization_from_filename(sub_path);
-                                if sub_quant.to_uppercase() == quant_upper {
-                                    matching_files.push(sub_path.to_string());
+                    if let Ok(sub_response) = reqwest::get(&sub_api_url).await {
+                        if sub_response.status().is_success() {
+                            if let Ok(sub_data) = sub_response.json::<serde_json::Value>().await {
+                                if let Some(sub_files) = sub_data.as_array() {
+                                    for sub_file in sub_files {
+                                        if let Some(sub_path) =
+                                            sub_file.get("path").and_then(|v| v.as_str())
+                                        {
+                                            if sub_path.ends_with(".gguf") {
+                                                let sub_quant =
+                                                    extract_quantization_from_filename(sub_path);
+                                                if sub_quant.to_uppercase() == quant_upper {
+                                                    matching_files.push(sub_path.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
