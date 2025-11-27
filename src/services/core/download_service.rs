@@ -402,10 +402,99 @@ impl DownloadService {
         result
     }
 
+    /// Download a single shard file from HuggingFace Hub.
+    ///
+    /// This is used internally by the queue processor for sharded models.
+    /// It downloads a specific file rather than auto-detecting files.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    /// * `filename` - Specific filename to download (e.g., "Q4_K_M/model-00001-of-00003.gguf")
+    /// * `quantization` - Quantization type for metadata
+    /// * `is_last_shard` - Whether this is the last shard (triggers database add)
+    /// * `progress_callback` - Optional callback for progress updates
+    async fn download_shard(
+        &self,
+        model_id: String,
+        filename: String,
+        quantization: String,
+        is_last_shard: bool,
+        progress_callback: Option<&crate::commands::download::ProgressCallback>,
+    ) -> Result<String> {
+        use crate::commands::download::{
+            download_specific_file, get_models_directory, DownloadContext, SessionOptions,
+        };
+
+        let cancel_token = CancellationToken::new();
+
+        // Use a unique key for tracking (model_id + filename for shards)
+        let tracking_key = format!("{}:{}", model_id, filename);
+
+        // Check if download is already running
+        {
+            let mut downloads = self.active_downloads.write().await;
+            if downloads.contains_key(&tracking_key) {
+                return Err(DownloadError::AlreadyRunning {
+                    model_id: tracking_key.clone(),
+                }
+                .into());
+            }
+            downloads.insert(tracking_key.clone(), cancel_token.clone());
+        }
+
+        // Get models directory and commit SHA
+        let models_dir = get_models_directory()?;
+
+        // Get commit SHA from HuggingFace API
+        let api_url = format!("https://huggingface.co/api/models/{}", model_id);
+        let response = reqwest::get(&api_url).await?;
+        let data: serde_json::Value = response.json().await?;
+        let commit_sha = data
+            .get("sha")
+            .and_then(|v| v.as_str())
+            .unwrap_or("main")
+            .to_string();
+
+        // Create download context
+        let context = DownloadContext {
+            model_id: &model_id,
+            quantization: Some(&quantization),
+            models_dir: &models_dir,
+            force: false,
+            add_to_db: is_last_shard, // Only add to DB on last shard
+            session: SessionOptions {
+                auth_token: None,
+                progress_callback,
+            },
+        };
+
+        // Execute download with cancellation support
+        let download_future = download_specific_file(&filename, &commit_sha, &context);
+        tokio::pin!(download_future);
+
+        let result = tokio::select! {
+            res = &mut download_future => {
+                res.map(|_| format!("Shard {} downloaded successfully", filename))
+            }
+            _ = cancel_token.cancelled() => {
+                Err(DownloadError::Cancelled { model_id: tracking_key.clone() }.into())
+            }
+        };
+
+        // Clean up tracking
+        self.active_downloads.write().await.remove(&tracking_key);
+
+        result
+    }
+
     /// Process the download queue, downloading items one at a time.
     ///
     /// This method should be called after adding items to the queue.
     /// It will continue processing until the queue is empty.
+    ///
+    /// For sharded models, each shard is downloaded individually. If any shard
+    /// fails, all remaining shards in the group are removed from the queue.
     ///
     /// # Arguments
     ///
@@ -433,23 +522,37 @@ impl DownloadService {
 
             let model_id = item.model_id.clone();
             let quantization = item.quantization.clone();
+            let is_shard = item.shard_info.is_some();
+
+            // Build display name for events (include shard info if applicable)
+            let display_name = if let Some(ref shard) = item.shard_info {
+                format!(
+                    "{} (shard {}/{})",
+                    model_id,
+                    shard.shard_index + 1,
+                    shard.total_shards
+                )
+            } else {
+                model_id.clone()
+            };
 
             // Emit "started" event
             let queue_status = self.get_queue_status().await;
             let queue_len = queue_status.pending.len() + 1;
-            let start_event = crate::commands::download::DownloadProgressEvent::starting(&model_id)
-                .with_queue_info(1, queue_len);
+            let start_event =
+                crate::commands::download::DownloadProgressEvent::starting(&display_name)
+                    .with_queue_info(1, queue_len);
             progress_callback(start_event);
 
             // Create a wrapper callback that converts (u64, u64) to DownloadProgressEvent
             let callback_clone = progress_callback.clone();
-            let model_id_for_callback = model_id.clone();
+            let display_name_for_callback = display_name.clone();
             let queue_len_for_callback = queue_len;
             let download_start_time = Instant::now();
             let progress_cb: crate::commands::download::ProgressCallback =
                 Box::new(move |downloaded: u64, total: u64| {
                     let event = crate::commands::download::DownloadProgressEvent::progress(
-                        &model_id_for_callback,
+                        &display_name_for_callback,
                         downloaded,
                         total,
                         download_start_time,
@@ -458,17 +561,29 @@ impl DownloadService {
                     callback_clone(event);
                 });
 
-            // Execute download
-            let result = self
-                .download(model_id.clone(), quantization.clone(), Some(&progress_cb))
-                .await;
+            // Execute download - use shard-specific method if this is a shard
+            let result = if is_shard {
+                let shard_info = item.shard_info.as_ref().unwrap();
+                let is_last_shard = self.is_last_shard_in_group(&item).await;
+                self.download_shard(
+                    model_id.clone(),
+                    shard_info.filename.clone(),
+                    quantization.clone().unwrap_or_default(),
+                    is_last_shard,
+                    Some(&progress_cb),
+                )
+                .await
+            } else {
+                self.download(model_id.clone(), quantization.clone(), Some(&progress_cb))
+                    .await
+            };
 
             match result {
                 Ok(_) => {
                     // Emit completed event
                     let complete_event =
                         crate::commands::download::DownloadProgressEvent::completed(
-                            &model_id,
+                            &display_name,
                             Some("Download completed successfully"),
                         );
                     progress_callback(complete_event);
@@ -477,8 +592,13 @@ impl DownloadService {
                     // Check if cancelled
                     let error_msg = e.to_string();
                     if error_msg.contains("cancelled") {
+                        // If this was a shard, remove all remaining shards in the group
+                        if let Some(ref group_id) = item.group_id {
+                            self.remove_shard_group(group_id).await;
+                        }
+
                         let skip_event = crate::commands::download::DownloadProgressEvent::skipped(
-                            &model_id,
+                            &display_name,
                             "Cancelled by user",
                         );
                         progress_callback(skip_event);
@@ -488,14 +608,31 @@ impl DownloadService {
                         failed_item.queued_at = None;
                         self.mark_failed(failed_item).await;
 
+                        // If this was a shard, mark entire group as failed
+                        if let Some(ref group_id) = item.group_id {
+                            // Move remaining shards to failed list
+                            let removed = self.fail_shard_group(group_id).await;
+                            if removed > 0 {
+                                let group_msg = format!(
+                                    "Shard failed, {} remaining shards cancelled",
+                                    removed
+                                );
+                                let group_event =
+                                    crate::commands::download::DownloadProgressEvent::errored(
+                                        &model_id, &group_msg,
+                                    );
+                                progress_callback(group_event);
+                            }
+                        }
+
                         let error_event = crate::commands::download::DownloadProgressEvent::errored(
-                            &model_id, &error_msg,
+                            &display_name, &error_msg,
                         );
                         progress_callback(error_event);
 
                         // Emit skipped event to indicate we're moving to next
                         let skip_event = crate::commands::download::DownloadProgressEvent::skipped(
-                            &model_id,
+                            &display_name,
                             &format!("Failed: {}", error_msg),
                         );
                         progress_callback(skip_event);
@@ -522,6 +659,40 @@ impl DownloadService {
 
         // Done processing
         *self.processing.write().await = false;
+    }
+
+    /// Check if the given item is the last shard in its group.
+    async fn is_last_shard_in_group(&self, item: &QueuedDownload) -> bool {
+        let Some(ref group_id) = item.group_id else {
+            return true; // Not a shard, treat as "last"
+        };
+
+        let queue = self.pending_queue.read().await;
+        !queue.iter().any(|q| q.group_id.as_ref() == Some(group_id))
+    }
+
+    /// Move all remaining items in a shard group to the failed list.
+    ///
+    /// Returns the number of items moved.
+    async fn fail_shard_group(&self, group_id: &str) -> usize {
+        let mut queue = self.pending_queue.write().await;
+        let mut failed = self.failed_downloads.write().await;
+
+        let mut removed = Vec::new();
+        queue.retain(|item| {
+            if item.group_id.as_deref() == Some(group_id) {
+                let mut failed_item = item.clone();
+                failed_item.queued_at = None;
+                removed.push(failed_item);
+                false
+            } else {
+                true
+            }
+        });
+
+        let count = removed.len();
+        failed.extend(removed);
+        count
     }
 
     /// Cancel an in-flight download.
