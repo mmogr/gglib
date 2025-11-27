@@ -584,6 +584,165 @@ impl DownloadService {
     ) -> Result<()> {
         crate::commands::download::handle_search(query, limit, sort, gguf_only).await
     }
+
+    /// Detect shard files for a model/quantization from HuggingFace.
+    ///
+    /// Queries the HuggingFace API to find all GGUF files matching the specified
+    /// quantization. Returns an ordered list of filenames if multiple shards are
+    /// found, or a single-element list for non-sharded models.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID (e.g., "unsloth/Llama-3.2-1B-Instruct-GGUF")
+    /// * `quantization` - Quantization type (e.g., "Q4_K_M")
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Vec<String>)` containing ordered shard filenames, or an error
+    /// if the model/quantization is not found.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let service = DownloadService::new();
+    /// // Non-sharded model returns single file
+    /// let files = service.detect_shard_files("TheBloke/Llama-2-7B-GGUF", "Q4_K_M").await?;
+    /// assert_eq!(files.len(), 1);
+    ///
+    /// // Sharded model returns multiple files in order
+    /// let files = service.detect_shard_files("big/model-GGUF", "Q4_K_M").await?;
+    /// assert!(files.len() > 1);
+    /// assert!(files[0].contains("00001"));
+    /// ```
+    pub async fn detect_shard_files(
+        &self,
+        model_id: &str,
+        quantization: &str,
+    ) -> Result<Vec<String>> {
+        use crate::commands::download::extract_quantization_from_filename;
+
+        let quant_upper = quantization.to_uppercase();
+        let api_url = format!("https://huggingface.co/api/models/{}/tree/main", model_id);
+
+        let response = reqwest::get(&api_url)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to fetch model info: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!(
+                "Failed to fetch model info: HTTP {}",
+                response.status()
+            ));
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse API response: {}", e))?;
+
+        let files = data
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("Invalid API response format"))?;
+
+        let mut matching_files: Vec<String> = Vec::new();
+
+        // Check top-level files
+        for file in files {
+            if let Some(filename) = file.get("path").and_then(|v| v.as_str()) {
+                let entry_type = file.get("type").and_then(|v| v.as_str()).unwrap_or("file");
+
+                // Direct GGUF files at repo root
+                if entry_type == "file" && filename.ends_with(".gguf") {
+                    let file_quant = extract_quantization_from_filename(filename);
+                    if file_quant.to_uppercase() == quant_upper {
+                        matching_files.push(filename.to_string());
+                    }
+                }
+
+                // Sharded GGUF files in per-quant directories
+                if entry_type == "directory" && filename.to_uppercase().contains(&quant_upper) {
+                    let sub_api_url = format!(
+                        "https://huggingface.co/api/models/{}/tree/main/{}",
+                        model_id, filename
+                    );
+
+                    if let Ok(sub_response) = reqwest::get(&sub_api_url).await {
+                        if sub_response.status().is_success() {
+                            if let Ok(sub_data) = sub_response.json::<serde_json::Value>().await {
+                                if let Some(sub_files) = sub_data.as_array() {
+                                    for sub_file in sub_files {
+                                        if let Some(sub_path) =
+                                            sub_file.get("path").and_then(|v| v.as_str())
+                                        {
+                                            if sub_path.ends_with(".gguf") {
+                                                let sub_quant =
+                                                    extract_quantization_from_filename(sub_path);
+                                                if sub_quant.to_uppercase() == quant_upper {
+                                                    matching_files.push(sub_path.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if matching_files.is_empty() {
+            return Err(anyhow::anyhow!(
+                "No GGUF files found for quantization '{}'",
+                quantization
+            ));
+        }
+
+        // Sort to ensure proper shard order (00001, 00002, etc.)
+        matching_files.sort();
+
+        Ok(matching_files)
+    }
+
+    /// Smart queue method that auto-detects shards and queues appropriately.
+    ///
+    /// This is the preferred method for GUI downloads. It:
+    /// 1. Queries HuggingFace to detect if the model is sharded
+    /// 2. Creates individual queue items for each shard (with shared group_id)
+    /// 3. Or creates a single queue item for non-sharded models
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    /// * `quantization` - Quantization type
+    ///
+    /// # Returns
+    ///
+    /// Returns `(queue_position, shard_count)` where shard_count is 1 for
+    /// non-sharded models.
+    pub async fn queue_download_auto(
+        &self,
+        model_id: String,
+        quantization: String,
+    ) -> Result<(usize, usize)> {
+        // Detect shard files from HuggingFace
+        let shard_files = self.detect_shard_files(&model_id, &quantization).await?;
+        let shard_count = shard_files.len();
+
+        if shard_count == 1 {
+            // Non-sharded model - use regular queue method
+            let position = self
+                .queue_download(model_id, Some(quantization))
+                .await?;
+            Ok((position, 1))
+        } else {
+            // Sharded model - queue each shard separately
+            let position = self
+                .queue_sharded_download(model_id, quantization, shard_files)
+                .await?;
+            Ok((position, shard_count))
+        }
+    }
 }
 
 impl Default for DownloadService {
