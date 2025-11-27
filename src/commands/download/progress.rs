@@ -39,7 +39,7 @@ impl DownloadProgressEvent {
 
     pub fn starting(model_id: &str) -> Self {
         let mut event = Self::base(model_id, "started");
-        event.message = Some("Starting download...".to_string());
+        event.message = Some(format!("Starting download: {}", model_id));
         event
     }
 
@@ -98,7 +98,7 @@ impl DownloadProgressEvent {
             0.0
         };
 
-        event.message = Some(format!("Downloading... {:.1}%", event.percentage));
+        event.message = Some(format!("Downloading: {} ({:.1}%)", model_id, event.percentage));
         event
     }
 

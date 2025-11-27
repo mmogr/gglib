@@ -10,9 +10,17 @@
 
 .progressHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+.progressInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .progressStatus {
@@ -21,6 +29,16 @@
   gap: 0.5rem;
   font-weight: 600;
   color: #f1f5f9;
+}
+
+.currentModelId {
+  font-size: 0.85em;
+  color: #94a3b8;
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .progressBarContainer {

@@ -322,14 +322,28 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
       {progress && (
         <div className={styles.progressContainer}>
           <div className={styles.progressHeader}>
-            <div className={styles.progressStatus}>
-              {progress.status === 'started' && '⏳ '}
-              {(progress.status === 'downloading' || progress.status === 'progress') && '📥 '}
-              {progress.status === 'completed' && '✅ '}
-              {progress.status === 'error' && '❌ '}
-              {progress.status === 'queued' && '🕐 '}
-              {progress.status === 'skipped' && '⏭️ '}
-              <span>{progress.message}</span>
+            <div className={styles.progressInfo}>
+              <div className={styles.progressStatus}>
+                {progress.status === 'started' && '⏳ '}
+                {(progress.status === 'downloading' || progress.status === 'progress') && '📥 '}
+                {progress.status === 'completed' && '✅ '}
+                {progress.status === 'error' && '❌ '}
+                {progress.status === 'queued' && '🕐 '}
+                {progress.status === 'skipped' && '⏭️ '}
+                <span>
+                  {(progress.status === 'downloading' || progress.status === 'progress') 
+                    ? `Downloading... ${progress.percentage?.toFixed(1) || 0}%`
+                    : progress.message}
+                </span>
+              </div>
+              {/* Show model ID for downloading status */}
+              {(progress.status === 'started' || progress.status === 'downloading' || progress.status === 'progress') && (
+                <div className={styles.currentModelId} title={progress.model_id}>
+                  {progress.model_id.length > 40 
+                    ? progress.model_id.substring(0, 37) + '...' 
+                    : progress.model_id}
+                </div>
+              )}
             </div>
             {(progress.status === 'started' || progress.status === 'downloading' || progress.status === 'progress') && (
               <button
