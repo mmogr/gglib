@@ -838,20 +838,20 @@ impl DownloadService {
 
                     if let Ok(sub_response) = reqwest::get(&sub_api_url).await
                         && sub_response.status().is_success()
-                            && let Ok(sub_data) = sub_response.json::<serde_json::Value>().await
-                                && let Some(sub_files) = sub_data.as_array() {
-                                    for sub_file in sub_files {
-                                        if let Some(sub_path) =
-                                            sub_file.get("path").and_then(|v| v.as_str())
-                                            && sub_path.ends_with(".gguf") {
-                                                let sub_quant =
-                                                    extract_quantization_from_filename(sub_path);
-                                                if sub_quant.to_uppercase() == quant_upper {
-                                                    matching_files.push(sub_path.to_string());
-                                                }
-                                            }
-                                    }
+                        && let Ok(sub_data) = sub_response.json::<serde_json::Value>().await
+                        && let Some(sub_files) = sub_data.as_array()
+                    {
+                        for sub_file in sub_files {
+                            if let Some(sub_path) = sub_file.get("path").and_then(|v| v.as_str())
+                                && sub_path.ends_with(".gguf")
+                            {
+                                let sub_quant = extract_quantization_from_filename(sub_path);
+                                if sub_quant.to_uppercase() == quant_upper {
+                                    matching_files.push(sub_path.to_string());
                                 }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1135,7 +1135,12 @@ mod tests {
 
         // All items should share the same group_id
         let group_id = status.pending[0].group_id.as_ref().unwrap();
-        assert!(status.pending.iter().all(|p| p.group_id.as_ref() == Some(group_id)));
+        assert!(
+            status
+                .pending
+                .iter()
+                .all(|p| p.group_id.as_ref() == Some(group_id))
+        );
     }
 
     #[tokio::test]
@@ -1206,7 +1211,11 @@ mod tests {
         ];
 
         let result = service
-            .queue_sharded_download("test/sharded".to_string(), "Q4_K_M".to_string(), shard_files)
+            .queue_sharded_download(
+                "test/sharded".to_string(),
+                "Q4_K_M".to_string(),
+                shard_files,
+            )
             .await;
 
         assert!(result.is_err());
