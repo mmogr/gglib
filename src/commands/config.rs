@@ -1,4 +1,7 @@
-use crate::cli::{ConfigCommand, ModelsDirCommand};
+use crate::cli::{ConfigCommand, ModelsDirCommand, SettingsCommand};
+use crate::services::core::AppCore;
+use crate::services::database;
+use crate::services::settings::{Settings, SettingsUpdate, validate_settings};
 use crate::utils::input;
 use crate::utils::paths::{
     DirectoryCreationStrategy, default_models_dir, ensure_directory, persist_models_dir,
@@ -10,6 +13,10 @@ use anyhow::Result;
 pub fn handle(command: ConfigCommand) -> Result<()> {
     match command {
         ConfigCommand::ModelsDir { command } => handle_models_dir(command),
+        ConfigCommand::Settings { command } => {
+            // Settings commands need async runtime for database access
+            tokio::runtime::Runtime::new()?.block_on(handle_settings(command))
+        }
     }
 }
 
@@ -52,6 +59,117 @@ fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
                 "✓ Models directory updated to {} (non-interactive)",
                 resolved.path.display()
             );
+            Ok(())
+        }
+    }
+}
+
+async fn handle_settings(command: SettingsCommand) -> Result<()> {
+    let pool = database::setup_database().await?;
+    let core = AppCore::new(pool);
+
+    match command {
+        SettingsCommand::Show => {
+            let settings = core.settings().get().await?;
+            println!("Current application settings:");
+            println!("  default_download_path:   {:?}", settings.default_download_path);
+            println!("  default_context_size:    {:?}", settings.default_context_size);
+            println!("  proxy_port:              {:?}", settings.proxy_port);
+            println!("  server_port:             {:?}", settings.server_port);
+            println!("  max_download_queue_size: {:?}", settings.max_download_queue_size);
+            Ok(())
+        }
+        SettingsCommand::Set {
+            default_context_size,
+            proxy_port,
+            server_port,
+            max_download_queue_size,
+            default_download_path,
+        } => {
+            // Check if any settings were provided and which ones
+            let has_default_download_path = default_download_path.is_some();
+            let has_default_context_size = default_context_size.is_some();
+            let has_proxy_port = proxy_port.is_some();
+            let has_server_port = server_port.is_some();
+            let has_max_download_queue_size = max_download_queue_size.is_some();
+
+            if !has_default_download_path
+                && !has_default_context_size
+                && !has_proxy_port
+                && !has_server_port
+                && !has_max_download_queue_size
+            {
+                println!("No settings provided. Use --help to see available options.");
+                return Ok(());
+            }
+
+            // Build update request
+            let update = SettingsUpdate {
+                default_download_path: default_download_path.map(Some),
+                default_context_size: default_context_size.map(Some),
+                proxy_port: proxy_port.map(Some),
+                server_port: server_port.map(Some),
+                max_download_queue_size: max_download_queue_size.map(Some),
+            };
+
+            // Get current settings and apply updates for validation
+            let mut current = core.settings().get().await?;
+            if let Some(Some(v)) = &update.default_download_path {
+                current.default_download_path = Some(v.clone());
+            }
+            if let Some(Some(v)) = update.default_context_size {
+                current.default_context_size = Some(v);
+            }
+            if let Some(Some(v)) = update.proxy_port {
+                current.proxy_port = Some(v);
+            }
+            if let Some(Some(v)) = update.server_port {
+                current.server_port = Some(v);
+            }
+            if let Some(Some(v)) = update.max_download_queue_size {
+                current.max_download_queue_size = Some(v);
+            }
+
+            // Validate before saving
+            validate_settings(&current)?;
+
+            // Save settings
+            let updated = core.settings().update(update).await?;
+            println!("✓ Settings updated successfully:");
+            if has_default_download_path {
+                println!("  default_download_path: {:?}", updated.default_download_path);
+            }
+            if has_default_context_size {
+                println!("  default_context_size: {:?}", updated.default_context_size);
+            }
+            if has_proxy_port {
+                println!("  proxy_port: {:?}", updated.proxy_port);
+            }
+            if has_server_port {
+                println!("  server_port: {:?}", updated.server_port);
+            }
+            if has_max_download_queue_size {
+                println!("  max_download_queue_size: {:?}", updated.max_download_queue_size);
+            }
+            Ok(())
+        }
+        SettingsCommand::Reset { force } => {
+            if !force {
+                let confirm = input::prompt_confirmation("Reset all settings to defaults?")?;
+                if !confirm {
+                    println!("Cancelled.");
+                    return Ok(());
+                }
+            }
+
+            let defaults = Settings::default();
+            core.settings().save(&defaults).await?;
+            println!("✓ Settings reset to defaults:");
+            println!("  default_download_path:   {:?}", defaults.default_download_path);
+            println!("  default_context_size:    {:?}", defaults.default_context_size);
+            println!("  proxy_port:              {:?}", defaults.proxy_port);
+            println!("  server_port:             {:?}", defaults.server_port);
+            println!("  max_download_queue_size: {:?}", defaults.max_download_queue_size);
             Ok(())
         }
     }
