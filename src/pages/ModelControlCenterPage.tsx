@@ -5,6 +5,7 @@ import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel
 import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspectorPanel';
 import WorkPanel from '../components/WorkPanel/WorkPanel';
 import { ServerInfo } from '../types';
+import { TauriService } from '../services/tauri';
 import './ModelControlCenterPage.css';
 
 export type WorkPanelTab = 'add-download' | 'runs';
@@ -133,10 +134,7 @@ export default function ModelControlCenterPage({
 
   const handleStopServer = async (modelId: number) => {
     try {
-      const response = await fetch(`http://localhost:9887/api/models/${modelId}/stop`, {
-        method: 'POST',
-      });
-      if (!response.ok) throw new Error('Failed to stop server');
+      await TauriService.stopServer(modelId);
       await loadServers();
     } catch (err) {
       console.error('Failed to stop server:', err);
