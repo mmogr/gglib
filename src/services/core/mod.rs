@@ -38,6 +38,7 @@
 //! }
 //! ```
 
+pub mod download_models;
 pub mod download_service;
 pub mod model_service;
 pub mod proxy_service;
@@ -49,10 +50,12 @@ use crate::utils::paths::get_llama_server_path;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
-pub use download_service::{
-    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadService, DownloadStatus,
-    QueuedDownload,
+// Re-export types from download_models (canonical location)
+pub use download_models::{
+    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
+    ShardInfo,
 };
+pub use download_service::DownloadService;
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};

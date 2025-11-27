@@ -1604,6 +1604,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "urlencoding",
+ "uuid",
  "which",
  "zip",
 ]
