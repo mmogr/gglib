@@ -54,7 +54,10 @@ fn test_chat_completion_request_deserialize_full() {
     assert_eq!(request.top_p, Some(0.9));
     assert_eq!(request.max_tokens, Some(1024));
     assert_eq!(request.n, Some(1));
-    assert_eq!(request.stop, Some(vec!["END".to_string(), "STOP".to_string()]));
+    assert_eq!(
+        request.stop,
+        Some(vec!["END".to_string(), "STOP".to_string()])
+    );
     assert_eq!(request.num_ctx, Some(8192));
 }
 
