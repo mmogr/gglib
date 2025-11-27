@@ -318,7 +318,7 @@ impl GuiBackend {
 
     /// Add a download to the queue or start immediately if nothing is running.
     /// Returns `(queue_position, shard_count)` - position 1 means will start immediately.
-    /// 
+    ///
     /// This method auto-detects sharded models from HuggingFace and creates
     /// individual queue entries for each shard with a shared group_id.
     pub async fn queue_download(

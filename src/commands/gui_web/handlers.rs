@@ -321,7 +321,10 @@ pub async fn queue_download(
             .await;
     });
 
-    Ok(Json(ApiResponse::success(QueueDownloadResponse { position, shard_count })))
+    Ok(Json(ApiResponse::success(QueueDownloadResponse {
+        position,
+        shard_count,
+    })))
 }
 
 /// Get the current download queue status

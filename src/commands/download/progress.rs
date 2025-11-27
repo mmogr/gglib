@@ -129,6 +129,7 @@ impl DownloadProgressEvent {
     }
 
     /// Create a progress event with shard information for sharded model downloads.
+    #[allow(clippy::too_many_arguments)]
     pub fn progress_with_shard(
         model_id: &str,
         shard_downloaded: u64,
@@ -141,7 +142,7 @@ impl DownloadProgressEvent {
         start_time: Instant,
     ) -> Self {
         let mut event = Self::base(model_id, "progress");
-        
+
         // Use aggregate values for the main progress
         event.downloaded = aggregate_downloaded;
         event.total = aggregate_total;
@@ -167,7 +168,10 @@ impl DownloadProgressEvent {
 
         event.message = Some(format!(
             "Downloading shard {}/{}: {} ({:.1}%)",
-            current_shard + 1, total_shards, model_id, event.percentage
+            current_shard + 1,
+            total_shards,
+            model_id,
+            event.percentage
         ));
 
         event.shard_progress = Some(ShardProgressInfo {

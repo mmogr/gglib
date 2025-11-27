@@ -61,7 +61,12 @@ impl ShardInfo {
     }
 
     /// Create a new ShardInfo instance with file size.
-    pub fn with_size(shard_index: usize, total_shards: usize, filename: String, file_size: u64) -> Self {
+    pub fn with_size(
+        shard_index: usize,
+        total_shards: usize,
+        filename: String,
+        file_size: u64,
+    ) -> Self {
         Self {
             shard_index,
             total_shards,
