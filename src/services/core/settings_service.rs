@@ -111,7 +111,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_settings_service_get() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let service = SettingsService::new(pool);
 
         let settings = service.get().await.unwrap();
@@ -121,7 +121,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_settings_service_update() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let service = SettingsService::new(pool);
 
         let update = SettingsUpdate {
@@ -141,7 +141,7 @@ mod tests {
         // This test may depend on environment, but shouldn't panic
         let pool_result = tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(crate::services::database::setup_database());
+            .block_on(crate::services::database::setup_test_database());
 
         if let Ok(pool) = pool_result {
             let service = SettingsService::new(pool);

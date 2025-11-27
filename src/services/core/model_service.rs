@@ -257,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_model_service_list() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let service = ModelService::new(pool);
 
         // Should not panic, returns empty or existing models
@@ -267,7 +267,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_model_service_get_nonexistent() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let service = ModelService::new(pool);
 
         // Should return error for non-existent ID
@@ -277,7 +277,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_model_service_find_by_identifier_nonexistent() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let service = ModelService::new(pool);
 
         // Should return None for non-existent identifier

@@ -72,3 +72,20 @@ pub async fn setup_database() -> Result<SqlitePool> {
 
     Ok(pool)
 }
+
+/// Sets up an in-memory SQLite database for testing.
+///
+/// This creates a fresh in-memory database with the full production schema,
+/// providing complete isolation between tests. Use this in unit tests instead
+/// of `setup_database()` to avoid file system race conditions.
+///
+/// # Returns
+///
+/// Returns a `Result<SqlitePool>` containing the database connection pool.
+#[cfg(test)]
+pub async fn setup_test_database() -> Result<SqlitePool> {
+    let pool = SqlitePool::connect("sqlite::memory:").await?;
+    create_schema(&pool).await?;
+    crate::services::settings::init_settings_table(&pool).await?;
+    Ok(pool)
+}

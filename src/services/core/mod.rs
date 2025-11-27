@@ -275,7 +275,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_appcore_creation() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let core = AppCore::new(pool);
         // Just verify it doesn't panic
         let _ = core.db_pool();
@@ -288,7 +288,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_appcore_with_config() {
-        let pool = database::setup_database().await.unwrap();
+        let pool = database::setup_test_database().await.unwrap();
         let core = AppCore::with_config(pool, 8000, 3);
         // Just verify it doesn't panic
         let _ = core.db_pool();
