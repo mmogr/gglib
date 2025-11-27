@@ -22,6 +22,9 @@ pub struct Settings {
 
     /// Base port for llama-server instances
     pub server_port: Option<u16>,
+
+    /// Maximum number of downloads that can be queued (1-50)
+    pub max_download_queue_size: Option<u32>,
 }
 
 impl Default for Settings {
@@ -31,6 +34,7 @@ impl Default for Settings {
             default_context_size: Some(4096),
             proxy_port: Some(8080),
             server_port: Some(9000),
+            max_download_queue_size: Some(10),
         }
     }
 }
@@ -51,11 +55,18 @@ pub async fn init_settings_table(pool: &SqlitePool) -> Result<()> {
             default_context_size INTEGER,
             proxy_port INTEGER,
             server_port INTEGER,
+            max_download_queue_size INTEGER,
             updated_at TEXT NOT NULL
         )",
     )
     .execute(pool)
     .await?;
+
+    // Migration: add max_download_queue_size column if it doesn't exist
+    // This handles existing databases that were created before this column was added
+    let _ = sqlx::query("ALTER TABLE settings ADD COLUMN max_download_queue_size INTEGER")
+        .execute(pool)
+        .await;
 
     Ok(())
 }
@@ -63,7 +74,7 @@ pub async fn init_settings_table(pool: &SqlitePool) -> Result<()> {
 /// Get current settings from the database
 pub async fn get_settings(pool: &SqlitePool) -> Result<Settings> {
     let row = sqlx::query(
-        "SELECT default_download_path, default_context_size, proxy_port, server_port 
+        "SELECT default_download_path, default_context_size, proxy_port, server_port, max_download_queue_size 
          FROM settings WHERE id = 1",
     )
     .fetch_optional(pool)
@@ -75,12 +86,14 @@ pub async fn get_settings(pool: &SqlitePool) -> Result<Settings> {
             let default_context_size: Option<i64> = row.try_get(1)?;
             let proxy_port: Option<i64> = row.try_get(2)?;
             let server_port: Option<i64> = row.try_get(3)?;
+            let max_download_queue_size: Option<i64> = row.try_get(4)?;
 
             Ok(Settings {
                 default_download_path,
                 default_context_size: default_context_size.map(|v| v as u64),
                 proxy_port: proxy_port.map(|v| v as u16),
                 server_port: server_port.map(|v| v as u16),
+                max_download_queue_size: max_download_queue_size.map(|v| v as u32),
             })
         }
         None => {
@@ -101,6 +114,7 @@ pub async fn save_settings(pool: &SqlitePool, settings: &Settings) -> Result<()>
             default_context_size = ?,
             proxy_port = ?,
             server_port = ?,
+            max_download_queue_size = ?,
             updated_at = ?
          WHERE id = 1",
     )
@@ -108,6 +122,7 @@ pub async fn save_settings(pool: &SqlitePool, settings: &Settings) -> Result<()>
     .bind(settings.default_context_size.map(|v| v as i64))
     .bind(settings.proxy_port.map(|v| v as i64))
     .bind(settings.server_port.map(|v| v as i64))
+    .bind(settings.max_download_queue_size.map(|v| v as i64))
     .bind(&updated_at)
     .execute(pool)
     .await?
@@ -116,13 +131,14 @@ pub async fn save_settings(pool: &SqlitePool, settings: &Settings) -> Result<()>
     // If no rows were updated, insert a new row
     if rows_affected == 0 {
         sqlx::query(
-            "INSERT INTO settings (id, default_download_path, default_context_size, proxy_port, server_port, updated_at)
-             VALUES (1, ?, ?, ?, ?, ?)",
+            "INSERT INTO settings (id, default_download_path, default_context_size, proxy_port, server_port, max_download_queue_size, updated_at)
+             VALUES (1, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&settings.default_download_path)
         .bind(settings.default_context_size.map(|v| v as i64))
         .bind(settings.proxy_port.map(|v| v as i64))
         .bind(settings.server_port.map(|v| v as i64))
+        .bind(settings.max_download_queue_size.map(|v| v as i64))
         .bind(&updated_at)
         .execute(pool)
         .await?;
@@ -138,6 +154,7 @@ pub struct SettingsUpdate {
     pub default_context_size: Option<Option<u64>>,
     pub proxy_port: Option<Option<u16>>,
     pub server_port: Option<Option<u16>>,
+    pub max_download_queue_size: Option<Option<u32>>,
 }
 
 /// Update settings with partial changes
@@ -155,6 +172,9 @@ pub async fn update_settings(pool: &SqlitePool, update: SettingsUpdate) -> Resul
     }
     if let Some(port) = update.server_port {
         current.server_port = port;
+    }
+    if let Some(queue_size) = update.max_download_queue_size {
+        current.max_download_queue_size = queue_size;
     }
 
     save_settings(pool, &current).await?;
@@ -190,6 +210,17 @@ pub fn validate_settings(settings: &Settings) -> Result<()> {
         ));
     }
 
+    // Validate max download queue size
+    if let Some(queue_size) = settings
+        .max_download_queue_size
+        .filter(|&s| !(1..=50).contains(&s))
+    {
+        return Err(anyhow!(
+            "Max download queue size must be between 1 and 50, got {}",
+            queue_size
+        ));
+    }
+
     // Validate download path if specified
     if settings
         .default_download_path
@@ -213,6 +244,7 @@ mod tests {
         assert_eq!(settings.proxy_port, Some(8080));
         assert_eq!(settings.server_port, Some(9000));
         assert_eq!(settings.default_download_path, None);
+        assert_eq!(settings.max_download_queue_size, Some(10));
     }
 
     #[test]
@@ -298,11 +330,31 @@ mod tests {
             default_download_path: None,
             proxy_port: None,
             server_port: None,
+            max_download_queue_size: None,
         };
         let updated = update_settings(&pool, update).await.unwrap();
 
         assert_eq!(updated.default_context_size, Some(16384));
         assert_eq!(updated.proxy_port, Some(8080)); // Unchanged
         assert_eq!(updated.server_port, Some(9000)); // Unchanged
+        assert_eq!(updated.max_download_queue_size, Some(10)); // Unchanged
+    }
+
+    #[test]
+    fn test_validate_queue_size_too_small() {
+        let settings = Settings {
+            max_download_queue_size: Some(0),
+            ..Default::default()
+        };
+        assert!(validate_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn test_validate_queue_size_too_large() {
+        let settings = Settings {
+            max_download_queue_size: Some(100),
+            ..Default::default()
+        };
+        assert!(validate_settings(&settings).is_err());
     }
 }
