@@ -41,10 +41,7 @@ async fn list_models(state: tauri::State<'_, AppState>) -> Result<Vec<GuiModel>,
 }
 
 #[tauri::command]
-async fn add_model(
-    file_path: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<String, String> {
+async fn add_model(file_path: String, state: tauri::State<'_, AppState>) -> Result<String, String> {
     let request = AddModelRequest { file_path };
 
     state
@@ -82,9 +79,15 @@ async fn update_model(
     state: tauri::State<'_, AppState>,
 ) -> Result<GuiModel, String> {
     let request = UpdateModelRequest {
-        name: updates.get("name").and_then(|v| v.as_str().map(str::to_string)),
-        quantization: updates.get("quantization").and_then(|v| v.as_str().map(str::to_string)),
-        file_path: updates.get("file_path").and_then(|v| v.as_str().map(str::to_string)),
+        name: updates
+            .get("name")
+            .and_then(|v| v.as_str().map(str::to_string)),
+        quantization: updates
+            .get("quantization")
+            .and_then(|v| v.as_str().map(str::to_string)),
+        file_path: updates
+            .get("file_path")
+            .and_then(|v| v.as_str().map(str::to_string)),
     };
 
     state
@@ -111,7 +114,7 @@ async fn serve_model(
         port = ?port,
         "Serve model command called"
     );
-    
+
     // Use context_length if provided, otherwise parse ctx_size
     let context_length = if let Some(len) = context_length {
         Some(len)
@@ -147,7 +150,7 @@ async fn serve_model(
             error!(error = %e, "Failed to start server");
             format!("Failed to start server: {}", e)
         });
-    
+
     result
 }
 
@@ -190,7 +193,7 @@ async fn download_model(
     } else {
         debug!("Successfully emitted start event");
     }
-    
+
     // Clone for emission in closure
     let model_id_clone = model_id.clone();
     let app_clone = app.clone();
@@ -198,27 +201,29 @@ async fn download_model(
 
     // Create progress callback
     let start_time = std::time::Instant::now();
-    
+
     let throttle = ProgressThrottle::responsive_ui();
     let callback_throttle = throttle.clone();
 
-    let progress_callback: gglib::commands::download::ProgressCallback = Box::new(move |downloaded, total| {
-        if !callback_throttle.should_emit(downloaded, total) {
-            return;
-        }
-        let event = DownloadProgressEvent::progress(&model_id_clone, downloaded, total, start_time);
-        // debug!(downloaded, total, "Emitting progress"); // Commented out to avoid spam
-        if let Err(err) = app_clone.emit("download-progress", event) {
-            tracing::error!(error = %err, "Failed to emit progress event");
-        }
-    });
-    
+    let progress_callback: gglib::commands::download::ProgressCallback =
+        Box::new(move |downloaded, total| {
+            if !callback_throttle.should_emit(downloaded, total) {
+                return;
+            }
+            let event =
+                DownloadProgressEvent::progress(&model_id_clone, downloaded, total, start_time);
+            // debug!(downloaded, total, "Emitting progress"); // Commented out to avoid spam
+            if let Err(err) = app_clone.emit("download-progress", event) {
+                tracing::error!(error = %err, "Failed to emit progress event");
+            }
+        });
+
     // Use the shared backend (DRY!)
     let result = state
         .backend
         .download_model(model_id.clone(), quantization, Some(&progress_callback))
         .await;
-    
+
     match result {
         Ok(message) => {
             if let Err(err) = app.emit(
@@ -304,9 +309,7 @@ async fn stop_proxy(state: tauri::State<'_, AppState>) -> Result<String, String>
 }
 
 #[tauri::command]
-async fn get_proxy_status(
-    state: tauri::State<'_, AppState>,
-) -> Result<serde_json::Value, String> {
+async fn get_proxy_status(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
     state
         .backend
         .get_proxy_status()
@@ -317,9 +320,7 @@ async fn get_proxy_status(
 // Tag Management Commands
 
 #[tauri::command]
-async fn list_tags(
-    state: tauri::State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+async fn list_tags(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
     state
         .backend
         .list_tags()
@@ -414,20 +415,27 @@ async fn queue_download(
     // Start the queue processor in a background task (if not already running)
     let backend = state.backend.clone();
     let app_clone = app.clone();
-    
+
     tokio::spawn(async move {
         use gglib::commands::download::DownloadProgressEvent;
-        
+
         let progress_callback = move |event: DownloadProgressEvent| {
             if let Err(err) = app_clone.emit("download-progress", &event) {
                 tracing::error!(error = %err, "Failed to emit download progress event");
             }
         };
-        
-        backend.core().downloads().process_queue(progress_callback).await;
+
+        backend
+            .core()
+            .downloads()
+            .process_queue(progress_callback)
+            .await;
     });
 
-    Ok(QueueDownloadResponse { position, shard_count })
+    Ok(QueueDownloadResponse {
+        position,
+        shard_count,
+    })
 }
 
 #[tauri::command]
@@ -464,9 +472,7 @@ async fn cancel_shard_group(
 }
 
 #[tauri::command]
-async fn clear_failed_downloads(
-    state: tauri::State<'_, AppState>,
-) -> Result<String, String> {
+async fn clear_failed_downloads(state: tauri::State<'_, AppState>) -> Result<String, String> {
     state.backend.clear_failed_downloads().await;
     Ok("Cleared failed downloads".to_string())
 }
@@ -474,11 +480,16 @@ async fn clear_failed_downloads(
 /// Check if llama.cpp is installed
 #[tauri::command]
 fn check_llama_status() -> Result<LlamaStatus, String> {
-    use gglib::commands::llama::{check_llama_installed, check_prebuilt_availability, PrebuiltAvailability};
-    
+    use gglib::commands::llama::{
+        check_llama_installed, check_prebuilt_availability, PrebuiltAvailability,
+    };
+
     let installed = check_llama_installed();
-    let can_download = matches!(check_prebuilt_availability(), PrebuiltAvailability::Available { .. });
-    
+    let can_download = matches!(
+        check_prebuilt_availability(),
+        PrebuiltAvailability::Available { .. }
+    );
+
     Ok(LlamaStatus {
         installed,
         can_download,
@@ -495,74 +506,107 @@ struct LlamaStatus {
 /// Install llama.cpp by downloading pre-built binaries
 #[tauri::command]
 async fn install_llama(app: tauri::AppHandle) -> Result<String, String> {
-    use gglib::commands::llama::{check_prebuilt_availability, download_prebuilt_binaries_with_boxed_callback, PrebuiltAvailability};
     use gglib::commands::download::ProgressThrottle;
+    use gglib::commands::llama::{
+        check_prebuilt_availability, download_prebuilt_binaries_with_boxed_callback,
+        PrebuiltAvailability,
+    };
     use std::sync::Arc;
-    
+
     // Check if pre-built binaries are available
     match check_prebuilt_availability() {
         PrebuiltAvailability::Available { description, .. } => {
             // Emit started event
-            let _ = app.emit("llama-install-progress", LlamaInstallEvent {
-                status: "started".to_string(),
-                downloaded: 0,
-                total: 0,
-                percentage: 0.0,
-                message: format!("Downloading llama.cpp for {}...", description),
-            });
-            
+            let _ = app.emit(
+                "llama-install-progress",
+                LlamaInstallEvent {
+                    status: "started".to_string(),
+                    downloaded: 0,
+                    total: 0,
+                    percentage: 0.0,
+                    message: format!("Downloading llama.cpp for {}...", description),
+                },
+            );
+
             // Create progress callback (boxed, thread-safe)
             let start_time = std::time::Instant::now();
             let throttle = Arc::new(ProgressThrottle::responsive_ui());
             let app_clone = app.clone();
-            
-            let progress_callback: Box<dyn Fn(u64, u64) + Send + Sync> = Box::new(move |downloaded: u64, total: u64| {
-                if !throttle.should_emit(downloaded, total) {
-                    return;
-                }
-                let elapsed = start_time.elapsed().as_secs_f64();
-                let percentage = if total > 0 { (downloaded as f64 / total as f64) * 100.0 } else { 0.0 };
-                let speed = if elapsed > 0.0 { downloaded as f64 / elapsed } else { 0.0 };
-                let eta = if speed > 0.0 && total > downloaded { (total - downloaded) as f64 / speed } else { 0.0 };
-                
-                let _ = app_clone.emit("llama-install-progress", LlamaInstallEvent {
-                    status: "downloading".to_string(),
-                    downloaded,
-                    total,
-                    percentage,
-                    message: format!("Downloading... {:.1}% ({:.1} MB/s, {:.0}s remaining)", 
-                        percentage, speed / 1_000_000.0, eta),
+
+            let progress_callback: Box<dyn Fn(u64, u64) + Send + Sync> =
+                Box::new(move |downloaded: u64, total: u64| {
+                    if !throttle.should_emit(downloaded, total) {
+                        return;
+                    }
+                    let elapsed = start_time.elapsed().as_secs_f64();
+                    let percentage = if total > 0 {
+                        (downloaded as f64 / total as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    let speed = if elapsed > 0.0 {
+                        downloaded as f64 / elapsed
+                    } else {
+                        0.0
+                    };
+                    let eta = if speed > 0.0 && total > downloaded {
+                        (total - downloaded) as f64 / speed
+                    } else {
+                        0.0
+                    };
+
+                    let _ = app_clone.emit(
+                        "llama-install-progress",
+                        LlamaInstallEvent {
+                            status: "downloading".to_string(),
+                            downloaded,
+                            total,
+                            percentage,
+                            message: format!(
+                                "Downloading... {:.1}% ({:.1} MB/s, {:.0}s remaining)",
+                                percentage,
+                                speed / 1_000_000.0,
+                                eta
+                            ),
+                        },
+                    );
                 });
-            });
-            
+
             // Download with progress
             match download_prebuilt_binaries_with_boxed_callback(progress_callback).await {
                 Ok(()) => {
-                    let _ = app.emit("llama-install-progress", LlamaInstallEvent {
-                        status: "completed".to_string(),
-                        downloaded: 0,
-                        total: 0,
-                        percentage: 100.0,
-                        message: "llama.cpp installed successfully!".to_string(),
-                    });
+                    let _ = app.emit(
+                        "llama-install-progress",
+                        LlamaInstallEvent {
+                            status: "completed".to_string(),
+                            downloaded: 0,
+                            total: 0,
+                            percentage: 100.0,
+                            message: "llama.cpp installed successfully!".to_string(),
+                        },
+                    );
                     Ok("llama.cpp installed successfully".to_string())
                 }
                 Err(e) => {
                     let error_msg = format!("Failed to install llama.cpp: {}", e);
-                    let _ = app.emit("llama-install-progress", LlamaInstallEvent {
-                        status: "error".to_string(),
-                        downloaded: 0,
-                        total: 0,
-                        percentage: 0.0,
-                        message: error_msg.clone(),
-                    });
+                    let _ = app.emit(
+                        "llama-install-progress",
+                        LlamaInstallEvent {
+                            status: "error".to_string(),
+                            downloaded: 0,
+                            total: 0,
+                            percentage: 0.0,
+                            message: error_msg.clone(),
+                        },
+                    );
                     Err(error_msg)
                 }
             }
         }
-        PrebuiltAvailability::NotAvailable { reason } => {
-            Err(format!("Cannot auto-install llama.cpp: {}. Please build from source.", reason))
-        }
+        PrebuiltAvailability::NotAvailable { reason } => Err(format!(
+            "Cannot auto-install llama.cpp: {}. Please build from source.",
+            reason
+        )),
     }
 }
 
@@ -621,7 +665,7 @@ async fn sync_menu_state_internal(
 
     // Gather current state
     let llama_installed = check_llama_installed();
-    
+
     let proxy_status = state
         .backend
         .get_proxy_status()
@@ -637,11 +681,7 @@ async fn sync_menu_state_internal(
 
     // Check if selected model has a running server
     let selected_model_server_running = if let Some(id) = selected_id {
-        let servers = state
-            .backend
-            .list_servers()
-            .await
-            .unwrap_or_default();
+        let servers = state.backend.list_servers().await.unwrap_or_default();
         servers.iter().any(|s| s.model_id == id)
     } else {
         false
@@ -710,7 +750,7 @@ async fn main() {
         .setup(|app| {
             // Build and attach the application menu
             let handle = app.handle().clone();
-            
+
             match menu::build_app_menu(&handle) {
                 Ok((menu, app_menu)) => {
                     // Attach menu to the app
@@ -723,7 +763,7 @@ async fn main() {
                     // Store menu references for state updates
                     let state: tauri::State<AppState> = app.state();
                     let menu_arc = state.menu.clone();
-                    
+
                     // We need to spawn this since we're in a sync context
                     tauri::async_runtime::spawn(async move {
                         *menu_arc.write().await = Some(app_menu);
@@ -734,7 +774,7 @@ async fn main() {
                     tauri::async_runtime::spawn(async move {
                         // Small delay to ensure state is initialized
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                        
+
                         let state: tauri::State<AppState> = handle_clone.state();
                         if let Err(e) = sync_menu_state_internal(&handle_clone, &state).await {
                             warn!(error = %e, "Failed to perform initial menu sync");
@@ -791,7 +831,7 @@ async fn main() {
 /// Handle menu item click events
 fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     let id = event.id().as_ref();
-    
+
     debug!(menu_id = %id, "Menu event received");
 
     match id {
@@ -836,7 +876,7 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
             let app_clone = app.clone();
             tauri::async_runtime::spawn(async move {
                 let state: tauri::State<AppState> = app_clone.state();
-                
+
                 // Check current proxy status
                 let proxy_running = match state.backend.get_proxy_status().await {
                     Ok(status) => status
@@ -851,7 +891,8 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
                     if let Err(e) = state.backend.stop_proxy().await {
                         error!(error = %e, "Failed to stop proxy from menu");
                         // Emit error to frontend
-                        let _ = app_clone.emit("menu:proxy-error", format!("Failed to stop proxy: {}", e));
+                        let _ = app_clone
+                            .emit("menu:proxy-error", format!("Failed to stop proxy: {}", e));
                     } else {
                         info!("Proxy stopped from menu");
                         let _ = app_clone.emit("menu:proxy-stopped", ());
@@ -874,17 +915,14 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
             let app_clone = app.clone();
             tauri::async_runtime::spawn(async move {
                 let state: tauri::State<AppState> = app_clone.state();
-                
+
                 if let Ok(status) = state.backend.get_proxy_status().await {
                     let host = status
                         .get("host")
                         .and_then(|v| v.as_str())
                         .unwrap_or("127.0.0.1");
-                    let port = status
-                        .get("port")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(8080);
-                    
+                    let port = status.get("port").and_then(|v| v.as_u64()).unwrap_or(8080);
+
                     let url = format!("http://{}:{}/v1", host, port);
                     let _ = app_clone.emit("menu:copy-to-clipboard", url);
                 }
@@ -952,7 +990,10 @@ async fn start_embedded_api_server(
     let app = routes::api_routes(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    println!("🌐 Embedded API server listening on http://localhost:{}", port);
+    println!(
+        "🌐 Embedded API server listening on http://localhost:{}",
+        port
+    );
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

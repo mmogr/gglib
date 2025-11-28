@@ -5,9 +5,7 @@
 //! selected model, etc.).
 
 use tauri::{
-    menu::{
-        AboutMetadataBuilder, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu,
-    },
+    menu::{AboutMetadataBuilder, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     AppHandle, Wry,
 };
 
@@ -121,8 +119,13 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
         .website_label(Some("GitHub"))
         .build();
 
-    let preferences_item =
-        MenuItem::with_id(app, ids::PREFERENCES, "Settings...", true, Some("CmdOrCtrl+,"))?;
+    let preferences_item = MenuItem::with_id(
+        app,
+        ids::PREFERENCES,
+        "Settings...",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
 
     let app_submenu = Submenu::with_items(
         app,
