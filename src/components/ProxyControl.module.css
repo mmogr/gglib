@@ -241,3 +241,17 @@
   font-size: var(--font-size-xs);
   line-height: var(--line-height-normal);
 }
+
+/* Responsive: center dropdown on narrow screens */
+@media (max-width: 600px) {
+  .proxyDropdown {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, -50%);
+    min-width: min(350px, calc(100vw - 32px));
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+  }
+}

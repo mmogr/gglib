@@ -65,3 +65,103 @@
   background: var(--color-online);
   box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
 }
+
+/* Mobile menu toggle button */
+.menuToggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--button-height-base);
+  height: var(--button-height-base);
+  padding: 0;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-elevated);
+  color: inherit;
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  transition: var(--transition-all);
+}
+
+.menuToggle:hover {
+  border-color: var(--color-border-hover);
+  background: var(--color-background-hover);
+}
+
+/* Desktop navigation wrapper */
+.desktopNav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+/* Mobile dropdown menu */
+.mobileMenu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: var(--spacing-base);
+  min-width: 180px;
+  padding: var(--spacing-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+}
+
+.mobileMenu.open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.mobileMenuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-base);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-all);
+}
+
+.mobileMenuItem:hover {
+  background: var(--color-background-hover);
+}
+
+.mobileMenuItemActive {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* Wrapper for ProxyControl inside mobile menu */
+.mobileMenuProxyWrapper {
+  width: 100%;
+}
+
+.mobileMenuProxyWrapper > div {
+  width: 100%;
+}
+
+/* Responsive: hide desktop nav, show hamburger on narrow screens */
+@media (max-width: 600px) {
+  .headerRight {
+    position: relative;
+  }
+
+  .desktopNav {
+    display: none;
+  }
+
+  .menuToggle {
+    display: flex;
+  }
+}
