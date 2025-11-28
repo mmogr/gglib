@@ -40,16 +40,22 @@ describe('Header', () => {
       expect(screen.getByText('🦀')).toBeInTheDocument();
     });
 
-    it('renders the chat button', () => {
+    it('renders the chat button in desktop nav', () => {
       render(<Header {...defaultProps} />);
       
-      expect(screen.getByRole('button', { name: /chat/i })).toBeInTheDocument();
+      // Both desktop and mobile nav have chat buttons, use getAllByRole and check desktop one
+      const chatButtons = screen.getAllByRole('button', { name: /chat/i });
+      expect(chatButtons.length).toBeGreaterThanOrEqual(1);
+      expect(chatButtons[0]).toBeInTheDocument();
     });
 
-    it('renders the settings button', () => {
+    it('renders the settings button in desktop nav', () => {
       render(<Header {...defaultProps} />);
       
-      expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
+      // Both desktop and mobile nav have settings buttons
+      const settingsButtons = screen.getAllByRole('button', { name: /settings/i });
+      expect(settingsButtons.length).toBeGreaterThanOrEqual(1);
+      expect(settingsButtons[0]).toBeInTheDocument();
     });
 
     it('renders the work panel button', () => {
@@ -61,7 +67,9 @@ describe('Header', () => {
     it('renders the proxy control component', () => {
       render(<Header {...defaultProps} />);
       
-      expect(screen.getByTestId('proxy-control')).toBeInTheDocument();
+      // Proxy control appears in both desktop and mobile nav
+      const proxyControls = screen.getAllByTestId('proxy-control');
+      expect(proxyControls.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -69,8 +77,9 @@ describe('Header', () => {
     it('calls onOpenChat when clicked', () => {
       render(<Header {...defaultProps} />);
       
-      const chatButton = screen.getByRole('button', { name: /chat/i });
-      fireEvent.click(chatButton);
+      // Get the desktop nav chat button (first one)
+      const chatButtons = screen.getAllByRole('button', { name: /chat/i });
+      fireEvent.click(chatButtons[0]);
       
       expect(mockOnOpenChat).toHaveBeenCalledTimes(1);
     });
@@ -78,8 +87,9 @@ describe('Header', () => {
     it('has correct title attribute', () => {
       render(<Header {...defaultProps} />);
       
-      const chatButton = screen.getByRole('button', { name: /chat/i });
-      expect(chatButton).toHaveAttribute('title', 'Open chat');
+      // Get the desktop nav chat button which has the title attribute
+      const chatButton = screen.getByTitle('Open chat');
+      expect(chatButton).toBeInTheDocument();
     });
   });
 
@@ -87,8 +97,9 @@ describe('Header', () => {
     it('calls onOpenSettings when clicked', () => {
       render(<Header {...defaultProps} />);
       
-      const settingsButton = screen.getByRole('button', { name: /settings/i });
-      fireEvent.click(settingsButton);
+      // Get the desktop nav settings button (first one)
+      const settingsButtons = screen.getAllByRole('button', { name: /settings/i });
+      fireEvent.click(settingsButtons[0]);
       
       expect(mockOnOpenSettings).toHaveBeenCalledTimes(1);
     });
@@ -96,15 +107,16 @@ describe('Header', () => {
     it('has correct title attribute', () => {
       render(<Header {...defaultProps} />);
       
-      const settingsButton = screen.getByRole('button', { name: /settings/i });
-      expect(settingsButton).toHaveAttribute('title', 'Open settings');
+      // Get the desktop nav settings button which has the title attribute
+      const settingsButton = screen.getByTitle('Open settings');
+      expect(settingsButton).toBeInTheDocument();
     });
 
     it('has correct aria-label', () => {
       render(<Header {...defaultProps} />);
       
-      const settingsButton = screen.getByRole('button', { name: /settings/i });
-      expect(settingsButton).toHaveAttribute('aria-label', 'Open settings');
+      const settingsButton = screen.getByLabelText('Open settings');
+      expect(settingsButton).toBeInTheDocument();
     });
   });
 
