@@ -2,11 +2,13 @@
 
 .fileInputGroup {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-sm);
 }
 
 .fileInputGroup .formInput {
-  flex: 1;
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 .browseButton {

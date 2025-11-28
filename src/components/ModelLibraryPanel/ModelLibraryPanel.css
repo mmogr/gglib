@@ -166,7 +166,13 @@
 
 .empty-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--spacing-base);
+}
+
+.empty-actions .btn {
+  min-width: 120px;
 }
 
 .loading-state {
