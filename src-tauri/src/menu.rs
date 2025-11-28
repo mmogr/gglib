@@ -301,8 +301,6 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
             &PredefinedMenuItem::maximize(app, Some("Zoom"))?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::close_window(app, Some("Close Window"))?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::bring_all_to_front(app, Some("Bring All to Front"))?,
         ],
     )?;
 
