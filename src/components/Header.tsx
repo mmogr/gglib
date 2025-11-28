@@ -1,4 +1,4 @@
-import { FC } from "react";
+import { FC, useState, useRef, useEffect } from "react";
 import ProxyControl from "./ProxyControl";
 import styles from './Header.module.css';
 
@@ -17,7 +17,31 @@ const Header: FC<HeaderProps> = ({
   isWorkPanelVisible,
   isModelRunning,
 }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const workPanelLabel = isWorkPanelVisible ? 'Hide work panel' : 'Show work panel';
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    if (isMobileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMobileMenuOpen]);
+
+  const handleMobileMenuAction = (action: () => void) => {
+    action();
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <header className="header">
@@ -28,7 +52,7 @@ const Header: FC<HeaderProps> = ({
             GGLib
           </h1>
         </div>
-        <div className={styles.headerRight}>
+        <div className={styles.headerRight} ref={menuRef}>
           <button
             type="button"
             className={styles.headerButton}
@@ -66,6 +90,42 @@ const Header: FC<HeaderProps> = ({
               aria-hidden="true"
             />
           </button>
+
+          {/* Mobile menu toggle */}
+          <button
+            type="button"
+            className={styles.menuToggle}
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={isMobileMenuOpen}
+          >
+            {isMobileMenuOpen ? '✕' : '☰'}
+          </button>
+
+          {/* Mobile dropdown menu */}
+          <div className={`${styles.mobileMenu} ${isMobileMenuOpen ? styles.open : ''}`}>
+            <button
+              type="button"
+              className={styles.mobileMenuItem}
+              onClick={() => handleMobileMenuAction(onOpenChat)}
+            >
+              💬 Chat
+            </button>
+            <button
+              type="button"
+              className={styles.mobileMenuItem}
+              onClick={() => handleMobileMenuAction(onOpenSettings)}
+            >
+              ⚙️ Settings
+            </button>
+            <button
+              type="button"
+              className={`${styles.mobileMenuItem} ${isWorkPanelVisible ? styles.mobileMenuItemActive : ''}`}
+              onClick={() => handleMobileMenuAction(onToggleWorkPanel)}
+            >
+              📋 {workPanelLabel}
+            </button>
+          </div>
         </div>
       </div>
     </header>
