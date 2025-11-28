@@ -1,5 +1,6 @@
-import { FC, useState, useRef, useEffect } from "react";
+import { FC, useState, useRef } from "react";
 import ProxyControl from "./ProxyControl";
+import { useClickOutside } from "../hooks/useClickOutside";
 import styles from './Header.module.css';
 
 interface HeaderProps {
@@ -22,21 +23,7 @@ const Header: FC<HeaderProps> = ({
   const workPanelLabel = isWorkPanelVisible ? 'Hide work panel' : 'Show work panel';
 
   // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMobileMenuOpen(false);
-      }
-    };
-
-    if (isMobileMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isMobileMenuOpen]);
+  useClickOutside(menuRef, () => setIsMobileMenuOpen(false), isMobileMenuOpen);
 
   const handleMobileMenuAction = (action: () => void) => {
     action();

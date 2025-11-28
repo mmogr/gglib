@@ -1,5 +1,6 @@
 import { FC, useState, useEffect, useRef } from "react";
 import { TauriService } from "../services/tauri";
+import { useClickOutside } from "../hooks/useClickOutside";
 import styles from './ProxyControl.module.css';
 
 interface ProxyStatus {
@@ -46,18 +47,8 @@ const ProxyControl: FC<ProxyControlProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
+  // Close dropdown when clicking outside
+  useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
 
   const loadStatus = async () => {
     try {
