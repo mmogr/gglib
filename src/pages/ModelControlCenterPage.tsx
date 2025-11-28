@@ -89,7 +89,7 @@ export default function ModelControlCenterPage({
             if (runningServer) {
               await stopServer(selectedModelId);
               // Sync menu state after server stop
-              TauriService.syncMenuState().catch(() => {});
+              TauriService.syncMenuStateSilent();
             }
           }
         },
@@ -97,7 +97,7 @@ export default function ModelControlCenterPage({
           if (selectedModelId) {
             await removeModel(selectedModelId, false);
             // Sync menu state after model removal
-            TauriService.syncMenuState().catch(() => {});
+            TauriService.syncMenuStateSilent();
           }
         },
       });

@@ -571,5 +571,15 @@ export class TauriService {
     }
     // No-op for web UI
   }
+
+  /**
+   * Trigger menu state sync silently (swallowing errors).
+   * Use this for fire-and-forget sync after state-changing operations.
+   */
+  static syncMenuStateSilent(): void {
+    this.syncMenuState().catch(() => {
+      // Silently ignore - menu sync is best-effort
+    });
+  }
 }
 

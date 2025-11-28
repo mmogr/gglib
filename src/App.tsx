@@ -61,7 +61,7 @@ function App() {
       setTimeout(() => {
         setShowLlamaModal(false);
         // Sync menu state after llama installation
-        TauriService.syncMenuState().catch(() => {});
+        TauriService.syncMenuStateSilent();
       }, 2000);
     }
   }, [installProgress?.status]);
@@ -144,7 +144,7 @@ function App() {
 
       // Proxy events - just sync menu state
       unlisteners.push(await listen("menu:proxy-stopped", () => {
-        TauriService.syncMenuState().catch(() => {});
+        TauriService.syncMenuStateSilent();
       }));
 
       unlisteners.push(await listen("menu:start-proxy", () => {
