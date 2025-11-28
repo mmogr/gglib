@@ -24,6 +24,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 dotenvy = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+open = "5"
 
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem

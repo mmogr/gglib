@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { isTauriApp } from '../services/tauri';
 
 export interface LlamaStatus {
   installed: boolean;
@@ -13,10 +14,6 @@ export interface LlamaInstallProgress {
   percentage: number;
   message: string;
 }
-
-// Check if we're running in Tauri (desktop app)
-const isTauriApp = typeof (window as any).__TAURI_INTERNALS__ !== 'undefined' ||
-                   typeof (window as any).__TAURI__ !== 'undefined';
 
 export function useLlamaStatus() {
   const [status, setStatus] = useState<LlamaStatus | null>(null);

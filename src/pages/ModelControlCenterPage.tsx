@@ -4,6 +4,7 @@ import { useTags } from '../hooks/useTags';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspectorPanel';
 import WorkPanel from '../components/WorkPanel/WorkPanel';
+import { TauriService } from '../services/tauri';
 import { ServerInfo } from '../types';
 import './ModelControlCenterPage.css';
 
@@ -15,6 +16,14 @@ interface ModelControlCenterPageProps {
   stopServer: (modelId: number) => Promise<void>;
   isWorkPanelVisible: boolean;
   onShowWorkPanel: () => void;
+  onRegisterMenuActions?: (actions: {
+    refreshModels: () => void;
+    addModelFromFile: () => void;
+    showDownloads: () => void;
+    startServer: () => void;
+    stopServer: () => void;
+    removeModel: () => void;
+  }) => void;
 }
 
 export default function ModelControlCenterPage({
@@ -23,6 +32,7 @@ export default function ModelControlCenterPage({
   stopServer,
   isWorkPanelVisible,
   onShowWorkPanel,
+  onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
   const { tags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
@@ -32,12 +42,67 @@ export default function ModelControlCenterPage({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<'add' | 'download'>('add');
   
+  // Ref for file input (for menu-triggered file add)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   // Panel width state (percentages)
   const [leftPanelWidth, setLeftPanelWidth] = useState(45);
   const [centerPanelWidth, setCenterPanelWidth] = useState(30);
   
   const layoutRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef<number | null>(null); // 0 for left, 1 for center
+
+  // Register menu actions for App.tsx to call
+  useEffect(() => {
+    if (onRegisterMenuActions) {
+      onRegisterMenuActions({
+        refreshModels: () => {
+          loadModels();
+        },
+        addModelFromFile: () => {
+          // Trigger the file dialog in AddModel component via WorkPanel
+          setActiveSubTab('add');
+          if (!isWorkPanelVisible) {
+            onShowWorkPanel();
+          }
+          // Also trigger the actual file picker if available
+          fileInputRef.current?.click();
+        },
+        showDownloads: () => {
+          setActiveTab('add-download');
+          setActiveSubTab('download');
+          if (!isWorkPanelVisible) {
+            onShowWorkPanel();
+          }
+        },
+        startServer: () => {
+          if (selectedModelId) {
+            // Trigger start server via the inspector panel's functionality
+            // The actual server start is handled through the ModelInspectorPanel
+            loadServers();
+          }
+        },
+        stopServer: async () => {
+          if (selectedModelId) {
+            // Find if this model has a running server
+            const runningServer = servers.find(s => s.model_id === selectedModelId);
+            if (runningServer) {
+              await stopServer(selectedModelId);
+              // Sync menu state after server stop
+              TauriService.syncMenuStateSilent();
+            }
+          }
+        },
+        removeModel: async () => {
+          if (selectedModelId) {
+            await removeModel(selectedModelId, false);
+            // Sync menu state after model removal
+            TauriService.syncMenuStateSilent();
+          }
+        },
+      });
+    }
+  }, [onRegisterMenuActions, loadModels, selectedModelId, servers, stopServer, removeModel, isWorkPanelVisible, onShowWorkPanel, loadServers]);
 
   // Handle resize
   const handleMouseDown = useCallback((panelIndex: number) => (e: React.MouseEvent) => {
