@@ -88,6 +88,13 @@
   background: var(--color-background-hover);
 }
 
+/* Desktop navigation wrapper */
+.desktopNav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
 /* Mobile dropdown menu */
 .mobileMenu {
   display: none;
@@ -135,14 +142,22 @@
   color: white;
 }
 
-/* Responsive: hide nav buttons, show hamburger on narrow screens */
+/* Wrapper for ProxyControl inside mobile menu */
+.mobileMenuProxyWrapper {
+  width: 100%;
+}
+
+.mobileMenuProxyWrapper > div {
+  width: 100%;
+}
+
+/* Responsive: hide desktop nav, show hamburger on narrow screens */
 @media (max-width: 600px) {
   .headerRight {
     position: relative;
   }
 
-  .headerRight > .headerButton,
-  .headerRight > :global(.proxy-control) {
+  .desktopNav {
     display: none;
   }
 

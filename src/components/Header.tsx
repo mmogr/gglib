@@ -53,43 +53,46 @@ const Header: FC<HeaderProps> = ({
           </h1>
         </div>
         <div className={styles.headerRight} ref={menuRef}>
-          <button
-            type="button"
-            className={styles.headerButton}
-            onClick={onOpenChat}
-            title="Open chat"
-          >
-            💬 Chat
-          </button>
-          <ProxyControl
-            buttonClassName={styles.headerButton}
-            buttonActiveClassName={styles.headerButtonActive}
-            statusDotClassName={styles.statusDot}
-            statusDotActiveClassName={styles.statusDotActive}
-          />
-          <button
-            type="button"
-            className={styles.headerButton}
-            onClick={onOpenSettings}
-            aria-label="Open settings"
-            title="Open settings"
-          >
-            ⚙️ Settings
-          </button>
-          <button
-            type="button"
-            className={`${styles.headerButton} ${isWorkPanelVisible ? styles.headerButtonActive : ''}`}
-            onClick={onToggleWorkPanel}
-            aria-pressed={isWorkPanelVisible}
-            aria-label={`${workPanelLabel}. ${isModelRunning ? 'A model is running.' : 'No models running.'}`}
-            title={workPanelLabel}
-          >
-            <span>Work Panel</span>
-            <span
-              className={`${styles.statusDot} ${isModelRunning ? styles.statusDotActive : ''}`}
-              aria-hidden="true"
+          {/* Desktop navigation */}
+          <div className={styles.desktopNav}>
+            <button
+              type="button"
+              className={styles.headerButton}
+              onClick={onOpenChat}
+              title="Open chat"
+            >
+              💬 Chat
+            </button>
+            <ProxyControl
+              buttonClassName={styles.headerButton}
+              buttonActiveClassName={styles.headerButtonActive}
+              statusDotClassName={styles.statusDot}
+              statusDotActiveClassName={styles.statusDotActive}
             />
-          </button>
+            <button
+              type="button"
+              className={styles.headerButton}
+              onClick={onOpenSettings}
+              aria-label="Open settings"
+              title="Open settings"
+            >
+              ⚙️ Settings
+            </button>
+            <button
+              type="button"
+              className={`${styles.headerButton} ${isWorkPanelVisible ? styles.headerButtonActive : ''}`}
+              onClick={onToggleWorkPanel}
+              aria-pressed={isWorkPanelVisible}
+              aria-label={`${workPanelLabel}. ${isModelRunning ? 'A model is running.' : 'No models running.'}`}
+              title={workPanelLabel}
+            >
+              <span>Work Panel</span>
+              <span
+                className={`${styles.statusDot} ${isModelRunning ? styles.statusDotActive : ''}`}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
 
           {/* Mobile menu toggle */}
           <button
@@ -111,6 +114,14 @@ const Header: FC<HeaderProps> = ({
             >
               💬 Chat
             </button>
+            <div className={styles.mobileMenuProxyWrapper}>
+              <ProxyControl
+                buttonClassName={styles.mobileMenuItem}
+                buttonActiveClassName={styles.mobileMenuItemActive}
+                statusDotClassName={styles.statusDot}
+                statusDotActiveClassName={styles.statusDotActive}
+              />
+            </div>
             <button
               type="button"
               className={styles.mobileMenuItem}
