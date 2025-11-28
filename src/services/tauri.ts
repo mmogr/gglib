@@ -13,7 +13,7 @@ import { getApiBase } from "../utils/apiBase";
 
 // Platform detection
 // Check if we're running in Tauri (desktop app) or Web UI
-const isTauriApp = typeof (window as any).__TAURI_INTERNALS__ !== 'undefined' ||
+export const isTauriApp = typeof (window as any).__TAURI_INTERNALS__ !== 'undefined' ||
                    typeof (window as any).__TAURI__ !== 'undefined';
 
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -544,6 +544,32 @@ export class TauriService {
       const data: ApiResponse<string> = await response.json();
       return data.data || 'Cleared failed downloads';
     }
+  }
+
+  // ==========================================================================
+  // Menu State Synchronization (Tauri desktop only)
+  // ==========================================================================
+
+  /**
+   * Set the currently selected model ID to sync menu state.
+   * This is only relevant for the Tauri desktop app.
+   */
+  static async setSelectedModel(modelId: number | null): Promise<void> {
+    if (isTauriApp) {
+      await invoke('set_selected_model', { modelId });
+    }
+    // No-op for web UI - menu sync is only needed for native menus
+  }
+
+  /**
+   * Manually trigger a menu state sync.
+   * Call this after actions that might affect menu state.
+   */
+  static async syncMenuState(): Promise<void> {
+    if (isTauriApp) {
+      await invoke('sync_menu_state');
+    }
+    // No-op for web UI
   }
 }
 

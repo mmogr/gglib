@@ -26,8 +26,13 @@ export function useModels() {
     loadModels();
   }, [loadModels]);
 
+  // Sync selected model with native menu state (Tauri only)
   const selectModel = useCallback((id: number | null) => {
     setSelectedModelId(id);
+    // Sync with backend for menu state updates (no-op in web mode)
+    TauriService.setSelectedModel(id).catch((err) => {
+      console.warn('Failed to sync model selection with menu:', err);
+    });
   }, []);
 
   const selectedModel = models.find(m => m.id === selectedModelId) || null;
