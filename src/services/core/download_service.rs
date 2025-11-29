@@ -15,6 +15,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
+/// Type alias for storing child process PIDs for synchronous termination on shutdown.
+/// Uses std::sync::RwLock (not tokio) for synchronous access in shutdown handler.
+pub type PidStorage = Arc<std::sync::RwLock<HashMap<String, u32>>>;
+
 /// Service for managing HuggingFace model downloads.
 ///
 /// Provides download management with:
@@ -29,6 +33,9 @@ pub struct DownloadService {
     max_queue_size: Arc<RwLock<u32>>,
     /// Flag to track if queue processor is running
     processing: Arc<RwLock<bool>>,
+    /// Stores PIDs of active child processes for synchronous termination on app shutdown.
+    /// Uses std::sync::RwLock for synchronous access from the shutdown handler.
+    child_pids: PidStorage,
 }
 
 impl DownloadService {
@@ -40,6 +47,7 @@ impl DownloadService {
             failed_downloads: Arc::new(RwLock::new(Vec::new())),
             max_queue_size: Arc::new(RwLock::new(10)),
             processing: Arc::new(RwLock::new(false)),
+            child_pids: Arc::new(std::sync::RwLock::new(HashMap::new())),
         }
     }
 
@@ -454,6 +462,8 @@ impl DownloadService {
             false, // force
             progress_callback,
             Some(cancel_token.clone()), // Pass token for cancellation
+            Some(self.child_pids.clone()), // PID storage for shutdown termination
+            Some(model_id.clone()), // PID key
         );
         tokio::pin!(download_future);
 
@@ -520,7 +530,7 @@ impl DownloadService {
         let hf_service = HuggingFaceService::new();
         let commit_sha = hf_service.get_commit_sha(&model_id).await?;
 
-        // Create download context with cancellation token
+        // Create download context with cancellation token and PID storage
         let context = DownloadContext {
             model_id: &model_id,
             quantization: Some(&quantization),
@@ -531,6 +541,8 @@ impl DownloadService {
                 auth_token: None,
                 progress_callback,
                 cancel_token: Some(cancel_token.clone()),
+                pid_storage: Some(self.child_pids.clone()),
+                pid_key: Some(tracking_key.clone()),
             },
         };
 
@@ -993,6 +1005,47 @@ impl DownloadService {
         count
     }
 
+    /// Get a clone of the PID storage for passing to download functions.
+    ///
+    /// This allows the download functions to register their child process PIDs
+    /// so they can be killed synchronously on app shutdown.
+    pub fn child_pids(&self) -> PidStorage {
+        self.child_pids.clone()
+    }
+
+    /// Synchronously kill all active child processes.
+    ///
+    /// This method is designed for app shutdown and does NOT require an async runtime.
+    /// It sends SIGKILL (Unix) or TerminateProcess (Windows) to all tracked child processes.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of processes that were signaled to terminate.
+    pub fn kill_all_processes_sync(&self) -> usize {
+        use tracing::info;
+
+        // Get all PIDs - use write lock to drain the map
+        let pids: Vec<(String, u32)> = match self.child_pids.write() {
+            Ok(mut guard) => guard.drain().collect(),
+            Err(poisoned) => poisoned.into_inner().drain().collect(),
+        };
+
+        let count = pids.len();
+        if count == 0 {
+            return 0;
+        }
+
+        info!(count = count, "Killing all child processes for shutdown");
+
+        for (key, pid) in &pids {
+            info!(key = %key, pid = pid, "Killing process");
+            kill_process_by_pid(*pid);
+        }
+
+        info!(count = count, "Process termination signals sent");
+        count
+    }
+
     /// Search HuggingFace Hub for GGUF models.
     ///
     /// This is a convenience wrapper around the search functionality.
@@ -1199,6 +1252,52 @@ impl DownloadService {
         }
 
         Ok((completed.len(), total_shards, completed))
+    }
+}
+
+/// Kill a process by PID using platform-specific APIs.
+///
+/// This is a synchronous function that sends a termination signal to the process.
+/// On Unix (macOS/Linux), it sends SIGKILL. On Windows, it uses TerminateProcess.
+///
+/// # Arguments
+///
+/// * `pid` - The process ID to terminate
+#[cfg(unix)]
+fn kill_process_by_pid(pid: u32) {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+    use tracing::warn;
+
+    let nix_pid = Pid::from_raw(pid as i32);
+    if let Err(e) = kill(nix_pid, Signal::SIGKILL) {
+        // ESRCH means process doesn't exist (already terminated) - that's fine
+        if e != nix::errno::Errno::ESRCH {
+            warn!(pid = pid, error = %e, "Failed to kill process");
+        }
+    }
+}
+
+#[cfg(windows)]
+fn kill_process_by_pid(pid: u32) {
+    use tracing::warn;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, false, pid);
+        match handle {
+            Ok(h) => {
+                if let Err(e) = TerminateProcess(h, 1) {
+                    warn!(pid = pid, error = ?e, "Failed to terminate process");
+                }
+                let _ = CloseHandle(h);
+            }
+            Err(e) => {
+                // ERROR_INVALID_PARAMETER means process doesn't exist - that's fine
+                warn!(pid = pid, error = ?e, "Failed to open process for termination");
+            }
+        }
     }
 }
 

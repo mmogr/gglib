@@ -849,41 +849,25 @@ async fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            // Handle app exit to gracefully cancel downloads
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+            // Handle app exit to gracefully kill download subprocesses
+            if let tauri::RunEvent::ExitRequested { .. } = event {
                 let state: tauri::State<AppState> = app_handle.state();
                 let downloads = state.backend.core().downloads();
 
-                // Check if there are active downloads
-                let active_count = tauri::async_runtime::block_on(async {
-                    downloads.active_downloads().await.len()
-                });
-
-                if active_count > 0 {
-                    info!(count = active_count, "Active downloads detected, performing graceful shutdown");
-
-                    // Prevent immediate exit to allow cleanup
-                    api.prevent_exit();
-
-                    // Clone what we need for the async cleanup
-                    let app_handle_clone = app_handle.clone();
-                    let backend = state.backend.clone();
-
-                    // Spawn async cleanup task
-                    tauri::async_runtime::spawn(async move {
-                        let downloads = backend.core().downloads();
-
-                        // Cancel all downloads and wait up to 2 seconds for cleanup
-                        let cancelled = downloads
-                            .cancel_all_and_wait(std::time::Duration::from_secs(2))
-                            .await;
-
-                        info!(cancelled = cancelled, "Download cleanup complete, exiting app");
-
-                        // Now exit the app
-                        app_handle_clone.exit(0);
-                    });
+                // Synchronously kill all child processes (Python downloaders)
+                // This is reliable because it sends SIGKILL/TerminateProcess directly
+                // rather than relying on async task cancellation
+                let killed = downloads.kill_all_processes_sync();
+                
+                if killed > 0 {
+                    info!(count = killed, "Killed download processes on app exit");
                 }
+                
+                // Also cancel tokens so any async tasks clean up gracefully
+                // (This is best-effort since tasks may already be aborting)
+                let _cancelled = tauri::async_runtime::block_on(async {
+                    downloads.cancel_all_and_wait(std::time::Duration::from_millis(100)).await
+                });
             }
         });
 }

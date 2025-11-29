@@ -16,6 +16,7 @@ use super::file_ops::{
 };
 use super::utils::get_models_directory;
 use crate::models::Gguf;
+use crate::services::core::download_service::PidStorage;
 use crate::services::core::HuggingFaceService;
 
 /// Configuration for downloading sharded files
@@ -35,6 +36,10 @@ pub struct SessionOptions<'a> {
     pub progress_callback: Option<&'a ProgressCallback>,
     /// Cancellation token for external cancellation (GUI/service layer)
     pub cancel_token: Option<CancellationToken>,
+    /// Optional PID storage for synchronous process termination on app shutdown
+    pub pid_storage: Option<PidStorage>,
+    /// Key used to identify this download in the PID storage
+    pub pid_key: Option<String>,
 }
 
 impl SessionOptions<'_> {

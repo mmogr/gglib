@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+use crate::services::core::download_service::PidStorage;
 use crate::utils::paths::get_data_root;
 
 use super::file_ops::ProgressCallback;
@@ -43,6 +44,11 @@ pub struct FastDownloadRequest<'a> {
     pub progress: Option<&'a ProgressCallback>,
     /// Cancellation token for external cancellation (GUI/service layer)
     pub cancel_token: Option<CancellationToken>,
+    /// Optional PID storage for synchronous process termination on app shutdown.
+    /// When provided, the child process PID will be stored here so shutdown can kill it.
+    pub pid_storage: Option<PidStorage>,
+    /// Key used to identify this download in the PID storage (typically model_id or model_id:filename)
+    pub pid_key: Option<String>,
 }
 
 pub(crate) async fn ensure_fast_helper_ready() -> Result<()> {
@@ -411,6 +417,25 @@ impl PythonHelper {
             .spawn()
             .with_context(|| "Failed to spawn fast-path downloader")?;
 
+        // Store the child PID for synchronous termination on app shutdown
+        let pid = child.id();
+        let pid_key_for_cleanup = request.pid_key.clone();
+        let pid_storage_for_cleanup = request.pid_storage.clone();
+        if let (Some(storage), Some(key), Some(pid)) = (&request.pid_storage, &request.pid_key, pid) {
+            if let Ok(mut guard) = storage.write() {
+                guard.insert(key.clone(), pid);
+            }
+        }
+
+        // Helper to remove PID from storage on completion/error
+        let cleanup_pid = || {
+            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup) {
+                if let Ok(mut guard) = storage.write() {
+                    guard.remove(key);
+                }
+            }
+        };
+
         let stdout = child
             .stdout
             .take()
@@ -448,12 +473,14 @@ impl PythonHelper {
                         std::future::pending::<()>().await
                     }
                 } => {
+                    cleanup_pid();
                     let _ = child.kill().await;
                     finish_progress(&mut cli_progress);
                     bail!("{}", FAST_CANCELLED_MSG);
                 }
                 // Ctrl+C from terminal (CLI)
                 _ = &mut ctrl_c => {
+                    cleanup_pid();
                     let _ = child.kill().await;
                     finish_progress(&mut cli_progress);
                     bail!("{}", FAST_CANCELLED_MSG);
@@ -484,6 +511,7 @@ impl PythonHelper {
                                     .detail
                                     .or(event.reason)
                                     .unwrap_or_else(|| "fast helper unavailable".to_string());
+                                cleanup_pid();
                                 let _ = child.kill().await;
                                 finish_progress(&mut cli_progress);
                                 bail!(reason);
@@ -492,6 +520,7 @@ impl PythonHelper {
                                 let msg = event
                                     .message
                                     .unwrap_or_else(|| "fast helper reported an error".to_string());
+                                cleanup_pid();
                                 let _ = child.kill().await;
                                 finish_progress(&mut cli_progress);
                                 return Err(anyhow!(msg));
@@ -508,6 +537,7 @@ impl PythonHelper {
         }
 
         let status = child.wait().await?;
+        cleanup_pid(); // Child has exited, remove PID from storage
         let stderr_buf: Vec<u8> = stderr_task.await.unwrap_or_default();
         let stderr_text = String::from_utf8_lossy(&stderr_buf).trim().to_string();
 

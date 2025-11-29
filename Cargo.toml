@@ -44,6 +44,13 @@ tokio-util = "0.7"
 zip = "2.2"
 uuid = { version = "1.18.1", features = ["v4"] }
 
+# Platform-specific process termination for graceful shutdown
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["signal"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
 [build-dependencies]
 regex = "1.10"
 
