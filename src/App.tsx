@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import ModelControlCenterPage from "./pages/ModelControlCenterPage";
 import Header from "./components/Header";
 import SettingsModal from "./components/SettingsModal";
@@ -15,15 +15,8 @@ if (isTauriApp) {
   });
 }
 
-const ChatView = lazy(async () => {
-  const module = await import("./components/ChatView");
-  return { default: module.ChatView };
-});
-
 function App() {
-  const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isWorkPanelVisible, setIsWorkPanelVisible] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
   // Sidebar visibility (for menu toggle, currently not visually implemented)
   const [, setIsSidebarVisible] = useState(true);
@@ -42,7 +35,6 @@ function App() {
   const menuActionsRef = useRef<{
     refreshModels: () => void;
     addModelFromFile: () => void;
-    showDownloads: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
@@ -84,21 +76,9 @@ function App() {
         setIsSettingsOpen(true);
       }));
 
-      // Chat
-      unlisteners.push(await listen("menu:show-chat", () => {
-        setIsChatOpen(true);
-      }));
-
       // Toggle sidebar
       unlisteners.push(await listen("menu:toggle-sidebar", () => {
         setIsSidebarVisible(prev => !prev);
-      }));
-
-      // Show downloads panel
-      unlisteners.push(await listen("menu:show-downloads", () => {
-        setIsWorkPanelVisible(true);
-        // Trigger subtab change in ModelControlCenterPage
-        menuActionsRef.current?.showDownloads?.();
       }));
 
       // Add model from file (triggers file dialog)
@@ -161,8 +141,6 @@ function App() {
     };
   }, [checkLlamaStatus]);
 
-  const showWorkPanel = () => setIsWorkPanelVisible(true);
-
   // Handler for selecting a model from the header popover
   const handleSelectModelFromHeader = useCallback((modelId: number) => {
     menuActionsRef.current?.selectModel?.(modelId);
@@ -172,7 +150,6 @@ function App() {
   const registerMenuActions = useCallback((actions: {
     refreshModels: () => void;
     addModelFromFile: () => void;
-    showDownloads: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
@@ -195,16 +172,9 @@ function App() {
           servers={servers}
           loadServers={loadServers}
           stopServer={stopServer}
-          isWorkPanelVisible={isWorkPanelVisible}
-          onShowWorkPanel={showWorkPanel}
           onRegisterMenuActions={registerMenuActions}
         />
       </div>
-      {isChatOpen && (
-        <Suspense fallback={<div className="chat-loading">Preparing chat experience…</div>}>
-          <ChatView onClose={() => setIsChatOpen(false)} />
-        </Suspense>
-      )}
       {isSettingsOpen && (
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       )}

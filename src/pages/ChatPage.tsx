@@ -1,0 +1,334 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { AssistantRuntimeProvider } from '@assistant-ui/react';
+import { ConversationListPanel } from '../components/ConversationListPanel';
+import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
+import { useGglibRuntime } from '../hooks/useGglibRuntime';
+import { ChatService, ConversationSummary } from '../services/chat';
+import './ChatPage.css';
+
+const DEFAULT_CONVERSATION_TITLE = 'New Chat';
+const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
+
+interface ChatPageProps {
+  serverPort: number;
+  modelName: string;
+  onClose: () => Promise<void>; // Stops server and exits
+}
+
+export default function ChatPage({
+  serverPort,
+  modelName,
+  onClose,
+}: ChatPageProps) {
+  // Conversation state
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationLoading, setConversationLoading] = useState(true);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [conversationSearch, setConversationSearch] = useState('');
+  const [chatError, setChatError] = useState<string | null>(null);
+  
+  // New conversation modal state
+  const [isNewConversationModalOpen, setIsNewConversationModalOpen] = useState(false);
+  const [newConversationTitle, setNewConversationTitle] = useState(DEFAULT_CONVERSATION_TITLE);
+  const [newConversationPrompt, setNewConversationPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+  const [creatingConversation, setCreatingConversation] = useState(false);
+  
+  // Message persistence tracking
+  const persistedMessageIds = useRef<Set<string>>(new Set());
+  
+  // Panel width for resize
+  const [leftPanelWidth, setLeftPanelWidth] = useState(35);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+
+  // Runtime
+  const runtime = useGglibRuntime({
+    selectedServerPort: serverPort,
+    onError: (error) => setChatError(error.message),
+  });
+
+  // Sync conversations
+  const syncConversations = useCallback(
+    async (options: { preferredId?: number | null; silent?: boolean } = {}) => {
+      if (!options.silent) {
+        setConversationLoading(true);
+      }
+      try {
+        let list = await ChatService.listConversations();
+        let preferredId = options.preferredId ?? null;
+
+        // Create default conversation if none exist
+        if (!list.length) {
+          preferredId = await ChatService.createConversation(
+            DEFAULT_CONVERSATION_TITLE,
+            null,
+            DEFAULT_SYSTEM_PROMPT,
+          );
+          list = await ChatService.listConversations();
+        }
+
+        setConversations(list);
+        setActiveConversationId((prev) => {
+          if (preferredId && list.some((c) => c.id === preferredId)) {
+            return preferredId;
+          }
+          if (prev && list.some((c) => c.id === prev)) {
+            return prev;
+          }
+          return list[0]?.id ?? null;
+        });
+      } catch (error) {
+        setChatError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!options.silent) {
+          setConversationLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
+  // Load conversations on mount
+  useEffect(() => {
+    syncConversations();
+  }, [syncConversations]);
+
+  // Get active conversation
+  const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
+
+  // Handle resize
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || !layoutRef.current) return;
+
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+
+      rafId = requestAnimationFrame(() => {
+        if (!layoutRef.current) return;
+        const rect = layoutRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percentage = (x / rect.width) * 100;
+        const newLeftWidth = Math.max(20, Math.min(50, percentage));
+        setLeftPanelWidth(newLeftWidth);
+      });
+    };
+
+    const handleMouseUp = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      isDraggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  // Conversation handlers
+  const handleDeleteConversation = async (conversationId: number) => {
+    const shouldDelete = window.confirm('Delete this conversation? This cannot be undone.');
+    if (!shouldDelete) return;
+
+    try {
+      await ChatService.deleteConversation(conversationId);
+      persistedMessageIds.current = new Set();
+      await syncConversations();
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleNewConversation = () => {
+    setNewConversationTitle(DEFAULT_CONVERSATION_TITLE);
+    setNewConversationPrompt(activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT);
+    setIsNewConversationModalOpen(true);
+  };
+
+  const handleCreateConversation = async () => {
+    setCreatingConversation(true);
+    try {
+      const title = newConversationTitle.trim() || DEFAULT_CONVERSATION_TITLE;
+      const systemPrompt = newConversationPrompt.trim() || DEFAULT_SYSTEM_PROMPT;
+      const newId = await ChatService.createConversation(title, null, systemPrompt);
+      persistedMessageIds.current = new Set();
+      await syncConversations({ preferredId: newId });
+      setIsNewConversationModalOpen(false);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreatingConversation(false);
+    }
+  };
+
+  const handleRenameConversation = async (title: string) => {
+    if (!activeConversation) return;
+    try {
+      await ChatService.updateConversationTitle(activeConversation.id, title);
+      await syncConversations({ preferredId: activeConversation.id, silent: true });
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleClearConversation = async () => {
+    if (!activeConversation) return;
+    const confirmed = window.confirm('Start a fresh copy of this conversation?');
+    if (!confirmed) return;
+
+    try {
+      await ChatService.deleteConversation(activeConversation.id);
+      const newId = await ChatService.createConversation(
+        activeConversation.title,
+        null,
+        activeConversation.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
+      );
+      persistedMessageIds.current = new Set();
+      await syncConversations({ preferredId: newId });
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleExportConversation = () => {
+    // Export would require access to runtime - simplified version
+    if (!activeConversation) return;
+    // For now, just export conversation metadata
+    const data = { conversation: activeConversation };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `conversation-${activeConversation.id}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleUpdateSystemPrompt = async (prompt: string | null) => {
+    if (!activeConversation) return;
+    try {
+      await ChatService.updateConversationSystemPrompt(activeConversation.id, prompt);
+      await syncConversations({ preferredId: activeConversation.id, silent: true });
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  return (
+    <div className="chat-page">
+      <AssistantRuntimeProvider runtime={runtime}>
+        <div
+          ref={layoutRef}
+          className="chat-page-layout"
+          style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
+        >
+          {/* Left Panel: Conversation List */}
+          <div className="grid-panel-container">
+            <ConversationListPanel
+              conversations={conversations}
+              activeConversationId={activeConversationId}
+              onSelectConversation={setActiveConversationId}
+              onDeleteConversation={handleDeleteConversation}
+              onNewConversation={handleNewConversation}
+              searchQuery={conversationSearch}
+              onSearchChange={setConversationSearch}
+              loading={conversationLoading}
+              modelName={modelName}
+              onClose={onClose}
+            />
+            <div className="resize-handle" onMouseDown={handleMouseDown} />
+          </div>
+
+          {/* Right Panel: Chat Messages */}
+          <div className="grid-panel-container">
+            <ChatMessagesPanel
+              activeConversation={activeConversation}
+              activeConversationId={activeConversationId}
+              isServerConnected={true}
+              onRenameConversation={handleRenameConversation}
+              onClearConversation={handleClearConversation}
+              onExportConversation={handleExportConversation}
+              onUpdateSystemPrompt={handleUpdateSystemPrompt}
+              persistedMessageIds={persistedMessageIds}
+              syncConversations={syncConversations}
+              chatError={chatError}
+              setChatError={setChatError}
+            />
+          </div>
+        </div>
+      </AssistantRuntimeProvider>
+
+      {/* New Conversation Modal */}
+      {isNewConversationModalOpen && (
+        <div
+          className="chat-modal-overlay"
+          onClick={() => !creatingConversation && setIsNewConversationModalOpen(false)}
+        >
+          <div className="chat-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="chat-modal-title">Start a new chat</h3>
+            <label className="chat-modal-label">
+              Title
+              <input
+                className="chat-modal-input"
+                value={newConversationTitle}
+                onChange={(e) => setNewConversationTitle(e.target.value)}
+                placeholder="New Chat"
+              />
+            </label>
+            <label className="chat-modal-label">
+              System Prompt
+              <textarea
+                className="chat-modal-textarea"
+                value={newConversationPrompt}
+                onChange={(e) => setNewConversationPrompt(e.target.value)}
+                placeholder={DEFAULT_SYSTEM_PROMPT}
+                rows={4}
+              />
+            </label>
+            <p className="chat-modal-hint">
+              The system prompt steers the assistant's behavior for the entire conversation.
+            </p>
+            <div className="chat-modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setIsNewConversationModalOpen(false)}
+                disabled={creatingConversation}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleCreateConversation}
+                disabled={creatingConversation}
+              >
+                {creatingConversation ? 'Creating…' : 'Create chat'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
