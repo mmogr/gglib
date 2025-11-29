@@ -14,8 +14,8 @@ interface WorkPanelProps {
   onStopServer: (modelId: number) => Promise<void>;
   onRefreshServers: () => void;
   onSelectModel: (id: number) => void;
-  activeSubTab?: 'add' | 'download';
-  onSubTabChange?: (subtab: 'add' | 'download') => void;
+  activeSubTab?: 'add' | 'download' | 'browse';
+  onSubTabChange?: (subtab: 'add' | 'download' | 'browse') => void;
 }
 
 const WorkPanel: FC<WorkPanelProps> = ({

@@ -7,8 +7,9 @@
 //! GUI-specific functionality like converting models to `GuiModel` with server status.
 
 use crate::models::gui::{
-    AddModelRequest, AppSettings, GuiModel, ModelsDirectoryInfo, RemoveModelRequest,
-    StartServerRequest, StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
+    AddModelRequest, AppSettings, GuiModel, HfQuantizationsResponse, HfSearchRequest,
+    HfSearchResponse, ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest,
+    StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
 };
 use crate::services::core::{AppCore, StartServerConfig};
 use crate::services::database;
@@ -264,6 +265,26 @@ impl GuiBackend {
     /// Cancel an in-flight download if one exists.
     pub async fn cancel_download(&self, model_id: &str) -> Result<()> {
         self.core.downloads().cancel(model_id).await
+    }
+
+    // =========================================================================
+    // HuggingFace Browser Operations
+    // =========================================================================
+
+    /// Search HuggingFace for GGUF text-generation models with pagination.
+    ///
+    /// Returns models matching the search query with optional parameter filtering.
+    /// Parameter filtering is done client-side since HuggingFace API doesn't support it.
+    pub async fn browse_hf_models(&self, request: HfSearchRequest) -> Result<HfSearchResponse> {
+        crate::commands::download::search_hf_models_paginated(request).await
+    }
+
+    /// Get available quantizations for a HuggingFace model.
+    ///
+    /// Returns detailed information about each quantization variant including
+    /// file size and whether it's sharded.
+    pub async fn get_model_quantizations(&self, model_id: &str) -> Result<HfQuantizationsResponse> {
+        crate::commands::download::get_quantizations_structured(model_id).await
     }
 
     // =========================================================================

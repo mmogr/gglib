@@ -10,8 +10,9 @@ use crate::commands::download::{DownloadProgressEvent, ProgressThrottle};
 use crate::commands::gui_web::state::AppState;
 use crate::models::gui::{
     AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
-    ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest, StartServerResponse,
-    UpdateModelRequest, UpdateModelsDirectoryRequest, UpdateSettingsRequest,
+    HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, ModelsDirectoryInfo,
+    RemoveModelRequest, StartServerRequest, StartServerResponse, UpdateModelRequest,
+    UpdateModelsDirectoryRequest, UpdateSettingsRequest,
 };
 use crate::services::core::DownloadQueueStatus;
 use axum::{
@@ -365,6 +366,41 @@ pub async fn clear_failed_downloads(
     Ok(Json(ApiResponse::success(
         "Cleared failed downloads".to_string(),
     )))
+}
+
+// HuggingFace Browser Handlers
+
+/// Browse HuggingFace models with search and pagination
+pub async fn browse_hf_models(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<HfSearchRequest>,
+) -> Result<Json<ApiResponse<HfSearchResponse>>, AppError> {
+    let response = state
+        .backend
+        .browse_hf_models(request)
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(response)))
+}
+
+/// Get available quantizations for a HuggingFace model
+pub async fn get_hf_quantizations(
+    State(state): State<Arc<AppState>>,
+    Path(model_id): Path<String>,
+) -> Result<Json<ApiResponse<HfQuantizationsResponse>>, AppError> {
+    // URL decode the model_id (it will be URL encoded due to the slash)
+    let decoded_model_id = urlencoding::decode(&model_id)
+        .map_err(|e| AppError::BadRequest(format!("Invalid model ID encoding: {}", e)))?
+        .into_owned();
+
+    let response = state
+        .backend
+        .get_model_quantizations(&decoded_model_id)
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(response)))
 }
 
 /// Stream download progress events via SSE

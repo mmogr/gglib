@@ -7,8 +7,9 @@ use dotenvy::dotenv;
 use gglib::{
     commands::llama::check_llama_installed,
     models::gui::{
-        AddModelRequest, AppSettings, GuiModel, RemoveModelRequest, StartServerRequest,
-        UpdateModelRequest, UpdateSettingsRequest,
+        AddModelRequest, AppSettings, GuiModel, HfQuantizationsResponse, HfSearchRequest,
+        HfSearchResponse, RemoveModelRequest, StartServerRequest, UpdateModelRequest,
+        UpdateSettingsRequest,
     },
     services::core::{DownloadError, DownloadQueueStatus},
     services::gui_backend::GuiBackend,
@@ -477,6 +478,32 @@ async fn clear_failed_downloads(state: tauri::State<'_, AppState>) -> Result<Str
     Ok("Cleared failed downloads".to_string())
 }
 
+// HuggingFace Browser Commands
+
+#[tauri::command]
+async fn browse_hf_models(
+    request: HfSearchRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<HfSearchResponse, String> {
+    state
+        .backend
+        .browse_hf_models(request)
+        .await
+        .map_err(|e| format!("Failed to browse HuggingFace models: {}", e))
+}
+
+#[tauri::command]
+async fn get_hf_quantizations(
+    model_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<HfQuantizationsResponse, String> {
+    state
+        .backend
+        .get_model_quantizations(&model_id)
+        .await
+        .map_err(|e| format!("Failed to get quantizations: {}", e))
+}
+
 /// Check if llama.cpp is installed
 #[tauri::command]
 fn check_llama_status() -> Result<LlamaStatus, String> {
@@ -814,6 +841,8 @@ async fn main() {
             remove_from_download_queue,
             cancel_shard_group,
             clear_failed_downloads,
+            browse_hf_models,
+            get_hf_quantizations,
             get_gui_api_port,
             check_llama_status,
             install_llama,
