@@ -54,6 +54,12 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             "/api/models/download/queue/clear-failed",
             post(handlers::clear_failed_downloads),
         )
+        // HuggingFace browser routes
+        .route("/api/hf/browse", post(handlers::browse_hf_models))
+        .route(
+            "/api/hf/quantizations/:model_id",
+            get(handlers::get_hf_quantizations),
+        )
         .route("/api/models/:id", get(handlers::get_model))
         .route("/api/models/:id", put(handlers::update_model))
         .route("/api/models/:id", delete(handlers::remove_model))

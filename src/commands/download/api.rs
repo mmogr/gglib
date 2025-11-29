@@ -8,6 +8,9 @@ use std::path::Path;
 
 use super::file_ops::extract_quantization_from_filename;
 use super::utils::format_number;
+use crate::models::gui::{
+    HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
+};
 
 /// Create HuggingFace Hub API client
 pub fn create_hf_api(token: Option<String>, models_dir: &Path) -> Result<Api> {
@@ -538,4 +541,307 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
     }
 
     Ok(())
+}
+
+// ============================================================================
+// GUI Browser API Functions
+// ============================================================================
+
+/// Search HuggingFace models for the GUI browser with pagination and parameter filtering.
+///
+/// This function queries the HuggingFace API for GGUF text-generation models,
+/// applies client-side parameter filtering, and returns paginated results.
+pub async fn search_hf_models_paginated(request: HfSearchRequest) -> Result<HfSearchResponse> {
+    let mut url = format!(
+        "https://huggingface.co/api/models?library=gguf&pipeline_tag=text-generation&expand=safetensors&sort=downloads&direction=-1&limit={}&p={}",
+        request.limit,
+        request.page
+    );
+
+    // Add search query if provided
+    if let Some(ref query) = request.query {
+        if !query.trim().is_empty() {
+            url.push_str(&format!("&search={}", urlencoding::encode(query.trim())));
+        }
+    }
+
+    let response = reqwest::get(&url).await?;
+
+    if !response.status().is_success() {
+        return Err(anyhow!(
+            "HuggingFace API request failed: {}",
+            response.status()
+        ));
+    }
+
+    // Check for pagination via Link header
+    let has_more = response
+        .headers()
+        .get("Link")
+        .and_then(|h| h.to_str().ok())
+        .map(|link| link.contains("rel=\"next\""))
+        .unwrap_or(false);
+
+    let models_json: Vec<serde_json::Value> = response.json().await?;
+
+    // Parse and filter models
+    let mut models: Vec<HfModelSummary> = Vec::new();
+
+    for model_json in models_json {
+        // Extract parameter count from safetensors.total
+        let parameters_b = model_json
+            .get("safetensors")
+            .and_then(|s| s.get("total"))
+            .and_then(|t| t.as_u64())
+            .map(|params| params as f64 / 1_000_000_000.0);
+
+        // Apply parameter filtering (client-side)
+        if let Some(min) = request.min_params_b {
+            if let Some(params) = parameters_b {
+                if params < min {
+                    continue;
+                }
+            } else {
+                // Skip models without parameter info when filtering by min
+                continue;
+            }
+        }
+
+        if let Some(max) = request.max_params_b {
+            if let Some(params) = parameters_b {
+                if params > max {
+                    continue;
+                }
+            } else {
+                // Skip models without parameter info when filtering by max
+                continue;
+            }
+        }
+
+        let id = model_json
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if id.is_empty() {
+            continue;
+        }
+
+        // Extract author from id (format: "author/model-name")
+        let author = id.split('/').next().map(|s| s.to_string());
+
+        // Extract model name (last part of id)
+        let name = id
+            .split('/')
+            .next_back()
+            .unwrap_or(&id)
+            .to_string();
+
+        let downloads = model_json
+            .get("downloads")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        let likes = model_json
+            .get("likes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        let last_modified = model_json
+            .get("lastModified")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let description = model_json
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                // Truncate long descriptions
+                if s.len() > 200 {
+                    format!("{}...", &s[..197])
+                } else {
+                    s.to_string()
+                }
+            });
+
+        let tags = model_json
+            .get("tags")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|t| t.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        models.push(HfModelSummary {
+            id,
+            name,
+            author,
+            downloads,
+            likes,
+            last_modified,
+            parameters_b,
+            description,
+            tags,
+        });
+    }
+
+    Ok(HfSearchResponse {
+        models,
+        has_more,
+        page: request.page,
+        total_count: None, // HuggingFace API doesn't provide total count
+    })
+}
+
+/// Get available quantizations for a model with structured data for the GUI.
+///
+/// Returns detailed information about each quantization variant including
+/// file size and whether it's sharded.
+pub async fn get_quantizations_structured(model_id: &str) -> Result<HfQuantizationsResponse> {
+    let api_url = format!("https://huggingface.co/api/models/{}/tree/main", model_id);
+    let mut quantizations: Vec<HfQuantization> = Vec::new();
+
+    let response = reqwest::get(&api_url).await?;
+
+    if !response.status().is_success() {
+        return Err(anyhow!(
+            "Failed to fetch model files: {}",
+            response.status()
+        ));
+    }
+
+    let data: serde_json::Value = response.json().await?;
+
+    if let Some(files) = data.as_array() {
+        // Track quantizations we've seen (to handle sharded models)
+        let mut quant_map: std::collections::HashMap<String, HfQuantization> =
+            std::collections::HashMap::new();
+
+        // 1) Direct GGUF files at repo root
+        for file in files {
+            if let (Some(path), Some(size)) = (
+                file.get("path").and_then(|v| v.as_str()),
+                file.get("size").and_then(|v| v.as_u64()),
+            ) {
+                let entry_type = file.get("type").and_then(|v| v.as_str()).unwrap_or("file");
+
+                if entry_type == "file" && path.ends_with(".gguf") {
+                    let quant_name = extract_quantization_from_filename(path).to_string();
+                    if quant_name != "unknown" {
+                        let size_mb = size as f64 / 1_048_576.0;
+
+                        // Check if this is a shard (e.g., model-00001-of-00003.gguf)
+                        let is_shard = path.contains("-00001-of-") || path.contains("-00002-of-");
+
+                        if let Some(existing) = quant_map.get_mut(&quant_name) {
+                            // Add to existing shard count
+                            existing.size_bytes += size;
+                            existing.size_mb += size_mb;
+                            if let Some(ref mut count) = existing.shard_count {
+                                *count += 1;
+                            }
+                        } else {
+                            quant_map.insert(
+                                quant_name.clone(),
+                                HfQuantization {
+                                    name: quant_name,
+                                    file_path: path.to_string(),
+                                    size_bytes: size,
+                                    size_mb,
+                                    is_sharded: is_shard,
+                                    shard_count: if is_shard { Some(1) } else { None },
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2) Check subdirectories for sharded GGUF files
+        for file in files {
+            if let Some(dir_path) = file.get("path").and_then(|v| v.as_str()) {
+                let entry_type = file.get("type").and_then(|v| v.as_str()).unwrap_or("file");
+
+                if entry_type == "directory" {
+                    let sub_api_url = format!(
+                        "https://huggingface.co/api/models/{}/tree/main/{}",
+                        model_id, dir_path
+                    );
+
+                    if let Ok(sub_response) = reqwest::get(&sub_api_url).await {
+                        if sub_response.status().is_success() {
+                            if let Ok(sub_data) = sub_response.json::<serde_json::Value>().await {
+                                if let Some(sub_files) = sub_data.as_array() {
+                                    let mut dir_total_size: u64 = 0;
+                                    let mut dir_shard_count: u32 = 0;
+                                    let mut dir_quant_name: Option<String> = None;
+                                    let mut dir_first_file: Option<String> = None;
+
+                                    for sub_file in sub_files {
+                                        if let (Some(sub_path), Some(sub_size)) = (
+                                            sub_file.get("path").and_then(|v| v.as_str()),
+                                            sub_file.get("size").and_then(|v| v.as_u64()),
+                                        ) {
+                                            if sub_path.ends_with(".gguf") {
+                                                dir_total_size += sub_size;
+                                                dir_shard_count += 1;
+
+                                                if dir_quant_name.is_none() {
+                                                    dir_quant_name = Some(
+                                                        extract_quantization_from_filename(
+                                                            sub_path,
+                                                        )
+                                                        .to_string(),
+                                                    );
+                                                    dir_first_file = Some(sub_path.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Add this directory's quantization if we found GGUF files
+                                    if let (Some(quant_name), Some(first_file)) =
+                                        (dir_quant_name, dir_first_file)
+                                    {
+                                        if quant_name != "unknown"
+                                            && !quant_map.contains_key(&quant_name)
+                                        {
+                                            quant_map.insert(
+                                                quant_name.clone(),
+                                                HfQuantization {
+                                                    name: quant_name,
+                                                    file_path: first_file,
+                                                    size_bytes: dir_total_size,
+                                                    size_mb: dir_total_size as f64 / 1_048_576.0,
+                                                    is_sharded: dir_shard_count > 1,
+                                                    shard_count: if dir_shard_count > 1 {
+                                                        Some(dir_shard_count)
+                                                    } else {
+                                                        None
+                                                    },
+                                                },
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Convert map to vec and sort by quantization name
+        quantizations = quant_map.into_values().collect();
+        quantizations.sort_by(|a, b| a.name.cmp(&b.name));
+    }
+
+    Ok(HfQuantizationsResponse {
+        model_id: model_id.to_string(),
+        quantizations,
+    })
 }

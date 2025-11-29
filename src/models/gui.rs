@@ -7,6 +7,104 @@
 use crate::models::Gguf;
 use serde::{Deserialize, Serialize};
 
+// ============================================================================
+// HuggingFace Browser Types
+// ============================================================================
+
+/// Summary of a HuggingFace model from the search API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HfModelSummary {
+    /// Model ID (e.g., "TheBloke/Llama-2-7B-GGUF")
+    pub id: String,
+    /// Human-readable model name (derived from id)
+    pub name: String,
+    /// Author/organization (e.g., "TheBloke")
+    pub author: Option<String>,
+    /// Total download count
+    pub downloads: u64,
+    /// Like count
+    pub likes: u64,
+    /// Last modified timestamp
+    pub last_modified: Option<String>,
+    /// Total parameter count in billions (from safetensors.total)
+    pub parameters_b: Option<f64>,
+    /// Model description/README excerpt
+    pub description: Option<String>,
+    /// Model tags
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+/// Request for searching HuggingFace models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HfSearchRequest {
+    /// Search query (model name)
+    pub query: Option<String>,
+    /// Minimum parameters in billions
+    pub min_params_b: Option<f64>,
+    /// Maximum parameters in billions
+    pub max_params_b: Option<f64>,
+    /// Page number (0-indexed)
+    pub page: u32,
+    /// Results per page (default 30)
+    pub limit: u32,
+}
+
+impl Default for HfSearchRequest {
+    fn default() -> Self {
+        Self {
+            query: None,
+            min_params_b: None,
+            max_params_b: None,
+            page: 0,
+            limit: 30,
+        }
+    }
+}
+
+/// Response from HuggingFace model search
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HfSearchResponse {
+    /// Models matching the search criteria
+    pub models: Vec<HfModelSummary>,
+    /// Whether more results are available
+    pub has_more: bool,
+    /// Current page number (0-indexed)
+    pub page: u32,
+    /// Total count of matching models (if available)
+    pub total_count: Option<u64>,
+}
+
+/// Information about a specific quantization variant
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HfQuantization {
+    /// Quantization name (e.g., "Q4_K_M", "Q8_0")
+    pub name: String,
+    /// File path within the repository
+    pub file_path: String,
+    /// File size in bytes
+    pub size_bytes: u64,
+    /// File size in MB (for display)
+    pub size_mb: f64,
+    /// Whether this is a sharded model (multiple files)
+    pub is_sharded: bool,
+    /// Number of shards if sharded
+    pub shard_count: Option<u32>,
+}
+
+/// Response containing available quantizations for a model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HfQuantizationsResponse {
+    /// Model ID
+    pub model_id: String,
+    /// Available quantizations
+    pub quantizations: Vec<HfQuantization>,
+}
+
+// ============================================================================
+// GUI Model Types
+// ============================================================================
+
 /// Frontend-friendly model structure shared by both Tauri and Web GUIs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuiModel {
