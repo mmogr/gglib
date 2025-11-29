@@ -214,7 +214,7 @@ struct PlainProgress {
 }
 
 /// Smoothing factor for EWA speed calculation (same as ProgressThrottle)
-const EWA_SMOOTHING: f64 = 0.05;
+const EWA_SMOOTHING: f64 = 0.02;
 
 impl PlainProgress {
     fn new() -> Self {

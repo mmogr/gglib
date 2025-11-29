@@ -214,9 +214,9 @@ struct ThrottleState {
 }
 
 /// Smoothing factor for EWA speed calculation.
-/// 0.05 = 5% weight to new sample, 95% to historical average.
-/// This provides ~5 second response time for stable speed display.
-const EWA_SMOOTHING: f64 = 0.05;
+/// 0.02 = 2% weight to new sample, 98% to historical average.
+/// This provides ~10 second response time for very stable speed display.
+const EWA_SMOOTHING: f64 = 0.02;
 
 impl ProgressThrottle {
     pub fn new(min_interval: Duration, min_step_bytes: u64) -> Self {

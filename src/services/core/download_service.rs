@@ -897,7 +897,8 @@ impl DownloadService {
     ///
     /// # Arguments
     ///
-    /// * `model_id` - The model ID of the download to cancel
+    /// * `model_id` - The model ID of the download to cancel. For sharded downloads,
+    ///   this will cancel any active shard that belongs to this model.
     ///
     /// # Errors
     ///
@@ -905,7 +906,16 @@ impl DownloadService {
     pub async fn cancel(&self, model_id: &str) -> Result<()> {
         let token = {
             let mut downloads = self.active_downloads.write().await;
-            downloads.remove(model_id)
+            // Try exact match first (for non-sharded downloads)
+            if let Some(token) = downloads.remove(model_id) {
+                Some(token)
+            } else {
+                // For sharded downloads, the key is "model_id:filename"
+                // Find any key that starts with "model_id:"
+                let prefix = format!("{}:", model_id);
+                let key_to_remove = downloads.keys().find(|k| k.starts_with(&prefix)).cloned();
+                key_to_remove.and_then(|k| downloads.remove(&k))
+            }
         };
 
         if let Some(token) = token {
