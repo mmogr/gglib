@@ -503,8 +503,8 @@ impl DownloadService {
         progress_callback: Option<&crate::commands::download::ProgressCallback>,
     ) -> Result<String> {
         use crate::commands::download::{
-            DownloadContext, SessionOptions, download_specific_file, get_models_directory,
-            get_first_shard_filename, sanitize_model_name,
+            DownloadContext, SessionOptions, download_specific_file, get_first_shard_filename,
+            get_models_directory, sanitize_model_name,
         };
 
         let cancel_token = CancellationToken::new();

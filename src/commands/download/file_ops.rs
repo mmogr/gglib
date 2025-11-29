@@ -67,7 +67,10 @@ pub async fn download_specific_file(
             // For sharded models, use the first shard path (llama-server requires it).
             let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
             let quant = extract_quantization_from_filename(
-                db_path.file_name().and_then(|s| s.to_str()).unwrap_or(filename)
+                db_path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(filename),
             );
             add_to_database(context.model_id, commit_sha, db_path, quant).await?;
         }
@@ -105,7 +108,10 @@ pub async fn download_specific_file(
         // For non-sharded models, use the downloaded file path.
         let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
         let quant = extract_quantization_from_filename(
-            db_path.file_name().and_then(|s| s.to_str()).unwrap_or(filename)
+            db_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(filename),
         );
         add_to_database(context.model_id, commit_sha, db_path, quant).await?;
     }
@@ -464,7 +470,7 @@ mod tests {
     #[test]
     fn test_get_first_shard_filename_second_of_two() {
         let result = get_first_shard_filename(
-            "UD-Q6_K_XL/Qwen3-Next-80B-A3B-Instruct-UD-Q6_K_XL-00002-of-00002.gguf"
+            "UD-Q6_K_XL/Qwen3-Next-80B-A3B-Instruct-UD-Q6_K_XL-00002-of-00002.gguf",
         );
         assert_eq!(
             result,
