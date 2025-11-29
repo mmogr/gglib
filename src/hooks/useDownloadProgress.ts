@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TauriService } from '../services/tauri';
 import { isTauriApp } from '../utils/platform';
 import { DownloadQueueStatus } from '../types';
@@ -45,6 +45,9 @@ interface UseDownloadProgressReturn {
   queueCount: number;
 }
 
+// Throttle interval for progress updates (ms)
+const PROGRESS_THROTTLE_MS = 200;
+
 /**
  * Hook to listen for download progress events from Tauri or Web SSE.
  * Reusable across components that need to show download progress.
@@ -56,6 +59,55 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
   const [queueStatus, setQueueStatus] = useState<DownloadQueueStatus | null>(null);
   const [connectionMode, setConnectionMode] = useState<string>('Initializing...');
   const [error, setError] = useState<string | null>(null);
+  
+  // Throttle refs for progress updates
+  const lastProgressUpdateRef = useRef<number>(0);
+  const pendingProgressRef = useRef<DownloadProgress | null>(null);
+  const throttleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Throttled progress setter to prevent excessive re-renders
+  const throttledSetProgress = useCallback((progressData: DownloadProgress) => {
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastProgressUpdateRef.current;
+
+    // Always update immediately for non-progress events (completed, error, etc.)
+    if (progressData.status !== 'progress') {
+      lastProgressUpdateRef.current = now;
+      setProgress(progressData);
+      return;
+    }
+
+    // If enough time has passed, update immediately
+    if (timeSinceLastUpdate >= PROGRESS_THROTTLE_MS) {
+      lastProgressUpdateRef.current = now;
+      setProgress(progressData);
+      pendingProgressRef.current = null;
+      return;
+    }
+
+    // Otherwise, store the latest progress and schedule an update
+    pendingProgressRef.current = progressData;
+    
+    if (!throttleTimeoutRef.current) {
+      throttleTimeoutRef.current = setTimeout(() => {
+        if (pendingProgressRef.current) {
+          lastProgressUpdateRef.current = Date.now();
+          setProgress(pendingProgressRef.current);
+          pendingProgressRef.current = null;
+        }
+        throttleTimeoutRef.current = null;
+      }, PROGRESS_THROTTLE_MS - timeSinceLastUpdate);
+    }
+  }, []);
+
+  // Cleanup throttle timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (throttleTimeoutRef.current) {
+        clearTimeout(throttleTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Fetch the current queue status
   const fetchQueueStatus = useCallback(async () => {
@@ -103,8 +155,9 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
           const { listen } = await import('@tauri-apps/api/event');
           unlistenTauri = await listen<DownloadProgress>('download-progress', (event) => {
             const progressData = event.payload;
-            setProgress(progressData);
-            fetchQueueStatus();
+            throttledSetProgress(progressData);
+            // Note: fetchQueueStatus is handled by the 2-second interval polling,
+            // not called on every progress event to avoid overwhelming the UI
 
             if (progressData.status === 'completed') {
               onCompleted?.();
@@ -128,8 +181,9 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
               return;
             }
             const progressData = JSON.parse(event.data) as DownloadProgress;
-            setProgress(progressData);
-            fetchQueueStatus();
+            throttledSetProgress(progressData);
+            // Note: fetchQueueStatus is handled by the 2-second interval polling,
+            // not called on every progress event to avoid overwhelming the UI
 
             if (progressData.status === 'completed') {
               onCompleted?.();
@@ -158,7 +212,7 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
         eventSource.close();
       }
     };
-  }, [fetchQueueStatus, onCompleted]);
+  }, [throttledSetProgress, onCompleted]);
 
   const isDownloading = queueStatus?.current !== null && queueStatus?.current !== undefined;
   const queueCount = (queueStatus?.pending.length || 0) + (isDownloading ? 1 : 0);

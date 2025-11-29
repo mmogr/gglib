@@ -213,7 +213,6 @@ pub async fn download_model(
     let model_id = payload.model_id.clone();
 
     // Create a progress callback that sends updates to the broadcast channel
-    let start_time = std::time::Instant::now();
     let throttle = ProgressThrottle::responsive_ui();
 
     let progress_model_id = model_id.clone();
@@ -225,11 +224,11 @@ pub async fn download_model(
 
     let callback: Box<dyn Fn(u64, u64) + Send + Sync> =
         Box::new(move |downloaded: u64, total: u64| {
-            if !callback_throttle.should_emit(downloaded, total) {
+            let Some(speed) = callback_throttle.should_emit_with_speed(downloaded, total) else {
                 return;
-            }
+            };
             let event =
-                DownloadProgressEvent::progress(&callback_model_id, downloaded, total, start_time);
+                DownloadProgressEvent::progress(&callback_model_id, downloaded, total, speed);
             let _ = callback_progress_tx.send(event.to_json_string());
         });
 

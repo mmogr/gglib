@@ -200,19 +200,17 @@ async fn download_model(
     let app_clone = app.clone();
     let model_id_clone2 = model_id.clone();
 
-    // Create progress callback
-    let start_time = std::time::Instant::now();
-
+    // Create progress callback with EWA speed calculation
     let throttle = ProgressThrottle::responsive_ui();
     let callback_throttle = throttle.clone();
 
     let progress_callback: gglib::commands::download::ProgressCallback =
         Box::new(move |downloaded, total| {
-            if !callback_throttle.should_emit(downloaded, total) {
+            let Some(speed) = callback_throttle.should_emit_with_speed(downloaded, total) else {
                 return;
-            }
+            };
             let event =
-                DownloadProgressEvent::progress(&model_id_clone, downloaded, total, start_time);
+                DownloadProgressEvent::progress(&model_id_clone, downloaded, total, speed);
             // debug!(downloaded, total, "Emitting progress"); // Commented out to avoid spam
             if let Err(err) = app_clone.emit("download-progress", event) {
                 tracing::error!(error = %err, "Failed to emit progress event");

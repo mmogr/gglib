@@ -12,7 +12,6 @@ use super::huggingface_service::HuggingFaceService;
 use anyhow::Result;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
@@ -636,7 +635,6 @@ impl DownloadService {
             let callback_clone = progress_callback.clone();
             let display_name_for_callback = model_id.clone(); // Use model_id, not display_name with shard info
             let queue_len_for_callback = queue_len;
-            let download_start_time = Instant::now();
 
             // Capture shard info for the callback
             let shard_index_for_cb = shard_index;
@@ -646,8 +644,16 @@ impl DownloadService {
             let aggregate_total_for_cb = aggregate_total;
             let is_shard_for_cb = is_shard;
 
+            // Use throttle with EWA speed calculation
+            let throttle = crate::commands::download::ProgressThrottle::responsive_ui();
+
             let progress_cb: crate::commands::download::ProgressCallback =
                 Box::new(move |downloaded: u64, total: u64| {
+                    // Check throttle and get EWA speed
+                    let Some(speed) = throttle.should_emit_with_speed(downloaded, total) else {
+                        return;
+                    };
+
                     let event = if is_shard_for_cb && total_shards_for_cb > 1 {
                         // For sharded downloads, include aggregate progress
                         let aggregate_downloaded = completed_shards_size_for_cb + downloaded;
@@ -667,7 +673,7 @@ impl DownloadService {
                             &shard_filename_for_cb,
                             aggregate_downloaded,
                             aggregate_total_effective,
-                            download_start_time,
+                            speed,
                         )
                         .with_queue_info(1, queue_len_for_callback)
                     } else {
@@ -676,7 +682,7 @@ impl DownloadService {
                             &display_name_for_callback,
                             downloaded,
                             total,
-                            download_start_time,
+                            speed,
                         )
                         .with_queue_info(1, queue_len_for_callback)
                     };
