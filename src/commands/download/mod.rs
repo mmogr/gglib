@@ -1,6 +1,7 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/commands_download_docs.md"))]
 
 use anyhow::Result;
+use tokio_util::sync::CancellationToken;
 
 // Sub-modules
 mod api;
@@ -28,6 +29,7 @@ pub async fn execute(
     token: Option<String>,
     force: bool,
     progress_callback: Option<&ProgressCallback>,
+    cancel_token: Option<CancellationToken>,
 ) -> Result<()> {
     // Get or create the models directory
     let models_dir = get_models_directory()?;
@@ -48,6 +50,7 @@ pub async fn execute(
         session: SessionOptions {
             auth_token: token,
             progress_callback,
+            cancel_token,
         },
     };
 

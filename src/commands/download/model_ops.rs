@@ -7,6 +7,7 @@ use reqwest;
 use serde_json;
 use std::io::Write;
 use std::path::Path;
+use tokio_util::sync::CancellationToken;
 
 use super::api::create_hf_api;
 use super::file_ops::{
@@ -32,6 +33,8 @@ pub struct DownloadConfig<'a> {
 pub struct SessionOptions<'a> {
     pub auth_token: Option<String>,
     pub progress_callback: Option<&'a ProgressCallback>,
+    /// Cancellation token for external cancellation (GUI/service layer)
+    pub cancel_token: Option<CancellationToken>,
 }
 
 impl SessionOptions<'_> {

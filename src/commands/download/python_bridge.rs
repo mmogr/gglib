@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::signal;
+use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -40,6 +41,8 @@ pub struct FastDownloadRequest<'a> {
     pub token: Option<&'a str>,
     pub force: bool,
     pub progress: Option<&'a ProgressCallback>,
+    /// Cancellation token for external cancellation (GUI/service layer)
+    pub cancel_token: Option<CancellationToken>,
 }
 
 pub(crate) async fn ensure_fast_helper_ready() -> Result<()> {
@@ -211,7 +214,7 @@ struct PlainProgress {
 }
 
 /// Smoothing factor for EWA speed calculation (same as ProgressThrottle)
-const EWA_SMOOTHING: f64 = 0.2;
+const EWA_SMOOTHING: f64 = 0.05;
 
 impl PlainProgress {
     fn new() -> Self {
@@ -432,12 +435,28 @@ impl PythonHelper {
         };
         let mut ctrl_c = Box::pin(signal::ctrl_c());
 
+        // Create a future for the cancellation token that never completes if None
+        let cancel_token = request.cancel_token.clone();
+
         loop {
             tokio::select! {
+                // External cancellation (from GUI/service layer)
+                _ = async {
+                    if let Some(ref token) = cancel_token {
+                        token.cancelled().await
+                    } else {
+                        std::future::pending::<()>().await
+                    }
+                } => {
+                    let _ = child.kill().await;
+                    finish_progress(&mut cli_progress);
+                    bail!("{}", FAST_CANCELLED_MSG);
+                }
+                // Ctrl+C from terminal (CLI)
                 _ = &mut ctrl_c => {
                     let _ = child.kill().await;
                     finish_progress(&mut cli_progress);
-                    bail!("fast download cancelled by user");
+                    bail!("{}", FAST_CANCELLED_MSG);
                 }
                 line = lines.next_line() => {
                     let line = line?;

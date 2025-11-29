@@ -89,6 +89,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
                 token,
                 force,
                 None,
+                None, // CLI uses Ctrl+C for cancellation
             )
             .await
         }

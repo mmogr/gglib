@@ -209,8 +209,7 @@ async fn download_model(
             let Some(speed) = callback_throttle.should_emit_with_speed(downloaded, total) else {
                 return;
             };
-            let event =
-                DownloadProgressEvent::progress(&model_id_clone, downloaded, total, speed);
+            let event = DownloadProgressEvent::progress(&model_id_clone, downloaded, total, speed);
             // debug!(downloaded, total, "Emitting progress"); // Commented out to avoid spam
             if let Err(err) = app_clone.emit("download-progress", event) {
                 tracing::error!(error = %err, "Failed to emit progress event");
@@ -812,6 +811,28 @@ async fn main() {
             }
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Cancel all active downloads when app is closing
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                let handle = window.app_handle();
+                let state: tauri::State<AppState> = handle.state();
+                let backend = state.backend.clone();
+
+                // Run cleanup synchronously before allowing close
+                tauri::async_runtime::block_on(async {
+                    let downloads = backend.core().downloads();
+                    let active = downloads.active_downloads().await;
+                    if !active.is_empty() {
+                        info!("Cancelling {} active downloads on app close", active.len());
+                        for model_id in active {
+                            if let Err(e) = downloads.cancel(&model_id).await {
+                                warn!(error = %e, model_id = %model_id, "Failed to cancel download on close");
+                            }
+                        }
+                    }
+                });
+            }
         })
         .on_menu_event(handle_menu_event)
         .invoke_handler(tauri::generate_handler![

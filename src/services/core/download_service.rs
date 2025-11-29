@@ -453,6 +453,7 @@ impl DownloadService {
             None,  // token
             false, // force
             progress_callback,
+            Some(cancel_token.clone()), // Pass token for cancellation
         );
         tokio::pin!(download_future);
 
@@ -519,7 +520,7 @@ impl DownloadService {
         let hf_service = HuggingFaceService::new();
         let commit_sha = hf_service.get_commit_sha(&model_id).await?;
 
-        // Create download context
+        // Create download context with cancellation token
         let context = DownloadContext {
             model_id: &model_id,
             quantization: Some(&quantization),
@@ -529,6 +530,7 @@ impl DownloadService {
             session: SessionOptions {
                 auth_token: None,
                 progress_callback,
+                cancel_token: Some(cancel_token.clone()),
             },
         };
 
