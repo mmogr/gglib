@@ -540,6 +540,12 @@ jobs:
           if [ -d "src-tauri/target/${{ matrix.target }}/release/bundle/macos/GGLib GUI.app" ]; then
             echo "Found .app bundle in target-specific directory, copying..."
             cp -r "src-tauri/target/${{ matrix.target }}/release/bundle/macos/GGLib GUI.app" gui-release/
+            
+            # Copy the install script and README for macOS users
+            echo "Copying macOS install script and README..."
+            cp scripts/macos-install.command gui-release/
+            cp scripts/MACOS-README.txt gui-release/
+            chmod +x gui-release/macos-install.command
           else
             echo "Note: No .app bundle found (expected for cross-compilation). Using bare binary only."
           fi

@@ -101,7 +101,30 @@ The `GuiBackend` service provides a unified interface for GUI operations, while 
 
 GGLib provides a streamlined installation process using the included Makefile for the best developer and user experience.
 
-### Quick Install
+### Pre-built Releases
+
+Download the latest release for your platform from the [Releases page](https://github.com/mmogr/gglib/releases).
+
+#### macOS
+
+1. Download the macOS release tarball for your architecture:
+   - `gglib-gui-*-aarch64-apple-darwin.tar.gz` for Apple Silicon (M1/M2/M3)
+   - `gglib-gui-*-x86_64-apple-darwin.tar.gz` for Intel Macs
+2. Extract the archive: `tar -xzf gglib-gui-*.tar.gz`
+3. Double-click `macos-install.command` (or run `./macos-install.command` in Terminal)
+4. The script will remove the quarantine attribute and optionally install to `/Applications`
+
+> **Note:** macOS marks downloaded apps as "damaged" because they are not code-signed. The install script fixes this automatically by removing the quarantine attribute.
+
+#### Windows
+
+Download and extract the Windows release (`gglib-gui-*-x86_64-pc-windows-msvc.zip`), then run `gglib-gui.exe`.
+
+#### Linux
+
+Download and extract the Linux release (`gglib-gui-*-x86_64-unknown-linux-gnu.tar.gz`), then run the `gglib-gui` binary.
+
+### Quick Install (From Source)
 
 The recommended way to install GGLib is using the Makefile:
 
