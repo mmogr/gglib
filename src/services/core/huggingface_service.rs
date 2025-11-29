@@ -9,6 +9,11 @@
 //! The service follows the pattern established by other core services:
 //! - Stateless struct that can be cloned and shared
 //! - Pure functions without interactive prompts
+
+// Allow collapsible_if because let chains (`if let ... && let ...`) are unstable
+// in the CI's Rust version (1.86). Once let chains are stabilized, we can collapse
+// these nested if statements.
+#![allow(clippy::collapsible_if)]
 //! - Returns domain types from `models/gui.rs`
 //!
 //! # Example
@@ -426,55 +431,64 @@ impl HuggingFaceService {
                         let sub_api_url =
                             format!("{}/{}/tree/main/{}", HF_API_BASE, model_id, dir_path);
 
-                        if let Ok(sub_response) = reqwest::get(&sub_api_url).await
-                            && sub_response.status().is_success()
-                            && let Ok(sub_data) = sub_response.json::<serde_json::Value>().await
-                            && let Some(sub_files) = sub_data.as_array()
-                        {
-                            let mut dir_total_size: u64 = 0;
-                            let mut dir_shard_count: u32 = 0;
-                            let mut dir_quant_name: Option<String> = None;
-                            let mut dir_first_file: Option<String> = None;
-
-                            for sub_file in sub_files {
-                                if let (Some(sub_path), Some(sub_size)) = (
-                                    sub_file.get("path").and_then(|v| v.as_str()),
-                                    sub_file.get("size").and_then(|v| v.as_u64()),
-                                ) && sub_path.ends_with(".gguf")
+                        if let Ok(sub_response) = reqwest::get(&sub_api_url).await {
+                            if sub_response.status().is_success() {
+                                if let Ok(sub_data) = sub_response.json::<serde_json::Value>().await
                                 {
-                                    dir_total_size += sub_size;
-                                    dir_shard_count += 1;
+                                    if let Some(sub_files) = sub_data.as_array() {
+                                        let mut dir_total_size: u64 = 0;
+                                        let mut dir_shard_count: u32 = 0;
+                                        let mut dir_quant_name: Option<String> = None;
+                                        let mut dir_first_file: Option<String> = None;
 
-                                    if dir_quant_name.is_none() {
-                                        dir_quant_name = Some(
-                                            extract_quantization_from_filename(sub_path)
-                                                .to_string(),
-                                        );
-                                        dir_first_file = Some(sub_path.to_string());
+                                        for sub_file in sub_files {
+                                            if let (Some(sub_path), Some(sub_size)) = (
+                                                sub_file.get("path").and_then(|v| v.as_str()),
+                                                sub_file.get("size").and_then(|v| v.as_u64()),
+                                            ) {
+                                                if sub_path.ends_with(".gguf") {
+                                                    dir_total_size += sub_size;
+                                                    dir_shard_count += 1;
+
+                                                    if dir_quant_name.is_none() {
+                                                        dir_quant_name = Some(
+                                                            extract_quantization_from_filename(
+                                                                sub_path,
+                                                            )
+                                                            .to_string(),
+                                                        );
+                                                        dir_first_file = Some(sub_path.to_string());
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        if let (Some(quant_name), Some(first_file)) =
+                                            (dir_quant_name, dir_first_file)
+                                        {
+                                            if quant_name != "unknown"
+                                                && !quant_map.contains_key(&quant_name)
+                                            {
+                                                quant_map.insert(
+                                                    quant_name.clone(),
+                                                    HfQuantization {
+                                                        name: quant_name,
+                                                        file_path: first_file,
+                                                        size_bytes: dir_total_size,
+                                                        size_mb: dir_total_size as f64
+                                                            / 1_048_576.0,
+                                                        is_sharded: dir_shard_count > 1,
+                                                        shard_count: if dir_shard_count > 1 {
+                                                            Some(dir_shard_count)
+                                                        } else {
+                                                            None
+                                                        },
+                                                    },
+                                                );
+                                            }
+                                        }
                                     }
                                 }
-                            }
-
-                            if let (Some(quant_name), Some(first_file)) =
-                                (dir_quant_name, dir_first_file)
-                                && quant_name != "unknown"
-                                && !quant_map.contains_key(&quant_name)
-                            {
-                                quant_map.insert(
-                                    quant_name.clone(),
-                                    HfQuantization {
-                                        name: quant_name,
-                                        file_path: first_file,
-                                        size_bytes: dir_total_size,
-                                        size_mb: dir_total_size as f64 / 1_048_576.0,
-                                        is_sharded: dir_shard_count > 1,
-                                        shard_count: if dir_shard_count > 1 {
-                                            Some(dir_shard_count)
-                                        } else {
-                                            None
-                                        },
-                                    },
-                                );
                             }
                         }
                     }
@@ -661,19 +675,20 @@ impl HuggingFaceService {
                 }
 
                 // Sharded GGUF files in per-quant directories
-                if entry_type == "directory"
-                    && filename.to_uppercase().contains(&quant_upper)
-                    && let Ok(sub_files) = self.fetch_tree(model_id, Some(filename)).await
-                {
-                    for sub_file in sub_files {
-                        if let Some(sub_path) = sub_file.get("path").and_then(|v| v.as_str())
-                            && sub_path.ends_with(".gguf")
-                        {
-                            let sub_quant = extract_quantization_from_filename(sub_path);
-                            if sub_quant.to_uppercase() == quant_upper {
-                                let file_size =
-                                    sub_file.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
-                                matching_files.push((sub_path.to_string(), file_size));
+                if entry_type == "directory" && filename.to_uppercase().contains(&quant_upper) {
+                    if let Ok(sub_files) = self.fetch_tree(model_id, Some(filename)).await {
+                        for sub_file in sub_files {
+                            if let Some(sub_path) = sub_file.get("path").and_then(|v| v.as_str()) {
+                                if sub_path.ends_with(".gguf") {
+                                    let sub_quant = extract_quantization_from_filename(sub_path);
+                                    if sub_quant.to_uppercase() == quant_upper {
+                                        let file_size = sub_file
+                                            .get("size")
+                                            .and_then(|v| v.as_u64())
+                                            .unwrap_or(0);
+                                        matching_files.push((sub_path.to_string(), file_size));
+                                    }
+                                }
                             }
                         }
                     }
