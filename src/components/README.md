@@ -25,5 +25,6 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
 - **`ModelList.tsx`**: The main view for listing and managing models.
 - **`ChatView.tsx`**: The chat interface component.
 - **`DownloadModel.tsx`**: Component for searching and downloading models with queue support. Users can queue multiple downloads that process sequentially.
+- **`HuggingFaceBrowser/`**: Browse and search GGUF models on HuggingFace Hub with sorting options (downloads, likes, date, alphabetical) and parameter filtering.
 - **`ModelInspectorPanel/`**: Detailed view for model metadata.
 - **`WorkPanel/`**: Container for active tasks and views.
