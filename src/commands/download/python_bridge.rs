@@ -437,12 +437,13 @@ impl PythonHelper {
         }
 
         // Helper to remove PID from storage on completion/error
+        #[allow(clippy::collapsible_if)]
         let cleanup_pid = || {
-            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup)
-                && let Ok(mut guard) = storage.write()
-            {
-                guard.remove(key);
-                tracing::debug!(key = %key, "Removed PID from shutdown tracking");
+            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup) {
+                if let Ok(mut guard) = storage.write() {
+                    guard.remove(key);
+                    tracing::debug!(key = %key, "Removed PID from shutdown tracking");
+                }
             }
         };
 
