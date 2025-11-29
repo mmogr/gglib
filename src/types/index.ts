@@ -126,6 +126,11 @@ export interface HfModelSummary {
 }
 
 /**
+ * Sort field options for HuggingFace model search.
+ */
+export type HfSortField = 'downloads' | 'likes' | 'modified' | 'created' | 'id';
+
+/**
  * Request for searching HuggingFace models.
  */
 export interface HfSearchRequest {
@@ -139,6 +144,10 @@ export interface HfSearchRequest {
   page: number;
   /** Results per page (default 30) */
   limit: number;
+  /** Sort field (default: downloads) */
+  sort_by?: HfSortField;
+  /** Sort direction: true = ascending, false = descending (default: false/descending) */
+  sort_ascending?: boolean;
 }
 
 /**

@@ -43,6 +43,7 @@ use super::huggingface_models::HuggingFaceError;
 use crate::commands::download::extract_quantization_from_filename;
 use crate::models::gui::{
     HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
+    HfSortField,
 };
 use anyhow::Result;
 use std::collections::HashMap;
@@ -93,11 +94,19 @@ impl HuggingFaceService {
     ///
     /// This is the core URL builder that ensures consistent API calls
     /// across all methods, preventing issues like missing likes data.
-    fn build_search_url(fetch_limit: u32, page: u32) -> String {
+    fn build_search_url(
+        fetch_limit: u32,
+        page: u32,
+        sort_by: &HfSortField,
+        sort_ascending: bool,
+    ) -> String {
+        let direction = if sort_ascending { "1" } else { "-1" };
         format!(
-            "{}?library=gguf&pipeline_tag=text-generation&{}&sort=downloads&direction=-1&limit={}&p={}",
+            "{}?library=gguf&pipeline_tag=text-generation&{}&sort={}&direction={}&limit={}&p={}",
             HF_API_BASE,
             Self::build_expand_params(),
+            sort_by.as_api_param(),
+            direction,
             fetch_limit,
             page
         )
@@ -216,7 +225,12 @@ impl HuggingFaceService {
         // that don't contain GGUF files themselves (only their derivatives do).
         let fetch_limit = 100;
 
-        let mut url = Self::build_search_url(fetch_limit, request.page);
+        let mut url = Self::build_search_url(
+            fetch_limit,
+            request.page,
+            &request.sort_by,
+            request.sort_ascending,
+        );
 
         // CRITICAL: Always add "GGUF" to the search to filter for repos that actually contain
         // GGUF files. The library=gguf tag returns base models like "meta-llama/Llama-3.1-8B"
@@ -691,7 +705,7 @@ mod tests {
 
     #[test]
     fn test_build_search_url_includes_expand_params() {
-        let url = HuggingFaceService::build_search_url(100, 0);
+        let url = HuggingFaceService::build_search_url(100, 0, &HfSortField::Downloads, false);
 
         // Verify URL structure
         assert!(url.starts_with("https://huggingface.co/api/models"));
@@ -704,9 +718,38 @@ mod tests {
         assert!(url.contains("expand[]=siblings"));
         assert!(url.contains("expand[]=gguf"));
 
+        // Verify default sort params
+        assert!(url.contains("sort=downloads"));
+        assert!(url.contains("direction=-1"));
+
         // Verify pagination params
         assert!(url.contains("limit=100"));
         assert!(url.contains("p=0"));
+    }
+
+    #[test]
+    fn test_build_search_url_with_different_sort_options() {
+        // Test sorting by likes descending
+        let url = HuggingFaceService::build_search_url(50, 1, &HfSortField::Likes, false);
+        assert!(url.contains("sort=likes"));
+        assert!(url.contains("direction=-1"));
+        assert!(url.contains("limit=50"));
+        assert!(url.contains("p=1"));
+
+        // Test sorting by name ascending (alphabetical)
+        let url = HuggingFaceService::build_search_url(30, 0, &HfSortField::Alphabetical, true);
+        assert!(url.contains("sort=id"));
+        assert!(url.contains("direction=1"));
+
+        // Test sorting by modified date
+        let url = HuggingFaceService::build_search_url(30, 0, &HfSortField::Modified, false);
+        assert!(url.contains("sort=lastModified"));
+        assert!(url.contains("direction=-1"));
+
+        // Test sorting by created date
+        let url = HuggingFaceService::build_search_url(30, 0, &HfSortField::Created, false);
+        assert!(url.contains("sort=createdAt"));
+        assert!(url.contains("direction=-1"));
     }
 
     #[test]

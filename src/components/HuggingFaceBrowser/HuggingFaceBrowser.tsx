@@ -6,6 +6,7 @@ import {
   HfSearchResponse,
   HfQuantization,
   HfQuantizationsResponse,
+  HfSortField,
 } from "../../types";
 import { useDownloadProgress } from "../../hooks/useDownloadProgress";
 import { DownloadProgressDisplay } from "../DownloadProgressDisplay";
@@ -17,6 +18,21 @@ interface HuggingFaceBrowserProps {
   /** Callback when a model download completes */
   onDownloadCompleted?: () => void;
 }
+
+// Sort options configuration
+interface SortOption {
+  value: HfSortField;
+  label: string;
+  defaultAscending: boolean;
+}
+
+const SORT_OPTIONS: SortOption[] = [
+  { value: "downloads", label: "Downloads", defaultAscending: false },
+  { value: "likes", label: "Likes", defaultAscending: false },
+  { value: "modified", label: "Recently Updated", defaultAscending: false },
+  { value: "created", label: "Recently Created", defaultAscending: false },
+  { value: "id", label: "Alphabetical", defaultAscending: true },
+];
 
 // Debounce helper
 function useDebounce<T>(value: T, delay: number): T {
@@ -187,6 +203,8 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [minParams, setMinParams] = useState("");
   const [maxParams, setMaxParams] = useState("");
+  const [sortBy, setSortBy] = useState<HfSortField>("downloads");
+  const [sortAscending, setSortAscending] = useState(false);
 
   // Results state
   const [models, setModels] = useState<HfModelSummary[]>([]);
@@ -213,6 +231,18 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   // Ref to track if we should fetch on debounced change
   const isInitialMount = useRef(true);
 
+  // Handle sort change
+  const handleSortChange = (newSortBy: HfSortField) => {
+    const sortOption = SORT_OPTIONS.find((opt) => opt.value === newSortBy);
+    setSortBy(newSortBy);
+    // Set the default direction for this sort option
+    if (sortOption) {
+      setSortAscending(sortOption.defaultAscending);
+    }
+    // Trigger a new search with the updated sort
+    setCurrentPage(0);
+  };
+
   // Build search request
   const buildSearchRequest = useCallback(
     (page: number): HfSearchRequest => ({
@@ -221,8 +251,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
       max_params_b: maxParams ? parseFloat(maxParams) : null,
       page,
       limit: 30,
+      sort_by: sortBy,
+      sort_ascending: sortAscending,
     }),
-    [searchQuery, minParams, maxParams]
+    [searchQuery, minParams, maxParams, sortBy, sortAscending]
   );
 
   // Perform search
@@ -320,6 +352,13 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
     // They can manually click Search to get all results
   }, [debouncedQuery]);
 
+  // Auto-search when sort changes
+  useEffect(() => {
+    if (!isInitialMount.current) {
+      performSearch(0, false);
+    }
+  }, [sortBy, sortAscending]);
+
   return (
     <div className={styles.container}>
       {/* Search Section */}
@@ -369,6 +408,29 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
               min="0"
               step="0.1"
             />
+          </div>
+          <div className={styles.filterGroup}>
+            <label className={styles.searchLabel}>Sort By</label>
+            <div className={styles.sortWrapper}>
+              <select
+                className={styles.sortSelect}
+                value={sortBy}
+                onChange={(e) => handleSortChange(e.target.value as HfSortField)}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                className={styles.sortDirectionBtn}
+                onClick={() => setSortAscending(!sortAscending)}
+                title={sortAscending ? "Ascending" : "Descending"}
+              >
+                {sortAscending ? "↑" : "↓"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

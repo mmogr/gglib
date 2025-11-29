@@ -35,6 +35,37 @@ pub struct HfModelSummary {
     pub tags: Vec<String>,
 }
 
+/// Sort field options for HuggingFace model search
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum HfSortField {
+    /// Sort by download count (default)
+    #[default]
+    Downloads,
+    /// Sort by number of likes
+    Likes,
+    /// Sort by last modified date
+    Modified,
+    /// Sort by creation date
+    Created,
+    /// Sort alphabetically by name
+    #[serde(rename = "id")]
+    Alphabetical,
+}
+
+impl HfSortField {
+    /// Get the API parameter value for this sort field
+    pub fn as_api_param(&self) -> &'static str {
+        match self {
+            HfSortField::Downloads => "downloads",
+            HfSortField::Likes => "likes",
+            HfSortField::Modified => "lastModified",
+            HfSortField::Created => "createdAt",
+            HfSortField::Alphabetical => "id",
+        }
+    }
+}
+
 /// Request for searching HuggingFace models
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HfSearchRequest {
@@ -48,6 +79,12 @@ pub struct HfSearchRequest {
     pub page: u32,
     /// Results per page (default 30)
     pub limit: u32,
+    /// Sort field (default: downloads)
+    #[serde(default)]
+    pub sort_by: HfSortField,
+    /// Sort direction: true = ascending, false = descending (default: false/descending)
+    #[serde(default)]
+    pub sort_ascending: bool,
 }
 
 impl Default for HfSearchRequest {
@@ -58,6 +95,8 @@ impl Default for HfSearchRequest {
             max_params_b: None,
             page: 0,
             limit: 30,
+            sort_by: HfSortField::default(),
+            sort_ascending: false, // Descending by default (most downloads/likes first)
         }
     }
 }
