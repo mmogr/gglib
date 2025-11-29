@@ -1,6 +1,7 @@
 import { useState, FC } from "react";
 import { GgufModel } from "../types";
 import { TauriService } from "../services/tauri";
+import { formatParamCount } from "../utils/format";
 
 interface ModelListProps {
   models: GgufModel[];
@@ -79,12 +80,7 @@ const ModelList: FC<ModelListProps> = ({
     }
   };
 
-  const formatSize = (paramCount: number) => {
-    if (paramCount >= 1) {
-      return `${paramCount.toFixed(1)}B`;
-    }
-    return `${(paramCount * 1000).toFixed(0)}M`;
-  };
+
 
   if (error) {
     return (
@@ -130,7 +126,7 @@ const ModelList: FC<ModelListProps> = ({
                   <div className="name-secondary">📦 {model.hf_repo_id}</div>
                 )}
               </div>
-              <div className="cell">{formatSize(model.param_count_b)}</div>
+              <div className="cell">{formatParamCount(model.param_count_b)}</div>
               <div className="cell">{model.architecture || "—"}</div>
               <div className="cell">
                 <span className="quantization-badge">
@@ -178,7 +174,7 @@ const ModelList: FC<ModelListProps> = ({
             <div className="modal-body">
               <div className="model-info">
                 <strong>{servingModel.name}</strong>
-                <span className="model-size">{formatSize(servingModel.param_count_b)}</span>
+                <span className="model-size">{formatParamCount(servingModel.param_count_b)}</span>
               </div>
               
               <div className="form-group">

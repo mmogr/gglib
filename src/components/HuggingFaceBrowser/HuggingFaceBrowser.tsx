@@ -10,6 +10,7 @@ import {
 } from "../../types";
 import { useDownloadProgress } from "../../hooks/useDownloadProgress";
 import { DownloadProgressDisplay } from "../DownloadProgressDisplay";
+import { formatBytes, formatNumber } from "../../utils/format";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
@@ -51,30 +52,17 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// Format file size for display
-const formatSize = (sizeBytes: number): string => {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  if (sizeBytes < 1024 * 1024 * 1024)
-    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-};
-
-// Format large numbers (downloads, likes)
-const formatNumber = (num: number): string => {
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
-  return num.toString();
-};
-
 // Model card component with expandable quantization panel
 interface ModelCardProps {
   model: HfModelSummary;
   onDownload: (modelId: string, quantization: string) => void;
-  isDownloading: boolean;
+  /** Whether download buttons should be disabled (queue full) */
+  downloadsDisabled: boolean;
+  /** Tooltip text when downloads are disabled */
+  disabledReason?: string;
 }
 
-const ModelCard: FC<ModelCardProps> = ({ model, onDownload, isDownloading }) => {
+const ModelCard: FC<ModelCardProps> = ({ model, onDownload, downloadsDisabled, disabledReason }) => {
   const [expanded, setExpanded] = useState(false);
   const [quantizations, setQuantizations] = useState<HfQuantization[]>([]);
   const [loadingQuants, setLoadingQuants] = useState(false);
@@ -171,7 +159,7 @@ const ModelCard: FC<ModelCardProps> = ({ model, onDownload, isDownloading }) => 
                       )}
                     </span>
                     <span className={styles.quantSize}>
-                      {formatSize(quant.size_bytes)}
+                      {formatBytes(quant.size_bytes)}
                     </span>
                   </div>
                   <button
@@ -180,7 +168,8 @@ const ModelCard: FC<ModelCardProps> = ({ model, onDownload, isDownloading }) => 
                       e.stopPropagation();
                       handleDownload(quant);
                     }}
-                    disabled={isDownloading}
+                    disabled={downloadsDisabled}
+                    title={downloadsDisabled ? disabledReason : "Add to download queue"}
                   >
                     Download
                   </button>
@@ -215,12 +204,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
 
-  // Download progress
-  const { progress, cancelDownload } = useDownloadProgress({
+  // Download progress - use queueStatus to determine if we can queue more downloads
+  const { progress, queueStatus, queueCount, isDownloading, cancelDownload } = useDownloadProgress({
     onCompleted: () => {
-      setIsDownloading(false);
       onDownloadCompleted?.();
     },
   });
@@ -311,16 +298,13 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
   // Handle download
   const handleDownload = async (modelId: string, quantization: string) => {
-    setIsDownloading(true);
     setError(null);
     try {
       await TauriService.queueDownload(modelId, quantization);
       onDownloadStarted?.();
-      // Note: isDownloading will be set to false by useDownloadProgress callbacks
     } catch (err) {
-      setIsDownloading(false);
       setError(
-        err instanceof Error ? err.message : "Failed to start download"
+        err instanceof Error ? err.message : "Failed to queue download"
       );
     }
   };
@@ -330,7 +314,6 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
     if (progress?.model_id) {
       try {
         await cancelDownload(progress.model_id);
-        setIsDownloading(false);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to cancel download"
@@ -338,6 +321,13 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
       }
     }
   };
+
+  // Determine if queue is full (can't add more downloads)
+  const maxQueueSize = queueStatus?.max_size ?? 10;
+  const isQueueFull = queueCount >= maxQueueSize;
+  const disabledReason = isQueueFull 
+    ? `Queue is full (${queueCount}/${maxQueueSize})`
+    : undefined;
 
   // Auto-search on debounced query change (after initial mount)
   useEffect(() => {
@@ -437,13 +427,33 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
       {/* Results Section */}
       <div className={styles.resultsSection}>
-        {/* Download Progress */}
-        {isDownloading && progress && (
-          <DownloadProgressDisplay
-            progress={progress}
-            onCancel={handleCancelDownload}
-            className={styles.downloadProgress}
-          />
+        {/* Download Progress & Queue Status */}
+        {(isDownloading || queueCount > 0) && (
+          <div className={styles.downloadStatusSection}>
+            {/* Queue status indicator */}
+            <div className={styles.queueStatusBar}>
+              <span className={styles.queueStatusText}>
+                📥 {queueCount > 1 ? `${queueCount} downloads queued` : 'Downloading'}
+                {isDownloading && progress && (
+                  <span className={styles.currentDownload}>
+                    {" "}— {progress.model_id.length > 30 
+                      ? progress.model_id.substring(0, 27) + "..." 
+                      : progress.model_id}
+                  </span>
+                )}
+              </span>
+            </div>
+            
+            {/* Download progress display */}
+            {isDownloading && progress && (
+              <DownloadProgressDisplay
+                progress={progress}
+                onCancel={handleCancelDownload}
+                compact={true}
+                className={styles.downloadProgress}
+              />
+            )}
+          </div>
         )}
 
         {/* Error State */}
@@ -487,7 +497,8 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
                 key={model.id}
                 model={model}
                 onDownload={handleDownload}
-                isDownloading={isDownloading}
+                downloadsDisabled={isQueueFull}
+                disabledReason={disabledReason}
               />
             ))}
 

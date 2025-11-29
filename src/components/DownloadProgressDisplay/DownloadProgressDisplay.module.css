@@ -162,3 +162,17 @@
 .progressMetric {
   color: var(--vscode-foreground, #cccccc);
 }
+
+/* Compact mode single-line stats */
+.compactStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 0.8em;
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+}
+
+.compactStats > span {
+  white-space: nowrap;
+}

@@ -1,6 +1,7 @@
 import { FC, useState, useEffect } from 'react';
 import { GgufModel, ServeConfig, ServerInfo } from '../../types';
 import { TauriService } from '../../services/tauri';
+import { formatParamCount } from '../../utils/format';
 import './ModelInspectorPanel.css';
 
 interface ModelInspectorPanelProps {
@@ -203,13 +204,6 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     navigator.clipboard.writeText(text);
   };
 
-  const formatSize = (paramCount: number) => {
-    if (paramCount >= 1) {
-      return `${paramCount.toFixed(1)}B`;
-    }
-    return `${(paramCount * 1000).toFixed(0)}M`;
-  };
-
   const combinedTags = modelTags.length > 0 ? modelTags : (model?.tags || []);
   const hasAgentTag = combinedTags.some(tag => tag.toLowerCase() === 'agent');
   const effectiveJinjaEnabled = jinjaOverride === null ? hasAgentTag : jinjaOverride;
@@ -252,7 +246,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             <div className="metadata-grid">
               <div className="metadata-row">
                 <span className="metadata-label">Size:</span>
-                <span className="metadata-value">{formatSize(model.param_count_b)}</span>
+                <span className="metadata-value">{formatParamCount(model.param_count_b)}</span>
               </div>
               {model.architecture && (
                 <div className="metadata-row">
@@ -415,7 +409,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             <div className="modal-body">
               <div className="model-info">
                 <strong>{model.name}</strong>
-                <span className="model-size">{formatSize(model.param_count_b)}</span>
+                <span className="model-size">{formatParamCount(model.param_count_b)}</span>
               </div>
 
               <div className="form-group">

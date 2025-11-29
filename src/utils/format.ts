@@ -1,0 +1,46 @@
+/**
+ * Shared formatting utilities for displaying bytes, time, and numbers.
+ */
+
+/**
+ * Format bytes into human-readable format (B, KB, MB, GB, etc.)
+ */
+export const formatBytes = (bytes: number, decimals = 2): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
+
+/**
+ * Format seconds into human-readable time (e.g., "5m 30s")
+ */
+export const formatTime = (seconds: number): string => {
+  if (!isFinite(seconds) || seconds < 0) return 'Calculating...';
+  if (seconds < 60) return `${Math.ceil(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.ceil(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+};
+
+/**
+ * Format large numbers with K/M suffix (e.g., 1.5K, 2.3M)
+ */
+export const formatNumber = (num: number): string => {
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toString();
+};
+
+/**
+ * Format model parameter count (e.g., "7.0B", "500M")
+ * @param paramCount - Parameter count in billions (e.g., 7.0 for 7B, 0.5 for 500M)
+ */
+export const formatParamCount = (paramCount: number): string => {
+  if (paramCount >= 1) {
+    return `${paramCount.toFixed(1)}B`;
+  }
+  return `${(paramCount * 1000).toFixed(0)}M`;
+};

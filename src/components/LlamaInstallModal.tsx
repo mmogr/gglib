@@ -1,5 +1,6 @@
 import { FC } from 'react';
 import { LlamaInstallProgress } from '../hooks/useLlamaStatus';
+import { formatBytes } from '../utils/format';
 import styles from './LlamaInstallModal.module.css';
 
 interface LlamaInstallModalProps {
@@ -11,15 +12,6 @@ interface LlamaInstallModalProps {
   onInstall: () => void;
   onSkip?: () => void;
 }
-
-const formatBytes = (bytes: number, decimals = 1) => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-};
 
 export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
   isOpen,

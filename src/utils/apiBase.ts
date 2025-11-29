@@ -1,8 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-
-const isTauriApp =
-  typeof (window as any).__TAURI_INTERNALS__ !== "undefined" ||
-  typeof (window as any).__TAURI__ !== "undefined";
+import { isTauriApp } from "./platform";
 
 let cachedBase: string | null = null;
 let resolvingPromise: Promise<string> | null = null;

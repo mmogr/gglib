@@ -1,5 +1,6 @@
 import { FC } from 'react';
 import { GgufModel, ServerInfo } from '../../types';
+import { formatParamCount } from '../../utils/format';
 import './ModelLibraryPanel.css';
 
 interface ModelLibraryPanelProps {
@@ -33,13 +34,6 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   servers,
   onShowWorkPanel,
 }) => {
-  const formatSize = (paramCount: number) => {
-    if (paramCount >= 1) {
-      return `${paramCount.toFixed(1)}B`;
-    }
-    return `${(paramCount * 1000).toFixed(0)}M`;
-  };
-
   const isModelRunning = (modelId?: number) => {
     if (!modelId) return false;
     return servers.some(s => s.model_id === modelId);
@@ -152,7 +146,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
                     )}
                   </div>
                   <div className="model-metadata">
-                    <span className="metadata-item">{formatSize(model.param_count_b)}</span>
+                    <span className="metadata-item">{formatParamCount(model.param_count_b)}</span>
                     {model.architecture && (
                       <span className="metadata-item">{model.architecture}</span>
                     )}

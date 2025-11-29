@@ -1,9 +1,7 @@
 import { useState, FC, FormEvent } from "react";
 import { TauriService } from "../services/tauri";
+import { isTauriApp } from "../utils/platform";
 import styles from './AddModel.module.css';
-
-// Check if we're in Tauri environment
-const isTauri = typeof (window as any).__TAURI_INTERNALS__ !== 'undefined';
 
 interface AddModelProps {
   onModelAdded: () => void;
@@ -15,7 +13,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
   const [error, setError] = useState<string | null>(null);
 
   const handleBrowse = async () => {
-    if (!isTauri) {
+    if (!isTauriApp) {
       // In web mode, use standard file input
       const input = document.createElement('input');
       input.type = 'file';

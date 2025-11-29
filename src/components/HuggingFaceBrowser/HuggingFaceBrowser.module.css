@@ -479,3 +479,30 @@
 .downloadProgress {
   margin-bottom: 1rem;
 }
+
+/* Download Status Section */
+.downloadStatusSection {
+  background: rgba(34, 211, 238, 0.05);
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.queueStatusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.queueStatusText {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #22d3ee;
+}
+
+.currentDownload {
+  color: #94a3b8;
+  font-weight: 400;
+}

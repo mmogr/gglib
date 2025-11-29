@@ -1,5 +1,6 @@
 import { FC } from 'react';
 import { DownloadProgress } from '../../hooks/useDownloadProgress';
+import { formatBytes, formatTime } from '../../utils/format';
 import styles from './DownloadProgressDisplay.module.css';
 
 interface DownloadProgressDisplayProps {
@@ -8,23 +9,6 @@ interface DownloadProgressDisplayProps {
   compact?: boolean;
   className?: string;
 }
-
-const formatBytes = (bytes: number, decimals = 2) => {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-};
-
-const formatTime = (seconds: number) => {
-  if (!isFinite(seconds) || seconds < 0) return 'Calculating...';
-  if (seconds < 60) return `${Math.ceil(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.ceil(seconds % 60);
-  return `${minutes}m ${remainingSeconds}s`;
-};
 
 /**
  * Reusable download progress display component.
@@ -122,42 +106,58 @@ const DownloadProgressDisplay: FC<DownloadProgressDisplayProps> = ({
             </div>
           )}
 
-          {/* Progress details */}
-          {!compact && progress.percentage !== undefined && (
-            <div className={styles.progressDetails}>
-              <div>
-                <span className={styles.progressLabel}>
-                  {progress.shard_progress && progress.shard_progress.total_shards > 1
-                    ? 'Overall'
-                    : 'Progress'}
-                </span>
-                <span className={styles.progressPercentage}>{progress.percentage.toFixed(1)}%</span>
+          {/* Progress details - full version for non-compact, condensed for compact */}
+          {progress.percentage !== undefined && (
+            compact ? (
+              /* Condensed single-line stats for compact mode */
+              <div className={styles.compactStats}>
+                {progress.downloaded !== undefined && progress.total !== undefined && (
+                  <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
+                )}
+                {progress.speed !== undefined && (
+                  <span>{formatBytes(progress.speed)}/s</span>
+                )}
+                {progress.eta !== undefined && (
+                  <span>ETA: {formatTime(progress.eta)}</span>
+                )}
               </div>
-              {progress.downloaded !== undefined && progress.total !== undefined && (
+            ) : (
+              /* Full details for non-compact mode */
+              <div className={styles.progressDetails}>
                 <div>
                   <span className={styles.progressLabel}>
                     {progress.shard_progress && progress.shard_progress.total_shards > 1
-                      ? 'Total Size'
-                      : 'Size'}
+                      ? 'Overall'
+                      : 'Progress'}
                   </span>
-                  <span className={styles.progressMetric}>
-                    {formatBytes(progress.downloaded)} / {formatBytes(progress.total)}
-                  </span>
+                  <span className={styles.progressPercentage}>{progress.percentage.toFixed(1)}%</span>
                 </div>
-              )}
-              {progress.speed !== undefined && (
-                <div>
-                  <span className={styles.progressLabel}>Speed</span>
-                  <span className={styles.progressMetric}>{formatBytes(progress.speed)}/s</span>
-                </div>
-              )}
-              {progress.eta !== undefined && (
-                <div>
-                  <span className={styles.progressLabel}>ETA</span>
-                  <span className={styles.progressMetric}>{formatTime(progress.eta)}</span>
-                </div>
-              )}
-            </div>
+                {progress.downloaded !== undefined && progress.total !== undefined && (
+                  <div>
+                    <span className={styles.progressLabel}>
+                      {progress.shard_progress && progress.shard_progress.total_shards > 1
+                        ? 'Total Size'
+                        : 'Size'}
+                    </span>
+                    <span className={styles.progressMetric}>
+                      {formatBytes(progress.downloaded)} / {formatBytes(progress.total)}
+                    </span>
+                  </div>
+                )}
+                {progress.speed !== undefined && (
+                  <div>
+                    <span className={styles.progressLabel}>Speed</span>
+                    <span className={styles.progressMetric}>{formatBytes(progress.speed)}/s</span>
+                  </div>
+                )}
+                {progress.eta !== undefined && (
+                  <div>
+                    <span className={styles.progressLabel}>ETA</span>
+                    <span className={styles.progressMetric}>{formatTime(progress.eta)}</span>
+                  </div>
+                )}
+              </div>
+            )
           )}
         </div>
       )}
