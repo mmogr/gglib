@@ -36,9 +36,14 @@
   transition: var(--transition-all);
 }
 
-.headerButton:hover {
+.headerButton:hover:not(:disabled) {
   border-color: var(--color-border-hover);
   background: var(--color-background-hover);
+}
+
+.headerButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .headerButtonActive {
@@ -50,20 +55,31 @@
 .headerButtonIconOnly {
   width: var(--button-height-base);
   padding: 0;
+  position: relative;
 }
 
-.statusDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-border);
-  box-shadow: 0 0 0 1px var(--color-background);
-  transition: var(--transition-all);
+/* Server button wrapper for popover positioning */
+.serverButtonWrapper {
+  position: relative;
 }
 
-.statusDotActive {
-  background: var(--color-online);
-  box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+/* Server count badge */
+.serverBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--color-online, #10b981);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
 }
 
 /* Mobile menu toggle button */
@@ -140,15 +156,6 @@
 .mobileMenuItemActive {
   background: var(--color-primary);
   color: white;
-}
-
-/* Wrapper for ProxyControl inside mobile menu */
-.mobileMenuProxyWrapper {
-  width: 100%;
-}
-
-.mobileMenuProxyWrapper > div {
-  width: 100%;
 }
 
 /* Responsive: hide desktop nav, show hamburger on narrow screens */
