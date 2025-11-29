@@ -433,10 +433,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             {/* Queue status indicator */}
             <div className={styles.queueStatusBar}>
               <span className={styles.queueStatusText}>
-                📥 Queue: {queueCount}/{maxQueueSize}
+                📥 {queueCount > 1 ? `${queueCount} downloads queued` : 'Downloading'}
                 {isDownloading && progress && (
                   <span className={styles.currentDownload}>
-                    {" "}— Downloading: {progress.model_id.length > 30 
+                    {" "}— {progress.model_id.length > 30 
                       ? progress.model_id.substring(0, 27) + "..." 
                       : progress.model_id}
                   </span>

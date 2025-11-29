@@ -130,9 +130,9 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
       <h2>Download from HuggingFace</h2>
       <div style={{ fontSize: '0.8em', color: '#666', marginBottom: '10px' }}>
         Mode: {connectionMode}
-        {queueStatus && (
+        {queueCount > 0 && (
           <span style={{ marginLeft: '12px' }}>
-            Queue: {queueCount}/{queueStatus.max_size}
+            {queueCount} {queueCount === 1 ? 'download' : 'downloads'} queued
           </span>
         )}
       </div>
