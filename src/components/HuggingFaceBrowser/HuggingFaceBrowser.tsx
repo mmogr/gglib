@@ -10,6 +10,7 @@ import {
 } from "../../types";
 import { useDownloadProgress } from "../../hooks/useDownloadProgress";
 import { DownloadProgressDisplay } from "../DownloadProgressDisplay";
+import { formatBytes, formatNumber } from "../../utils/format";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
@@ -50,22 +51,6 @@ function useDebounce<T>(value: T, delay: number): T {
 
   return debouncedValue;
 }
-
-// Format file size for display
-const formatSize = (sizeBytes: number): string => {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  if (sizeBytes < 1024 * 1024 * 1024)
-    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-};
-
-// Format large numbers (downloads, likes)
-const formatNumber = (num: number): string => {
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
-  return num.toString();
-};
 
 // Model card component with expandable quantization panel
 interface ModelCardProps {
@@ -174,7 +159,7 @@ const ModelCard: FC<ModelCardProps> = ({ model, onDownload, downloadsDisabled, d
                       )}
                     </span>
                     <span className={styles.quantSize}>
-                      {formatSize(quant.size_bytes)}
+                      {formatBytes(quant.size_bytes)}
                     </span>
                   </div>
                   <button

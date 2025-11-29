@@ -1,53 +1,13 @@
 import { useState, FC, FormEvent, useEffect, useCallback } from "react";
 import { TauriService } from "../services/tauri";
 import { DownloadQueueStatus, DownloadQueueItem } from "../types";
+import { DownloadProgress } from "../hooks/useDownloadProgress";
+import { formatBytes, formatTime } from "../utils/format";
 import styles from "./DownloadModel.module.css";
 
 interface DownloadModelProps {
   onModelDownloaded: () => void;
 }
-
-interface ShardProgressInfo {
-  current_shard: number;
-  total_shards: number;
-  current_filename: string;
-  shard_downloaded: number;
-  shard_total: number;
-  aggregate_downloaded: number;
-  aggregate_total: number;
-}
-
-interface DownloadProgress {
-  status: "started" | "downloading" | "progress" | "completed" | "error" | "queued" | "skipped";
-  model_id: string;
-  message?: string;
-  progress?: number;
-  downloaded?: number;
-  total?: number;
-  percentage?: number;
-  speed?: number; // bytes per second
-  eta?: number;   // seconds remaining
-  queue_position?: number;
-  queue_length?: number;
-  shard_progress?: ShardProgressInfo | null;
-}
-
-const formatBytes = (bytes: number, decimals = 2) => {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-};
-
-const formatTime = (seconds: number) => {
-  if (!isFinite(seconds) || seconds < 0) return 'Calculating...';
-  if (seconds < 60) return `${Math.ceil(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.ceil(seconds % 60);
-  return `${minutes}m ${remainingSeconds}s`;
-};
 
 const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
   const [repoId, setRepoId] = useState("");
