@@ -14,6 +14,7 @@ vi.mock('../../../src/services/tauri', () => ({
     addModel: vi.fn(),
     removeModel: vi.fn(),
     updateModel: vi.fn(),
+    setSelectedModel: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
