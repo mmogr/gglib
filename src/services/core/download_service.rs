@@ -1022,23 +1022,30 @@ impl DownloadService {
     ///
     /// Returns the number of processes that were signaled to terminate.
     pub fn kill_all_processes_sync(&self) -> usize {
-        use tracing::info;
+        use tracing::{info, debug};
 
         // Get all PIDs - use write lock to drain the map
         let pids: Vec<(String, u32)> = match self.child_pids.write() {
-            Ok(mut guard) => guard.drain().collect(),
-            Err(poisoned) => poisoned.into_inner().drain().collect(),
+            Ok(mut guard) => {
+                debug!(tracked_count = guard.len(), "Draining PID storage");
+                guard.drain().collect()
+            }
+            Err(poisoned) => {
+                info!("PID storage lock was poisoned, recovering");
+                poisoned.into_inner().drain().collect()
+            }
         };
 
         let count = pids.len();
         if count == 0 {
+            debug!("No child processes tracked - nothing to kill");
             return 0;
         }
 
         info!(count = count, "Killing all child processes for shutdown");
 
         for (key, pid) in &pids {
-            info!(key = %key, pid = pid, "Killing process");
+            info!(key = %key, pid = pid, "Sending SIGKILL to process");
             kill_process_by_pid(*pid);
         }
 

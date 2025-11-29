@@ -812,6 +812,21 @@ async fn main() {
 
             Ok(())
         })
+        // Handle window close events - this is more reliable than RunEvent::WindowEvent
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                info!("Window close requested via on_window_event - cleaning up download processes");
+                let app_handle = window.app_handle();
+                let state: tauri::State<AppState> = app_handle.state();
+                let downloads = state.backend.core().downloads();
+                
+                // Synchronously kill all child processes (Python downloaders)
+                let killed = downloads.kill_all_processes_sync();
+                if killed > 0 {
+                    info!(count = killed, "Killed download processes on window close");
+                }
+            }
+        })
         .on_menu_event(handle_menu_event)
         .invoke_handler(tauri::generate_handler![
             list_models,
@@ -849,25 +864,18 @@ async fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            // Handle app exit to gracefully kill download subprocesses
-            if let tauri::RunEvent::ExitRequested { .. } = event {
+            // Handle app exit as a final fallback (Cmd+Q, dock quit, etc.)
+            // Note: on_window_event handles CloseRequested more reliably
+            if let tauri::RunEvent::Exit = event {
+                info!("App exiting (RunEvent::Exit) - final cleanup of download processes");
                 let state: tauri::State<AppState> = app_handle.state();
                 let downloads = state.backend.core().downloads();
-
-                // Synchronously kill all child processes (Python downloaders)
-                // This is reliable because it sends SIGKILL/TerminateProcess directly
-                // rather than relying on async task cancellation
-                let killed = downloads.kill_all_processes_sync();
                 
+                // Synchronously kill all child processes (Python downloaders)
+                let killed = downloads.kill_all_processes_sync();
                 if killed > 0 {
                     info!(count = killed, "Killed download processes on app exit");
                 }
-                
-                // Also cancel tokens so any async tasks clean up gracefully
-                // (This is best-effort since tasks may already be aborting)
-                let _cancelled = tauri::async_runtime::block_on(async {
-                    downloads.cancel_all_and_wait(std::time::Duration::from_millis(100)).await
-                });
             }
         });
 }
