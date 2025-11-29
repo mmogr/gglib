@@ -46,6 +46,7 @@ function App() {
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
+    selectModel: (modelId: number) => void;
   } | null>(null);
 
   // Show llama install modal when needed (only for Tauri desktop app)
@@ -160,9 +161,12 @@ function App() {
     };
   }, [checkLlamaStatus]);
 
-  const toggleWorkPanel = () => setIsWorkPanelVisible((prev) => !prev);
   const showWorkPanel = () => setIsWorkPanelVisible(true);
-  const hasRunningServers = servers.length > 0;
+
+  // Handler for selecting a model from the header popover
+  const handleSelectModelFromHeader = useCallback((modelId: number) => {
+    menuActionsRef.current?.selectModel?.(modelId);
+  }, []);
 
   // Callback to register menu actions from ModelControlCenterPage
   const registerMenuActions = useCallback((actions: {
@@ -172,6 +176,7 @@ function App() {
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
+    selectModel: (modelId: number) => void;
   }) => {
     menuActionsRef.current = actions;
   }, []);
@@ -179,11 +184,11 @@ function App() {
   return (
     <div className="app">
       <Header
-        onOpenChat={() => setIsChatOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onToggleWorkPanel={toggleWorkPanel}
-        isWorkPanelVisible={isWorkPanelVisible}
-        isModelRunning={hasRunningServers}
+        servers={servers}
+        onStopServer={stopServer}
+        onSelectModel={handleSelectModelFromHeader}
+        onRefreshServers={loadServers}
       />
       <div className="app-body">
         <ModelControlCenterPage

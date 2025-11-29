@@ -1,0 +1,52 @@
+.runs-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--spacing-xs, 4px);
+  background: var(--color-surface, #2a2a2a);
+  border: 1px solid var(--color-border, #3a3a3a);
+  border-radius: var(--border-radius-md, 8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  min-width: 280px;
+  max-width: 360px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.runs-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  border-bottom: 1px solid var(--color-border, #3a3a3a);
+  background: var(--color-surface-elevated, #333333);
+}
+
+.runs-popover-title {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: 600;
+  color: var(--color-text-primary, #e0e0e0);
+}
+
+.runs-popover-content {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Scrollbar styling for popover content */
+.runs-popover-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.runs-popover-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.runs-popover-content::-webkit-scrollbar-thumb {
+  background: var(--color-border, #3a3a3a);
+  border-radius: 3px;
+}
+
+.runs-popover-content::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-hover, #4a4a4a);
+}

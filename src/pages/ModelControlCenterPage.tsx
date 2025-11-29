@@ -25,6 +25,7 @@ interface ModelControlCenterPageProps {
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
+    selectModel: (modelId: number) => void;
   }) => void;
 }
 
@@ -101,9 +102,12 @@ export default function ModelControlCenterPage({
             TauriService.syncMenuStateSilent();
           }
         },
+        selectModel: (modelId: number) => {
+          selectModel(modelId);
+        },
       });
     }
-  }, [onRegisterMenuActions, loadModels, selectedModelId, servers, stopServer, removeModel, isWorkPanelVisible, onShowWorkPanel, loadServers]);
+  }, [onRegisterMenuActions, loadModels, selectedModelId, servers, stopServer, removeModel, isWorkPanelVisible, onShowWorkPanel, loadServers, selectModel]);
 
   // Handle resize
   const handleMouseDown = useCallback((panelIndex: number) => (e: React.MouseEvent) => {
@@ -187,16 +191,6 @@ export default function ModelControlCenterPage({
 
   const handleModelDownloaded = async () => {
     await loadModels();
-  };
-
-  const handleShowWorkPanel = (tab: WorkPanelTab, subtab?: 'add' | 'download') => {
-    setActiveTab(tab);
-    if (subtab) {
-      setActiveSubTab(subtab);
-    }
-    if (!isWorkPanelVisible) {
-      onShowWorkPanel();
-    }
   };
 
   const handleSelectModel = (modelId: number) => {
