@@ -1,13 +1,14 @@
 import { FC, useState } from 'react';
 import AddModel from '../AddModel';
 import DownloadModel from '../DownloadModel';
+import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
 import './AddDownloadTab.css';
 
 interface AddDownloadTabProps {
   onModelAdded: (filePath: string) => Promise<void>;
   onModelDownloaded: () => Promise<void>;
-  activeSubTab?: 'add' | 'download';
-  onSubTabChange?: (subtab: 'add' | 'download') => void;
+  activeSubTab?: 'add' | 'download' | 'browse';
+  onSubTabChange?: (subtab: 'add' | 'download' | 'browse') => void;
 }
 
 const AddDownloadTab: FC<AddDownloadTabProps> = ({
@@ -16,10 +17,10 @@ const AddDownloadTab: FC<AddDownloadTabProps> = ({
   activeSubTab: externalActiveSubTab,
   onSubTabChange,
 }) => {
-  const [internalActiveSubTab, setInternalActiveSubTab] = useState<'add' | 'download'>('add');
+  const [internalActiveSubTab, setInternalActiveSubTab] = useState<'add' | 'download' | 'browse'>('browse');
   const activeSubTab = externalActiveSubTab ?? internalActiveSubTab;
   
-  const handleSubTabChange = (subtab: 'add' | 'download') => {
+  const handleSubTabChange = (subtab: 'add' | 'download' | 'browse') => {
     if (onSubTabChange) {
       onSubTabChange(subtab);
     } else {
@@ -39,25 +40,34 @@ const AddDownloadTab: FC<AddDownloadTabProps> = ({
     <div className="add-download-tab">
       <div className="subtab-switcher">
         <button
-          className={`subtab-button btn ${activeSubTab === 'add' ? 'active' : ''}`}
-          onClick={() => handleSubTabChange('add')}
+          className={`subtab-button btn ${activeSubTab === 'browse' ? 'active' : ''}`}
+          onClick={() => handleSubTabChange('browse')}
         >
-          📁 Add from file
+          🔍 Browse HF
         </button>
         <button
           className={`subtab-button btn ${activeSubTab === 'download' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('download')}
         >
-          ⬇️ Download from HF
+          ⬇️ Direct Download
+        </button>
+        <button
+          className={`subtab-button btn ${activeSubTab === 'add' ? 'active' : ''}`}
+          onClick={() => handleSubTabChange('add')}
+        >
+          📁 Add from file
         </button>
       </div>
 
       <div className="subtab-content">
-        {activeSubTab === 'add' && (
-          <AddModel onModelAdded={handleModelAdded} />
+        {activeSubTab === 'browse' && (
+          <HuggingFaceBrowser onDownloadStarted={handleModelDownloaded} />
         )}
         {activeSubTab === 'download' && (
           <DownloadModel onModelDownloaded={handleModelDownloaded} />
+        )}
+        {activeSubTab === 'add' && (
+          <AddModel onModelAdded={handleModelAdded} />
         )}
       </div>
     </div>

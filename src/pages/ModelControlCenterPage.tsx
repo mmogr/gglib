@@ -40,7 +40,7 @@ export default function ModelControlCenterPage({
   const [activeTab, setActiveTab] = useState<WorkPanelTab>('add-download');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<'add' | 'download'>('add');
+  const [activeSubTab, setActiveSubTab] = useState<'add' | 'download' | 'browse'>('browse');
   
   // Ref for file input (for menu-triggered file add)
   const fileInputRef = useRef<HTMLInputElement>(null);
