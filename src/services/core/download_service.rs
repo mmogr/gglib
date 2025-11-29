@@ -951,6 +951,48 @@ impl DownloadService {
         self.active_downloads.read().await.keys().cloned().collect()
     }
 
+    /// Cancel all active downloads and wait for them to stop.
+    ///
+    /// This method cancels all in-flight downloads and waits up to the specified
+    /// timeout for the Python subprocesses to terminate. Used for graceful app shutdown.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout` - Maximum time to wait for downloads to stop
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of downloads that were cancelled.
+    pub async fn cancel_all_and_wait(&self, timeout: std::time::Duration) -> usize {
+        use tracing::info;
+
+        // Get all active download keys and their tokens
+        let tokens: Vec<(String, CancellationToken)> = {
+            let mut downloads = self.active_downloads.write().await;
+            downloads.drain().collect()
+        };
+
+        let count = tokens.len();
+        if count == 0 {
+            return 0;
+        }
+
+        info!(count = count, "Cancelling all active downloads for shutdown");
+
+        // Cancel all tokens - this signals the download tasks to stop
+        for (key, token) in &tokens {
+            info!(key = %key, "Cancelling download");
+            token.cancel();
+        }
+
+        // Wait a bit for Python processes to receive the kill signal and terminate
+        // The cancel triggers child.kill().await in the download task
+        tokio::time::sleep(timeout).await;
+
+        info!(count = count, "Download cancellation complete");
+        count
+    }
+
     /// Search HuggingFace Hub for GGUF models.
     ///
     /// This is a convenience wrapper around the search functionality.

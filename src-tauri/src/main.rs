@@ -812,28 +812,6 @@ async fn main() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
-            // Cancel all active downloads when app is closing
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                let handle = window.app_handle();
-                let state: tauri::State<AppState> = handle.state();
-                let backend = state.backend.clone();
-
-                // Run cleanup synchronously before allowing close
-                tauri::async_runtime::block_on(async {
-                    let downloads = backend.core().downloads();
-                    let active = downloads.active_downloads().await;
-                    if !active.is_empty() {
-                        info!("Cancelling {} active downloads on app close", active.len());
-                        for model_id in active {
-                            if let Err(e) = downloads.cancel(&model_id).await {
-                                warn!(error = %e, model_id = %model_id, "Failed to cancel download on close");
-                            }
-                        }
-                    }
-                });
-            }
-        })
         .on_menu_event(handle_menu_event)
         .invoke_handler(tauri::generate_handler![
             list_models,
@@ -868,8 +846,46 @@ async fn main() {
             set_selected_model,
             sync_menu_state
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Handle app exit to gracefully cancel downloads
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let state: tauri::State<AppState> = app_handle.state();
+                let downloads = state.backend.core().downloads();
+
+                // Check if there are active downloads
+                let active_count = tauri::async_runtime::block_on(async {
+                    downloads.active_downloads().await.len()
+                });
+
+                if active_count > 0 {
+                    info!(count = active_count, "Active downloads detected, performing graceful shutdown");
+
+                    // Prevent immediate exit to allow cleanup
+                    api.prevent_exit();
+
+                    // Clone what we need for the async cleanup
+                    let app_handle_clone = app_handle.clone();
+                    let backend = state.backend.clone();
+
+                    // Spawn async cleanup task
+                    tauri::async_runtime::spawn(async move {
+                        let downloads = backend.core().downloads();
+
+                        // Cancel all downloads and wait up to 2 seconds for cleanup
+                        let cancelled = downloads
+                            .cancel_all_and_wait(std::time::Duration::from_secs(2))
+                            .await;
+
+                        info!(cancelled = cancelled, "Download cleanup complete, exiting app");
+
+                        // Now exit the app
+                        app_handle_clone.exit(0);
+                    });
+                }
+            }
+        });
 }
 
 // =============================================================================
