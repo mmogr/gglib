@@ -85,7 +85,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
                 model_id,
                 quantization,
                 list_quants,
-                !skip_db,  // add_to_db: true by default, false if --skip-db passed
+                !skip_db, // add_to_db: true by default, false if --skip-db passed
                 token,
                 force,
                 None,
