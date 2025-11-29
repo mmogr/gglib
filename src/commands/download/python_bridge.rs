@@ -421,27 +421,28 @@ impl PythonHelper {
         let pid = child.id();
         let pid_key_for_cleanup = request.pid_key.clone();
         let pid_storage_for_cleanup = request.pid_storage.clone();
-        if let (Some(storage), Some(key), Some(pid)) = (&request.pid_storage, &request.pid_key, pid) {
+        if let (Some(storage), Some(key), Some(pid)) = (&request.pid_storage, &request.pid_key, pid)
+        {
             tracing::info!(pid = pid, key = %key, "Storing Python subprocess PID for shutdown cleanup");
             if let Ok(mut guard) = storage.write() {
                 guard.insert(key.clone(), pid);
             }
         } else {
             tracing::debug!(
-                has_storage = request.pid_storage.is_some(), 
-                has_key = request.pid_key.is_some(), 
-                pid = ?pid, 
+                has_storage = request.pid_storage.is_some(),
+                has_key = request.pid_key.is_some(),
+                pid = ?pid,
                 "PID not stored - missing storage, key, or PID"
             );
         }
 
         // Helper to remove PID from storage on completion/error
         let cleanup_pid = || {
-            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup) {
-                if let Ok(mut guard) = storage.write() {
-                    guard.remove(key);
-                    tracing::debug!(key = %key, "Removed PID from shutdown tracking");
-                }
+            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup)
+                && let Ok(mut guard) = storage.write()
+            {
+                guard.remove(key);
+                tracing::debug!(key = %key, "Removed PID from shutdown tracking");
             }
         };
 

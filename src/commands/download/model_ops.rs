@@ -16,8 +16,8 @@ use super::file_ops::{
 };
 use super::utils::get_models_directory;
 use crate::models::Gguf;
-use crate::services::core::download_service::PidStorage;
 use crate::services::core::HuggingFaceService;
+use crate::services::core::download_service::PidStorage;
 
 /// Configuration for downloading sharded files
 pub struct DownloadConfig<'a> {

@@ -461,9 +461,9 @@ impl DownloadService {
             None,  // token
             false, // force
             progress_callback,
-            Some(cancel_token.clone()), // Pass token for cancellation
+            Some(cancel_token.clone()),    // Pass token for cancellation
             Some(self.child_pids.clone()), // PID storage for shutdown termination
-            Some(model_id.clone()), // PID key
+            Some(model_id.clone()),        // PID key
         );
         tokio::pin!(download_future);
 
@@ -989,7 +989,10 @@ impl DownloadService {
             return 0;
         }
 
-        info!(count = count, "Cancelling all active downloads for shutdown");
+        info!(
+            count = count,
+            "Cancelling all active downloads for shutdown"
+        );
 
         // Cancel all tokens - this signals the download tasks to stop
         for (key, token) in &tokens {
@@ -1022,7 +1025,7 @@ impl DownloadService {
     ///
     /// Returns the number of processes that were signaled to terminate.
     pub fn kill_all_processes_sync(&self) -> usize {
-        use tracing::{info, debug};
+        use tracing::{debug, info};
 
         // Get all PIDs - use write lock to drain the map
         let pids: Vec<(String, u32)> = match self.child_pids.write() {
@@ -1289,7 +1292,7 @@ fn kill_process_by_pid(pid: u32) {
 fn kill_process_by_pid(pid: u32) {
     use tracing::warn;
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
 
     unsafe {
         let handle = OpenProcess(PROCESS_TERMINATE, false, pid);
