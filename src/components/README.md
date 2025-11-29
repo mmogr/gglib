@@ -70,4 +70,3 @@ When a model is served, the view transitions to a Chat layout:
 
 ### Support Components
 - **`DownloadProgressDisplay/`**: Download progress indicators
-- **`Sidebar.tsx`**: Legacy sidebar component (deprecated)

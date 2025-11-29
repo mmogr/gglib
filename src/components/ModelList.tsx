@@ -51,8 +51,6 @@ const ModelList: FC<ModelListProps> = ({
     
     setIsServing(true);
     try {
-      console.log('Serving model:', servingModel.id, servingModel.name);
-      
       // Determine context length: custom input > model default > undefined
       let contextLength: number | undefined = undefined;
       if (customContext.trim()) {
@@ -64,12 +62,11 @@ const ModelList: FC<ModelListProps> = ({
         contextLength = servingModel.context_length;
       }
       
-      const response = await TauriService.serveModel({
+      await TauriService.serveModel({
         id: servingModel.id,
         context_length: contextLength,
         mlock: false,
       });
-      console.log('Serve response:', response);
       setServingModel(null);
       onRefresh(); // Refresh to show updated server status
     } catch (err) {
