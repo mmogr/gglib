@@ -55,8 +55,9 @@
 .sidebar-tabs-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-md);
   flex-shrink: 0;
+  margin-left: var(--spacing-md);
 }
 
 /* Responsive: narrower widths */
