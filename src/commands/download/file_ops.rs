@@ -82,6 +82,9 @@ pub async fn download_specific_file(
         token: context.session.token(),
         force: context.force,
         progress: context.session.progress_callback,
+        cancel_token: context.session.cancel_token.clone(),
+        pid_storage: context.session.pid_storage.clone(),
+        pid_key: context.session.pid_key.clone(),
     };
 
     run_fast_download(&fast_request).await?;
@@ -172,6 +175,9 @@ pub async fn download_sharded_files(
             token: context.session.token(),
             force: context.force,
             progress: context.session.progress_callback,
+            cancel_token: context.session.cancel_token.clone(),
+            pid_storage: context.session.pid_storage.clone(),
+            pid_key: context.session.pid_key.clone(),
         };
 
         run_fast_download(&fast_request).await?;

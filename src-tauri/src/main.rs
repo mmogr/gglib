@@ -200,19 +200,16 @@ async fn download_model(
     let app_clone = app.clone();
     let model_id_clone2 = model_id.clone();
 
-    // Create progress callback
-    let start_time = std::time::Instant::now();
-
+    // Create progress callback with EWA speed calculation
     let throttle = ProgressThrottle::responsive_ui();
     let callback_throttle = throttle.clone();
 
     let progress_callback: gglib::commands::download::ProgressCallback =
         Box::new(move |downloaded, total| {
-            if !callback_throttle.should_emit(downloaded, total) {
+            let Some(speed) = callback_throttle.should_emit_with_speed(downloaded, total) else {
                 return;
-            }
-            let event =
-                DownloadProgressEvent::progress(&model_id_clone, downloaded, total, start_time);
+            };
+            let event = DownloadProgressEvent::progress(&model_id_clone, downloaded, total, speed);
             // debug!(downloaded, total, "Emitting progress"); // Commented out to avoid spam
             if let Err(err) = app_clone.emit("download-progress", event) {
                 tracing::error!(error = %err, "Failed to emit progress event");
@@ -815,6 +812,21 @@ async fn main() {
 
             Ok(())
         })
+        // Handle window close events - this is more reliable than RunEvent::WindowEvent
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                info!("Window close requested via on_window_event - cleaning up download processes");
+                let app_handle = window.app_handle();
+                let state: tauri::State<AppState> = app_handle.state();
+                let downloads = state.backend.core().downloads();
+                
+                // Synchronously kill all child processes (Python downloaders)
+                let killed = downloads.kill_all_processes_sync();
+                if killed > 0 {
+                    info!(count = killed, "Killed download processes on window close");
+                }
+            }
+        })
         .on_menu_event(handle_menu_event)
         .invoke_handler(tauri::generate_handler![
             list_models,
@@ -849,8 +861,23 @@ async fn main() {
             set_selected_model,
             sync_menu_state
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Handle app exit as a final fallback (Cmd+Q, dock quit, etc.)
+            // Note: on_window_event handles CloseRequested more reliably
+            if let tauri::RunEvent::Exit = event {
+                info!("App exiting (RunEvent::Exit) - final cleanup of download processes");
+                let state: tauri::State<AppState> = app_handle.state();
+                let downloads = state.backend.core().downloads();
+                
+                // Synchronously kill all child processes (Python downloaders)
+                let killed = downloads.kill_all_processes_sync();
+                if killed > 0 {
+                    info!(count = killed, "Killed download processes on app exit");
+                }
+            }
+        });
 }
 
 // =============================================================================

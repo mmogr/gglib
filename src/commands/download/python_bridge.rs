@@ -9,10 +9,12 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::signal;
+use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+use crate::services::core::download_service::PidStorage;
 use crate::utils::paths::get_data_root;
 
 use super::file_ops::ProgressCallback;
@@ -40,6 +42,13 @@ pub struct FastDownloadRequest<'a> {
     pub token: Option<&'a str>,
     pub force: bool,
     pub progress: Option<&'a ProgressCallback>,
+    /// Cancellation token for external cancellation (GUI/service layer)
+    pub cancel_token: Option<CancellationToken>,
+    /// Optional PID storage for synchronous process termination on app shutdown.
+    /// When provided, the child process PID will be stored here so shutdown can kill it.
+    pub pid_storage: Option<PidStorage>,
+    /// Key used to identify this download in the PID storage (typically model_id or model_id:filename)
+    pub pid_key: Option<String>,
 }
 
 pub(crate) async fn ensure_fast_helper_ready() -> Result<()> {
@@ -202,33 +211,57 @@ impl FancyProgress {
 }
 
 struct PlainProgress {
-    start: Instant,
     last_emit: Instant,
+    last_bytes: u64,
     last_line_len: usize,
     printed: bool,
+    /// Exponentially weighted average speed in bytes/sec
+    ewa_speed: f64,
 }
+
+/// Smoothing factor for EWA speed calculation (same as ProgressThrottle)
+const EWA_SMOOTHING: f64 = 0.02;
 
 impl PlainProgress {
     fn new() -> Self {
         Self {
-            start: Instant::now(),
             last_emit: Instant::now(),
+            last_bytes: 0,
             last_line_len: 0,
             printed: false,
+            ewa_speed: 0.0,
         }
     }
 
     fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
         const MIN_INTERVAL: Duration = Duration::from_millis(250);
         let now = Instant::now();
-        if downloaded < total && now.duration_since(self.last_emit) < MIN_INTERVAL {
+        let elapsed_since_last = now.duration_since(self.last_emit);
+
+        if downloaded < total && elapsed_since_last < MIN_INTERVAL {
             return;
         }
 
+        // Calculate instantaneous speed for this interval
+        let elapsed_secs = elapsed_since_last.as_secs_f64();
+        let bytes_delta = downloaded.saturating_sub(self.last_bytes);
+        let instant_speed = if elapsed_secs > 0.0 {
+            bytes_delta as f64 / elapsed_secs
+        } else {
+            0.0
+        };
+
+        // Update EWA speed
+        if self.printed {
+            self.ewa_speed = EWA_SMOOTHING * instant_speed + (1.0 - EWA_SMOOTHING) * self.ewa_speed;
+        } else {
+            self.ewa_speed = instant_speed;
+        }
+
         self.last_emit = now;
-        let elapsed = now.duration_since(self.start).as_secs_f64().max(0.001);
-        let speed = downloaded as f64 / elapsed; // bytes/sec
-        let speed_mib = speed / (1024.0 * 1024.0);
+        self.last_bytes = downloaded;
+
+        let speed_mib = self.ewa_speed / (1024.0 * 1024.0);
 
         let (down_div, down_unit) = pick_display_unit(downloaded);
         let (total_div, total_unit) = pick_display_unit(total);
@@ -384,6 +417,36 @@ impl PythonHelper {
             .spawn()
             .with_context(|| "Failed to spawn fast-path downloader")?;
 
+        // Store the child PID for synchronous termination on app shutdown
+        let pid = child.id();
+        let pid_key_for_cleanup = request.pid_key.clone();
+        let pid_storage_for_cleanup = request.pid_storage.clone();
+        if let (Some(storage), Some(key), Some(pid)) = (&request.pid_storage, &request.pid_key, pid)
+        {
+            tracing::info!(pid = pid, key = %key, "Storing Python subprocess PID for shutdown cleanup");
+            if let Ok(mut guard) = storage.write() {
+                guard.insert(key.clone(), pid);
+            }
+        } else {
+            tracing::debug!(
+                has_storage = request.pid_storage.is_some(),
+                has_key = request.pid_key.is_some(),
+                pid = ?pid,
+                "PID not stored - missing storage, key, or PID"
+            );
+        }
+
+        // Helper to remove PID from storage on completion/error
+        #[allow(clippy::collapsible_if)]
+        let cleanup_pid = || {
+            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup) {
+                if let Ok(mut guard) = storage.write() {
+                    guard.remove(key);
+                    tracing::debug!(key = %key, "Removed PID from shutdown tracking");
+                }
+            }
+        };
+
         let stdout = child
             .stdout
             .take()
@@ -408,12 +471,30 @@ impl PythonHelper {
         };
         let mut ctrl_c = Box::pin(signal::ctrl_c());
 
+        // Create a future for the cancellation token that never completes if None
+        let cancel_token = request.cancel_token.clone();
+
         loop {
             tokio::select! {
-                _ = &mut ctrl_c => {
+                // External cancellation (from GUI/service layer)
+                _ = async {
+                    if let Some(ref token) = cancel_token {
+                        token.cancelled().await
+                    } else {
+                        std::future::pending::<()>().await
+                    }
+                } => {
+                    cleanup_pid();
                     let _ = child.kill().await;
                     finish_progress(&mut cli_progress);
-                    bail!("fast download cancelled by user");
+                    bail!("{}", FAST_CANCELLED_MSG);
+                }
+                // Ctrl+C from terminal (CLI)
+                _ = &mut ctrl_c => {
+                    cleanup_pid();
+                    let _ = child.kill().await;
+                    finish_progress(&mut cli_progress);
+                    bail!("{}", FAST_CANCELLED_MSG);
                 }
                 line = lines.next_line() => {
                     let line = line?;
@@ -441,6 +522,7 @@ impl PythonHelper {
                                     .detail
                                     .or(event.reason)
                                     .unwrap_or_else(|| "fast helper unavailable".to_string());
+                                cleanup_pid();
                                 let _ = child.kill().await;
                                 finish_progress(&mut cli_progress);
                                 bail!(reason);
@@ -449,6 +531,7 @@ impl PythonHelper {
                                 let msg = event
                                     .message
                                     .unwrap_or_else(|| "fast helper reported an error".to_string());
+                                cleanup_pid();
                                 let _ = child.kill().await;
                                 finish_progress(&mut cli_progress);
                                 return Err(anyhow!(msg));
@@ -465,6 +548,7 @@ impl PythonHelper {
         }
 
         let status = child.wait().await?;
+        cleanup_pid(); // Child has exited, remove PID from storage
         let stderr_buf: Vec<u8> = stderr_task.await.unwrap_or_default();
         let stderr_text = String::from_utf8_lossy(&stderr_buf).trim().to_string();
 

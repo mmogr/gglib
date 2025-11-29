@@ -7,6 +7,7 @@ use reqwest;
 use serde_json;
 use std::io::Write;
 use std::path::Path;
+use tokio_util::sync::CancellationToken;
 
 use super::api::create_hf_api;
 use super::file_ops::{
@@ -16,6 +17,7 @@ use super::file_ops::{
 use super::utils::get_models_directory;
 use crate::models::Gguf;
 use crate::services::core::HuggingFaceService;
+use crate::services::core::download_service::PidStorage;
 
 /// Configuration for downloading sharded files
 pub struct DownloadConfig<'a> {
@@ -32,6 +34,12 @@ pub struct DownloadConfig<'a> {
 pub struct SessionOptions<'a> {
     pub auth_token: Option<String>,
     pub progress_callback: Option<&'a ProgressCallback>,
+    /// Cancellation token for external cancellation (GUI/service layer)
+    pub cancel_token: Option<CancellationToken>,
+    /// Optional PID storage for synchronous process termination on app shutdown
+    pub pid_storage: Option<PidStorage>,
+    /// Key used to identify this download in the PID storage
+    pub pid_key: Option<String>,
 }
 
 impl SessionOptions<'_> {

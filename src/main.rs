@@ -89,6 +89,9 @@ async fn run_command(command: cli::Commands) -> Result<()> {
                 token,
                 force,
                 None,
+                None, // CLI uses Ctrl+C for cancellation
+                None, // No PID storage for CLI
+                None, // No PID key for CLI
             )
             .await
         }
