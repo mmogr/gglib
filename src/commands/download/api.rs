@@ -558,10 +558,11 @@ pub async fn search_hf_models_paginated(request: HfSearchRequest) -> Result<HfSe
     // Fetching 100 and filtering typically yields ~15-20 models with actual GGUF files.
     let fetch_limit = 100;
 
-    // Use expand[]=siblings&expand[]=safetensors to get file list AND parameter count
+    // Use expand[]=siblings&expand[]=gguf to get file list AND parameter count
     // We need siblings to filter for models that actually contain .gguf files
+    // NOTE: Use gguf.total instead of safetensors.total - GGUF repos don't have safetensors data
     let mut url = format!(
-        "https://huggingface.co/api/models?library=gguf&pipeline_tag=text-generation&expand[]=siblings&expand[]=safetensors&sort=downloads&direction=-1&limit={}&p={}",
+        "https://huggingface.co/api/models?library=gguf&pipeline_tag=text-generation&expand[]=siblings&expand[]=gguf&sort=downloads&direction=-1&limit={}&p={}",
         fetch_limit, request.page
     );
 
@@ -627,9 +628,9 @@ pub async fn search_hf_models_paginated(request: HfSearchRequest) -> Result<HfSe
             continue;
         }
 
-        // Extract parameter count from safetensors.total
+        // Extract parameter count from gguf.total (GGUF repos have this, not safetensors.total)
         let parameters_b = model_json
-            .get("safetensors")
+            .get("gguf")
             .and_then(|s| s.get("total"))
             .and_then(|t| t.as_u64())
             .map(|params| params as f64 / 1_000_000_000.0);
