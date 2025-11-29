@@ -554,8 +554,7 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
 pub async fn search_hf_models_paginated(request: HfSearchRequest) -> Result<HfSearchResponse> {
     let mut url = format!(
         "https://huggingface.co/api/models?library=gguf&pipeline_tag=text-generation&expand=safetensors&sort=downloads&direction=-1&limit={}&p={}",
-        request.limit,
-        request.page
+        request.limit, request.page
     );
 
     // Add search query if provided
@@ -632,11 +631,7 @@ pub async fn search_hf_models_paginated(request: HfSearchRequest) -> Result<HfSe
         let author = id.split('/').next().map(|s| s.to_string());
 
         // Extract model name (last part of id)
-        let name = id
-            .split('/')
-            .next_back()
-            .unwrap_or(&id)
-            .to_string();
+        let name = id.split('/').next_back().unwrap_or(&id).to_string();
 
         let downloads = model_json
             .get("downloads")

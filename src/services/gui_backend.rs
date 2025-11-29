@@ -283,10 +283,7 @@ impl GuiBackend {
     ///
     /// Returns detailed information about each quantization variant including
     /// file size and whether it's sharded.
-    pub async fn get_model_quantizations(
-        &self,
-        model_id: &str,
-    ) -> Result<HfQuantizationsResponse> {
+    pub async fn get_model_quantizations(&self, model_id: &str) -> Result<HfQuantizationsResponse> {
         crate::commands::download::get_quantizations_structured(model_id).await
     }
 
