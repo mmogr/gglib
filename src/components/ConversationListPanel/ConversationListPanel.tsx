@@ -68,11 +68,11 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
               ＋ New
             </button>
             <button
-              className="icon-btn icon-btn-sm"
+              className="btn btn-danger btn-sm"
               onClick={onClose}
               title="Stop server and close chat"
             >
-              ✕
+              ✕ Close
             </button>
           </div>
         </div>
