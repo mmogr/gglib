@@ -30,9 +30,6 @@ interface ModelLibraryPanelProps {
   // Tab control (optional - can be controlled externally or internally)
   activeTab?: SidebarTabId;
   onTabChange?: (tab: SidebarTabId) => void;
-  
-  // Legacy prop - kept for transition, will be removed in Task 3
-  onShowWorkPanel?: (tab: 'add-download', subtab?: 'add' | 'download') => void;
 }
 
 const SIDEBAR_TABS: SidebarTab[] = [
