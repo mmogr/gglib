@@ -504,6 +504,7 @@ impl DownloadService {
     ) -> Result<String> {
         use crate::commands::download::{
             DownloadContext, SessionOptions, download_specific_file, get_models_directory,
+            get_first_shard_filename, sanitize_model_name,
         };
 
         let cancel_token = CancellationToken::new();
@@ -530,6 +531,16 @@ impl DownloadService {
         let hf_service = HuggingFaceService::new();
         let commit_sha = hf_service.get_commit_sha(&model_id).await?;
 
+        // For sharded models, compute the first shard path for database registration.
+        // llama-server requires the first shard to be specified when loading split models.
+        let first_shard_path = if is_last_shard {
+            let first_shard_filename = get_first_shard_filename(&filename);
+            let model_dir = models_dir.join(sanitize_model_name(&model_id));
+            Some(model_dir.join(&first_shard_filename))
+        } else {
+            None
+        };
+
         // Create download context with cancellation token and PID storage
         let context = DownloadContext {
             model_id: &model_id,
@@ -544,6 +555,7 @@ impl DownloadService {
                 pid_storage: Some(self.child_pids.clone()),
                 pid_key: Some(tracking_key.clone()),
             },
+            first_shard_path,
         };
 
         // Execute download with cancellation support

@@ -58,6 +58,7 @@ pub async fn execute(
             pid_storage,
             pid_key,
         },
+        first_shard_path: None, // CLI path handles sharding differently via download_sharded_files
     };
 
     // Download the model

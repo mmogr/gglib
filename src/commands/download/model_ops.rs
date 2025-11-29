@@ -6,7 +6,7 @@ use hf_hub::api::sync::Api;
 use reqwest;
 use serde_json;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
 use super::api::create_hf_api;
@@ -56,6 +56,9 @@ pub struct DownloadContext<'a> {
     pub force: bool,
     pub add_to_db: bool,
     pub session: SessionOptions<'a>,
+    /// For sharded models: the path to the first shard file (used for database registration).
+    /// llama-server requires the first shard to be specified when loading split models.
+    pub first_shard_path: Option<PathBuf>,
 }
 
 /// Download a specific model with optional quantization filter
@@ -436,6 +439,7 @@ pub async fn handle_update_model(model_id: u32, force: bool) -> Result<()> {
                         force: true,
                         add_to_db: true,
                         session: SessionOptions::default(),
+                        first_shard_path: None, // Update path handles sharding via download_sharded_files
                     };
 
                     download_model(&api, context).await?;

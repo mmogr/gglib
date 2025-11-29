@@ -64,8 +64,12 @@ pub async fn download_specific_file(
             local_path.display()
         );
         if context.add_to_db {
-            let quant = extract_quantization_from_filename(filename);
-            add_to_database(context.model_id, commit_sha, &local_path, quant).await?;
+            // For sharded models, use the first shard path (llama-server requires it).
+            let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
+            let quant = extract_quantization_from_filename(
+                db_path.file_name().and_then(|s| s.to_str()).unwrap_or(filename)
+            );
+            add_to_database(context.model_id, commit_sha, db_path, quant).await?;
         }
         return Ok(());
     }
@@ -97,8 +101,13 @@ pub async fn download_specific_file(
 
     // Add to database if requested
     if context.add_to_db {
-        let quant = extract_quantization_from_filename(filename);
-        add_to_database(context.model_id, commit_sha, &local_path, quant).await?;
+        // For sharded models, use the first shard path (llama-server requires it).
+        // For non-sharded models, use the downloaded file path.
+        let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
+        let quant = extract_quantization_from_filename(
+            db_path.file_name().and_then(|s| s.to_str()).unwrap_or(filename)
+        );
+        add_to_database(context.model_id, commit_sha, db_path, quant).await?;
     }
 
     Ok(())
@@ -421,5 +430,69 @@ pub fn extract_quantization_from_filename(filename: &str) -> &str {
         "imatrix"
     } else {
         "unknown"
+    }
+}
+
+/// Convert a shard filename to the first shard filename.
+///
+/// For split GGUF files with patterns like "model-00002-of-00003.gguf",
+/// this returns "model-00001-of-00003.gguf". This is needed because
+/// llama-server requires the first shard to be specified when loading
+/// split models.
+///
+/// If the filename is not a shard pattern, returns it unchanged.
+pub fn get_first_shard_filename(filename: &str) -> String {
+    use regex::Regex;
+    // Match pattern like "-00002-of-00003" and replace with "-00001-of-00003"
+    let re = Regex::new(r"-(\d+)-of-(\d+)").unwrap();
+    if let Some(caps) = re.captures(filename) {
+        let total = &caps[2];
+        // Keep the same width for the first shard number
+        let width = caps[1].len();
+        let first_shard = format!("{:0>width$}", 1, width = width);
+        re.replace(filename, format!("-{}-of-{}", first_shard, total))
+            .to_string()
+    } else {
+        filename.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_first_shard_filename_second_of_two() {
+        let result = get_first_shard_filename(
+            "UD-Q6_K_XL/Qwen3-Next-80B-A3B-Instruct-UD-Q6_K_XL-00002-of-00002.gguf"
+        );
+        assert_eq!(
+            result,
+            "UD-Q6_K_XL/Qwen3-Next-80B-A3B-Instruct-UD-Q6_K_XL-00001-of-00002.gguf"
+        );
+    }
+
+    #[test]
+    fn test_get_first_shard_filename_third_of_five() {
+        let result = get_first_shard_filename("model-00003-of-00005.gguf");
+        assert_eq!(result, "model-00001-of-00005.gguf");
+    }
+
+    #[test]
+    fn test_get_first_shard_filename_already_first() {
+        let result = get_first_shard_filename("model-00001-of-00003.gguf");
+        assert_eq!(result, "model-00001-of-00003.gguf");
+    }
+
+    #[test]
+    fn test_get_first_shard_filename_non_sharded() {
+        let result = get_first_shard_filename("model-Q4_K_M.gguf");
+        assert_eq!(result, "model-Q4_K_M.gguf");
+    }
+
+    #[test]
+    fn test_get_first_shard_filename_with_directory() {
+        let result = get_first_shard_filename("Q4_K_M/model-00005-of-00010.gguf");
+        assert_eq!(result, "Q4_K_M/model-00001-of-00010.gguf");
     }
 }
