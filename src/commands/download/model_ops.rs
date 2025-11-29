@@ -285,15 +285,51 @@ pub async fn add_to_database(
     quantization: &str,
 ) -> Result<()> {
     use crate::services::{AppCore, database};
+    use crate::utils::validation;
+
+    // Parse GGUF metadata from the downloaded file to extract param_count_b and other info
+    // If parsing fails, log a warning and fall back to defaults
+    let file_path_str = file_path
+        .to_str()
+        .ok_or_else(|| anyhow!("Invalid file path"))?;
+
+    let gguf_metadata = match validation::validate_and_parse_gguf(file_path_str) {
+        Ok(metadata) => {
+            println!("✓ Parsed GGUF metadata from downloaded file");
+            Some(metadata)
+        }
+        Err(e) => {
+            eprintln!(
+                "Warning: Failed to parse GGUF metadata, using defaults: {}",
+                e
+            );
+            None
+        }
+    };
+
+    // Extract param_count_b from metadata, fall back to 0.0
+    let param_count_b = gguf_metadata
+        .as_ref()
+        .and_then(|m| m.param_count_b)
+        .unwrap_or(0.0);
 
     let mut model = Gguf::new(
         model_id.to_string(),
         file_path.to_path_buf(),
-        0.0, // We'll need to parse this from the GGUF file later
+        param_count_b,
         Utc::now(),
     );
 
-    model.quantization = Some(quantization.to_string());
+    // Use extracted metadata where available, with fallbacks
+    model.quantization = gguf_metadata
+        .as_ref()
+        .and_then(|m| m.quantization.clone())
+        .or_else(|| Some(quantization.to_string()));
+    model.architecture = gguf_metadata.as_ref().and_then(|m| m.architecture.clone());
+    model.context_length = gguf_metadata.as_ref().and_then(|m| m.context_length);
+    if let Some(ref meta) = gguf_metadata {
+        model.metadata = meta.metadata.clone();
+    }
     model.hf_repo_id = Some(model_id.to_string());
     model.hf_commit_sha = Some(commit_sha.to_string());
     model.hf_filename = Some(file_path.file_name().unwrap().to_string_lossy().to_string());
@@ -308,7 +344,9 @@ pub async fn add_to_database(
     println!("✓ Successfully added model to database:");
     println!("  Model: {}", model.name);
     println!("  File: {}", model.file_path.display());
+    println!("  Parameters: {:.1}B", model.param_count_b);
     println!("  Quantization: {:?}", model.quantization);
+    println!("  Architecture: {:?}", model.architecture);
     println!("  HF Repo: {:?}", model.hf_repo_id);
 
     Ok(())
