@@ -77,7 +77,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
             model_id,
             quantization,
             list_quants,
-            add_to_db,
+            skip_db,
             token,
             force,
         } => {
@@ -85,7 +85,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
                 model_id,
                 quantization,
                 list_quants,
-                add_to_db,
+                !skip_db, // add_to_db: true by default, false if --skip-db passed
                 token,
                 force,
                 None,

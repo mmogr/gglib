@@ -50,9 +50,9 @@ pub enum Commands {
         /// List available quantizations for the model
         #[arg(long)]
         list_quants: bool,
-        /// Add to database after download
+        /// Skip adding to database after download (models are registered by default)
         #[arg(long)]
-        add_to_db: bool,
+        skip_db: bool,
         /// HuggingFace token for private models
         #[arg(long)]
         token: Option<String>,
