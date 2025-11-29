@@ -2,6 +2,7 @@
 
 .proxyControl {
   position: relative;
+  display: inline-flex;
 }
 
 .proxyButton {
