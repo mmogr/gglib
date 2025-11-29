@@ -2,25 +2,27 @@ import { FC, useState } from 'react';
 import AddModel from '../AddModel';
 import DownloadModel from '../DownloadModel';
 import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
-import './AddDownloadTab.css';
+import './AddDownloadContent.css';
 
-interface AddDownloadTabProps {
+export type AddDownloadSubTab = 'add' | 'download' | 'browse';
+
+interface AddDownloadContentProps {
   onModelAdded: (filePath: string) => Promise<void>;
   onModelDownloaded: () => Promise<void>;
-  activeSubTab?: 'add' | 'download' | 'browse';
-  onSubTabChange?: (subtab: 'add' | 'download' | 'browse') => void;
+  activeSubTab?: AddDownloadSubTab;
+  onSubTabChange?: (subtab: AddDownloadSubTab) => void;
 }
 
-const AddDownloadTab: FC<AddDownloadTabProps> = ({
+const AddDownloadContent: FC<AddDownloadContentProps> = ({
   onModelAdded,
   onModelDownloaded,
   activeSubTab: externalActiveSubTab,
   onSubTabChange,
 }) => {
-  const [internalActiveSubTab, setInternalActiveSubTab] = useState<'add' | 'download' | 'browse'>('browse');
+  const [internalActiveSubTab, setInternalActiveSubTab] = useState<AddDownloadSubTab>('browse');
   const activeSubTab = externalActiveSubTab ?? internalActiveSubTab;
   
-  const handleSubTabChange = (subtab: 'add' | 'download' | 'browse') => {
+  const handleSubTabChange = (subtab: AddDownloadSubTab) => {
     if (onSubTabChange) {
       onSubTabChange(subtab);
     } else {
@@ -37,29 +39,29 @@ const AddDownloadTab: FC<AddDownloadTabProps> = ({
   };
 
   return (
-    <div className="add-download-tab">
-      <div className="subtab-switcher">
+    <div className="add-download-content">
+      <div className="add-download-subtabs">
         <button
-          className={`subtab-button btn ${activeSubTab === 'browse' ? 'active' : ''}`}
+          className={`add-download-subtab ${activeSubTab === 'browse' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('browse')}
         >
           🔍 Browse HF
         </button>
         <button
-          className={`subtab-button btn ${activeSubTab === 'download' ? 'active' : ''}`}
+          className={`add-download-subtab ${activeSubTab === 'download' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('download')}
         >
-          ⬇️ Direct Download
+          ⬇️ Direct URL
         </button>
         <button
-          className={`subtab-button btn ${activeSubTab === 'add' ? 'active' : ''}`}
+          className={`add-download-subtab ${activeSubTab === 'add' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('add')}
         >
-          📁 Add from file
+          📁 Local File
         </button>
       </div>
 
-      <div className="subtab-content">
+      <div className="add-download-panel">
         {activeSubTab === 'browse' && (
           <HuggingFaceBrowser onDownloadStarted={handleModelDownloaded} />
         )}
@@ -74,4 +76,4 @@ const AddDownloadTab: FC<AddDownloadTabProps> = ({
   );
 };
 
-export default AddDownloadTab;
+export default AddDownloadContent;

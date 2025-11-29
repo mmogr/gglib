@@ -2,17 +2,39 @@
   background: var(--color-surface);
 }
 
-.library-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-md);
+/* Proxy button styling for sidebar - needs higher specificity to override icon-btn-sm */
+.icon-btn.icon-btn-sm.proxy-sidebar-btn {
+  position: relative;
+  font-size: var(--font-size-base);
+  width: auto;
+  height: auto;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  gap: var(--spacing-xs);
+  display: inline-flex;
 }
 
-.library-header h2 {
-  margin: 0;
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
+.proxy-sidebar-btn-active {
+  color: var(--color-success);
+}
+
+.proxy-status-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: transparent;
+}
+
+.proxy-status-dot-active {
+  background: var(--color-success);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .search-bar {

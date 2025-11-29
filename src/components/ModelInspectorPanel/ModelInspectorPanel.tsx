@@ -7,6 +7,7 @@ import './ModelInspectorPanel.css';
 interface ModelInspectorPanelProps {
   model: GgufModel | null;
   onStartServer: () => void;
+  onServerStarted?: (serverInfo: ServerInfo) => void;
   onStopServer: (modelId: number) => Promise<void>;
   servers: ServerInfo[];
   onRemoveModel: (id: number, force: boolean) => void;
@@ -23,6 +24,7 @@ interface ModelInspectorPanelProps {
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   model,
   onStartServer,
+  onServerStarted,
   onStopServer,
   servers,
   onRemoveModel,
@@ -128,9 +130,19 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
         jinja: jinjaOverride === null ? undefined : jinjaOverride,
       };
 
-      await TauriService.serveModel(config);
+      const result = await TauriService.serveModel(config);
       setShowServeModal(false);
       onStartServer();
+      
+      // Notify parent that server started - opens chat view
+      if (onServerStarted && result) {
+        onServerStarted({
+          model_id: model.id,
+          model_name: model.name,
+          port: result.port,
+          status: 'running',
+        });
+      }
     } catch (error) {
       console.error('Failed to start server:', error);
       alert(`Failed to start server: ${error}`);

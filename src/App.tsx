@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import ModelControlCenterPage from "./pages/ModelControlCenterPage";
 import Header from "./components/Header";
 import SettingsModal from "./components/SettingsModal";
@@ -15,15 +15,8 @@ if (isTauriApp) {
   });
 }
 
-const ChatView = lazy(async () => {
-  const module = await import("./components/ChatView");
-  return { default: module.ChatView };
-});
-
 function App() {
-  const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isWorkPanelVisible, setIsWorkPanelVisible] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
   // Sidebar visibility (for menu toggle, currently not visually implemented)
   const [, setIsSidebarVisible] = useState(true);
@@ -42,10 +35,10 @@ function App() {
   const menuActionsRef = useRef<{
     refreshModels: () => void;
     addModelFromFile: () => void;
-    showDownloads: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
+    selectModel: (modelId: number) => void;
   } | null>(null);
 
   // Show llama install modal when needed (only for Tauri desktop app)
@@ -83,21 +76,9 @@ function App() {
         setIsSettingsOpen(true);
       }));
 
-      // Chat
-      unlisteners.push(await listen("menu:show-chat", () => {
-        setIsChatOpen(true);
-      }));
-
       // Toggle sidebar
       unlisteners.push(await listen("menu:toggle-sidebar", () => {
         setIsSidebarVisible(prev => !prev);
-      }));
-
-      // Show downloads panel
-      unlisteners.push(await listen("menu:show-downloads", () => {
-        setIsWorkPanelVisible(true);
-        // Trigger subtab change in ModelControlCenterPage
-        menuActionsRef.current?.showDownloads?.();
       }));
 
       // Add model from file (triggers file dialog)
@@ -160,18 +141,19 @@ function App() {
     };
   }, [checkLlamaStatus]);
 
-  const toggleWorkPanel = () => setIsWorkPanelVisible((prev) => !prev);
-  const showWorkPanel = () => setIsWorkPanelVisible(true);
-  const hasRunningServers = servers.length > 0;
+  // Handler for selecting a model from the header popover
+  const handleSelectModelFromHeader = useCallback((modelId: number) => {
+    menuActionsRef.current?.selectModel?.(modelId);
+  }, []);
 
   // Callback to register menu actions from ModelControlCenterPage
   const registerMenuActions = useCallback((actions: {
     refreshModels: () => void;
     addModelFromFile: () => void;
-    showDownloads: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
+    selectModel: (modelId: number) => void;
   }) => {
     menuActionsRef.current = actions;
   }, []);
@@ -179,27 +161,20 @@ function App() {
   return (
     <div className="app">
       <Header
-        onOpenChat={() => setIsChatOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onToggleWorkPanel={toggleWorkPanel}
-        isWorkPanelVisible={isWorkPanelVisible}
-        isModelRunning={hasRunningServers}
+        servers={servers}
+        onStopServer={stopServer}
+        onSelectModel={handleSelectModelFromHeader}
+        onRefreshServers={loadServers}
       />
       <div className="app-body">
         <ModelControlCenterPage
           servers={servers}
           loadServers={loadServers}
           stopServer={stopServer}
-          isWorkPanelVisible={isWorkPanelVisible}
-          onShowWorkPanel={showWorkPanel}
           onRegisterMenuActions={registerMenuActions}
         />
       </div>
-      {isChatOpen && (
-        <Suspense fallback={<div className="chat-loading">Preparing chat experience…</div>}>
-          <ChatView onClose={() => setIsChatOpen(false)} />
-        </Suspense>
-      )}
       {isSettingsOpen && (
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       )}
