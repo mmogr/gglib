@@ -6,6 +6,8 @@ import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspecto
 import WorkPanel from '../components/WorkPanel/WorkPanel';
 import { TauriService } from '../services/tauri';
 import { ServerInfo } from '../types';
+import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
+import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
 import './ModelControlCenterPage.css';
 
 export type WorkPanelTab = 'add-download' | 'runs';
@@ -40,7 +42,10 @@ export default function ModelControlCenterPage({
   const [activeTab, setActiveTab] = useState<WorkPanelTab>('add-download');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<'add' | 'download' | 'browse'>('browse');
+  const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('browse');
+  
+  // Sidebar tab state (for the new tabbed sidebar)
+  const [sidebarTab, setSidebarTab] = useState<SidebarTabId>('models');
   
   // Ref for file input (for menu-triggered file add)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,20 +65,16 @@ export default function ModelControlCenterPage({
           loadModels();
         },
         addModelFromFile: () => {
-          // Trigger the file dialog in AddModel component via WorkPanel
+          // Switch to add tab in sidebar
+          setSidebarTab('add');
           setActiveSubTab('add');
-          if (!isWorkPanelVisible) {
-            onShowWorkPanel();
-          }
           // Also trigger the actual file picker if available
           fileInputRef.current?.click();
         },
         showDownloads: () => {
-          setActiveTab('add-download');
+          // Switch to add tab in sidebar with download subtab
+          setSidebarTab('add');
           setActiveSubTab('download');
-          if (!isWorkPanelVisible) {
-            onShowWorkPanel();
-          }
         },
         startServer: () => {
           if (selectedModelId) {
@@ -228,7 +229,12 @@ export default function ModelControlCenterPage({
             selectedTags={selectedTags}
             onTagFilterChange={setSelectedTags}
             servers={servers}
-            onShowWorkPanel={handleShowWorkPanel}
+            onModelAdded={handleModelAdded}
+            onModelDownloaded={handleModelDownloaded}
+            activeSubTab={activeSubTab}
+            onSubTabChange={setActiveSubTab}
+            activeTab={sidebarTab}
+            onTabChange={setSidebarTab}
           />
           <div 
             className="resize-handle" 
