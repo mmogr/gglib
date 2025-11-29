@@ -40,6 +40,8 @@
 
 pub mod download_models;
 pub mod download_service;
+pub mod huggingface_models;
+pub mod huggingface_service;
 pub mod model_service;
 pub mod proxy_service;
 pub mod server_service;
@@ -56,6 +58,8 @@ pub use download_models::{
     ShardInfo,
 };
 pub use download_service::DownloadService;
+pub use huggingface_models::HuggingFaceError;
+pub use huggingface_service::{HF_API_BASE, HuggingFaceService};
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};
@@ -76,6 +80,7 @@ pub struct AppCore {
     proxy_service: ProxyService,
     download_service: DownloadService,
     settings_service: SettingsService,
+    huggingface_service: HuggingFaceService,
 }
 
 impl AppCore {
@@ -133,6 +138,7 @@ impl AppCore {
         let proxy_service = ProxyService::new(db_pool.clone());
         let download_service = DownloadService::new();
         let settings_service = SettingsService::new(db_pool.clone());
+        let huggingface_service = HuggingFaceService::new();
 
         Self {
             db_pool,
@@ -141,6 +147,7 @@ impl AppCore {
             proxy_service,
             download_service,
             settings_service,
+            huggingface_service,
         }
     }
 
@@ -263,6 +270,30 @@ impl AppCore {
     pub fn settings(&self) -> &SettingsService {
         &self.settings_service
     }
+
+    /// Access the HuggingFace service for searching and browsing GGUF models.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use gglib::services::core::AppCore;
+    /// # use gglib::models::gui::HfSearchRequest;
+    /// # async fn example(core: &AppCore) -> anyhow::Result<()> {
+    /// // Search for models
+    /// let request = HfSearchRequest {
+    ///     query: Some("llama".to_string()),
+    ///     ..Default::default()
+    /// };
+    /// let response = core.huggingface().search_models_paginated(request).await?;
+    /// for model in response.models {
+    ///     println!("{}: {} likes", model.id, model.likes);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn huggingface(&self) -> &HuggingFaceService {
+        &self.huggingface_service
+    }
 }
 
 // AppCore is not Clone because ProxyService contains non-Clone RwLock state.
@@ -284,6 +315,7 @@ mod tests {
         let _ = core.proxy();
         let _ = core.downloads();
         let _ = core.settings();
+        let _ = core.huggingface();
     }
 
     #[tokio::test]

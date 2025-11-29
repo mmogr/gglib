@@ -276,7 +276,10 @@ impl GuiBackend {
     /// Returns models matching the search query with optional parameter filtering.
     /// Parameter filtering is done client-side since HuggingFace API doesn't support it.
     pub async fn browse_hf_models(&self, request: HfSearchRequest) -> Result<HfSearchResponse> {
-        crate::commands::download::search_hf_models_paginated(request).await
+        self.core
+            .huggingface()
+            .search_models_paginated(request)
+            .await
     }
 
     /// Get available quantizations for a HuggingFace model.
@@ -284,7 +287,7 @@ impl GuiBackend {
     /// Returns detailed information about each quantization variant including
     /// file size and whether it's sharded.
     pub async fn get_model_quantizations(&self, model_id: &str) -> Result<HfQuantizationsResponse> {
-        crate::commands::download::get_quantizations_structured(model_id).await
+        self.core.huggingface().get_quantizations(model_id).await
     }
 
     // =========================================================================

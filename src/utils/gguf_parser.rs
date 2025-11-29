@@ -6,6 +6,7 @@
 //! rich metadata including model architecture, quantization, context length,
 //! and other model-specific information.
 
+use crate::commands::download::extract_quantization_from_filename;
 use crate::models::GgufMetadata;
 use anyhow::{Context, Result, anyhow};
 use std::collections::HashMap;
@@ -445,10 +446,11 @@ fn extract_quantization_info(
     metadata_map: &HashMap<String, GgufValue>,
     file_path: &Path,
 ) -> Option<String> {
-    // First try filename parsing as it's often more specific and accurate
+    // First try filename parsing using the canonical implementation (DRY)
     if let Some(filename) = file_path.file_name().and_then(|s| s.to_str()) {
-        if let Some(filename_quant) = extract_quantization_from_filename(filename) {
-            return Some(filename_quant);
+        let quant = extract_quantization_from_filename(filename);
+        if quant != "unknown" {
+            return Some(quant.to_string());
         }
     }
 
@@ -476,28 +478,6 @@ fn map_file_type_to_quantization(file_type: &str) -> Option<String> {
         "8" => Some("Q8_0".to_string()),
         _ => None,
     }
-}
-
-/// Extract quantization info from filename
-fn extract_quantization_from_filename(filename: &str) -> Option<String> {
-    let filename_upper = filename.to_uppercase();
-
-    // Common quantization patterns (ordered by specificity - longer patterns first)
-    let quantizations = [
-        "Q8_K_XL", "Q8_K_XXL", "Q8_K_L", "Q8_K_M", "Q8_K_S", "Q8_K", "Q6_K_XL", "Q6_K_XXL",
-        "Q6_K_L", "Q6_K_M", "Q6_K_S", "Q6_K", "Q5_K_XL", "Q5_K_XXL", "Q5_K_L", "Q5_K_M", "Q5_K_S",
-        "Q5_K", "Q4_K_XL", "Q4_K_XXL", "Q4_K_L", "Q4_K_M", "Q4_K_S", "Q4_K", "Q3_K_XL", "Q3_K_XXL",
-        "Q3_K_L", "Q3_K_M", "Q3_K_S", "Q3_K", "Q2_K_XL", "Q2_K_XXL", "Q2_K_L", "Q2_K_M", "Q2_K_S",
-        "Q2_K", "Q8_0", "Q5_0", "Q5_1", "Q4_0", "Q4_1", "F16", "F32",
-    ];
-
-    for quant in &quantizations {
-        if filename_upper.contains(quant) {
-            return Some(quant.to_string());
-        }
-    }
-
-    None
 }
 
 /// Read a u32 value from the reader

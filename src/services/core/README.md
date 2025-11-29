@@ -7,19 +7,19 @@ The `core` module provides a unified service layer for gglib that can be used by
 ## Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│                        AppCore                          │
-│  (Facade holding SqlitePool + service accessors)        │
-├─────────────┬─────────────┬─────────────┬──────────────┤
-│ ModelService│ServerService│ProxyService │SettingsService│
-│             │             │             │              │
-│ - list()    │ - start()   │ - start()   │ - get()      │
-│ - get_by_id │ - stop()    │ - stop()    │ - update()   │
-│ - add()     │ - list()    │ - status()  │ - validate() │
-│ - update()  │ - get()     │             │              │
-│ - remove()  │             │             │              │
-│ - tags...   │             │             │              │
-└─────────────┴─────────────┴─────────────┴──────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              AppCore                                     │
+│         (Facade holding SqlitePool + service accessors)                  │
+├─────────────┬─────────────┬─────────────┬──────────────┬────────────────┤
+│ ModelService│ServerService│ProxyService │SettingsServ │HuggingFaceSvc  │
+│             │             │             │              │                │
+│ - list()    │ - start()   │ - start()   │ - get()      │ - search()     │
+│ - get_by_id │ - stop()    │ - stop()    │ - update()   │ - get_quants() │
+│ - add()     │ - list()    │ - status()  │ - validate() │ - fetch_tree() │
+│ - update()  │ - get()     │             │              │                │
+│ - remove()  │             │             │              │                │
+│ - tags...   │             │             │              │                │
+└─────────────┴─────────────┴─────────────┴──────────────┴────────────────┘
 ```
 
 ## Usage
@@ -108,6 +108,33 @@ HuggingFace downloads with queue management:
 - `cancel(model_id)` - Cancel active download
 - `cancel_shard_group(group_id)` - Cancel active download and remove all related shards
 - `is_downloading(model_id)` - Check if model is currently downloading
+
+### HuggingFaceService
+
+HuggingFace Hub API integration for searching and browsing GGUF models:
+- `search_models_paginated(request)` - Search models with pagination, filtering, and sorting
+- `search_models(query, limit, sort)` - Simple search for CLI usage
+- `get_quantizations(model_id)` - Get available quantization variants for a model
+- `fetch_tree(model_id, path)` - Fetch repository file tree
+- `get_commit_sha(model_id)` - Get latest commit SHA for a model
+- `find_gguf_files_for_quantization(model_id, quant)` - Find all GGUF files for a specific quantization
+
+**Search Options:**
+- Sort by: `downloads`, `likes`, `lastModified`, `createdAt`, `id` (alphabetical)
+- Filter by: parameter count range, search query
+- Pagination with configurable page size
+
+**Example:**
+```rust,ignore
+let core = AppCore::new(pool);
+let request = HfSearchRequest {
+    query: Some("llama".to_string()),
+    sort_by: HfSortField::Likes,
+    sort_ascending: false,
+    ..Default::default()
+};
+let results = core.huggingface().search_models_paginated(request).await?;
+```
 
 #### Sharded Model Support
 
