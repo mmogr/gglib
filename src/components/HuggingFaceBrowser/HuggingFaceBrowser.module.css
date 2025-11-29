@@ -417,3 +417,8 @@
   color: #fca5a5;
   font-size: 0.9rem;
 }
+
+/* Download Progress */
+.downloadProgress {
+  margin-bottom: 1rem;
+}

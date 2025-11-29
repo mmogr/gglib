@@ -7,11 +7,15 @@ import {
   HfQuantization,
   HfQuantizationsResponse,
 } from "../../types";
+import { useDownloadProgress } from "../../hooks/useDownloadProgress";
+import { DownloadProgressDisplay } from "../DownloadProgressDisplay";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
   /** Callback when a model download is initiated */
   onDownloadStarted?: () => void;
+  /** Callback when a model download completes */
+  onDownloadCompleted?: () => void;
 }
 
 // Debounce helper
@@ -177,6 +181,7 @@ const ModelCard: FC<ModelCardProps> = ({ model, onDownload, isDownloading }) => 
 // Main browser component
 const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   onDownloadStarted,
+  onDownloadCompleted,
 }) => {
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -193,6 +198,14 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Download progress
+  const { progress, cancelDownload } = useDownloadProgress({
+    onCompleted: () => {
+      setIsDownloading(false);
+      onDownloadCompleted?.();
+    },
+  });
 
   // Debounced search
   const debouncedQuery = useDebounce(searchQuery, 300);
@@ -267,15 +280,30 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   // Handle download
   const handleDownload = async (modelId: string, quantization: string) => {
     setIsDownloading(true);
+    setError(null);
     try {
       await TauriService.queueDownload(modelId, quantization);
       onDownloadStarted?.();
+      // Note: isDownloading will be set to false by useDownloadProgress callbacks
     } catch (err) {
+      setIsDownloading(false);
       setError(
         err instanceof Error ? err.message : "Failed to start download"
       );
-    } finally {
-      setIsDownloading(false);
+    }
+  };
+
+  // Handle cancel download
+  const handleCancelDownload = async () => {
+    if (progress?.model_id) {
+      try {
+        await cancelDownload(progress.model_id);
+        setIsDownloading(false);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to cancel download"
+        );
+      }
     }
   };
 
@@ -347,6 +375,15 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
       {/* Results Section */}
       <div className={styles.resultsSection}>
+        {/* Download Progress */}
+        {isDownloading && progress && (
+          <DownloadProgressDisplay
+            progress={progress}
+            onCancel={handleCancelDownload}
+            className={styles.downloadProgress}
+          />
+        )}
+
         {/* Error State */}
         {error && (
           <div className={styles.errorState}>

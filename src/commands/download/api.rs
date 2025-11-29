@@ -552,17 +552,36 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
 /// This function queries the HuggingFace API for GGUF text-generation models,
 /// applies client-side parameter filtering, and returns paginated results.
 pub async fn search_hf_models_paginated(request: HfSearchRequest) -> Result<HfSearchResponse> {
+    // Fetch more models than requested since we filter out models without actual GGUF files.
+    // The library=gguf filter returns models TAGGED with GGUF, but many are base models
+    // that don't contain GGUF files themselves (only their derivatives do).
+    // Fetching 100 and filtering typically yields ~15-20 models with actual GGUF files.
+    let fetch_limit = 100;
+
+    // Use expand[]=siblings&expand[]=safetensors to get file list AND parameter count
+    // We need siblings to filter for models that actually contain .gguf files
     let mut url = format!(
-        "https://huggingface.co/api/models?library=gguf&pipeline_tag=text-generation&expand=safetensors&sort=downloads&direction=-1&limit={}&p={}",
-        request.limit, request.page
+        "https://huggingface.co/api/models?library=gguf&pipeline_tag=text-generation&expand[]=siblings&expand[]=safetensors&sort=downloads&direction=-1&limit={}&p={}",
+        fetch_limit, request.page
     );
 
-    // Add search query if provided
-    if let Some(ref query) = request.query {
-        if !query.trim().is_empty() {
-            url.push_str(&format!("&search={}", urlencoding::encode(query.trim())));
+    // CRITICAL: Always add "GGUF" to the search to filter for repos that actually contain
+    // GGUF files. The library=gguf tag returns base models like "meta-llama/Llama-3.1-8B"
+    // that are tagged with GGUF because derivatives exist, but don't contain GGUF files.
+    // Adding "GGUF" to the search returns repos like "bartowski/Llama-3.1-8B-GGUF" that
+    // actually contain the quantized files.
+    let search_query = match &request.query {
+        Some(q) if !q.trim().is_empty() => {
+            // If user query doesn't already contain "gguf", append it
+            if q.to_lowercase().contains("gguf") {
+                q.trim().to_string()
+            } else {
+                format!("{} GGUF", q.trim())
+            }
         }
-    }
+        _ => "GGUF".to_string(),
+    };
+    url.push_str(&format!("&search={}", urlencoding::encode(&search_query)));
 
     let response = reqwest::get(&url).await?;
 
@@ -587,6 +606,27 @@ pub async fn search_hf_models_paginated(request: HfSearchRequest) -> Result<HfSe
     let mut models: Vec<HfModelSummary> = Vec::new();
 
     for model_json in models_json {
+        // Check if the model actually contains .gguf files
+        // The library=gguf filter returns models tagged with GGUF, but some are base models
+        // that don't contain GGUF files themselves (only derivatives do)
+        let has_gguf_files = model_json
+            .get("siblings")
+            .and_then(|s| s.as_array())
+            .map(|siblings| {
+                siblings.iter().any(|file| {
+                    file.get("rfilename")
+                        .and_then(|f| f.as_str())
+                        .map(|name| name.ends_with(".gguf"))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false);
+
+        // Skip models that don't actually have GGUF files
+        if !has_gguf_files {
+            continue;
+        }
+
         // Extract parameter count from safetensors.total
         let parameters_b = model_json
             .get("safetensors")
