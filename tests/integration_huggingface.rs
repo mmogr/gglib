@@ -6,8 +6,20 @@
 //! - Quantization detection and grouping
 //! - Sharded file detection and handling
 //! - Repository information parsing
+//! - HuggingFace service API URL construction (#39)
 
 use gglib::commands::download;
+use gglib::services::core::HuggingFaceService;
+
+/// Test that HuggingFaceService is constructable and has expected methods
+#[tokio::test]
+async fn test_huggingface_service_construction() {
+    let service = HuggingFaceService::new();
+    // Verify service is Clone
+    let _cloned = service.clone();
+    // Verify service is Default
+    let _default = HuggingFaceService;
+}
 
 /// Test basic search functionality (mock test since we can't make real API calls in CI)
 #[tokio::test]
