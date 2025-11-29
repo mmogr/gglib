@@ -1,7 +1,7 @@
-import { useState, FC, FormEvent, useEffect, useCallback } from "react";
+import { useState, FC, FormEvent } from "react";
 import { TauriService } from "../services/tauri";
-import { DownloadQueueStatus, DownloadQueueItem } from "../types";
-import { DownloadProgress } from "../hooks/useDownloadProgress";
+import { DownloadQueueItem } from "../types";
+import { useDownloadProgress } from "../hooks/useDownloadProgress";
 import { formatBytes, formatTime } from "../utils/format";
 import styles from "./DownloadModel.module.css";
 
@@ -13,10 +13,19 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
   const [repoId, setRepoId] = useState("");
   const [quantization, setQuantization] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<DownloadProgress | null>(null);
-  const [connectionMode, setConnectionMode] = useState<string>("Initializing...");
-  const [queueStatus, setQueueStatus] = useState<DownloadQueueStatus | null>(null);
+
+  // Use the shared download progress hook
+  const {
+    progress,
+    queueStatus,
+    connectionMode,
+    error,
+    setError,
+    fetchQueueStatus,
+    isDownloading,
+    queueCount,
+    cancelDownload,
+  } = useDownloadProgress({ onCompleted: onModelDownloaded });
 
   const commonQuantizations = [
     "Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0",
@@ -24,117 +33,6 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
     "Q4_K_S", "Q4_K_M", "Q5_K_S", "Q5_K_M",
     "Q6_K", "Q8_K"
   ];
-
-  // Fetch the current queue status
-  const fetchQueueStatus = useCallback(async () => {
-    try {
-      const status = await TauriService.getDownloadQueue();
-      setQueueStatus(status);
-    } catch (err) {
-      console.error("Failed to fetch queue status:", err);
-    }
-  }, []);
-
-  // Initial fetch and periodic refresh of queue status
-  useEffect(() => {
-    fetchQueueStatus();
-    const interval = setInterval(fetchQueueStatus, 2000);
-    return () => clearInterval(interval);
-  }, [fetchQueueStatus]);
-
-  // Listen for download progress events from Tauri or Web SSE
-  useEffect(() => {
-    let unlistenTauri: (() => void) | undefined;
-    let eventSource: EventSource | undefined;
-
-    const setupListener = async () => {
-      // Check for Tauri environment (supports both v1 and v2)
-      // We check for __TAURI_INTERNALS__ (v2) or __TAURI__ (v1)
-      // We also check if the window has the IPC function which is the most reliable
-      const isTauri = typeof (window as any).__TAURI_INTERNALS__ !== 'undefined' ||
-                      typeof (window as any).__TAURI__ !== 'undefined' ||
-                      typeof (window as any).__TAURI_IPC__ !== 'undefined';
-
-      console.log("[DownloadModel] Environment check:", { isTauri });
-
-      // Tauri Environment
-      if (isTauri) {
-        setConnectionMode("Desktop (Tauri)");
-        try {
-          console.log("[DownloadModel] Setting up Tauri event listener...");
-          const { listen } = await import('@tauri-apps/api/event');
-          unlistenTauri = await listen<DownloadProgress>('download-progress', (event) => {
-            console.log("[DownloadModel] Received Tauri event:", event);
-            const progressData = event.payload;
-            
-            setProgress(progressData);
-            // Refresh queue status on any progress event
-            fetchQueueStatus();
-
-            if (progressData.status === 'completed') {
-              onModelDownloaded();
-              setTimeout(() => {
-                setProgress(null);
-              }, 2000);
-            } else if (progressData.status === 'error' || progressData.status === 'skipped') {
-              // Keep progress visible for errors but allow new submissions
-            }
-          });
-          console.log("[DownloadModel] Tauri event listener registered.");
-        } catch (e) {
-          console.error("[DownloadModel] Failed to setup Tauri listener:", e);
-          setConnectionMode(`Desktop Error: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      } else {
-        setConnectionMode("Web (SSE)");
-        // Web Environment - Use SSE
-        // Determine API base URL (same origin for production, localhost:9887 for dev)
-        const baseUrl = import.meta.env.DEV ? 'http://localhost:9887' : '';
-        eventSource = new EventSource(`${baseUrl}/api/models/download/progress`);
-        
-        eventSource.onmessage = (event) => {
-          try {
-            // Skip empty data (can happen with keep-alive or connection events)
-            if (!event.data || event.data.trim() === '') {
-              return;
-            }
-            const progressData = JSON.parse(event.data) as DownloadProgress;
-            
-            setProgress(progressData);
-            // Refresh queue status on any progress event
-            fetchQueueStatus();
-
-            if (progressData.status === 'completed') {
-              onModelDownloaded();
-              setTimeout(() => {
-                setProgress(null);
-              }, 2000);
-            } else if (progressData.status === 'error' || progressData.status === 'skipped') {
-              // Keep progress visible for errors but allow new submissions
-            }
-          } catch (e) {
-            console.error("Failed to parse progress event", e);
-          }
-        };
-
-        eventSource.onerror = (err) => {
-           console.error("SSE Error:", err);
-           // Don't close immediately on error, it might reconnect
-        };
-      }
-    };
-
-    setupListener();
-
-    return () => {
-      if (unlistenTauri) {
-        unlistenTauri();
-      }
-      if (eventSource) {
-        eventSource.close();
-      }
-    };
-  }, [fetchQueueStatus, onModelDownloaded]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -221,20 +119,10 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
     if (!queueStatus?.current) {
       return;
     }
-
-    try {
-      await TauriService.cancelDownload(queueStatus.current.model_id);
-      setError("Download cancelled");
-      setProgress(null);
-      await fetchQueueStatus();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to cancel download");
-    }
+    // Use the hook's cancelDownload which handles state updates
+    await cancelDownload(queueStatus.current.model_id);
   };
 
-  // Check if we're currently downloading
-  const isDownloading = queueStatus?.current !== null && queueStatus?.current !== undefined;
-  const queueCount = (queueStatus?.pending.length || 0) + (isDownloading ? 1 : 0);
   const hasFailedDownloads = (queueStatus?.failed.length || 0) > 0;
 
   return (

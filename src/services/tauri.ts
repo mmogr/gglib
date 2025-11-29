@@ -13,11 +13,10 @@ import {
   HfQuantizationsResponse,
 } from "../types";
 import { getApiBase } from "../utils/apiBase";
+import { isTauriApp } from "../utils/platform";
 
-// Platform detection
-// Check if we're running in Tauri (desktop app) or Web UI
-export const isTauriApp = typeof (window as any).__TAURI_INTERNALS__ !== 'undefined' ||
-                   typeof (window as any).__TAURI__ !== 'undefined';
+// Re-export for backward compatibility
+export { isTauriApp };
 
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const apiBase = await getApiBase();

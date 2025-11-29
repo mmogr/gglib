@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { TauriService } from '../services/tauri';
+import { isTauriApp } from '../utils/platform';
 import { DownloadQueueStatus } from '../types';
 
 export interface ShardProgressInfo {
@@ -96,12 +97,7 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
     let eventSource: EventSource | undefined;
 
     const setupListener = async () => {
-      const isTauri =
-        typeof (window as any).__TAURI_INTERNALS__ !== 'undefined' ||
-        typeof (window as any).__TAURI__ !== 'undefined' ||
-        typeof (window as any).__TAURI_IPC__ !== 'undefined';
-
-      if (isTauri) {
+      if (isTauriApp) {
         setConnectionMode('Desktop (Tauri)');
         try {
           const { listen } = await import('@tauri-apps/api/event');
