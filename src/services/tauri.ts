@@ -8,6 +8,9 @@ import {
   DownloadConfig,
   ServeConfig,
   DownloadQueueStatus,
+  HfSearchRequest,
+  HfSearchResponse,
+  HfQuantizationsResponse,
 } from "../types";
 import { getApiBase } from "../utils/apiBase";
 
@@ -543,6 +546,62 @@ export class TauriService {
 
       const data: ApiResponse<string> = await response.json();
       return data.data || 'Cleared failed downloads';
+    }
+  }
+
+  // ==========================================================================
+  // HuggingFace Browser Operations
+  // ==========================================================================
+
+  /**
+   * Browse HuggingFace models with search, parameter filtering, and pagination.
+   * Returns GGUF text-generation models only.
+   */
+  static async browseHfModels(request: HfSearchRequest): Promise<HfSearchResponse> {
+    if (isTauriApp) {
+      return await invoke<HfSearchResponse>('browse_hf_models', { request });
+    } else {
+      const response = await apiFetch(`/hf/browse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const error: ApiResponse<any> = await response.json();
+        throw new Error(error.error || 'Failed to browse HuggingFace models');
+      }
+
+      const data: ApiResponse<HfSearchResponse> = await response.json();
+      if (!data.data) {
+        throw new Error('Invalid response from server');
+      }
+      return data.data;
+    }
+  }
+
+  /**
+   * Get available quantizations for a HuggingFace model.
+   * Returns detailed info about each quantization including file size and sharding.
+   */
+  static async getHfQuantizations(modelId: string): Promise<HfQuantizationsResponse> {
+    if (isTauriApp) {
+      return await invoke<HfQuantizationsResponse>('get_hf_quantizations', { modelId });
+    } else {
+      // URL encode the model_id since it contains a slash
+      const encodedModelId = encodeURIComponent(modelId);
+      const response = await apiFetch(`/hf/quantizations/${encodedModelId}`);
+
+      if (!response.ok) {
+        const error: ApiResponse<any> = await response.json();
+        throw new Error(error.error || 'Failed to get model quantizations');
+      }
+
+      const data: ApiResponse<HfQuantizationsResponse> = await response.json();
+      if (!data.data) {
+        throw new Error('Invalid response from server');
+      }
+      return data.data;
     }
   }
 
