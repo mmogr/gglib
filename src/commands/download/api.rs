@@ -2,11 +2,8 @@
 
 use anyhow::{Result, anyhow};
 use hf_hub::api::sync::Api;
-use reqwest;
-use serde_json;
 use std::path::Path;
 
-use super::file_ops::extract_quantization_from_filename;
 use super::utils::format_number;
 use crate::services::core::HuggingFaceService;
 
@@ -44,166 +41,32 @@ pub async fn list_available_quantizations(api: &Api, model_id: &str) -> Result<(
 
             println!("\nSearching for GGUF files using HuggingFace API...");
 
-            // Use HuggingFace's REST API to list files (including sharded directories)
-            let api_url = format!("https://huggingface.co/api/models/{}/tree/main", model_id);
+            // Use HuggingFaceService for consistent API access (DRY)
+            let hf_service = HuggingFaceService::new();
 
-            match reqwest::get(&api_url).await {
+            match hf_service.get_quantizations(model_id).await {
                 Ok(response) => {
-                    if response.status().is_success() {
-                        match response.text().await {
-                            Ok(json_text) => {
-                                match serde_json::from_str::<serde_json::Value>(&json_text) {
-                                    Ok(data) => {
-                                        let mut gguf_files = Vec::new();
-
-                                        if let Some(files) = data.as_array() {
-                                            // 1) Direct GGUF files at repo root
-                                            for file in files {
-                                                if let (Some(filename), Some(size)) = (
-                                                    file.get("path").and_then(|v| v.as_str()),
-                                                    file.get("size").and_then(|v| v.as_u64()),
-                                                ) {
-                                                    let entry_type = file
-                                                        .get("type")
-                                                        .and_then(|v| v.as_str())
-                                                        .unwrap_or("file");
-
-                                                    if entry_type == "file"
-                                                        && filename.ends_with(".gguf")
-                                                    {
-                                                        let size_mb = size as f64 / 1_048_576.0;
-                                                        gguf_files
-                                                            .push((filename.to_string(), size_mb));
-                                                    }
-                                                }
-                                            }
-
-                                            // 2) Sharded GGUF files in per-quant directories
-                                            for file in files {
-                                                if let Some(dir_path) =
-                                                    file.get("path").and_then(|v| v.as_str())
-                                                {
-                                                    let entry_type = file
-                                                        .get("type")
-                                                        .and_then(|v| v.as_str())
-                                                        .unwrap_or("file");
-
-                                                    if entry_type == "directory" {
-                                                        let sub_api_url = format!(
-                                                            "https://huggingface.co/api/models/{}/tree/main/{}",
-                                                            model_id, dir_path
-                                                        );
-
-                                                        if let Ok(sub_response) =
-                                                            reqwest::get(&sub_api_url).await
-                                                        {
-                                                            if sub_response.status().is_success() {
-                                                                if let Ok(sub_json_text) =
-                                                                    sub_response.text().await
-                                                                {
-                                                                    if let Ok(sub_data) =
-                                                                        serde_json::from_str::<
-                                                                            serde_json::Value,
-                                                                        >(
-                                                                            &sub_json_text
-                                                                        )
-                                                                    {
-                                                                        if let Some(sub_files) =
-                                                                            sub_data.as_array()
-                                                                        {
-                                                                            for sub_file in
-                                                                                sub_files
-                                                                            {
-                                                                                if let (
-                                                                                    Some(sub_path),
-                                                                                    Some(sub_size),
-                                                                                ) = (
-                                                                                    sub_file
-                                                                                        .get("path")
-                                                                                        .and_then(
-                                                                                            |v| {
-                                                                                                v
-                                                                                        .as_str()
-                                                                                            },
-                                                                                        ),
-                                                                                    sub_file
-                                                                                        .get("size")
-                                                                                        .and_then(
-                                                                                            |v| {
-                                                                                                v
-                                                                                        .as_u64()
-                                                                                            },
-                                                                                        ),
-                                                                                ) {
-                                                                                    if sub_path
-                                                                                        .ends_with(
-                                                                                            ".gguf",
-                                                                                        )
-                                                                                    {
-                                                                                        let size_mb = sub_size as f64
-                                                                                            / 1_048_576.0;
-                                                                                        gguf_files.push((
-                                                                                            sub_path
-                                                                                                .to_string(),
-                                                                                            size_mb,
-                                                                                        ));
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if gguf_files.is_empty() {
-                                            println!("❌ No GGUF files found in this repository.");
-                                        } else {
-                                            println!("✅ Found {} GGUF files:", gguf_files.len());
-                                            for (filename, size_mb) in &gguf_files {
-                                                let quant =
-                                                    extract_quantization_from_filename(filename);
-                                                println!(
-                                                    "  {} ({:.1} MB) - quantization: {}",
-                                                    filename, size_mb, quant
-                                                );
-                                            }
-
-                                            println!("\nTo download a specific file, use:");
-                                            for (filename, _) in &gguf_files {
-                                                let quant =
-                                                    extract_quantization_from_filename(filename);
-                                                if quant != "unknown" {
-                                                    println!(
-                                                        "  gglib download {} -q {}",
-                                                        model_id, quant
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Err(e) => {
-                                        println!("Failed to parse API response: {}", e);
-                                        fallback_file_search(&repo, model_id).await?;
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                println!("Failed to read API response: {}", e);
-                                fallback_file_search(&repo, model_id).await?;
-                            }
-                        }
+                    if response.quantizations.is_empty() {
+                        println!("❌ No GGUF files found in this repository.");
                     } else {
-                        println!("API request failed with status: {}", response.status());
-                        fallback_file_search(&repo, model_id).await?;
+                        println!("✅ Found {} quantizations:", response.quantizations.len());
+                        for quant in &response.quantizations {
+                            let shard_info = if quant.is_sharded {
+                                format!(" ({} shards)", quant.shard_count.unwrap_or(0))
+                            } else {
+                                String::new()
+                            };
+                            println!("  {} ({:.1} MB){}", quant.name, quant.size_mb, shard_info);
+                        }
+
+                        println!("\nTo download a specific quantization, use:");
+                        for quant in &response.quantizations {
+                            println!("  gglib download {} -q {}", model_id, quant.name);
+                        }
                     }
                 }
                 Err(e) => {
-                    println!("Failed to make API request: {}", e);
+                    println!("Failed to fetch quantizations: {}", e);
                     fallback_file_search(&repo, model_id).await?;
                 }
             }

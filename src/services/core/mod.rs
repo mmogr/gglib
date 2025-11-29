@@ -59,7 +59,7 @@ pub use download_models::{
 };
 pub use download_service::DownloadService;
 pub use huggingface_models::HuggingFaceError;
-pub use huggingface_service::HuggingFaceService;
+pub use huggingface_service::{HF_API_BASE, HuggingFaceService};
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};

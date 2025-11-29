@@ -8,6 +8,7 @@
 use super::download_models::{
     DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
 };
+use super::huggingface_service::HuggingFaceService;
 use anyhow::Result;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -515,15 +516,9 @@ impl DownloadService {
         // Get models directory and commit SHA
         let models_dir = get_models_directory()?;
 
-        // Get commit SHA from HuggingFace API
-        let api_url = format!("https://huggingface.co/api/models/{}", model_id);
-        let response = reqwest::get(&api_url).await?;
-        let data: serde_json::Value = response.json().await?;
-        let commit_sha = data
-            .get("sha")
-            .and_then(|v| v.as_str())
-            .unwrap_or("main")
-            .to_string();
+        // Get commit SHA from HuggingFace API using shared service
+        let hf_service = HuggingFaceService::new();
+        let commit_sha = hf_service.get_commit_sha(&model_id).await?;
 
         // Create download context
         let context = DownloadContext {
@@ -1004,85 +999,11 @@ impl DownloadService {
         model_id: &str,
         quantization: &str,
     ) -> Result<Vec<(String, u64)>> {
-        use crate::commands::download::extract_quantization_from_filename;
-
-        let quant_upper = quantization.to_uppercase();
-        let api_url = format!("https://huggingface.co/api/models/{}/tree/main", model_id);
-
-        let response = reqwest::get(&api_url)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to fetch model info: {}", e))?;
-
-        if !response.status().is_success() {
-            return Err(anyhow::anyhow!(
-                "Failed to fetch model info: HTTP {}",
-                response.status()
-            ));
-        }
-
-        let data: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to parse API response: {}", e))?;
-
-        let files = data
-            .as_array()
-            .ok_or_else(|| anyhow::anyhow!("Invalid API response format"))?;
-
-        let mut matching_files: Vec<(String, u64)> = Vec::new();
-
-        // Check top-level files
-        for file in files {
-            if let Some(filename) = file.get("path").and_then(|v| v.as_str()) {
-                let entry_type = file.get("type").and_then(|v| v.as_str()).unwrap_or("file");
-
-                // Direct GGUF files at repo root
-                if entry_type == "file" && filename.ends_with(".gguf") {
-                    let file_quant = extract_quantization_from_filename(filename);
-                    if file_quant.to_uppercase() == quant_upper {
-                        let file_size = file.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
-                        matching_files.push((filename.to_string(), file_size));
-                    }
-                }
-
-                // Sharded GGUF files in per-quant directories
-                // Note: Nested ifs required for CI compatibility (let-chains with await unstable in Rust 1.86)
-                #[allow(clippy::collapsible_if)]
-                if entry_type == "directory" && filename.to_uppercase().contains(&quant_upper) {
-                    let sub_api_url = format!(
-                        "https://huggingface.co/api/models/{}/tree/main/{}",
-                        model_id, filename
-                    );
-
-                    if let Ok(sub_response) = reqwest::get(&sub_api_url).await {
-                        if sub_response.status().is_success() {
-                            if let Ok(sub_data) = sub_response.json::<serde_json::Value>().await {
-                                if let Some(sub_files) = sub_data.as_array() {
-                                    for sub_file in sub_files {
-                                        if let Some(sub_path) =
-                                            sub_file.get("path").and_then(|v| v.as_str())
-                                        {
-                                            if sub_path.ends_with(".gguf") {
-                                                let sub_quant =
-                                                    extract_quantization_from_filename(sub_path);
-                                                if sub_quant.to_uppercase() == quant_upper {
-                                                    let file_size = sub_file
-                                                        .get("size")
-                                                        .and_then(|v| v.as_u64())
-                                                        .unwrap_or(0);
-                                                    matching_files
-                                                        .push((sub_path.to_string(), file_size));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Use HuggingFaceService to find GGUF files (DRY - no duplicate API calls)
+        let hf_service = HuggingFaceService::new();
+        let matching_files = hf_service
+            .find_gguf_files_for_quantization(model_id, quantization)
+            .await?;
 
         if matching_files.is_empty() {
             return Err(anyhow::anyhow!(
@@ -1090,9 +1011,6 @@ impl DownloadService {
                 quantization
             ));
         }
-
-        // Sort to ensure proper shard order (00001, 00002, etc.)
-        matching_files.sort_by(|a, b| a.0.cmp(&b.0));
 
         Ok(matching_files)
     }

@@ -48,7 +48,10 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 /// Base URL for HuggingFace API.
-const HF_API_BASE: &str = "https://huggingface.co/api/models";
+///
+/// Exposed publicly so other modules can use this constant instead of
+/// hardcoding the URL (DRY principle).
+pub const HF_API_BASE: &str = "https://huggingface.co/api/models";
 
 /// Fields to explicitly expand in API requests.
 ///
@@ -486,6 +489,188 @@ impl HuggingFaceService {
     pub async fn get_quantization_names(&self, model_id: &str) -> Result<Vec<String>> {
         let response = self.get_quantizations(model_id).await?;
         Ok(response.quantizations.into_iter().map(|q| q.name).collect())
+    }
+
+    // =========================================================================
+    // Low-level API Helpers (for use by other modules to avoid DRY violations)
+    // =========================================================================
+
+    /// Build a URL for the model tree endpoint.
+    ///
+    /// Use this instead of hardcoding URLs to maintain consistency.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID (e.g., "TheBloke/Llama-2-7B-GGUF")
+    /// * `path` - Optional subdirectory path within the repo
+    ///
+    /// # Returns
+    ///
+    /// Returns the full API URL for the tree endpoint.
+    pub fn build_tree_url(model_id: &str, path: Option<&str>) -> String {
+        match path {
+            Some(p) => format!("{}/{}/tree/main/{}", HF_API_BASE, model_id, p),
+            None => format!("{}/{}/tree/main", HF_API_BASE, model_id),
+        }
+    }
+
+    /// Build a URL for the model info endpoint.
+    ///
+    /// Use this instead of hardcoding URLs to maintain consistency.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    ///
+    /// # Returns
+    ///
+    /// Returns the full API URL for the model info endpoint.
+    pub fn build_model_info_url(model_id: &str) -> String {
+        format!("{}/{}", HF_API_BASE, model_id)
+    }
+
+    /// Fetch the file tree for a model repository.
+    ///
+    /// This is a low-level helper for fetching the file listing from HuggingFace.
+    /// Prefer using `get_quantizations()` for most use cases.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    /// * `path` - Optional subdirectory path
+    ///
+    /// # Returns
+    ///
+    /// Returns the raw JSON array of file entries.
+    pub async fn fetch_tree(
+        &self,
+        model_id: &str,
+        path: Option<&str>,
+    ) -> Result<Vec<serde_json::Value>> {
+        let url = Self::build_tree_url(model_id, path);
+        let response = reqwest::get(&url).await?;
+
+        if !response.status().is_success() {
+            return Err(HuggingFaceError::ApiRequestFailed {
+                status: response.status().as_u16(),
+                url,
+            }
+            .into());
+        }
+
+        let data: serde_json::Value = response.json().await?;
+        data.as_array().cloned().ok_or_else(|| {
+            HuggingFaceError::InvalidResponse {
+                message: "Expected array for tree response".to_string(),
+            }
+            .into()
+        })
+    }
+
+    /// Fetch model info (commit SHA, etc.) from HuggingFace.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    ///
+    /// # Returns
+    ///
+    /// Returns the raw JSON model info.
+    pub async fn fetch_model_info(&self, model_id: &str) -> Result<serde_json::Value> {
+        let url = Self::build_model_info_url(model_id);
+        let response = reqwest::get(&url).await?;
+
+        if !response.status().is_success() {
+            return Err(HuggingFaceError::ApiRequestFailed {
+                status: response.status().as_u16(),
+                url,
+            }
+            .into());
+        }
+
+        Ok(response.json().await?)
+    }
+
+    /// Get the commit SHA for a model repository.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    ///
+    /// # Returns
+    ///
+    /// Returns the commit SHA string, or "main" if not found.
+    pub async fn get_commit_sha(&self, model_id: &str) -> Result<String> {
+        let info = self.fetch_model_info(model_id).await?;
+        Ok(info
+            .get("sha")
+            .and_then(|v| v.as_str())
+            .unwrap_or("main")
+            .to_string())
+    }
+
+    /// Find GGUF files for a specific quantization in a model repository.
+    ///
+    /// This handles both flat repos (files at root) and structured repos
+    /// (files in quantization-named subdirectories).
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID
+    /// * `quantization` - Quantization name to filter by (e.g., "Q4_K_M")
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of (filename, size_bytes) tuples for matching files.
+    pub async fn find_gguf_files_for_quantization(
+        &self,
+        model_id: &str,
+        quantization: &str,
+    ) -> Result<Vec<(String, u64)>> {
+        let quant_upper = quantization.to_uppercase();
+        let files = self.fetch_tree(model_id, None).await?;
+
+        let mut matching_files: Vec<(String, u64)> = Vec::new();
+
+        // Check top-level files
+        for file in &files {
+            if let Some(filename) = file.get("path").and_then(|v| v.as_str()) {
+                let entry_type = file.get("type").and_then(|v| v.as_str()).unwrap_or("file");
+
+                // Direct GGUF files at repo root
+                if entry_type == "file" && filename.ends_with(".gguf") {
+                    let file_quant = extract_quantization_from_filename(filename);
+                    if file_quant.to_uppercase() == quant_upper {
+                        let file_size = file.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+                        matching_files.push((filename.to_string(), file_size));
+                    }
+                }
+
+                // Sharded GGUF files in per-quant directories
+                if entry_type == "directory"
+                    && filename.to_uppercase().contains(&quant_upper)
+                    && let Ok(sub_files) = self.fetch_tree(model_id, Some(filename)).await
+                {
+                    for sub_file in sub_files {
+                        if let Some(sub_path) = sub_file.get("path").and_then(|v| v.as_str())
+                            && sub_path.ends_with(".gguf")
+                        {
+                            let sub_quant = extract_quantization_from_filename(sub_path);
+                            if sub_quant.to_uppercase() == quant_upper {
+                                let file_size =
+                                    sub_file.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+                                matching_files.push((sub_path.to_string(), file_size));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort shard files by name to ensure correct order
+        matching_files.sort_by(|a, b| a.0.cmp(&b.0));
+
+        Ok(matching_files)
     }
 }
 
