@@ -592,7 +592,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
               key={activeConversationId ?? 'thread-root'}
               className="chat-thread-root"
             >
-              <ThreadPrimitive.Viewport className="chat-viewport">
+              <ThreadPrimitive.Viewport className="chat-viewport" autoScroll>
                 <ThreadPrimitive.Messages
                   components={{
                     AssistantMessage: AssistantMessageBubble,

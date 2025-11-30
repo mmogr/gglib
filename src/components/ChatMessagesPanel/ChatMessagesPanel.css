@@ -224,6 +224,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  scroll-behavior: smooth;
 }
 
 .chat-scroll-button {
