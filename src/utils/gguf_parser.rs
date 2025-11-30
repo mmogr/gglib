@@ -768,6 +768,60 @@ pub fn is_reasoning_model(metadata: &HashMap<String, String>) -> bool {
     detect_reasoning_support(metadata).supports_reasoning
 }
 
+/// Apply reasoning detection to GGUF metadata and return tags to add.
+///
+/// This is a shared helper function used by all model add flows:
+/// - CLI `add` command
+/// - GUI "Add Model" from local file
+/// - HuggingFace browser downloads
+///
+/// It analyzes the metadata, logs the detection results to stdout,
+/// and returns a list of tags to apply to the model.
+///
+/// # Arguments
+/// * `metadata` - The processed metadata HashMap from GGUF parsing
+///
+/// # Returns
+/// A `Vec<String>` of tags to add to the model (e.g., `["reasoning"]`)
+///
+/// # Examples
+///
+/// ```rust
+/// use std::collections::HashMap;
+/// use gglib::utils::gguf_parser::apply_reasoning_detection;
+///
+/// let mut metadata = HashMap::new();
+/// metadata.insert(
+///     "tokenizer.chat_template".to_string(),
+///     "... <think> ... </think> ...".to_string()
+/// );
+///
+/// let tags = apply_reasoning_detection(&metadata);
+/// assert!(tags.contains(&"reasoning".to_string()));
+/// ```
+pub fn apply_reasoning_detection(metadata: &HashMap<String, String>) -> Vec<String> {
+    let detection = detect_reasoning_support(metadata);
+    let mut tags = Vec::new();
+
+    if detection.supports_reasoning {
+        println!("\n🧠 Detected reasoning model capabilities:");
+        println!("  Confidence: {:.0}%", detection.confidence * 100.0);
+        if !detection.matched_patterns.is_empty() {
+            println!(
+                "  Matched patterns: {}",
+                detection.matched_patterns.join(", ")
+            );
+        }
+        if let Some(ref format) = detection.suggested_format {
+            println!("  Suggested format: --reasoning-format {}", format);
+        }
+        println!("  → Auto-adding 'reasoning' tag for optimal llama-server configuration");
+        tags.push("reasoning".to_string());
+    }
+
+    tags
+}
+
 /// Get the full chat template from metadata, even if it was truncated.
 /// Returns None if the template was truncated (stored as "Chat template (N chars)").
 ///

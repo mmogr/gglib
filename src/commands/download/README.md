@@ -23,10 +23,14 @@ The download module handles interactions with the HuggingFace Hub, including sea
 
 - **api.rs**: Handles HTTP requests to the HuggingFace Hub API.
 - **file_ops.rs**: Manages file system operations, including downloading and verifying files.
-- **model_ops.rs**: Processes model metadata and handles database insertion.
+- **model_ops.rs**: Processes model metadata, handles database insertion, and auto-detects reasoning models.
 - **progress.rs**: Provides progress bars and status updates during downloads.
 - **python_bridge.rs**: Spins up the managed Python helper (hf_xet) for accelerated transfers and streams progress back as JSON events.
 - **utils.rs**: Utility functions for the download module.
+
+### Reasoning Model Detection
+
+When a GGUF file is downloaded and added to the database, `model_ops.rs` automatically analyzes the model's metadata to detect reasoning/thinking capabilities. Models with chat templates containing `<think>`, `<reasoning>`, or similar tags (e.g., DeepSeek R1, Qwen3, QwQ) receive a `reasoning` tag automatically. This enables optimal configuration when serving via `llama-server --reasoning-format`.
 
 ### Fast-path helper overview
 

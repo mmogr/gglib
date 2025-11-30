@@ -161,6 +161,9 @@ impl ModelService {
             .or(gguf_metadata.param_count_b)
             .unwrap_or(0.0);
 
+        // Auto-detect reasoning model support from metadata
+        let tags = crate::utils::gguf_parser::apply_reasoning_detection(&gguf_metadata.metadata);
+
         // Create the model instance
         let new_model = Gguf {
             id: None,
@@ -177,7 +180,7 @@ impl ModelService {
             hf_filename: None,
             download_date: None,
             last_update_check: None,
-            tags: Vec::new(),
+            tags,
         };
 
         // Save to database
