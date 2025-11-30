@@ -49,6 +49,7 @@ export interface AppSettings {
   proxy_port?: number | null;
   server_port?: number | null;
   max_download_queue_size?: number | null;
+  title_generation_prompt?: string | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -57,6 +58,7 @@ export interface UpdateSettingsRequest {
   proxy_port?: number | null | undefined;
   server_port?: number | null | undefined;
   max_download_queue_size?: number | null | undefined;
+  title_generation_prompt?: string | null | undefined;
 }
 
 // Download Queue Types

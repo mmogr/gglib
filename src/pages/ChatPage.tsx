@@ -2,8 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
+import { ToastContainer } from '../components/Toast';
 import { useGglibRuntime } from '../hooks/useGglibRuntime';
-import { ChatService, ConversationSummary } from '../services/chat';
+import { useSettings } from '../hooks/useSettings';
+import { useToast } from '../hooks/useToast';
+import { ChatService, ConversationSummary, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/chat';
 import './ChatPage.css';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
@@ -40,6 +43,13 @@ export default function ChatPage({
   const [leftPanelWidth, setLeftPanelWidth] = useState(35);
   const layoutRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+
+  // Toast notifications
+  const { toasts, showToast, dismissToast } = useToast();
+
+  // Settings for title generation prompt
+  const { settings } = useSettings();
+  const titleGenerationPrompt = settings?.title_generation_prompt || DEFAULT_TITLE_GENERATION_PROMPT;
 
   // Runtime
   const runtime = useGglibRuntime({
@@ -265,6 +275,8 @@ export default function ChatPage({
               activeConversation={activeConversation}
               activeConversationId={activeConversationId}
               isServerConnected={true}
+              serverPort={serverPort}
+              titleGenerationPrompt={titleGenerationPrompt}
               onRenameConversation={handleRenameConversation}
               onClearConversation={handleClearConversation}
               onExportConversation={handleExportConversation}
@@ -273,6 +285,7 @@ export default function ChatPage({
               syncConversations={syncConversations}
               chatError={chatError}
               setChatError={setChatError}
+              showToast={showToast}
             />
           </div>
         </div>
@@ -329,6 +342,9 @@ export default function ChatPage({
           </div>
         </div>
       )}
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
