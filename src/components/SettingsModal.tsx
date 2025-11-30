@@ -2,6 +2,7 @@ import { FC, FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { UpdateSettingsRequest } from "../types";
+import { DEFAULT_TITLE_GENERATION_PROMPT } from "../services/chat";
 import styles from "./SettingsModal.module.css";
 
 interface SettingsModalProps {
@@ -24,6 +25,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [proxyPortInput, setProxyPortInput] = useState("");
   const [serverPortInput, setServerPortInput] = useState("");
   const [maxQueueSizeInput, setMaxQueueSizeInput] = useState("");
+  const [titlePromptInput, setTitlePromptInput] = useState("");
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const loading = loadingDir || loadingSettings;
@@ -42,6 +45,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setProxyPortInput(settings.proxy_port?.toString() || "");
       setServerPortInput(settings.server_port?.toString() || "");
       setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "");
+      setTitlePromptInput(settings.title_generation_prompt || "");
     }
   }, [settings]);
 
@@ -75,6 +79,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           proxy_port: parseNumericInput(proxyPortInput),
           server_port: parseNumericInput(serverPortInput),
           max_download_queue_size: parseNumericInput(maxQueueSizeInput),
+          title_generation_prompt: titlePromptInput.trim() || null,
         };
 
         // Check if any updates were made
@@ -82,7 +87,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.default_context_size !== undefined ||
           updates.proxy_port !== undefined ||
           updates.server_port !== undefined ||
-          updates.max_download_queue_size !== undefined;
+          updates.max_download_queue_size !== undefined ||
+          updates.title_generation_prompt !== undefined;
 
         if (hasUpdates) {
           await saveSettings(updates);
@@ -105,6 +111,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setProxyPortInput(settings.proxy_port?.toString() || "8080");
       setServerPortInput(settings.server_port?.toString() || "9000");
       setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "10");
+      setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
     }
   }, [info, settings]);
 
@@ -253,6 +260,45 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               <div className={styles.helperText}>
                 <span>Maximum number of models that can be queued for download (1-50)</span>
               </div>
+
+              {/* Advanced Settings Section */}
+              <div className={styles.separator} />
+              <button
+                type="button"
+                className={styles.advancedToggle}
+                onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                aria-expanded={isAdvancedOpen}
+              >
+                <span className={styles.advancedToggleIcon}>{isAdvancedOpen ? '▼' : '▶'}</span>
+                <span>Advanced Settings</span>
+              </button>
+
+              {isAdvancedOpen && (
+                <div className={styles.advancedSection}>
+                  <label className={styles.label} htmlFor="title-prompt-input">
+                    Chat Title Generation Prompt
+                  </label>
+                  <textarea
+                    id="title-prompt-input"
+                    className={styles.textarea}
+                    value={titlePromptInput}
+                    onChange={(event) => setTitlePromptInput(event.target.value)}
+                    placeholder={DEFAULT_TITLE_GENERATION_PROMPT}
+                    rows={3}
+                    disabled={saving}
+                  />
+                  <div className={styles.helperText}>
+                    <span>Prompt used when AI generates chat titles. Leave empty to use the default.</span>
+                    <button
+                      type="button"
+                      className={styles.resetLink}
+                      onClick={() => setTitlePromptInput("")}
+                    >
+                      Reset to default
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {error && <p className={styles.error} role="alert">{error}</p>}
               {successMessage && <p className={styles.success} role="status" aria-live="polite">{successMessage}</p>}
