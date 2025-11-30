@@ -19,7 +19,7 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
   activeSubTab: externalActiveSubTab,
   onSubTabChange,
 }) => {
-  const [internalActiveSubTab, setInternalActiveSubTab] = useState<AddDownloadSubTab>('browse');
+  const [internalActiveSubTab, setInternalActiveSubTab] = useState<AddDownloadSubTab>('download');
   const activeSubTab = externalActiveSubTab ?? internalActiveSubTab;
   
   const handleSubTabChange = (subtab: AddDownloadSubTab) => {
