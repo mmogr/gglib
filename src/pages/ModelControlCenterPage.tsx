@@ -311,6 +311,7 @@ export default function ModelControlCenterPage({
             onAddTag={addTagToModel}
             onRemoveTag={removeTagFromModel}
             getModelTags={getModelTags}
+            onDownloadCompleted={loadModels}
           />
         </div>
       </div>

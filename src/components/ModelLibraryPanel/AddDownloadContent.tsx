@@ -71,8 +71,6 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
       <div className="add-download-panel">
         {activeSubTab === 'browse' && (
           <HuggingFaceBrowser 
-            onDownloadStarted={handleModelDownloaded} 
-            onDownloadCompleted={handleModelDownloaded}
             onSelectModel={onSelectHfModel}
             selectedModelId={selectedHfModelId}
           />

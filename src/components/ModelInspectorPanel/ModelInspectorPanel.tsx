@@ -1,8 +1,11 @@
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, useCallback } from 'react';
 import { GgufModel, ServeConfig, ServerInfo, HfModelSummary } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { useSettings } from '../../hooks/useSettings';
-import { formatParamCount, getHuggingFaceUrl, getHuggingFaceModelUrl } from '../../utils/format';
+import { useDownloadProgress } from '../../hooks/useDownloadProgress';
+import { formatParamCount, getHuggingFaceUrl } from '../../utils/format';
+import { HfModelPreview } from '../HfModelPreview';
+import { DownloadProgressDisplay } from '../DownloadProgressDisplay';
 import './ModelInspectorPanel.css';
 
 interface ModelInspectorPanelProps {
@@ -22,6 +25,8 @@ interface ModelInspectorPanelProps {
   onAddTag: (modelId: number, tag: string) => Promise<void>;
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
   getModelTags: (modelId: number) => Promise<string[]>;
+  /** Callback when HF model download completes - refresh models list */
+  onDownloadCompleted?: () => void;
 }
 
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
@@ -36,6 +41,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onAddTag,
   onRemoveTag,
   getModelTags,
+  onDownloadCompleted,
 }) => {
   const { settings } = useSettings();
   const [modelTags, setModelTags] = useState<string[]>([]);
@@ -48,6 +54,28 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const [customContext, setCustomContext] = useState('');
   const [jinjaOverride, setJinjaOverride] = useState<boolean | null>(null);
   const [isServing, setIsServing] = useState(false);
+
+  // Download progress hook for HF model downloads
+  const { progress, queueStatus, cancelDownload } = useDownloadProgress({
+    onCompleted: onDownloadCompleted,
+  });
+
+  // Download handler for HF models
+  const handleHfDownload = useCallback(async (modelId: string, quantization: string) => {
+    try {
+      await TauriService.downloadModel({ repo_id: modelId, quantization });
+    } catch (error) {
+      console.error('Failed to start download:', error);
+    }
+  }, []);
+
+  // Check if download queue is full
+  const maxQueueSize = queueStatus?.max_size ?? 3;
+  const currentQueueCount = (queueStatus?.current ? 1 : 0) + (queueStatus?.pending?.length ?? 0);
+  const downloadsDisabled = currentQueueCount >= maxQueueSize;
+  const disabledReason = downloadsDisabled 
+    ? `Download queue is full (${currentQueueCount}/${maxQueueSize})`
+    : undefined;
   const [isDeleting, setIsDeleting] = useState(false);
   const [newTag, setNewTag] = useState('');
 
@@ -229,33 +257,28 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const effectiveJinjaEnabled = jinjaOverride === null ? hasAgentTag : jinjaOverride;
   const isAutoJinja = jinjaOverride === null && hasAgentTag;
 
-  // If HuggingFace model is selected, show embedded HF page
+  // If HuggingFace model is selected, show HF model preview with download options
   if (selectedHfModel) {
-    const hfUrl = getHuggingFaceModelUrl(selectedHfModel.id);
-    
     return (
       <div className="mcc-panel inspector-panel hf-preview-panel">
-        <div className="mcc-panel-header hf-preview-header">
-          <h2 className="inspector-title hf-preview-title">
-            {selectedHfModel.name}
-            <button
-              className="hf-open-button"
-              onClick={() => TauriService.openUrl(hfUrl)}
-              title="Open on HuggingFace"
-              aria-label="Open on HuggingFace"
-            >
-              🤗
-            </button>
-          </h2>
-        </div>
-        <div className="hf-iframe-container">
-          <iframe
-            src={hfUrl}
-            className="hf-iframe"
-            title={`HuggingFace - ${selectedHfModel.name}`}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          />
-        </div>
+        {/* Sticky download progress at top */}
+        {progress && (progress.status === 'downloading' || progress.status === 'progress' || progress.status === 'started' || progress.status === 'queued') && (
+          <div className="download-progress-sticky">
+            <DownloadProgressDisplay
+              progress={progress}
+              onCancel={() => cancelDownload(progress.model_id)}
+              compact={true}
+            />
+          </div>
+        )}
+        
+        {/* HF Model Preview */}
+        <HfModelPreview
+          model={selectedHfModel}
+          onDownload={handleHfDownload}
+          downloadsDisabled={downloadsDisabled}
+          disabledReason={disabledReason}
+        />
       </div>
     );
   }
