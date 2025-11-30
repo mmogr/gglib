@@ -438,7 +438,13 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                   id="context-input"
                   type="number"
                   className="context-input"
-                  placeholder={model.context_length ? `Default: ${model.context_length.toLocaleString()}` : 'Use model default'}
+                  placeholder={
+                    model.context_length
+                      ? `Model max: ${model.context_length.toLocaleString()}`
+                      : settings?.default_context_size
+                        ? `Default: ${settings.default_context_size.toLocaleString()}`
+                        : 'Enter context length'
+                  }
                   value={customContext}
                   onChange={(e) => setCustomContext(e.target.value)}
                   disabled={isServing}
@@ -447,7 +453,9 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                 <p className="input-help">
                   {model.context_length
                     ? `Model's maximum: ${model.context_length.toLocaleString()} tokens`
-                    : 'Leave empty to use model default'}
+                    : settings?.default_context_size
+                      ? `Will use your default: ${settings.default_context_size.toLocaleString()} tokens`
+                      : 'Leave empty to use llama-server default'}
                 </p>
               </div>
 
