@@ -34,6 +34,7 @@ gglib provides a simple interface to catalog, organize, and serve GGUF models lo
 - **Search & Browse**: Discover GGUF models on HuggingFace with search and browse commands
 - **Quantization Support**: Intelligent detection and handling of various quantization formats
 - **Rich metadata**: Support for complex metadata operations and Unicode content
+- **Reasoning Model Support**: Auto-detection and streaming of thinking/reasoning phases with collapsible UI for models like DeepSeek R1, Qwen3, and QwQ
 
 ## Architecture Overview
 
