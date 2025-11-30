@@ -325,17 +325,23 @@ mod tests {
 
     #[test]
     fn test_port_allocation() {
-        let mut core = ProcessCore::new(8080, "llama-server");
+        // Use a high port range (49152-65535 is the dynamic/private port range)
+        // to minimize conflicts with other services
+        let base_port = 59080;
+        let mut core = ProcessCore::new(base_port, "llama-server");
         let port1 = core.allocate_port().unwrap();
-        assert_eq!(port1, 8080);
+        // Port should be at or near base_port (may skip if base is in use)
+        assert!(port1 >= base_port && port1 < base_port + 100);
 
-        // Simulate a process using port 8080
-        let info = ServerInfo::new(1, "test".to_string(), 1234, 8080, 0, None);
+        // Simulate a process using the allocated port
+        let info = ServerInfo::new(1, "test".to_string(), 1234, port1, 0, None);
         let child = Command::new("echo").spawn().unwrap();
         core.processes.insert(1, RunningProcess::new(info, child));
 
         let port2 = core.allocate_port().unwrap();
-        assert_eq!(port2, 8081);
+        // Second port should be different and higher than the first
+        assert!(port2 > port1);
+        assert!(port2 < base_port + 100);
     }
 
     #[test]

@@ -7,7 +7,7 @@
 use crate::{
     models,
     services::{AppCore, database},
-    utils::{input, validation, gguf_parser},
+    utils::{gguf_parser, input, validation},
 };
 use anyhow::Result;
 
@@ -105,9 +105,15 @@ pub async fn handle_add(file_path: String) -> Result<()> {
 
     if reasoning_detection.supports_reasoning {
         println!("\n🧠 Detected reasoning model capabilities:");
-        println!("  Confidence: {:.0}%", reasoning_detection.confidence * 100.0);
+        println!(
+            "  Confidence: {:.0}%",
+            reasoning_detection.confidence * 100.0
+        );
         if !reasoning_detection.matched_patterns.is_empty() {
-            println!("  Matched patterns: {}", reasoning_detection.matched_patterns.join(", "));
+            println!(
+                "  Matched patterns: {}",
+                reasoning_detection.matched_patterns.join(", ")
+            );
         }
         if let Some(ref format) = reasoning_detection.suggested_format {
             println!("  Suggested format: --reasoning-format {}", format);

@@ -134,7 +134,14 @@ impl ProcessManager {
 
         // Spawn the process
         let path = std::path::Path::new(model_path);
-        let port = core.spawn(model_id, model_name, path, context_length, jinja, reasoning_format)?;
+        let port = core.spawn(
+            model_id,
+            model_name,
+            path,
+            context_length,
+            jinja,
+            reasoning_format,
+        )?;
 
         // Release the lock before waiting
         drop(core);
@@ -232,11 +239,8 @@ impl ProcessManager {
         // Start the new model
         let jinja_resolution = resolve_jinja_flag(None, &model.tags);
         // Use metadata-aware reasoning format resolution for auto-detection
-        let reasoning_resolution = resolve_reasoning_format_with_metadata(
-            None,
-            &model.tags,
-            Some(&model.metadata),
-        );
+        let reasoning_resolution =
+            resolve_reasoning_format_with_metadata(None, &model.tags, Some(&model.metadata));
 
         let port = self
             .start_model_single_swap(

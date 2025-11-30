@@ -713,9 +713,7 @@ pub fn detect_reasoning_support(metadata: &HashMap<String, String>) -> Reasoning
 
         for pattern in HIGH_CONFIDENCE_PATTERNS {
             if name_lower.contains(pattern) {
-                detection
-                    .matched_patterns
-                    .push(format!("name:{}", pattern));
+                detection.matched_patterns.push(format!("name:{}", pattern));
                 confidence_score += 0.4;
             }
         }
@@ -727,9 +725,7 @@ pub fn detect_reasoning_support(metadata: &HashMap<String, String>) -> Reasoning
                 continue;
             }
             if name_lower.contains(pattern) {
-                detection
-                    .matched_patterns
-                    .push(format!("name:{}", pattern));
+                detection.matched_patterns.push(format!("name:{}", pattern));
                 confidence_score += 0.25;
             }
         }
@@ -796,13 +792,19 @@ mod reasoning_detection_tests {
         let mut metadata = HashMap::new();
         metadata.insert(
             "tokenizer.chat_template".to_string(),
-            "{% if message.role == 'assistant' %}<think>{{ message.thinking }}</think>{% endif %}".to_string(),
+            "{% if message.role == 'assistant' %}<think>{{ message.thinking }}</think>{% endif %}"
+                .to_string(),
         );
 
         let detection = detect_reasoning_support(&metadata);
         assert!(detection.supports_reasoning);
         assert!(detection.confidence >= 0.3);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("think")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("think"))
+        );
         assert_eq!(detection.suggested_format, Some("deepseek".to_string()));
     }
 
@@ -816,7 +818,12 @@ mod reasoning_detection_tests {
 
         let detection = detect_reasoning_support(&metadata);
         assert!(detection.supports_reasoning);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("reasoning")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("reasoning"))
+        );
     }
 
     #[test]
@@ -853,16 +860,18 @@ mod reasoning_detection_tests {
 
         let detection = detect_reasoning_support(&metadata);
         assert!(detection.supports_reasoning);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("deepseek-r1")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("deepseek-r1"))
+        );
     }
 
     #[test]
     fn test_detect_qwen3_by_name() {
         let mut metadata = HashMap::new();
-        metadata.insert(
-            "general.name".to_string(),
-            "Qwen3-4B-Thinking".to_string(),
-        );
+        metadata.insert("general.name".to_string(), "Qwen3-4B-Thinking".to_string());
 
         let detection = detect_reasoning_support(&metadata);
         assert!(detection.supports_reasoning);
@@ -889,10 +898,7 @@ mod reasoning_detection_tests {
             "tokenizer.chat_template".to_string(),
             "... <think> ... </think> ...".to_string(),
         );
-        metadata.insert(
-            "general.name".to_string(),
-            "DeepSeek-R1-Qwen".to_string(),
-        );
+        metadata.insert("general.name".to_string(), "DeepSeek-R1-Qwen".to_string());
 
         let detection = detect_reasoning_support(&metadata);
         assert!(detection.supports_reasoning);

@@ -8,7 +8,9 @@
 //! process with inherited stdio, which is a different use case and doesn't
 //! use this service.
 
-use crate::commands::common::{JinjaResolutionSource, resolve_jinja_flag, ReasoningFormatSource, resolve_reasoning_format};
+use crate::commands::common::{
+    JinjaResolutionSource, ReasoningFormatSource, resolve_jinja_flag, resolve_reasoning_format,
+};
 use crate::models::gui::StartServerResponse;
 use crate::services::core::ModelService;
 use crate::services::process_manager::ProcessManager;
@@ -150,7 +152,10 @@ impl ServerService {
 
         // Resolve reasoning format
         let reasoning_resolution = resolve_reasoning_format(config.reasoning_format, &model.tags);
-        match (reasoning_resolution.format.as_ref(), reasoning_resolution.source) {
+        match (
+            reasoning_resolution.format.as_ref(),
+            reasoning_resolution.source,
+        ) {
             (Some(format), ReasoningFormatSource::Explicit) => {
                 debug!(format = %format, "Enabling reasoning format (user override)");
             }
