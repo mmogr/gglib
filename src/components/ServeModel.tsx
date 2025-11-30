@@ -33,16 +33,16 @@ const ServeModel: FC<ServeModelProps> = ({ models, onModelServed }) => {
       setServing(true);
       setError(null);
       
-      // Priority: custom input > model metadata > settings default
+      // Priority: custom input > settings default > model metadata
       let effectiveCtxSize: string | undefined = undefined;
       if (ctxSize.trim()) {
         effectiveCtxSize = ctxSize;
+      } else if (settings?.default_context_size) {
+        effectiveCtxSize = settings.default_context_size.toString();
       } else {
         const selectedModel = getSelectedModel();
         if (selectedModel?.context_length) {
           effectiveCtxSize = selectedModel.context_length.toString();
-        } else if (settings?.default_context_size) {
-          effectiveCtxSize = settings.default_context_size.toString();
         }
       }
       

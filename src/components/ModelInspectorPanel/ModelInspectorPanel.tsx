@@ -115,17 +115,17 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 
     setIsServing(true);
     try {
-      // Priority: custom input > model metadata > settings default
+      // Priority: custom input > settings default > model metadata
       let contextLength: number | undefined = undefined;
       if (customContext.trim()) {
         const parsed = parseInt(customContext.trim());
         if (!isNaN(parsed) && parsed > 0) {
           contextLength = parsed;
         }
-      } else if (model.context_length) {
-        contextLength = model.context_length;
       } else if (settings?.default_context_size) {
         contextLength = settings.default_context_size;
+      } else if (model.context_length) {
+        contextLength = model.context_length;
       }
 
       const config: ServeConfig = {
@@ -439,10 +439,10 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                   type="number"
                   className="context-input"
                   placeholder={
-                    model.context_length
-                      ? `Model max: ${model.context_length.toLocaleString()}`
-                      : settings?.default_context_size
-                        ? `Default: ${settings.default_context_size.toLocaleString()}`
+                    settings?.default_context_size
+                      ? `Default: ${settings.default_context_size.toLocaleString()}`
+                      : model.context_length
+                        ? `Model max: ${model.context_length.toLocaleString()}`
                         : 'Enter context length'
                   }
                   value={customContext}
@@ -453,9 +453,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                 <p className="input-help">
                   {model.context_length
                     ? `Model's maximum: ${model.context_length.toLocaleString()} tokens`
-                    : settings?.default_context_size
-                      ? `Will use your default: ${settings.default_context_size.toLocaleString()} tokens`
-                      : 'Leave empty to use llama-server default'}
+                    : 'No model context metadata available'}
                 </p>
               </div>
 
