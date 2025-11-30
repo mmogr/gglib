@@ -120,7 +120,8 @@ pub enum DirectoryCreationStrategy {
 ///
 /// Returns `Some(path)` if we are in a dev environment or running a release build
 /// from within the source repo (e.g. `make setup`).
-/// Returns `None` if we are running a standalone binary (e.g. installed via cargo install or downloaded).
+/// Returns `None` if we are running a standalone binary (e.g. installed via cargo install,
+/// downloaded, or bundled as a macOS/Linux app).
 fn detect_local_repo() -> Option<PathBuf> {
     let repo_root = PathBuf::from(env!("GGLIB_REPO_ROOT"));
 
@@ -132,15 +133,28 @@ fn detect_local_repo() -> Option<PathBuf> {
 
     #[cfg(not(debug_assertions))]
     {
-        // In release mode, only use it if it actually exists and looks like a repo
-        // We check for .git or Cargo.toml to confirm it's the repo.
+        // In release mode, only use repo if:
+        // 1. The repo path exists and looks like a repo
+        // 2. The current executable is actually inside that repo
+        //
+        // This second check is critical for bundled apps (e.g., macOS .app bundles)
+        // which are compiled with GGLIB_REPO_ROOT pointing to the build machine's
+        // repo path, but run from /Applications or similar locations.
         if repo_root.exists()
             && (repo_root.join(".git").exists() || repo_root.join("Cargo.toml").exists())
         {
-            Some(repo_root)
-        } else {
-            None
+            // Verify the executable is inside the repo (not a bundled/installed binary)
+            if let Ok(exe_path) = env::current_exe() {
+                if let Ok(canonical_exe) = exe_path.canonicalize() {
+                    if let Ok(canonical_repo) = repo_root.canonicalize() {
+                        if canonical_exe.starts_with(&canonical_repo) {
+                            return Some(repo_root);
+                        }
+                    }
+                }
+            }
         }
+        None
     }
 }
 
