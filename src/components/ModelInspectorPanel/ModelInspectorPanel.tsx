@@ -1,11 +1,9 @@
 import { FC, useState, useEffect, useCallback } from 'react';
-import { GgufModel, ServeConfig, ServerInfo, HfModelSummary } from '../../types';
+import { GgufModel, ServeConfig, ServerInfo, HfModelSummary, DownloadQueueStatus } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { useSettings } from '../../hooks/useSettings';
-import { useDownloadProgress } from '../../hooks/useDownloadProgress';
 import { formatParamCount, getHuggingFaceUrl } from '../../utils/format';
 import { HfModelPreview } from '../HfModelPreview';
-import { DownloadProgressDisplay } from '../DownloadProgressDisplay';
 import './ModelInspectorPanel.css';
 
 interface ModelInspectorPanelProps {
@@ -25,8 +23,8 @@ interface ModelInspectorPanelProps {
   onAddTag: (modelId: number, tag: string) => Promise<void>;
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
   getModelTags: (modelId: number) => Promise<string[]>;
-  /** Callback when HF model download completes - refresh models list */
-  onDownloadCompleted?: () => void;
+  /** Queue status from parent - for checking if downloads are disabled */
+  queueStatus?: DownloadQueueStatus | null;
 }
 
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
@@ -41,7 +39,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onAddTag,
   onRemoveTag,
   getModelTags,
-  onDownloadCompleted,
+  queueStatus,
 }) => {
   const { settings } = useSettings();
   const [modelTags, setModelTags] = useState<string[]>([]);
@@ -55,21 +53,16 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const [jinjaOverride, setJinjaOverride] = useState<boolean | null>(null);
   const [isServing, setIsServing] = useState(false);
 
-  // Download progress hook for HF model downloads
-  const { progress, queueStatus, cancelDownload } = useDownloadProgress({
-    onCompleted: onDownloadCompleted,
-  });
-
-  // Download handler for HF models
+  // Download handler for HF models - uses queue to support multiple downloads
   const handleHfDownload = useCallback(async (modelId: string, quantization: string) => {
     try {
-      await TauriService.downloadModel({ repo_id: modelId, quantization });
+      await TauriService.queueDownload(modelId, quantization);
     } catch (error) {
       console.error('Failed to start download:', error);
     }
   }, []);
 
-  // Check if download queue is full
+  // Check if download queue is full (using queueStatus from parent)
   const maxQueueSize = queueStatus?.max_size ?? 3;
   const currentQueueCount = (queueStatus?.current ? 1 : 0) + (queueStatus?.pending?.length ?? 0);
   const downloadsDisabled = currentQueueCount >= maxQueueSize;
@@ -261,18 +254,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   if (selectedHfModel) {
     return (
       <div className="mcc-panel inspector-panel hf-preview-panel">
-        {/* Sticky download progress at top */}
-        {progress && (progress.status === 'downloading' || progress.status === 'progress' || progress.status === 'started' || progress.status === 'queued') && (
-          <div className="download-progress-sticky">
-            <DownloadProgressDisplay
-              progress={progress}
-              onCancel={() => cancelDownload(progress.model_id)}
-              compact={true}
-            />
-          </div>
-        )}
-        
-        {/* HF Model Preview */}
+        {/* HF Model Preview - download progress is now handled by GlobalDownloadStatus at page level */}
         <HfModelPreview
           model={selectedHfModel}
           onDownload={handleHfDownload}

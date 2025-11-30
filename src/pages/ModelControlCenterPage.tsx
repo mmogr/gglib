@@ -1,8 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
+import { useDownloadProgress } from '../hooks/useDownloadProgress';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspectorPanel';
+import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
 import ChatPage from './ChatPage';
 import { TauriService } from '../services/tauri';
 import { ServerInfo, HfModelSummary } from '../types';
@@ -39,6 +41,19 @@ export default function ModelControlCenterPage({
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
   const { tags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
+  
+  // Global download progress - lifted to page level so it's always visible
+  const { progress, queueStatus, cancelDownload } = useDownloadProgress({
+    onCompleted: loadModels,
+  });
+  const [downloadDismissed, setDownloadDismissed] = useState(false);
+  
+  // Reset dismissed state when a new download starts
+  useEffect(() => {
+    if (progress && (progress.status === 'started' || progress.status === 'downloading' || progress.status === 'progress')) {
+      setDownloadDismissed(false);
+    }
+  }, [progress?.status]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -298,7 +313,17 @@ export default function ModelControlCenterPage({
         </div>
 
         {/* Right Panel: Model Inspector */}
-        <div className="grid-panel-container">
+        <div className="grid-panel-container right-panel-container">
+          {/* Global Download Status - always visible regardless of selected tab/model */}
+          {!downloadDismissed && (
+            <GlobalDownloadStatus
+              progress={progress}
+              queueStatus={queueStatus}
+              onCancel={cancelDownload}
+              onDismiss={() => setDownloadDismissed(true)}
+            />
+          )}
+          
           <ModelInspectorPanel
             model={selectedModel}
             selectedHfModel={selectedHfModel}
@@ -311,7 +336,7 @@ export default function ModelControlCenterPage({
             onAddTag={addTagToModel}
             onRemoveTag={removeTagFromModel}
             getModelTags={getModelTags}
-            onDownloadCompleted={loadModels}
+            queueStatus={queueStatus}
           />
         </div>
       </div>

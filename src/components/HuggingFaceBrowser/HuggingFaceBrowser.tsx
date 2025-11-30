@@ -73,35 +73,37 @@ const ModelCard: FC<ModelCardProps> = ({
       className={`${styles.modelCard} ${isSelected ? styles.modelCardSelected : ''}`}
       onClick={onSelect}
     >
-      <div className={styles.modelCardMain}>
-        <div className={styles.modelInfo}>
-          <h3 className={styles.modelName}>
-            {model.name}
-            <button
-              className={styles.hfButton}
-              onClick={handleOpenHuggingFace}
-              title="Open on HuggingFace"
-              aria-label="Open on HuggingFace"
-            >
-              🤗
-            </button>
-          </h3>
-          <span className={styles.modelId}>{model.id}</span>
-        </div>
-        <div className={styles.modelStats}>
-          {model.parameters_b && (
-            <span className={styles.paramBadge}>
-              {model.parameters_b.toFixed(1)}B
+      <div className={styles.modelCardHeader}>
+        <div className={styles.modelCardMain}>
+          <div className={styles.modelInfo}>
+            <h3 className={styles.modelName}>
+              {model.name}
+              <button
+                className={styles.hfButton}
+                onClick={handleOpenHuggingFace}
+                title="Open on HuggingFace"
+                aria-label="Open on HuggingFace"
+              >
+                🤗
+              </button>
+            </h3>
+            <span className={styles.modelId}>{model.id}</span>
+          </div>
+          <div className={styles.modelStats}>
+            {model.parameters_b && (
+              <span className={styles.paramBadge}>
+                {model.parameters_b.toFixed(1)}B
+              </span>
+            )}
+            <span className={styles.stat}>
+              <span className={styles.statIcon}>⬇️</span>
+              {formatNumber(model.downloads)}
             </span>
-          )}
-          <span className={styles.stat}>
-            <span className={styles.statIcon}>⬇️</span>
-            {formatNumber(model.downloads)}
-          </span>
-          <span className={styles.stat}>
-            <span className={styles.statIcon}>❤️</span>
-            {formatNumber(model.likes)}
-          </span>
+            <span className={styles.stat}>
+              <span className={styles.statIcon}>❤️</span>
+              {formatNumber(model.likes)}
+            </span>
+          </div>
         </div>
       </div>
     </div>
