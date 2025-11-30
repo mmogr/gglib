@@ -26,6 +26,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [serverPortInput, setServerPortInput] = useState("");
   const [maxQueueSizeInput, setMaxQueueSizeInput] = useState("");
   const [titlePromptInput, setTitlePromptInput] = useState("");
+  const [showFitIndicators, setShowFitIndicators] = useState(true);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -46,6 +47,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setServerPortInput(settings.server_port?.toString() || "");
       setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "");
       setTitlePromptInput(settings.title_generation_prompt || "");
+      setShowFitIndicators(settings.show_memory_fit_indicators !== false);
     }
   }, [settings]);
 
@@ -80,6 +82,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           server_port: parseNumericInput(serverPortInput),
           max_download_queue_size: parseNumericInput(maxQueueSizeInput),
           title_generation_prompt: titlePromptInput.trim() || null,
+          show_memory_fit_indicators: showFitIndicators,
         };
 
         // Check if any updates were made
@@ -112,6 +115,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setServerPortInput(settings.server_port?.toString() || "9000");
       setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "10");
       setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
+      setShowFitIndicators(true); // Default is enabled
     }
   }, [info, settings]);
 
@@ -259,6 +263,24 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               />
               <div className={styles.helperText}>
                 <span>Maximum number of models that can be queued for download (1-50)</span>
+              </div>
+
+              <div className={styles.separator} />
+
+              <div className={styles.checkboxGroup}>
+                <label className={styles.checkboxLabel}>
+                  <input
+                    type="checkbox"
+                    className={styles.checkbox}
+                    checked={showFitIndicators}
+                    onChange={(e) => setShowFitIndicators(e.target.checked)}
+                    disabled={saving}
+                  />
+                  <span className={styles.checkboxText}>Show memory fit indicators</span>
+                </label>
+                <div className={styles.helperText}>
+                  <span>Display ✅⚠️❌ indicators in HuggingFace browser showing if models fit in your system memory</span>
+                </div>
               </div>
 
               {/* Advanced Settings Section */}

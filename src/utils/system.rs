@@ -3,7 +3,9 @@
 //! This module provides cross-platform utilities for checking system
 //! dependencies, command availability, and version information.
 
+use serde::{Deserialize, Serialize};
 use std::process::Command;
+use sysinfo::System;
 
 /// Represents the status of a system dependency
 #[derive(Debug, Clone, PartialEq)]
@@ -299,6 +301,66 @@ pub struct GpuInfo {
     pub cuda_version: Option<String>,
     /// On macOS (Metal always available)
     pub has_metal: bool,
+}
+
+/// System memory information for model fit calculations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemMemoryInfo {
+    /// Total system RAM in bytes
+    pub total_ram_bytes: u64,
+    /// GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon)
+    /// None if no GPU detected or memory couldn't be determined
+    pub gpu_memory_bytes: Option<u64>,
+    /// Whether the system has Apple Silicon with unified memory
+    pub is_apple_silicon: bool,
+    /// Whether the system has an NVIDIA GPU
+    pub has_nvidia_gpu: bool,
+}
+
+/// Get system memory information for model fit calculations
+pub fn get_system_memory_info() -> SystemMemoryInfo {
+    let sys = System::new_all();
+    let total_ram_bytes = sys.total_memory();
+    let gpu_info = detect_gpu_info();
+
+    let (gpu_memory_bytes, is_apple_silicon) = if gpu_info.has_metal {
+        // Apple Silicon: unified memory architecture
+        // Approximately 75% of total RAM is available for GPU use
+        let gpu_available = (total_ram_bytes as f64 * 0.75) as u64;
+        (Some(gpu_available), true)
+    } else if gpu_info.has_nvidia_gpu {
+        // NVIDIA GPU: query VRAM via nvidia-smi
+        let vram = get_nvidia_vram_bytes();
+        (vram, false)
+    } else {
+        // No GPU acceleration available, will use RAM
+        (None, false)
+    };
+
+    SystemMemoryInfo {
+        total_ram_bytes,
+        gpu_memory_bytes,
+        is_apple_silicon,
+        has_nvidia_gpu: gpu_info.has_nvidia_gpu,
+    }
+}
+
+/// Get NVIDIA GPU VRAM in bytes using nvidia-smi
+fn get_nvidia_vram_bytes() -> Option<u64> {
+    let output = Command::new("nvidia-smi")
+        .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // nvidia-smi returns memory in MiB, convert to bytes
+    // If multiple GPUs, take the first one
+    let mib: u64 = stdout.lines().next()?.trim().parse().ok()?;
+    Some(mib * 1024 * 1024)
 }
 
 /// Detect GPU hardware and acceleration software
@@ -607,5 +669,40 @@ mod tests {
     fn test_dependency_with_hint() {
         let dep = Dependency::required("test", "Test dependency").with_hint("test install command");
         assert_eq!(dep.install_hint, Some("test install command".to_string()));
+    }
+
+    #[test]
+    fn test_get_system_memory_info() {
+        let info = get_system_memory_info();
+        // RAM should always be detected and be a reasonable value (> 1GB)
+        assert!(info.total_ram_bytes > 1_000_000_000);
+
+        // On macOS, we should detect Apple Silicon unified memory
+        #[cfg(target_os = "macos")]
+        {
+            assert!(info.is_apple_silicon);
+            assert!(info.gpu_memory_bytes.is_some());
+            // GPU memory should be ~75% of RAM
+            let expected_gpu = (info.total_ram_bytes as f64 * 0.75) as u64;
+            assert_eq!(info.gpu_memory_bytes, Some(expected_gpu));
+        }
+    }
+
+    #[test]
+    fn test_system_memory_info_serialization() {
+        let info = SystemMemoryInfo {
+            total_ram_bytes: 16_000_000_000,
+            gpu_memory_bytes: Some(12_000_000_000),
+            is_apple_silicon: true,
+            has_nvidia_gpu: false,
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        let parsed: SystemMemoryInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.total_ram_bytes, info.total_ram_bytes);
+        assert_eq!(parsed.gpu_memory_bytes, info.gpu_memory_bytes);
+        assert_eq!(parsed.is_apple_silicon, info.is_apple_silicon);
+        assert_eq!(parsed.has_nvidia_gpu, info.has_nvidia_gpu);
     }
 }

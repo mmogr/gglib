@@ -160,3 +160,35 @@
   color: var(--color-text-secondary);
   opacity: 0.7;
 }
+
+/* Checkbox styling */
+.checkboxGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.checkbox:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkboxText {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}

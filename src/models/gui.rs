@@ -283,6 +283,7 @@ pub struct AppSettings {
     pub proxy_port: Option<u16>,
     pub server_port: Option<u16>,
     pub max_download_queue_size: Option<u32>,
+    pub show_memory_fit_indicators: Option<bool>,
 }
 
 /// Request body for updating application settings
@@ -293,6 +294,7 @@ pub struct UpdateSettingsRequest {
     pub proxy_port: Option<Option<u16>>,
     pub server_port: Option<Option<u16>>,
     pub max_download_queue_size: Option<Option<u32>>,
+    pub show_memory_fit_indicators: Option<Option<bool>>,
 }
 
 /// Standard API response wrapper

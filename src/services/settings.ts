@@ -1,4 +1,4 @@
-import { ModelsDirectoryInfo, AppSettings, UpdateSettingsRequest } from "../types";
+import { ModelsDirectoryInfo, AppSettings, UpdateSettingsRequest, SystemMemoryInfo } from "../types";
 import { getApiBase } from "../utils/apiBase";
 
 interface ApiResponse<T> {
@@ -74,6 +74,22 @@ export async function updateSettings(settings: UpdateSettingsRequest): Promise<A
 
   if (!response.ok || !payload?.success || !payload.data) {
     const message = payload?.error || response.statusText || "Failed to update settings";
+    throw new Error(message);
+  }
+
+  return payload.data;
+}
+
+/**
+ * Fetch system memory information for "Will it fit?" calculations.
+ * Returns RAM and GPU memory info for the current system.
+ */
+export async function fetchSystemMemoryInfo(): Promise<SystemMemoryInfo> {
+  const response = await apiFetch(`/system/memory`);
+  const payload: ApiResponse<SystemMemoryInfo> = await response.json();
+
+  if (!response.ok || !payload.success || !payload.data) {
+    const message = payload?.error || response.statusText || "Failed to load system memory info";
     throw new Error(message);
   }
 

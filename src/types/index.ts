@@ -50,6 +50,7 @@ export interface AppSettings {
   server_port?: number | null;
   max_download_queue_size?: number | null;
   title_generation_prompt?: string | null;
+  show_memory_fit_indicators?: boolean | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -59,7 +60,31 @@ export interface UpdateSettingsRequest {
   server_port?: number | null | undefined;
   max_download_queue_size?: number | null | undefined;
   title_generation_prompt?: string | null | undefined;
+  show_memory_fit_indicators?: boolean | null | undefined;
 }
+
+// ============================================================================
+// System Memory Types (for "Will it fit?" indicators)
+// ============================================================================
+
+/**
+ * System memory information for model fit calculations.
+ */
+export interface SystemMemoryInfo {
+  /** Total system RAM in bytes */
+  total_ram_bytes: number;
+  /** GPU memory in bytes (VRAM for discrete GPUs, or unified memory portion for Apple Silicon) */
+  gpu_memory_bytes?: number | null;
+  /** Whether the system has Apple Silicon with unified memory */
+  is_apple_silicon: boolean;
+  /** Whether the system has an NVIDIA GPU */
+  has_nvidia_gpu: boolean;
+}
+
+/**
+ * Fit status for a model quantization based on available memory.
+ */
+export type FitStatus = 'fits' | 'tight' | 'wont_fit';
 
 // Download Queue Types
 

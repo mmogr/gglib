@@ -382,6 +382,38 @@
   cursor: not-allowed;
 }
 
+/* Quantization Actions (fit indicator + download button) */
+.quantActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Fit Indicators ("Will it fit?") */
+.fitIndicator {
+  font-size: 1rem;
+  cursor: help;
+  user-select: none;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.fitIndicator:hover {
+  transform: scale(1.15);
+}
+
+.fitIndicatorFits {
+  filter: drop-shadow(0 0 2px rgba(74, 222, 128, 0.4));
+}
+
+.fitIndicatorTight {
+  filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.4));
+}
+
+.fitIndicatorWontFit {
+  filter: drop-shadow(0 0 2px rgba(248, 113, 113, 0.4));
+}
+
 /* Load More */
 .loadMoreSection {
   padding: 1rem;

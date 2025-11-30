@@ -130,6 +130,7 @@ mod tests {
             proxy_port: None,
             server_port: None,
             max_download_queue_size: None,
+            show_memory_fit_indicators: None,
         };
 
         let result = service.update(update).await;
