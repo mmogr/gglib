@@ -2,29 +2,38 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import Header from '../../../src/components/Header';
+import { ServerInfo } from '../../../src/types';
 
-// Mock the ProxyControl component since it has its own complex state
-vi.mock('../../../src/components/ProxyControl', () => ({
-  default: () => <button data-testid="proxy-control">Proxy Control Mock</button>,
+// Mock the RunsPopover component since it has its own complex state
+vi.mock('../../../src/components/RunsPopover', () => ({
+  RunsPopover: ({ isOpen }: { isOpen: boolean }) => 
+    isOpen ? <div data-testid="runs-popover">Runs Popover Mock</div> : null,
 }));
 
 describe('Header', () => {
-  const mockOnOpenChat = vi.fn();
   const mockOnOpenSettings = vi.fn();
-  const mockOnToggleWorkPanel = vi.fn();
+  const mockOnStopServer = vi.fn().mockResolvedValue(undefined);
+  const mockOnSelectModel = vi.fn();
+  const mockOnRefreshServers = vi.fn();
+
+  const mockServers: ServerInfo[] = [
+    { model_id: 1, model_name: 'Test Model 1', port: 8080, status: 'running' },
+    { model_id: 2, model_name: 'Test Model 2', port: 8081, status: 'running' },
+  ];
 
   const defaultProps = {
-    onOpenChat: mockOnOpenChat,
     onOpenSettings: mockOnOpenSettings,
-    onToggleWorkPanel: mockOnToggleWorkPanel,
-    isWorkPanelVisible: false,
-    isModelRunning: false,
+    servers: [] as ServerInfo[],
+    onStopServer: mockOnStopServer,
+    onSelectModel: mockOnSelectModel,
+    onRefreshServers: mockOnRefreshServers,
   };
 
   beforeEach(() => {
-    mockOnOpenChat.mockClear();
     mockOnOpenSettings.mockClear();
-    mockOnToggleWorkPanel.mockClear();
+    mockOnStopServer.mockClear();
+    mockOnSelectModel.mockClear();
+    mockOnRefreshServers.mockClear();
   });
 
   describe('rendering', () => {
@@ -40,15 +49,6 @@ describe('Header', () => {
       expect(screen.getByText('🦀')).toBeInTheDocument();
     });
 
-    it('renders the chat button in desktop nav', () => {
-      render(<Header {...defaultProps} />);
-      
-      // Both desktop and mobile nav have chat buttons, use getAllByRole and check desktop one
-      const chatButtons = screen.getAllByRole('button', { name: /chat/i });
-      expect(chatButtons.length).toBeGreaterThanOrEqual(1);
-      expect(chatButtons[0]).toBeInTheDocument();
-    });
-
     it('renders the settings button in desktop nav', () => {
       render(<Header {...defaultProps} />);
       
@@ -58,38 +58,57 @@ describe('Header', () => {
       expect(settingsButtons[0]).toBeInTheDocument();
     });
 
-    it('renders the work panel button', () => {
+    it('renders the server status button', () => {
       render(<Header {...defaultProps} />);
       
-      expect(screen.getByText('Work Panel')).toBeInTheDocument();
-    });
-
-    it('renders the proxy control component', () => {
-      render(<Header {...defaultProps} />);
-      
-      // Proxy control appears in both desktop and mobile nav
-      const proxyControls = screen.getAllByTestId('proxy-control');
-      expect(proxyControls.length).toBeGreaterThanOrEqual(1);
+      // Server status button should be present (disabled when no servers)
+      const serverButton = screen.getByLabelText('No servers running');
+      expect(serverButton).toBeInTheDocument();
     });
   });
 
-  describe('chat button', () => {
-    it('calls onOpenChat when clicked', () => {
-      render(<Header {...defaultProps} />);
+  describe('server status button', () => {
+    it('is disabled when no servers are running', () => {
+      render(<Header {...defaultProps} servers={[]} />);
       
-      // Get the desktop nav chat button (first one)
-      const chatButtons = screen.getAllByRole('button', { name: /chat/i });
-      fireEvent.click(chatButtons[0]);
-      
-      expect(mockOnOpenChat).toHaveBeenCalledTimes(1);
+      const serverButton = screen.getByLabelText('No servers running');
+      expect(serverButton).toBeDisabled();
     });
 
-    it('has correct title attribute', () => {
-      render(<Header {...defaultProps} />);
+    it('is enabled when servers are running', () => {
+      render(<Header {...defaultProps} servers={mockServers} />);
       
-      // Get the desktop nav chat button which has the title attribute
-      const chatButton = screen.getByTitle('Open chat');
-      expect(chatButton).toBeInTheDocument();
+      const serverButton = screen.getByLabelText('2 servers running');
+      expect(serverButton).not.toBeDisabled();
+    });
+
+    it('shows correct count for single server', () => {
+      render(<Header {...defaultProps} servers={[mockServers[0]]} />);
+      
+      const serverButton = screen.getByLabelText('1 server running');
+      expect(serverButton).toBeInTheDocument();
+    });
+
+    it('shows badge with server count when servers are running', () => {
+      render(<Header {...defaultProps} servers={mockServers} />);
+      
+      expect(screen.getByText('2')).toBeInTheDocument();
+    });
+
+    it('does not show badge when no servers are running', () => {
+      render(<Header {...defaultProps} servers={[]} />);
+      
+      // Badge should not exist
+      expect(screen.queryByText('0')).not.toBeInTheDocument();
+    });
+
+    it('opens runs popover when clicked with running servers', () => {
+      render(<Header {...defaultProps} servers={mockServers} />);
+      
+      const serverButton = screen.getByLabelText('2 servers running');
+      fireEvent.click(serverButton);
+      
+      expect(screen.getByTestId('runs-popover')).toBeInTheDocument();
     });
   });
 
@@ -120,56 +139,35 @@ describe('Header', () => {
     });
   });
 
-  describe('work panel button', () => {
-    it('calls onToggleWorkPanel when clicked', () => {
+  describe('mobile menu', () => {
+    it('renders mobile menu toggle button', () => {
       render(<Header {...defaultProps} />);
       
-      const workPanelButton = screen.getByText('Work Panel').closest('button');
-      fireEvent.click(workPanelButton!);
-      
-      expect(mockOnToggleWorkPanel).toHaveBeenCalledTimes(1);
+      const menuToggle = screen.getByLabelText('Open menu');
+      expect(menuToggle).toBeInTheDocument();
     });
 
-    it('shows "Show work panel" title when panel is hidden', () => {
-      render(<Header {...defaultProps} isWorkPanelVisible={false} />);
+    it('toggles mobile menu when clicked', () => {
+      render(<Header {...defaultProps} />);
       
-      const workPanelButton = screen.getByText('Work Panel').closest('button');
-      expect(workPanelButton).toHaveAttribute('title', 'Show work panel');
+      const menuToggle = screen.getByLabelText('Open menu');
+      fireEvent.click(menuToggle);
+      
+      // After clicking, button should show "Close menu"
+      expect(screen.getByLabelText('Close menu')).toBeInTheDocument();
     });
 
-    it('shows "Hide work panel" title when panel is visible', () => {
-      render(<Header {...defaultProps} isWorkPanelVisible={true} />);
+    it('shows server status in mobile menu', () => {
+      render(<Header {...defaultProps} servers={mockServers} />);
       
-      const workPanelButton = screen.getByText('Work Panel').closest('button');
-      expect(workPanelButton).toHaveAttribute('title', 'Hide work panel');
+      // Mobile menu item shows server count
+      expect(screen.getByText('🖥️ 2 Running')).toBeInTheDocument();
     });
 
-    it('has aria-pressed false when panel is hidden', () => {
-      render(<Header {...defaultProps} isWorkPanelVisible={false} />);
+    it('shows "No Servers" in mobile menu when no servers', () => {
+      render(<Header {...defaultProps} servers={[]} />);
       
-      const workPanelButton = screen.getByText('Work Panel').closest('button');
-      expect(workPanelButton).toHaveAttribute('aria-pressed', 'false');
-    });
-
-    it('has aria-pressed true when panel is visible', () => {
-      render(<Header {...defaultProps} isWorkPanelVisible={true} />);
-      
-      const workPanelButton = screen.getByText('Work Panel').closest('button');
-      expect(workPanelButton).toHaveAttribute('aria-pressed', 'true');
-    });
-
-    it('includes model status in aria-label when no model running', () => {
-      render(<Header {...defaultProps} isModelRunning={false} />);
-      
-      const workPanelButton = screen.getByText('Work Panel').closest('button');
-      expect(workPanelButton?.getAttribute('aria-label')).toContain('No models running');
-    });
-
-    it('includes model status in aria-label when model is running', () => {
-      render(<Header {...defaultProps} isModelRunning={true} />);
-      
-      const workPanelButton = screen.getByText('Work Panel').closest('button');
-      expect(workPanelButton?.getAttribute('aria-label')).toContain('A model is running');
+      expect(screen.getByText('🖥️ No Servers')).toBeInTheDocument();
     });
   });
 
@@ -190,7 +188,18 @@ describe('Header', () => {
       render(<Header {...defaultProps} />);
       
       const buttons = screen.getAllByRole('button');
-      expect(buttons.length).toBeGreaterThanOrEqual(3); // Chat, Settings, Work Panel (+ mocked Proxy)
+      // Server status, Settings, Mobile menu toggle, Mobile menu items
+      expect(buttons.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('mobile menu toggle has aria-expanded attribute', () => {
+      render(<Header {...defaultProps} />);
+      
+      const menuToggle = screen.getByLabelText('Open menu');
+      expect(menuToggle).toHaveAttribute('aria-expanded', 'false');
+      
+      fireEvent.click(menuToggle);
+      expect(screen.getByLabelText('Close menu')).toHaveAttribute('aria-expanded', 'true');
     });
   });
 });

@@ -55,7 +55,7 @@ export default defineConfig(async () => ({
     include: ['tests/ts/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'json-summary', 'html'],
       reportsDirectory: './coverage/ts',
       include: ['src/**/*.{ts,tsx}'],
       exclude: [

@@ -13,28 +13,53 @@ jobs:
   update-badges:
     name: Update Badges
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Run on both success and failure to update badges accordingly
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Download artifact from triggering workflow
+        id: download
+        run: |
+          mkdir -p artifacts
+          WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          
+          echo "Triggered by: $WORKFLOW_NAME (Run ID: $RUN_ID, Conclusion: $CONCLUSION)"
+          echo "workflow_name=$WORKFLOW_NAME" >> $GITHUB_OUTPUT
+          echo "conclusion=$CONCLUSION" >> $GITHUB_OUTPUT
+          
+          # Download artifact based on which workflow triggered us
+          if [ "$WORKFLOW_NAME" == "CI" ]; then
+            echo "Downloading test-results artifact from CI workflow..."
+            gh run download $RUN_ID --name test-results --dir artifacts || echo "No test-results artifact found"
+          elif [ "$WORKFLOW_NAME" == "Coverage" ]; then
+            echo "Downloading coverage-report artifact from Coverage workflow..."
+            gh run download $RUN_ID --name coverage-report --dir artifacts || echo "No coverage-report artifact found"
+          elif [ "$WORKFLOW_NAME" == "Release" ]; then
+            echo "Release workflow - only updating version badge"
+          fi
+          
+          # List what we downloaded
+          echo "Downloaded artifacts:"
+          find artifacts -type f 2>/dev/null || echo "No files found"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Badge Data
         id: badges
         run: |
           mkdir -p badges
+          WORKFLOW_NAME="${{ steps.download.outputs.workflow_name }}"
+          CONCLUSION="${{ steps.download.outputs.conclusion }}"
           
-          # --- VERSION ---
+          # --- VERSION (always update) ---
           VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           echo "Detected version: $VERSION"
           
@@ -47,116 +72,173 @@ jobs:
           }
           JSON
           
-          # --- TESTS ---
-          # Run tests to get numbers
-          cargo test 2>&1 | tee test_output.txt || true
-          PASSED=$(grep -o "test result: ok\. [0-9]* passed" test_output.txt | grep -o "[0-9]*" | awk '{sum += $1} END {print sum}' || echo "0")
-          FAILED=$(grep -o "[0-9]* failed" test_output.txt | grep -o "[0-9]*" | awk '{sum += $1} END {print sum}' || echo "0")
-          TOTAL=$((PASSED + FAILED))
+          # --- RUST TESTS ---
+          # Skip test/coverage updates for Release workflow to preserve existing values
+          if [ "$WORKFLOW_NAME" == "Release" ]; then
+            echo "Skipping test/coverage badge updates for Release workflow"
+          else
+          # Parse from artifact if available, otherwise show workflow status
+          RUST_TEST_FILE=$(find artifacts -name "rust-test-output.txt" -type f 2>/dev/null | head -1)
           
-          if [ $TOTAL -eq 0 ]; then PERCENTAGE=0; else PERCENTAGE=$((PASSED * 100 / TOTAL)); fi
-          
-          if [ "$PERCENTAGE" -eq 100 ]; then COLOR="brightgreen";
-          elif [ "$PERCENTAGE" -gt 90 ]; then COLOR="green";
-          elif [ "$PERCENTAGE" -gt 80 ]; then COLOR="yellowgreen";
-          else COLOR="yellow"; fi
+          if [ -n "$RUST_TEST_FILE" ] && [ -f "$RUST_TEST_FILE" ]; then
+            echo "Parsing Rust test results from: $RUST_TEST_FILE"
+            PASSED=$(grep -o "test result: ok\. [0-9]* passed" "$RUST_TEST_FILE" | grep -o "[0-9]*" | awk '{sum += $1} END {print sum+0}')
+            FAILED=$(grep -o "[0-9]* failed" "$RUST_TEST_FILE" | grep -o "[0-9]*" | awk '{sum += $1} END {print sum+0}')
+            TOTAL=$((PASSED + FAILED))
+            
+            if [ "$TOTAL" -eq 0 ]; then 
+              # Check if workflow failed
+              if [ "$CONCLUSION" == "failure" ]; then
+                MESSAGE="failed"
+                COLOR="red"
+              else
+                MESSAGE="0/0"
+                COLOR="yellow"
+              fi
+            else
+              PERCENTAGE=$((PASSED * 100 / TOTAL))
+              MESSAGE="$PASSED/$TOTAL ($PERCENTAGE%)"
+              
+              if [ "$PERCENTAGE" -eq 100 ]; then COLOR="brightgreen";
+              elif [ "$PERCENTAGE" -gt 90 ]; then COLOR="green";
+              elif [ "$PERCENTAGE" -gt 80 ]; then COLOR="yellowgreen";
+              elif [ "$PERCENTAGE" -gt 60 ]; then COLOR="yellow";
+              else COLOR="red"; fi
+            fi
+          elif [ "$CONCLUSION" == "failure" ]; then
+            MESSAGE="failed"
+            COLOR="red"
+          else
+            # No artifact and not failed - keep existing or show unknown
+            MESSAGE="unknown"
+            COLOR="lightgrey"
+          fi
           
           cat <<JSON > badges/tests.json
           {
             "schemaVersion": 1,
-            "label": "tests",
-            "message": "$PASSED/$TOTAL ($PERCENTAGE%)",
+            "label": "Rust tests",
+            "message": "$MESSAGE",
             "color": "$COLOR"
           }
           JSON
 
-          # --- COVERAGE ---
-          COVERAGE="unknown"
-          COLOR="lightgrey"
-          MESSAGE="unknown"
+          # --- RUST COVERAGE ---
+          LCOV_FILE=$(find artifacts -name "lcov.info" -type f 2>/dev/null | head -1)
           
-          # Determine where to get the artifact from
-          # If triggered by Coverage workflow, use this run's ID. 
-          # Otherwise (CI/Release), find the latest successful Coverage run.
-          if [ "${{ github.event.workflow_run.name }}" == "Coverage" ]; then
-            RUN_ID="${{ github.event.workflow_run.id }}"
-          else
-            RUN_ID=$(gh run list --workflow=coverage.yml --branch=main --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-          fi
-          
-          echo "Downloading coverage artifact from run ID: $RUN_ID"
-          
-          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
-             gh run download $RUN_ID --name coverage-report || true
-          fi
-          
-          if [ -f lcov.info ]; then
-            TOTAL_LINES=$(grep -h '^LF:' lcov.info | awk -F ':' '{sum += $2} END {print sum+0}')
-            COVERED_LINES=$(grep -h '^LH:' lcov.info | awk -F ':' '{sum += $2} END {print sum+0}')
+          if [ -n "$LCOV_FILE" ] && [ -f "$LCOV_FILE" ]; then
+            echo "Parsing Rust coverage from: $LCOV_FILE"
+            TOTAL_LINES=$(grep -h '^LF:' "$LCOV_FILE" | awk -F ':' '{sum += $2} END {print sum+0}')
+            COVERED_LINES=$(grep -h '^LH:' "$LCOV_FILE" | awk -F ':' '{sum += $2} END {print sum+0}')
+            
             if [ "$TOTAL_LINES" -gt 0 ]; then
               COVERAGE=$(awk -v covered="$COVERED_LINES" -v total="$TOTAL_LINES" 'BEGIN { printf "%d", (covered / total) * 100 }')
+              MESSAGE="$COVERAGE%"
+              
+              if [ "$COVERAGE" -gt 90 ]; then COLOR="brightgreen";
+              elif [ "$COVERAGE" -gt 80 ]; then COLOR="green";
+              elif [ "$COVERAGE" -gt 70 ]; then COLOR="yellowgreen";
+              elif [ "$COVERAGE" -gt 60 ]; then COLOR="yellow";
+              else COLOR="red"; fi
             else
-              COVERAGE=0
+              MESSAGE="0%"
+              COLOR="red"
             fi
-            
-            if [ "$COVERAGE" -gt 90 ]; then COLOR="brightgreen";
-            elif [ "$COVERAGE" -gt 80 ]; then COLOR="green";
-            elif [ "$COVERAGE" -gt 70 ]; then COLOR="yellowgreen";
-            elif [ "$COVERAGE" -gt 60 ]; then COLOR="yellow";
-            else COLOR="red"; fi
-            
-            MESSAGE="$COVERAGE%"
+          elif [ "$WORKFLOW_NAME" == "Coverage" ] && [ "$CONCLUSION" == "failure" ]; then
+            MESSAGE="failed"
+            COLOR="red"
+          else
+            MESSAGE="unknown"
+            COLOR="lightgrey"
           fi
-
+          
           cat <<JSON > badges/coverage.json
           {
             "schemaVersion": 1,
-            "label": "coverage",
+            "label": "Rust coverage",
             "message": "$MESSAGE",
             "color": "$COLOR"
           }
           JSON
 
           # --- TYPESCRIPT TESTS ---
-          npm run test:run 2>&1 | tee ts_test_output.txt || true
-          TS_PASSED=$(grep -o "[0-9]* passed" ts_test_output.txt | grep -o "[0-9]*" | head -1 || echo "0")
+          # Try JSON file first (more reliable), fall back to text output
+          TS_JSON_FILE=$(find artifacts -name "ts-test-results.json" -type f 2>/dev/null | head -1)
+          TS_TEXT_FILE=$(find artifacts -name "ts-test-output.txt" -type f 2>/dev/null | head -1)
           
-          if [ -z "$TS_PASSED" ] || [ "$TS_PASSED" = "0" ]; then
-            TS_PASSED="0"
-            TS_COLOR="red"
+          if [ -n "$TS_JSON_FILE" ] && [ -f "$TS_JSON_FILE" ]; then
+            echo "Parsing TS test results from JSON: $TS_JSON_FILE"
+            TS_PASSED=$(jq -r '.numPassedTests // 0' "$TS_JSON_FILE" 2>/dev/null || echo "0")
+            TS_FAILED=$(jq -r '.numFailedTests // 0' "$TS_JSON_FILE" 2>/dev/null || echo "0")
+            TS_TOTAL=$(jq -r '.numTotalTests // 0' "$TS_JSON_FILE" 2>/dev/null || echo "0")
+          elif [ -n "$TS_TEXT_FILE" ] && [ -f "$TS_TEXT_FILE" ]; then
+            echo "Parsing TS test results from text: $TS_TEXT_FILE"
+            # Parse the summary line: "Tests  90 passed | 2 failed (92)" or "Tests  90 passed (90)"
+            TS_PASSED=$(grep -E "Tests\s+[0-9]+ passed" "$TS_TEXT_FILE" | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | tail -1 || echo "0")
+            TS_FAILED=$(grep -E "[0-9]+ failed" "$TS_TEXT_FILE" | grep -oE "[0-9]+ failed" | grep -oE "[0-9]+" | tail -1 || echo "0")
+            TS_TOTAL=$((TS_PASSED + TS_FAILED))
           else
-            TS_COLOR="brightgreen"
+            TS_PASSED=0
+            TS_FAILED=0
+            TS_TOTAL=0
+          fi
+          
+          # Ensure we have valid numbers
+          TS_PASSED=${TS_PASSED:-0}
+          TS_FAILED=${TS_FAILED:-0}
+          TS_TOTAL=${TS_TOTAL:-0}
+          
+          if [ "$TS_TOTAL" -eq 0 ]; then
+            if [ "$CONCLUSION" == "failure" ]; then
+              TS_MESSAGE="failed"
+              TS_COLOR="red"
+            else
+              TS_MESSAGE="unknown"
+              TS_COLOR="lightgrey"
+            fi
+          else
+            TS_PERCENTAGE=$((TS_PASSED * 100 / TS_TOTAL))
+            TS_MESSAGE="$TS_PASSED/$TS_TOTAL ($TS_PERCENTAGE%)"
+            
+            if [ "$TS_PERCENTAGE" -eq 100 ]; then TS_COLOR="brightgreen";
+            elif [ "$TS_PERCENTAGE" -gt 90 ]; then TS_COLOR="green";
+            elif [ "$TS_PERCENTAGE" -gt 80 ]; then TS_COLOR="yellowgreen";
+            elif [ "$TS_PERCENTAGE" -gt 60 ]; then TS_COLOR="yellow";
+            else TS_COLOR="red"; fi
           fi
           
           cat <<JSON > badges/ts-tests.json
           {
             "schemaVersion": 1,
             "label": "TS tests",
-            "message": "$TS_PASSED passed",
+            "message": "$TS_MESSAGE",
             "color": "$TS_COLOR"
           }
           JSON
 
           # --- TYPESCRIPT COVERAGE ---
-          TS_COVERAGE="unknown"
-          TS_COV_COLOR="lightgrey"
-          TS_COV_MESSAGE="unknown"
+          # Look for coverage-summary.json in various possible locations
+          TS_COV_FILE=$(find artifacts -name "coverage-summary.json" -type f 2>/dev/null | head -1)
           
-          # Download coverage artifact if available
-          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
-            if [ -f coverage/coverage-summary.json ]; then
-              TS_COVERAGE=$(jq -r '.total.lines.pct // 0' coverage/coverage-summary.json 2>/dev/null || echo "0")
-              # Round to integer
-              TS_COVERAGE=$(printf "%.0f" "$TS_COVERAGE" 2>/dev/null || echo "0")
-              
-              if [ "$TS_COVERAGE" -gt 90 ]; then TS_COV_COLOR="brightgreen";
-              elif [ "$TS_COVERAGE" -gt 80 ]; then TS_COV_COLOR="green";
-              elif [ "$TS_COVERAGE" -gt 70 ]; then TS_COV_COLOR="yellowgreen";
-              elif [ "$TS_COVERAGE" -gt 60 ]; then TS_COV_COLOR="yellow";
-              else TS_COV_COLOR="red"; fi
-              
-              TS_COV_MESSAGE="$TS_COVERAGE%"
-            fi
+          if [ -n "$TS_COV_FILE" ] && [ -f "$TS_COV_FILE" ]; then
+            echo "Parsing TS coverage from: $TS_COV_FILE"
+            TS_COVERAGE=$(jq -r '.total.lines.pct // 0' "$TS_COV_FILE" 2>/dev/null || echo "0")
+            # Round to integer
+            TS_COVERAGE=$(printf "%.0f" "$TS_COVERAGE" 2>/dev/null || echo "0")
+            
+            if [ "$TS_COVERAGE" -gt 90 ]; then TS_COV_COLOR="brightgreen";
+            elif [ "$TS_COVERAGE" -gt 80 ]; then TS_COV_COLOR="green";
+            elif [ "$TS_COVERAGE" -gt 70 ]; then TS_COV_COLOR="yellowgreen";
+            elif [ "$TS_COVERAGE" -gt 60 ]; then TS_COV_COLOR="yellow";
+            else TS_COV_COLOR="red"; fi
+            
+            TS_COV_MESSAGE="$TS_COVERAGE%"
+          elif [ "$WORKFLOW_NAME" == "Coverage" ] && [ "$CONCLUSION" == "failure" ]; then
+            TS_COV_MESSAGE="failed"
+            TS_COV_COLOR="red"
+          else
+            TS_COV_MESSAGE="unknown"
+            TS_COV_COLOR="lightgrey"
           fi
           
           cat <<JSON > badges/ts-coverage.json
@@ -167,6 +249,10 @@ jobs:
             "color": "$TS_COV_COLOR"
           }
           JSON
+          fi  # End of Release workflow skip
+          
+          echo "Generated badges:"
+          cat badges/*.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

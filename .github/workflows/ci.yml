@@ -54,11 +54,25 @@ jobs:
           npm install
           npm run build
 
-      - name: Run tests
-        run: cargo test --verbose
+      - name: Run Rust tests
+        run: cargo test --verbose 2>&1 | tee rust-test-output.txt
 
       - name: Run doctests
         run: cargo test --doc --verbose
+
+      - name: Run TypeScript tests
+        run: npm run test:run -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt || true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            rust-test-output.txt
+            ts-test-output.txt
+            ts-test-results.json
+          retention-days: 30
 
   clippy:
     name: Clippy
