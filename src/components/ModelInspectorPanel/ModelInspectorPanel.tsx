@@ -1,6 +1,7 @@
 import { FC, useState, useEffect } from 'react';
 import { GgufModel, ServeConfig, ServerInfo } from '../../types';
 import { TauriService } from '../../services/tauri';
+import { useSettings } from '../../hooks/useSettings';
 import { formatParamCount } from '../../utils/format';
 import './ModelInspectorPanel.css';
 
@@ -33,6 +34,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onRemoveTag,
   getModelTags,
 }) => {
+  const { settings } = useSettings();
   const [modelTags, setModelTags] = useState<string[]>([]);
   const [showServeModal, setShowServeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -113,12 +115,15 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 
     setIsServing(true);
     try {
+      // Priority: custom input > settings default > model metadata
       let contextLength: number | undefined = undefined;
       if (customContext.trim()) {
         const parsed = parseInt(customContext.trim());
         if (!isNaN(parsed) && parsed > 0) {
           contextLength = parsed;
         }
+      } else if (settings?.default_context_size) {
+        contextLength = settings.default_context_size;
       } else if (model.context_length) {
         contextLength = model.context_length;
       }
@@ -433,7 +438,13 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                   id="context-input"
                   type="number"
                   className="context-input"
-                  placeholder={model.context_length ? `Default: ${model.context_length.toLocaleString()}` : 'Use model default'}
+                  placeholder={
+                    settings?.default_context_size
+                      ? `Default: ${settings.default_context_size.toLocaleString()}`
+                      : model.context_length
+                        ? `Model max: ${model.context_length.toLocaleString()}`
+                        : 'Enter context length'
+                  }
                   value={customContext}
                   onChange={(e) => setCustomContext(e.target.value)}
                   disabled={isServing}
@@ -442,7 +453,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                 <p className="input-help">
                   {model.context_length
                     ? `Model's maximum: ${model.context_length.toLocaleString()} tokens`
-                    : 'Leave empty to use model default'}
+                    : 'No model context metadata available'}
                 </p>
               </div>
 
