@@ -100,27 +100,7 @@ pub async fn handle_add(file_path: String) -> Result<()> {
     };
 
     // Auto-detect reasoning model support from metadata
-    let reasoning_detection = gguf_parser::detect_reasoning_support(&gguf_metadata.metadata);
-    let mut auto_tags = Vec::new();
-
-    if reasoning_detection.supports_reasoning {
-        println!("\n🧠 Detected reasoning model capabilities:");
-        println!(
-            "  Confidence: {:.0}%",
-            reasoning_detection.confidence * 100.0
-        );
-        if !reasoning_detection.matched_patterns.is_empty() {
-            println!(
-                "  Matched patterns: {}",
-                reasoning_detection.matched_patterns.join(", ")
-            );
-        }
-        if let Some(ref format) = reasoning_detection.suggested_format {
-            println!("  Suggested format: --reasoning-format {}", format);
-        }
-        println!("  → Auto-adding 'reasoning' tag for optimal llama-server configuration");
-        auto_tags.push("reasoning".to_string());
-    }
+    let auto_tags = gguf_parser::apply_reasoning_detection(&gguf_metadata.metadata);
 
     // Create the model instance with extracted and user-provided metadata
     let new_model: models::Gguf = models::Gguf {
