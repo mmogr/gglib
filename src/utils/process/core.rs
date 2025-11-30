@@ -44,6 +44,7 @@ impl ProcessCore {
         model_path: &Path,
         context_size: Option<u64>,
         jinja: bool,
+        reasoning_format: Option<String>,
     ) -> Result<u16> {
         // Check if already running
         if self.processes.contains_key(&model_id) {
@@ -74,6 +75,11 @@ impl ProcessCore {
 
         if jinja {
             cmd.arg("--jinja");
+        }
+
+        // Add reasoning format if specified (for thinking/reasoning models)
+        if let Some(format) = reasoning_format {
+            cmd.arg("--reasoning-format").arg(format);
         }
 
         // For debugging: log to a file instead of suppressing

@@ -195,6 +195,7 @@ impl GuiBackend {
             model_id: id,
             context_length: request.context_length,
             jinja: request.jinja,
+            reasoning_format: request.reasoning_format,
         };
 
         self.core.servers().start(config).await
