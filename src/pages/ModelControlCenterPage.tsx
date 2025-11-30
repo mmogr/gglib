@@ -210,6 +210,24 @@ export default function ModelControlCenterPage({
     }
   };
 
+  // Handler for sidebar tab changes - clears HF selection when leaving HF browser context
+  const handleSidebarTabChange = (tab: SidebarTabId) => {
+    setSidebarTab(tab);
+    // Clear HF model selection when switching away from the Add Models tab
+    if (tab !== 'add') {
+      setSelectedHfModel(null);
+    }
+  };
+
+  // Handler for subtab changes within Add Models - clears HF selection when leaving Browse HF
+  const handleSubTabChange = (subtab: AddDownloadSubTab) => {
+    setActiveSubTab(subtab);
+    // Clear HF model selection when switching away from Browse HF subtab
+    if (subtab !== 'browse') {
+      setSelectedHfModel(null);
+    }
+  };
+
   // Handler for when server starts - opens chat view
   const handleServerStarted = async (serverInfo: ServerInfo) => {
     // Server started, open chat
@@ -267,11 +285,11 @@ export default function ModelControlCenterPage({
             onModelAdded={handleModelAdded}
             onModelDownloaded={handleModelDownloaded}
             activeSubTab={activeSubTab}
-            onSubTabChange={setActiveSubTab}
+            onSubTabChange={handleSubTabChange}
             onSelectHfModel={handleSelectHfModel}
             selectedHfModelId={selectedHfModel?.id}
             activeTab={sidebarTab}
-            onTabChange={setSidebarTab}
+            onTabChange={handleSidebarTabChange}
           />
           <div 
             className="resize-handle" 
