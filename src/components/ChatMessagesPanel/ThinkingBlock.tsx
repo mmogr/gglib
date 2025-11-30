@@ -46,6 +46,10 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   // Generate label based on state
   const getLabel = () => {
     if (isStreaming) {
+      // Show live duration during streaming for better UX feedback
+      if (durationSeconds != null) {
+        return `Thinking… ${formatThinkingDuration(durationSeconds)}`;
+      }
       return 'Thinking…';
     }
     if (durationSeconds != null) {

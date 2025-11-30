@@ -179,6 +179,10 @@ export function useGglibRuntime(options: GglibRuntimeOptions = {}) {
       const thinkingStartTime = Date.now();
       let thinkingEndTime: number | null = null;
       let hasReceivedMainContent = false;
+      
+      // Timing state for inline <think> tags (when --reasoning-format is not used)
+      let inlineThinkingStartTime: number | null = null;
+      let inlineThinkingEndTime: number | null = null;
 
       try {
         for await (const delta of parseSSEStream(reader, abortSignal)) {
@@ -200,19 +204,35 @@ export function useGglibRuntime(options: GglibRuntimeOptions = {}) {
             console.log('💬 Content delta:', delta.content);
           }
           
-          // Build display content: show thinking progress inline during streaming
-          // We'll embed it properly on completion
+          // Build display content with duration embedded in every yield
           let displayContent = '';
           
           if (thinkingContent) {
-            // During streaming, show thinking in progress
-            displayContent = `<think>${thinkingContent}</think>\n${mainContent}`;
+            // Calculate current thinking duration for live display
+            const currentEndTime = thinkingEndTime ?? Date.now();
+            const currentDurationSeconds = (currentEndTime - thinkingStartTime) / 1000;
+            // Embed with current duration (updates live, final value on completion)
+            displayContent = embedThinkingContent(thinkingContent, mainContent, currentDurationSeconds);
           } else {
             // Check if main content contains inline <think> tags (fallback for --reasoning-format none)
             const parsed = parseStreamingThinkingContent(mainContent);
             if (parsed.thinking) {
-              // Content has inline thinking tags - let it render as-is
-              displayContent = mainContent;
+              // Start tracking time when we first detect inline thinking
+              if (inlineThinkingStartTime === null) {
+                inlineThinkingStartTime = Date.now();
+              }
+              
+              // Track end time when thinking completes (closing tag received)
+              if (parsed.isThinkingComplete && inlineThinkingEndTime === null) {
+                inlineThinkingEndTime = Date.now();
+              }
+              
+              // Calculate current duration for live display
+              const currentEndTime = inlineThinkingEndTime ?? Date.now();
+              const currentDuration = (currentEndTime - inlineThinkingStartTime) / 1000;
+              
+              // Re-embed thinking with duration metadata
+              displayContent = embedThinkingContent(parsed.thinking, parsed.content, currentDuration);
             } else {
               displayContent = mainContent;
             }
@@ -241,8 +261,17 @@ export function useGglibRuntime(options: GglibRuntimeOptions = {}) {
       let finalContent = '';
       if (thinkingContent) {
         finalContent = embedThinkingContent(thinkingContent, mainContent, thinkingDurationSeconds);
+      } else if (inlineThinkingStartTime !== null) {
+        // Inline <think> tags path - embed duration for persistence
+        const parsed = parseStreamingThinkingContent(mainContent);
+        if (parsed.thinking) {
+          const endTime = inlineThinkingEndTime ?? Date.now();
+          const inlineDurationSeconds = (endTime - inlineThinkingStartTime) / 1000;
+          finalContent = embedThinkingContent(parsed.thinking, parsed.content, inlineDurationSeconds);
+        } else {
+          finalContent = mainContent;
+        }
       } else {
-        // Check for inline thinking in main content (fallback case)
         finalContent = mainContent;
       }
 
