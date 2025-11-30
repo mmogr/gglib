@@ -87,7 +87,10 @@ pub async fn add_model(pool: &SqlitePool, model: &Gguf) -> Result<()> {
         .into());
     }
 
-    sqlx::query("INSERT INTO models (name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    // Serialize tags as JSON array
+    let tags_json = serde_json::to_string(&model.tags).unwrap_or_else(|_| "[]".to_string());
+
+    sqlx::query("INSERT INTO models (name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(&model.name)
         .bind(&file_path_string)
         .bind(model.param_count_b)
@@ -101,6 +104,7 @@ pub async fn add_model(pool: &SqlitePool, model: &Gguf) -> Result<()> {
         .bind(&model.hf_filename)
         .bind(model.download_date.as_ref().map(|d| d.to_string()))
         .bind(model.last_update_check.as_ref().map(|d| d.to_string()))
+        .bind(&tags_json)
         .execute(pool)
         .await?;
 
