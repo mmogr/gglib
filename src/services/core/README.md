@@ -67,10 +67,12 @@ CRUD operations for GGUF models:
 - `list()` - List all models
 - `get_by_id(id)` - Get model by database ID
 - `find_by_identifier(id_or_name)` - Find by ID or name
-- `add(model)` / `add_from_file(path)` - Add model
+- `add(model)` / `add_from_file(path)` - Add model (auto-detects reasoning capabilities)
 - `update(id, model)` - Update model
 - `remove(id)` - Remove model
 - Tag operations: `list_tags()`, `add_tag()`, `remove_tag()`, `get_tags()`, `get_by_tag()`
+
+**Reasoning Detection:** When adding models via `add_from_file()`, the service automatically analyzes GGUF metadata for reasoning/thinking patterns (e.g., `<think>` tags in chat templates, model names like "deepseek-r1"). Detected reasoning models receive a `reasoning` tag for optimal llama-server configuration.
 
 ### ServerService
 
