@@ -4,23 +4,16 @@ import {
   HfModelSummary,
   HfSearchRequest,
   HfSearchResponse,
-  HfQuantization,
-  HfQuantizationsResponse,
   HfSortField,
-  FitStatus,
 } from "../../types";
-import { useDownloadProgress } from "../../hooks/useDownloadProgress";
-import { useSystemMemory } from "../../hooks/useSystemMemory";
-import { useSettings } from "../../hooks/useSettings";
-import { DownloadProgressDisplay } from "../DownloadProgressDisplay";
-import { formatBytes, formatNumber } from "../../utils/format";
+import { formatNumber, getHuggingFaceModelUrl } from "../../utils/format";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
-  /** Callback when a model download is initiated */
-  onDownloadStarted?: () => void;
-  /** Callback when a model download completes */
-  onDownloadCompleted?: () => void;
+  /** Callback when a model is selected (clicked) for preview */
+  onSelectModel?: (model: HfModelSummary | null) => void;
+  /** Currently selected model ID (for highlighting) */
+  selectedModelId?: string | null;
 }
 
 // Sort options configuration
@@ -37,36 +30,6 @@ const SORT_OPTIONS: SortOption[] = [
   { value: "created", label: "Recently Created", defaultAscending: false },
   { value: "id", label: "Alphabetical", defaultAscending: true },
 ];
-
-// Fit indicator component for "Will it fit?" memory check
-interface FitIndicatorProps {
-  sizeBytes: number;
-  checkFit: (sizeBytes: number) => FitStatus;
-  getTooltip: (sizeBytes: number) => string;
-}
-
-const FitIndicator: FC<FitIndicatorProps> = ({ sizeBytes, checkFit, getTooltip }) => {
-  const status = checkFit(sizeBytes);
-  const tooltip = getTooltip(sizeBytes);
-
-  const iconMap: Record<FitStatus, { icon: string; className: string }> = {
-    fits: { icon: "✅", className: styles.fitIndicatorFits },
-    tight: { icon: "⚠️", className: styles.fitIndicatorTight },
-    wont_fit: { icon: "❌", className: styles.fitIndicatorWontFit },
-  };
-
-  const { icon, className } = iconMap[status];
-
-  return (
-    <span 
-      className={`${styles.fitIndicator} ${className}`}
-      title={tooltip}
-      aria-label={tooltip}
-    >
-      {icon}
-    </span>
-  );
-};
 
 // Debounce helper
 function useDebounce<T>(value: T, delay: number): T {
@@ -85,70 +48,46 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// Model card component with expandable quantization panel
+// Simplified model card - just displays info, click to select for right pane preview
 interface ModelCardProps {
   model: HfModelSummary;
-  onDownload: (modelId: string, quantization: string) => void;
-  /** Whether download buttons should be disabled (queue full) */
-  downloadsDisabled: boolean;
-  /** Tooltip text when downloads are disabled */
-  disabledReason?: string;
-  /** Whether to show memory fit indicators */
-  showFitIndicators: boolean;
-  /** Check fit status for a given file size */
-  checkFit: (sizeBytes: number) => FitStatus;
-  /** Get tooltip text for a given file size */
-  getTooltip: (sizeBytes: number) => string;
+  /** Callback when the model card is clicked (for preview) */
+  onSelect: () => void;
+  /** Whether this model is currently selected */
+  isSelected: boolean;
 }
 
 const ModelCard: FC<ModelCardProps> = ({ 
   model, 
-  onDownload, 
-  downloadsDisabled, 
-  disabledReason,
-  showFitIndicators,
-  checkFit,
-  getTooltip,
+  onSelect,
+  isSelected,
 }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [quantizations, setQuantizations] = useState<HfQuantization[]>([]);
-  const [loadingQuants, setLoadingQuants] = useState(false);
-  const [quantError, setQuantError] = useState<string | null>(null);
-
-  const handleToggleExpand = useCallback(async () => {
-    if (!expanded && quantizations.length === 0 && !loadingQuants) {
-      // Load quantizations when expanding for the first time
-      setLoadingQuants(true);
-      setQuantError(null);
-      try {
-        const response: HfQuantizationsResponse =
-          await TauriService.getHfQuantizations(model.id);
-        setQuantizations(response.quantizations);
-      } catch (err) {
-        setQuantError(
-          err instanceof Error ? err.message : "Failed to load quantizations"
-        );
-      } finally {
-        setLoadingQuants(false);
-      }
-    }
-    setExpanded(!expanded);
-  }, [expanded, quantizations.length, loadingQuants, model.id]);
-
-  const handleDownload = (quant: HfQuantization) => {
-    onDownload(model.id, quant.name);
+  const handleOpenHuggingFace = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = getHuggingFaceModelUrl(model.id);
+    TauriService.openUrl(url);
   };
 
   return (
-    <div className={styles.modelCard}>
-      <div className={styles.modelCardHeader} onClick={handleToggleExpand}>
+    <div 
+      className={`${styles.modelCard} ${isSelected ? styles.modelCardSelected : ''}`}
+      onClick={onSelect}
+    >
+      <div className={styles.modelCardHeader}>
         <div className={styles.modelCardMain}>
           <div className={styles.modelInfo}>
-            <h3 className={styles.modelName}>{model.name}</h3>
+            <h3 className={styles.modelName}>
+              {model.name}
+              <button
+                className={styles.hfButton}
+                onClick={handleOpenHuggingFace}
+                title="Open on HuggingFace"
+                aria-label="Open on HuggingFace"
+              >
+                🤗
+              </button>
+            </h3>
             <span className={styles.modelId}>{model.id}</span>
-            {model.description && (
-              <p className={styles.modelDescription}>{model.description}</p>
-            )}
           </div>
           <div className={styles.modelStats}>
             {model.parameters_b && (
@@ -164,85 +103,17 @@ const ModelCard: FC<ModelCardProps> = ({
               <span className={styles.statIcon}>❤️</span>
               {formatNumber(model.likes)}
             </span>
-            <span
-              className={`${styles.expandIcon} ${expanded ? styles.expandIconOpen : ""}`}
-            >
-              ▼
-            </span>
           </div>
         </div>
       </div>
-
-      {expanded && (
-        <div className={styles.quantPanel}>
-          {loadingQuants && (
-            <div className={styles.quantPanelLoading}>
-              <span className={styles.spinner}></span>
-              Loading quantizations...
-            </div>
-          )}
-
-          {quantError && (
-            <div className={styles.quantPanelError}>{quantError}</div>
-          )}
-
-          {!loadingQuants && !quantError && quantizations.length === 0 && (
-            <div className={styles.quantPanelLoading}>
-              No quantizations found
-            </div>
-          )}
-
-          {!loadingQuants && !quantError && quantizations.length > 0 && (
-            <div className={styles.quantGrid}>
-              {quantizations.map((quant) => (
-                <div key={quant.name} className={styles.quantItem}>
-                  <div className={styles.quantInfo}>
-                    <span className={styles.quantName}>
-                      {quant.name}
-                      {quant.is_sharded && (
-                        <span className={styles.shardedBadge}>
-                          {quant.shard_count} shards
-                        </span>
-                      )}
-                    </span>
-                    <span className={styles.quantSize}>
-                      {formatBytes(quant.size_bytes)}
-                    </span>
-                  </div>
-                  <div className={styles.quantActions}>
-                    {showFitIndicators && (
-                      <FitIndicator
-                        sizeBytes={quant.size_bytes}
-                        checkFit={checkFit}
-                        getTooltip={getTooltip}
-                      />
-                    )}
-                    <button
-                      className={styles.downloadBtn}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownload(quant);
-                      }}
-                      disabled={downloadsDisabled}
-                      title={downloadsDisabled ? disabledReason : "Add to download queue"}
-                    >
-                      Download
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };
 
 // Main browser component
 const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
-  onDownloadStarted,
-  onDownloadCompleted,
+  onSelectModel,
+  selectedModelId,
 }) => {
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -260,18 +131,6 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Download progress - use queueStatus to determine if we can queue more downloads
-  const { progress, queueStatus, queueCount, isDownloading, cancelDownload } = useDownloadProgress({
-    onCompleted: () => {
-      onDownloadCompleted?.();
-    },
-  });
-
-  // System memory and settings for "Will it fit?" indicators
-  const { checkFit, getTooltip } = useSystemMemory();
-  const { settings } = useSettings();
-  const showFitIndicators = settings?.show_memory_fit_indicators !== false;
 
   // Debounced search
   const debouncedQuery = useDebounce(searchQuery, 300);
@@ -356,39 +215,6 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
       handleSearch();
     }
   };
-
-  // Handle download
-  const handleDownload = async (modelId: string, quantization: string) => {
-    setError(null);
-    try {
-      await TauriService.queueDownload(modelId, quantization);
-      onDownloadStarted?.();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to queue download"
-      );
-    }
-  };
-
-  // Handle cancel download
-  const handleCancelDownload = async () => {
-    if (progress?.model_id) {
-      try {
-        await cancelDownload(progress.model_id);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to cancel download"
-        );
-      }
-    }
-  };
-
-  // Determine if queue is full (can't add more downloads)
-  const maxQueueSize = queueStatus?.max_size ?? 10;
-  const isQueueFull = queueCount >= maxQueueSize;
-  const disabledReason = isQueueFull 
-    ? `Queue is full (${queueCount}/${maxQueueSize})`
-    : undefined;
 
   // Auto-search on debounced query change (after initial mount)
   useEffect(() => {
@@ -488,35 +314,6 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
       {/* Results Section */}
       <div className={styles.resultsSection}>
-        {/* Download Progress & Queue Status */}
-        {(isDownloading || queueCount > 0) && (
-          <div className={styles.downloadStatusSection}>
-            {/* Queue status indicator */}
-            <div className={styles.queueStatusBar}>
-              <span className={styles.queueStatusText}>
-                📥 {queueCount > 1 ? `${queueCount} downloads queued` : 'Downloading'}
-                {isDownloading && progress && (
-                  <span className={styles.currentDownload}>
-                    {" "}— {progress.model_id.length > 30 
-                      ? progress.model_id.substring(0, 27) + "..." 
-                      : progress.model_id}
-                  </span>
-                )}
-              </span>
-            </div>
-            
-            {/* Download progress display */}
-            {isDownloading && progress && (
-              <DownloadProgressDisplay
-                progress={progress}
-                onCancel={handleCancelDownload}
-                compact={true}
-                className={styles.downloadProgress}
-              />
-            )}
-          </div>
-        )}
-
         {/* Error State */}
         {error && (
           <div className={styles.errorState}>
@@ -557,12 +354,8 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
               <ModelCard
                 key={model.id}
                 model={model}
-                onDownload={handleDownload}
-                downloadsDisabled={isQueueFull}
-                disabledReason={disabledReason}
-                showFitIndicators={showFitIndicators}
-                checkFit={checkFit}
-                getTooltip={getTooltip}
+                onSelect={() => onSelectModel?.(model)}
+                isSelected={selectedModelId === model.id}
               />
             ))}
 

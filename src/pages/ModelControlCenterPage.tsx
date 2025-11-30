@@ -1,11 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
+import { useDownloadProgress } from '../hooks/useDownloadProgress';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspectorPanel';
+import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
 import ChatPage from './ChatPage';
 import { TauriService } from '../services/tauri';
-import { ServerInfo } from '../types';
+import { ServerInfo, HfModelSummary } from '../types';
 import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
 import './ModelControlCenterPage.css';
@@ -39,6 +41,19 @@ export default function ModelControlCenterPage({
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
   const { tags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
+  
+  // Global download progress - lifted to page level so it's always visible
+  const { progress, queueStatus, cancelDownload } = useDownloadProgress({
+    onCompleted: loadModels,
+  });
+  const [downloadDismissed, setDownloadDismissed] = useState(false);
+  
+  // Reset dismissed state when a new download starts
+  useEffect(() => {
+    if (progress && (progress.status === 'started' || progress.status === 'downloading' || progress.status === 'progress')) {
+      setDownloadDismissed(false);
+    }
+  }, [progress?.status]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -46,6 +61,9 @@ export default function ModelControlCenterPage({
   
   // Sidebar tab state (for the new tabbed sidebar)
   const [sidebarTab, setSidebarTab] = useState<SidebarTabId>('models');
+  
+  // HuggingFace model selection state (for preview in inspector)
+  const [selectedHfModel, setSelectedHfModel] = useState<HfModelSummary | null>(null);
   
   // Chat session state - when set, shows ChatPage instead of model panels
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
@@ -191,6 +209,40 @@ export default function ModelControlCenterPage({
     await loadModels();
   };
 
+  // Handler for selecting a local model (clears HF selection)
+  const handleSelectLocalModel = (id: number | null) => {
+    selectModel(id);
+    if (id !== null) {
+      setSelectedHfModel(null); // Clear HF selection when selecting local model
+    }
+  };
+
+  // Handler for selecting an HF model for preview (clears local selection)
+  const handleSelectHfModel = (model: HfModelSummary | null) => {
+    setSelectedHfModel(model);
+    if (model !== null) {
+      selectModel(null); // Clear local model selection when selecting HF model
+    }
+  };
+
+  // Handler for sidebar tab changes - clears HF selection when leaving HF browser context
+  const handleSidebarTabChange = (tab: SidebarTabId) => {
+    setSidebarTab(tab);
+    // Clear HF model selection when switching away from the Add Models tab
+    if (tab !== 'add') {
+      setSelectedHfModel(null);
+    }
+  };
+
+  // Handler for subtab changes within Add Models - clears HF selection when leaving Browse HF
+  const handleSubTabChange = (subtab: AddDownloadSubTab) => {
+    setActiveSubTab(subtab);
+    // Clear HF model selection when switching away from Browse HF subtab
+    if (subtab !== 'browse') {
+      setSelectedHfModel(null);
+    }
+  };
+
   // Handler for when server starts - opens chat view
   const handleServerStarted = async (serverInfo: ServerInfo) => {
     // Server started, open chat
@@ -235,7 +287,7 @@ export default function ModelControlCenterPage({
           <ModelLibraryPanel
             models={filteredModels}
             selectedModelId={selectedModelId}
-            onSelectModel={selectModel}
+            onSelectModel={handleSelectLocalModel}
             loading={loading}
             error={error}
             onRefresh={loadModels}
@@ -248,9 +300,11 @@ export default function ModelControlCenterPage({
             onModelAdded={handleModelAdded}
             onModelDownloaded={handleModelDownloaded}
             activeSubTab={activeSubTab}
-            onSubTabChange={setActiveSubTab}
+            onSubTabChange={handleSubTabChange}
+            onSelectHfModel={handleSelectHfModel}
+            selectedHfModelId={selectedHfModel?.id}
             activeTab={sidebarTab}
-            onTabChange={setSidebarTab}
+            onTabChange={handleSidebarTabChange}
           />
           <div 
             className="resize-handle" 
@@ -259,9 +313,20 @@ export default function ModelControlCenterPage({
         </div>
 
         {/* Right Panel: Model Inspector */}
-        <div className="grid-panel-container">
+        <div className="grid-panel-container right-panel-container">
+          {/* Global Download Status - always visible regardless of selected tab/model */}
+          {!downloadDismissed && (
+            <GlobalDownloadStatus
+              progress={progress}
+              queueStatus={queueStatus}
+              onCancel={cancelDownload}
+              onDismiss={() => setDownloadDismissed(true)}
+            />
+          )}
+          
           <ModelInspectorPanel
             model={selectedModel}
+            selectedHfModel={selectedHfModel}
             onStartServer={loadServers}
             onServerStarted={handleServerStarted}
             onStopServer={stopServer}
@@ -271,6 +336,7 @@ export default function ModelControlCenterPage({
             onAddTag={addTagToModel}
             onRemoveTag={removeTagFromModel}
             getModelTags={getModelTags}
+            queueStatus={queueStatus}
           />
         </div>
       </div>

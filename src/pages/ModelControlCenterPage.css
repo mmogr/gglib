@@ -114,3 +114,15 @@
     display: none;
   }
 }
+
+/* Right panel container - allows GlobalDownloadStatus + inspector to stack */
+.right-panel-container {
+  padding: var(--spacing-base);
+  gap: 0;
+}
+
+.right-panel-container > .mcc-panel {
+  /* Inspector panel takes remaining space after download status */
+  flex: 1;
+  min-height: 0;
+}

@@ -1,12 +1,15 @@
-import { FC, useState, useEffect } from 'react';
-import { GgufModel, ServeConfig, ServerInfo } from '../../types';
+import { FC, useState, useEffect, useCallback } from 'react';
+import { GgufModel, ServeConfig, ServerInfo, HfModelSummary, DownloadQueueStatus } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { useSettings } from '../../hooks/useSettings';
-import { formatParamCount } from '../../utils/format';
+import { formatParamCount, getHuggingFaceUrl } from '../../utils/format';
+import { HfModelPreview } from '../HfModelPreview';
 import './ModelInspectorPanel.css';
 
 interface ModelInspectorPanelProps {
   model: GgufModel | null;
+  /** Selected HuggingFace model for preview (mutually exclusive with local model) */
+  selectedHfModel?: HfModelSummary | null;
   onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerInfo) => void;
   onStopServer: (modelId: number) => Promise<void>;
@@ -20,10 +23,13 @@ interface ModelInspectorPanelProps {
   onAddTag: (modelId: number, tag: string) => Promise<void>;
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
   getModelTags: (modelId: number) => Promise<string[]>;
+  /** Queue status from parent - for checking if downloads are disabled */
+  queueStatus?: DownloadQueueStatus | null;
 }
 
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   model,
+  selectedHfModel,
   onStartServer,
   onServerStarted,
   onStopServer,
@@ -33,6 +39,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onAddTag,
   onRemoveTag,
   getModelTags,
+  queueStatus,
 }) => {
   const { settings } = useSettings();
   const [modelTags, setModelTags] = useState<string[]>([]);
@@ -45,6 +52,23 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const [customContext, setCustomContext] = useState('');
   const [jinjaOverride, setJinjaOverride] = useState<boolean | null>(null);
   const [isServing, setIsServing] = useState(false);
+
+  // Download handler for HF models - uses queue to support multiple downloads
+  const handleHfDownload = useCallback(async (modelId: string, quantization: string) => {
+    try {
+      await TauriService.queueDownload(modelId, quantization);
+    } catch (error) {
+      console.error('Failed to start download:', error);
+    }
+  }, []);
+
+  // Check if download queue is full (using queueStatus from parent)
+  const maxQueueSize = queueStatus?.max_size ?? 3;
+  const currentQueueCount = (queueStatus?.current ? 1 : 0) + (queueStatus?.pending?.length ?? 0);
+  const downloadsDisabled = currentQueueCount >= maxQueueSize;
+  const disabledReason = downloadsDisabled 
+    ? `Download queue is full (${currentQueueCount}/${maxQueueSize})`
+    : undefined;
   const [isDeleting, setIsDeleting] = useState(false);
   const [newTag, setNewTag] = useState('');
 
@@ -226,6 +250,21 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const effectiveJinjaEnabled = jinjaOverride === null ? hasAgentTag : jinjaOverride;
   const isAutoJinja = jinjaOverride === null && hasAgentTag;
 
+  // If HuggingFace model is selected, show HF model preview with download options
+  if (selectedHfModel) {
+    return (
+      <div className="mcc-panel inspector-panel hf-preview-panel">
+        {/* HF Model Preview - download progress is now handled by GlobalDownloadStatus at page level */}
+        <HfModelPreview
+          model={selectedHfModel}
+          onDownload={handleHfDownload}
+          downloadsDisabled={downloadsDisabled}
+          disabledReason={disabledReason}
+        />
+      </div>
+    );
+  }
+
   if (!model) {
     return (
       <div className="mcc-panel inspector-panel">
@@ -318,8 +357,21 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               </div>
               {model.hf_repo_id && (
                 <div className="metadata-row">
-                  <span className="metadata-label">Repository:</span>
-                  <span className="metadata-value">{model.hf_repo_id}</span>
+                  <span className="metadata-label">HuggingFace:</span>
+                  <span className="metadata-value hf-link-container">
+                    <span className="hf-repo-id">{model.hf_repo_id}</span>
+                    <button
+                      className="hf-link-button"
+                      onClick={() => {
+                        const url = getHuggingFaceUrl(model.hf_repo_id);
+                        if (url) TauriService.openUrl(url);
+                      }}
+                      title="Open on HuggingFace"
+                      aria-label="Open on HuggingFace"
+                    >
+                      🤗
+                    </button>
+                  </span>
                 </div>
               )}
             </div>

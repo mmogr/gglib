@@ -44,3 +44,31 @@ export const formatParamCount = (paramCount: number): string => {
   }
   return `${(paramCount * 1000).toFixed(0)}M`;
 };
+
+/**
+ * Compute the HuggingFace URL for a local model.
+ * Returns the URL if hf_repo_id exists, otherwise null.
+ * 
+ * @param hfRepoId - HuggingFace repository ID (e.g., "TheBloke/Llama-2-7B-GGUF")
+ * @param hfFilename - Optional filename for direct file link
+ * @returns The HuggingFace URL or null if no repo ID
+ */
+export const getHuggingFaceUrl = (
+  hfRepoId: string | null | undefined,
+  hfFilename?: string | null
+): string | null => {
+  if (!hfRepoId) return null;
+  
+  if (hfFilename) {
+    return `https://huggingface.co/${hfRepoId}/blob/main/${hfFilename}`;
+  }
+  return `https://huggingface.co/${hfRepoId}`;
+};
+
+/**
+ * Get the HuggingFace URL for an HfModelSummary (browse mode).
+ * @param modelId - The model ID from HuggingFace (e.g., "TheBloke/Llama-2-7B-GGUF")
+ */
+export const getHuggingFaceModelUrl = (modelId: string): string => {
+  return `https://huggingface.co/${modelId}`;
+};

@@ -605,6 +605,22 @@ export class TauriService {
   }
 
   // ==========================================================================
+  // Utility Commands
+  // ==========================================================================
+
+  /**
+   * Open a URL in the system's default browser.
+   * Falls back to window.open for web UI / dev mode.
+   */
+  static async openUrl(url: string): Promise<void> {
+    if (isTauriApp) {
+      await invoke('open_url', { url });
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  // ==========================================================================
   // Menu State Synchronization (Tauri desktop only)
   // ==========================================================================
 
