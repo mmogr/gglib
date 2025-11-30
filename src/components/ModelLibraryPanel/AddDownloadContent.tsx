@@ -2,6 +2,7 @@ import { FC, useState } from 'react';
 import AddModel from '../AddModel';
 import DownloadModel from '../DownloadModel';
 import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
+import { HfModelSummary } from '../../types';
 import './AddDownloadContent.css';
 
 export type AddDownloadSubTab = 'add' | 'download' | 'browse';
@@ -11,6 +12,10 @@ interface AddDownloadContentProps {
   onModelDownloaded: () => Promise<void>;
   activeSubTab?: AddDownloadSubTab;
   onSubTabChange?: (subtab: AddDownloadSubTab) => void;
+  /** Callback when an HF model is selected for preview */
+  onSelectHfModel?: (model: HfModelSummary | null) => void;
+  /** Currently selected HF model ID */
+  selectedHfModelId?: string | null;
 }
 
 const AddDownloadContent: FC<AddDownloadContentProps> = ({
@@ -18,6 +23,8 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
   onModelDownloaded,
   activeSubTab: externalActiveSubTab,
   onSubTabChange,
+  onSelectHfModel,
+  selectedHfModelId,
 }) => {
   const [internalActiveSubTab, setInternalActiveSubTab] = useState<AddDownloadSubTab>('download');
   const activeSubTab = externalActiveSubTab ?? internalActiveSubTab;
@@ -65,7 +72,9 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
         {activeSubTab === 'browse' && (
           <HuggingFaceBrowser 
             onDownloadStarted={handleModelDownloaded} 
-            onDownloadCompleted={handleModelDownloaded} 
+            onDownloadCompleted={handleModelDownloaded}
+            onSelectModel={onSelectHfModel}
+            selectedModelId={selectedHfModelId}
           />
         )}
         {activeSubTab === 'download' && (

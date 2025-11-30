@@ -13,7 +13,7 @@ import { useDownloadProgress } from "../../hooks/useDownloadProgress";
 import { useSystemMemory } from "../../hooks/useSystemMemory";
 import { useSettings } from "../../hooks/useSettings";
 import { DownloadProgressDisplay } from "../DownloadProgressDisplay";
-import { formatBytes, formatNumber } from "../../utils/format";
+import { formatBytes, formatNumber, getHuggingFaceModelUrl } from "../../utils/format";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
@@ -21,6 +21,10 @@ interface HuggingFaceBrowserProps {
   onDownloadStarted?: () => void;
   /** Callback when a model download completes */
   onDownloadCompleted?: () => void;
+  /** Callback when a model is selected (clicked) for preview */
+  onSelectModel?: (model: HfModelSummary | null) => void;
+  /** Currently selected model ID (for highlighting) */
+  selectedModelId?: string | null;
 }
 
 // Sort options configuration
@@ -89,6 +93,10 @@ function useDebounce<T>(value: T, delay: number): T {
 interface ModelCardProps {
   model: HfModelSummary;
   onDownload: (modelId: string, quantization: string) => void;
+  /** Callback when the model card is clicked (for preview) */
+  onSelect: () => void;
+  /** Whether this model is currently selected */
+  isSelected: boolean;
   /** Whether download buttons should be disabled (queue full) */
   downloadsDisabled: boolean;
   /** Tooltip text when downloads are disabled */
@@ -103,7 +111,9 @@ interface ModelCardProps {
 
 const ModelCard: FC<ModelCardProps> = ({ 
   model, 
-  onDownload, 
+  onDownload,
+  onSelect,
+  isSelected,
   downloadsDisabled, 
   disabledReason,
   showFitIndicators,
@@ -139,12 +149,33 @@ const ModelCard: FC<ModelCardProps> = ({
     onDownload(model.id, quant.name);
   };
 
+  const handleOpenHuggingFace = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = getHuggingFaceModelUrl(model.id);
+    TauriService.openUrl(url);
+  };
+
+  const handleCardClick = () => {
+    onSelect();
+    handleToggleExpand();
+  };
+
   return (
-    <div className={styles.modelCard}>
-      <div className={styles.modelCardHeader} onClick={handleToggleExpand}>
+    <div className={`${styles.modelCard} ${isSelected ? styles.modelCardSelected : ''}`}>
+      <div className={styles.modelCardHeader} onClick={handleCardClick}>
         <div className={styles.modelCardMain}>
           <div className={styles.modelInfo}>
-            <h3 className={styles.modelName}>{model.name}</h3>
+            <h3 className={styles.modelName}>
+              {model.name}
+              <button
+                className={styles.hfButton}
+                onClick={handleOpenHuggingFace}
+                title="Open on HuggingFace"
+                aria-label="Open on HuggingFace"
+              >
+                🤗
+              </button>
+            </h3>
             <span className={styles.modelId}>{model.id}</span>
             {model.description && (
               <p className={styles.modelDescription}>{model.description}</p>
@@ -243,6 +274,8 @@ const ModelCard: FC<ModelCardProps> = ({
 const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   onDownloadStarted,
   onDownloadCompleted,
+  onSelectModel,
+  selectedModelId,
 }) => {
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -558,6 +591,8 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
                 key={model.id}
                 model={model}
                 onDownload={handleDownload}
+                onSelect={() => onSelectModel?.(model)}
+                isSelected={selectedModelId === model.id}
                 downloadsDisabled={isQueueFull}
                 disabledReason={disabledReason}
                 showFitIndicators={showFitIndicators}

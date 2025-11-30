@@ -1,5 +1,5 @@
 import { FC, useState } from 'react';
-import { GgufModel, ServerInfo } from '../../types';
+import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
 import SidebarTabs, { SidebarTabId, SidebarTab } from './SidebarTabs';
 import ModelsListContent from './ModelsListContent';
 import AddDownloadContent, { AddDownloadSubTab } from './AddDownloadContent';
@@ -26,6 +26,10 @@ interface ModelLibraryPanelProps {
   onModelDownloaded: () => Promise<void>;
   activeSubTab?: AddDownloadSubTab;
   onSubTabChange?: (subtab: AddDownloadSubTab) => void;
+  
+  // HuggingFace model selection (for preview in inspector)
+  onSelectHfModel?: (model: HfModelSummary | null) => void;
+  selectedHfModelId?: string | null;
   
   // Tab control (optional - can be controlled externally or internally)
   activeTab?: SidebarTabId;
@@ -54,6 +58,8 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   onModelDownloaded,
   activeSubTab,
   onSubTabChange,
+  onSelectHfModel,
+  selectedHfModelId,
   activeTab: externalActiveTab,
   onTabChange: externalOnTabChange,
 }) => {
@@ -182,6 +188,8 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
             onModelDownloaded={onModelDownloaded}
             activeSubTab={activeSubTab}
             onSubTabChange={onSubTabChange}
+            onSelectHfModel={onSelectHfModel}
+            selectedHfModelId={selectedHfModelId}
           />
         )}
       </div>
