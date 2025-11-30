@@ -4,7 +4,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import { ReactNode } from 'react';
 import { useSettings } from '../../../src/hooks/useSettings';
+import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import { AppSettings } from '../../../src/types';
 
 // Mock the settings service
@@ -23,6 +25,11 @@ const mockSettings: AppSettings = {
   max_download_queue_size: 10,
 };
 
+// Wrapper to provide SettingsProvider for hook tests
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <SettingsProvider>{children}</SettingsProvider>
+);
+
 describe('useSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,7 +37,7 @@ describe('useSettings', () => {
   });
 
   it('loads settings on mount', async () => {
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     // Initially loading
     expect(result.current.loading).toBe(true);
@@ -49,7 +56,7 @@ describe('useSettings', () => {
     const error = new Error('Failed to connect');
     vi.mocked(fetchSettings).mockRejectedValue(error);
 
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -66,7 +73,7 @@ describe('useSettings', () => {
     };
     vi.mocked(updateSettings).mockResolvedValue(updatedSettings);
 
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -90,7 +97,7 @@ describe('useSettings', () => {
     // The saving state is set synchronously but React batches updates
     vi.mocked(updateSettings).mockResolvedValue(mockSettings);
 
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -109,7 +116,7 @@ describe('useSettings', () => {
     const error = new Error('Validation error');
     vi.mocked(updateSettings).mockRejectedValue(error);
 
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -131,7 +138,7 @@ describe('useSettings', () => {
   });
 
   it('refreshes settings manually', async () => {
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -161,7 +168,7 @@ describe('useSettings', () => {
     };
     vi.mocked(fetchSettings).mockResolvedValue(nullSettings);
 
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -171,7 +178,7 @@ describe('useSettings', () => {
   });
 
   it('preserves settings on failed refresh', async () => {
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -193,7 +200,7 @@ describe('useSettings', () => {
   });
 
   it('clears previous error on successful save', async () => {
-    const { result } = renderHook(() => useSettings());
+    const { result } = renderHook(() => useSettings(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);

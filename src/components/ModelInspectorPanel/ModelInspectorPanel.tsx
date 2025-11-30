@@ -1,6 +1,7 @@
 import { FC, useState, useEffect } from 'react';
 import { GgufModel, ServeConfig, ServerInfo } from '../../types';
 import { TauriService } from '../../services/tauri';
+import { useSettings } from '../../hooks/useSettings';
 import { formatParamCount } from '../../utils/format';
 import './ModelInspectorPanel.css';
 
@@ -33,6 +34,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onRemoveTag,
   getModelTags,
 }) => {
+  const { settings } = useSettings();
   const [modelTags, setModelTags] = useState<string[]>([]);
   const [showServeModal, setShowServeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -113,6 +115,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 
     setIsServing(true);
     try {
+      // Priority: custom input > model metadata > settings default
       let contextLength: number | undefined = undefined;
       if (customContext.trim()) {
         const parsed = parseInt(customContext.trim());
@@ -121,6 +124,8 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
         }
       } else if (model.context_length) {
         contextLength = model.context_length;
+      } else if (settings?.default_context_size) {
+        contextLength = settings.default_context_size;
       }
 
       const config: ServeConfig = {

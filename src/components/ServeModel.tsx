@@ -1,6 +1,7 @@
 import { useState, FC, FormEvent } from "react";
 import { GgufModel } from "../types";
 import { TauriService } from "../services/tauri";
+import { useSettings } from "../hooks/useSettings";
 
 interface ServeModelProps {
   models: GgufModel[];
@@ -8,12 +9,17 @@ interface ServeModelProps {
 }
 
 const ServeModel: FC<ServeModelProps> = ({ models, onModelServed }) => {
+  const { settings } = useSettings();
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
   const [port, setPort] = useState("8080");
   const [ctxSize, setCtxSize] = useState("");
   const [mlock, setMlock] = useState(false);
   const [serving, setServing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const getSelectedModel = () => {
+    return models.find(m => m.id === selectedModelId);
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,9 +33,22 @@ const ServeModel: FC<ServeModelProps> = ({ models, onModelServed }) => {
       setServing(true);
       setError(null);
       
+      // Priority: custom input > model metadata > settings default
+      let effectiveCtxSize: string | undefined = undefined;
+      if (ctxSize.trim()) {
+        effectiveCtxSize = ctxSize;
+      } else {
+        const selectedModel = getSelectedModel();
+        if (selectedModel?.context_length) {
+          effectiveCtxSize = selectedModel.context_length.toString();
+        } else if (settings?.default_context_size) {
+          effectiveCtxSize = settings.default_context_size.toString();
+        }
+      }
+      
       await TauriService.serveModel({
         id: selectedModelId,
-        ctx_size: ctxSize || undefined,
+        ctx_size: effectiveCtxSize,
         mlock,
         port: parseInt(port, 10),
       });
@@ -40,10 +59,6 @@ const ServeModel: FC<ServeModelProps> = ({ models, onModelServed }) => {
     } finally {
       setServing(false);
     }
-  };
-
-  const getSelectedModel = () => {
-    return models.find(m => m.id === selectedModelId);
   };
 
   return (

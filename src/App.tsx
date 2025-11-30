@@ -3,8 +3,11 @@ import ModelControlCenterPage from "./pages/ModelControlCenterPage";
 import Header from "./components/Header";
 import SettingsModal from "./components/SettingsModal";
 import LlamaInstallModal from "./components/LlamaInstallModal";
+import { ToastContainer } from "./components/Toast";
 import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
+import { useToast } from "./hooks/useToast";
+import { SettingsProvider } from "./contexts/SettingsContext";
 import { isTauriApp, TauriService } from "./services/tauri";
 
 // Tauri event listener (only imported in Tauri context)
@@ -21,6 +24,7 @@ function App() {
   // Sidebar visibility (for menu toggle, currently not visually implemented)
   const [, setIsSidebarVisible] = useState(true);
   const { servers, loadServers, stopServer } = useServers();
+  const { toasts, showToast, dismissToast } = useToast();
   const { 
     status: llamaStatus, 
     loading: llamaLoading,
@@ -159,35 +163,38 @@ function App() {
   }, []);
 
   return (
-    <div className="app">
-      <Header
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        servers={servers}
-        onStopServer={stopServer}
-        onSelectModel={handleSelectModelFromHeader}
-        onRefreshServers={loadServers}
-      />
-      <div className="app-body">
-        <ModelControlCenterPage
+    <SettingsProvider showToast={showToast}>
+      <div className="app">
+        <Header
+          onOpenSettings={() => setIsSettingsOpen(true)}
           servers={servers}
-          loadServers={loadServers}
-          stopServer={stopServer}
-          onRegisterMenuActions={registerMenuActions}
+          onStopServer={stopServer}
+          onSelectModel={handleSelectModelFromHeader}
+          onRefreshServers={loadServers}
         />
+        <div className="app-body">
+          <ModelControlCenterPage
+            servers={servers}
+            loadServers={loadServers}
+            stopServer={stopServer}
+            onRegisterMenuActions={registerMenuActions}
+          />
+        </div>
+        {isSettingsOpen && (
+          <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+        )}
+        <LlamaInstallModal
+          isOpen={showLlamaModal}
+          canDownload={llamaStatus?.canDownload ?? false}
+          installing={llamaInstalling}
+          progress={installProgress}
+          error={llamaError}
+          onInstall={installLlama}
+          onSkip={() => setShowLlamaModal(false)}
+        />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </div>
-      {isSettingsOpen && (
-        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      )}
-      <LlamaInstallModal
-        isOpen={showLlamaModal}
-        canDownload={llamaStatus?.canDownload ?? false}
-        installing={llamaInstalling}
-        progress={installProgress}
-        error={llamaError}
-        onInstall={installLlama}
-        onSkip={() => setShowLlamaModal(false)}
-      />
-    </div>
+    </SettingsProvider>
   );
 }
 
