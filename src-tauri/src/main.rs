@@ -651,6 +651,17 @@ fn get_gui_api_port(state: tauri::State<'_, AppState>) -> u16 {
 }
 
 // =============================================================================
+// Utility Commands
+// =============================================================================
+
+/// Open a URL in the system's default browser.
+/// Used by the frontend to open external links (e.g., HuggingFace model pages).
+#[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    open::that(&url).map_err(|e| format!("Failed to open URL: {}", e))
+}
+
+// =============================================================================
 // Menu State Synchronization Commands
 // =============================================================================
 
@@ -861,6 +872,7 @@ async fn main() {
             get_gui_api_port,
             check_llama_status,
             install_llama,
+            open_url,
             set_selected_model,
             sync_menu_state
         ])

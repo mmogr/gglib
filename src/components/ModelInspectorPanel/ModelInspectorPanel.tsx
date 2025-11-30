@@ -1,12 +1,14 @@
 import { FC, useState, useEffect } from 'react';
-import { GgufModel, ServeConfig, ServerInfo } from '../../types';
+import { GgufModel, ServeConfig, ServerInfo, HfModelSummary } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { useSettings } from '../../hooks/useSettings';
-import { formatParamCount } from '../../utils/format';
+import { formatParamCount, getHuggingFaceUrl, getHuggingFaceModelUrl } from '../../utils/format';
 import './ModelInspectorPanel.css';
 
 interface ModelInspectorPanelProps {
   model: GgufModel | null;
+  /** Selected HuggingFace model for preview (mutually exclusive with local model) */
+  selectedHfModel?: HfModelSummary | null;
   onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerInfo) => void;
   onStopServer: (modelId: number) => Promise<void>;
@@ -24,6 +26,7 @@ interface ModelInspectorPanelProps {
 
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   model,
+  selectedHfModel,
   onStartServer,
   onServerStarted,
   onStopServer,
@@ -226,6 +229,37 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const effectiveJinjaEnabled = jinjaOverride === null ? hasAgentTag : jinjaOverride;
   const isAutoJinja = jinjaOverride === null && hasAgentTag;
 
+  // If HuggingFace model is selected, show embedded HF page
+  if (selectedHfModel) {
+    const hfUrl = getHuggingFaceModelUrl(selectedHfModel.id);
+    
+    return (
+      <div className="mcc-panel inspector-panel hf-preview-panel">
+        <div className="mcc-panel-header hf-preview-header">
+          <h2 className="inspector-title hf-preview-title">
+            {selectedHfModel.name}
+            <button
+              className="hf-open-button"
+              onClick={() => TauriService.openUrl(hfUrl)}
+              title="Open on HuggingFace"
+              aria-label="Open on HuggingFace"
+            >
+              🤗
+            </button>
+          </h2>
+        </div>
+        <div className="hf-iframe-container">
+          <iframe
+            src={hfUrl}
+            className="hf-iframe"
+            title={`HuggingFace - ${selectedHfModel.name}`}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (!model) {
     return (
       <div className="mcc-panel inspector-panel">
@@ -318,8 +352,21 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               </div>
               {model.hf_repo_id && (
                 <div className="metadata-row">
-                  <span className="metadata-label">Repository:</span>
-                  <span className="metadata-value">{model.hf_repo_id}</span>
+                  <span className="metadata-label">HuggingFace:</span>
+                  <span className="metadata-value hf-link-container">
+                    <span className="hf-repo-id">{model.hf_repo_id}</span>
+                    <button
+                      className="hf-link-button"
+                      onClick={() => {
+                        const url = getHuggingFaceUrl(model.hf_repo_id);
+                        if (url) TauriService.openUrl(url);
+                      }}
+                      title="Open on HuggingFace"
+                      aria-label="Open on HuggingFace"
+                    >
+                      🤗
+                    </button>
+                  </span>
                 </div>
               )}
             </div>

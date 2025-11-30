@@ -5,7 +5,7 @@ import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel
 import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspectorPanel';
 import ChatPage from './ChatPage';
 import { TauriService } from '../services/tauri';
-import { ServerInfo } from '../types';
+import { ServerInfo, HfModelSummary } from '../types';
 import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
 import './ModelControlCenterPage.css';
@@ -46,6 +46,9 @@ export default function ModelControlCenterPage({
   
   // Sidebar tab state (for the new tabbed sidebar)
   const [sidebarTab, setSidebarTab] = useState<SidebarTabId>('models');
+  
+  // HuggingFace model selection state (for preview in inspector)
+  const [selectedHfModel, setSelectedHfModel] = useState<HfModelSummary | null>(null);
   
   // Chat session state - when set, shows ChatPage instead of model panels
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
@@ -191,6 +194,22 @@ export default function ModelControlCenterPage({
     await loadModels();
   };
 
+  // Handler for selecting a local model (clears HF selection)
+  const handleSelectLocalModel = (id: number | null) => {
+    selectModel(id);
+    if (id !== null) {
+      setSelectedHfModel(null); // Clear HF selection when selecting local model
+    }
+  };
+
+  // Handler for selecting an HF model for preview (clears local selection)
+  const handleSelectHfModel = (model: HfModelSummary | null) => {
+    setSelectedHfModel(model);
+    if (model !== null) {
+      selectModel(null); // Clear local model selection when selecting HF model
+    }
+  };
+
   // Handler for when server starts - opens chat view
   const handleServerStarted = async (serverInfo: ServerInfo) => {
     // Server started, open chat
@@ -235,7 +254,7 @@ export default function ModelControlCenterPage({
           <ModelLibraryPanel
             models={filteredModels}
             selectedModelId={selectedModelId}
-            onSelectModel={selectModel}
+            onSelectModel={handleSelectLocalModel}
             loading={loading}
             error={error}
             onRefresh={loadModels}
@@ -249,6 +268,8 @@ export default function ModelControlCenterPage({
             onModelDownloaded={handleModelDownloaded}
             activeSubTab={activeSubTab}
             onSubTabChange={setActiveSubTab}
+            onSelectHfModel={handleSelectHfModel}
+            selectedHfModelId={selectedHfModel?.id}
             activeTab={sidebarTab}
             onTabChange={setSidebarTab}
           />
@@ -262,6 +283,7 @@ export default function ModelControlCenterPage({
         <div className="grid-panel-container">
           <ModelInspectorPanel
             model={selectedModel}
+            selectedHfModel={selectedHfModel}
             onStartServer={loadServers}
             onServerStarted={handleServerStarted}
             onStopServer={stopServer}
