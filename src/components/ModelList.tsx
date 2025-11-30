@@ -206,7 +206,7 @@ const ModelList: FC<ModelListProps> = ({
                 Cancel
               </button>
               <button 
-                className="btn btn-primary" 
+                className={`btn btn-primary ${isServing ? 'btn-loading' : ''}`}
                 onClick={handleConfirmServe}
                 disabled={isServing}
               >

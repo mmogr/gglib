@@ -174,3 +174,30 @@
   width: 40px;
   height: 40px;
 }
+
+/* Loading State for Buttons */
+.btn-loading {
+  opacity: 0.9;
+  pointer-events: none;
+  cursor: wait;
+}
+
+/* Spinner inside buttons */
+.btn .spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.btn-primary .spinner {
+  border-color: rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+}
+
+.btn-secondary .spinner {
+  border-color: rgba(160, 160, 160, 0.3);
+  border-top-color: var(--color-text);
+}
