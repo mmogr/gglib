@@ -15,6 +15,7 @@ use crate::models::gui::{
     UpdateModelsDirectoryRequest, UpdateSettingsRequest,
 };
 use crate::services::core::DownloadQueueStatus;
+use crate::utils::system::SystemMemoryInfo;
 use axum::{
     Json,
     extract::{Path, State},
@@ -154,6 +155,12 @@ pub async fn update_settings(
         .await
         .map_err(|e| AppError::ServerError(e.to_string()))?;
     Ok(Json(ApiResponse::success(settings)))
+}
+
+/// Get system memory information for "Will it fit?" indicators
+pub async fn get_system_memory_info() -> Result<Json<ApiResponse<SystemMemoryInfo>>, AppError> {
+    let memory_info = crate::utils::system::get_system_memory_info();
+    Ok(Json(ApiResponse::success(memory_info)))
 }
 
 /// Add a model to the database

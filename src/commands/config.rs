@@ -119,6 +119,7 @@ async fn handle_settings(command: SettingsCommand) -> Result<()> {
                 proxy_port: proxy_port.map(Some),
                 server_port: server_port.map(Some),
                 max_download_queue_size: max_download_queue_size.map(Some),
+                show_memory_fit_indicators: None,
             };
 
             // Get current settings and apply updates for validation

@@ -315,6 +315,7 @@ impl GuiBackend {
             proxy_port: settings.proxy_port,
             server_port: settings.server_port,
             max_download_queue_size: settings.max_download_queue_size,
+            show_memory_fit_indicators: settings.show_memory_fit_indicators,
         })
     }
 
@@ -326,6 +327,7 @@ impl GuiBackend {
             proxy_port: request.proxy_port,
             server_port: request.server_port,
             max_download_queue_size: request.max_download_queue_size,
+            show_memory_fit_indicators: request.show_memory_fit_indicators,
         };
 
         let settings = self.core.settings().update(update).await?;
@@ -341,6 +343,7 @@ impl GuiBackend {
             proxy_port: settings.proxy_port,
             server_port: settings.server_port,
             max_download_queue_size: settings.max_download_queue_size,
+            show_memory_fit_indicators: settings.show_memory_fit_indicators,
         })
     }
 

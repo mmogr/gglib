@@ -27,6 +27,8 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
         // Application settings routes
         .route("/api/settings", get(handlers::get_settings))
         .route("/api/settings", put(handlers::update_settings))
+        // System info routes
+        .route("/api/system/memory", get(handlers::get_system_memory_info))
         // Model routes
         .route("/api/models", get(handlers::list_models))
         .route("/api/models", post(handlers::add_model))

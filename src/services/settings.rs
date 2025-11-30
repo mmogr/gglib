@@ -25,6 +25,9 @@ pub struct Settings {
 
     /// Maximum number of downloads that can be queued (1-50)
     pub max_download_queue_size: Option<u32>,
+
+    /// Whether to show memory fit indicators in HuggingFace browser
+    pub show_memory_fit_indicators: Option<bool>,
 }
 
 impl Default for Settings {
@@ -35,6 +38,7 @@ impl Default for Settings {
             proxy_port: Some(8080),
             server_port: Some(9000),
             max_download_queue_size: Some(10),
+            show_memory_fit_indicators: Some(true),
         }
     }
 }
@@ -68,13 +72,18 @@ pub async fn init_settings_table(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await;
 
+    // Migration: add show_memory_fit_indicators column if it doesn't exist
+    let _ = sqlx::query("ALTER TABLE settings ADD COLUMN show_memory_fit_indicators INTEGER")
+        .execute(pool)
+        .await;
+
     Ok(())
 }
 
 /// Get current settings from the database
 pub async fn get_settings(pool: &SqlitePool) -> Result<Settings> {
     let row = sqlx::query(
-        "SELECT default_download_path, default_context_size, proxy_port, server_port, max_download_queue_size 
+        "SELECT default_download_path, default_context_size, proxy_port, server_port, max_download_queue_size, show_memory_fit_indicators 
          FROM settings WHERE id = 1",
     )
     .fetch_optional(pool)
@@ -87,6 +96,7 @@ pub async fn get_settings(pool: &SqlitePool) -> Result<Settings> {
             let proxy_port: Option<i64> = row.try_get(2)?;
             let server_port: Option<i64> = row.try_get(3)?;
             let max_download_queue_size: Option<i64> = row.try_get(4)?;
+            let show_memory_fit_indicators: Option<i64> = row.try_get(5)?;
 
             Ok(Settings {
                 default_download_path,
@@ -94,6 +104,7 @@ pub async fn get_settings(pool: &SqlitePool) -> Result<Settings> {
                 proxy_port: proxy_port.map(|v| v as u16),
                 server_port: server_port.map(|v| v as u16),
                 max_download_queue_size: max_download_queue_size.map(|v| v as u32),
+                show_memory_fit_indicators: show_memory_fit_indicators.map(|v| v != 0),
             })
         }
         None => {
@@ -115,6 +126,7 @@ pub async fn save_settings(pool: &SqlitePool, settings: &Settings) -> Result<()>
             proxy_port = ?,
             server_port = ?,
             max_download_queue_size = ?,
+            show_memory_fit_indicators = ?,
             updated_at = ?
          WHERE id = 1",
     )
@@ -123,6 +135,11 @@ pub async fn save_settings(pool: &SqlitePool, settings: &Settings) -> Result<()>
     .bind(settings.proxy_port.map(|v| v as i64))
     .bind(settings.server_port.map(|v| v as i64))
     .bind(settings.max_download_queue_size.map(|v| v as i64))
+    .bind(
+        settings
+            .show_memory_fit_indicators
+            .map(|v| if v { 1i64 } else { 0i64 }),
+    )
     .bind(&updated_at)
     .execute(pool)
     .await?
@@ -131,14 +148,15 @@ pub async fn save_settings(pool: &SqlitePool, settings: &Settings) -> Result<()>
     // If no rows were updated, insert a new row
     if rows_affected == 0 {
         sqlx::query(
-            "INSERT INTO settings (id, default_download_path, default_context_size, proxy_port, server_port, max_download_queue_size, updated_at)
-             VALUES (1, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO settings (id, default_download_path, default_context_size, proxy_port, server_port, max_download_queue_size, show_memory_fit_indicators, updated_at)
+             VALUES (1, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&settings.default_download_path)
         .bind(settings.default_context_size.map(|v| v as i64))
         .bind(settings.proxy_port.map(|v| v as i64))
         .bind(settings.server_port.map(|v| v as i64))
         .bind(settings.max_download_queue_size.map(|v| v as i64))
+        .bind(settings.show_memory_fit_indicators.map(|v| if v { 1i64 } else { 0i64 }))
         .bind(&updated_at)
         .execute(pool)
         .await?;
@@ -155,6 +173,7 @@ pub struct SettingsUpdate {
     pub proxy_port: Option<Option<u16>>,
     pub server_port: Option<Option<u16>>,
     pub max_download_queue_size: Option<Option<u32>>,
+    pub show_memory_fit_indicators: Option<Option<bool>>,
 }
 
 /// Update settings with partial changes
@@ -175,6 +194,9 @@ pub async fn update_settings(pool: &SqlitePool, update: SettingsUpdate) -> Resul
     }
     if let Some(queue_size) = update.max_download_queue_size {
         current.max_download_queue_size = queue_size;
+    }
+    if let Some(show_fit) = update.show_memory_fit_indicators {
+        current.show_memory_fit_indicators = show_fit;
     }
 
     save_settings(pool, &current).await?;
@@ -245,6 +267,7 @@ mod tests {
         assert_eq!(settings.server_port, Some(9000));
         assert_eq!(settings.default_download_path, None);
         assert_eq!(settings.max_download_queue_size, Some(10));
+        assert_eq!(settings.show_memory_fit_indicators, Some(true));
     }
 
     #[test]
@@ -302,6 +325,7 @@ mod tests {
             proxy_port: Some(8081),
             server_port: Some(9001),
             max_download_queue_size: Some(10),
+            show_memory_fit_indicators: Some(false),
         };
         save_settings(&pool, &settings).await.unwrap();
 
@@ -314,6 +338,7 @@ mod tests {
         assert_eq!(retrieved.default_context_size, Some(8192));
         assert_eq!(retrieved.proxy_port, Some(8081));
         assert_eq!(retrieved.server_port, Some(9001));
+        assert_eq!(retrieved.show_memory_fit_indicators, Some(false));
     }
 
     #[tokio::test]
@@ -332,6 +357,7 @@ mod tests {
             proxy_port: None,
             server_port: None,
             max_download_queue_size: None,
+            show_memory_fit_indicators: None,
         };
         let updated = update_settings(&pool, update).await.unwrap();
 
@@ -339,6 +365,7 @@ mod tests {
         assert_eq!(updated.proxy_port, Some(8080)); // Unchanged
         assert_eq!(updated.server_port, Some(9000)); // Unchanged
         assert_eq!(updated.max_download_queue_size, Some(10)); // Unchanged
+        assert_eq!(updated.show_memory_fit_indicators, Some(true)); // Unchanged
     }
 
     #[test]

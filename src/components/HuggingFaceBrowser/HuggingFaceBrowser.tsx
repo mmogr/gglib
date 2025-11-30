@@ -7,8 +7,11 @@ import {
   HfQuantization,
   HfQuantizationsResponse,
   HfSortField,
+  FitStatus,
 } from "../../types";
 import { useDownloadProgress } from "../../hooks/useDownloadProgress";
+import { useSystemMemory } from "../../hooks/useSystemMemory";
+import { useSettings } from "../../hooks/useSettings";
 import { DownloadProgressDisplay } from "../DownloadProgressDisplay";
 import { formatBytes, formatNumber } from "../../utils/format";
 import styles from "./HuggingFaceBrowser.module.css";
@@ -35,6 +38,36 @@ const SORT_OPTIONS: SortOption[] = [
   { value: "id", label: "Alphabetical", defaultAscending: true },
 ];
 
+// Fit indicator component for "Will it fit?" memory check
+interface FitIndicatorProps {
+  sizeBytes: number;
+  checkFit: (sizeBytes: number) => FitStatus;
+  getTooltip: (sizeBytes: number) => string;
+}
+
+const FitIndicator: FC<FitIndicatorProps> = ({ sizeBytes, checkFit, getTooltip }) => {
+  const status = checkFit(sizeBytes);
+  const tooltip = getTooltip(sizeBytes);
+
+  const iconMap: Record<FitStatus, { icon: string; className: string }> = {
+    fits: { icon: "✅", className: styles.fitIndicatorFits },
+    tight: { icon: "⚠️", className: styles.fitIndicatorTight },
+    wont_fit: { icon: "❌", className: styles.fitIndicatorWontFit },
+  };
+
+  const { icon, className } = iconMap[status];
+
+  return (
+    <span 
+      className={`${styles.fitIndicator} ${className}`}
+      title={tooltip}
+      aria-label={tooltip}
+    >
+      {icon}
+    </span>
+  );
+};
+
 // Debounce helper
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -60,9 +93,23 @@ interface ModelCardProps {
   downloadsDisabled: boolean;
   /** Tooltip text when downloads are disabled */
   disabledReason?: string;
+  /** Whether to show memory fit indicators */
+  showFitIndicators: boolean;
+  /** Check fit status for a given file size */
+  checkFit: (sizeBytes: number) => FitStatus;
+  /** Get tooltip text for a given file size */
+  getTooltip: (sizeBytes: number) => string;
 }
 
-const ModelCard: FC<ModelCardProps> = ({ model, onDownload, downloadsDisabled, disabledReason }) => {
+const ModelCard: FC<ModelCardProps> = ({ 
+  model, 
+  onDownload, 
+  downloadsDisabled, 
+  disabledReason,
+  showFitIndicators,
+  checkFit,
+  getTooltip,
+}) => {
   const [expanded, setExpanded] = useState(false);
   const [quantizations, setQuantizations] = useState<HfQuantization[]>([]);
   const [loadingQuants, setLoadingQuants] = useState(false);
@@ -162,17 +209,26 @@ const ModelCard: FC<ModelCardProps> = ({ model, onDownload, downloadsDisabled, d
                       {formatBytes(quant.size_bytes)}
                     </span>
                   </div>
-                  <button
-                    className={styles.downloadBtn}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownload(quant);
-                    }}
-                    disabled={downloadsDisabled}
-                    title={downloadsDisabled ? disabledReason : "Add to download queue"}
-                  >
-                    Download
-                  </button>
+                  <div className={styles.quantActions}>
+                    {showFitIndicators && (
+                      <FitIndicator
+                        sizeBytes={quant.size_bytes}
+                        checkFit={checkFit}
+                        getTooltip={getTooltip}
+                      />
+                    )}
+                    <button
+                      className={styles.downloadBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(quant);
+                      }}
+                      disabled={downloadsDisabled}
+                      title={downloadsDisabled ? disabledReason : "Add to download queue"}
+                    >
+                      Download
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -211,6 +267,11 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
       onDownloadCompleted?.();
     },
   });
+
+  // System memory and settings for "Will it fit?" indicators
+  const { checkFit, getTooltip } = useSystemMemory();
+  const { settings } = useSettings();
+  const showFitIndicators = settings?.show_memory_fit_indicators !== false;
 
   // Debounced search
   const debouncedQuery = useDebounce(searchQuery, 300);
@@ -499,6 +560,9 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
                 onDownload={handleDownload}
                 downloadsDisabled={isQueueFull}
                 disabledReason={disabledReason}
+                showFitIndicators={showFitIndicators}
+                checkFit={checkFit}
+                getTooltip={getTooltip}
               />
             ))}
 
