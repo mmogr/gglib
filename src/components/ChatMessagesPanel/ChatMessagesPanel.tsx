@@ -15,6 +15,8 @@ import {
 } from '@assistant-ui/react';
 import type { ThreadMessage, ThreadMessageLike } from '@assistant-ui/react';
 import { ChatService, ConversationSummary, ChatMessageDto } from '../../services/chat';
+import { parseThinkingContent } from '../../utils/thinkingParser';
+import ThinkingBlock from './ThinkingBlock';
 import './ChatMessagesPanel.css';
 
 const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
@@ -41,9 +43,9 @@ const extractMessageText = (message: ThreadMessage): string => {
 };
 
 // Markdown rendering component
-const MarkdownMessageContent: React.FC = () => {
+const MarkdownMessageContent: React.FC<{ text?: string }> = ({ text: propText }) => {
   const message = useMessage();
-  const text = extractMessageText(message);
+  const text = propText ?? extractMessageText(message);
 
   const components: Partial<Components> = {
     table: ({ children }) => (
@@ -94,6 +96,14 @@ const AssistantMessageBubble: React.FC = () => {
     minute: '2-digit',
   }).format(message.createdAt ?? new Date());
 
+  // Extract and parse thinking content from message
+  const rawText = extractMessageText(message);
+  const parsed = parseThinkingContent(rawText);
+  const isStreaming = message.status?.type === 'running';
+  
+  // Determine if we're currently in the thinking phase (streaming with only thinking, no main content yet)
+  const isCurrentlyThinking = isStreaming && !!parsed.thinking && !parsed.content.trim();
+
   return (
     <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-assistant-message')}>
       <div className="chat-message-meta">
@@ -104,7 +114,19 @@ const AssistantMessageBubble: React.FC = () => {
         </div>
       </div>
       <div className="chat-message-content">
-        <MarkdownMessageContent />
+        {parsed.thinking && (
+          <ThinkingBlock
+            thinking={parsed.thinking}
+            durationSeconds={parsed.durationSeconds}
+            isStreaming={isCurrentlyThinking}
+          />
+        )}
+        {parsed.content && (
+          <MarkdownMessageContent text={parsed.content} />
+        )}
+        {!parsed.thinking && !parsed.content && isStreaming && (
+          <span className="chat-streaming-placeholder">…</span>
+        )}
       </div>
       <ActionBarPrimitive.Root className="chat-message-actions">
         <ActionBarPrimitive.Copy />
