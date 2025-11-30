@@ -502,7 +502,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                 Cancel
               </button>
               <button
-                className="btn btn-primary"
+                className={`btn btn-primary ${isServing ? 'btn-loading' : ''}`}
                 onClick={handleStartServer}
                 disabled={isServing}
               >

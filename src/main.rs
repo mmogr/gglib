@@ -182,55 +182,78 @@ async fn run_command(command: cli::Commands) -> Result<()> {
                     .args(["run", "tauri:dev"])
                     .status()?;
             } else {
-                // Get the repository root to resolve GUI binary paths correctly
-                let repo_root = gglib::utils::paths::get_resource_root()?;
+                // Try multiple locations for the GUI binary:
+                // 1. The compile-time repo root (for development builds)
+                // 2. The runtime resource root (for installed binaries)
+                let compile_time_repo = std::path::PathBuf::from(env!("GGLIB_REPO_ROOT"));
+                let runtime_root = gglib::utils::paths::get_resource_root()?;
 
-                // Try multiple possible binary locations (bundled vs unbundled)
-                let binary_path = {
+                // Helper to find binary in a given root
+                let find_binary = |root: &std::path::Path| -> Option<std::path::PathBuf> {
                     #[cfg(target_os = "macos")]
                     {
-                        let bundled = repo_root.join(
+                        let bundled = root.join(
                             "src-tauri/target/release/bundle/macos/GGLib GUI.app/Contents/MacOS/gglib-gui",
                         );
-                        let unbundled = repo_root.join("src-tauri/target/release/gglib-gui");
-                        if bundled.exists() { bundled } else { unbundled }
+                        let unbundled = root.join("src-tauri/target/release/gglib-gui");
+                        if bundled.exists() {
+                            Some(bundled)
+                        } else if unbundled.exists() {
+                            Some(unbundled)
+                        } else {
+                            None
+                        }
                     }
                     #[cfg(target_os = "linux")]
                     {
-                        let appimage = repo_root
+                        let appimage = root
                             .join("src-tauri/target/release/bundle/appimage/gglib-gui.AppImage");
-                        let deb_binary = repo_root.join("src-tauri/target/release/gglib-gui");
+                        let deb_binary = root.join("src-tauri/target/release/gglib-gui");
                         if appimage.exists() {
-                            appimage
+                            Some(appimage)
+                        } else if deb_binary.exists() {
+                            Some(deb_binary)
                         } else {
-                            deb_binary
+                            None
                         }
                     }
                     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
                     {
-                        repo_root.join("src-tauri/target/release/gglib-gui")
+                        let binary = root.join("src-tauri/target/release/gglib-gui.exe");
+                        if binary.exists() { Some(binary) } else { None }
                     }
                 };
 
-                if !binary_path.exists() {
-                    eprintln!(
-                        "Error: Desktop GUI binary not found at {}",
-                        binary_path.display()
-                    );
-                    eprintln!();
-                    eprintln!("The Tauri desktop app needs to be built first.");
-                    eprintln!();
-                    eprintln!("Build the desktop GUI:");
-                    eprintln!("  make build-tauri");
-                    eprintln!();
-                    eprintln!("Or use the web GUI instead:");
-                    eprintln!("  gglib web");
-                    eprintln!("  # Then open http://localhost:9887 in your browser");
-                    std::process::exit(1);
+                // Try compile-time repo first, then runtime root
+                let binary_path =
+                    find_binary(&compile_time_repo).or_else(|| find_binary(&runtime_root));
+
+                match binary_path {
+                    Some(path) => {
+                        println!("Launching Tauri GUI from {}...", path.display());
+                        let canonical_binary_path = std::fs::canonicalize(&path)?;
+                        std::process::Command::new(canonical_binary_path).spawn()?;
+                    }
+                    None => {
+                        eprintln!("Error: Desktop GUI binary not found.");
+                        eprintln!();
+                        eprintln!("Searched in:");
+                        eprintln!("  - {}", compile_time_repo.display());
+                        if runtime_root != compile_time_repo {
+                            eprintln!("  - {}", runtime_root.display());
+                        }
+                        eprintln!();
+                        eprintln!("The Tauri desktop app needs to be built first.");
+                        eprintln!();
+                        eprintln!("Build the desktop GUI:");
+                        eprintln!("  cd {} && make build-tauri", compile_time_repo.display());
+                        eprintln!();
+                        eprintln!("Or use the web GUI instead:");
+                        eprintln!("  gglib web");
+                        eprintln!("  # Then open http://localhost:9887 in your browser");
+                        std::process::exit(1);
+                    }
                 }
-                println!("Launching Tauri GUI from {}...", binary_path.display());
-                let canonical_binary_path = std::fs::canonicalize(&binary_path)?;
-                std::process::Command::new(canonical_binary_path).spawn()?;
             }
             Ok(())
         }
