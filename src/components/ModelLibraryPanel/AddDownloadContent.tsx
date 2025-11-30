@@ -63,7 +63,10 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
 
       <div className="add-download-panel">
         {activeSubTab === 'browse' && (
-          <HuggingFaceBrowser onDownloadStarted={handleModelDownloaded} />
+          <HuggingFaceBrowser 
+            onDownloadStarted={handleModelDownloaded} 
+            onDownloadCompleted={handleModelDownloaded} 
+          />
         )}
         {activeSubTab === 'download' && (
           <DownloadModel onModelDownloaded={handleModelDownloaded} />
