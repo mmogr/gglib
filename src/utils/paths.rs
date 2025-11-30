@@ -133,27 +133,43 @@ fn detect_local_repo() -> Option<PathBuf> {
 
     #[cfg(not(debug_assertions))]
     {
-        // In release mode, only use repo if:
-        // 1. The repo path exists and looks like a repo
-        // 2. The current executable is actually inside that repo
-        //
-        // This second check is critical for bundled apps (e.g., macOS .app bundles)
-        // which are compiled with GGLIB_REPO_ROOT pointing to the build machine's
-        // repo path, but run from /Applications or similar locations.
-        if repo_root.exists()
-            && (repo_root.join(".git").exists() || repo_root.join("Cargo.toml").exists())
+        // In release mode, check if this binary was built from a local repo.
+        // We use multiple strategies to detect this:
+
+        // First, verify the repo path exists and looks like a valid gglib repo
+        if !repo_root.exists()
+            || (!repo_root.join(".git").exists() && !repo_root.join("Cargo.toml").exists())
         {
-            // Verify the executable is inside the repo (not a bundled/installed binary)
-            if let Ok(exe_path) = env::current_exe() {
-                if let Ok(canonical_exe) = exe_path.canonicalize() {
-                    if let Ok(canonical_repo) = repo_root.canonicalize() {
-                        if canonical_exe.starts_with(&canonical_repo) {
-                            return Some(repo_root);
-                        }
+            return None;
+        }
+
+        // Strategy 1: Check for the .gglib_repo_path marker file created by build.rs
+        // This file is written at compile time and contains the repo path.
+        // If it exists and matches GGLIB_REPO_ROOT, this binary was built from this repo.
+        let marker_file = repo_root.join("data").join(".gglib_repo_path");
+        if marker_file.exists() {
+            if let Ok(contents) = fs::read_to_string(&marker_file) {
+                let marker_path = contents.trim();
+                // Verify the marker matches the compile-time repo root
+                if marker_path == repo_root.to_string_lossy() {
+                    return Some(repo_root);
+                }
+            }
+        }
+
+        // Strategy 2 (fallback): Check if executable is inside the repo
+        // This handles cases where the marker file might be missing but
+        // we're running directly from target/release/
+        if let Ok(exe_path) = env::current_exe() {
+            if let Ok(canonical_exe) = exe_path.canonicalize() {
+                if let Ok(canonical_repo) = repo_root.canonicalize() {
+                    if canonical_exe.starts_with(&canonical_repo) {
+                        return Some(repo_root);
                     }
                 }
             }
         }
+
         None
     }
 }
