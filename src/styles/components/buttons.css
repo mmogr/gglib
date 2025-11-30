@@ -176,8 +176,10 @@
 }
 
 /* Loading State for Buttons */
-.btn-loading {
-  opacity: 0.9;
+/* Use higher specificity to override .btn:disabled opacity */
+.btn.btn-loading,
+.btn.btn-loading:disabled {
+  opacity: 1;
   pointer-events: none;
   cursor: wait;
 }
