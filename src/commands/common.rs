@@ -3,7 +3,9 @@
 //! This module hosts reusable utilities for building llama.cpp
 //! invocations so that multiple commands can stay DRY.
 
+use std::collections::HashMap;
 use anyhow::{Result, anyhow};
+use crate::utils::gguf_parser;
 
 /// Indicates how the Jinja flag was resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +132,8 @@ pub enum ReasoningFormatSource {
     Explicit,
     /// Auto-enabled because the model has a "reasoning" tag.
     ReasoningTag,
+    /// Auto-enabled because GGUF metadata indicates reasoning support.
+    MetadataDetection,
     /// Not enabled (default).
     Default,
 }
@@ -150,9 +154,11 @@ pub struct ReasoningFormatResolution {
 /// extracted to a separate `reasoning_content` field in the response. This requires
 /// the `--reasoning-format` flag to be passed to llama-server.
 ///
-/// Auto-detection:
-/// - If the model has a "reasoning" tag, uses "deepseek" format (extracts to reasoning_content)
-/// - Otherwise, no reasoning format is passed (default llama-server behavior)
+/// Resolution order:
+/// 1. Explicit value from user (highest priority)
+/// 2. Model has "reasoning" tag
+/// 3. GGUF metadata indicates reasoning support (chat template contains <think> etc.)
+/// 4. Default: no reasoning format
 ///
 /// Explicit values:
 /// - "none": Don't extract, keep thinking in content as <think>...</think> tags
@@ -162,35 +168,57 @@ pub fn resolve_reasoning_format(
     explicit: Option<String>,
     tags: &[String],
 ) -> ReasoningFormatResolution {
-    match explicit {
-        Some(format) => {
-            let format_lower = format.to_lowercase();
-            if format_lower == "none" || format_lower == "deepseek" || format_lower == "deepseek-legacy" {
-                ReasoningFormatResolution {
-                    format: Some(format_lower),
-                    source: ReasoningFormatSource::Explicit,
-                }
-            } else {
-                // Invalid format, fall back to default
-                ReasoningFormatResolution {
-                    format: None,
-                    source: ReasoningFormatSource::Default,
-                }
-            }
+    resolve_reasoning_format_with_metadata(explicit, tags, None)
+}
+
+/// Extended version of resolve_reasoning_format that also checks GGUF metadata.
+///
+/// This is the comprehensive resolver that checks:
+/// 1. Explicit user setting
+/// 2. "reasoning" tag on the model
+/// 3. GGUF metadata (chat_template containing <think> patterns)
+///
+/// Use this when you have access to the model's metadata HashMap.
+pub fn resolve_reasoning_format_with_metadata(
+    explicit: Option<String>,
+    tags: &[String],
+    metadata: Option<&HashMap<String, String>>,
+) -> ReasoningFormatResolution {
+    // 1. Check explicit setting first
+    if let Some(format) = explicit {
+        let format_lower = format.to_lowercase();
+        if format_lower == "none" || format_lower == "deepseek" || format_lower == "deepseek-legacy" {
+            return ReasoningFormatResolution {
+                format: Some(format_lower),
+                source: ReasoningFormatSource::Explicit,
+            };
         }
-        None => {
-            if tags.iter().any(|tag| tag.eq_ignore_ascii_case("reasoning")) {
-                ReasoningFormatResolution {
-                    format: Some("deepseek".to_string()),
-                    source: ReasoningFormatSource::ReasoningTag,
-                }
-            } else {
-                ReasoningFormatResolution {
-                    format: None,
-                    source: ReasoningFormatSource::Default,
-                }
-            }
+        // Invalid format, continue to other checks
+    }
+
+    // 2. Check for "reasoning" tag
+    if tags.iter().any(|tag| tag.eq_ignore_ascii_case("reasoning")) {
+        return ReasoningFormatResolution {
+            format: Some("deepseek".to_string()),
+            source: ReasoningFormatSource::ReasoningTag,
+        };
+    }
+
+    // 3. Check GGUF metadata for reasoning patterns
+    if let Some(meta) = metadata {
+        let detection = gguf_parser::detect_reasoning_support(meta);
+        if detection.supports_reasoning {
+            return ReasoningFormatResolution {
+                format: detection.suggested_format,
+                source: ReasoningFormatSource::MetadataDetection,
+            };
         }
+    }
+
+    // 4. Default: no reasoning format
+    ReasoningFormatResolution {
+        format: None,
+        source: ReasoningFormatSource::Default,
     }
 }
 
@@ -284,9 +312,51 @@ mod tests {
     }
 
     #[test]
-    fn reasoning_rejects_invalid_format() {
-        let result = resolve_reasoning_format(Some("invalid".to_string()), &[]);
-        assert_eq!(result.format, None);
-        assert_eq!(result.source, ReasoningFormatSource::Default);
+    fn reasoning_from_metadata_detection() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "{% if message.role == 'assistant' %}<think>...</think>{% endif %}".to_string(),
+        );
+        
+        let result = resolve_reasoning_format_with_metadata(None, &[], Some(&metadata));
+        assert_eq!(result.format, Some("deepseek".to_string()));
+        assert_eq!(result.source, ReasoningFormatSource::MetadataDetection);
+    }
+
+    #[test]
+    fn explicit_overrides_metadata_detection() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<think>...</think>".to_string(),
+        );
+        
+        // Explicit "none" should override metadata detection
+        let result = resolve_reasoning_format_with_metadata(
+            Some("none".to_string()),
+            &[],
+            Some(&metadata)
+        );
+        assert_eq!(result.format, Some("none".to_string()));
+        assert_eq!(result.source, ReasoningFormatSource::Explicit);
+    }
+
+    #[test]
+    fn tag_overrides_metadata_detection() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<think>...</think>".to_string(),
+        );
+        
+        // Tag should take precedence over metadata (both should result in deepseek anyway)
+        let result = resolve_reasoning_format_with_metadata(
+            None,
+            &["reasoning".to_string()],
+            Some(&metadata)
+        );
+        assert_eq!(result.format, Some("deepseek".to_string()));
+        assert_eq!(result.source, ReasoningFormatSource::ReasoningTag);
     }
 }

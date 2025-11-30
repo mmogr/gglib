@@ -8,7 +8,7 @@
 //!
 //! This replaces the old MultiManager and ModelManager with a cleaner, unified API.
 
-use crate::commands::common::{resolve_jinja_flag, resolve_reasoning_format};
+use crate::commands::common::{resolve_jinja_flag, resolve_reasoning_format_with_metadata};
 use crate::models::Gguf;
 use crate::services::database;
 use crate::utils::process::{ProcessCore, ServerInfo, check_process_health, wait_for_http_health};
@@ -231,7 +231,12 @@ impl ProcessManager {
 
         // Start the new model
         let jinja_resolution = resolve_jinja_flag(None, &model.tags);
-        let reasoning_resolution = resolve_reasoning_format(None, &model.tags);
+        // Use metadata-aware reasoning format resolution for auto-detection
+        let reasoning_resolution = resolve_reasoning_format_with_metadata(
+            None,
+            &model.tags,
+            Some(&model.metadata),
+        );
 
         let port = self
             .start_model_single_swap(

@@ -7,7 +7,7 @@
 use crate::{
     models,
     services::{AppCore, database},
-    utils::{input, validation},
+    utils::{input, validation, gguf_parser},
 };
 use anyhow::Result;
 
@@ -99,6 +99,23 @@ pub async fn handle_add(file_path: String) -> Result<()> {
         input::prompt_float("Parameter count (in billions)")?
     };
 
+    // Auto-detect reasoning model support from metadata
+    let reasoning_detection = gguf_parser::detect_reasoning_support(&gguf_metadata.metadata);
+    let mut auto_tags = Vec::new();
+
+    if reasoning_detection.supports_reasoning {
+        println!("\n🧠 Detected reasoning model capabilities:");
+        println!("  Confidence: {:.0}%", reasoning_detection.confidence * 100.0);
+        if !reasoning_detection.matched_patterns.is_empty() {
+            println!("  Matched patterns: {}", reasoning_detection.matched_patterns.join(", "));
+        }
+        if let Some(ref format) = reasoning_detection.suggested_format {
+            println!("  Suggested format: --reasoning-format {}", format);
+        }
+        println!("  → Auto-adding 'reasoning' tag for optimal llama-server configuration");
+        auto_tags.push("reasoning".to_string());
+    }
+
     // Create the model instance with extracted and user-provided metadata
     let new_model: models::Gguf = models::Gguf {
         id: None, // Will be set by the database
@@ -115,7 +132,7 @@ pub async fn handle_add(file_path: String) -> Result<()> {
         hf_filename: None,
         download_date: None,
         last_update_check: None,
-        tags: Vec::new(),
+        tags: auto_tags,
     };
 
     // Display clean summary instead of debug dump

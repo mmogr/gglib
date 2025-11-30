@@ -4,6 +4,12 @@
  * Reasoning models output a "thinking" phase that llama-server extracts
  * to `reasoning_content` field. For persistence and display, thinking
  * content is stored as `<think>...</think>` tags embedded in the message.
+ * 
+ * Supports multiple tag formats used by different models:
+ * - `<think>...</think>` - DeepSeek R1, Qwen3, most reasoning models
+ * - `<reasoning>...</reasoning>` - Alternative format
+ * - `<seed:think>...</seed:think>` - Seed-OSS models
+ * - `<|START_THINKING|>...<|END_THINKING|>` - Command-R7B style
  */
 
 export interface ParsedThinkingContent {
@@ -16,11 +22,41 @@ export interface ParsedThinkingContent {
 }
 
 /**
- * Parse thinking content from a message that may contain `<think>...</think>` tags.
+ * Normalize different thinking tag formats to standard `<think>` format.
+ * This allows consistent handling regardless of which model format is used.
  * 
- * Supports formats:
- * - `<think>...</think>` - Standard format used by most models
- * - `<think duration="X.X">...</think>` - With duration metadata
+ * @param text - Text that may contain various thinking tag formats
+ * @returns Text with normalized `<think>` tags
+ */
+export function normalizeThinkingTags(text: string): string {
+  if (!text) return text;
+  
+  let normalized = text;
+  
+  // Normalize <seed:think> to <think>
+  normalized = normalized.replace(/<seed:think>/gi, '<think>');
+  normalized = normalized.replace(/<\/seed:think>/gi, '</think>');
+  
+  // Normalize <|START_THINKING|> to <think>
+  normalized = normalized.replace(/<\|START_THINKING\|>/gi, '<think>');
+  normalized = normalized.replace(/<\|END_THINKING\|>/gi, '</think>');
+  
+  // Normalize <reasoning> to <think>
+  normalized = normalized.replace(/<reasoning>/gi, '<think>');
+  normalized = normalized.replace(/<\/reasoning>/gi, '</think>');
+  
+  return normalized;
+}
+
+/**
+ * Parse thinking content from a message that may contain thinking tags.
+ * 
+ * Supports multiple formats:
+ * - `<think>...</think>` - Standard format (DeepSeek R1, Qwen3, most models)
+ * - `<reasoning>...</reasoning>` - Alternative format
+ * - `<seed:think>...</seed:think>` - Seed-OSS models
+ * - `<|START_THINKING|>...<|END_THINKING|>` - Command-R7B style
+ * - `<think duration="X.X">...</think>` - With duration metadata (normalized output)
  * 
  * @param text - The full message text that may contain thinking tags
  * @returns Parsed thinking content and main content
@@ -30,10 +66,13 @@ export function parseThinkingContent(text: string): ParsedThinkingContent {
     return { thinking: null, content: '', durationSeconds: null };
   }
 
+  // Normalize tags first for consistent parsing
+  const normalized = normalizeThinkingTags(text);
+
   // Match <think> tags with optional duration attribute
   // Supports: <think>...</think> or <think duration="5.2">...</think>
   const thinkingRegex = /^<think(?:\s+duration="([\d.]+)")?\s*>([\s\S]*?)<\/think>\s*/;
-  const match = text.match(thinkingRegex);
+  const match = normalized.match(thinkingRegex);
 
   if (!match) {
     return { thinking: null, content: text, durationSeconds: null };
@@ -41,7 +80,7 @@ export function parseThinkingContent(text: string): ParsedThinkingContent {
 
   const durationStr = match[1];
   const thinkingContent = match[2]?.trim() || null;
-  const remainingContent = text.slice(match[0].length);
+  const remainingContent = normalized.slice(match[0].length);
   const durationSeconds = durationStr ? parseFloat(durationStr) : null;
 
   return {
@@ -53,6 +92,7 @@ export function parseThinkingContent(text: string): ParsedThinkingContent {
 
 /**
  * Embed thinking content into a message using `<think>` tags.
+ * Always uses standard `<think>` format for consistency.
  * 
  * @param thinking - The thinking content to embed
  * @param content - The main content
@@ -78,18 +118,27 @@ export function embedThinkingContent(
 /**
  * Check if content appears to contain thinking tags (for streaming detection).
  * This is a lightweight check for UI purposes.
+ * Checks for all known thinking tag formats.
  * 
  * @param text - Text to check
  * @returns True if the text starts with a thinking tag
  */
 export function hasThinkingContent(text: string): boolean {
-  return text.trimStart().startsWith('<think');
+  const trimmed = text.trimStart().toLowerCase();
+  return (
+    trimmed.startsWith('<think') ||
+    trimmed.startsWith('<reasoning') ||
+    trimmed.startsWith('<seed:think') ||
+    trimmed.startsWith('<|start_thinking|')
+  );
 }
 
 /**
  * Extract thinking content from streaming text that may have incomplete tags.
- * Used during streaming when we receive content with inline `<think>` tags
+ * Used during streaming when we receive content with inline thinking tags
  * (e.g., when server uses `--reasoning-format none`).
+ * 
+ * Supports all known thinking tag formats by normalizing first.
  * 
  * @param text - Streaming text that may contain partial thinking tags
  * @returns Object with extracted thinking, remaining content, and whether thinking is complete
@@ -99,7 +148,9 @@ export function parseStreamingThinkingContent(text: string): {
   content: string;
   isThinkingComplete: boolean;
 } {
-  const trimmed = text.trimStart();
+  // Normalize tags for consistent parsing
+  const normalized = normalizeThinkingTags(text);
+  const trimmed = normalized.trimStart();
   
   // Check if we have a complete thinking block
   const completeMatch = trimmed.match(/^<think(?:\s+[^>]*)?>([\s\S]*?)<\/think>\s*([\s\S]*)$/);
