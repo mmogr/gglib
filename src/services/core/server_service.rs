@@ -8,7 +8,9 @@
 //! process with inherited stdio, which is a different use case and doesn't
 //! use this service.
 
-use crate::commands::common::{JinjaResolutionSource, resolve_jinja_flag};
+use crate::commands::common::{
+    JinjaResolutionSource, ReasoningFormatSource, resolve_jinja_flag, resolve_reasoning_format,
+};
 use crate::models::gui::StartServerResponse;
 use crate::services::core::ModelService;
 use crate::services::process_manager::ProcessManager;
@@ -27,6 +29,9 @@ pub struct StartServerConfig {
     pub context_length: Option<u64>,
     /// Optional explicit jinja flag (None = auto-detect from tags)
     pub jinja: Option<bool>,
+    /// Optional explicit reasoning format (None = auto-detect from tags)
+    /// Valid values: "none", "deepseek", "deepseek-legacy"
+    pub reasoning_format: Option<String>,
 }
 
 /// Service for managing background llama-server instances.
@@ -145,6 +150,21 @@ impl ServerService {
             _ => {}
         }
 
+        // Resolve reasoning format
+        let reasoning_resolution = resolve_reasoning_format(config.reasoning_format, &model.tags);
+        match (
+            reasoning_resolution.format.as_ref(),
+            reasoning_resolution.source,
+        ) {
+            (Some(format), ReasoningFormatSource::Explicit) => {
+                debug!(format = %format, "Enabling reasoning format (user override)");
+            }
+            (Some(format), ReasoningFormatSource::ReasoningTag) => {
+                debug!(format = %format, "Enabling reasoning format due to 'reasoning' tag");
+            }
+            _ => {}
+        }
+
         debug!("Calling ProcessManager.start_server");
 
         // Start the server
@@ -156,6 +176,7 @@ impl ServerService {
                 &model.file_path.to_string_lossy(),
                 context_length,
                 jinja_resolution.enabled,
+                reasoning_resolution.format,
             )
             .await?;
 

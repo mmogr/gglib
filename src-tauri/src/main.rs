@@ -137,6 +137,7 @@ async fn serve_model(
         port,
         mlock,
         jinja,
+        reasoning_format: None, // Auto-detect from model tags
     };
 
     let result = state

@@ -192,6 +192,7 @@ impl AppCore {
     ///     model_id: 1,
     ///     context_length: Some(4096),
     ///     jinja: None,
+    ///     reasoning_format: None,
     /// }).await?;
     /// println!("Server running on port {}", result.port);
     ///

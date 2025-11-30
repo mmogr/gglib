@@ -577,3 +577,346 @@ fn read_f64<R: Read>(reader: &mut R) -> Result<f64> {
     reader.read_exact(&mut buf)?;
     Ok(f64::from_le_bytes(buf))
 }
+
+/// Known thinking/reasoning tag patterns used by various models.
+/// These are checked against the chat template to detect reasoning model support.
+const THINKING_TAG_PATTERNS: &[&str] = &[
+    // Standard patterns (DeepSeek R1, Qwen3, most reasoning models)
+    "<think>",
+    "<think ",
+    "</think>",
+    // Alternative tag names
+    "<reasoning>",
+    "</reasoning>",
+    // Seed-OSS models
+    "<seed:think>",
+    "</seed:think>",
+    // Command-R7B style
+    "<|START_THINKING|>",
+    "<|END_THINKING|>",
+    // Apertus style
+    "<|inner_prefix|>",
+    "<|inner_suffix|>",
+    // Nemotron V2 style (uses same <think> but in different context)
+    "enable_thinking",
+    // Bailing/Ring models
+    "thinking_forced_open",
+];
+
+/// Known model name patterns that indicate reasoning capability.
+/// Checked against the model name for additional detection confidence.
+const REASONING_MODEL_NAME_PATTERNS: &[&str] = &[
+    "deepseek-r1",
+    "deepseek-v3",
+    "qwen3",
+    "qwq",
+    "thinking",
+    "reasoning",
+    "cot", // chain-of-thought
+    "o1",
+    "o3",
+];
+
+/// Result of reasoning capability detection
+#[derive(Debug, Clone)]
+pub struct ReasoningDetection {
+    /// Whether the model appears to support reasoning/thinking
+    pub supports_reasoning: bool,
+    /// Confidence level of the detection (0.0 to 1.0)
+    pub confidence: f32,
+    /// The specific pattern(s) that matched, if any
+    pub matched_patterns: Vec<String>,
+    /// Suggested reasoning format for llama-server
+    pub suggested_format: Option<String>,
+}
+
+impl Default for ReasoningDetection {
+    fn default() -> Self {
+        Self {
+            supports_reasoning: false,
+            confidence: 0.0,
+            matched_patterns: Vec::new(),
+            suggested_format: None,
+        }
+    }
+}
+
+/// Detect if a model supports reasoning/thinking based on its GGUF metadata.
+///
+/// This function analyzes the chat template and model name to determine
+/// if the model is a reasoning model that outputs `<think>` or similar tags.
+///
+/// # Arguments
+/// * `metadata` - The processed metadata HashMap from GGUF parsing
+///
+/// # Returns
+/// A `ReasoningDetection` struct with detection results and confidence
+///
+/// # Examples
+///
+/// ```rust
+/// use std::collections::HashMap;
+/// use gglib::utils::gguf_parser::detect_reasoning_support;
+///
+/// let mut metadata = HashMap::new();
+/// metadata.insert(
+///     "tokenizer.chat_template".to_string(),
+///     "... <think> ... </think> ...".to_string()
+/// );
+///
+/// let detection = detect_reasoning_support(&metadata);
+/// assert!(detection.supports_reasoning);
+/// assert!(detection.confidence > 0.5);
+/// ```
+pub fn detect_reasoning_support(metadata: &HashMap<String, String>) -> ReasoningDetection {
+    let mut detection = ReasoningDetection::default();
+    let mut confidence_score = 0.0f32;
+
+    // Check chat template for thinking patterns (highest confidence)
+    if let Some(template) = metadata.get("tokenizer.chat_template") {
+        let template_lower = template.to_lowercase();
+
+        for pattern in THINKING_TAG_PATTERNS {
+            let pattern_lower = pattern.to_lowercase();
+            if template_lower.contains(&pattern_lower) {
+                detection.matched_patterns.push(pattern.to_string());
+                // Opening tags are higher confidence than closing tags alone
+                if pattern.starts_with('<') && !pattern.starts_with("</") {
+                    confidence_score += 0.4;
+                } else {
+                    confidence_score += 0.2;
+                }
+            }
+        }
+
+        // Check for template variables that indicate thinking support
+        if template_lower.contains("enable_thinking")
+            || template_lower.contains("thinking_forced_open")
+        {
+            confidence_score += 0.3;
+        }
+    }
+
+    // Check model name for reasoning patterns
+    // High-confidence patterns (definitive reasoning models) get 0.4
+    // Medium-confidence patterns (might be reasoning) get 0.25
+    if let Some(name) = metadata.get("general.name") {
+        let name_lower = name.to_lowercase();
+
+        // High-confidence: definitive reasoning model names
+        const HIGH_CONFIDENCE_PATTERNS: &[&str] = &[
+            "deepseek-r1", // DeepSeek R1 family
+            "qwq",         // Qwen QwQ reasoning model
+            "o1",          // OpenAI O1 style
+            "o3",          // OpenAI O3 style
+        ];
+
+        for pattern in HIGH_CONFIDENCE_PATTERNS {
+            if name_lower.contains(pattern) {
+                detection.matched_patterns.push(format!("name:{}", pattern));
+                confidence_score += 0.4;
+            }
+        }
+
+        // Medium-confidence: might indicate reasoning
+        for pattern in REASONING_MODEL_NAME_PATTERNS {
+            // Skip patterns already checked with high confidence
+            if HIGH_CONFIDENCE_PATTERNS.contains(pattern) {
+                continue;
+            }
+            if name_lower.contains(pattern) {
+                detection.matched_patterns.push(format!("name:{}", pattern));
+                confidence_score += 0.25;
+            }
+        }
+    }
+
+    // Check architecture for known reasoning architectures
+    if let Some(arch) = metadata.get("general.architecture") {
+        let arch_lower = arch.to_lowercase();
+        // DeepSeek models often have specific architecture markers
+        if arch_lower.contains("deepseek") {
+            confidence_score += 0.15;
+            detection
+                .matched_patterns
+                .push(format!("arch:{}", arch_lower));
+        }
+    }
+
+    // Normalize confidence to 0.0-1.0 range
+    detection.confidence = confidence_score.min(1.0);
+    detection.supports_reasoning = detection.confidence >= 0.3;
+
+    // Suggest format based on detected patterns
+    if detection.supports_reasoning {
+        // Most reasoning models work with "deepseek" format
+        detection.suggested_format = Some("deepseek".to_string());
+    }
+
+    detection
+}
+
+/// Check if a model's metadata indicates it's a reasoning model.
+/// This is a simplified boolean check for common use cases.
+///
+/// # Arguments
+/// * `metadata` - The processed metadata HashMap from GGUF parsing
+///
+/// # Returns
+/// `true` if the model appears to be a reasoning model, `false` otherwise
+pub fn is_reasoning_model(metadata: &HashMap<String, String>) -> bool {
+    detect_reasoning_support(metadata).supports_reasoning
+}
+
+/// Get the full chat template from metadata, even if it was truncated.
+/// Returns None if the template was truncated (stored as "Chat template (N chars)").
+///
+/// This is useful when you need to re-parse the GGUF file to get the full template.
+pub fn get_chat_template(metadata: &HashMap<String, String>) -> Option<&String> {
+    metadata.get("tokenizer.chat_template").and_then(|s| {
+        // Check if it was truncated
+        if s.starts_with("Chat template (") && s.ends_with(" chars)") {
+            None // Was truncated, need to re-read from file
+        } else {
+            Some(s)
+        }
+    })
+}
+
+#[cfg(test)]
+mod reasoning_detection_tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_think_tags() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "{% if message.role == 'assistant' %}<think>{{ message.thinking }}</think>{% endif %}"
+                .to_string(),
+        );
+
+        let detection = detect_reasoning_support(&metadata);
+        assert!(detection.supports_reasoning);
+        assert!(detection.confidence >= 0.3);
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("think"))
+        );
+        assert_eq!(detection.suggested_format, Some("deepseek".to_string()));
+    }
+
+    #[test]
+    fn test_detect_reasoning_tags() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<reasoning>thoughts here</reasoning>response".to_string(),
+        );
+
+        let detection = detect_reasoning_support(&metadata);
+        assert!(detection.supports_reasoning);
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("reasoning"))
+        );
+    }
+
+    #[test]
+    fn test_detect_seed_think_tags() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<seed:think>thinking</seed:think>response".to_string(),
+        );
+
+        let detection = detect_reasoning_support(&metadata);
+        assert!(detection.supports_reasoning);
+    }
+
+    #[test]
+    fn test_detect_command_r_style() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<|START_THINKING|>thoughts<|END_THINKING|>response".to_string(),
+        );
+
+        let detection = detect_reasoning_support(&metadata);
+        assert!(detection.supports_reasoning);
+    }
+
+    #[test]
+    fn test_detect_by_model_name() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "general.name".to_string(),
+            "DeepSeek-R1-Distill-Qwen-32B".to_string(),
+        );
+
+        let detection = detect_reasoning_support(&metadata);
+        assert!(detection.supports_reasoning);
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("deepseek-r1"))
+        );
+    }
+
+    #[test]
+    fn test_detect_qwen3_by_name() {
+        let mut metadata = HashMap::new();
+        metadata.insert("general.name".to_string(), "Qwen3-4B-Thinking".to_string());
+
+        let detection = detect_reasoning_support(&metadata);
+        assert!(detection.supports_reasoning);
+    }
+
+    #[test]
+    fn test_no_detection_for_regular_model() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "{% for message in messages %}{{ message.content }}{% endfor %}".to_string(),
+        );
+        metadata.insert("general.name".to_string(), "Llama-2-7B-Chat".to_string());
+
+        let detection = detect_reasoning_support(&metadata);
+        assert!(!detection.supports_reasoning);
+        assert!(detection.confidence < 0.3);
+    }
+
+    #[test]
+    fn test_combined_detection() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "... <think> ... </think> ...".to_string(),
+        );
+        metadata.insert("general.name".to_string(), "DeepSeek-R1-Qwen".to_string());
+
+        let detection = detect_reasoning_support(&metadata);
+        assert!(detection.supports_reasoning);
+        // Should have high confidence from multiple sources
+        assert!(detection.confidence >= 0.5);
+    }
+
+    #[test]
+    fn test_is_reasoning_model_helper() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<think>test</think>".to_string(),
+        );
+
+        assert!(is_reasoning_model(&metadata));
+
+        let empty_metadata = HashMap::new();
+        assert!(!is_reasoning_model(&empty_metadata));
+    }
+}

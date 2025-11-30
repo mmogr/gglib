@@ -59,6 +59,7 @@ When a model is served, the view transitions to a Chat layout:
 
 ### Chat Interface
 - **`ChatMessagesPanel/`**: Message display with markdown rendering and composer
+  - **`ThinkingBlock.tsx`**: Collapsible "Thinking" section for reasoning models, shows live duration during streaming and final "Thought for X seconds" on completion
 - **`ConversationListPanel/`**: Conversation list with search and management controls
 
 ### Server Management

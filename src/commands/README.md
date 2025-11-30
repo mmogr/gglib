@@ -97,7 +97,11 @@ Serve a model with llama-server.
 - `--ctx-size <SIZE>`: Context size (number or "max" for model's maximum)
 - `--mlock`: Enable memory lock
 - `--jinja`: Force-enable Jinja template parsing for llama-server chat templates
+- `--reasoning-format <FORMAT>`: Set reasoning format for thinking models ("none", "deepseek", or "auto"). Auto-detected for models with "reasoning" tag or thinking patterns in chat template.
 - `--port <PORT>`: Port to serve on (default: 8080)
+
+**Reasoning Models:**
+When adding models like DeepSeek R1 or Qwen3, gglib auto-detects reasoning capability from GGUF metadata and adds a "reasoning" tag. When served, these models automatically use `--reasoning-format=deepseek` to extract thinking content to a separate `reasoning_content` field for proper UI display.
 
 **Example:**
 ```bash

@@ -211,6 +211,11 @@ pub struct StartServerRequest {
     /// Optional override for forcing Jinja templates
     #[serde(default)]
     pub jinja: Option<bool>,
+    /// Optional reasoning format for thinking/reasoning models
+    /// Valid values: "none", "deepseek", "deepseek-legacy"
+    /// If not specified, auto-detects based on model tags
+    #[serde(default)]
+    pub reasoning_format: Option<String>,
 }
 
 /// Response for starting a server

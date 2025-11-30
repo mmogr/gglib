@@ -8,7 +8,7 @@
 //!
 //! This replaces the old MultiManager and ModelManager with a cleaner, unified API.
 
-use crate::commands::common::resolve_jinja_flag;
+use crate::commands::common::{resolve_jinja_flag, resolve_reasoning_format_with_metadata};
 use crate::models::Gguf;
 use crate::services::database;
 use crate::utils::process::{ProcessCore, ServerInfo, check_process_health, wait_for_http_health};
@@ -81,6 +81,7 @@ impl ProcessManager {
         model_path: &str,
         context_length: Option<u64>,
         jinja: bool,
+        reasoning_format: Option<String>,
     ) -> Result<u16> {
         match &self.strategy {
             ProcessStrategy::Concurrent { max_concurrent } => {
@@ -91,6 +92,7 @@ impl ProcessManager {
                     context_length,
                     *max_concurrent,
                     jinja,
+                    reasoning_format,
                 )
                 .await
             }
@@ -104,6 +106,7 @@ impl ProcessManager {
     }
 
     /// Start server with Concurrent strategy (GUI behavior)
+    #[allow(clippy::too_many_arguments)]
     async fn start_server_concurrent(
         &self,
         model_id: u32,
@@ -112,6 +115,7 @@ impl ProcessManager {
         context_length: Option<u64>,
         max_concurrent: usize,
         jinja: bool,
+        reasoning_format: Option<String>,
     ) -> Result<u16> {
         let mut core = self.core.write().await;
 
@@ -130,7 +134,14 @@ impl ProcessManager {
 
         // Spawn the process
         let path = std::path::Path::new(model_path);
-        let port = core.spawn(model_id, model_name, path, context_length, jinja)?;
+        let port = core.spawn(
+            model_id,
+            model_name,
+            path,
+            context_length,
+            jinja,
+            reasoning_format,
+        )?;
 
         // Release the lock before waiting
         drop(core);
@@ -227,6 +238,9 @@ impl ProcessManager {
 
         // Start the new model
         let jinja_resolution = resolve_jinja_flag(None, &model.tags);
+        // Use metadata-aware reasoning format resolution for auto-detection
+        let reasoning_resolution =
+            resolve_reasoning_format_with_metadata(None, &model.tags, Some(&model.metadata));
 
         let port = self
             .start_model_single_swap(
@@ -234,6 +248,7 @@ impl ProcessManager {
                 model_id,
                 Some(requested_ctx),
                 jinja_resolution.enabled,
+                reasoning_resolution.format,
             )
             .await?;
 
@@ -264,6 +279,7 @@ impl ProcessManager {
         model_id: u32,
         context_size: Option<u64>,
         jinja: bool,
+        reasoning_format: Option<String>,
     ) -> Result<u16> {
         info!(
             "Starting llama-server for model '{}' on port allocation",
@@ -287,6 +303,7 @@ impl ProcessManager {
                 &model.file_path,
                 context_size,
                 jinja,
+                reasoning_format,
             )?
         };
 
