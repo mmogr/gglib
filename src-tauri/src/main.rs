@@ -815,11 +815,13 @@ async fn main() {
         // Handle window close events - this is more reliable than RunEvent::WindowEvent
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                info!("Window close requested via on_window_event - cleaning up download processes");
+                info!(
+                    "Window close requested via on_window_event - cleaning up download processes"
+                );
                 let app_handle = window.app_handle();
                 let state: tauri::State<AppState> = app_handle.state();
                 let downloads = state.backend.core().downloads();
-                
+
                 // Synchronously kill all child processes (Python downloaders)
                 let killed = downloads.kill_all_processes_sync();
                 if killed > 0 {
@@ -870,7 +872,7 @@ async fn main() {
                 info!("App exiting (RunEvent::Exit) - final cleanup of download processes");
                 let state: tauri::State<AppState> = app_handle.state();
                 let downloads = state.backend.core().downloads();
-                
+
                 // Synchronously kill all child processes (Python downloaders)
                 let killed = downloads.kill_all_processes_sync();
                 if killed > 0 {

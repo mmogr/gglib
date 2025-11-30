@@ -42,7 +42,7 @@ export default function ModelControlCenterPage({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('browse');
+  const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('download');
   
   // Sidebar tab state (for the new tabbed sidebar)
   const [sidebarTab, setSidebarTab] = useState<SidebarTabId>('models');

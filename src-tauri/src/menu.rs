@@ -186,6 +186,30 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
     )?;
 
     // =========================================================================
+    // Edit Menu - Standard text editing shortcuts (Copy, Cut, Paste, etc.)
+    // =========================================================================
+    // Note: Undo/Redo are only supported on macOS via PredefinedMenuItem.
+    // On Windows/Linux, the WebView handles Ctrl+Z/Ctrl+Y natively.
+    let edit_submenu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            #[cfg(target_os = "macos")]
+            &PredefinedMenuItem::undo(app, None)?,
+            #[cfg(target_os = "macos")]
+            &PredefinedMenuItem::redo(app, None)?,
+            #[cfg(target_os = "macos")]
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+
+    // =========================================================================
     // Model Menu
     // =========================================================================
     // These start disabled until a model is selected
@@ -354,6 +378,7 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
         &[
             &app_submenu,
             &file_submenu,
+            &edit_submenu,
             &model_submenu,
             &proxy_submenu,
             &view_submenu,
