@@ -77,6 +77,27 @@
   flex-shrink: 0;
 }
 
+/* Generate title button spinner */
+.icon-btn.generating {
+  pointer-events: none;
+}
+
+.icon-btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-text-muted);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: icon-btn-spin 0.8s linear infinite;
+}
+
+@keyframes icon-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* System prompt card */
 .chat-prompt-card {
   border: 1px solid var(--color-border);
