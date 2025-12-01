@@ -772,6 +772,58 @@ pub async fn save_message(
     Ok(Json(ApiResponse::success(message_id)))
 }
 
+/// Request payload for updating a message
+#[derive(Debug, Deserialize)]
+pub struct UpdateMessagePayload {
+    pub content: String,
+}
+
+/// Response for delete message operation
+#[derive(Debug, Serialize)]
+pub struct DeleteMessageResponse {
+    pub deleted_count: i64,
+}
+
+/// Update a message's content
+pub async fn update_message(
+    State(state): State<Arc<AppState>>,
+    Path(message_id): Path<i64>,
+    Json(payload): Json<UpdateMessagePayload>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    chat_history::update_message(state.backend.db_pool(), message_id, payload.content)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("not found") {
+                AppError::NotFound(format!("Message {} not found", message_id))
+            } else {
+                AppError::DatabaseError(e.to_string())
+            }
+        })?;
+
+    Ok(Json(ApiResponse::success("Message updated".to_string())))
+}
+
+/// Delete a message and all subsequent messages in the conversation
+pub async fn delete_message(
+    State(state): State<Arc<AppState>>,
+    Path(message_id): Path<i64>,
+) -> Result<Json<ApiResponse<DeleteMessageResponse>>, AppError> {
+    let deleted_count =
+        chat_history::delete_message_and_subsequent(state.backend.db_pool(), message_id)
+            .await
+            .map_err(|e| {
+                if e.to_string().contains("not found") {
+                    AppError::NotFound(format!("Message {} not found", message_id))
+                } else {
+                    AppError::DatabaseError(e.to_string())
+                }
+            })?;
+
+    Ok(Json(ApiResponse::success(DeleteMessageResponse {
+        deleted_count,
+    })))
+}
+
 /// Custom error type for API handlers
 #[derive(Debug)]
 pub enum AppError {

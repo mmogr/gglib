@@ -35,4 +35,12 @@ The following endpoints manage the download queue:
 - `DELETE /api/models/download/queue/:id` - Remove a pending download from queue
 - `DELETE /api/models/download/queue/failed` - Clear all failed downloads
 
+## Message Endpoints
+
+The following endpoints manage chat messages:
+
+- `POST /api/messages` - Save a new message to the database
+- `PUT /api/messages/:id` - Update a message's content
+- `DELETE /api/messages/:id` - Delete a message and all subsequent messages (cascade deletion)
+
 <!-- module-docs:end -->

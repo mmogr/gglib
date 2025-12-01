@@ -103,6 +103,11 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             get(handlers::get_messages),
         )
         .route("/api/messages", post(handlers::save_message))
+        .route("/api/messages/:message_id", put(handlers::update_message))
+        .route(
+            "/api/messages/:message_id",
+            delete(handlers::delete_message),
+        )
         // Inject state
         .with_state(state)
         // Enable CORS for local development
