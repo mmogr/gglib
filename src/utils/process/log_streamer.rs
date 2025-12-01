@@ -107,11 +107,11 @@ impl ServerLogManager {
     /// Add a log line for a server (sync - can be called from std threads)
     pub fn add_log(&self, port: u16, line: &str) {
         let entry = ServerLogEntry::new(line.to_string(), port);
-        
+
         // Add to buffer
         {
             let mut buffers = self.buffers.write().unwrap();
-            let buffer = buffers.entry(port).or_insert_with(LogBuffer::new);
+            let buffer = buffers.entry(port).or_default();
             buffer.push(entry.clone());
         }
 
@@ -122,10 +122,7 @@ impl ServerLogManager {
     /// Get logs for a specific server
     pub fn get_logs(&self, port: u16) -> Vec<ServerLogEntry> {
         let buffers = self.buffers.read().unwrap();
-        buffers
-            .get(&port)
-            .map(|b| b.get_all())
-            .unwrap_or_default()
+        buffers.get(&port).map(|b| b.get_all()).unwrap_or_default()
     }
 
     /// Get a broadcast receiver for log events
@@ -169,15 +166,15 @@ mod tests {
     #[test]
     fn test_log_buffer_capacity() {
         let mut buffer = LogBuffer::new();
-        
+
         // Fill beyond capacity
         for i in 0..MAX_LOG_LINES + 100 {
             buffer.push(ServerLogEntry::new(format!("line {}", i), 8080));
         }
-        
+
         // Should be capped at MAX_LOG_LINES
         assert_eq!(buffer.len(), MAX_LOG_LINES);
-        
+
         // First entry should be line 100 (oldest 100 were dropped)
         let logs = buffer.get_all();
         assert!(logs[0].line.contains("100"));
@@ -186,11 +183,11 @@ mod tests {
     #[test]
     fn test_log_buffer_get_last() {
         let mut buffer = LogBuffer::new();
-        
+
         for i in 0..100 {
             buffer.push(ServerLogEntry::new(format!("line {}", i), 8080));
         }
-        
+
         let last_10 = buffer.get_last(10);
         assert_eq!(last_10.len(), 10);
         assert!(last_10[0].line.contains("90"));
@@ -200,14 +197,14 @@ mod tests {
     #[test]
     fn test_log_manager() {
         let manager = ServerLogManager::new();
-        
+
         manager.init_server(8080);
         manager.add_log(8080, "test line");
-        
+
         let logs = manager.get_logs(8080);
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].line, "test line");
-        
+
         manager.clear_logs(8080);
         let logs = manager.get_logs(8080);
         assert!(logs.is_empty());

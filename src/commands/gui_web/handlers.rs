@@ -876,18 +876,15 @@ pub async fn stream_server_logs(
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, std::convert::Infallible>>> {
     let log_manager = get_log_manager();
     let receiver = log_manager.subscribe();
-    
+
     // Filter to only logs for the requested port
-    let stream = BroadcastStream::new(receiver)
-        .filter_map(move |result| {
-            match result {
-                Ok(entry) if entry.port == port => {
-                    Some(Ok(Event::default().data(serde_json::to_string(&entry).unwrap_or_default())))
-                }
-                _ => None,
-            }
-        });
-    
+    let stream = BroadcastStream::new(receiver).filter_map(move |result| match result {
+        Ok(entry) if entry.port == port => Some(Ok(
+            Event::default().data(serde_json::to_string(&entry).unwrap_or_default())
+        )),
+        _ => None,
+    });
+
     Sse::new(stream)
 }
 
