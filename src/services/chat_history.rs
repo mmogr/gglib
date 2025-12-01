@@ -273,13 +273,11 @@ pub async fn delete_message_and_subsequent(pool: &SqlitePool, message_id: i64) -
     };
 
     // Delete the target message and all messages with higher IDs in the same conversation
-    let result = sqlx::query(
-        "DELETE FROM chat_messages WHERE conversation_id = ? AND id >= ?",
-    )
-    .bind(conversation_id)
-    .bind(message_id)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("DELETE FROM chat_messages WHERE conversation_id = ? AND id >= ?")
+        .bind(conversation_id)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
 
     // Update the conversation timestamp
     sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
