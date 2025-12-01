@@ -28,5 +28,6 @@ This module contains low-level helper functions and shared utilities used across
 - **`gguf_parser.rs`**: Specialized parser for extracting metadata from GGUF files. Includes `detect_reasoning_support()` for auto-detecting reasoning models (DeepSeek R1, Qwen3, QwQ, etc.) from chat template patterns and model names.
 - **`input.rs`**: CLI user input handling (prompts, confirmations).
 - **`process/`**: Low-level process management utilities.
+  - **`log_streamer.rs`**: `ServerLogManager` for capturing and broadcasting llama-server stdout/stderr logs. Provides real-time log streaming via broadcast channels and maintains a ring buffer of recent logs per server port.
 
 <!-- module-docs:end -->

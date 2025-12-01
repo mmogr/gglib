@@ -35,6 +35,14 @@ The following endpoints manage the download queue:
 - `DELETE /api/models/download/queue/:id` - Remove a pending download from queue
 - `DELETE /api/models/download/queue/failed` - Clear all failed downloads
 
+## Server Logs Endpoints
+
+The following endpoints provide access to llama-server stdout/stderr logs:
+
+- `GET /api/servers/:port/logs` - Get buffered logs for a server
+- `GET /api/servers/:port/logs/stream` - SSE stream of real-time log entries
+- `DELETE /api/servers/:port/logs` - Clear buffered logs for a server
+
 ## Message Endpoints
 
 The following endpoints manage chat messages:
