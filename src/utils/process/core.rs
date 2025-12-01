@@ -46,6 +46,7 @@ impl ProcessCore {
     /// * `port` - Optional specific port (None = auto-allocate)
     /// * `jinja` - Enable Jinja templating
     /// * `reasoning_format` - Optional reasoning format for thinking models
+    #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         &mut self,
         model_id: u32,

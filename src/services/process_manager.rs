@@ -74,6 +74,7 @@ impl ProcessManager {
     /// Behavior depends on strategy:
     /// - Concurrent: Errors if already running or at capacity
     /// - SingleSwap: Auto-swaps if different model, compares context
+    #[allow(clippy::too_many_arguments)]
     pub async fn start_server(
         &self,
         model_id: u32,

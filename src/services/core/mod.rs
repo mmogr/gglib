@@ -191,6 +191,7 @@ impl AppCore {
     /// let result = core.servers().start(StartServerConfig {
     ///     model_id: 1,
     ///     context_length: Some(4096),
+    ///     port: None, // Auto-allocate port
     ///     jinja: None,
     ///     reasoning_format: None,
     /// }).await?;
