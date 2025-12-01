@@ -176,8 +176,12 @@ const UserMessageBubble: React.FC = () => {
         <MarkdownMessageContent />
       </div>
       <ActionBarPrimitive.Root className="chat-message-actions">
-        <ActionBarPrimitive.Copy />
-        <ActionBarPrimitive.Edit />
+        <ActionBarPrimitive.Copy className="chat-action-btn" title="Copy message" aria-label="Copy message">
+          📋
+        </ActionBarPrimitive.Copy>
+        <ActionBarPrimitive.Edit className="chat-action-btn chat-edit-btn" title="Edit message" aria-label="Edit message">
+          ✏️
+        </ActionBarPrimitive.Edit>
         <button
           className="chat-action-btn chat-delete-btn"
           onClick={handleDelete}
@@ -192,6 +196,38 @@ const UserMessageBubble: React.FC = () => {
 };
 
 const SystemMessageBubble: React.FC = () => null;
+
+// EditComposer - shown when user clicks Edit on their message
+const EditComposer: React.FC = () => {
+  const message = useMessage();
+  const timestamp = new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(message.createdAt ?? new Date());
+
+  return (
+    <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-user-message', 'chat-edit-mode')}>
+      <div className="chat-message-meta">
+        <div className="chat-message-avatar">🧑‍💻</div>
+        <div>
+          <div className="chat-message-author">You</div>
+          <div className="chat-message-timestamp">{timestamp}</div>
+        </div>
+      </div>
+      <ComposerPrimitive.Root className="chat-edit-composer">
+        <ComposerPrimitive.Input className="chat-edit-input" />
+        <div className="chat-edit-actions">
+          <ComposerPrimitive.Cancel className="chat-edit-cancel">
+            Cancel
+          </ComposerPrimitive.Cancel>
+          <ComposerPrimitive.Send className="chat-edit-send">
+            Save & Regenerate
+          </ComposerPrimitive.Send>
+        </div>
+      </ComposerPrimitive.Root>
+    </MessagePrimitive.Root>
+  );
+};
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -565,11 +601,24 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     setIsDeleting(true);
     try {
       // Find the DB ID from the runtime message ID
-      const dbId = extractDbId(deleteTargetId);
+      // First try direct extraction (for hydrated messages with db-xxx format)
+      let dbId = extractDbId(deleteTargetId);
+      
+      // If not found, look up by position (for newly created messages)
+      if (!dbId) {
+        const state = threadRuntime.getState();
+        const messages = state.messages;
+        const position = messages.findIndex(m => m.id === deleteTargetId);
+        if (position >= 0) {
+          dbId = dbIdByPosition.current.get(position) ?? null;
+        }
+      }
       
       if (dbId) {
         // Delete from database (cascade deletes subsequent)
         await ChatService.deleteMessage(dbId);
+      } else {
+        console.warn('Could not find DB ID for message:', deleteTargetId);
       }
       
       // Reload messages from DB and reset runtime
@@ -782,6 +831,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       AssistantMessage: AssistantMessageBubble,
                       UserMessage: UserMessageBubble,
                       SystemMessage: SystemMessageBubble,
+                      EditComposer: EditComposer,
                     }}
                   />
                   <ThreadPrimitive.ScrollToBottom className="chat-scroll-button">

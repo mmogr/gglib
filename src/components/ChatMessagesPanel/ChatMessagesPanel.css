@@ -323,6 +323,79 @@
   background: rgba(243, 139, 168, 0.2);
 }
 
+/* Edit Composer Styles */
+.chat-edit-mode {
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-md);
+}
+
+.chat-edit-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  width: 100%;
+}
+
+.chat-edit-input {
+  width: 100%;
+  min-height: 60px;
+  padding: var(--spacing-sm);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  resize: vertical;
+}
+
+.chat-edit-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.chat-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
+.chat-edit-cancel,
+.chat-edit-send {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chat-edit-cancel {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.chat-edit-cancel:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.chat-edit-send {
+  background: var(--color-primary);
+  border: none;
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.chat-edit-send:hover {
+  background: var(--color-primary-hover);
+}
+
+.chat-edit-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Markdown styling */
 .chat-markdown-body {
   font-size: var(--font-size-sm);
