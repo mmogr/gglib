@@ -19,6 +19,22 @@ use tokio_util::sync::CancellationToken;
 /// Uses std::sync::RwLock (not tokio) for synchronous access in shutdown handler.
 pub type PidStorage = Arc<std::sync::RwLock<HashMap<String, u32>>>;
 
+/// Metadata for an active download, stored alongside its cancellation token.
+/// This enables proper UI display of download progress with all relevant information.
+#[derive(Clone)]
+pub struct ActiveDownloadInfo {
+    /// Token to cancel this download
+    pub cancel_token: CancellationToken,
+    /// Original model ID (e.g., "TheBloke/Llama-2-7B-GGUF")
+    pub model_id: String,
+    /// Quantization type if specified (e.g., "Q4_K_M")
+    pub quantization: Option<String>,
+    /// Shard info if this is part of a sharded download
+    pub shard_info: Option<super::download_models::ShardInfo>,
+    /// Group ID for sharded downloads
+    pub group_id: Option<String>,
+}
+
 /// Service for managing HuggingFace model downloads.
 ///
 /// Provides download management with:
@@ -27,7 +43,7 @@ pub type PidStorage = Arc<std::sync::RwLock<HashMap<String, u32>>>;
 /// - Download queue with configurable max size
 /// - Auto-advance to next download on completion/failure
 pub struct DownloadService {
-    active_downloads: Arc<RwLock<HashMap<String, CancellationToken>>>,
+    active_downloads: Arc<RwLock<HashMap<String, ActiveDownloadInfo>>>,
     pending_queue: Arc<RwLock<VecDeque<QueuedDownload>>>,
     failed_downloads: Arc<RwLock<Vec<QueuedDownload>>>,
     max_queue_size: Arc<RwLock<u32>>,
@@ -325,15 +341,15 @@ impl DownloadService {
         let failed = self.failed_downloads.read().await;
         let max_size = *self.max_queue_size.read().await;
 
-        // Current download(s)
-        let current = active.keys().next().map(|model_id| DownloadQueueItem {
-            model_id: model_id.clone(),
-            quantization: None, // We don't track quantization for active downloads
+        // Current download - now includes full metadata from ActiveDownloadInfo
+        let current = active.values().next().map(|info| DownloadQueueItem {
+            model_id: info.model_id.clone(),
+            quantization: info.quantization.clone(),
             status: DownloadStatus::Downloading,
             position: 1,
             error: None,
-            group_id: None,
-            shard_info: None,
+            group_id: info.group_id.clone(),
+            shard_info: info.shard_info.clone(),
         });
 
         // Pending items
@@ -529,7 +545,15 @@ impl DownloadService {
                 }
                 .into());
             }
-            downloads.insert(model_id.clone(), cancel_token.clone());
+            // Store full download info for proper UI display
+            let info = ActiveDownloadInfo {
+                cancel_token: cancel_token.clone(),
+                model_id: model_id.clone(),
+                quantization: quantization.clone(),
+                shard_info: None,
+                group_id: None,
+            };
+            downloads.insert(model_id.clone(), info);
         }
 
         // Execute download with cancellation support
@@ -574,6 +598,9 @@ impl DownloadService {
     /// * `quantization` - Quantization type for metadata
     /// * `is_last_shard` - Whether this is the last shard (triggers database add)
     /// * `progress_callback` - Optional callback for progress updates
+    /// * `shard_info` - Shard metadata for progress tracking
+    /// * `group_id` - Group ID for sharded downloads
+    #[allow(clippy::too_many_arguments)]
     async fn download_shard(
         &self,
         model_id: String,
@@ -581,6 +608,8 @@ impl DownloadService {
         quantization: String,
         is_last_shard: bool,
         progress_callback: Option<&crate::commands::download::ProgressCallback>,
+        shard_info: Option<super::download_models::ShardInfo>,
+        group_id: Option<String>,
     ) -> Result<String> {
         use crate::commands::download::{
             DownloadContext, SessionOptions, download_specific_file, get_first_shard_filename,
@@ -601,7 +630,15 @@ impl DownloadService {
                 }
                 .into());
             }
-            downloads.insert(tracking_key.clone(), cancel_token.clone());
+            // Store full download info for proper UI display
+            let info = ActiveDownloadInfo {
+                cancel_token: cancel_token.clone(),
+                model_id: model_id.clone(),
+                quantization: Some(quantization.clone()),
+                shard_info,
+                group_id,
+            };
+            downloads.insert(tracking_key.clone(), info);
         }
 
         // Get models directory and commit SHA
@@ -693,16 +730,24 @@ impl DownloadService {
             let quantization = item.quantization.clone();
             let is_shard = item.shard_info.is_some();
 
+            // Build canonical model identifier for progress events (model_id:quantization)
+            // This format is expected by the frontend for matching progress to queue status
+            let canonical_id = if let Some(ref quant) = quantization {
+                format!("{}:{}", model_id, quant)
+            } else {
+                model_id.clone()
+            };
+
             // Build display name for events (include shard info if applicable)
             let display_name = if let Some(ref shard) = item.shard_info {
                 format!(
                     "{} (shard {}/{})",
-                    model_id,
+                    canonical_id,
                     shard.shard_index + 1,
                     shard.total_shards
                 )
             } else {
-                model_id.clone()
+                canonical_id.clone()
             };
 
             // Emit "started" event
@@ -739,7 +784,8 @@ impl DownloadService {
 
             // Create a wrapper callback that converts (u64, u64) to DownloadProgressEvent
             let callback_clone = progress_callback.clone();
-            let display_name_for_callback = model_id.clone(); // Use model_id, not display_name with shard info
+            // Use canonical_id (model_id:quantization) for progress events to match queue status
+            let canonical_id_for_callback = canonical_id.clone();
             let queue_len_for_callback = queue_len;
 
             // Capture shard info for the callback
@@ -771,7 +817,7 @@ impl DownloadService {
                         };
 
                         crate::commands::download::DownloadProgressEvent::progress_with_shard(
-                            &display_name_for_callback,
+                            &canonical_id_for_callback,
                             downloaded,
                             total,
                             shard_index_for_cb,
@@ -785,7 +831,7 @@ impl DownloadService {
                     } else {
                         // Non-sharded download
                         crate::commands::download::DownloadProgressEvent::progress(
-                            &display_name_for_callback,
+                            &canonical_id_for_callback,
                             downloaded,
                             total,
                             speed,
@@ -797,7 +843,7 @@ impl DownloadService {
 
             // Execute download - use shard-specific method if this is a shard
             let result = if is_shard {
-                let shard_info = item.shard_info.as_ref().unwrap();
+                let shard_info = item.shard_info.clone().unwrap();
                 let is_last_shard = self.is_last_shard_in_group(&item).await;
                 self.download_shard(
                     model_id.clone(),
@@ -805,6 +851,8 @@ impl DownloadService {
                     quantization.clone().unwrap_or_default(),
                     is_last_shard,
                     Some(&progress_cb),
+                    Some(shard_info),
+                    item.group_id.clone(),
                 )
                 .await
             } else {
@@ -851,7 +899,8 @@ impl DownloadService {
                                     format!("Shard failed, {} remaining shards cancelled", removed);
                                 let group_event =
                                     crate::commands::download::DownloadProgressEvent::errored(
-                                        &model_id, &group_msg,
+                                        &canonical_id,
+                                        &group_msg,
                                     );
                                 progress_callback(group_event);
                             }
@@ -876,8 +925,14 @@ impl DownloadService {
             // Emit updated queue status for remaining items
             let remaining_status = self.get_queue_status().await;
             for pending_item in &remaining_status.pending {
+                // Build canonical ID for queued events (model_id:quantization)
+                let pending_canonical_id = if let Some(ref quant) = pending_item.quantization {
+                    format!("{}:{}", pending_item.model_id, quant)
+                } else {
+                    pending_item.model_id.clone()
+                };
                 let queued_event = crate::commands::download::DownloadProgressEvent::queued(
-                    &pending_item.model_id,
+                    &pending_canonical_id,
                     pending_item.position,
                     remaining_status.pending.len()
                         + if remaining_status.current.is_some() {
@@ -1008,11 +1063,11 @@ impl DownloadService {
     ///
     /// Returns an error if no download is running for this model.
     pub async fn cancel(&self, model_id: &str) -> Result<()> {
-        let token = {
+        let info = {
             let mut downloads = self.active_downloads.write().await;
             // Try exact match first (for non-sharded downloads)
-            if let Some(token) = downloads.remove(model_id) {
-                Some(token)
+            if let Some(info) = downloads.remove(model_id) {
+                Some(info)
             } else {
                 // For sharded downloads, the key is "model_id:filename"
                 // Find any key that starts with "model_id:"
@@ -1022,8 +1077,8 @@ impl DownloadService {
             }
         };
 
-        if let Some(token) = token {
-            token.cancel();
+        if let Some(info) = info {
+            info.cancel_token.cancel();
             Ok(())
         } else {
             Err(DownloadError::NotFound {
@@ -1070,13 +1125,13 @@ impl DownloadService {
     pub async fn cancel_all_and_wait(&self, timeout: std::time::Duration) -> usize {
         use tracing::info;
 
-        // Get all active download keys and their tokens
-        let tokens: Vec<(String, CancellationToken)> = {
+        // Get all active download keys and their info
+        let infos: Vec<(String, ActiveDownloadInfo)> = {
             let mut downloads = self.active_downloads.write().await;
             downloads.drain().collect()
         };
 
-        let count = tokens.len();
+        let count = infos.len();
         if count == 0 {
             return 0;
         }
@@ -1087,9 +1142,9 @@ impl DownloadService {
         );
 
         // Cancel all tokens - this signals the download tasks to stop
-        for (key, token) in &tokens {
+        for (key, info) in &infos {
             info!(key = %key, "Cancelling download");
-            token.cancel();
+            info.cancel_token.cancel();
         }
 
         // Wait a bit for Python processes to receive the kill signal and terminate
