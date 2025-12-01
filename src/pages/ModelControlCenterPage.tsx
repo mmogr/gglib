@@ -43,7 +43,7 @@ export default function ModelControlCenterPage({
   const { tags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
   
   // Global download progress - lifted to page level so it's always visible
-  const { progress, queueStatus, cancelDownload } = useDownloadProgress({
+  const { progress, queueStatus, cancelDownload, fetchQueueStatus } = useDownloadProgress({
     onCompleted: loadModels,
   });
   const [downloadDismissed, setDownloadDismissed] = useState(false);
@@ -325,6 +325,7 @@ export default function ModelControlCenterPage({
               queueStatus={queueStatus}
               onCancel={cancelDownload}
               onDismiss={() => setDownloadDismissed(true)}
+              onRefreshQueue={fetchQueueStatus}
             />
           )}
           

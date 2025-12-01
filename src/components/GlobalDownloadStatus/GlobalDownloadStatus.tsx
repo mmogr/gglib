@@ -2,6 +2,7 @@ import { FC, useState, useEffect, useRef } from 'react';
 import { DownloadProgress } from '../../hooks/useDownloadProgress';
 import { DownloadQueueStatus } from '../../types';
 import { formatBytes, formatTime } from '../../utils/format';
+import DownloadQueuePopover from './DownloadQueuePopover';
 import styles from './GlobalDownloadStatus.module.css';
 
 interface GlobalDownloadStatusProps {
@@ -13,6 +14,8 @@ interface GlobalDownloadStatusProps {
   onCancel: (modelId: string) => void;
   /** Callback when user dismisses completion message */
   onDismiss: () => void;
+  /** Callback to refresh queue status */
+  onRefreshQueue?: () => void;
 }
 
 /**
@@ -27,10 +30,12 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   queueStatus,
   onCancel,
   onDismiss,
+  onRefreshQueue,
 }) => {
   // Track completed downloads since last dismiss
   const [completedModels, setCompletedModels] = useState<string[]>([]);
   const [showCompletion, setShowCompletion] = useState(false);
+  const [isQueuePopoverOpen, setIsQueuePopoverOpen] = useState(false);
   const previousProgressRef = useRef<DownloadProgress | null>(null);
 
   // Track when downloads complete
@@ -138,6 +143,19 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   const displayProgress = relevantProgress;
   const isQueued = !currentDownload && progress?.status === 'queued';
 
+  // Handle queue badge click
+  const handleQueueBadgeClick = () => {
+    setIsQueuePopoverOpen((prev) => !prev);
+  };
+
+  const handleClosePopover = () => {
+    setIsQueuePopoverOpen(false);
+  };
+
+  const handleRefreshQueue = () => {
+    onRefreshQueue?.();
+  };
+
   // Show active download progress
   return (
     <div className={styles.container}>
@@ -156,9 +174,21 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
                   : 'Downloading'}
             </span>
             {queueCount > 0 && (
-              <span className={styles.queueBadge}>
-                +{queueCount} queued
-              </span>
+              <div className={styles.queueBadgeContainer}>
+                <button
+                  className={styles.queueBadge}
+                  onClick={handleQueueBadgeClick}
+                  title="Click to view and manage queue"
+                >
+                  +{queueCount} queued
+                </button>
+                <DownloadQueuePopover
+                  isOpen={isQueuePopoverOpen}
+                  onClose={handleClosePopover}
+                  pendingItems={queueStatus?.pending || []}
+                  onRefresh={handleRefreshQueue}
+                />
+              </div>
             )}
           </div>
           {displayModelId && !isQueued && (

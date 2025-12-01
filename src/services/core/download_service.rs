@@ -399,6 +399,86 @@ impl DownloadService {
         Ok(())
     }
 
+    /// Reorder a queued item (or shard group) to a new position in the queue.
+    ///
+    /// For sharded models, all shards with the same `group_id` are moved together
+    /// as a unit, preserving their relative order within the group.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - The model ID to move (used to identify the group)
+    /// * `new_position` - The target position (0-based index in the pending queue)
+    ///
+    /// # Returns
+    ///
+    /// The actual position where the item(s) were placed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model is not found in the pending queue.
+    pub async fn reorder_queue(&self, model_id: &str, new_position: usize) -> Result<usize> {
+        let mut queue = self.pending_queue.write().await;
+
+        // Find the item to get its group_id (if any)
+        let group_id = queue
+            .iter()
+            .find(|item| item.model_id == model_id)
+            .and_then(|item| item.group_id.clone());
+
+        // Collect indices and items to move (either single item or entire shard group)
+        let items_to_move: Vec<QueuedDownload> = if let Some(ref gid) = group_id {
+            // Move all items in the shard group together
+            queue
+                .iter()
+                .filter(|item| item.group_id.as_deref() == Some(gid))
+                .cloned()
+                .collect()
+        } else {
+            // Single item (non-sharded)
+            queue
+                .iter()
+                .filter(|item| item.model_id == model_id)
+                .cloned()
+                .collect()
+        };
+
+        if items_to_move.is_empty() {
+            return Err(DownloadError::NotInQueue {
+                model_id: model_id.to_string(),
+            }
+            .into());
+        }
+
+        // Remove the items from queue
+        if let Some(ref gid) = group_id {
+            queue.retain(|item| item.group_id.as_deref() != Some(gid));
+        } else {
+            queue.retain(|item| item.model_id != model_id);
+        }
+
+        // Calculate actual insertion position (clamped to queue bounds)
+        let insert_pos = new_position.min(queue.len());
+
+        // Insert items at new position (in order, to preserve shard sequence)
+        for (offset, item) in items_to_move.into_iter().enumerate() {
+            let pos = insert_pos + offset;
+            // VecDeque insert: convert to vec temporarily for easier insertion
+            if pos >= queue.len() {
+                queue.push_back(item);
+            } else {
+                // Insert by rotating: push_back then rotate
+                queue.push_back(item);
+                // Rotate the last element to the target position
+                let len = queue.len();
+                for i in (pos + 1..len).rev() {
+                    queue.swap(i, i - 1);
+                }
+            }
+        }
+
+        Ok(insert_pos)
+    }
+
     /// Clear all failed downloads from the list.
     pub async fn clear_failed(&self) {
         self.failed_downloads.write().await.clear();
