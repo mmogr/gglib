@@ -75,7 +75,8 @@ function formatModelName(modelId: string): string {
 }
 
 /**
- * Popover component showing queued downloads with drag-to-reorder and cancel functionality.
+ * Popover component showing queued downloads with reorder and cancel functionality.
+ * Uses up/down buttons for reordering (works in both Tauri WebKit and web browsers).
  * Sharded models are grouped and displayed as a single entry.
  */
 const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
@@ -85,8 +86,6 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
   onRefresh,
 }) => {
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Close when clicking outside
@@ -116,60 +115,41 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     }
   }, [isProcessing, onRefresh]);
 
-  // Drag and drop handlers
-  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    // Use a transparent image as drag preview (we'll show our own indicator)
-    const img = new Image();
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    e.dataTransfer.setDragImage(img, 0, 0);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedIndex !== null && draggedIndex !== index) {
-      setDropTargetIndex(index);
-    }
-  }, [draggedIndex]);
-
-  const handleDragLeave = useCallback(() => {
-    setDropTargetIndex(null);
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    setDropTargetIndex(null);
-    
-    if (draggedIndex === null || draggedIndex === targetIndex || isProcessing) {
-      setDraggedIndex(null);
-      return;
-    }
+  // Move item up in queue (decrease position)
+  const handleMoveUp = useCallback(async (index: number) => {
+    if (isProcessing || index === 0) return;
     
     setIsProcessing(true);
-    const draggedItem = groupedItems[draggedIndex];
+    const item = groupedItems[index];
+    const newPosition = index - 1;
     
     try {
-      // Calculate the new position based on target index
-      // The backend expects a 0-based position in the queue
-      // Simply use the target index directly since our grouped items are already sorted by position
-      const newPosition = targetIndex;
-      
-      await TauriService.reorderDownloadQueue(draggedItem.model_id, newPosition);
+      await TauriService.reorderDownloadQueue(item.model_id, newPosition);
       onRefresh();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
     } finally {
-      setDraggedIndex(null);
       setIsProcessing(false);
     }
-  }, [draggedIndex, groupedItems, isProcessing, onRefresh]);
+  }, [groupedItems, isProcessing, onRefresh]);
 
-  const handleDragEnd = useCallback(() => {
-    setDraggedIndex(null);
-    setDropTargetIndex(null);
-  }, []);
+  // Move item down in queue (increase position)
+  const handleMoveDown = useCallback(async (index: number) => {
+    if (isProcessing || index >= groupedItems.length - 1) return;
+    
+    setIsProcessing(true);
+    const item = groupedItems[index];
+    const newPosition = index + 1;
+    
+    try {
+      await TauriService.reorderDownloadQueue(item.model_id, newPosition);
+      onRefresh();
+    } catch (error) {
+      console.error('Failed to reorder queue:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [groupedItems, isProcessing, onRefresh]);
 
   if (!isOpen || groupedItems.length === 0) {
     return null;
@@ -185,17 +165,28 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
         {groupedItems.map((item, index) => (
           <div
             key={item.group_id || item.model_id}
-            className={`${styles.queueItem} ${draggedIndex === index ? styles.dragging : ''} ${dropTargetIndex === index ? styles.dropTarget : ''}`}
-            draggable={!isProcessing}
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragOver={(e) => handleDragOver(e, index)}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, index)}
-            onDragEnd={handleDragEnd}
+            className={styles.queueItem}
           >
-            {/* Drag handle */}
-            <div className={styles.dragHandle} title="Drag to reorder">
-              <span className={styles.dragIcon}>☰</span>
+            {/* Reorder buttons */}
+            <div className={styles.reorderButtons}>
+              <button
+                className={styles.reorderBtn}
+                onClick={() => handleMoveUp(index)}
+                disabled={isProcessing || index === 0}
+                title="Move up"
+                aria-label="Move up in queue"
+              >
+                ▲
+              </button>
+              <button
+                className={styles.reorderBtn}
+                onClick={() => handleMoveDown(index)}
+                disabled={isProcessing || index === groupedItems.length - 1}
+                title="Move down"
+                aria-label="Move down in queue"
+              >
+                ▼
+              </button>
             </div>
             
             {/* Item info */}

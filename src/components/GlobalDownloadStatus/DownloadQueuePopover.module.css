@@ -79,41 +79,46 @@
   background: var(--color-surface-hover, #333333);
 }
 
-.queueItem.dragging {
-  opacity: 0.5;
-  background: var(--color-surface-elevated, #333333);
-}
-
-.queueItem.dropTarget {
-  background: rgba(34, 211, 238, 0.1);
-  border-top: 2px solid var(--color-primary, #22d3ee);
-}
-
-/* Drag Handle */
-.dragHandle {
+/* Reorder Buttons */
+.reorderButtons {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  cursor: grab;
-  opacity: 0.5;
-  transition: opacity 0.15s ease;
+  flex-direction: column;
+  gap: 2px;
   flex-shrink: 0;
 }
 
-.dragHandle:hover {
-  opacity: 1;
-}
-
-.dragHandle:active {
-  cursor: grabbing;
-}
-
-.dragIcon {
-  font-size: 14px;
+.reorderBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 14px;
+  background: transparent;
+  border: 1px solid var(--color-border, #3a3a3a);
+  border-radius: var(--radius-xs, 3px);
   color: var(--color-text-secondary, #999);
-  user-select: none;
+  cursor: pointer;
+  font-size: 8px;
+  line-height: 1;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.reorderBtn:hover:not(:disabled) {
+  background: var(--color-surface-hover, #3a3a3a);
+  color: var(--color-text-primary, #e0e0e0);
+  border-color: var(--color-border-hover, #4a4a4a);
+}
+
+.reorderBtn:active:not(:disabled) {
+  background: var(--color-primary, #22d3ee);
+  color: var(--color-surface, #1a1a1a);
+  border-color: var(--color-primary, #22d3ee);
+}
+
+.reorderBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* Item Info */
