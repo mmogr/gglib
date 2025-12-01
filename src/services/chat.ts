@@ -157,6 +157,38 @@ export class ChatService {
   }
 
   /**
+   * Update a message's content.
+   * 
+   * @param messageId - The ID of the message to update
+   * @param content - The new content for the message
+   */
+  static async updateMessage(messageId: number, content: string): Promise<void> {
+    const response = await apiFetch(`/messages/${messageId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!response.ok) {
+      throw buildError(response, "Failed to update message");
+    }
+  }
+
+  /**
+   * Delete a message and all subsequent messages in the conversation.
+   * This cascade deletion maintains conversation coherence.
+   * 
+   * @param messageId - The ID of the message to delete
+   * @returns The number of messages deleted (including the target and subsequent messages)
+   */
+  static async deleteMessage(messageId: number): Promise<{ deleted_count: number }> {
+    const response = await apiFetch(`/messages/${messageId}`, {
+      method: "DELETE",
+    });
+    return parseResponse<{ deleted_count: number }>(response, "Failed to delete message");
+  }
+
+  /**
    * Generate a chat title using the currently served LLM.
    * 
    * Sends the conversation history to the model with a prompt asking for a short,
