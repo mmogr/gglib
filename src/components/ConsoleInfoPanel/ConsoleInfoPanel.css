@@ -6,6 +6,15 @@
   height: 100%;
 }
 
+/* View tabs (Chat / Console) */
+.console-info-tabs {
+  margin-bottom: var(--spacing-md);
+}
+
+.console-info-tabs .sidebar-tabs-container {
+  padding: 0;
+}
+
 .console-info-header {
   display: flex;
   align-items: flex-start;

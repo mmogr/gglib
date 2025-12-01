@@ -4,7 +4,6 @@ import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
-import SidebarTabs, { SidebarTab } from '../components/ModelLibraryPanel/SidebarTabs';
 import { ToastContainer } from '../components/Toast';
 import { useGglibRuntime } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
@@ -12,12 +11,7 @@ import { useToast } from '../hooks/useToast';
 import { ChatService, ConversationSummary, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/chat';
 import './ChatPage.css';
 
-type ChatPageTabId = 'chat' | 'console';
-
-const CHAT_PAGE_TABS: SidebarTab<ChatPageTabId>[] = [
-  { id: 'chat', label: 'Chat', icon: '💬' },
-  { id: 'console', label: 'Console', icon: '📟' },
-];
+export type ChatPageTabId = 'chat' | 'console';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
@@ -27,6 +21,7 @@ interface ChatPageProps {
   modelName: string;
   contextLength?: number;
   serverStartTime?: number; // Unix timestamp in seconds
+  initialView?: 'chat' | 'console'; // Which view to show initially
   onClose: () => Promise<void>; // Stops server and exits
 }
 
@@ -35,10 +30,11 @@ export default function ChatPage({
   modelName,
   contextLength,
   serverStartTime,
+  initialView = 'chat',
   onClose,
 }: ChatPageProps) {
   // Tab state
-  const [activeTab, setActiveTab] = useState<ChatPageTabId>('chat');
+  const [activeTab, setActiveTab] = useState<ChatPageTabId>(initialView);
   
   // Conversation state
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -263,15 +259,6 @@ export default function ChatPage({
 
   return (
     <div className="chat-page">
-      {/* Tab Navigation */}
-      <div className="chat-page-tabs">
-        <SidebarTabs<ChatPageTabId>
-          tabs={CHAT_PAGE_TABS}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
-      </div>
-
       {activeTab === 'chat' ? (
         /* Chat Tab Content */
         <AssistantRuntimeProvider runtime={runtime}>
@@ -293,6 +280,8 @@ export default function ChatPage({
                 loading={conversationLoading}
                 modelName={modelName}
                 onClose={onClose}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
               />
               <div className="resize-handle" onMouseDown={handleMouseDown} />
             </div>
@@ -333,6 +322,8 @@ export default function ChatPage({
               contextLength={contextLength}
               startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
               onStopServer={onClose}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
             />
             <div className="resize-handle" onMouseDown={handleMouseDown} />
           </div>

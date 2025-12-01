@@ -16,6 +16,7 @@ interface ChatSession {
   serverPort: number;
   modelId: number;
   modelName: string;
+  initialView: 'chat' | 'console';
 }
 
 interface ModelControlCenterPageProps {
@@ -29,7 +30,7 @@ interface ModelControlCenterPageProps {
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
-    selectModel: (modelId: number) => void;
+    selectModel: (modelId: number, view?: 'chat' | 'console') => void;
   }) => void;
 }
 
@@ -125,8 +126,22 @@ export default function ModelControlCenterPage({
             TauriService.syncMenuStateSilent();
           }
         },
-        selectModel: (modelId: number) => {
-          selectModel(modelId);
+        selectModel: (modelId: number, view?: 'chat' | 'console') => {
+          // If a view is specified, open the chat/console page for that server
+          if (view) {
+            const server = servers.find(s => s.model_id === modelId);
+            if (server) {
+              setChatSession({
+                serverPort: server.port,
+                modelId: server.model_id,
+                modelName: server.model_name,
+                initialView: view,
+              });
+            }
+          } else {
+            // Just select the model in the library
+            selectModel(modelId);
+          }
         },
       });
     }
@@ -254,6 +269,7 @@ export default function ModelControlCenterPage({
       serverPort: serverInfo.port,
       modelId: serverInfo.model_id,
       modelName: serverInfo.model_name,
+      initialView: 'chat',
     });
   };
 
@@ -272,6 +288,7 @@ export default function ModelControlCenterPage({
       <ChatPage
         serverPort={chatSession.serverPort}
         modelName={chatSession.modelName}
+        initialView={chatSession.initialView}
         onClose={handleCloseChat}
       />
     );

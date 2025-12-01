@@ -1,5 +1,12 @@
 import { FC, useState, useEffect, useCallback } from 'react';
+import { ChatPageTabId } from '../../pages/ChatPage';
+import SidebarTabs, { SidebarTab } from '../ModelLibraryPanel/SidebarTabs';
 import './ConsoleInfoPanel.css';
+
+const CHAT_PAGE_TABS: SidebarTab<ChatPageTabId>[] = [
+  { id: 'chat', label: 'Chat', icon: '💬' },
+  { id: 'console', label: 'Console', icon: '📟' },
+];
 
 interface ConsoleInfoPanelProps {
   modelName: string;
@@ -7,6 +14,8 @@ interface ConsoleInfoPanelProps {
   contextLength?: number;
   startTime: number; // Unix timestamp in seconds
   onStopServer: () => Promise<void>;
+  activeTab: ChatPageTabId;
+  onTabChange: (tab: ChatPageTabId) => void;
 }
 
 interface ServerMetrics {
@@ -46,6 +55,8 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   contextLength,
   startTime,
   onStopServer,
+  activeTab,
+  onTabChange,
 }) => {
   const [uptime, setUptime] = useState(() => formatUptime(startTime));
   const [metrics, setMetrics] = useState<ServerMetrics | null>(null);
@@ -98,6 +109,15 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   return (
     <div className="mcc-panel console-info-panel">
       <div className="mcc-panel-header">
+        {/* View Tabs */}
+        <div className="console-info-tabs">
+          <SidebarTabs<ChatPageTabId>
+            tabs={CHAT_PAGE_TABS}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+          />
+        </div>
+
         <div className="console-info-header">
           <div className="console-info-title-group">
             <span className="console-info-label">Server running</span>

@@ -42,7 +42,7 @@ function App() {
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
-    selectModel: (modelId: number) => void;
+    selectModel: (modelId: number, view?: 'chat' | 'console') => void;
   } | null>(null);
 
   // Show llama install modal when needed (only for Tauri desktop app)
@@ -146,8 +146,8 @@ function App() {
   }, [checkLlamaStatus]);
 
   // Handler for selecting a model from the header popover
-  const handleSelectModelFromHeader = useCallback((modelId: number) => {
-    menuActionsRef.current?.selectModel?.(modelId);
+  const handleSelectModelFromHeader = useCallback((modelId: number, view?: 'chat' | 'console') => {
+    menuActionsRef.current?.selectModel?.(modelId, view);
   }, []);
 
   // Callback to register menu actions from ModelControlCenterPage
@@ -157,7 +157,7 @@ function App() {
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
-    selectModel: (modelId: number) => void;
+    selectModel: (modelId: number, view?: 'chat' | 'console') => void;
   }) => {
     menuActionsRef.current = actions;
   }, []);

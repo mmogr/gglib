@@ -8,7 +8,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   servers: ServerInfo[];
   onStopServer: (modelId: number) => Promise<void>;
-  onSelectModel: (modelId: number) => void;
+  onSelectModel: (modelId: number, view?: 'chat' | 'console') => void;
   onRefreshServers?: () => void;
 }
 
