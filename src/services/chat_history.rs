@@ -233,3 +233,59 @@ pub async fn get_message_count(pool: &SqlitePool, conversation_id: i64) -> Resul
 
     Ok(row.get("count"))
 }
+
+/// Update a message's content by ID
+pub async fn update_message(pool: &SqlitePool, message_id: i64, content: String) -> Result<()> {
+    let result = sqlx::query("UPDATE chat_messages SET content = ? WHERE id = ?")
+        .bind(&content)
+        .bind(message_id)
+        .execute(pool)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Message not found: {}", message_id));
+    }
+
+    // Update the conversation timestamp
+    sqlx::query(
+        "UPDATE chat_conversations SET updated_at = datetime('now') 
+         WHERE id = (SELECT conversation_id FROM chat_messages WHERE id = ?)",
+    )
+    .bind(message_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Delete a message and all subsequent messages in the same conversation.
+/// Returns the number of messages deleted.
+pub async fn delete_message_and_subsequent(pool: &SqlitePool, message_id: i64) -> Result<i64> {
+    // First get the conversation_id for this message
+    let row = sqlx::query("SELECT conversation_id FROM chat_messages WHERE id = ?")
+        .bind(message_id)
+        .fetch_optional(pool)
+        .await?;
+
+    let conversation_id: i64 = match row {
+        Some(r) => r.get("conversation_id"),
+        None => return Err(anyhow::anyhow!("Message not found: {}", message_id)),
+    };
+
+    // Delete the target message and all messages with higher IDs in the same conversation
+    let result = sqlx::query(
+        "DELETE FROM chat_messages WHERE conversation_id = ? AND id >= ?",
+    )
+    .bind(conversation_id)
+    .bind(message_id)
+    .execute(pool)
+    .await?;
+
+    // Update the conversation timestamp
+    sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
+        .bind(conversation_id)
+        .execute(pool)
+        .await?;
+
+    Ok(result.rows_affected() as i64)
+}
