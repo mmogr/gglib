@@ -27,6 +27,8 @@ pub struct StartServerConfig {
     pub model_id: u32,
     /// Optional context length override
     pub context_length: Option<u64>,
+    /// Optional port override (None = auto-allocate)
+    pub port: Option<u16>,
     /// Optional explicit jinja flag (None = auto-detect from tags)
     pub jinja: Option<bool>,
     /// Optional explicit reasoning format (None = auto-detect from tags)
@@ -175,6 +177,7 @@ impl ServerService {
                 model.name.clone(),
                 &model.file_path.to_string_lossy(),
                 context_length,
+                config.port,
                 jinja_resolution.enabled,
                 reasoning_resolution.format,
             )

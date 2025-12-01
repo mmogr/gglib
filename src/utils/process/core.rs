@@ -37,12 +37,22 @@ impl ProcessCore {
     /// Spawn a new llama-server process
     ///
     /// Returns the port number and ServerInfo for the spawned process.
+    ///
+    /// # Arguments
+    /// * `model_id` - Unique model identifier
+    /// * `model_name` - Human-readable model name
+    /// * `model_path` - Path to the model file
+    /// * `context_size` - Optional context window size
+    /// * `port` - Optional specific port (None = auto-allocate)
+    /// * `jinja` - Enable Jinja templating
+    /// * `reasoning_format` - Optional reasoning format for thinking models
     pub fn spawn(
         &mut self,
         model_id: u32,
         model_name: String,
         model_path: &Path,
         context_size: Option<u64>,
+        port: Option<u16>,
         jinja: bool,
         reasoning_format: Option<String>,
     ) -> Result<u16> {
@@ -56,8 +66,27 @@ impl ProcessCore {
             return Err(anyhow!("Model file not found: {}", model_path.display()));
         }
 
-        // Allocate port
-        let port = self.allocate_port()?;
+        // Use specified port or auto-allocate
+        let port = match port {
+            Some(p) => {
+                // Validate port is not privileged
+                if p < 1024 {
+                    return Err(anyhow!(
+                        "Port {} is a privileged port. Please use a port >= 1024.",
+                        p
+                    ));
+                }
+                // Check if the specified port is available
+                if !Self::is_port_available(p) {
+                    return Err(anyhow!(
+                        "Port {} is already in use. Please choose a different port.",
+                        p
+                    ));
+                }
+                p
+            }
+            None => self.allocate_port()?,
+        };
 
         // Build llama-server command
         let mut cmd = Command::new(&self.llama_server_path);

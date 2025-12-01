@@ -80,6 +80,7 @@ impl ProcessManager {
         model_name: String,
         model_path: &str,
         context_length: Option<u64>,
+        port: Option<u16>,
         jinja: bool,
         reasoning_format: Option<String>,
     ) -> Result<u16> {
@@ -90,6 +91,7 @@ impl ProcessManager {
                     model_name,
                     model_path,
                     context_length,
+                    port,
                     *max_concurrent,
                     jinja,
                     reasoning_format,
@@ -113,6 +115,7 @@ impl ProcessManager {
         model_name: String,
         model_path: &str,
         context_length: Option<u64>,
+        port: Option<u16>,
         max_concurrent: usize,
         jinja: bool,
         reasoning_format: Option<String>,
@@ -134,11 +137,12 @@ impl ProcessManager {
 
         // Spawn the process
         let path = std::path::Path::new(model_path);
-        let port = core.spawn(
+        let allocated_port = core.spawn(
             model_id,
             model_name,
             path,
             context_length,
+            port,
             jinja,
             reasoning_format,
         )?;
@@ -148,13 +152,13 @@ impl ProcessManager {
 
         // Wait for server to be ready by polling health endpoint
         debug!(
-            port = %port,
+            port = %allocated_port,
             "Waiting for llama-server to be ready"
         );
-        self.wait_for_health(port).await?;
+        self.wait_for_health(allocated_port).await?;
         debug!("llama-server is ready and accepting requests");
 
-        Ok(port)
+        Ok(allocated_port)
     }
 
     /// Ensure a model is running with SingleSwap strategy (Proxy behavior)
@@ -294,7 +298,7 @@ impl ProcessManager {
             ));
         }
 
-        // Spawn the process
+        // Spawn the process (SingleSwap always auto-allocates port)
         let port = {
             let mut core = self.core.write().await;
             core.spawn(
@@ -302,6 +306,7 @@ impl ProcessManager {
                 model.name.clone(),
                 &model.file_path,
                 context_size,
+                None, // SingleSwap strategy always auto-allocates port
                 jinja,
                 reasoning_format,
             )?

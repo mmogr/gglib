@@ -194,6 +194,7 @@ impl GuiBackend {
         let config = StartServerConfig {
             model_id: id,
             context_length: request.context_length,
+            port: request.port,
             jinja: request.jinja,
             reasoning_format: request.reasoning_format,
         };

@@ -168,6 +168,7 @@ export class TauriService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           context_length: config.context_length || (config.ctx_size ? parseInt(config.ctx_size) : undefined),
+          port: config.port,
           mlock: config.mlock || false,
           jinja: config.jinja,
         }),
