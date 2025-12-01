@@ -152,17 +152,9 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     
     try {
       // Calculate the new position based on target index
-      // We need to map from UI index to actual queue position
-      const targetItem = groupedItems[targetIndex];
-      let newPosition = targetItem.position;
-      
-      // If moving down, insert after the target
-      if (targetIndex > draggedIndex) {
-        newPosition = targetItem.position;
-      } else {
-        // If moving up, insert before the target
-        newPosition = Math.max(0, targetItem.position - 1);
-      }
+      // The backend expects a 0-based position in the queue
+      // Simply use the target index directly since our grouped items are already sorted by position
+      const newPosition = targetIndex;
       
       await TauriService.reorderDownloadQueue(draggedItem.model_id, newPosition);
       onRefresh();
