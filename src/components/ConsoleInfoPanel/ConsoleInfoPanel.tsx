@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, useCallback } from 'react';
+import { FC, useState, useEffect, useCallback, useRef } from 'react';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import './ConsoleInfoPanel.css';
@@ -14,8 +14,9 @@ interface ConsoleInfoPanelProps {
 }
 
 interface ServerMetrics {
-  kvCacheUsageRatio: number;
-  kvCacheTokens: number;
+  kvCacheUsageRatio: number | null;
+  kvCacheTokens: number | null;
+  nTokensMax: number;
   promptTokensTotal: number;
   predictedTokensTotal: number;
   requestsProcessing: number;
@@ -56,13 +57,35 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   const [uptime, setUptime] = useState(() => formatUptime(startTime));
   const [metrics, setMetrics] = useState<ServerMetrics | null>(null);
   const [isStopping, setIsStopping] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Update uptime every second
+  // Update uptime every second - sync to wall clock to prevent flicker
   useEffect(() => {
-    const interval = setInterval(() => {
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    
+    // Initial update
+    setUptime(formatUptime(startTime));
+    
+    // Calculate ms until next whole second to sync updates
+    const msUntilNextSecond = 1000 - (Date.now() % 1000);
+    
+    // First, wait until next whole second, then start interval
+    const timeout = setTimeout(() => {
       setUptime(formatUptime(startTime));
-    }, 1000);
-    return () => clearInterval(interval);
+      intervalRef.current = setInterval(() => {
+        setUptime(formatUptime(startTime));
+      }, 1000);
+    }, msUntilNextSecond);
+    
+    return () => {
+      clearTimeout(timeout);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
   }, [startTime]);
 
   // Poll server metrics
@@ -99,7 +122,9 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
 
   const contextUsagePercent = metrics?.kvCacheUsageRatio != null 
     ? Math.round(metrics.kvCacheUsageRatio * 100) 
-    : null;
+    : metrics?.nTokensMax != null && contextLength 
+      ? Math.round((metrics.nTokensMax / contextLength) * 100)
+      : null;
 
   return (
     <div className="mcc-panel console-info-panel">
@@ -166,16 +191,16 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
                 </div>
                 <div className="context-usage-stats">
                   <span className="context-usage-percent">{contextUsagePercent}%</span>
-                  {metrics?.kvCacheTokens != null && (
+                  {(metrics?.kvCacheTokens != null || metrics?.nTokensMax != null) && (
                     <span className="context-usage-tokens">
-                      {metrics.kvCacheTokens.toLocaleString()} tokens
+                      {(metrics.kvCacheTokens ?? metrics.nTokensMax ?? 0).toLocaleString()} tokens
                     </span>
                   )}
                 </div>
               </div>
             ) : (
               <p className="console-info-hint">
-                Loading metrics...
+                No usage yet
               </p>
             )}
           </section>
@@ -240,18 +265,19 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
  * Parse Prometheus-format metrics text into structured data
  */
 function parsePrometheusMetrics(text: string): ServerMetrics {
-  const getMetricValue = (name: string): number => {
+  const getMetricValue = (name: string): number | null => {
     const regex = new RegExp(`^${name}\\s+([\\d.]+)`, 'm');
     const match = text.match(regex);
-    return match ? parseFloat(match[1]) : 0;
+    return match ? parseFloat(match[1]) : null;
   };
 
   return {
     kvCacheUsageRatio: getMetricValue('llamacpp:kv_cache_usage_ratio'),
     kvCacheTokens: getMetricValue('llamacpp:kv_cache_tokens'),
-    promptTokensTotal: getMetricValue('llamacpp:prompt_tokens_total'),
-    predictedTokensTotal: getMetricValue('llamacpp:tokens_predicted_total'),
-    requestsProcessing: getMetricValue('llamacpp:requests_processing'),
+    nTokensMax: getMetricValue('llamacpp:n_tokens_max') ?? 0,
+    promptTokensTotal: getMetricValue('llamacpp:prompt_tokens_total') ?? 0,
+    predictedTokensTotal: getMetricValue('llamacpp:tokens_predicted_total') ?? 0,
+    requestsProcessing: getMetricValue('llamacpp:requests_processing') ?? 0,
   };
 }
 
