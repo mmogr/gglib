@@ -38,6 +38,10 @@
   color: var(--color-text);
 }
 
+.queueBadgeContainer {
+  position: relative;
+}
+
 .queueBadge {
   background: rgba(34, 211, 238, 0.15);
   color: var(--color-primary);
@@ -45,6 +49,13 @@
   font-weight: var(--font-weight-medium);
   padding: 0.15rem 0.5rem;
   border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.queueBadge:hover {
+  background: rgba(34, 211, 238, 0.25);
 }
 
 .cancelBtn {

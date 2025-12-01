@@ -364,6 +364,33 @@ pub async fn remove_from_download_queue(
     ))))
 }
 
+/// Reorder an item in the download queue
+#[derive(Debug, Deserialize)]
+pub struct ReorderQueueRequest {
+    pub model_id: String,
+    pub new_position: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReorderQueueResponse {
+    pub actual_position: usize,
+}
+
+pub async fn reorder_download_queue(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ReorderQueueRequest>,
+) -> Result<Json<ApiResponse<ReorderQueueResponse>>, AppError> {
+    let actual_position = state
+        .backend
+        .reorder_download_queue(&payload.model_id, payload.new_position)
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(ReorderQueueResponse {
+        actual_position,
+    })))
+}
+
 /// Clear all failed downloads
 pub async fn clear_failed_downloads(
     State(state): State<Arc<AppState>>,

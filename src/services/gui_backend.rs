@@ -379,6 +379,29 @@ impl GuiBackend {
         self.core.downloads().remove_from_queue(model_id).await
     }
 
+    /// Reorder a queued download to a new position.
+    ///
+    /// For sharded models, all shards are moved together as a unit.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - The model ID to move
+    /// * `new_position` - The target position (0-based index)
+    ///
+    /// # Returns
+    ///
+    /// The actual position where the item(s) were placed.
+    pub async fn reorder_download_queue(
+        &self,
+        model_id: &str,
+        new_position: usize,
+    ) -> Result<usize> {
+        self.core
+            .downloads()
+            .reorder_queue(model_id, new_position)
+            .await
+    }
+
     /// Cancel all shards in a shard group (for sharded model downloads).
     ///
     /// This removes all pending shards in the group and cancels any active

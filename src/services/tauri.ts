@@ -504,6 +504,34 @@ export class TauriService {
   }
 
   /**
+   * Reorder a pending download to a new position in the queue.
+   * For sharded models, all shards are moved together as a unit.
+   *
+   * @param modelId - The model ID to move
+   * @param newPosition - The target position (0-based index)
+   * @returns The actual position where the item(s) were placed
+   */
+  static async reorderDownloadQueue(modelId: string, newPosition: number): Promise<number> {
+    if (isTauriApp) {
+      return await invoke<number>('reorder_download_queue', { modelId, newPosition });
+    } else {
+      const response = await apiFetch(`/models/download/queue/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId, new_position: newPosition }),
+      });
+
+      if (!response.ok) {
+        const error: ApiResponse<any> = await response.json();
+        throw new Error(error.error || 'Failed to reorder queue');
+      }
+
+      const data: ApiResponse<{ actual_position: number }> = await response.json();
+      return data.data?.actual_position ?? newPosition;
+    }
+  }
+
+  /**
    * Cancel all shards in a shard group (for sharded model downloads).
    * This removes all pending shards and cancels any active download in the group.
    */

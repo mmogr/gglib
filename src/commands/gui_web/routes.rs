@@ -53,6 +53,10 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             post(handlers::remove_from_download_queue),
         )
         .route(
+            "/api/models/download/queue/reorder",
+            post(handlers::reorder_download_queue),
+        )
+        .route(
             "/api/models/download/queue/clear-failed",
             post(handlers::clear_failed_downloads),
         )
