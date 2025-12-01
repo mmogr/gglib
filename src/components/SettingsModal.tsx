@@ -51,8 +51,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
   }, [settings]);
 
-  const handleOverlayClick = useCallback(() => {
-    if (!saving) {
+  const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only close if mousedown is directly on the overlay, not bubbled from children
+    if (e.target === e.currentTarget && !saving) {
       onClose();
     }
   }, [onClose, saving]);
@@ -136,8 +137,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   }
 
   return (
-    <div className="modal-overlay" onClick={handleOverlayClick}>
-      <div className="modal modal-md" onClick={(event) => event.stopPropagation()}>
+    <div className="modal-overlay" onMouseDown={handleOverlayMouseDown}>
+      <div className="modal modal-md">
         <div className="modal-header">
           <h2 className="modal-title">Settings</h2>
           <button className="modal-close" onClick={handleOverlayClick} aria-label="Close settings dialog">
