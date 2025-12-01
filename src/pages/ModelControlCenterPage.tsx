@@ -225,11 +225,15 @@ export default function ModelControlCenterPage({
     }
   };
 
-  // Handler for sidebar tab changes - clears HF selection when leaving HF browser context
+  // Handler for sidebar tab changes - manages model selection based on context
   const handleSidebarTabChange = (tab: SidebarTabId) => {
     setSidebarTab(tab);
-    // Clear HF model selection when switching away from the Add Models tab
-    if (tab !== 'add') {
+    // Clear appropriate model selection based on tab context
+    if (tab === 'add') {
+      // Clear local model selection when entering Add Models tab
+      selectModel(null);
+    } else {
+      // Clear HF model selection when leaving the Add Models tab
       setSelectedHfModel(null);
     }
   };
