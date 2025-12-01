@@ -458,6 +458,19 @@ async fn remove_from_download_queue(
 }
 
 #[tauri::command]
+async fn reorder_download_queue(
+    model_id: String,
+    new_position: usize,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, String> {
+    state
+        .backend
+        .reorder_download_queue(&model_id, new_position)
+        .await
+        .map_err(|e| format!("Failed to reorder queue: {}", e))
+}
+
+#[tauri::command]
 async fn cancel_shard_group(
     group_id: String,
     state: tauri::State<'_, AppState>,
@@ -865,6 +878,7 @@ async fn main() {
             queue_download,
             get_download_queue,
             remove_from_download_queue,
+            reorder_download_queue,
             cancel_shard_group,
             clear_failed_downloads,
             browse_hf_models,
