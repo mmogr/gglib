@@ -98,7 +98,8 @@ impl ProcessCore {
             .arg("--host")
             .arg("127.0.0.1")
             .arg("--port")
-            .arg(port.to_string());
+            .arg(port.to_string())
+            .arg("--metrics"); // Enable metrics endpoint for context usage monitoring
 
         // Add context size if specified
         if let Some(ctx) = context_size {

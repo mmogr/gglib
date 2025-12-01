@@ -160,7 +160,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
               </div>
             ) : (
               <p className="console-info-hint">
-                Enable <code>--metrics</code> flag to see live context usage
+                Loading metrics...
               </p>
             )}
           </section>
