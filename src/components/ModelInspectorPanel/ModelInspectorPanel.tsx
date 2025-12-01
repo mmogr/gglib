@@ -2,6 +2,7 @@ import { FC, useState, useEffect, useCallback } from 'react';
 import { GgufModel, ServeConfig, ServerInfo, HfModelSummary, DownloadQueueStatus } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { useSettings } from '../../hooks/useSettings';
+import { useToast } from '../../hooks/useToast';
 import { formatParamCount, getHuggingFaceUrl } from '../../utils/format';
 import { HfModelPreview } from '../HfModelPreview';
 import './ModelInspectorPanel.css';
@@ -42,6 +43,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   queueStatus,
 }) => {
   const { settings } = useSettings();
+  const { showToast } = useToast();
   const [modelTags, setModelTags] = useState<string[]>([]);
   const [showServeModal, setShowServeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -50,6 +52,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   const [editedQuantization, setEditedQuantization] = useState('');
   const [editedFilePath, setEditedFilePath] = useState('');
   const [customContext, setCustomContext] = useState('');
+  const [customPort, setCustomPort] = useState('');
   const [jinjaOverride, setJinjaOverride] = useState<boolean | null>(null);
   const [isServing, setIsServing] = useState(false);
 
@@ -152,15 +155,30 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
         contextLength = model.context_length;
       }
 
+      // Parse port if specified (must be >= 1024)
+      let port: number | undefined = undefined;
+      if (customPort.trim()) {
+        const parsed = parseInt(customPort.trim());
+        if (!isNaN(parsed) && parsed >= 1024 && parsed <= 65535) {
+          port = parsed;
+        } else if (!isNaN(parsed) && parsed < 1024) {
+          showToast('Port must be 1024 or higher (privileged ports require root)', 'error');
+          setIsServing(false);
+          return;
+        }
+      }
+
       const config: ServeConfig = {
         id: model.id,
         context_length: contextLength,
+        port,
         mlock: false,
         jinja: jinjaOverride === null ? undefined : jinjaOverride,
       };
 
       const result = await TauriService.serveModel(config);
       setShowServeModal(false);
+      setCustomPort(''); // Reset port input for next time
       onStartServer();
       
       // Notify parent that server started - opens chat view
@@ -174,7 +192,13 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
       }
     } catch (error) {
       console.error('Failed to start server:', error);
-      alert(`Failed to start server: ${error}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Check if it's a port-related error for better UX
+      if (errorMessage.toLowerCase().includes('port') && errorMessage.toLowerCase().includes('in use')) {
+        showToast(errorMessage, 'error');
+      } else {
+        showToast(`Failed to start server: ${errorMessage}`, 'error');
+      }
     } finally {
       setIsServing(false);
     }
@@ -506,6 +530,31 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                   {model.context_length
                     ? `Model's maximum: ${model.context_length.toLocaleString()} tokens`
                     : 'No model context metadata available'}
+                </p>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="port-input">
+                  Port
+                  <span className="label-hint"> (optional)</span>
+                </label>
+                <input
+                  id="port-input"
+                  type="number"
+                  className="context-input"
+                  placeholder={
+                    settings?.server_port
+                      ? `Auto (from ${settings.server_port})`
+                      : 'Auto (from 9000)'
+                  }
+                  value={customPort}
+                  onChange={(e) => setCustomPort(e.target.value)}
+                  disabled={isServing}
+                  min="1024"
+                  max="65535"
+                />
+                <p className="input-help">
+                  Leave empty to auto-allocate from base port
                 </p>
               </div>
 
