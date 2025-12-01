@@ -15,6 +15,11 @@
   gap: 0;
 }
 
+/* Hidden state for tab switching - keeps component mounted but invisible */
+.chat-page-layout--hidden {
+  display: none;
+}
+
 /* Modal styles */
 .chat-modal-overlay {
   position: fixed;
