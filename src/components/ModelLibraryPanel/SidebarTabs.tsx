@@ -1,28 +1,30 @@
-import { FC, ReactNode } from 'react';
+import { ReactNode } from 'react';
 import './SidebarTabs.css';
 
+// Legacy type for ModelLibraryPanel backwards compatibility
 export type SidebarTabId = 'models' | 'add';
 
-export interface SidebarTab {
-  id: SidebarTabId;
+export interface SidebarTab<T extends string = SidebarTabId> {
+  id: T;
   label: string;
   icon?: string;
 }
 
-interface SidebarTabsProps {
-  tabs: SidebarTab[];
-  activeTab: SidebarTabId;
-  onTabChange: (tabId: SidebarTabId) => void;
+interface SidebarTabsProps<T extends string = SidebarTabId> {
+  tabs: SidebarTab<T>[];
+  activeTab: T;
+  onTabChange: (tabId: T) => void;
   /** Optional content to render on the right side of the tabs (e.g., action buttons) */
   rightContent?: ReactNode;
 }
 
-const SidebarTabs: FC<SidebarTabsProps> = ({
+// Generic version using function overload for better type inference
+function SidebarTabs<T extends string = SidebarTabId>({
   tabs,
   activeTab,
   onTabChange,
   rightContent,
-}) => {
+}: SidebarTabsProps<T>) {
   return (
     <div className="sidebar-tabs-container">
       <div className="sidebar-tabs" role="tablist">
@@ -46,6 +48,6 @@ const SidebarTabs: FC<SidebarTabsProps> = ({
       )}
     </div>
   );
-};
+}
 
 export default SidebarTabs;

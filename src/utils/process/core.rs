@@ -3,9 +3,11 @@
 //! This module provides low-level process spawning, tracking, and management
 //! functionality that is shared across different process management strategies.
 
+use crate::utils::process::log_streamer::get_log_manager;
 use crate::utils::process::types::{RunningProcess, ServerInfo};
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -112,28 +114,58 @@ impl ProcessCore {
             cmd.arg("--reasoning-format").arg(format);
         }
 
-        // For debugging: log to a file instead of suppressing
-        let log_path = std::env::temp_dir().join(format!("llama-server-{}.log", port));
-        let log_file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .ok();
-
-        if let Some(file) = log_file {
-            debug!(log_path = %log_path.display(), "Logging llama-server output");
-            cmd.stdout(file.try_clone().unwrap()).stderr(file);
-        } else {
-            // Fallback: suppress output if logging fails
-            cmd.stdout(Stdio::null()).stderr(Stdio::null());
-        }
+        // Use piped stdio for log streaming
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         // Spawn the process
-        let child = cmd
+        let mut child = cmd
             .spawn()
             .map_err(|e| anyhow!("Failed to spawn llama-server: {}", e))?;
 
         let pid = child.id();
+
+        // Spawn thread to read stdout and stream to log manager
+        if let Some(stdout) = child.stdout.take() {
+            let log_port = port;
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stdout);
+                let log_manager = get_log_manager();
+                for line in reader.lines() {
+                    match line {
+                        Ok(text) => {
+                            log_manager.add_log(log_port, &text);
+                        }
+                        Err(e) => {
+                            debug!(port = %log_port, error = %e, "Error reading stdout");
+                            break;
+                        }
+                    }
+                }
+                debug!(port = %log_port, "stdout reader thread exiting");
+            });
+        }
+
+        // Spawn thread to read stderr and stream to log manager
+        if let Some(stderr) = child.stderr.take() {
+            let log_port = port;
+            std::thread::spawn(move || {
+                let reader = BufReader::new(stderr);
+                let log_manager = get_log_manager();
+                for line in reader.lines() {
+                    match line {
+                        Ok(text) => {
+                            log_manager.add_log(log_port, &text);
+                        }
+                        Err(e) => {
+                            debug!(port = %log_port, error = %e, "Error reading stderr");
+                            break;
+                        }
+                    }
+                }
+                debug!(port = %log_port, "stderr reader thread exiting");
+            });
+        }
+
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

@@ -73,6 +73,10 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
         .route("/api/models/:id/start", post(handlers::start_server))
         .route("/api/models/:id/stop", post(handlers::stop_server))
         .route("/api/servers", get(handlers::list_servers))
+        // Server log routes
+        .route("/api/servers/:port/logs", get(handlers::get_server_logs))
+        .route("/api/servers/:port/logs/stream", get(handlers::stream_server_logs))
+        .route("/api/servers/:port/logs", delete(handlers::clear_server_logs))
         // Proxy routes
         .route("/api/proxy/status", get(handlers::get_proxy_status))
         .route("/api/proxy/start", post(handlers::start_proxy))

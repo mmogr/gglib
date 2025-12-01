@@ -8,6 +8,12 @@
   background: var(--color-background);
 }
 
+.chat-page-tabs {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
 .chat-page-layout {
   display: grid;
   flex: 1;

@@ -851,6 +851,55 @@ pub async fn delete_message(
     })))
 }
 
+// ==================== Server Log Handlers ====================
+
+use crate::utils::process::log_streamer::{ServerLogEntry, get_log_manager};
+
+/// Response type for getting server logs
+#[derive(Debug, Serialize)]
+pub struct ServerLogsResponse {
+    pub logs: Vec<ServerLogEntry>,
+}
+
+/// Get historical logs for a server (by port)
+pub async fn get_server_logs(
+    Path(port): Path<u16>,
+) -> Result<Json<ApiResponse<ServerLogsResponse>>, AppError> {
+    let log_manager = get_log_manager();
+    let logs = log_manager.get_logs(port);
+    Ok(Json(ApiResponse::success(ServerLogsResponse { logs })))
+}
+
+/// Stream server logs as Server-Sent Events (SSE)
+pub async fn stream_server_logs(
+    Path(port): Path<u16>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<Event, std::convert::Infallible>>> {
+    let log_manager = get_log_manager();
+    let receiver = log_manager.subscribe();
+    
+    // Filter to only logs for the requested port
+    let stream = BroadcastStream::new(receiver)
+        .filter_map(move |result| {
+            match result {
+                Ok(entry) if entry.port == port => {
+                    Some(Ok(Event::default().data(serde_json::to_string(&entry).unwrap_or_default())))
+                }
+                _ => None,
+            }
+        });
+    
+    Sse::new(stream)
+}
+
+/// Clear logs for a specific server (by port)
+pub async fn clear_server_logs(
+    Path(port): Path<u16>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    let log_manager = get_log_manager();
+    log_manager.clear_logs(port);
+    Ok(Json(ApiResponse::success("Logs cleared".to_string())))
+}
+
 /// Custom error type for API handlers
 #[derive(Debug)]
 pub enum AppError {

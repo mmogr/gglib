@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
+import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
+import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
+import SidebarTabs, { SidebarTab } from '../components/ModelLibraryPanel/SidebarTabs';
 import { ToastContainer } from '../components/Toast';
 import { useGglibRuntime } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
@@ -9,20 +12,34 @@ import { useToast } from '../hooks/useToast';
 import { ChatService, ConversationSummary, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/chat';
 import './ChatPage.css';
 
+type ChatPageTabId = 'chat' | 'console';
+
+const CHAT_PAGE_TABS: SidebarTab<ChatPageTabId>[] = [
+  { id: 'chat', label: 'Chat', icon: '💬' },
+  { id: 'console', label: 'Console', icon: '📟' },
+];
+
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
 
 interface ChatPageProps {
   serverPort: number;
   modelName: string;
+  contextLength?: number;
+  serverStartTime?: number; // Unix timestamp in seconds
   onClose: () => Promise<void>; // Stops server and exits
 }
 
 export default function ChatPage({
   serverPort,
   modelName,
+  contextLength,
+  serverStartTime,
   onClose,
 }: ChatPageProps) {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<ChatPageTabId>('chat');
+  
   // Conversation state
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationLoading, setConversationLoading] = useState(true);
@@ -246,50 +263,86 @@ export default function ChatPage({
 
   return (
     <div className="chat-page">
-      <AssistantRuntimeProvider runtime={runtime}>
+      {/* Tab Navigation */}
+      <div className="chat-page-tabs">
+        <SidebarTabs<ChatPageTabId>
+          tabs={CHAT_PAGE_TABS}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+      </div>
+
+      {activeTab === 'chat' ? (
+        /* Chat Tab Content */
+        <AssistantRuntimeProvider runtime={runtime}>
+          <div
+            ref={layoutRef}
+            className="chat-page-layout"
+            style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
+          >
+            {/* Left Panel: Conversation List */}
+            <div className="grid-panel-container">
+              <ConversationListPanel
+                conversations={conversations}
+                activeConversationId={activeConversationId}
+                onSelectConversation={setActiveConversationId}
+                onDeleteConversation={handleDeleteConversation}
+                onNewConversation={handleNewConversation}
+                searchQuery={conversationSearch}
+                onSearchChange={setConversationSearch}
+                loading={conversationLoading}
+                modelName={modelName}
+                onClose={onClose}
+              />
+              <div className="resize-handle" onMouseDown={handleMouseDown} />
+            </div>
+
+            {/* Right Panel: Chat Messages */}
+            <div className="grid-panel-container">
+              <ChatMessagesPanel
+                activeConversation={activeConversation}
+                activeConversationId={activeConversationId}
+                isServerConnected={true}
+                serverPort={serverPort}
+                titleGenerationPrompt={titleGenerationPrompt}
+                onRenameConversation={handleRenameConversation}
+                onClearConversation={handleClearConversation}
+                onExportConversation={handleExportConversation}
+                onUpdateSystemPrompt={handleUpdateSystemPrompt}
+                persistedMessageIds={persistedMessageIds}
+                syncConversations={syncConversations}
+                chatError={chatError}
+                setChatError={setChatError}
+                showToast={showToast}
+              />
+            </div>
+          </div>
+        </AssistantRuntimeProvider>
+      ) : (
+        /* Console Tab Content */
         <div
           ref={layoutRef}
           className="chat-page-layout"
           style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
         >
-          {/* Left Panel: Conversation List */}
+          {/* Left Panel: Server Info */}
           <div className="grid-panel-container">
-            <ConversationListPanel
-              conversations={conversations}
-              activeConversationId={activeConversationId}
-              onSelectConversation={setActiveConversationId}
-              onDeleteConversation={handleDeleteConversation}
-              onNewConversation={handleNewConversation}
-              searchQuery={conversationSearch}
-              onSearchChange={setConversationSearch}
-              loading={conversationLoading}
+            <ConsoleInfoPanel
               modelName={modelName}
-              onClose={onClose}
+              serverPort={serverPort}
+              contextLength={contextLength}
+              startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
+              onStopServer={onClose}
             />
             <div className="resize-handle" onMouseDown={handleMouseDown} />
           </div>
 
-          {/* Right Panel: Chat Messages */}
+          {/* Right Panel: Server Logs */}
           <div className="grid-panel-container">
-            <ChatMessagesPanel
-              activeConversation={activeConversation}
-              activeConversationId={activeConversationId}
-              isServerConnected={true}
-              serverPort={serverPort}
-              titleGenerationPrompt={titleGenerationPrompt}
-              onRenameConversation={handleRenameConversation}
-              onClearConversation={handleClearConversation}
-              onExportConversation={handleExportConversation}
-              onUpdateSystemPrompt={handleUpdateSystemPrompt}
-              persistedMessageIds={persistedMessageIds}
-              syncConversations={syncConversations}
-              chatError={chatError}
-              setChatError={setChatError}
-              showToast={showToast}
-            />
+            <ConsoleLogPanel serverPort={serverPort} />
           </div>
         </div>
-      </AssistantRuntimeProvider>
+      )}
 
       {/* New Conversation Modal */}
       {isNewConversationModalOpen && (
