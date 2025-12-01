@@ -1,14 +1,8 @@
 import { FC, useState } from 'react';
 import { ServerInfo } from '../../types';
-import SidebarTabs, { SidebarTab } from '../ModelLibraryPanel/SidebarTabs';
+import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
+import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import './ServerList.css';
-
-type ServerViewTab = 'chat' | 'console';
-
-const SERVER_VIEW_TABS: SidebarTab<ServerViewTab>[] = [
-  { id: 'chat', label: 'Chat', icon: '💬' },
-  { id: 'console', label: 'Console', icon: '📟' },
-];
 
 interface ServerListProps {
   servers: ServerInfo[];
@@ -46,7 +40,7 @@ const ServerList: FC<ServerListProps> = ({
     setExpandedServerId(prev => prev === modelId ? null : modelId);
   };
 
-  const handleTabSelect = (modelId: number, tab: ServerViewTab) => {
+  const handleTabSelect = (modelId: number, tab: ChatPageTabId) => {
     onSelectModel?.(modelId, tab);
   };
 
@@ -106,8 +100,8 @@ const ServerList: FC<ServerListProps> = ({
             </div>
             {expandedServerId === server.model_id && onSelectModel && (
               <div className="server-item-tabs">
-                <SidebarTabs<ServerViewTab>
-                  tabs={SERVER_VIEW_TABS}
+                <SidebarTabs<ChatPageTabId>
+                  tabs={CHAT_PAGE_TABS}
                   activeTab="chat"
                   onTabChange={(tab) => handleTabSelect(server.model_id, tab)}
                 />

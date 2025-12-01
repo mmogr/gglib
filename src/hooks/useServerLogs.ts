@@ -83,7 +83,8 @@ export function useServerLogs(options: UseServerLogsOptions): UseServerLogsRetur
           const baseUrl = import.meta.env.DEV ? 'http://localhost:9887' : '';
           const response = await fetch(`${baseUrl}/api/servers/${serverPort}/logs`);
           if (response.ok) {
-            const initialLogs = await response.json() as ServerLogEntry[];
+            const json = await response.json() as { success: boolean; data?: { logs: ServerLogEntry[] } };
+            const initialLogs = json.data?.logs;
             if (initialLogs && initialLogs.length > 0) {
               setLogs(initialLogs);
             }

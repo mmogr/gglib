@@ -5,6 +5,7 @@ import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { ToastContainer } from '../components/Toast';
+import { SidebarTab } from '../components/ModelLibraryPanel/SidebarTabs';
 import { useGglibRuntime } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
 import { useToast } from '../hooks/useToast';
@@ -12,6 +13,12 @@ import { ChatService, ConversationSummary, DEFAULT_TITLE_GENERATION_PROMPT } fro
 import './ChatPage.css';
 
 export type ChatPageTabId = 'chat' | 'console';
+
+/** Shared tab definitions for Chat/Console view switching */
+export const CHAT_PAGE_TABS: SidebarTab<ChatPageTabId>[] = [
+  { id: 'chat', label: 'Chat', icon: '💬' },
+  { id: 'console', label: 'Console', icon: '📟' },
+];
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';

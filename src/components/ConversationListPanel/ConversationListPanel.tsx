@@ -1,13 +1,8 @@
 import { FC } from 'react';
 import { ConversationSummary } from '../../services/chat';
-import { ChatPageTabId } from '../../pages/ChatPage';
-import SidebarTabs, { SidebarTab } from '../ModelLibraryPanel/SidebarTabs';
+import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
+import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import './ConversationListPanel.css';
-
-const CHAT_PAGE_TABS: SidebarTab<ChatPageTabId>[] = [
-  { id: 'chat', label: 'Chat', icon: '💬' },
-  { id: 'console', label: 'Console', icon: '📟' },
-];
 
 interface ConversationListPanelProps {
   conversations: ConversationSummary[];

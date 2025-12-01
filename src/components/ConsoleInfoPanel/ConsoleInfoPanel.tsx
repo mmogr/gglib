@@ -1,12 +1,7 @@
 import { FC, useState, useEffect, useCallback } from 'react';
-import { ChatPageTabId } from '../../pages/ChatPage';
-import SidebarTabs, { SidebarTab } from '../ModelLibraryPanel/SidebarTabs';
+import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
+import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import './ConsoleInfoPanel.css';
-
-const CHAT_PAGE_TABS: SidebarTab<ChatPageTabId>[] = [
-  { id: 'chat', label: 'Chat', icon: '💬' },
-  { id: 'console', label: 'Console', icon: '📟' },
-];
 
 interface ConsoleInfoPanelProps {
   modelName: string;
