@@ -176,6 +176,22 @@ async fn list_servers(
         .map_err(|e| format!("Failed to list servers: {}", e))
 }
 
+// Server log commands
+use gglib::utils::process::log_streamer::{ServerLogEntry, get_log_manager};
+
+#[tauri::command]
+async fn get_server_logs(port: u16) -> Result<Vec<ServerLogEntry>, String> {
+    let log_manager = get_log_manager();
+    Ok(log_manager.get_logs(port))
+}
+
+#[tauri::command]
+async fn clear_server_logs(port: u16) -> Result<(), String> {
+    let log_manager = get_log_manager();
+    log_manager.clear_logs(port);
+    Ok(())
+}
+
 #[tauri::command]
 async fn download_model(
     app: tauri::AppHandle,
@@ -835,6 +851,30 @@ async fn main() {
                 }
             }
 
+            // Spawn a task to emit server log events
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let log_manager = get_log_manager();
+                let mut receiver = log_manager.subscribe();
+                
+                loop {
+                    match receiver.recv().await {
+                        Ok(entry) => {
+                            if let Err(e) = app_handle.emit("server-log", &entry) {
+                                debug!(error = %e, "Failed to emit server-log event");
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            debug!(skipped = %n, "Server log receiver lagged, skipping old messages");
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            debug!("Server log channel closed");
+                            break;
+                        }
+                    }
+                }
+            });
+
             Ok(())
         })
         // Handle window close events - this is more reliable than RunEvent::WindowEvent
@@ -863,6 +903,8 @@ async fn main() {
             serve_model,
             stop_server,
             list_servers,
+            get_server_logs,
+            clear_server_logs,
             download_model,
             cancel_download,
             search_models,

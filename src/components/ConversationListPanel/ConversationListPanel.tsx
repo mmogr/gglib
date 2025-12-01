@@ -1,5 +1,7 @@
 import { FC } from 'react';
 import { ConversationSummary } from '../../services/chat';
+import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
+import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import './ConversationListPanel.css';
 
 interface ConversationListPanelProps {
@@ -13,6 +15,8 @@ interface ConversationListPanelProps {
   loading: boolean;
   modelName: string;
   onClose: () => void;
+  activeTab: ChatPageTabId;
+  onTabChange: (tab: ChatPageTabId) => void;
 }
 
 const formatRelativeTime = (iso: string) => {
@@ -44,6 +48,8 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
   loading,
   modelName,
   onClose,
+  activeTab,
+  onTabChange,
 }) => {
   const filteredConversations = searchQuery.trim()
     ? conversations.filter(c => 
@@ -54,6 +60,15 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
   return (
     <div className="mcc-panel conversation-list-panel">
       <div className="mcc-panel-header">
+        {/* View Tabs */}
+        <div className="conversation-list-tabs">
+          <SidebarTabs<ChatPageTabId>
+            tabs={CHAT_PAGE_TABS}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+          />
+        </div>
+
         <div className="conversation-list-header">
           <div className="conversation-list-title-group">
             <span className="conversation-list-label">Chatting with</span>

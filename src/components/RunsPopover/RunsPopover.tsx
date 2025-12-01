@@ -9,7 +9,7 @@ interface RunsPopoverProps {
   onClose: () => void;
   servers: ServerInfo[];
   onStopServer: (modelId: number) => Promise<void>;
-  onSelectModel: (modelId: number) => void;
+  onSelectModel: (modelId: number, view?: 'chat' | 'console') => void;
   onRefresh?: () => void;
 }
 
@@ -33,8 +33,8 @@ const RunsPopover: FC<RunsPopoverProps> = ({
     }
   }, [isOpen, servers.length, onClose]);
 
-  const handleSelectModel = (modelId: number) => {
-    onSelectModel(modelId);
+  const handleSelectModel = (modelId: number, view?: 'chat' | 'console') => {
+    onSelectModel(modelId, view);
     onClose();
   };
 

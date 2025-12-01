@@ -2,12 +2,23 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
+import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
+import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { ToastContainer } from '../components/Toast';
+import { SidebarTab } from '../components/ModelLibraryPanel/SidebarTabs';
 import { useGglibRuntime } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
 import { useToast } from '../hooks/useToast';
 import { ChatService, ConversationSummary, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/chat';
 import './ChatPage.css';
+
+export type ChatPageTabId = 'chat' | 'console';
+
+/** Shared tab definitions for Chat/Console view switching */
+export const CHAT_PAGE_TABS: SidebarTab<ChatPageTabId>[] = [
+  { id: 'chat', label: 'Chat', icon: '💬' },
+  { id: 'console', label: 'Console', icon: '📟' },
+];
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
@@ -15,14 +26,23 @@ const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
 interface ChatPageProps {
   serverPort: number;
   modelName: string;
+  contextLength?: number;
+  serverStartTime?: number; // Unix timestamp in seconds
+  initialView?: 'chat' | 'console'; // Which view to show initially
   onClose: () => Promise<void>; // Stops server and exits
 }
 
 export default function ChatPage({
   serverPort,
   modelName,
+  contextLength,
+  serverStartTime,
+  initialView = 'chat',
   onClose,
 }: ChatPageProps) {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<ChatPageTabId>(initialView);
+  
   // Conversation state
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationLoading, setConversationLoading] = useState(true);
@@ -246,10 +266,11 @@ export default function ChatPage({
 
   return (
     <div className="chat-page">
+      {/* Chat Tab Content - always mounted, hidden when not active */}
       <AssistantRuntimeProvider runtime={runtime}>
         <div
-          ref={layoutRef}
-          className="chat-page-layout"
+          ref={activeTab === 'chat' ? layoutRef : undefined}
+          className={`chat-page-layout ${activeTab !== 'chat' ? 'chat-page-layout--hidden' : ''}`}
           style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
         >
           {/* Left Panel: Conversation List */}
@@ -265,6 +286,8 @@ export default function ChatPage({
               loading={conversationLoading}
               modelName={modelName}
               onClose={onClose}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
             />
             <div className="resize-handle" onMouseDown={handleMouseDown} />
           </div>
@@ -290,6 +313,32 @@ export default function ChatPage({
           </div>
         </div>
       </AssistantRuntimeProvider>
+
+      {/* Console Tab Content - always mounted, hidden when not active */}
+      <div
+        ref={activeTab === 'console' ? layoutRef : undefined}
+        className={`chat-page-layout ${activeTab !== 'console' ? 'chat-page-layout--hidden' : ''}`}
+        style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
+      >
+        {/* Left Panel: Server Info */}
+        <div className="grid-panel-container">
+          <ConsoleInfoPanel
+            modelName={modelName}
+            serverPort={serverPort}
+            contextLength={contextLength}
+            startTime={serverStartTime ?? Math.floor(Date.now() / 1000)}
+            onStopServer={onClose}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
+          <div className="resize-handle" onMouseDown={handleMouseDown} />
+        </div>
+
+        {/* Right Panel: Server Logs */}
+        <div className="grid-panel-container">
+          <ConsoleLogPanel serverPort={serverPort} />
+        </div>
+      </div>
 
       {/* New Conversation Modal */}
       {isNewConversationModalOpen && (

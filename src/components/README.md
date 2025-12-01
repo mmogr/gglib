@@ -36,9 +36,9 @@ The UI uses a clean 2-panel layout:
 1. **Model Library Panel** (left): Browse models, search/filter, add new models
 2. **Model Inspector Panel** (right): View details, serve models, manage servers
 
-When a model is served, the view transitions to a Chat layout:
-1. **Conversation List Panel** (left): Manage chat conversations
-2. **Chat Messages Panel** (right): View and send messages
+When a model is served, the view transitions to a Chat layout with tab switching:
+1. **Chat View**: Conversation List (left) + Messages Panel (right)
+2. **Console View**: Server Info Panel (left) + Live Logs (right)
 
 ## Core Components
 
@@ -65,6 +65,10 @@ When a model is served, the view transitions to a Chat layout:
   - **Message Editing**: Inline edit mode for user messages with Save & Regenerate
   - **Message Deletion**: Delete button with cascade deletion of subsequent messages
 - **`ConversationListPanel/`**: Conversation list with search and management controls
+
+### Console View
+When a model is served, users can switch between Chat and Console views:
+- **`ConsoleInfoPanel/`**: Left panel showing server info (port, uptime, context usage), live metrics from `/metrics` endpoint, and stop button
 
 ### Server Management
 - **`ServeModel.tsx`**: Start llama-server for a model

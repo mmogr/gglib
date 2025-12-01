@@ -1,11 +1,13 @@
-import { FC } from 'react';
+import { FC, useState } from 'react';
 import { ServerInfo } from '../../types';
+import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
+import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import './ServerList.css';
 
 interface ServerListProps {
   servers: ServerInfo[];
   onStopServer: (modelId: number) => Promise<void>;
-  onSelectModel?: (modelId: number) => void;
+  onSelectModel?: (modelId: number, view?: 'chat' | 'console') => void;
   /** Compact mode for popover display */
   compact?: boolean;
   /** Show header with count and refresh button */
@@ -21,6 +23,9 @@ const ServerList: FC<ServerListProps> = ({
   showHeader = false,
   onRefresh,
 }) => {
+  // Track which server has expanded tabs (only one at a time)
+  const [expandedServerId, setExpandedServerId] = useState<number | null>(null);
+
   const handleStop = async (modelId: number, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering onSelectModel
     try {
@@ -30,8 +35,13 @@ const ServerList: FC<ServerListProps> = ({
     }
   };
 
-  const handleSelect = (modelId: number) => {
-    onSelectModel?.(modelId);
+  const handleServerClick = (modelId: number) => {
+    // Toggle expanded state for this server
+    setExpandedServerId(prev => prev === modelId ? null : modelId);
+  };
+
+  const handleTabSelect = (modelId: number, tab: ChatPageTabId) => {
+    onSelectModel?.(modelId, tab);
   };
 
   if (servers.length === 0) {
@@ -67,23 +77,36 @@ const ServerList: FC<ServerListProps> = ({
         {servers.map((server) => (
           <div
             key={server.model_id}
-            className={`server-item ${onSelectModel ? 'clickable' : ''}`}
-            onClick={() => handleSelect(server.model_id)}
+            className={`server-item ${expandedServerId === server.model_id ? 'expanded' : ''}`}
           >
-            <div className="server-info">
-              <div className="server-name">{server.model_name}</div>
-              <div className="server-details">
-                <span className="server-port">:{server.port}</span>
-                <span className="server-status">{server.status}</span>
-              </div>
-            </div>
-            <button
-              className={`server-stop-btn ${compact ? 'compact' : ''}`}
-              onClick={(e) => handleStop(server.model_id, e)}
-              title="Stop server"
+            <div 
+              className={`server-item-header ${onSelectModel ? 'clickable' : ''}`}
+              onClick={() => handleServerClick(server.model_id)}
             >
-              ⏹️{!compact && ' Stop'}
-            </button>
+              <div className="server-info">
+                <div className="server-name">{server.model_name}</div>
+                <div className="server-details">
+                  <span className="server-port">:{server.port}</span>
+                  <span className="server-status">{server.status}</span>
+                </div>
+              </div>
+              <button
+                className={`server-stop-btn ${compact ? 'compact' : ''}`}
+                onClick={(e) => handleStop(server.model_id, e)}
+                title="Stop server"
+              >
+                ⏹️{!compact && ' Stop'}
+              </button>
+            </div>
+            {expandedServerId === server.model_id && onSelectModel && (
+              <div className="server-item-tabs">
+                <SidebarTabs<ChatPageTabId>
+                  tabs={CHAT_PAGE_TABS}
+                  activeTab="chat"
+                  onTabChange={(tab) => handleTabSelect(server.model_id, tab)}
+                />
+              </div>
+            )}
           </div>
         ))}
       </div>

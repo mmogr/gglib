@@ -4,6 +4,15 @@
   background: var(--color-surface);
 }
 
+/* View tabs (Chat / Console) */
+.conversation-list-tabs {
+  margin-bottom: var(--spacing-md);
+}
+
+.conversation-list-tabs .sidebar-tabs-container {
+  padding: 0;
+}
+
 .conversation-list-header {
   display: flex;
   justify-content: space-between;
