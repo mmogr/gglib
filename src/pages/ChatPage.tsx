@@ -295,9 +295,9 @@ export default function ChatPage({
       {isNewConversationModalOpen && (
         <div
           className="chat-modal-overlay"
-          onClick={() => !creatingConversation && setIsNewConversationModalOpen(false)}
+          onMouseDown={(e) => e.target === e.currentTarget && !creatingConversation && setIsNewConversationModalOpen(false)}
         >
-          <div className="chat-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="chat-modal">
             <h3 className="chat-modal-title">Start a new chat</h3>
             <label className="chat-modal-label">
               Title

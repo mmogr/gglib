@@ -155,8 +155,8 @@ const ModelList: FC<ModelListProps> = ({
 
       {/* Serve Configuration Modal */}
       {servingModel && (
-        <div className="modal-overlay" onClick={() => !isServing && setServingModel(null)}>
-          <div className="modal modal-md" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && !isServing && setServingModel(null)}>
+          <div className="modal modal-md">
             <div className="modal-header">
               <h3>Start Model Server</h3>
               <button 

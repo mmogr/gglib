@@ -462,8 +462,8 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 
       {/* Serve Modal */}
       {showServeModal && (
-        <div className="modal-overlay" onClick={() => !isServing && setShowServeModal(false)}>
-          <div className="modal modal-md" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && !isServing && setShowServeModal(false)}>
+          <div className="modal modal-md">
             <div className="modal-header">
               <h3>Start Model Server</h3>
               <button
@@ -585,8 +585,8 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="modal-overlay" onClick={() => !isDeleting && setShowDeleteModal(false)}>
-          <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && !isDeleting && setShowDeleteModal(false)}>
+          <div className="modal modal-sm">
             <div className="modal-header">
               <h3>Delete Model</h3>
               <button
