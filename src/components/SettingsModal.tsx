@@ -141,7 +141,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       <div className="modal modal-md">
         <div className="modal-header">
           <h2 className="modal-title">Settings</h2>
-          <button className="modal-close" onClick={handleOverlayClick} aria-label="Close settings dialog">
+          <button className="modal-close" onClick={onClose} aria-label="Close settings dialog">
             ×
           </button>
         </div>
@@ -331,7 +331,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                   Refresh
                 </button>
                 <div className={styles.footerActions}>
-                  <button type="button" className="btn btn-secondary" onClick={handleOverlayClick} disabled={saving}>
+                  <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={saving}>
