@@ -18,6 +18,7 @@ import { parseToolCall, ToolCall } from './types';
  */
 export class ToolRegistry {
   private tools = new Map<string, RegisteredTool>();
+  private disabledTools = new Set<string>();
 
   /**
    * Register a tool with its definition and executor.
@@ -31,6 +32,8 @@ export class ToolRegistry {
       throw new Error(`Tool "${name}" is already registered`);
     }
     this.tools.set(name, { definition, execute });
+    // Newly registered tools are enabled by default
+    this.disabledTools.delete(name);
   }
 
   /**
@@ -75,11 +78,45 @@ export class ToolRegistry {
   }
 
   /**
+   * Check if a tool is enabled.
+   * Returns true if tool exists and is not disabled.
+   */
+  isEnabled(name: string): boolean {
+    return this.tools.has(name) && !this.disabledTools.has(name);
+  }
+
+  /**
+   * Enable a tool by name.
+   */
+  enable(name: string): void {
+    this.disabledTools.delete(name);
+  }
+
+  /**
+   * Disable a tool by name.
+   */
+  disable(name: string): void {
+    if (this.tools.has(name)) {
+      this.disabledTools.add(name);
+    }
+  }
+
+  /**
    * Get all registered tool definitions.
    * Returns array suitable for OpenAI API `tools` parameter.
    */
   getDefinitions(): ToolDefinition[] {
     return Array.from(this.tools.values()).map((t) => t.definition);
+  }
+
+  /**
+   * Get enabled tool definitions only.
+   * Returns array of definitions for tools that are not disabled.
+   */
+  getEnabledDefinitions(): ToolDefinition[] {
+    return Array.from(this.tools.entries())
+      .filter(([name]) => !this.disabledTools.has(name))
+      .map(([, t]) => t.definition);
   }
 
   /**
@@ -153,6 +190,7 @@ export class ToolRegistry {
    */
   clear(): void {
     this.tools.clear();
+    this.disabledTools.clear();
   }
 }
 

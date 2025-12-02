@@ -227,7 +227,7 @@ export function useGglibRuntime(options: GglibRuntimeOptions = {}) {
   const getToolDefinitions = (): ToolDefinition[] => {
     if (!enableToolCalling) return [];
     const registry = getToolRegistry();
-    return registry.getDefinitions();
+    return registry.getEnabledDefinitions();
   };
 
   // Create adapter for gglib direct server API
