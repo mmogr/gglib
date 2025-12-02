@@ -1089,10 +1089,12 @@ impl DownloadService {
             {
                 let mut active = self.active_downloads.write().await;
                 // Build the tracking key that download/download_shard will use
+                // IMPORTANT: Must match the key format used in download_shard() (model_id:filename)
+                // NOT canonical_id (which includes quantization)
                 let tracking_key = if is_shard {
                     format!(
                         "{}:{}",
-                        canonical_id,
+                        model_id,
                         item.shard_info
                             .as_ref()
                             .map(|s| s.filename.as_str())
