@@ -605,6 +605,19 @@ pub async fn list_tags(
     Ok(Json(ApiResponse::success(tags)))
 }
 
+/// Get filter options for model library (quantizations, param range, context range)
+pub async fn get_model_filter_options(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<crate::services::database::ModelFilterOptions>>, AppError> {
+    let options = state
+        .backend
+        .get_model_filter_options()
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(options)))
+}
+
 #[derive(serde::Deserialize)]
 pub struct AddTagRequest {
     pub tag: String,

@@ -386,6 +386,20 @@ export class TauriService {
     }
   }
 
+  // Model filter options for library UI
+  static async getModelFilterOptions(): Promise<import('../types').ModelFilterOptions> {
+    if (isTauriApp) {
+      return await invoke<import('../types').ModelFilterOptions>('get_model_filter_options');
+    } else {
+      const response = await apiFetch(`/models/filter-options`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch filter options: ${response.statusText}`);
+      }
+      const data: ApiResponse<import('../types').ModelFilterOptions> = await response.json();
+      return data.data || { quantizations: [], param_range: null, context_range: null };
+    }
+  }
+
   static async addModelTag(modelId: number, tag: string): Promise<string> {
     if (isTauriApp) {
       return await invoke<string>('add_model_tag', { modelId, tag });

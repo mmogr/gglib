@@ -38,7 +38,37 @@
 }
 
 .search-bar {
+  flex: 1;
+}
+
+.search-filter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
   margin-top: var(--spacing-md);
+}
+
+.filter-button-container {
+  position: relative;
+}
+
+.filter-btn {
+  position: relative;
+}
+
+.filter-btn-active {
+  color: var(--color-primary, #4a9eff);
+}
+
+.filter-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background: var(--color-primary, #4a9eff);
+  border-radius: var(--radius-full, 50%);
+  border: 2px solid var(--color-surface, #2a2a2a);
 }
 
 .search-input {

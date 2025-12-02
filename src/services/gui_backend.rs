@@ -179,6 +179,16 @@ impl GuiBackend {
         self.core.models().get_by_tag(&tag).await
     }
 
+    /// Get filter options for the model library UI
+    ///
+    /// Returns aggregate data about available models for building
+    /// dynamic filter controls (quantizations, param range, context range).
+    pub async fn get_model_filter_options(
+        &self,
+    ) -> Result<crate::services::database::ModelFilterOptions> {
+        self.core.models().get_filter_options().await
+    }
+
     // =========================================================================
     // Server Operations - Delegate to AppCore with GUI-specific conversions
     // =========================================================================

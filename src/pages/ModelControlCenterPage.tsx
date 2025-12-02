@@ -2,9 +2,11 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
 import { useDownloadProgress } from '../hooks/useDownloadProgress';
+import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
+import { FilterState } from '../components/FilterPopover';
 import ChatPage from './ChatPage';
 import { TauriService } from '../services/tauri';
 import { ServerInfo, HfModelSummary } from '../types';
@@ -42,6 +44,7 @@ export default function ModelControlCenterPage({
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
   const { tags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
+  const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
   
   // Global download progress - lifted to page level so it's always visible
   const { progress, queueStatus, cancelDownload, fetchQueueStatus } = useDownloadProgress({
@@ -57,8 +60,28 @@ export default function ModelControlCenterPage({
   }, [progress?.status]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('download');
+  
+  // Filter state for the model library (session-only, not persisted)
+  const [filters, setFilters] = useState<FilterState>({
+    paramRange: null,
+    contextRange: null,
+    selectedQuantizations: [],
+    selectedTags: [],
+  });
+
+  const handleFiltersChange = useCallback((newFilters: FilterState) => {
+    setFilters(newFilters);
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setFilters({
+      paramRange: null,
+      contextRange: null,
+      selectedQuantizations: [],
+      selectedTags: [],
+    });
+  }, []);
   
   // Sidebar tab state (for the new tabbed sidebar)
   const [sidebarTab, setSidebarTab] = useState<SidebarTabId>('models');
@@ -199,22 +222,42 @@ export default function ModelControlCenterPage({
     };
   }, []);
 
-  // Filter models based on search and tags
+  // Filter models based on search, tags, param range, context range, and quantizations
   const filteredModels = models.filter(model => {
+    // Text search
     const matchesSearch = !searchQuery || 
       model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       model.architecture?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       model.hf_repo_id?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesTags = selectedTags.length === 0 || 
-      (model.tags && selectedTags.some(tag => model.tags!.includes(tag)));
+    // Tag filter
+    const matchesTags = filters.selectedTags.length === 0 || 
+      (model.tags && filters.selectedTags.some(tag => model.tags!.includes(tag)));
     
-    return matchesSearch && matchesTags;
+    // Parameter count filter
+    const matchesParams = filters.paramRange === null || 
+      (model.param_count_b >= filters.paramRange[0] && 
+       model.param_count_b <= filters.paramRange[1]);
+    
+    // Context length filter
+    const matchesContext = filters.contextRange === null || 
+      model.context_length === undefined ||
+      model.context_length === null ||
+      (model.context_length >= filters.contextRange[0] && 
+       model.context_length <= filters.contextRange[1]);
+    
+    // Quantization filter
+    const matchesQuantization = filters.selectedQuantizations.length === 0 || 
+      (model.quantization && filters.selectedQuantizations.includes(model.quantization));
+    
+    return matchesSearch && matchesTags && matchesParams && matchesContext && matchesQuantization;
   });
 
   const handleModelAdded = async (filePath: string) => {
     if (filePath) {
       await addModel(filePath);
+      // Refresh filter options when a model is added
+      refreshFilterOptions();
     } else {
       await loadModels();
     }
@@ -222,6 +265,8 @@ export default function ModelControlCenterPage({
 
   const handleModelDownloaded = async () => {
     await loadModels();
+    // Refresh filter options when a model is downloaded
+    refreshFilterOptions();
   };
 
   // Handler for selecting a local model (clears HF selection)
@@ -315,9 +360,11 @@ export default function ModelControlCenterPage({
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             tags={tags}
-            selectedTags={selectedTags}
-            onTagFilterChange={setSelectedTags}
             servers={servers}
+            filterOptions={filterOptions}
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            onClearFilters={handleClearFilters}
             onModelAdded={handleModelAdded}
             onModelDownloaded={handleModelDownloaded}
             activeSubTab={activeSubTab}
@@ -358,6 +405,7 @@ export default function ModelControlCenterPage({
             onAddTag={addTagToModel}
             onRemoveTag={removeTagFromModel}
             getModelTags={getModelTags}
+            onRefresh={loadModels}
             queueStatus={queueStatus}
           />
         </div>

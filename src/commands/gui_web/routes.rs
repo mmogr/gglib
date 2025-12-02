@@ -91,6 +91,11 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
         .route("/api/chat", post(handlers::chat_proxy))
         // Tag routes
         .route("/api/tags", get(handlers::list_tags))
+        // Model filter options route
+        .route(
+            "/api/models/filter-options",
+            get(handlers::get_model_filter_options),
+        )
         .route("/api/models/:model_id/tags", get(handlers::get_model_tags))
         .route("/api/models/:model_id/tags", post(handlers::add_model_tag))
         .route(
