@@ -54,6 +54,9 @@ impl McpService {
         // Start auto-start servers
         let servers = self.database.list_servers().await?;
         for server in servers {
+            // Note: We use nested ifs here instead of `if a && let Err(e) = ...`
+            // because let chains are not stable in Rust 1.86 (CI uses stable).
+            #[allow(clippy::collapsible_if)]
             if server.auto_start && server.enabled {
                 if let Err(e) = self.start_server(&server.id.unwrap().to_string()).await {
                     tracing::warn!(
