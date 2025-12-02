@@ -12,7 +12,7 @@ use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 
 // Re-export public types and functions
 pub use error::ModelStoreError;
-pub use filters::{get_model_filter_options, ModelFilterOptions, RangeValues};
+pub use filters::{ModelFilterOptions, RangeValues, get_model_filter_options};
 pub use models::{
     add_model, find_model_by_identifier, find_models_by_name, get_model_by_id, list_models,
     remove_model_by_id, update_model,

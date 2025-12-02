@@ -5,7 +5,6 @@
 
 use anyhow::Result;
 use sqlx::{Row, SqlitePool};
-use std::collections::HashSet;
 
 /// Filter options for the model library UI.
 ///
@@ -55,7 +54,7 @@ pub async fn get_model_filter_options(pool: &SqlitePool) -> Result<ModelFilterOp
 
     // Get param count range
     let param_row = sqlx::query(
-        "SELECT MIN(param_count_b) as min_params, MAX(param_count_b) as max_params FROM models"
+        "SELECT MIN(param_count_b) as min_params, MAX(param_count_b) as max_params FROM models",
     )
     .fetch_one(pool)
     .await?;
@@ -96,11 +95,11 @@ pub async fn get_model_filter_options(pool: &SqlitePool) -> Result<ModelFilterOp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::database::{add_model, create_schema};
     use crate::models::Gguf;
-    use std::path::PathBuf;
+    use crate::services::database::{add_model, create_schema};
     use chrono::Utc;
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     async fn setup_test_db() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
@@ -143,10 +142,27 @@ mod tests {
         let pool = setup_test_db().await;
 
         // Add test models with various properties
-        add_model(&pool, &create_test_model("model1", 7.0, Some("Q4_K_M"), Some(4096))).await.unwrap();
-        add_model(&pool, &create_test_model("model2", 13.0, Some("Q8_0"), Some(8192))).await.unwrap();
-        add_model(&pool, &create_test_model("model3", 70.0, Some("Q4_K_M"), Some(32768))).await.unwrap();
-        add_model(&pool, &create_test_model("model4", 3.0, Some("F16"), None)).await.unwrap();
+        add_model(
+            &pool,
+            &create_test_model("model1", 7.0, Some("Q4_K_M"), Some(4096)),
+        )
+        .await
+        .unwrap();
+        add_model(
+            &pool,
+            &create_test_model("model2", 13.0, Some("Q8_0"), Some(8192)),
+        )
+        .await
+        .unwrap();
+        add_model(
+            &pool,
+            &create_test_model("model3", 70.0, Some("Q4_K_M"), Some(32768)),
+        )
+        .await
+        .unwrap();
+        add_model(&pool, &create_test_model("model4", 3.0, Some("F16"), None))
+            .await
+            .unwrap();
 
         let options = get_model_filter_options(&pool).await.unwrap();
 
@@ -167,7 +183,12 @@ mod tests {
     #[tokio::test]
     async fn test_get_model_filter_options_single_model() {
         let pool = setup_test_db().await;
-        add_model(&pool, &create_test_model("only_model", 7.0, Some("Q4_K_M"), Some(4096))).await.unwrap();
+        add_model(
+            &pool,
+            &create_test_model("only_model", 7.0, Some("Q4_K_M"), Some(4096)),
+        )
+        .await
+        .unwrap();
 
         let options = get_model_filter_options(&pool).await.unwrap();
 
