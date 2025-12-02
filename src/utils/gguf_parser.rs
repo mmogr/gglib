@@ -654,8 +654,8 @@ const TOOL_CALLING_PATTERNS: &[&str] = &[
 /// Model name patterns that indicate tool calling capability.
 /// More conservative than template detection.
 const TOOL_CALLING_MODEL_NAME_PATTERNS: &[&str] = &[
-    "hermes",      // NousResearch Hermes models
-    "functionary", // MeetKai Functionary models
+    "hermes",       // NousResearch Hermes models
+    "functionary",  // MeetKai Functionary models
     "firefunction", // Fireworks Firefunction
     "toolcall",
     "function",
@@ -990,7 +990,12 @@ pub fn detect_tool_support(metadata: &HashMap<String, String>) -> ToolCallingDet
         }
 
         // Low-confidence patterns (might just be documentation)
-        if template_lower.contains("tool_call") && !detection.matched_patterns.iter().any(|p| p.contains("tool_call")) {
+        if template_lower.contains("tool_call")
+            && !detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("tool_call"))
+        {
             detection.matched_patterns.push("tool_call".to_string());
             confidence_score += 0.2;
         }
@@ -1287,7 +1292,12 @@ mod tool_calling_detection_tests {
         let detection = detect_tool_support(&metadata);
         assert!(detection.supports_tool_calling);
         assert!(detection.confidence >= 0.3);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("tool_call")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("tool_call"))
+        );
         assert_eq!(detection.detected_format, Some("hermes".to_string()));
     }
 
@@ -1301,7 +1311,12 @@ mod tool_calling_detection_tests {
 
         let detection = detect_tool_support(&metadata);
         assert!(detection.supports_tool_calling);
-        assert!(detection.matched_patterns.iter().any(|p| p.to_lowercase().contains("tool_calls")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.to_lowercase().contains("tool_calls"))
+        );
         assert_eq!(detection.detected_format, Some("mistral".to_string()));
     }
 
@@ -1341,7 +1356,12 @@ mod tool_calling_detection_tests {
 
         let detection = detect_tool_support(&metadata);
         assert!(detection.supports_tool_calling);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("jinja")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("jinja"))
+        );
     }
 
     #[test]
@@ -1354,7 +1374,12 @@ mod tool_calling_detection_tests {
 
         let detection = detect_tool_support(&metadata);
         assert!(detection.supports_tool_calling);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("hermes")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("hermes"))
+        );
     }
 
     #[test]

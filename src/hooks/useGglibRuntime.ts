@@ -18,18 +18,61 @@ export interface GglibRuntimeOptions {
   onError?: (error: Error) => void;
 }
 
+// =============================================================================
+// Tool Calling Types
+// =============================================================================
+
+/** Streaming delta for tool call function details */
+interface ToolCallFunctionDelta {
+  /** Function name (sent in first chunk) */
+  name?: string;
+  /** Partial arguments JSON string (accumulated across chunks) */
+  arguments?: string;
+}
+
+/** Streaming delta for a single tool call */
+interface ToolCallDelta {
+  /** Index of the tool call (for parallel tool calls) */
+  index: number;
+  /** Tool call ID (sent in first chunk) */
+  id?: string;
+  /** Tool type - always "function" (sent in first chunk) */
+  type?: string;
+  /** Function delta */
+  function?: ToolCallFunctionDelta;
+}
+
+/** Accumulated tool call (after all deltas combined) */
+export interface AccumulatedToolCall {
+  /** Unique ID for this tool call */
+  id: string;
+  /** Tool type - always "function" */
+  type: string;
+  /** Function call details */
+  function: {
+    /** Name of the function to call */
+    name: string;
+    /** JSON string of arguments */
+    arguments: string;
+  };
+}
+
 /** Delta content from SSE stream */
 interface StreamDelta {
   /** Main content delta */
   content: string | null;
   /** Reasoning/thinking content delta (from reasoning models) */
   reasoningContent: string | null;
+  /** Tool call deltas (for function calling) */
+  toolCalls: ToolCallDelta[] | null;
+  /** Finish reason from the chunk (null during streaming, set on final chunk) */
+  finishReason: string | null;
 }
 
 /**
  * Parse SSE events from a streaming response.
  * Handles OpenAI-compatible streaming format with `data:` prefixed lines.
- * Extracts both `content` and `reasoning_content` from delta objects.
+ * Extracts `content`, `reasoning_content`, and `tool_calls` from delta objects.
  */
 async function* parseSSEStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -82,17 +125,22 @@ async function* parseSSEStream(
         // Parse JSON chunk and extract content deltas
         try {
           const chunk = JSON.parse(dataLine);
-          const delta = chunk.choices?.[0]?.delta;
+          const choice = chunk.choices?.[0];
+          const delta = choice?.delta;
+          const finishReason = choice?.finish_reason ?? null;
           
-          // Extract both content and reasoning_content from delta
+          // Extract content, reasoning_content, and tool_calls from delta
           const contentDelta = delta?.content ?? null;
           const reasoningDelta = delta?.reasoning_content ?? null;
+          const toolCallsDelta: ToolCallDelta[] | null = delta?.tool_calls ?? null;
           
-          // Only yield if we have some content
-          if (contentDelta || reasoningDelta) {
+          // Yield if we have any content or tool calls, or if we have a finish_reason
+          if (contentDelta || reasoningDelta || toolCallsDelta || finishReason) {
             yield {
               content: contentDelta,
               reasoningContent: reasoningDelta,
+              toolCalls: toolCallsDelta,
+              finishReason,
             };
           }
         } catch {
@@ -107,6 +155,49 @@ async function* parseSSEStream(
 }
 
 /**
+ * Accumulate streaming tool call deltas by index.
+ * Tool calls stream incrementally with partial JSON arguments.
+ * This function merges deltas into complete tool calls.
+ */
+function accumulateToolCallDelta(
+  accumulator: Map<number, AccumulatedToolCall>,
+  delta: ToolCallDelta
+): void {
+  const existing = accumulator.get(delta.index);
+  
+  if (!existing) {
+    // First delta for this index - initialize
+    accumulator.set(delta.index, {
+      id: delta.id ?? '',
+      type: delta.type ?? 'function',
+      function: {
+        name: delta.function?.name ?? '',
+        arguments: delta.function?.arguments ?? '',
+      },
+    });
+  } else {
+    // Merge with existing
+    if (delta.id) existing.id = delta.id;
+    if (delta.type) existing.type = delta.type;
+    if (delta.function?.name) existing.function.name = delta.function.name;
+    if (delta.function?.arguments) {
+      existing.function.arguments += delta.function.arguments;
+    }
+  }
+}
+
+/**
+ * Get accumulated tool calls as an array, sorted by index.
+ */
+function getAccumulatedToolCalls(
+  accumulator: Map<number, AccumulatedToolCall>
+): AccumulatedToolCall[] {
+  return Array.from(accumulator.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([, call]) => call);
+}
+
+/**
  * Custom runtime hook that bridges assistant-ui with gglib's served models.
  * 
  * This hook creates a runtime that:
@@ -114,7 +205,7 @@ async function* parseSSEStream(
  * - Forwards requests to the selected server port
  * - Supports streaming responses for real-time token display
  * - Works in both Tauri desktop and web modes
- * 
+ *
  * @param options - Configuration options for the runtime
  * @returns The assistant-ui runtime instance
  */
@@ -183,13 +274,30 @@ export function useGglibRuntime(options: GglibRuntimeOptions = {}) {
       // Timing state for inline <think> tags (when --reasoning-format is not used)
       let inlineThinkingStartTime: number | null = null;
       let inlineThinkingEndTime: number | null = null;
+      
+      // Tool call accumulation state
+      const toolCallAccumulator = new Map<number, AccumulatedToolCall>();
+      let finishReason: string | null = null;
 
       try {
         for await (const delta of parseSSEStream(reader, abortSignal)) {
+          // Track finish reason
+          if (delta.finishReason) {
+            finishReason = delta.finishReason;
+          }
+          
           // Handle reasoning_content (from llama-server with reasoning format enabled)
           if (delta.reasoningContent) {
             thinkingContent += delta.reasoningContent;
             console.log('💭 Thinking delta:', delta.reasoningContent);
+          }
+          
+          // Handle tool calls (accumulate by index)
+          if (delta.toolCalls) {
+            for (const tc of delta.toolCalls) {
+              accumulateToolCallDelta(toolCallAccumulator, tc);
+              console.log('🔧 Tool call delta:', tc);
+            }
           }
           
           // Handle main content
@@ -275,11 +383,40 @@ export function useGglibRuntime(options: GglibRuntimeOptions = {}) {
         finalContent = mainContent;
       }
 
-      console.log('✅ Streaming complete, total content:', finalContent);
+      // Get accumulated tool calls
+      const accumulatedToolCalls = getAccumulatedToolCalls(toolCallAccumulator);
+      
+      console.log('✅ Streaming complete');
+      console.log('   Content:', finalContent);
+      console.log('   Tool calls:', accumulatedToolCalls.length > 0 ? accumulatedToolCalls : 'none');
+      console.log('   Finish reason:', finishReason);
 
-      // Final yield with complete content (no return value needed for async generator)
+      // Build final content parts
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contentParts: any[] = [];
+      
+      // Add text content if present
+      if (finalContent) {
+        contentParts.push({ type: 'text' as const, text: finalContent });
+      }
+      
+      // Add tool calls if present (finish_reason: "tool_calls")
+      if (finishReason === 'tool_calls' && accumulatedToolCalls.length > 0) {
+        for (const tc of accumulatedToolCalls) {
+          contentParts.push({
+            type: 'tool-call' as const,
+            toolCallId: tc.id,
+            toolName: tc.function.name,
+            args: JSON.parse(tc.function.arguments || '{}'),
+          });
+        }
+      }
+
+      // Final yield with complete content
       yield {
-        content: [{ type: 'text' as const, text: finalContent }],
+        content: contentParts.length > 0 
+          ? contentParts 
+          : [{ type: 'text' as const, text: '' }],
       };
     },
   };
