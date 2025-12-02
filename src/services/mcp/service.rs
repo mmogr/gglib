@@ -54,15 +54,14 @@ impl McpService {
         // Start auto-start servers
         let servers = self.database.list_servers().await?;
         for server in servers {
-            if server.auto_start
-                && server.enabled
-                && let Err(e) = self.start_server(&server.id.unwrap().to_string()).await
-            {
-                tracing::warn!(
-                    server_name = %server.name,
-                    error = %e,
-                    "Failed to auto-start MCP server"
-                );
+            if server.auto_start && server.enabled {
+                if let Err(e) = self.start_server(&server.id.unwrap().to_string()).await {
+                    tracing::warn!(
+                        server_name = %server.name,
+                        error = %e,
+                        "Failed to auto-start MCP server"
+                    );
+                }
             }
         }
 
