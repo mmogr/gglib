@@ -1056,36 +1056,70 @@ impl DownloadService {
     ///
     /// # Arguments
     ///
-    /// * `model_id` - The model ID of the download to cancel. For sharded downloads,
-    ///   this will cancel any active shard that belongs to this model.
+    /// * `model_id` - The model ID of the download to cancel. Accepts formats:
+    ///   - `"owner/repo"` - Cancels non-sharded download or all shards of a sharded download
+    ///   - `"owner/repo:quantization"` - Cancels all shards matching this quantization
+    ///   - `"owner/repo:quantization/filename"` - Cancels a specific shard
     ///
     /// # Errors
     ///
     /// Returns an error if no download is running for this model.
     pub async fn cancel(&self, model_id: &str) -> Result<()> {
-        let info = {
+        // Parse input to extract base model_id and optional quantization
+        // Input formats:
+        // - "owner/repo" (non-sharded, or cancel all shards)
+        // - "owner/repo:quantization" (from frontend, cancel all matching shards)
+        // - "owner/repo:quantization/filename" (full shard key)
+        let (base_model_id, quantization) = if let Some(colon_pos) = model_id.find(':') {
+            let base = &model_id[..colon_pos];
+            let rest = &model_id[colon_pos + 1..];
+            // Extract just the quantization part (before any '/')
+            let quant = rest.split('/').next().unwrap_or(rest);
+            (base, Some(quant))
+        } else {
+            (model_id, None)
+        };
+
+        let infos_to_cancel: Vec<ActiveDownloadInfo> = {
             let mut downloads = self.active_downloads.write().await;
-            // Try exact match first (for non-sharded downloads)
-            if let Some(info) = downloads.remove(model_id) {
-                Some(info)
+
+            // Try exact match on base_model_id first (for non-sharded downloads)
+            if let Some(info) = downloads.remove(base_model_id) {
+                vec![info]
             } else {
-                // For sharded downloads, the key is "model_id:filename"
-                // Find any key that starts with "model_id:"
-                let prefix = format!("{}:", model_id);
-                let key_to_remove = downloads.keys().find(|k| k.starts_with(&prefix)).cloned();
-                key_to_remove.and_then(|k| downloads.remove(&k))
+                // For sharded downloads, find ALL keys matching the pattern
+                // Sharded keys are: "owner/repo:quantization/filename"
+                let prefix = match quantization {
+                    Some(q) => format!("{}:{}/", base_model_id, q),
+                    None => format!("{}:", base_model_id),
+                };
+
+                let keys_to_remove: Vec<String> = downloads
+                    .keys()
+                    .filter(|k| k.starts_with(&prefix))
+                    .cloned()
+                    .collect();
+
+                keys_to_remove
+                    .into_iter()
+                    .filter_map(|k| downloads.remove(&k))
+                    .collect()
             }
         };
 
-        if let Some(info) = info {
-            info.cancel_token.cancel();
-            Ok(())
-        } else {
-            Err(DownloadError::NotFound {
+        if infos_to_cancel.is_empty() {
+            return Err(DownloadError::NotFound {
                 model_id: model_id.to_string(),
             }
-            .into())
+            .into());
         }
+
+        // Cancel all matching downloads
+        for info in &infos_to_cancel {
+            info.cancel_token.cancel();
+        }
+
+        Ok(())
     }
 
     /// Check if a download is currently running for a model.
