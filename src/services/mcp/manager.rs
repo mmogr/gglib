@@ -34,6 +34,7 @@ pub enum McpManagerError {
 /// Running MCP server instance.
 struct RunningServer {
     /// Server configuration
+    #[allow(dead_code)]
     config: McpServerConfig,
     /// MCP client for communication
     client: McpClient,
@@ -115,7 +116,7 @@ impl McpManager {
             McpManagerError::InvalidConfig("Stdio server requires command".to_string())
         })?;
 
-        let args = config.args.as_ref().map(|a| a.as_slice()).unwrap_or(&[]);
+        let args = config.args.as_deref().unwrap_or(&[]);
         let cwd = config.cwd.as_deref();
         let env: Vec<(String, String)> = config.env.clone();
 

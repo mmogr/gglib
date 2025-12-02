@@ -54,6 +54,7 @@ struct JsonRpcRequest {
 struct JsonRpcResponse {
     #[allow(dead_code)]
     jsonrpc: String,
+    #[allow(dead_code)]
     id: Option<u64>,
     result: Option<Value>,
     error: Option<JsonRpcError>,
