@@ -13,8 +13,8 @@ use super::huggingface_service::HuggingFaceService;
 use anyhow::Result;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
@@ -758,20 +758,15 @@ impl DownloadService {
     ) -> Result<String> {
         let cancel_token = CancellationToken::new();
 
-        // Check if download is already running
+        // Register or update active download entry
+        // If pre-registered by queue processor, update cancel_token; otherwise create new
         {
             let mut downloads = self.active_downloads.write().await;
-            if downloads.contains_key(&model_id) {
-                return Err(DownloadError::AlreadyRunning {
-                    model_id: model_id.clone(),
-                }
-                .into());
-            }
-            // Check if we have a pre-registered entry (from queue processor)
-            // If so, just update its cancel_token; otherwise create new
             if let Some(existing) = downloads.get_mut(&model_id) {
+                // Pre-registered entry from queue processor - update cancel_token
                 existing.cancel_token = cancel_token.clone();
             } else {
+                // Direct call (not via queue) - create new entry
                 let info = ActiveDownloadInfo {
                     cancel_token: cancel_token.clone(),
                     model_id: model_id.clone(),
@@ -853,18 +848,13 @@ impl DownloadService {
         // Check if download is already running
         {
             let mut downloads = self.active_downloads.write().await;
-            if downloads.contains_key(&tracking_key) {
-                return Err(DownloadError::AlreadyRunning {
-                    model_id: tracking_key.clone(),
-                }
-                .into());
-            }
-            // Store full download info for proper UI display
-            // Check if we have a pre-registered entry (from queue processor)
-            // If so, just update its cancel_token; otherwise create new
+            // Register or update active download entry
+            // If pre-registered by queue processor, update cancel_token; otherwise create new
             if let Some(existing) = downloads.get_mut(&tracking_key) {
+                // Pre-registered entry from queue processor - update cancel_token
                 existing.cancel_token = cancel_token.clone();
             } else {
+                // Direct call (not via queue) - create new entry
                 let info = ActiveDownloadInfo {
                     cancel_token: cancel_token.clone(),
                     model_id: model_id.clone(),
@@ -1088,7 +1078,14 @@ impl DownloadService {
                 let mut active = self.active_downloads.write().await;
                 // Build the tracking key that download/download_shard will use
                 let tracking_key = if is_shard {
-                    format!("{}:{}", canonical_id, item.shard_info.as_ref().map(|s| s.filename.as_str()).unwrap_or(""))
+                    format!(
+                        "{}:{}",
+                        canonical_id,
+                        item.shard_info
+                            .as_ref()
+                            .map(|s| s.filename.as_str())
+                            .unwrap_or("")
+                    )
                 } else {
                     model_id.clone()
                 };
