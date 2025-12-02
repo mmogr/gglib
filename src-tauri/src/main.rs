@@ -327,6 +327,26 @@ async fn resume_downloads(
     let event = gglib::commands::download::DownloadProgressEvent::resumed(&model_id);
     let _ = app.emit("download-progress", &event);
 
+    // Start the queue processor in a background task to resume downloading
+    let backend = state.backend.clone();
+    let app_clone = app.clone();
+
+    tokio::spawn(async move {
+        use gglib::commands::download::DownloadProgressEvent;
+
+        let progress_callback = move |event: DownloadProgressEvent| {
+            if let Err(err) = app_clone.emit("download-progress", &event) {
+                tracing::error!(error = %err, "Failed to emit download progress event");
+            }
+        };
+
+        backend
+            .core()
+            .downloads()
+            .process_queue(progress_callback)
+            .await;
+    });
+
     Ok("Downloads resumed".to_string())
 }
 
