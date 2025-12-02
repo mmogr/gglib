@@ -316,10 +316,10 @@ impl McpClient {
 
         // Read response with timeout (30 seconds for initial startup, especially for npx)
         let read_timeout = Duration::from_secs(30);
-        
+
         let read_result = timeout(read_timeout, async {
             let mut reader = stdout_reader.lock().await;
-            
+
             // Try reading lines until we get a valid JSON-RPC response
             // (skip any empty lines or non-JSON output from npx startup)
             for _ in 0..10 {
@@ -327,7 +327,9 @@ impl McpClient {
                 match reader.read_line(&mut line) {
                     Ok(0) => {
                         // EOF - server closed stdout
-                        return Err(McpClientError::ProtocolError("Server closed connection".to_string()));
+                        return Err(McpClientError::ProtocolError(
+                            "Server closed connection".to_string(),
+                        ));
                     }
                     Ok(_) => {
                         let trimmed = line.trim();
@@ -336,7 +338,7 @@ impl McpClient {
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             continue;
                         }
-                        
+
                         // Try to parse as JSON
                         match serde_json::from_str::<JsonRpcResponse>(trimmed) {
                             Ok(response) => return Ok(response),
@@ -350,8 +352,10 @@ impl McpClient {
                     Err(e) => return Err(McpClientError::IoError(e)),
                 }
             }
-            
-            Err(McpClientError::ProtocolError("No valid JSON-RPC response received".to_string()))
+
+            Err(McpClientError::ProtocolError(
+                "No valid JSON-RPC response received".to_string(),
+            ))
         })
         .await;
 
