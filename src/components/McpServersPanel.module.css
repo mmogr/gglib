@@ -1,0 +1,228 @@
+/* MCP Servers Panel Styles */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.headerTitle h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.headerCount {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+}
+
+.headerActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--text-secondary, #666);
+}
+
+.spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--border-color, #ddd);
+  border-top-color: var(--primary-color, #007bff);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error {
+  padding: 0.75rem;
+  background: var(--error-bg, #fee2e2);
+  color: var(--error-color, #dc2626);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary, #666);
+}
+
+.emptyState p {
+  margin: 0 0 0.5rem;
+}
+
+.emptyHint {
+  font-size: 0.875rem;
+  margin-bottom: 1rem !important;
+}
+
+.serverList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.serverCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: var(--card-bg, #f9fafb);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 0.5rem;
+}
+
+.serverInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.serverHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.serverName {
+  font-weight: 500;
+  color: var(--text-primary, #111);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 9999px;
+}
+
+.badgeRunning {
+  background: var(--success-bg, #dcfce7);
+  color: var(--success-color, #16a34a);
+}
+
+.badgeStopped {
+  background: var(--neutral-bg, #f3f4f6);
+  color: var(--text-secondary, #6b7280);
+}
+
+.badgeStarting {
+  background: var(--warning-bg, #fef3c7);
+  color: var(--warning-color, #d97706);
+}
+
+.badgeError {
+  background: var(--error-bg, #fee2e2);
+  color: var(--error-color, #dc2626);
+}
+
+.serverDetails {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666);
+}
+
+.serverType {
+  padding: 0.125rem 0.375rem;
+  background: var(--neutral-bg, #e5e7eb);
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.serverCommand {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  color: var(--text-secondary, #666);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serverTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.toolsLabel {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #666);
+}
+
+.toolChip {
+  display: inline-flex;
+  padding: 0.125rem 0.375rem;
+  background: var(--primary-bg, #dbeafe);
+  color: var(--primary-color, #2563eb);
+  font-size: 0.75rem;
+  border-radius: 0.25rem;
+}
+
+.serverError {
+  font-size: 0.75rem;
+  color: var(--error-color, #dc2626);
+  margin-top: 0.25rem;
+}
+
+.serverActions {
+  display: flex;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.footer {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.footerHelp {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #666);
+  margin: 0;
+}
+
+.footerHelp a {
+  color: var(--primary-color, #2563eb);
+  text-decoration: none;
+}
+
+.footerHelp a:hover {
+  text-decoration: underline;
+}
