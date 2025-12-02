@@ -602,7 +602,8 @@ impl DownloadService {
 
     /// Get the path to the incomplete downloads file.
     fn incomplete_downloads_path() -> Result<PathBuf> {
-        let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
         let gglib_dir = home.join(".gglib");
         std::fs::create_dir_all(&gglib_dir)?;
         Ok(gglib_dir.join("incomplete_downloads.json"))
@@ -669,7 +670,7 @@ impl DownloadService {
     /// Returns the list of downloads that were restored.
     pub async fn restore_incomplete_downloads(&self) -> Vec<IncompleteDownload> {
         let incomplete = self.load_incomplete_downloads().await;
-        
+
         if incomplete.is_empty() {
             return Vec::new();
         }
@@ -690,7 +691,7 @@ impl DownloadService {
     pub async fn discard_incomplete_downloads(&self) -> Result<()> {
         // Clear from memory
         self.paused_downloads.write().await.clear();
-        
+
         // Clear persisted state
         self.clear_incomplete_downloads_file().await?;
 
@@ -910,7 +911,7 @@ impl DownloadService {
     /// - HTTP 429 (rate limiting)
     fn is_retryable_error(error_msg: &str) -> bool {
         let error_lower = error_msg.to_lowercase();
-        
+
         // Network connectivity errors
         error_lower.contains("timeout")
             || error_lower.contains("timed out")
@@ -1091,7 +1092,7 @@ impl DownloadService {
             let mut attempt = 0u32;
             let result = loop {
                 attempt += 1;
-                
+
                 // Execute download - use shard-specific method if this is a shard
                 let download_result = if is_shard {
                     let shard_info = item.shard_info.clone().unwrap();
@@ -1115,32 +1116,36 @@ impl DownloadService {
                     Ok(_) => break download_result,
                     Err(e) => {
                         let error_msg = e.to_string();
-                        
+
                         // Don't retry if cancelled by user
                         if error_msg.contains("cancelled") {
                             break download_result;
                         }
-                        
+
                         // Check if error is retryable (network-related)
                         let is_retryable = Self::is_retryable_error(&error_msg);
-                        
+
                         if is_retryable && attempt < DEFAULT_MAX_RETRIES {
                             // Emit retry event
-                            let retry_event = crate::commands::download::DownloadProgressEvent::retry(
-                                &display_name,
-                                attempt,
-                                DEFAULT_MAX_RETRIES,
-                                DEFAULT_RETRY_DELAY_SECS,
-                            );
+                            let retry_event =
+                                crate::commands::download::DownloadProgressEvent::retry(
+                                    &display_name,
+                                    attempt,
+                                    DEFAULT_MAX_RETRIES,
+                                    DEFAULT_RETRY_DELAY_SECS,
+                                );
                             progress_callback(retry_event);
-                            
+
                             // Wait before retrying
-                            tokio::time::sleep(std::time::Duration::from_secs(DEFAULT_RETRY_DELAY_SECS)).await;
-                            
+                            tokio::time::sleep(std::time::Duration::from_secs(
+                                DEFAULT_RETRY_DELAY_SECS,
+                            ))
+                            .await;
+
                             // Continue to next attempt
                             continue;
                         }
-                        
+
                         // Not retryable or max retries reached
                         break download_result;
                     }

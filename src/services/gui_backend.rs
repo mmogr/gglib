@@ -285,9 +285,7 @@ impl GuiBackend {
     }
 
     /// Get incomplete downloads from disk (for startup recovery prompt).
-    pub async fn get_incomplete_downloads(
-        &self,
-    ) -> Vec<crate::services::core::IncompleteDownload> {
+    pub async fn get_incomplete_downloads(&self) -> Vec<crate::services::core::IncompleteDownload> {
         self.core.downloads().load_incomplete_downloads().await
     }
 
