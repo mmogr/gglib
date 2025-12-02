@@ -49,7 +49,7 @@ export default function ModelControlCenterPage({
   // Global download progress - lifted to page level so it's always visible
   const { progress, queueStatus, cancelDownload, fetchQueueStatus, isPaused, pauseDownloads, resumeDownloads } = useDownloadProgress({
     onCompleted: loadModels,
-    onRetry: useCallback((modelId: string, attempt: number, maxAttempts: number) => {
+    onRetry: useCallback((_modelId: string, attempt: number, maxAttempts: number) => {
       showToast?.(
         `Retrying download (${attempt}/${maxAttempts})...`,
         'warning',

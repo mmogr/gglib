@@ -3,12 +3,14 @@ import ModelControlCenterPage from "./pages/ModelControlCenterPage";
 import Header from "./components/Header";
 import SettingsModal from "./components/SettingsModal";
 import LlamaInstallModal from "./components/LlamaInstallModal";
+import { IncompleteDownloadsModal } from "./components/IncompleteDownloadsModal";
 import { ToastContainer } from "./components/Toast";
 import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { useToast } from "./hooks/useToast";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { isTauriApp, TauriService } from "./services/tauri";
+import type { IncompleteDownload } from "./types";
 
 // Tauri event listener (only imported in Tauri context)
 let listen: ((event: string, handler: (event: any) => void) => Promise<() => void>) | null = null;
@@ -21,6 +23,8 @@ if (isTauriApp) {
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
+  const [incompleteDownloads, setIncompleteDownloads] = useState<IncompleteDownload[]>([]);
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   // Sidebar visibility (for menu toggle, currently not visually implemented)
   const [, setIsSidebarVisible] = useState(true);
   const { servers, loadServers, stopServer } = useServers();
@@ -44,6 +48,47 @@ function App() {
     removeModel: () => void;
     selectModel: (modelId: number, view?: 'chat' | 'console') => void;
   } | null>(null);
+
+  // Check for incomplete downloads on startup
+  useEffect(() => {
+    const checkIncomplete = async () => {
+      try {
+        const incomplete = await TauriService.getIncompleteDownloads();
+        if (incomplete && incomplete.length > 0) {
+          setIncompleteDownloads(incomplete);
+          setShowIncompleteModal(true);
+        }
+      } catch (err) {
+        console.error('Failed to check incomplete downloads:', err);
+      }
+    };
+    checkIncomplete();
+  }, []);
+
+  // Handlers for incomplete downloads modal
+  const handleResumeIncomplete = useCallback(async () => {
+    try {
+      await TauriService.restoreIncompleteDownloads();
+      setShowIncompleteModal(false);
+      setIncompleteDownloads([]);
+      showToast('Resuming incomplete downloads...', 'info');
+    } catch (err) {
+      console.error('Failed to resume incomplete downloads:', err);
+      showToast('Failed to resume downloads', 'error');
+    }
+  }, [showToast]);
+
+  const handleDiscardIncomplete = useCallback(async () => {
+    try {
+      await TauriService.discardIncompleteDownloads();
+      setShowIncompleteModal(false);
+      setIncompleteDownloads([]);
+      showToast('Incomplete downloads discarded', 'info');
+    } catch (err) {
+      console.error('Failed to discard incomplete downloads:', err);
+      showToast('Failed to discard downloads', 'error');
+    }
+  }, [showToast]);
 
   // Show llama install modal when needed (only for Tauri desktop app)
   useEffect(() => {
@@ -192,6 +237,12 @@ function App() {
           error={llamaError}
           onInstall={installLlama}
           onSkip={() => setShowLlamaModal(false)}
+        />
+        <IncompleteDownloadsModal
+          isOpen={showIncompleteModal}
+          downloads={incompleteDownloads}
+          onResume={handleResumeIncomplete}
+          onDiscard={handleDiscardIncomplete}
         />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </div>

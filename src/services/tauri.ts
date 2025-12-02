@@ -574,7 +574,7 @@ export class TauriService {
         throw new Error(`Failed to fetch download queue: ${response.statusText}`);
       }
       const data: ApiResponse<DownloadQueueStatus> = await response.json();
-      return data.data || { pending: [], failed: [], max_size: 10 };
+      return data.data || { pending: [], failed: [], max_size: 10, is_paused: false };
     }
   }
 
