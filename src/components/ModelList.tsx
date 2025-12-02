@@ -1,4 +1,4 @@
-import { useState, FC } from "react";
+import { useState, FC, useMemo } from "react";
 import { GgufModel } from "../types";
 import { TauriService } from "../services/tauri";
 import { formatParamCount } from "../utils/format";
@@ -11,6 +11,16 @@ interface ModelListProps {
   onModelRemoved: () => void;
 }
 
+/** Check if model has a specific tag */
+const hasTag = (model: GgufModel, tag: string): boolean => {
+  return model.tags?.includes(tag) ?? false;
+};
+
+/** Check if model should auto-enable Jinja (has 'agent' or 'reasoning' tag) */
+const shouldAutoEnableJinja = (model: GgufModel): boolean => {
+  return hasTag(model, 'agent') || hasTag(model, 'reasoning');
+};
+
 const ModelList: FC<ModelListProps> = ({
   models,
   loading,
@@ -21,7 +31,13 @@ const ModelList: FC<ModelListProps> = ({
   const [removing, setRemoving] = useState<number | null>(null);
   const [servingModel, setServingModel] = useState<GgufModel | null>(null);
   const [customContext, setCustomContext] = useState<string>('');
+  const [enableJinja, setEnableJinja] = useState<boolean>(false);
   const [isServing, setIsServing] = useState(false);
+
+  // Auto-enable Jinja when serving model has agent/reasoning tags
+  const jinjaAutoEnabled = useMemo(() => {
+    return servingModel ? shouldAutoEnableJinja(servingModel) : false;
+  }, [servingModel]);
 
   const handleRemove = async (model: GgufModel) => {
     if (!model.id) return;
@@ -44,6 +60,8 @@ const ModelList: FC<ModelListProps> = ({
     if (!model.id) return;
     setServingModel(model);
     setCustomContext(''); // Reset custom context
+    // Auto-enable Jinja for agent/reasoning models, reset for others
+    setEnableJinja(shouldAutoEnableJinja(model));
   };
 
   const handleConfirmServe = async () => {
@@ -66,6 +84,7 @@ const ModelList: FC<ModelListProps> = ({
         id: servingModel.id,
         context_length: contextLength,
         mlock: false,
+        jinja: enableJinja || jinjaAutoEnabled,
       });
       setServingModel(null);
       onRefresh(); // Refresh to show updated server status
@@ -174,6 +193,50 @@ const ModelList: FC<ModelListProps> = ({
                 <span className="model-size">{formatParamCount(servingModel.param_count_b)}</span>
               </div>
               
+              {/* Capability Badges */}
+              {(hasTag(servingModel, 'reasoning') || hasTag(servingModel, 'agent')) && (
+                <div className="capability-badges" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  {hasTag(servingModel, 'reasoning') && (
+                    <span 
+                      className="capability-badge reasoning" 
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '0.25rem',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '0.25rem',
+                        backgroundColor: 'var(--color-purple-bg, #f3e8ff)',
+                        color: 'var(--color-purple-text, #7c3aed)',
+                        fontSize: '0.75rem',
+                        fontWeight: 500
+                      }}
+                      title="Model supports chain-of-thought reasoning with thinking tags"
+                    >
+                      🧠 Reasoning
+                    </span>
+                  )}
+                  {hasTag(servingModel, 'agent') && (
+                    <span 
+                      className="capability-badge agent" 
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '0.25rem',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '0.25rem',
+                        backgroundColor: 'var(--color-blue-bg, #dbeafe)',
+                        color: 'var(--color-blue-text, #2563eb)',
+                        fontSize: '0.75rem',
+                        fontWeight: 500
+                      }}
+                      title="Model supports tool/function calling for agentic workflows"
+                    >
+                      🔧 Agent
+                    </span>
+                  )}
+                </div>
+              )}
+              
               <div className="form-group">
                 <label htmlFor="context-input">
                   Context Length
@@ -193,6 +256,43 @@ const ModelList: FC<ModelListProps> = ({
                   {servingModel.context_length 
                     ? `Model's maximum: ${servingModel.context_length.toLocaleString()} tokens`
                     : 'Leave empty to use model default'}
+                </p>
+              </div>
+
+              {/* Jinja Templates Toggle */}
+              <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label 
+                  htmlFor="jinja-toggle" 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    cursor: isServing ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <input
+                    id="jinja-toggle"
+                    type="checkbox"
+                    checked={enableJinja || jinjaAutoEnabled}
+                    onChange={(e) => setEnableJinja(e.target.checked)}
+                    disabled={isServing || jinjaAutoEnabled}
+                    style={{ width: 'auto', margin: 0 }}
+                  />
+                  <span>Enable Jinja templates</span>
+                  {jinjaAutoEnabled && (
+                    <span 
+                      style={{ 
+                        fontSize: '0.75rem', 
+                        color: 'var(--color-text-secondary, #6b7280)',
+                        fontStyle: 'italic'
+                      }}
+                    >
+                      (auto-enabled for this model)
+                    </span>
+                  )}
+                </label>
+                <p className="input-help" style={{ marginTop: '0.25rem' }}>
+                  Required for tool calling and advanced chat templates. {jinjaAutoEnabled ? 'Automatically enabled for agent/reasoning models.' : 'Enable if using function calling.'}
                 </p>
               </div>
             </div>

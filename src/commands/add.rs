@@ -99,8 +99,8 @@ pub async fn handle_add(file_path: String) -> Result<()> {
         input::prompt_float("Parameter count (in billions)")?
     };
 
-    // Auto-detect reasoning model support from metadata
-    let auto_tags = gguf_parser::apply_reasoning_detection(&gguf_metadata.metadata);
+    // Auto-detect reasoning and tool calling capabilities from metadata
+    let auto_tags = gguf_parser::apply_capability_detection(&gguf_metadata.metadata);
 
     // Create the model instance with extracted and user-provided metadata
     let new_model: models::Gguf = models::Gguf {

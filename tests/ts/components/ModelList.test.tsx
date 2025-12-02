@@ -399,6 +399,7 @@ describe('ModelList', () => {
           id: 1,
           context_length: 4096,
           mlock: false,
+          jinja: false, // No agent/reasoning tags, so jinja defaults to false
         });
       });
     });
@@ -422,6 +423,7 @@ describe('ModelList', () => {
           id: 1,
           context_length: 8192,
           mlock: false,
+          jinja: false, // No agent/reasoning tags
         });
       });
     });
@@ -490,6 +492,67 @@ describe('ModelList', () => {
       fireEvent.click(serveButton);
       
       expect(screen.queryByText('Start Model Server')).not.toBeInTheDocument();
+    });
+
+    it('auto-enables jinja for agent-tagged model', async () => {
+      vi.mocked(TauriService.serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      
+      const agentModel = createModel({ tags: ['agent'] });
+      render(<ModelList {...defaultProps} models={[agentModel]} />);
+      
+      const serveButton = screen.getByTitle('Serve model');
+      fireEvent.click(serveButton);
+      
+      // Verify agent badge is shown
+      expect(screen.getByText('🔧 Agent')).toBeInTheDocument();
+      
+      const startButton = screen.getByText('Start Server');
+      fireEvent.click(startButton);
+      
+      await waitFor(() => {
+        expect(TauriService.serveModel).toHaveBeenCalledWith({
+          id: 1,
+          context_length: 4096,
+          mlock: false,
+          jinja: true, // Auto-enabled for agent tag
+        });
+      });
+    });
+
+    it('auto-enables jinja for reasoning-tagged model', async () => {
+      vi.mocked(TauriService.serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      
+      const reasoningModel = createModel({ tags: ['reasoning'] });
+      render(<ModelList {...defaultProps} models={[reasoningModel]} />);
+      
+      const serveButton = screen.getByTitle('Serve model');
+      fireEvent.click(serveButton);
+      
+      // Verify reasoning badge is shown
+      expect(screen.getByText('🧠 Reasoning')).toBeInTheDocument();
+      
+      const startButton = screen.getByText('Start Server');
+      fireEvent.click(startButton);
+      
+      await waitFor(() => {
+        expect(TauriService.serveModel).toHaveBeenCalledWith({
+          id: 1,
+          context_length: 4096,
+          mlock: false,
+          jinja: true, // Auto-enabled for reasoning tag
+        });
+      });
+    });
+
+    it('shows both badges for model with both tags', () => {
+      const dualCapModel = createModel({ tags: ['agent', 'reasoning'] });
+      render(<ModelList {...defaultProps} models={[dualCapModel]} />);
+      
+      const serveButton = screen.getByTitle('Serve model');
+      fireEvent.click(serveButton);
+      
+      expect(screen.getByText('🧠 Reasoning')).toBeInTheDocument();
+      expect(screen.getByText('🔧 Agent')).toBeInTheDocument();
     });
   });
 });
