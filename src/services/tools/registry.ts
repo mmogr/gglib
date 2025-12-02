@@ -13,25 +13,41 @@ import type {
 import { parseToolCall, ToolCall } from './types';
 
 /**
+ * Source identifier for tool registration.
+ * Used to track where tools came from for bulk operations.
+ */
+export type ToolSource = 
+  | 'builtin'           // Built-in tools (datetime, etc.)
+  | `mcp:${string}`;    // MCP server tools (mcp:server-id)
+
+/**
+ * Extended registered tool with source tracking.
+ */
+interface RegisteredToolWithSource extends RegisteredTool {
+  source: ToolSource;
+}
+
+/**
  * Registry for managing tools available to the LLM.
  * Handles tool registration, lookup, and execution.
  */
 export class ToolRegistry {
-  private tools = new Map<string, RegisteredTool>();
+  private tools = new Map<string, RegisteredToolWithSource>();
   private disabledTools = new Set<string>();
 
   /**
    * Register a tool with its definition and executor.
    * @param definition - OpenAI-compatible tool definition
    * @param execute - Function to execute when tool is called
+   * @param source - Source identifier for the tool (default: 'builtin')
    * @throws Error if tool with same name already exists
    */
-  register(definition: ToolDefinition, execute: ToolExecutor): void {
+  register(definition: ToolDefinition, execute: ToolExecutor, source: ToolSource = 'builtin'): void {
     const name = definition.function.name;
     if (this.tools.has(name)) {
       throw new Error(`Tool "${name}" is already registered`);
     }
-    this.tools.set(name, { definition, execute });
+    this.tools.set(name, { definition, execute, source });
     // Newly registered tools are enabled by default
     this.disabledTools.delete(name);
   }
@@ -42,12 +58,14 @@ export class ToolRegistry {
    * @param description - Description for the LLM
    * @param parameters - JSON Schema for parameters (optional)
    * @param execute - Executor function
+   * @param source - Source identifier for the tool (default: 'builtin')
    */
   registerFunction(
     name: string,
     description: string,
     parameters: ToolDefinition['function']['parameters'] | undefined,
-    execute: ToolExecutor
+    execute: ToolExecutor,
+    source: ToolSource = 'builtin'
   ): void {
     this.register(
       {
@@ -58,7 +76,8 @@ export class ToolRegistry {
           parameters,
         },
       },
-      execute
+      execute,
+      source
     );
   }
 
@@ -191,6 +210,71 @@ export class ToolRegistry {
   clear(): void {
     this.tools.clear();
     this.disabledTools.clear();
+  }
+
+  /**
+   * Unregister all tools from a specific source.
+   * Useful for removing all tools when an MCP server disconnects.
+   * @param source - Source identifier (e.g., 'mcp:server-1')
+   * @returns Number of tools removed
+   */
+  unregisterBySource(source: ToolSource): number {
+    let count = 0;
+    for (const [name, tool] of this.tools) {
+      if (tool.source === source) {
+        this.tools.delete(name);
+        this.disabledTools.delete(name);
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Get the source of a registered tool.
+   * @returns Source identifier or undefined if tool not found
+   */
+  getSource(name: string): ToolSource | undefined {
+    return this.tools.get(name)?.source;
+  }
+
+  /**
+   * Get all tools from a specific source.
+   * @param source - Source identifier
+   * @returns Array of tool definitions from that source
+   */
+  getBySource(source: ToolSource): ToolDefinition[] {
+    return Array.from(this.tools.values())
+      .filter((t) => t.source === source)
+      .map((t) => t.definition);
+  }
+
+  /**
+   * Get a map of sources to their tool counts.
+   * Useful for displaying tool statistics in the UI.
+   */
+  getSourceStats(): Map<ToolSource, number> {
+    const stats = new Map<ToolSource, number>();
+    for (const tool of this.tools.values()) {
+      stats.set(tool.source, (stats.get(tool.source) || 0) + 1);
+    }
+    return stats;
+  }
+
+  /**
+   * Get enabled tool definitions grouped by source.
+   * Returns a map of source -> definitions for UI grouping.
+   */
+  getEnabledDefinitionsBySource(): Map<ToolSource, ToolDefinition[]> {
+    const grouped = new Map<ToolSource, ToolDefinition[]>();
+    for (const [name, tool] of this.tools) {
+      if (!this.disabledTools.has(name)) {
+        const list = grouped.get(tool.source) || [];
+        list.push(tool.definition);
+        grouped.set(tool.source, list);
+      }
+    }
+    return grouped;
   }
 }
 
