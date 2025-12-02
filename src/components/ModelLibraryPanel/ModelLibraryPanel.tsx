@@ -18,8 +18,6 @@ interface ModelLibraryPanelProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   tags: string[];
-  selectedTags: string[];
-  onTagFilterChange: (tags: string[]) => void;
   servers: ServerInfo[];
   
   // Filter props
@@ -58,8 +56,6 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   searchQuery,
   onSearchChange,
   tags,
-  selectedTags,
-  onTagFilterChange,
   servers,
   filterOptions,
   filters,

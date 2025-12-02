@@ -60,7 +60,6 @@ export default function ModelControlCenterPage({
   }, [progress?.status]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('download');
   
   // Filter state for the model library (session-only, not persisted)
@@ -71,15 +70,8 @@ export default function ModelControlCenterPage({
     selectedTags: [],
   });
 
-  // Sync selectedTags with filters for backward compatibility
-  useEffect(() => {
-    setFilters(prev => ({ ...prev, selectedTags: selectedTags }));
-  }, [selectedTags]);
-
   const handleFiltersChange = useCallback((newFilters: FilterState) => {
     setFilters(newFilters);
-    // Sync selectedTags state for backward compatibility
-    setSelectedTags(newFilters.selectedTags);
   }, []);
 
   const handleClearFilters = useCallback(() => {
@@ -89,7 +81,6 @@ export default function ModelControlCenterPage({
       selectedQuantizations: [],
       selectedTags: [],
     });
-    setSelectedTags([]);
   }, []);
   
   // Sidebar tab state (for the new tabbed sidebar)
@@ -369,8 +360,6 @@ export default function ModelControlCenterPage({
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             tags={tags}
-            selectedTags={selectedTags}
-            onTagFilterChange={setSelectedTags}
             servers={servers}
             filterOptions={filterOptions}
             filters={filters}

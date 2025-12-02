@@ -1,4 +1,4 @@
-import { FC, useCallback, useRef, useEffect, useState } from 'react';
+import { FC, useCallback, useRef } from 'react';
 import './RangeSlider.css';
 
 interface RangeSliderProps {
@@ -60,9 +60,6 @@ const RangeSlider: FC<RangeSliderProps> = ({
     const value = Math.max(Number(e.target.value), minValue + step);
     onChange(minValue, value);
   };
-
-  // Determine if range is at full extent (no filtering applied)
-  const isFullRange = minValue <= min && maxValue >= max;
 
   return (
     <div className={`range-slider ${disabled ? 'range-slider-disabled' : ''}`}>

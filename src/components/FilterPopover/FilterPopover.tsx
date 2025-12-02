@@ -1,7 +1,7 @@
 import { FC, useRef } from 'react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { RangeSlider } from '../RangeSlider';
-import { ModelFilterOptions, RangeValues } from '../../types';
+import { ModelFilterOptions } from '../../types';
 import './FilterPopover.css';
 
 export interface FilterState {
