@@ -43,6 +43,7 @@ which = "5.0"
 tokio-util = "0.7"
 zip = "2.2"
 uuid = { version = "1.18.1", features = ["v4"] }
+base64 = "0.22"
 
 # Platform-specific process termination for graceful shutdown
 [target.'cfg(unix)'.dependencies]

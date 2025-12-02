@@ -65,6 +65,11 @@ pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};
 pub use settings_service::SettingsService;
 
+// Re-export MCP types from the mcp module
+pub use crate::services::mcp::{
+    McpService, McpServiceError, McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult,
+};
+
 // Re-export types from canonical locations
 pub use crate::models::gui::{ModelsDirectoryInfo, StartServerResponse};
 
@@ -81,6 +86,7 @@ pub struct AppCore {
     download_service: DownloadService,
     settings_service: SettingsService,
     huggingface_service: HuggingFaceService,
+    mcp_service: McpService,
 }
 
 impl AppCore {
@@ -139,6 +145,7 @@ impl AppCore {
         let download_service = DownloadService::new();
         let settings_service = SettingsService::new(db_pool.clone());
         let huggingface_service = HuggingFaceService::new();
+        let mcp_service = McpService::new(db_pool.clone());
 
         Self {
             db_pool,
@@ -148,6 +155,7 @@ impl AppCore {
             download_service,
             settings_service,
             huggingface_service,
+            mcp_service,
         }
     }
 
@@ -296,6 +304,44 @@ impl AppCore {
     pub fn huggingface(&self) -> &HuggingFaceService {
         &self.huggingface_service
     }
+
+    /// Access the MCP (Model Context Protocol) service for managing external tools.
+    ///
+    /// MCP servers expose tools that can be called by the LLM during inference.
+    /// This enables integration with external services like web search, code execution,
+    /// file system access, and more.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use gglib::services::core::AppCore;
+    /// # use gglib::services::mcp::{McpServerConfig, McpServerType};
+    /// # use std::collections::HashMap;
+    /// # async fn example(core: &AppCore) -> anyhow::Result<()> {
+    /// // Add an MCP server
+    /// let config = McpServerConfig {
+    ///     id: None,
+    ///     name: "filesystem".to_string(),
+    ///     server_type: McpServerType::Stdio,
+    ///     command: "npx".to_string(),
+    ///     args: vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()],
+    ///     env_vars: HashMap::new(),
+    ///     auto_start: true,
+    ///     enabled: true,
+    /// };
+    /// let saved = core.mcp().add_server(config).await?;
+    ///
+    /// // Start the server
+    /// core.mcp().start_server(saved.id.as_ref().unwrap()).await?;
+    ///
+    /// // List available tools
+    /// let tools = core.mcp().list_all_tools().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn mcp(&self) -> &McpService {
+        &self.mcp_service
+    }
 }
 
 // AppCore is not Clone because ProxyService contains non-Clone RwLock state.
@@ -318,6 +364,7 @@ mod tests {
         let _ = core.downloads();
         let _ = core.settings();
         let _ = core.huggingface();
+        let _ = core.mcp();
     }
 
     #[tokio::test]

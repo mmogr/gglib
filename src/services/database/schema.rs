@@ -7,7 +7,13 @@ use anyhow::Result;
 use sqlx::SqlitePool;
 
 /// Valid table names for schema operations.
-pub const VALID_TABLES: [&str; 3] = ["chat_conversations", "chat_messages", "models"];
+pub const VALID_TABLES: [&str; 5] = [
+    "chat_conversations",
+    "chat_messages",
+    "models",
+    "mcp_servers",
+    "mcp_server_env",
+];
 
 /// Valid SQL column types for migrations.
 pub const VALID_COLUMN_TYPES: [&str; 4] = ["TEXT", "INTEGER", "REAL", "BLOB"];
@@ -92,6 +98,45 @@ pub async fn create_schema(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // Create MCP servers table for external tool servers
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS mcp_servers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
+            enabled INTEGER NOT NULL DEFAULT 1,
+            auto_start INTEGER NOT NULL DEFAULT 0,
+            command TEXT,
+            args TEXT,
+            cwd TEXT,
+            url TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_connected_at TEXT
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Create MCP server environment variables table
+    // Values are base64 encoded for MVP (future: proper encryption)
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS mcp_server_env (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            server_id INTEGER NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            FOREIGN KEY (server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE,
+            UNIQUE(server_id, key)
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    // Index for faster MCP env lookups
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_mcp_env_server ON mcp_server_env(server_id)")
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
