@@ -6,11 +6,13 @@
 //! Types are defined in the `download_models` module for better organization.
 
 use super::download_models::{
-    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
+    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, IncompleteDownload,
+    PausedDownloadState, QueuedDownload,
 };
 use super::huggingface_service::HuggingFaceService;
 use anyhow::Result;
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
@@ -33,6 +35,10 @@ pub struct ActiveDownloadInfo {
     pub shard_info: Option<super::download_models::ShardInfo>,
     /// Group ID for sharded downloads
     pub group_id: Option<String>,
+    /// Bytes downloaded so far (for pause state)
+    pub bytes_downloaded: u64,
+    /// Total bytes expected (for pause state)
+    pub total_bytes: u64,
 }
 
 /// Service for managing HuggingFace model downloads.
@@ -42,6 +48,7 @@ pub struct ActiveDownloadInfo {
 /// - Cancellation support
 /// - Download queue with configurable max size
 /// - Auto-advance to next download on completion/failure
+/// - Pause/resume functionality
 pub struct DownloadService {
     active_downloads: Arc<RwLock<HashMap<String, ActiveDownloadInfo>>>,
     pending_queue: Arc<RwLock<VecDeque<QueuedDownload>>>,
@@ -52,6 +59,10 @@ pub struct DownloadService {
     /// Stores PIDs of active child processes for synchronous termination on app shutdown.
     /// Uses std::sync::RwLock for synchronous access from the shutdown handler.
     child_pids: PidStorage,
+    /// Flag to track if downloads are paused
+    is_paused: Arc<RwLock<bool>>,
+    /// Paused downloads state for resumption
+    paused_downloads: Arc<RwLock<Vec<PausedDownloadState>>>,
 }
 
 impl DownloadService {
@@ -64,7 +75,14 @@ impl DownloadService {
             max_queue_size: Arc::new(RwLock::new(10)),
             processing: Arc::new(RwLock::new(false)),
             child_pids: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            is_paused: Arc::new(RwLock::new(false)),
+            paused_downloads: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+
+    /// Check if the download queue is currently paused.
+    pub async fn is_paused(&self) -> bool {
+        *self.is_paused.read().await
     }
 
     /// Set the maximum queue size.
@@ -340,12 +358,17 @@ impl DownloadService {
         let pending = self.pending_queue.read().await;
         let failed = self.failed_downloads.read().await;
         let max_size = *self.max_queue_size.read().await;
+        let is_paused = *self.is_paused.read().await;
 
         // Current download - now includes full metadata from ActiveDownloadInfo
         let current = active.values().next().map(|info| DownloadQueueItem {
             model_id: info.model_id.clone(),
             quantization: info.quantization.clone(),
-            status: DownloadStatus::Downloading,
+            status: if is_paused {
+                DownloadStatus::Paused
+            } else {
+                DownloadStatus::Downloading
+            },
             position: 1,
             error: None,
             group_id: info.group_id.clone(),
@@ -387,6 +410,7 @@ impl DownloadService {
             pending: pending_items,
             failed: failed_items,
             max_size,
+            is_paused,
         }
     }
 
@@ -500,6 +524,178 @@ impl DownloadService {
         self.failed_downloads.write().await.clear();
     }
 
+    /// Pause all downloads.
+    ///
+    /// This will:
+    /// 1. Set the paused flag
+    /// 2. Cancel the current download (storing its state for resumption)
+    /// 3. Save the paused state to disk for recovery after restart
+    ///
+    /// The `huggingface_hub` library's `resume_download=True` flag ensures
+    /// downloads can be resumed from where they left off.
+    pub async fn pause(&self) -> Result<()> {
+        // Set the paused flag
+        *self.is_paused.write().await = true;
+
+        // Cancel all active downloads and store their state
+        let active = self.active_downloads.read().await;
+        for (model_id, info) in active.iter() {
+            // Create paused state from active download
+            let paused_state = PausedDownloadState::new(
+                QueuedDownload {
+                    model_id: model_id.clone(),
+                    quantization: info.quantization.clone(),
+                    group_id: info.group_id.clone(),
+                    shard_info: info.shard_info.clone(),
+                    queued_at: Some(std::time::Instant::now()),
+                },
+                info.bytes_downloaded,
+                info.total_bytes,
+            );
+
+            self.paused_downloads.write().await.push(paused_state);
+
+            // Signal cancellation
+            info.cancel_token.cancel();
+        }
+
+        // Save state to disk
+        self.save_incomplete_downloads().await?;
+
+        Ok(())
+    }
+
+    /// Resume paused downloads.
+    ///
+    /// This will:
+    /// 1. Clear the paused flag
+    /// 2. Re-queue paused downloads at the front of the queue
+    /// 3. Clear persisted incomplete downloads file
+    pub async fn resume(&self) -> Result<()> {
+        // Clear the paused flag
+        *self.is_paused.write().await = false;
+
+        // Move paused downloads back to front of pending queue
+        let paused = {
+            let mut paused = self.paused_downloads.write().await;
+            std::mem::take(&mut *paused)
+        };
+
+        if !paused.is_empty() {
+            let mut queue = self.pending_queue.write().await;
+            // Insert paused downloads at the front (in reverse order to maintain original order)
+            for state in paused.into_iter().rev() {
+                queue.push_front(state.queued_download);
+            }
+        }
+
+        // Clear persisted state
+        self.clear_incomplete_downloads_file().await?;
+
+        Ok(())
+    }
+
+    /// Get the path to the incomplete downloads file.
+    fn incomplete_downloads_path() -> Result<PathBuf> {
+        let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+        let gglib_dir = home.join(".gglib");
+        std::fs::create_dir_all(&gglib_dir)?;
+        Ok(gglib_dir.join("incomplete_downloads.json"))
+    }
+
+    /// Save incomplete downloads to disk for recovery after restart.
+    async fn save_incomplete_downloads(&self) -> Result<()> {
+        let paused = self.paused_downloads.read().await;
+        let pending = self.pending_queue.read().await;
+
+        let incomplete: Vec<IncompleteDownload> = paused
+            .iter()
+            .map(IncompleteDownload::from_paused)
+            .chain(pending.iter().map(|q| IncompleteDownload {
+                model_id: q.model_id.clone(),
+                quantization: q.quantization.clone(),
+                group_id: q.group_id.clone(),
+                shard_info: q.shard_info.clone(),
+                bytes_downloaded: 0,
+                total_bytes: 0,
+                interrupted_at: chrono::Utc::now().to_rfc3339(),
+            }))
+            .collect();
+
+        if incomplete.is_empty() {
+            return self.clear_incomplete_downloads_file().await;
+        }
+
+        let path = Self::incomplete_downloads_path()?;
+        let json = serde_json::to_string_pretty(&incomplete)?;
+        tokio::fs::write(path, json).await?;
+
+        Ok(())
+    }
+
+    /// Clear the incomplete downloads file.
+    async fn clear_incomplete_downloads_file(&self) -> Result<()> {
+        let path = Self::incomplete_downloads_path()?;
+        if path.exists() {
+            tokio::fs::remove_file(path).await?;
+        }
+        Ok(())
+    }
+
+    /// Load incomplete downloads from disk.
+    /// Returns empty vec if file doesn't exist or can't be read.
+    pub async fn load_incomplete_downloads(&self) -> Vec<IncompleteDownload> {
+        let path = match Self::incomplete_downloads_path() {
+            Ok(p) => p,
+            Err(_) => return Vec::new(),
+        };
+
+        if !path.exists() {
+            return Vec::new();
+        }
+
+        match tokio::fs::read_to_string(&path).await {
+            Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Resume incomplete downloads from disk (called on startup).
+    /// Returns the list of downloads that were restored.
+    pub async fn restore_incomplete_downloads(&self) -> Vec<IncompleteDownload> {
+        let incomplete = self.load_incomplete_downloads().await;
+        
+        if incomplete.is_empty() {
+            return Vec::new();
+        }
+
+        // Add to pending queue
+        let mut queue = self.pending_queue.write().await;
+        for download in &incomplete {
+            queue.push_back(download.to_queued_download());
+        }
+
+        // Clear the file since we've restored them
+        let _ = self.clear_incomplete_downloads_file().await;
+
+        incomplete
+    }
+
+    /// Discard incomplete downloads and clear the HuggingFace cache for them.
+    pub async fn discard_incomplete_downloads(&self) -> Result<()> {
+        // Clear from memory
+        self.paused_downloads.write().await.clear();
+        
+        // Clear persisted state
+        self.clear_incomplete_downloads_file().await?;
+
+        // Note: We don't clear the huggingface_hub cache here as it's managed
+        // by the library itself. Users can manually clear ~/.cache/huggingface
+        // if needed.
+
+        Ok(())
+    }
+
     /// Get the next item from the queue (internal use).
     async fn pop_next(&self) -> Option<QueuedDownload> {
         self.pending_queue.write().await.pop_front()
@@ -552,6 +748,8 @@ impl DownloadService {
                 quantization: quantization.clone(),
                 shard_info: None,
                 group_id: None,
+                bytes_downloaded: 0,
+                total_bytes: 0,
             };
             downloads.insert(model_id.clone(), info);
         }
@@ -637,6 +835,8 @@ impl DownloadService {
                 quantization: Some(quantization.clone()),
                 shard_info,
                 group_id,
+                bytes_downloaded: 0,
+                total_bytes: 0,
             };
             downloads.insert(tracking_key.clone(), info);
         }

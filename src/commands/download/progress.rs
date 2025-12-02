@@ -97,6 +97,37 @@ impl DownloadProgressEvent {
         event
     }
 
+    /// Create a "paused" status event when the download queue is paused.
+    pub fn paused(model_id: &str, downloaded: u64, total: u64) -> Self {
+        let mut event = Self::base(model_id, "paused");
+        event.downloaded = downloaded;
+        event.total = total;
+        event.percentage = if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        event.message = Some("Download paused".to_string());
+        event
+    }
+
+    /// Create a "resumed" status event when the download queue is resumed.
+    pub fn resumed(model_id: &str) -> Self {
+        let mut event = Self::base(model_id, "resumed");
+        event.message = Some("Download resumed".to_string());
+        event
+    }
+
+    /// Create a "retry" status event when retrying after a network error.
+    pub fn retry(model_id: &str, attempt: u32, max_attempts: u32, delay_secs: u64) -> Self {
+        let mut event = Self::base(model_id, "retry");
+        event.message = Some(format!(
+            "Network error, retrying (attempt {}/{}) in {}s...",
+            attempt, max_attempts, delay_secs
+        ));
+        event
+    }
+
     /// Create a progress event with pre-calculated EWA speed.
     pub fn progress(model_id: &str, downloaded: u64, total: u64, speed: f64) -> Self {
         let mut event = Self::base(model_id, "progress");

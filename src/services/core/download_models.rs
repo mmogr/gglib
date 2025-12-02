@@ -221,6 +221,34 @@ pub enum DownloadStatus {
     Completed,
     /// Failed with an error
     Failed,
+    /// Download queue is paused
+    Paused,
+}
+
+/// State of a paused download for resumption.
+/// Stores all information needed to resume the download later.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PausedDownloadState {
+    /// The queued download item that was paused
+    pub queued_download: QueuedDownload,
+    /// Bytes downloaded before pausing (for progress display)
+    pub bytes_downloaded: u64,
+    /// Total bytes expected (for progress display)
+    pub total_bytes: u64,
+    /// Timestamp when paused (for display purposes)
+    pub paused_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl PausedDownloadState {
+    /// Create a new paused download state.
+    pub fn new(queued_download: QueuedDownload, bytes_downloaded: u64, total_bytes: u64) -> Self {
+        Self {
+            queued_download,
+            bytes_downloaded,
+            total_bytes,
+            paused_at: chrono::Utc::now(),
+        }
+    }
 }
 
 /// Information about a download in the queue (for API responses).
@@ -281,6 +309,55 @@ pub struct DownloadQueueStatus {
     pub failed: Vec<DownloadQueueItem>,
     /// Maximum queue size
     pub max_size: u32,
+    /// Whether the download queue is currently paused
+    #[serde(default)]
+    pub is_paused: bool,
+}
+
+/// Represents an incomplete download that was interrupted (for persistence).
+/// Used to restore downloads after app restart.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct IncompleteDownload {
+    /// Model ID (e.g., "TheBloke/Llama-2-7B-GGUF")
+    pub model_id: String,
+    /// Quantization type if specified
+    pub quantization: Option<String>,
+    /// Group ID for sharded downloads
+    pub group_id: Option<String>,
+    /// Shard information if this is part of a sharded model
+    pub shard_info: Option<ShardInfo>,
+    /// Bytes downloaded before interruption
+    pub bytes_downloaded: u64,
+    /// Total bytes expected
+    pub total_bytes: u64,
+    /// Timestamp when the download was interrupted
+    pub interrupted_at: String,
+}
+
+impl IncompleteDownload {
+    /// Create from a paused download state.
+    pub fn from_paused(state: &PausedDownloadState) -> Self {
+        Self {
+            model_id: state.queued_download.model_id.clone(),
+            quantization: state.queued_download.quantization.clone(),
+            group_id: state.queued_download.group_id.clone(),
+            shard_info: state.queued_download.shard_info.clone(),
+            bytes_downloaded: state.bytes_downloaded,
+            total_bytes: state.total_bytes,
+            interrupted_at: state.paused_at.to_rfc3339(),
+        }
+    }
+
+    /// Convert back to a QueuedDownload for resumption.
+    pub fn to_queued_download(&self) -> QueuedDownload {
+        QueuedDownload {
+            model_id: self.model_id.clone(),
+            quantization: self.quantization.clone(),
+            group_id: self.group_id.clone(),
+            shard_info: self.shard_info.clone(),
+            queued_at: Some(std::time::Instant::now()),
+        }
+    }
 }
 
 #[cfg(test)]

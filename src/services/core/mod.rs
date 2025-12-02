@@ -54,8 +54,8 @@ use std::sync::Arc;
 
 // Re-export types from download_models (canonical location)
 pub use download_models::{
-    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
-    ShardInfo,
+    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, IncompleteDownload,
+    PausedDownloadState, QueuedDownload, ShardInfo,
 };
 pub use download_service::DownloadService;
 pub use huggingface_models::HuggingFaceError;
