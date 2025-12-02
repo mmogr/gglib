@@ -304,7 +304,7 @@ export class McpService {
       const response = await apiFetch(`/mcp/servers/${serverId}/tools/${toolName}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(args),
+        body: JSON.stringify({ arguments: args }),
       });
 
       if (!response.ok) {
