@@ -92,6 +92,12 @@ pub struct QueuedDownload {
     pub shard_info: Option<ShardInfo>,
     #[serde(skip)]
     pub queued_at: Option<Instant>,
+    /// Bytes already downloaded (for resumed downloads)
+    #[serde(default)]
+    pub initial_bytes_downloaded: u64,
+    /// Total bytes expected (for resumed downloads)
+    #[serde(default)]
+    pub initial_total_bytes: u64,
 }
 
 impl QueuedDownload {
@@ -103,6 +109,8 @@ impl QueuedDownload {
             group_id: None,
             shard_info: None,
             queued_at: Some(Instant::now()),
+            initial_bytes_downloaded: 0,
+            initial_total_bytes: 0,
         }
     }
 
@@ -119,6 +127,8 @@ impl QueuedDownload {
             group_id: Some(group_id),
             shard_info: Some(shard_info),
             queued_at: Some(Instant::now()),
+            initial_bytes_downloaded: 0,
+            initial_total_bytes: 0,
         }
     }
 
@@ -249,6 +259,15 @@ impl PausedDownloadState {
             paused_at: chrono::Utc::now(),
         }
     }
+
+    /// Convert paused state back to a QueuedDownload with progress preserved.
+    /// This allows the download to resume with correct progress tracking.
+    pub fn into_queued_download(self) -> QueuedDownload {
+        let mut queued = self.queued_download;
+        queued.initial_bytes_downloaded = self.bytes_downloaded;
+        queued.initial_total_bytes = self.total_bytes;
+        queued
+    }
 }
 
 /// Information about a download in the queue (for API responses).
@@ -356,6 +375,8 @@ impl IncompleteDownload {
             group_id: self.group_id.clone(),
             shard_info: self.shard_info.clone(),
             queued_at: Some(std::time::Instant::now()),
+            initial_bytes_downloaded: self.bytes_downloaded,
+            initial_total_bytes: self.total_bytes,
         }
     }
 }

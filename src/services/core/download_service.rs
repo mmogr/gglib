@@ -91,6 +91,14 @@ impl DownloadService {
         *self.is_paused.read().await
     }
 
+    /// Get the first paused download's progress (for emitting paused event with actual values).
+    pub async fn get_paused_progress(&self) -> Option<(u64, u64)> {
+        let paused = self.paused_downloads.read().await;
+        paused
+            .first()
+            .map(|state| (state.bytes_downloaded, state.total_bytes))
+    }
+
     /// Set the maximum queue size.
     pub async fn set_max_queue_size(&self, size: u32) {
         *self.max_queue_size.write().await = size;
@@ -573,6 +581,8 @@ impl DownloadService {
                     group_id: info.group_id.clone(),
                     shard_info: info.shard_info.clone(),
                     queued_at: Some(std::time::Instant::now()),
+                    initial_bytes_downloaded: bytes_downloaded,
+                    initial_total_bytes: total_bytes,
                 },
                 bytes_downloaded,
                 total_bytes,
@@ -609,8 +619,9 @@ impl DownloadService {
         if !paused.is_empty() {
             let mut queue = self.pending_queue.write().await;
             // Insert paused downloads at the front (in reverse order to maintain original order)
+            // Use into_queued_download() to preserve progress information
             for state in paused.into_iter().rev() {
-                queue.push_front(state.queued_download);
+                queue.push_front(state.into_queued_download());
             }
         }
 
@@ -1068,8 +1079,9 @@ impl DownloadService {
             let throttle = crate::commands::download::ProgressThrottle::responsive_ui();
 
             // Create shared atomics for progress tracking (used by pause to capture state)
-            let shared_bytes_downloaded = Arc::new(AtomicU64::new(0));
-            let shared_total_bytes = Arc::new(AtomicU64::new(0));
+            // Initialize with previous progress if this is a resumed download
+            let shared_bytes_downloaded = Arc::new(AtomicU64::new(item.initial_bytes_downloaded));
+            let shared_total_bytes = Arc::new(AtomicU64::new(item.initial_total_bytes));
             let bytes_downloaded_for_cb = shared_bytes_downloaded.clone();
             let total_bytes_for_cb = shared_total_bytes.clone();
 

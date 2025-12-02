@@ -292,13 +292,15 @@ async fn pause_downloads(
         .map_err(|e| format!("Failed to pause downloads: {}", e))?;
 
     // Emit a paused event so frontend updates UI
+    // Use actual progress values from the paused state
     let queue_status = state.backend.get_download_queue().await;
     let model_id = queue_status
         .current
         .as_ref()
         .map(|d| d.model_id.clone())
         .unwrap_or_default();
-    let event = gglib::commands::download::DownloadProgressEvent::paused(&model_id, 0, 0);
+    let (downloaded, total) = state.backend.get_paused_progress().await.unwrap_or((0, 0));
+    let event = gglib::commands::download::DownloadProgressEvent::paused(&model_id, downloaded, total);
     let _ = app.emit("download-progress", &event);
 
     Ok("Downloads paused".to_string())

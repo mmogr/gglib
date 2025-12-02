@@ -274,6 +274,11 @@ impl GuiBackend {
         self.core.downloads().pause().await
     }
 
+    /// Get the progress of the first paused download (for UI events).
+    pub async fn get_paused_progress(&self) -> Option<(u64, u64)> {
+        self.core.downloads().get_paused_progress().await
+    }
+
     /// Resume paused downloads.
     pub async fn resume_downloads(&self) -> Result<()> {
         self.core.downloads().resume().await
