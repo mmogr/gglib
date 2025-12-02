@@ -1546,7 +1546,10 @@ mod tests {
 
         // Cancel using frontend format (model_id:quantization)
         let result = service.cancel("test/model:Q4_K_M").await;
-        assert!(result.is_ok(), "Cancel with model_id:quantization should succeed");
+        assert!(
+            result.is_ok(),
+            "Cancel with model_id:quantization should succeed"
+        );
 
         // Verify download was removed
         assert!(service.active_downloads().await.is_empty());
