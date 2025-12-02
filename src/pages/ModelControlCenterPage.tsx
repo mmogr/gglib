@@ -10,6 +10,7 @@ import { TauriService } from '../services/tauri';
 import { ServerInfo, HfModelSummary } from '../types';
 import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
+import { ToastType } from '../components/Toast';
 import './ModelControlCenterPage.css';
 
 interface ChatSession {
@@ -23,6 +24,7 @@ interface ModelControlCenterPageProps {
   servers: ServerInfo[];
   loadServers: () => Promise<void>;
   stopServer: (modelId: number) => Promise<void>;
+  showToast?: (message: string, type?: ToastType, duration?: number) => void;
   onRegisterMenuActions?: (actions: {
     refreshModels: () => void;
     addModelFromFile: () => void;
@@ -38,14 +40,22 @@ export default function ModelControlCenterPage({
   servers,
   loadServers,
   stopServer,
+  showToast,
   onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
   const { tags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
   
   // Global download progress - lifted to page level so it's always visible
-  const { progress, queueStatus, cancelDownload, fetchQueueStatus } = useDownloadProgress({
+  const { progress, queueStatus, cancelDownload, fetchQueueStatus, isPaused, pauseDownloads, resumeDownloads } = useDownloadProgress({
     onCompleted: loadModels,
+    onRetry: useCallback((modelId: string, attempt: number, maxAttempts: number) => {
+      showToast?.(
+        `Retrying download (${attempt}/${maxAttempts})...`,
+        'warning',
+        5000
+      );
+    }, [showToast]),
   });
   const [downloadDismissed, setDownloadDismissed] = useState(false);
   
@@ -343,6 +353,9 @@ export default function ModelControlCenterPage({
               onCancel={cancelDownload}
               onDismiss={() => setDownloadDismissed(true)}
               onRefreshQueue={fetchQueueStatus}
+              isPaused={isPaused}
+              onPause={pauseDownloads}
+              onResume={resumeDownloads}
             />
           )}
           

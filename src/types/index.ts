@@ -88,7 +88,7 @@ export type FitStatus = 'fits' | 'tight' | 'wont_fit';
 
 // Download Queue Types
 
-export type DownloadStatus = 'downloading' | 'queued' | 'completed' | 'failed';
+export type DownloadStatus = 'downloading' | 'queued' | 'completed' | 'failed' | 'paused';
 
 /**
  * Information about a shard in a sharded model download.
@@ -122,6 +122,29 @@ export interface DownloadQueueStatus {
   pending: DownloadQueueItem[];
   failed: DownloadQueueItem[];
   max_size: number;
+  /** Whether the download queue is currently paused */
+  is_paused: boolean;
+}
+
+/**
+ * Represents an incomplete download that was interrupted.
+ * Used for recovery prompts on app startup.
+ */
+export interface IncompleteDownload {
+  /** Model ID (e.g., "TheBloke/Llama-2-7B-GGUF") */
+  model_id: string;
+  /** Quantization type if specified */
+  quantization?: string | null;
+  /** Group ID for sharded downloads */
+  group_id?: string | null;
+  /** Shard information if this is part of a sharded model */
+  shard_info?: ShardInfo | null;
+  /** Bytes downloaded before interruption */
+  bytes_downloaded: number;
+  /** Total bytes expected */
+  total_bytes: number;
+  /** ISO timestamp when the download was interrupted */
+  interrupted_at: string;
 }
 
 // ============================================================================

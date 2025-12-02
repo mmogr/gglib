@@ -6,27 +6,39 @@ import styles from './DownloadProgressDisplay.module.css';
 interface DownloadProgressDisplayProps {
   progress: DownloadProgress;
   onCancel?: () => void;
+  onPause?: () => void;
+  onResume?: () => void;
+  isPaused?: boolean;
   compact?: boolean;
   className?: string;
 }
 
 /**
  * Reusable download progress display component.
- * Shows progress bar, speed, ETA, and cancel button.
+ * Shows progress bar, speed, ETA, pause/play button, and cancel button.
  */
 const DownloadProgressDisplay: FC<DownloadProgressDisplayProps> = ({
   progress,
   onCancel,
+  onPause,
+  onResume,
+  isPaused = false,
   compact = false,
   className,
 }) => {
   const isActive =
     progress.status === 'started' ||
     progress.status === 'downloading' ||
+    progress.status === 'progress' ||
+    progress.status === 'paused';
+
+  const isDownloading =
+    progress.status === 'started' ||
+    progress.status === 'downloading' ||
     progress.status === 'progress';
 
   return (
-    <div className={`${styles.progressContainer} ${compact ? styles.compact : ''} ${className || ''}`}>
+    <div className={`${styles.progressContainer} ${compact ? styles.compact : ''} ${isPaused ? styles.paused : ''} ${className || ''}`}>
       <div className={styles.progressHeader}>
         <div className={styles.progressInfo}>
           <div className={styles.progressStatus}>
@@ -36,12 +48,16 @@ const DownloadProgressDisplay: FC<DownloadProgressDisplayProps> = ({
             {progress.status === 'error' && '❌ '}
             {progress.status === 'queued' && '🕐 '}
             {progress.status === 'skipped' && '⏭️ '}
+            {progress.status === 'paused' && '⏸️ '}
+            {progress.status === 'retry' && '🔄 '}
             <span>
-              {(progress.status === 'downloading' || progress.status === 'progress')
-                ? progress.shard_progress && progress.shard_progress.total_shards > 1
-                  ? `Downloading shard ${progress.shard_progress.current_shard + 1}/${progress.shard_progress.total_shards}... ${progress.percentage?.toFixed(1) || 0}%`
-                  : `Downloading... ${progress.percentage?.toFixed(1) || 0}%`
-                : progress.message}
+              {progress.status === 'paused'
+                ? `Paused - ${progress.percentage?.toFixed(1) || 0}%`
+                : (progress.status === 'downloading' || progress.status === 'progress')
+                  ? progress.shard_progress && progress.shard_progress.total_shards > 1
+                    ? `Downloading shard ${progress.shard_progress.current_shard + 1}/${progress.shard_progress.total_shards}... ${progress.percentage?.toFixed(1) || 0}%`
+                    : `Downloading... ${progress.percentage?.toFixed(1) || 0}%`
+                  : progress.message}
             </span>
           </div>
           {isActive && (
@@ -52,15 +68,29 @@ const DownloadProgressDisplay: FC<DownloadProgressDisplayProps> = ({
             </div>
           )}
         </div>
-        {isActive && onCancel && (
-          <button
-            type="button"
-            className={styles.cancelBtn}
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-        )}
+        <div className={styles.progressActions}>
+          {/* Pause/Resume button */}
+          {isActive && (onPause || onResume) && (
+            <button
+              type="button"
+              className={styles.pauseBtn}
+              onClick={isPaused ? onResume : onPause}
+              title={isPaused ? 'Resume downloads' : 'Pause downloads'}
+            >
+              {isPaused ? '▶' : '⏸'}
+            </button>
+          )}
+          {/* Cancel button */}
+          {isDownloading && onCancel && (
+            <button
+              type="button"
+              className={styles.cancelBtn}
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
 
       {isActive && (
@@ -68,7 +98,7 @@ const DownloadProgressDisplay: FC<DownloadProgressDisplayProps> = ({
           {/* Main progress bar */}
           <div className={styles.progressBar}>
             <div
-              className={`${styles.progressBarFill} ${progress.percentage !== undefined ? '' : styles.indeterminate}`}
+              className={`${styles.progressBarFill} ${progress.percentage !== undefined ? '' : styles.indeterminate} ${isPaused ? styles.pausedFill : ''}`}
               style={progress.percentage !== undefined ? { width: `${progress.percentage}%` } : {}}
             ></div>
           </div>

@@ -8,6 +8,11 @@
   margin-bottom: var(--spacing-base);
 }
 
+.container.paused {
+  border-color: var(--vscode-editorWarning-foreground, #cca700);
+  opacity: 0.95;
+}
+
 /* Progress Section (Active Download) */
 .progressSection {
   display: flex;
@@ -56,6 +61,32 @@
 
 .queueBadge:hover {
   background: rgba(34, 211, 238, 0.25);
+}
+
+.controlButtons {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.pauseBtn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 14px;
+  background: var(--vscode-button-secondaryBackground, #3a3d41);
+  color: var(--vscode-button-secondaryForeground, #cccccc);
+  border: none;
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pauseBtn:hover {
+  background: var(--vscode-button-secondaryHoverBackground, #45494e);
 }
 
 .cancelBtn {

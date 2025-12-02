@@ -17,6 +17,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
+/// Default number of retry attempts for network-related errors.
+const DEFAULT_MAX_RETRIES: u32 = 3;
+/// Default delay between retry attempts (in seconds).
+const DEFAULT_RETRY_DELAY_SECS: u64 = 5;
+
 /// Type alias for storing child process PIDs for synchronous termination on shutdown.
 /// Uses std::sync::RwLock (not tokio) for synchronous access in shutdown handler.
 pub type PidStorage = Arc<std::sync::RwLock<HashMap<String, u32>>>;
@@ -894,6 +899,47 @@ impl DownloadService {
         result
     }
 
+    /// Check if an error message indicates a retryable network-related error.
+    ///
+    /// Returns `true` for errors that are likely transient and may succeed on retry:
+    /// - Connection timeouts
+    /// - Network unreachable
+    /// - Connection reset
+    /// - DNS resolution failures
+    /// - HTTP 5xx errors (server errors)
+    /// - HTTP 429 (rate limiting)
+    fn is_retryable_error(error_msg: &str) -> bool {
+        let error_lower = error_msg.to_lowercase();
+        
+        // Network connectivity errors
+        error_lower.contains("timeout")
+            || error_lower.contains("timed out")
+            || error_lower.contains("connection refused")
+            || error_lower.contains("connection reset")
+            || error_lower.contains("broken pipe")
+            || error_lower.contains("network unreachable")
+            || error_lower.contains("no route to host")
+            || error_lower.contains("dns")
+            || error_lower.contains("resolve")
+            // HTTP server errors (5xx)
+            || error_lower.contains("500")
+            || error_lower.contains("502")
+            || error_lower.contains("503")
+            || error_lower.contains("504")
+            || error_lower.contains("internal server error")
+            || error_lower.contains("bad gateway")
+            || error_lower.contains("service unavailable")
+            || error_lower.contains("gateway timeout")
+            // Rate limiting
+            || error_lower.contains("429")
+            || error_lower.contains("too many requests")
+            || error_lower.contains("rate limit")
+            // Generic network errors
+            || error_lower.contains("eof while parsing")
+            || error_lower.contains("incomplete")
+            || error_lower.contains("truncated")
+    }
+
     /// Process the download queue, downloading items one at a time.
     ///
     /// This method should be called after adding items to the queue.
@@ -1041,23 +1087,64 @@ impl DownloadService {
                     callback_clone(event);
                 });
 
-            // Execute download - use shard-specific method if this is a shard
-            let result = if is_shard {
-                let shard_info = item.shard_info.clone().unwrap();
-                let is_last_shard = self.is_last_shard_in_group(&item).await;
-                self.download_shard(
-                    model_id.clone(),
-                    shard_info.filename.clone(),
-                    quantization.clone().unwrap_or_default(),
-                    is_last_shard,
-                    Some(&progress_cb),
-                    Some(shard_info),
-                    item.group_id.clone(),
-                )
-                .await
-            } else {
-                self.download(model_id.clone(), quantization.clone(), Some(&progress_cb))
+            // Execute download with retry logic for network errors
+            let mut attempt = 0u32;
+            let result = loop {
+                attempt += 1;
+                
+                // Execute download - use shard-specific method if this is a shard
+                let download_result = if is_shard {
+                    let shard_info = item.shard_info.clone().unwrap();
+                    let is_last_shard = self.is_last_shard_in_group(&item).await;
+                    self.download_shard(
+                        model_id.clone(),
+                        shard_info.filename.clone(),
+                        quantization.clone().unwrap_or_default(),
+                        is_last_shard,
+                        Some(&progress_cb),
+                        Some(shard_info),
+                        item.group_id.clone(),
+                    )
                     .await
+                } else {
+                    self.download(model_id.clone(), quantization.clone(), Some(&progress_cb))
+                        .await
+                };
+
+                match &download_result {
+                    Ok(_) => break download_result,
+                    Err(e) => {
+                        let error_msg = e.to_string();
+                        
+                        // Don't retry if cancelled by user
+                        if error_msg.contains("cancelled") {
+                            break download_result;
+                        }
+                        
+                        // Check if error is retryable (network-related)
+                        let is_retryable = Self::is_retryable_error(&error_msg);
+                        
+                        if is_retryable && attempt < DEFAULT_MAX_RETRIES {
+                            // Emit retry event
+                            let retry_event = crate::commands::download::DownloadProgressEvent::retry(
+                                &display_name,
+                                attempt,
+                                DEFAULT_MAX_RETRIES,
+                                DEFAULT_RETRY_DELAY_SECS,
+                            );
+                            progress_callback(retry_event);
+                            
+                            // Wait before retrying
+                            tokio::time::sleep(std::time::Duration::from_secs(DEFAULT_RETRY_DELAY_SECS)).await;
+                            
+                            // Continue to next attempt
+                            continue;
+                        }
+                        
+                        // Not retryable or max retries reached
+                        break download_result;
+                    }
+                }
             };
 
             match result {

@@ -8,6 +8,7 @@ import {
   DownloadConfig,
   ServeConfig,
   DownloadQueueStatus,
+  IncompleteDownload,
   HfSearchRequest,
   HfSearchResponse,
   HfQuantizationsResponse,
@@ -17,7 +18,6 @@ import { isTauriApp } from "../utils/platform";
 
 // Re-export for backward compatibility
 export { isTauriApp };
-
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const apiBase = await getApiBase();
   return fetch(`${apiBase}${path}`, init);
@@ -287,6 +287,103 @@ export class TauriService {
 
       const data: ApiResponse<string> = await response.json();
       return data.data || 'Download cancelled';
+    }
+  }
+
+  static async pauseDownloads(): Promise<string> {
+    if (isTauriApp) {
+      return await invoke<string>('pause_downloads');
+    } else {
+      const response = await apiFetch(`/models/download/pause`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to pause downloads';
+        try {
+          const error: ApiResponse<any> = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch {
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data: ApiResponse<string> = await response.json();
+      return data.data || 'Downloads paused';
+    }
+  }
+
+  static async resumeDownloads(): Promise<string> {
+    if (isTauriApp) {
+      return await invoke<string>('resume_downloads');
+    } else {
+      const response = await apiFetch(`/models/download/resume`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to resume downloads';
+        try {
+          const error: ApiResponse<any> = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch {
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data: ApiResponse<string> = await response.json();
+      return data.data || 'Downloads resumed';
+    }
+  }
+
+  static async getIncompleteDownloads(): Promise<IncompleteDownload[]> {
+    if (isTauriApp) {
+      return await invoke<IncompleteDownload[]>('get_incomplete_downloads');
+    } else {
+      const response = await apiFetch(`/models/download/incomplete`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to get incomplete downloads: ${response.statusText}`);
+      }
+
+      const data: ApiResponse<IncompleteDownload[]> = await response.json();
+      return data.data || [];
+    }
+  }
+
+  static async restoreIncompleteDownloads(): Promise<IncompleteDownload[]> {
+    if (isTauriApp) {
+      return await invoke<IncompleteDownload[]>('restore_incomplete_downloads');
+    } else {
+      const response = await apiFetch(`/models/download/incomplete/restore`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to restore incomplete downloads: ${response.statusText}`);
+      }
+
+      const data: ApiResponse<IncompleteDownload[]> = await response.json();
+      return data.data || [];
+    }
+  }
+
+  static async discardIncompleteDownloads(): Promise<string> {
+    if (isTauriApp) {
+      return await invoke<string>('discard_incomplete_downloads');
+    } else {
+      const response = await apiFetch(`/models/download/incomplete/discard`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to discard incomplete downloads: ${response.statusText}`);
+      }
+
+      const data: ApiResponse<string> = await response.json();
+      return data.data || 'Incomplete downloads discarded';
     }
   }
 

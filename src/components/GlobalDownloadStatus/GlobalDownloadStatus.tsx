@@ -12,6 +12,12 @@ interface GlobalDownloadStatusProps {
   queueStatus: DownloadQueueStatus | null;
   /** Callback to cancel the current download */
   onCancel: (modelId: string) => void;
+  /** Callback to pause all downloads */
+  onPause: () => void;
+  /** Callback to resume downloads */
+  onResume: () => void;
+  /** Whether downloads are currently paused */
+  isPaused: boolean;
   /** Callback when user dismisses completion message */
   onDismiss: () => void;
   /** Callback to refresh queue status */
@@ -23,12 +29,16 @@ interface GlobalDownloadStatusProps {
  * Shows:
  * - Active download progress with shard support
  * - Queue status (X more queued)
+ * - Pause/resume controls
  * - Completion summary with list of downloaded models (dismissible)
  */
 const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   progress,
   queueStatus,
   onCancel,
+  onPause,
+  onResume,
+  isPaused,
   onDismiss,
   onRefreshQueue,
 }) => {
@@ -103,7 +113,8 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
     progress.status === 'started' ||
     progress.status === 'downloading' ||
     progress.status === 'progress' ||
-    progress.status === 'queued'
+    progress.status === 'queued' ||
+    progress.status === 'paused'
   ));
   
   const queueCount = (queueStatus?.pending?.length || 0);
@@ -164,20 +175,22 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
 
   // Show active download progress
   return (
-    <div className={styles.container}>
+    <div className={`${styles.container} ${isPaused ? styles.paused : ''}`}>
       <div className={styles.progressSection}>
-        {/* Header with model name and cancel */}
+        {/* Header with model name and controls */}
         <div className={styles.progressHeader}>
           <div className={styles.progressInfo}>
             <span className={styles.statusIcon}>
-              {isQueued ? '🕐' : '📥'}
+              {isPaused ? '⏸️' : isQueued ? '🕐' : '📥'}
             </span>
             <span className={styles.statusText}>
-              {isQueued 
-                ? 'Queued'
-                : displayProgress?.shard_progress && displayProgress.shard_progress.total_shards > 1
-                  ? `Downloading shard ${displayProgress.shard_progress.current_shard + 1}/${displayProgress.shard_progress.total_shards}`
-                  : 'Downloading'}
+              {isPaused
+                ? 'Paused'
+                : isQueued 
+                  ? 'Queued'
+                  : displayProgress?.shard_progress && displayProgress.shard_progress.total_shards > 1
+                    ? `Downloading shard ${displayProgress.shard_progress.current_shard + 1}/${displayProgress.shard_progress.total_shards}`
+                    : 'Downloading'}
             </span>
             {queueCount > 0 && (
               <div className={styles.queueBadgeContainer}>
@@ -197,14 +210,25 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               </div>
             )}
           </div>
-          {displayModelId && !isQueued && (
+          <div className={styles.controlButtons}>
+            {/* Pause/Resume button */}
             <button
-              className={styles.cancelBtn}
-              onClick={() => onCancel(displayModelId)}
+              className={styles.pauseBtn}
+              onClick={isPaused ? onResume : onPause}
+              title={isPaused ? 'Resume downloads' : 'Pause downloads'}
             >
-              Cancel
+              {isPaused ? '▶' : '⏸'}
             </button>
-          )}
+            {/* Cancel button */}
+            {displayModelId && !isQueued && !isPaused && (
+              <button
+                className={styles.cancelBtn}
+                onClick={() => onCancel(displayModelId)}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Model name */}

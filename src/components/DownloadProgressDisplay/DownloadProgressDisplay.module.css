@@ -11,6 +11,11 @@
   margin-bottom: 8px;
 }
 
+.progressContainer.paused {
+  border-color: var(--vscode-editorWarning-foreground, #cca700);
+  opacity: 0.9;
+}
+
 .progressHeader {
   display: flex;
   justify-content: space-between;
@@ -37,6 +42,33 @@
   text-overflow: ellipsis;
 }
 
+.progressActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pauseBtn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 14px;
+  background: var(--vscode-button-secondaryBackground, #3a3d41);
+  color: var(--vscode-button-secondaryForeground, #cccccc);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pauseBtn:hover {
+  background: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
 .cancelBtn {
   padding: 4px 12px;
   font-size: 0.85em;
@@ -46,7 +78,6 @@
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.15s ease;
-  flex-shrink: 0;
 }
 
 .cancelBtn:hover {
@@ -70,6 +101,10 @@
   background: var(--vscode-progressBar-background, #0e639c);
   border-radius: 4px;
   transition: width 0.3s ease;
+}
+
+.progressBarFill.pausedFill {
+  background: var(--vscode-editorWarning-foreground, #cca700);
 }
 
 .progressBarFill.indeterminate {

@@ -177,6 +177,7 @@ function App() {
             servers={servers}
             loadServers={loadServers}
             stopServer={stopServer}
+            showToast={showToast}
             onRegisterMenuActions={registerMenuActions}
           />
         </div>

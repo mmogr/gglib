@@ -14,7 +14,7 @@ export interface ShardProgressInfo {
 }
 
 export interface DownloadProgress {
-  status: 'started' | 'downloading' | 'progress' | 'completed' | 'error' | 'queued' | 'skipped';
+  status: 'started' | 'downloading' | 'progress' | 'completed' | 'error' | 'queued' | 'skipped' | 'paused' | 'resumed' | 'retry';
   model_id: string;
   message?: string;
   progress?: number;
@@ -30,6 +30,7 @@ export interface DownloadProgress {
 
 interface UseDownloadProgressOptions {
   onCompleted?: () => void;
+  onRetry?: (modelId: string, attempt: number, maxAttempts: number) => void;
 }
 
 interface UseDownloadProgressReturn {
@@ -41,19 +42,21 @@ interface UseDownloadProgressReturn {
   clearProgress: () => void;
   fetchQueueStatus: () => Promise<void>;
   cancelDownload: (modelId: string) => Promise<void>;
+  pauseDownloads: () => Promise<void>;
+  resumeDownloads: () => Promise<void>;
   isDownloading: boolean;
+  isPaused: boolean;
   queueCount: number;
 }
 
 // Throttle interval for progress updates (ms)
 const PROGRESS_THROTTLE_MS = 200;
-
 /**
  * Hook to listen for download progress events from Tauri or Web SSE.
  * Reusable across components that need to show download progress.
  */
 export function useDownloadProgress(options: UseDownloadProgressOptions = {}): UseDownloadProgressReturn {
-  const { onCompleted } = options;
+  const { onCompleted, onRetry } = options;
   
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [queueStatus, setQueueStatus] = useState<DownloadQueueStatus | null>(null);
@@ -136,6 +139,26 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
     }
   }, [fetchQueueStatus]);
 
+  // Pause all downloads
+  const pauseDownloads = useCallback(async () => {
+    try {
+      await TauriService.pauseDownloads();
+      await fetchQueueStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to pause downloads');
+    }
+  }, [fetchQueueStatus]);
+
+  // Resume paused downloads
+  const resumeDownloads = useCallback(async () => {
+    try {
+      await TauriService.resumeDownloads();
+      await fetchQueueStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume downloads');
+    }
+  }, [fetchQueueStatus]);
+
   // Initial fetch and periodic refresh of queue status
   useEffect(() => {
     fetchQueueStatus();
@@ -165,6 +188,17 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
                 setProgress(null);
               }, 2000);
             }
+            
+            // Handle retry events - extract attempt info from message
+            if (progressData.status === 'retry' && progressData.message) {
+              // Message format: "Retry attempt N/M: reason"
+              const match = progressData.message.match(/Retry attempt (\d+)\/(\d+)/);
+              if (match) {
+                const attempt = parseInt(match[1], 10);
+                const maxAttempts = parseInt(match[2], 10);
+                onRetry?.(progressData.model_id, attempt, maxAttempts);
+              }
+            }
           });
         } catch (e) {
           console.error('[useDownloadProgress] Failed to setup Tauri listener:', e);
@@ -191,6 +225,17 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
                 setProgress(null);
               }, 2000);
             }
+            
+            // Handle retry events - extract attempt info from message
+            if (progressData.status === 'retry' && progressData.message) {
+              // Message format: "Retry attempt N/M: reason"
+              const match = progressData.message.match(/Retry attempt (\d+)\/(\d+)/);
+              if (match) {
+                const attempt = parseInt(match[1], 10);
+                const maxAttempts = parseInt(match[2], 10);
+                onRetry?.(progressData.model_id, attempt, maxAttempts);
+              }
+            }
           } catch (e) {
             console.error('Failed to parse progress event', e);
           }
@@ -212,9 +257,10 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
         eventSource.close();
       }
     };
-  }, [throttledSetProgress, onCompleted]);
+  }, [throttledSetProgress, onCompleted, onRetry]);
 
   const isDownloading = queueStatus?.current !== null && queueStatus?.current !== undefined;
+  const isPaused = queueStatus?.is_paused ?? false;
   const queueCount = (queueStatus?.pending.length || 0) + (isDownloading ? 1 : 0);
 
   return {
@@ -226,7 +272,10 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
     clearProgress,
     fetchQueueStatus,
     cancelDownload,
+    pauseDownloads,
+    resumeDownloads,
     isDownloading,
+    isPaused,
     queueCount,
   };
 }
