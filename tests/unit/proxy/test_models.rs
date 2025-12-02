@@ -16,7 +16,7 @@ fn test_chat_completion_request_deserialize_minimal() {
     assert_eq!(request.model, "llama-7b");
     assert_eq!(request.messages.len(), 1);
     assert_eq!(request.messages[0].role, "user");
-    assert_eq!(request.messages[0].content, "Hello!");
+    assert_eq!(request.messages[0].content, Some("Hello!".to_string()));
     assert!(!request.stream); // Default should be false
     assert!(request.temperature.is_none());
     assert!(request.top_p.is_none());
@@ -79,27 +79,31 @@ fn test_chat_completion_request_stream_defaults_false() {
 fn test_chat_message_serialize_deserialize() {
     let message = gglib::proxy::models::ChatMessage {
         role: "assistant".to_string(),
-        content: "Hello, how can I help you?".to_string(),
+        content: Some("Hello, how can I help you?".to_string()),
+        tool_calls: None,
+        tool_call_id: None,
     };
 
     let json = serde_json::to_string(&message).unwrap();
     let deserialized: gglib::proxy::models::ChatMessage = serde_json::from_str(&json).unwrap();
 
     assert_eq!(deserialized.role, "assistant");
-    assert_eq!(deserialized.content, "Hello, how can I help you?");
+    assert_eq!(deserialized.content, Some("Hello, how can I help you?".to_string()));
 }
 
 #[test]
 fn test_chat_message_with_unicode() {
     let message = gglib::proxy::models::ChatMessage {
         role: "user".to_string(),
-        content: "Hello! 你好 🦙 émojis работает".to_string(),
+        content: Some("Hello! 你好 🦙 émojis работает".to_string()),
+        tool_calls: None,
+        tool_call_id: None,
     };
 
     let json = serde_json::to_string(&message).unwrap();
     let deserialized: gglib::proxy::models::ChatMessage = serde_json::from_str(&json).unwrap();
 
-    assert_eq!(deserialized.content, "Hello! 你好 🦙 émojis работает");
+    assert_eq!(deserialized.content, Some("Hello! 你好 🦙 émojis работает".to_string()));
 }
 
 /// Test ModelsResponse serialization
@@ -196,7 +200,9 @@ fn test_chat_completion_response_serialize() {
             index: 0,
             message: gglib::proxy::models::ChatMessage {
                 role: "assistant".to_string(),
-                content: "Hello!".to_string(),
+                content: Some("Hello!".to_string()),
+                tool_calls: None,
+                tool_call_id: None,
             },
             finish_reason: Some("stop".to_string()),
         }],
@@ -229,6 +235,7 @@ fn test_chat_completion_chunk_serialize() {
             delta: gglib::proxy::models::ChatDelta {
                 role: None,
                 content: Some("Hello".to_string()),
+                tool_calls: None,
             },
             finish_reason: None,
         }],
@@ -248,6 +255,7 @@ fn test_chat_delta_with_role() {
     let delta = gglib::proxy::models::ChatDelta {
         role: Some("assistant".to_string()),
         content: None,
+        tool_calls: None,
     };
 
     let json = serde_json::to_string(&delta).unwrap();
@@ -304,7 +312,7 @@ fn test_chat_message_empty_content() {
     let message: gglib::proxy::models::ChatMessage = serde_json::from_str(json_str).unwrap();
 
     assert_eq!(message.role, "user");
-    assert_eq!(message.content, "");
+    assert_eq!(message.content, Some("".to_string()));
 }
 
 #[test]
@@ -361,7 +369,7 @@ fn test_chat_completion_response_deserialize() {
 
     assert_eq!(response.id, "chatcmpl-456");
     assert_eq!(response.choices.len(), 1);
-    assert_eq!(response.choices[0].message.content, "Test response");
+    assert_eq!(response.choices[0].message.content, Some("Test response".to_string()));
     assert!(response.usage.is_some());
     assert_eq!(response.usage.unwrap().total_tokens, 30);
 }

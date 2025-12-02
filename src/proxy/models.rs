@@ -2,6 +2,83 @@
 
 use serde::{Deserialize, Serialize};
 
+// =============================================================================
+// Tool Calling Types
+// =============================================================================
+
+/// Tool definition for function calling (OpenAI-compatible)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    /// Tool type - always "function"
+    pub r#type: String,
+    /// Function definition
+    pub function: FunctionDefinition,
+}
+
+/// Function definition within a tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionDefinition {
+    /// Function name
+    pub name: String,
+    /// Description of what the function does
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// JSON Schema for function parameters
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<serde_json::Value>,
+}
+
+/// A tool call made by the assistant
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    /// Unique ID for this tool call
+    pub id: String,
+    /// Tool type - always "function"
+    pub r#type: String,
+    /// Function call details
+    pub function: ToolCallFunction,
+}
+
+/// Function call details within a tool call
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallFunction {
+    /// Name of the function to call
+    pub name: String,
+    /// JSON string of arguments
+    pub arguments: String,
+}
+
+/// Streaming delta for tool calls
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallDelta {
+    /// Index of the tool call (for parallel tool calls)
+    pub index: u32,
+    /// Tool call ID (sent in first chunk)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Tool type (sent in first chunk)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    /// Function delta
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function: Option<ToolCallFunctionDelta>,
+}
+
+/// Streaming delta for function details
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallFunctionDelta {
+    /// Function name (sent in first chunk)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Partial arguments JSON string (accumulated across chunks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<String>,
+}
+
+// =============================================================================
+// Chat Completion Request/Response Types
+// =============================================================================
+
 /// Request to /v1/chat/completions endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatCompletionRequest {
@@ -30,15 +107,28 @@ pub struct ChatCompletionRequest {
     /// Context window size (Ollama-compatible parameter)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub num_ctx: Option<u64>,
+    /// Tool definitions for function calling
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDefinition>>,
+    /// Tool choice: "auto", "none", "required", or specific tool
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<serde_json::Value>,
 }
 
 /// A single chat message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
-    /// Role: "system", "user", "assistant"
+    /// Role: "system", "user", "assistant", or "tool"
     pub role: String,
-    /// Message content
-    pub content: String,
+    /// Message content (optional when tool_calls present)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    /// Tool calls made by assistant (role="assistant" only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    /// Tool call ID this message is responding to (role="tool" only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
 }
 
 /// Response from /v1/chat/completions endpoint (non-streaming)
@@ -88,6 +178,9 @@ pub struct ChatDelta {
     pub role: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// Streaming tool calls (accumulated by index)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCallDelta>>,
 }
 
 /// Token usage statistics
