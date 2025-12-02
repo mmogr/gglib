@@ -1,9 +1,10 @@
 import { FC, useState } from 'react';
-import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
+import { GgufModel, ServerInfo, HfModelSummary, ModelFilterOptions } from '../../types';
 import SidebarTabs, { SidebarTabId, SidebarTab } from './SidebarTabs';
 import ModelsListContent from './ModelsListContent';
 import AddDownloadContent, { AddDownloadSubTab } from './AddDownloadContent';
 import ProxyControl from '../ProxyControl';
+import { FilterPopover, FilterState } from '../FilterPopover';
 import './ModelLibraryPanel.css';
 
 interface ModelLibraryPanelProps {
@@ -20,6 +21,12 @@ interface ModelLibraryPanelProps {
   selectedTags: string[];
   onTagFilterChange: (tags: string[]) => void;
   servers: ServerInfo[];
+  
+  // Filter props
+  filterOptions: ModelFilterOptions | null;
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+  onClearFilters: () => void;
   
   // Add/Download props
   onModelAdded: (filePath: string) => Promise<void>;
@@ -54,6 +61,10 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   selectedTags,
   onTagFilterChange,
   servers,
+  filterOptions,
+  filters,
+  onFiltersChange,
+  onClearFilters,
   onModelAdded,
   onModelDownloaded,
   activeSubTab,
@@ -65,6 +76,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
 }) => {
   // Internal tab state (used if not controlled externally)
   const [internalActiveTab, setInternalActiveTab] = useState<SidebarTabId>('models');
+  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const activeTab = externalActiveTab ?? internalActiveTab;
   
   const handleTabChange = (tab: SidebarTabId) => {
@@ -75,13 +87,12 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
     }
   };
 
-  const toggleTagFilter = (tag: string) => {
-    if (selectedTags.includes(tag)) {
-      onTagFilterChange(selectedTags.filter(t => t !== tag));
-    } else {
-      onTagFilterChange([...selectedTags, tag]);
-    }
-  };
+  // Check if any filters are active (for badge indicator)
+  const hasActiveFilters = 
+    filters.paramRange !== null ||
+    filters.contextRange !== null ||
+    filters.selectedQuantizations.length > 0 ||
+    filters.selectedTags.length > 0;
 
   const handleSwitchToAddTab = () => {
     handleTabChange('add');
@@ -144,7 +155,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
 
         {/* Search and filters - only show on models tab */}
         {activeTab === 'models' && (
-          <>
+          <div className="search-filter-row">
             <div className="search-bar">
               <input
                 type="text"
@@ -155,20 +166,27 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
               />
             </div>
 
-            {tags.length > 0 && (
-              <div className="tag-filters">
-                {tags.map(tag => (
-                  <button
-                    key={tag}
-                    className={`tag-filter-chip ${selectedTags.includes(tag) ? 'active' : ''}`}
-                    onClick={() => toggleTagFilter(tag)}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
+            <div className="filter-button-container">
+              <button
+                className={`icon-btn icon-btn-sm filter-btn ${hasActiveFilters ? 'filter-btn-active' : ''}`}
+                onClick={() => setFilterPopoverOpen(!filterPopoverOpen)}
+                title="Filter models"
+              >
+                ⚙️
+                {hasActiveFilters && <span className="filter-badge" />}
+              </button>
+              
+              <FilterPopover
+                isOpen={filterPopoverOpen}
+                onClose={() => setFilterPopoverOpen(false)}
+                filterOptions={filterOptions}
+                tags={tags}
+                filters={filters}
+                onFiltersChange={onFiltersChange}
+                onClearFilters={onClearFilters}
+              />
+            </div>
+          </div>
         )}
       </div>
 

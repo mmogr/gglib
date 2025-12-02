@@ -218,3 +218,28 @@ export interface HfQuantizationsResponse {
   /** Available quantizations */
   quantizations: HfQuantization[];
 }
+
+// ============================================================================
+// Model Filter Options Types
+// ============================================================================
+
+/**
+ * A range of numeric values with min and max.
+ */
+export interface RangeValues {
+  min: number;
+  max: number;
+}
+
+/**
+ * Filter options for the model library UI.
+ * Contains aggregate data about available models for building dynamic filter controls.
+ */
+export interface ModelFilterOptions {
+  /** All distinct quantization types present in the library */
+  quantizations: string[];
+  /** Minimum and maximum parameter counts (in billions) */
+  param_range: RangeValues | null;
+  /** Minimum and maximum context lengths */
+  context_range: RangeValues | null;
+}
