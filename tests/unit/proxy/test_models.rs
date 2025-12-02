@@ -88,7 +88,10 @@ fn test_chat_message_serialize_deserialize() {
     let deserialized: gglib::proxy::models::ChatMessage = serde_json::from_str(&json).unwrap();
 
     assert_eq!(deserialized.role, "assistant");
-    assert_eq!(deserialized.content, Some("Hello, how can I help you?".to_string()));
+    assert_eq!(
+        deserialized.content,
+        Some("Hello, how can I help you?".to_string())
+    );
 }
 
 #[test]
@@ -103,7 +106,10 @@ fn test_chat_message_with_unicode() {
     let json = serde_json::to_string(&message).unwrap();
     let deserialized: gglib::proxy::models::ChatMessage = serde_json::from_str(&json).unwrap();
 
-    assert_eq!(deserialized.content, Some("Hello! 你好 🦙 émojis работает".to_string()));
+    assert_eq!(
+        deserialized.content,
+        Some("Hello! 你好 🦙 émojis работает".to_string())
+    );
 }
 
 /// Test ModelsResponse serialization
@@ -369,7 +375,10 @@ fn test_chat_completion_response_deserialize() {
 
     assert_eq!(response.id, "chatcmpl-456");
     assert_eq!(response.choices.len(), 1);
-    assert_eq!(response.choices[0].message.content, Some("Test response".to_string()));
+    assert_eq!(
+        response.choices[0].message.content,
+        Some("Test response".to_string())
+    );
     assert!(response.usage.is_some());
     assert_eq!(response.usage.unwrap().total_tokens, 30);
 }
