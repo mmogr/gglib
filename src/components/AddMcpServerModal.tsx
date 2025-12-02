@@ -20,7 +20,7 @@ const SERVER_TEMPLATES = [
     name: "Tavily Web Search",
     type: "stdio" as McpServerType,
     command: "npx",
-    args: ["-y", "@tavily/mcp-server"],
+    args: ["-y", "tavily-mcp"],
     envKeys: ["TAVILY_API_KEY"],
     description: "Search the web using Tavily API",
   },

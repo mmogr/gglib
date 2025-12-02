@@ -1,9 +1,12 @@
 import { FC, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
+import { useMcpServers } from "../hooks/useMcpServers";
 import { UpdateSettingsRequest } from "../types";
 import { DEFAULT_TITLE_GENERATION_PROMPT } from "../services/chat";
+import { McpServerInfo } from "../services/mcp";
 import { McpServersPanel } from "./McpServersPanel";
+import { AddMcpServerModal } from "./AddMcpServerModal";
 import styles from "./SettingsModal.module.css";
 
 type SettingsTab = "general" | "mcp";
@@ -33,6 +36,11 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  
+  // MCP Server modal state
+  const [showAddMcpModal, setShowAddMcpModal] = useState(false);
+  const [editingMcpServer, setEditingMcpServer] = useState<McpServerInfo | null>(null);
+  const { addServer: addMcpServer, updateServer: updateMcpServer } = useMcpServers();
 
   const loading = loadingDir || loadingSettings;
   const saving = savingDir || savingSettings;
@@ -371,7 +379,37 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
           {/* MCP Servers Tab */}
           {activeTab === "mcp" && (
-            <McpServersPanel />
+            <>
+              <McpServersPanel
+                onAddServer={() => {
+                  setEditingMcpServer(null);
+                  setShowAddMcpModal(true);
+                }}
+                onEditServer={(server) => {
+                  setEditingMcpServer(server);
+                  setShowAddMcpModal(true);
+                }}
+              />
+              {showAddMcpModal && (
+                <AddMcpServerModal
+                  isOpen={showAddMcpModal}
+                  editingServer={editingMcpServer ?? undefined}
+                  onClose={() => {
+                    setShowAddMcpModal(false);
+                    setEditingMcpServer(null);
+                  }}
+                  onSave={async (config) => {
+                    if (editingMcpServer?.config.id) {
+                      await updateMcpServer(editingMcpServer.config.id.toString(), { ...config, id: editingMcpServer.config.id });
+                    } else {
+                      await addMcpServer(config);
+                    }
+                    setShowAddMcpModal(false);
+                    setEditingMcpServer(null);
+                  }}
+                />
+              )}
+            </>
           )}
         </div>
       </div>

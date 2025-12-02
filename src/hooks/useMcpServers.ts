@@ -11,6 +11,7 @@ import {
   McpServerInfo,
   McpTool,
 } from "../services/mcp";
+import { syncAllMcpTools } from "../services/tools";
 
 interface UseMcpServersResult {
   /** List of all MCP servers with their status */
@@ -133,6 +134,8 @@ export function useMcpServers(): UseMcpServersResult {
       try {
         const tools = await McpService.startServer(id);
         await refresh();
+        // Sync MCP tools to the tool registry so they're available for chat
+        await syncAllMcpTools();
         return tools;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to start server";
@@ -149,6 +152,8 @@ export function useMcpServers(): UseMcpServersResult {
       try {
         await McpService.stopServer(id);
         await refresh();
+        // Sync MCP tools to remove stopped server's tools from registry
+        await syncAllMcpTools();
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to stop server";
         setError(msg);

@@ -11,8 +11,10 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::Mutex;
+use tokio::time::timeout;
 
 /// Errors that can occur during MCP client operations.
 #[derive(Debug, Error)]
@@ -29,14 +31,14 @@ pub enum McpClientError {
     #[error("MCP protocol error: {0}")]
     ProtocolError(String),
 
+    #[error("Timeout waiting for MCP server response")]
+    Timeout,
+
     #[error("MCP server returned error: code={code}, message={message}")]
     ServerError { code: i64, message: String },
 
     #[error("Server not connected")]
     NotConnected,
-
-    #[error("Request timeout")]
-    Timeout,
 }
 
 /// JSON-RPC 2.0 request.
@@ -72,7 +74,9 @@ struct JsonRpcError {
 /// MCP initialize result.
 #[derive(Debug, Clone, Deserialize)]
 pub struct InitializeResult {
+    #[serde(rename = "protocolVersion")]
     pub protocol_version: String,
+    #[serde(rename = "serverInfo")]
     pub server_info: ServerInfo,
     pub capabilities: ServerCapabilities,
 }
@@ -310,12 +314,52 @@ impl McpClient {
             stdin_guard.flush()?;
         }
 
-        // Read response
-        let mut reader = stdout_reader.lock().await;
-        let mut line = String::new();
-        reader.read_line(&mut line)?;
+        // Read response with timeout (30 seconds for initial startup, especially for npx)
+        let read_timeout = Duration::from_secs(30);
+        
+        let read_result = timeout(read_timeout, async {
+            let mut reader = stdout_reader.lock().await;
+            
+            // Try reading lines until we get a valid JSON-RPC response
+            // (skip any empty lines or non-JSON output from npx startup)
+            for _ in 0..10 {
+                let mut line = String::new();
+                match reader.read_line(&mut line) {
+                    Ok(0) => {
+                        // EOF - server closed stdout
+                        return Err(McpClientError::ProtocolError("Server closed connection".to_string()));
+                    }
+                    Ok(_) => {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            // Empty line, try again
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            continue;
+                        }
+                        
+                        // Try to parse as JSON
+                        match serde_json::from_str::<JsonRpcResponse>(trimmed) {
+                            Ok(response) => return Ok(response),
+                            Err(_) => {
+                                // Not valid JSON-RPC, might be npx output, skip it
+                                tracing::debug!(line = trimmed, "Skipping non-JSON-RPC output");
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => return Err(McpClientError::IoError(e)),
+                }
+            }
+            
+            Err(McpClientError::ProtocolError("No valid JSON-RPC response received".to_string()))
+        })
+        .await;
 
-        let response: JsonRpcResponse = serde_json::from_str(&line)?;
+        let response = match read_result {
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => return Err(McpClientError::Timeout),
+        };
 
         // Check for error
         if let Some(err) = response.error {
