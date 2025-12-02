@@ -281,23 +281,51 @@ async fn cancel_download(
 }
 
 #[tauri::command]
-async fn pause_downloads(state: tauri::State<'_, AppState>) -> Result<String, String> {
+async fn pause_downloads(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
     state
         .backend
         .pause_downloads()
         .await
-        .map(|_| "Downloads paused".to_string())
-        .map_err(|e| format!("Failed to pause downloads: {}", e))
+        .map_err(|e| format!("Failed to pause downloads: {}", e))?;
+
+    // Emit a paused event so frontend updates UI
+    let queue_status = state.backend.get_download_queue().await;
+    let model_id = queue_status
+        .current
+        .as_ref()
+        .map(|d| d.model_id.clone())
+        .unwrap_or_default();
+    let event = gglib::commands::download::DownloadProgressEvent::paused(&model_id, 0, 0);
+    let _ = app.emit("download-progress", &event);
+
+    Ok("Downloads paused".to_string())
 }
 
 #[tauri::command]
-async fn resume_downloads(state: tauri::State<'_, AppState>) -> Result<String, String> {
+async fn resume_downloads(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
     state
         .backend
         .resume_downloads()
         .await
-        .map(|_| "Downloads resumed".to_string())
-        .map_err(|e| format!("Failed to resume downloads: {}", e))
+        .map_err(|e| format!("Failed to resume downloads: {}", e))?;
+
+    // Emit a resumed event so frontend updates UI
+    let queue_status = state.backend.get_download_queue().await;
+    let model_id = queue_status
+        .current
+        .as_ref()
+        .map(|d| d.model_id.clone())
+        .unwrap_or_default();
+    let event = gglib::commands::download::DownloadProgressEvent::resumed(&model_id);
+    let _ = app.emit("download-progress", &event);
+
+    Ok("Downloads resumed".to_string())
 }
 
 #[tauri::command]

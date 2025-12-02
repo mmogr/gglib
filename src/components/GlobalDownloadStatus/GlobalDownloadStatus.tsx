@@ -109,7 +109,11 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   const relevantProgress = isProgressMatch ? progress : null;
 
   // Determine if we should show anything
-  const isActiveDownload = currentDownload || (progress && (
+  // Show when:
+  // 1. There's a current download in the queue
+  // 2. We have progress indicating an active state
+  // 3. Downloads are paused (even if currentDownload just became available from paused_downloads)
+  const isActiveDownload = currentDownload || isPaused || (progress && (
     progress.status === 'started' ||
     progress.status === 'downloading' ||
     progress.status === 'progress' ||

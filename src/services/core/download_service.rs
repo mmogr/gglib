@@ -13,6 +13,7 @@ use super::huggingface_service::HuggingFaceService;
 use anyhow::Result;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
@@ -40,10 +41,10 @@ pub struct ActiveDownloadInfo {
     pub shard_info: Option<super::download_models::ShardInfo>,
     /// Group ID for sharded downloads
     pub group_id: Option<String>,
-    /// Bytes downloaded so far (for pause state)
-    pub bytes_downloaded: u64,
-    /// Total bytes expected (for pause state)
-    pub total_bytes: u64,
+    /// Bytes downloaded so far (shared atomic for progress tracking)
+    pub bytes_downloaded: Arc<AtomicU64>,
+    /// Total bytes expected (shared atomic for progress tracking)
+    pub total_bytes: Arc<AtomicU64>,
 }
 
 /// Service for managing HuggingFace model downloads.
@@ -362,23 +363,38 @@ impl DownloadService {
         let active = self.active_downloads.read().await;
         let pending = self.pending_queue.read().await;
         let failed = self.failed_downloads.read().await;
+        let paused = self.paused_downloads.read().await;
         let max_size = *self.max_queue_size.read().await;
         let is_paused = *self.is_paused.read().await;
 
-        // Current download - now includes full metadata from ActiveDownloadInfo
-        let current = active.values().next().map(|info| DownloadQueueItem {
-            model_id: info.model_id.clone(),
-            quantization: info.quantization.clone(),
-            status: if is_paused {
-                DownloadStatus::Paused
-            } else {
-                DownloadStatus::Downloading
-            },
-            position: 1,
-            error: None,
-            group_id: info.group_id.clone(),
-            shard_info: info.shard_info.clone(),
-        });
+        // Current download - check active_downloads first, then paused_downloads if paused
+        let current = if is_paused && active.is_empty() {
+            // When paused, the download state is in paused_downloads
+            paused.first().map(|state| DownloadQueueItem {
+                model_id: state.queued_download.model_id.clone(),
+                quantization: state.queued_download.quantization.clone(),
+                status: DownloadStatus::Paused,
+                position: 1,
+                error: None,
+                group_id: state.queued_download.group_id.clone(),
+                shard_info: state.queued_download.shard_info.clone(),
+            })
+        } else {
+            // Active download in progress
+            active.values().next().map(|info| DownloadQueueItem {
+                model_id: info.model_id.clone(),
+                quantization: info.quantization.clone(),
+                status: if is_paused {
+                    DownloadStatus::Paused
+                } else {
+                    DownloadStatus::Downloading
+                },
+                position: 1,
+                error: None,
+                group_id: info.group_id.clone(),
+                shard_info: info.shard_info.clone(),
+            })
+        };
 
         // Pending items
         let pending_items: Vec<DownloadQueueItem> = pending
@@ -545,6 +561,10 @@ impl DownloadService {
         // Cancel all active downloads and store their state
         let active = self.active_downloads.read().await;
         for (model_id, info) in active.iter() {
+            // Read current progress from atomics
+            let bytes_downloaded = info.bytes_downloaded.load(Ordering::Relaxed);
+            let total_bytes = info.total_bytes.load(Ordering::Relaxed);
+
             // Create paused state from active download
             let paused_state = PausedDownloadState::new(
                 QueuedDownload {
@@ -554,8 +574,8 @@ impl DownloadService {
                     shard_info: info.shard_info.clone(),
                     queued_at: Some(std::time::Instant::now()),
                 },
-                info.bytes_downloaded,
-                info.total_bytes,
+                bytes_downloaded,
+                total_bytes,
             );
 
             self.paused_downloads.write().await.push(paused_state);
@@ -747,17 +767,22 @@ impl DownloadService {
                 }
                 .into());
             }
-            // Store full download info for proper UI display
-            let info = ActiveDownloadInfo {
-                cancel_token: cancel_token.clone(),
-                model_id: model_id.clone(),
-                quantization: quantization.clone(),
-                shard_info: None,
-                group_id: None,
-                bytes_downloaded: 0,
-                total_bytes: 0,
-            };
-            downloads.insert(model_id.clone(), info);
+            // Check if we have a pre-registered entry (from queue processor)
+            // If so, just update its cancel_token; otherwise create new
+            if let Some(existing) = downloads.get_mut(&model_id) {
+                existing.cancel_token = cancel_token.clone();
+            } else {
+                let info = ActiveDownloadInfo {
+                    cancel_token: cancel_token.clone(),
+                    model_id: model_id.clone(),
+                    quantization: quantization.clone(),
+                    shard_info: None,
+                    group_id: None,
+                    bytes_downloaded: Arc::new(AtomicU64::new(0)),
+                    total_bytes: Arc::new(AtomicU64::new(0)),
+                };
+                downloads.insert(model_id.clone(), info);
+            }
         }
 
         // Execute download with cancellation support
@@ -835,16 +860,22 @@ impl DownloadService {
                 .into());
             }
             // Store full download info for proper UI display
-            let info = ActiveDownloadInfo {
-                cancel_token: cancel_token.clone(),
-                model_id: model_id.clone(),
-                quantization: Some(quantization.clone()),
-                shard_info,
-                group_id,
-                bytes_downloaded: 0,
-                total_bytes: 0,
-            };
-            downloads.insert(tracking_key.clone(), info);
+            // Check if we have a pre-registered entry (from queue processor)
+            // If so, just update its cancel_token; otherwise create new
+            if let Some(existing) = downloads.get_mut(&tracking_key) {
+                existing.cancel_token = cancel_token.clone();
+            } else {
+                let info = ActiveDownloadInfo {
+                    cancel_token: cancel_token.clone(),
+                    model_id: model_id.clone(),
+                    quantization: Some(quantization.clone()),
+                    shard_info,
+                    group_id,
+                    bytes_downloaded: Arc::new(AtomicU64::new(0)),
+                    total_bytes: Arc::new(AtomicU64::new(0)),
+                };
+                downloads.insert(tracking_key.clone(), info);
+            }
         }
 
         // Get models directory and commit SHA
@@ -1046,8 +1077,40 @@ impl DownloadService {
             // Use throttle with EWA speed calculation
             let throttle = crate::commands::download::ProgressThrottle::responsive_ui();
 
+            // Create shared atomics for progress tracking (used by pause to capture state)
+            let shared_bytes_downloaded = Arc::new(AtomicU64::new(0));
+            let shared_total_bytes = Arc::new(AtomicU64::new(0));
+            let bytes_downloaded_for_cb = shared_bytes_downloaded.clone();
+            let total_bytes_for_cb = shared_total_bytes.clone();
+
+            // Store progress atomics in active downloads for pause to read
+            {
+                let mut active = self.active_downloads.write().await;
+                // Build the tracking key that download/download_shard will use
+                let tracking_key = if is_shard {
+                    format!("{}:{}", canonical_id, item.shard_info.as_ref().map(|s| s.filename.as_str()).unwrap_or(""))
+                } else {
+                    model_id.clone()
+                };
+                // Pre-register the download with progress atomics
+                let info = ActiveDownloadInfo {
+                    cancel_token: CancellationToken::new(),
+                    model_id: model_id.clone(),
+                    quantization: quantization.clone(),
+                    shard_info: item.shard_info.clone(),
+                    group_id: item.group_id.clone(),
+                    bytes_downloaded: shared_bytes_downloaded.clone(),
+                    total_bytes: shared_total_bytes.clone(),
+                };
+                active.insert(tracking_key, info);
+            }
+
             let progress_cb: crate::commands::download::ProgressCallback =
                 Box::new(move |downloaded: u64, total: u64| {
+                    // Update shared atomics for pause state tracking
+                    bytes_downloaded_for_cb.store(downloaded, Ordering::Relaxed);
+                    total_bytes_for_cb.store(total, Ordering::Relaxed);
+
                     // Check throttle and get EWA speed
                     let Some(speed) = throttle.should_emit_with_speed(downloaded, total) else {
                         return;

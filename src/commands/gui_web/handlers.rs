@@ -295,6 +295,16 @@ pub async fn pause_downloads(
         .await
         .map_err(|e| AppError::ServerError(e.to_string()))?;
 
+    // Emit a paused event via SSE so frontend updates UI
+    let queue_status = state.backend.get_download_queue().await;
+    let model_id = queue_status
+        .current
+        .as_ref()
+        .map(|d| d.model_id.clone())
+        .unwrap_or_default();
+    let event = DownloadProgressEvent::paused(&model_id, 0, 0);
+    let _ = state.progress_tx.send(event.to_json_string());
+
     Ok(Json(ApiResponse::success("Downloads paused".to_string())))
 }
 
@@ -307,6 +317,16 @@ pub async fn resume_downloads(
         .resume_downloads()
         .await
         .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    // Emit a resumed event via SSE so frontend updates UI
+    let queue_status = state.backend.get_download_queue().await;
+    let model_id = queue_status
+        .current
+        .as_ref()
+        .map(|d| d.model_id.clone())
+        .unwrap_or_default();
+    let event = DownloadProgressEvent::resumed(&model_id);
+    let _ = state.progress_tx.send(event.to_json_string());
 
     // Restart the queue processor
     let backend = state.backend.clone();

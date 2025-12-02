@@ -189,6 +189,11 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
               }, 2000);
             }
             
+            // Immediately refresh queue status on pause/resume to update UI
+            if (progressData.status === 'paused' || progressData.status === 'resumed') {
+              fetchQueueStatus();
+            }
+            
             // Handle retry events - extract attempt info from message
             if (progressData.status === 'retry' && progressData.message) {
               // Message format: "Retry attempt N/M: reason"
@@ -224,6 +229,11 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
               setTimeout(() => {
                 setProgress(null);
               }, 2000);
+            }
+            
+            // Immediately refresh queue status on pause/resume to update UI
+            if (progressData.status === 'paused' || progressData.status === 'resumed') {
+              fetchQueueStatus();
             }
             
             // Handle retry events - extract attempt info from message
