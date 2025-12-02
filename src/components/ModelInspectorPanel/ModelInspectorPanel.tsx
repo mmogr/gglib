@@ -24,6 +24,8 @@ interface ModelInspectorPanelProps {
   onAddTag: (modelId: number, tag: string) => Promise<void>;
   onRemoveTag: (modelId: number, tag: string) => Promise<void>;
   getModelTags: (modelId: number) => Promise<string[]>;
+  /** Callback to refresh model list after tag changes */
+  onRefresh?: () => Promise<void>;
   /** Queue status from parent - for checking if downloads are disabled */
   queueStatus?: DownloadQueueStatus | null;
 }
@@ -40,6 +42,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   onAddTag,
   onRemoveTag,
   getModelTags,
+  onRefresh,
   queueStatus,
 }) => {
   const { settings } = useSettings();
@@ -105,6 +108,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     try {
       await onAddTag(model.id, newTag.trim());
       await loadModelTags();
+      await onRefresh?.(); // Refresh model list so filtering uses updated tags
       setNewTag('');
     } catch (error) {
       console.error('Failed to add tag:', error);
@@ -116,6 +120,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     try {
       await onRemoveTag(model.id, tag);
       await loadModelTags();
+      await onRefresh?.(); // Refresh model list so filtering uses updated tags
     } catch (error) {
       console.error('Failed to remove tag:', error);
     }

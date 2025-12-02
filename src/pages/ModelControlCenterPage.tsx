@@ -405,6 +405,7 @@ export default function ModelControlCenterPage({
             onAddTag={addTagToModel}
             onRemoveTag={removeTagFromModel}
             getModelTags={getModelTags}
+            onRefresh={loadModels}
             queueStatus={queueStatus}
           />
         </div>
