@@ -12,5 +12,5 @@ pub mod settings;
 pub use chat_history::*;
 pub use core::AppCore;
 pub use database::*;
-pub use mcp::{McpService, McpServerConfig, McpServerType, McpServerStatus, McpTool};
+pub use mcp::{McpServerConfig, McpServerStatus, McpServerType, McpService, McpTool};
 pub use process_manager::ProcessManager;

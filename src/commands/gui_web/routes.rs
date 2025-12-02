@@ -133,7 +133,10 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
         .route("/api/mcp/servers/:id", get(handlers::get_mcp_server))
         .route("/api/mcp/servers/:id", put(handlers::update_mcp_server))
         .route("/api/mcp/servers/:id", delete(handlers::remove_mcp_server))
-        .route("/api/mcp/servers/:id/start", post(handlers::start_mcp_server))
+        .route(
+            "/api/mcp/servers/:id/start",
+            post(handlers::start_mcp_server),
+        )
         .route("/api/mcp/servers/:id/stop", post(handlers::stop_mcp_server))
         .route("/api/mcp/tools", get(handlers::list_mcp_tools))
         .route(

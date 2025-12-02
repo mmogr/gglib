@@ -66,7 +66,9 @@ mod manager;
 mod service;
 
 pub use client::{McpClient, McpClientError};
-pub use config::{McpServerConfig, McpServerInfo, McpServerStatus, McpServerType, McpTool, McpToolResult};
+pub use config::{
+    McpServerConfig, McpServerInfo, McpServerStatus, McpServerType, McpTool, McpToolResult,
+};
 pub use database::{McpDatabase, McpDatabaseError};
 pub use manager::{McpManager, McpManagerError};
 pub use service::{McpService, McpServiceError};

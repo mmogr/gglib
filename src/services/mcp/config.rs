@@ -104,7 +104,11 @@ fn default_true() -> bool {
 
 impl McpServerConfig {
     /// Create a new stdio-based MCP server config.
-    pub fn new_stdio(name: impl Into<String>, command: impl Into<String>, args: Vec<String>) -> Self {
+    pub fn new_stdio(
+        name: impl Into<String>,
+        command: impl Into<String>,
+        args: Vec<String>,
+    ) -> Self {
         Self {
             id: None,
             name: name.into(),
@@ -242,7 +246,10 @@ mod tests {
         assert_eq!(config.server_type, McpServerType::Stdio);
         assert_eq!(config.command, Some("npx".to_string()));
         assert_eq!(config.env.len(), 1);
-        assert_eq!(config.env[0], ("API_KEY".to_string(), "secret123".to_string()));
+        assert_eq!(
+            config.env[0],
+            ("API_KEY".to_string(), "secret123".to_string())
+        );
         assert!(config.auto_start);
     }
 

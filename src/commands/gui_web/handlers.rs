@@ -1031,12 +1031,7 @@ pub async fn stop_mcp_server(
 pub async fn list_mcp_tools(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<Vec<(String, Vec<McpTool>)>>>, AppError> {
-    let tools = state
-        .backend
-        .core()
-        .mcp()
-        .list_all_tools()
-        .await;
+    let tools = state.backend.core().mcp().list_all_tools().await;
 
     Ok(Json(ApiResponse::success(tools)))
 }

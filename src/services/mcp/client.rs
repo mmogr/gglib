@@ -5,12 +5,12 @@
 
 use super::config::{McpTool, McpToolResult};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
@@ -171,13 +171,15 @@ impl McpClient {
             .spawn()
             .map_err(|e| McpClientError::SpawnFailed(e.to_string()))?;
 
-        let stdin = child.stdin.take().ok_or_else(|| {
-            McpClientError::SpawnFailed("Failed to get stdin".to_string())
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| McpClientError::SpawnFailed("Failed to get stdin".to_string()))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| {
-            McpClientError::SpawnFailed("Failed to get stdout".to_string())
-        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| McpClientError::SpawnFailed("Failed to get stdout".to_string()))?;
 
         self.process = Some(child);
         self.stdin = Some(Arc::new(std::sync::Mutex::new(stdin)));
@@ -213,7 +215,12 @@ impl McpClient {
     /// List available tools from the MCP server.
     pub async fn list_tools(&self) -> Result<Vec<McpTool>, McpClientError> {
         // Check if server supports tools
-        if self.capabilities.as_ref().and_then(|c| c.tools.as_ref()).is_none() {
+        if self
+            .capabilities
+            .as_ref()
+            .and_then(|c| c.tools.as_ref())
+            .is_none()
+        {
             return Ok(Vec::new());
         }
 
@@ -247,7 +254,10 @@ impl McpClient {
 
         // MCP returns content array with text/image items
         let content = result.get("content").cloned().unwrap_or(json!([]));
-        let is_error = result.get("isError").and_then(|v| v.as_bool()).unwrap_or(false);
+        let is_error = result
+            .get("isError")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         if is_error {
             // Extract error message from content
@@ -273,7 +283,10 @@ impl McpClient {
         params: Option<Value>,
     ) -> Result<T, McpClientError> {
         let stdin = self.stdin.as_ref().ok_or(McpClientError::NotConnected)?;
-        let stdout_reader = self.stdout_reader.as_ref().ok_or(McpClientError::NotConnected)?;
+        let stdout_reader = self
+            .stdout_reader
+            .as_ref()
+            .ok_or(McpClientError::NotConnected)?;
 
         let id = self.request_id.fetch_add(1, Ordering::SeqCst);
 
@@ -286,12 +299,12 @@ impl McpClient {
 
         // Write request
         let request_line = serde_json::to_string(&request)? + "\n";
-        
+
         // Use blocking IO wrapped in std Mutex
         {
-            let mut stdin_guard = stdin.lock().map_err(|_| {
-                McpClientError::ProtocolError("Failed to lock stdin".to_string())
-            })?;
+            let mut stdin_guard = stdin
+                .lock()
+                .map_err(|_| McpClientError::ProtocolError("Failed to lock stdin".to_string()))?;
             stdin_guard.write_all(request_line.as_bytes())?;
             stdin_guard.flush()?;
         }
@@ -331,11 +344,11 @@ impl McpClient {
         });
 
         let line = serde_json::to_string(&notification)? + "\n";
-        
+
         {
-            let mut stdin_guard = stdin.lock().map_err(|_| {
-                McpClientError::ProtocolError("Failed to lock stdin".to_string())
-            })?;
+            let mut stdin_guard = stdin
+                .lock()
+                .map_err(|_| McpClientError::ProtocolError("Failed to lock stdin".to_string()))?;
             stdin_guard.write_all(line.as_bytes())?;
             stdin_guard.flush()?;
         }
@@ -413,7 +426,8 @@ mod tests {
 
     #[test]
     fn test_json_rpc_error_parsing() {
-        let json = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}"#;
+        let json =
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}"#;
         let response: JsonRpcResponse = serde_json::from_str(json).unwrap();
         assert!(response.error.is_some());
         assert_eq!(response.error.as_ref().unwrap().code, -32600);

@@ -74,17 +74,18 @@ impl McpDatabase {
         .await?;
 
         // Index for faster env lookups
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_mcp_env_server ON mcp_server_env(server_id)",
-        )
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_mcp_env_server ON mcp_server_env(server_id)")
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
 
     /// Add a new MCP server configuration.
-    pub async fn add_server(&self, config: McpServerConfig) -> Result<McpServerConfig, McpDatabaseError> {
+    pub async fn add_server(
+        &self,
+        config: McpServerConfig,
+    ) -> Result<McpServerConfig, McpDatabaseError> {
         // Validate config
         match config.server_type {
             McpServerType::Stdio => {
@@ -108,7 +109,10 @@ impl McpDatabase {
             McpServerType::Sse => "sse",
         };
 
-        let args_json = config.args.as_ref().map(|a| serde_json::to_string(a).unwrap());
+        let args_json = config
+            .args
+            .as_ref()
+            .map(|a| serde_json::to_string(a).unwrap());
 
         // Insert the server
         let result = sqlx::query(
@@ -138,14 +142,12 @@ impl McpDatabase {
                 value.as_bytes(),
             );
 
-            sqlx::query(
-                "INSERT INTO mcp_server_env (server_id, key, value) VALUES (?, ?, ?)",
-            )
-            .bind(server_id)
-            .bind(key)
-            .bind(&encoded_value)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT INTO mcp_server_env (server_id, key, value) VALUES (?, ?, ?)")
+                .bind(server_id)
+                .bind(key)
+                .bind(&encoded_value)
+                .execute(&self.pool)
+                .await?;
         }
 
         // Fetch and return the complete config
@@ -192,7 +194,11 @@ impl McpDatabase {
     }
 
     /// Update an existing MCP server configuration.
-    pub async fn update_server(&self, id: i64, config: McpServerConfig) -> Result<McpServerConfig, McpDatabaseError> {
+    pub async fn update_server(
+        &self,
+        id: i64,
+        config: McpServerConfig,
+    ) -> Result<McpServerConfig, McpDatabaseError> {
         // Validate config exists
         let _ = self.get_server(id).await?;
 
@@ -201,7 +207,10 @@ impl McpDatabase {
             McpServerType::Sse => "sse",
         };
 
-        let args_json = config.args.as_ref().map(|a| serde_json::to_string(a).unwrap());
+        let args_json = config
+            .args
+            .as_ref()
+            .map(|a| serde_json::to_string(a).unwrap());
 
         // Update the server
         sqlx::query(
@@ -235,14 +244,12 @@ impl McpDatabase {
                 value.as_bytes(),
             );
 
-            sqlx::query(
-                "INSERT INTO mcp_server_env (server_id, key, value) VALUES (?, ?, ?)",
-            )
-            .bind(id)
-            .bind(key)
-            .bind(&encoded_value)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query("INSERT INTO mcp_server_env (server_id, key, value) VALUES (?, ?, ?)")
+                .bind(id)
+                .bind(key)
+                .bind(&encoded_value)
+                .execute(&self.pool)
+                .await?;
         }
 
         self.get_server(id).await
@@ -264,18 +271,19 @@ impl McpDatabase {
 
     /// Update the last_connected_at timestamp.
     pub async fn update_last_connected(&self, id: i64) -> Result<(), McpDatabaseError> {
-        sqlx::query(
-            "UPDATE mcp_servers SET last_connected_at = datetime('now') WHERE id = ?",
-        )
-        .bind(id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("UPDATE mcp_servers SET last_connected_at = datetime('now') WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
 
     /// Get environment variables for a server (decoded).
-    async fn get_server_env(&self, server_id: i64) -> Result<Vec<(String, String)>, McpDatabaseError> {
+    async fn get_server_env(
+        &self,
+        server_id: i64,
+    ) -> Result<Vec<(String, String)>, McpDatabaseError> {
         let rows = sqlx::query_as::<_, EnvRow>(
             "SELECT key, value FROM mcp_server_env WHERE server_id = ?",
         )
@@ -286,14 +294,15 @@ impl McpDatabase {
         let mut env = Vec::with_capacity(rows.len());
         for row in rows {
             // Decode base64 value. TODO: proper decryption
-            let decoded = base64::Engine::decode(
-                &base64::engine::general_purpose::STANDARD,
-                &row.value,
-            )
-            .map_err(|e| McpDatabaseError::InvalidConfig(format!("Failed to decode env var: {}", e)))?;
+            let decoded =
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &row.value)
+                    .map_err(|e| {
+                        McpDatabaseError::InvalidConfig(format!("Failed to decode env var: {}", e))
+                    })?;
 
-            let value = String::from_utf8(decoded)
-                .map_err(|e| McpDatabaseError::InvalidConfig(format!("Invalid UTF-8 in env var: {}", e)))?;
+            let value = String::from_utf8(decoded).map_err(|e| {
+                McpDatabaseError::InvalidConfig(format!("Invalid UTF-8 in env var: {}", e))
+            })?;
 
             env.push((row.key, value));
         }
@@ -367,8 +376,9 @@ mod tests {
         let pool = setup_test_db().await;
         let db = McpDatabase::new(pool);
 
-        let config = McpServerConfig::new_stdio("Test", "npx", vec!["-y".to_string(), "test".to_string()])
-            .with_env("API_KEY", "secret123");
+        let config =
+            McpServerConfig::new_stdio("Test", "npx", vec!["-y".to_string(), "test".to_string()])
+                .with_env("API_KEY", "secret123");
 
         let saved = db.add_server(config).await.unwrap();
         assert!(saved.id.is_some());
@@ -387,8 +397,12 @@ mod tests {
         let pool = setup_test_db().await;
         let db = McpDatabase::new(pool);
 
-        db.add_server(McpServerConfig::new_stdio("A", "cmd", vec![])).await.unwrap();
-        db.add_server(McpServerConfig::new_stdio("B", "cmd", vec![])).await.unwrap();
+        db.add_server(McpServerConfig::new_stdio("A", "cmd", vec![]))
+            .await
+            .unwrap();
+        db.add_server(McpServerConfig::new_stdio("B", "cmd", vec![]))
+            .await
+            .unwrap();
 
         let servers = db.list_servers().await.unwrap();
         assert_eq!(servers.len(), 2);
@@ -399,11 +413,14 @@ mod tests {
         let pool = setup_test_db().await;
         let db = McpDatabase::new(pool);
 
-        let saved = db.add_server(McpServerConfig::new_stdio("Test", "cmd", vec![])).await.unwrap();
+        let saved = db
+            .add_server(McpServerConfig::new_stdio("Test", "cmd", vec![]))
+            .await
+            .unwrap();
         let id = saved.id.unwrap();
 
         db.remove_server(id).await.unwrap();
-        
+
         let result = db.get_server(id).await;
         assert!(matches!(result, Err(McpDatabaseError::NotFound(_))));
     }

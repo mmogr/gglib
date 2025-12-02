@@ -67,7 +67,8 @@ pub use settings_service::SettingsService;
 
 // Re-export MCP types from the mcp module
 pub use crate::services::mcp::{
-    McpService, McpServiceError, McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult,
+    McpServerConfig, McpServerStatus, McpServerType, McpService, McpServiceError, McpTool,
+    McpToolResult,
 };
 
 // Re-export types from canonical locations

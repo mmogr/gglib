@@ -73,7 +73,10 @@ impl McpService {
     // =========================================================================
 
     /// Add a new MCP server configuration.
-    pub async fn add_server(&self, config: McpServerConfig) -> Result<McpServerConfig, McpServiceError> {
+    pub async fn add_server(
+        &self,
+        config: McpServerConfig,
+    ) -> Result<McpServerConfig, McpServiceError> {
         let saved = self.database.add_server(config).await?;
         tracing::info!(server_name = %saved.name, "Added MCP server configuration");
         Ok(saved)
@@ -219,7 +222,10 @@ impl McpService {
         tool_name: &str,
         arguments: HashMap<String, serde_json::Value>,
     ) -> Result<McpToolResult, McpServiceError> {
-        Ok(self.manager.call_tool(server_id, tool_name, arguments).await?)
+        Ok(self
+            .manager
+            .call_tool(server_id, tool_name, arguments)
+            .await?)
     }
 
     // =========================================================================
@@ -241,7 +247,7 @@ impl McpService {
         test_config.id = Some(-1); // Use negative ID to indicate test
 
         let tools = self.manager.start_server(test_config).await?;
-        
+
         // Stop the test server
         self.manager.stop_server("-1").await?;
 
