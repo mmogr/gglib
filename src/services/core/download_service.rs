@@ -1522,6 +1522,137 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_cancel_with_model_id_quantization_format() {
+        // Test that cancel works when frontend sends "model_id:quantization" format
+        // for sharded downloads where keys are "model_id:quantization/filename"
+        let service = DownloadService::new();
+
+        // Manually insert a sharded download into active_downloads
+        // This simulates what happens during download_shard()
+        {
+            let mut downloads = service.active_downloads.write().await;
+            let cancel_token = CancellationToken::new();
+            downloads.insert(
+                "test/model:Q4_K_M/model-00001-of-00003.gguf".to_string(),
+                ActiveDownloadInfo {
+                    cancel_token: cancel_token.clone(),
+                    model_id: "test/model".to_string(),
+                    quantization: Some("Q4_K_M".to_string()),
+                    shard_info: None,
+                    group_id: None,
+                },
+            );
+        }
+
+        // Cancel using frontend format (model_id:quantization)
+        let result = service.cancel("test/model:Q4_K_M").await;
+        assert!(result.is_ok(), "Cancel with model_id:quantization should succeed");
+
+        // Verify download was removed
+        assert!(service.active_downloads().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cancel_all_shards() {
+        // Test that cancel removes all shards matching the quantization
+        let service = DownloadService::new();
+        let group_id = "test-group-123";
+
+        // Insert multiple shards
+        {
+            let mut downloads = service.active_downloads.write().await;
+            for i in 1..=3 {
+                let cancel_token = CancellationToken::new();
+                downloads.insert(
+                    format!("test/model:Q4_K_M/model-0000{}-of-00003.gguf", i),
+                    ActiveDownloadInfo {
+                        cancel_token,
+                        model_id: "test/model".to_string(),
+                        quantization: Some("Q4_K_M".to_string()),
+                        shard_info: None,
+                        group_id: Some(group_id.to_string()),
+                    },
+                );
+            }
+        }
+
+        // Verify 3 downloads are active
+        assert_eq!(service.active_downloads().await.len(), 3);
+
+        // Cancel all using frontend format
+        let result = service.cancel("test/model:Q4_K_M").await;
+        assert!(result.is_ok(), "Cancel should succeed");
+
+        // Verify ALL shards were removed
+        assert!(
+            service.active_downloads().await.is_empty(),
+            "All shards should be cancelled"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cancel_non_sharded_download() {
+        // Test that cancel works for non-sharded downloads (exact match on model_id)
+        let service = DownloadService::new();
+
+        // Insert a non-sharded download (key is just model_id)
+        {
+            let mut downloads = service.active_downloads.write().await;
+            let cancel_token = CancellationToken::new();
+            downloads.insert(
+                "test/model".to_string(),
+                ActiveDownloadInfo {
+                    cancel_token,
+                    model_id: "test/model".to_string(),
+                    quantization: None,
+                    shard_info: None,
+                    group_id: None,
+                },
+            );
+        }
+
+        // Cancel using just model_id
+        let result = service.cancel("test/model").await;
+        assert!(result.is_ok(), "Cancel non-sharded download should succeed");
+
+        // Verify download was removed
+        assert!(service.active_downloads().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cancel_does_not_affect_other_quantizations() {
+        // Test that cancelling one quantization doesn't affect another
+        let service = DownloadService::new();
+
+        // Insert shards for two different quantizations
+        {
+            let mut downloads = service.active_downloads.write().await;
+            for quant in &["Q4_K_M", "Q8_0"] {
+                let cancel_token = CancellationToken::new();
+                downloads.insert(
+                    format!("test/model:{}/model-00001.gguf", quant),
+                    ActiveDownloadInfo {
+                        cancel_token,
+                        model_id: "test/model".to_string(),
+                        quantization: Some(quant.to_string()),
+                        shard_info: None,
+                        group_id: None,
+                    },
+                );
+            }
+        }
+
+        // Cancel only Q4_K_M
+        let result = service.cancel("test/model:Q4_K_M").await;
+        assert!(result.is_ok());
+
+        // Verify Q8_0 is still active
+        let active = service.active_downloads().await;
+        assert_eq!(active.len(), 1);
+        assert!(active[0].contains("Q8_0"));
+    }
+
+    #[tokio::test]
     async fn test_queue_download() {
         let service = DownloadService::new();
         let result = service
