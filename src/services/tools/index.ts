@@ -36,7 +36,19 @@ export {
   ToolRegistry,
   getToolRegistry,
   resetToolRegistry,
+  type ToolSource,
 } from './registry';
+
+// Re-export MCP integration
+export {
+  registerMcpTools,
+  unregisterMcpTools,
+  syncAllMcpTools,
+  getMcpToolsByServer,
+  getMcpSource,
+  onMcpToolsChange,
+  notifyMcpToolsChanged,
+} from './mcpIntegration';
 
 // Register built-in tools on import
 import { registerBuiltinTools } from './builtin';

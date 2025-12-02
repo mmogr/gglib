@@ -45,6 +45,13 @@ export default defineConfig(async () => ({
       // 3. tell vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+    // Proxy API requests to the backend server during development
+    proxy: {
+      '/api': {
+        target: 'http://localhost:9887',
+        changeOrigin: true,
+      },
+    },
   },
 
   // Test configuration for Vitest

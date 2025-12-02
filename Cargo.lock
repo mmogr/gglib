@@ -889,10 +889,11 @@ dependencies = [
 
 [[package]]
 name = "gglib"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "clap",

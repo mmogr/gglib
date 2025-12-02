@@ -910,6 +910,155 @@ pub async fn clear_server_logs(
     Ok(Json(ApiResponse::success("Logs cleared".to_string())))
 }
 
+// ==================== MCP Server Handlers ====================
+
+use crate::services::mcp::{McpServerConfig, McpServerInfo, McpTool, McpToolResult};
+use std::collections::HashMap;
+
+/// List all MCP servers with their current status
+pub async fn list_mcp_servers(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<McpServerInfo>>>, AppError> {
+    let servers = state
+        .backend
+        .core()
+        .mcp()
+        .list_servers_with_status()
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(servers)))
+}
+
+/// Add a new MCP server configuration
+pub async fn add_mcp_server(
+    State(state): State<Arc<AppState>>,
+    Json(config): Json<McpServerConfig>,
+) -> Result<Json<ApiResponse<McpServerConfig>>, AppError> {
+    let server = state
+        .backend
+        .core()
+        .mcp()
+        .add_server(config)
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(server)))
+}
+
+/// Get a specific MCP server by ID
+pub async fn get_mcp_server(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<McpServerInfo>>, AppError> {
+    let info = state
+        .backend
+        .core()
+        .mcp()
+        .get_server_info(&id)
+        .await
+        .map_err(|e| AppError::NotFound(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(info)))
+}
+
+/// Update an MCP server configuration
+pub async fn update_mcp_server(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(config): Json<McpServerConfig>,
+) -> Result<Json<ApiResponse<McpServerConfig>>, AppError> {
+    let updated = state
+        .backend
+        .core()
+        .mcp()
+        .update_server(&id, config)
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(updated)))
+}
+
+/// Remove an MCP server configuration
+pub async fn remove_mcp_server(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    state
+        .backend
+        .core()
+        .mcp()
+        .remove_server(&id)
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success("Server removed".to_string())))
+}
+
+/// Start an MCP server
+pub async fn start_mcp_server(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<Vec<McpTool>>>, AppError> {
+    let tools = state
+        .backend
+        .core()
+        .mcp()
+        .start_server(&id)
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(tools)))
+}
+
+/// Stop an MCP server
+pub async fn stop_mcp_server(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    state
+        .backend
+        .core()
+        .mcp()
+        .stop_server(&id)
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success("Server stopped".to_string())))
+}
+
+/// Get all tools from all running MCP servers
+pub async fn list_mcp_tools(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<(String, Vec<McpTool>)>>>, AppError> {
+    let tools = state.backend.core().mcp().list_all_tools().await;
+
+    Ok(Json(ApiResponse::success(tools)))
+}
+
+/// Request body for calling an MCP tool
+#[derive(Debug, Deserialize)]
+pub struct CallMcpToolRequest {
+    pub arguments: HashMap<String, serde_json::Value>,
+}
+
+/// Call a tool on an MCP server
+pub async fn call_mcp_tool(
+    State(state): State<Arc<AppState>>,
+    Path((server_id, tool_name)): Path<(String, String)>,
+    Json(request): Json<CallMcpToolRequest>,
+) -> Result<Json<ApiResponse<McpToolResult>>, AppError> {
+    let result = state
+        .backend
+        .core()
+        .mcp()
+        .call_tool(&server_id, &tool_name, request.arguments)
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(result)))
+}
+
 /// Custom error type for API handlers
 #[derive(Debug)]
 pub enum AppError {

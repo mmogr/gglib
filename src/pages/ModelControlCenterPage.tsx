@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
 import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
 import { useDownloadProgress } from '../hooks/useDownloadProgress';
@@ -7,7 +7,8 @@ import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel
 import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
 import { FilterState } from '../components/FilterPopover';
-import ChatPage from './ChatPage';
+// Lazy load ChatPage to avoid loading assistant-ui until needed
+const ChatPage = lazy(() => import('./ChatPage'));
 import { TauriService } from '../services/tauri';
 import { ServerInfo, HfModelSummary } from '../types';
 import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
@@ -330,12 +331,14 @@ export default function ModelControlCenterPage({
   // If chat session is active, show ChatPage
   if (chatSession) {
     return (
-      <ChatPage
-        serverPort={chatSession.serverPort}
-        modelName={chatSession.modelName}
-        initialView={chatSession.initialView}
-        onClose={handleCloseChat}
-      />
+      <Suspense fallback={<div className="model-control-center"><div className="loading-chat">Loading chat...</div></div>}>
+        <ChatPage
+          serverPort={chatSession.serverPort}
+          modelName={chatSession.modelName}
+          initialView={chatSession.initialView}
+          onClose={handleCloseChat}
+        />
+      </Suspense>
     );
   }
 

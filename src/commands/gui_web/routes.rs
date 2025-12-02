@@ -127,6 +127,22 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             "/api/messages/:message_id",
             delete(handlers::delete_message),
         )
+        // MCP server routes
+        .route("/api/mcp/servers", get(handlers::list_mcp_servers))
+        .route("/api/mcp/servers", post(handlers::add_mcp_server))
+        .route("/api/mcp/servers/:id", get(handlers::get_mcp_server))
+        .route("/api/mcp/servers/:id", put(handlers::update_mcp_server))
+        .route("/api/mcp/servers/:id", delete(handlers::remove_mcp_server))
+        .route(
+            "/api/mcp/servers/:id/start",
+            post(handlers::start_mcp_server),
+        )
+        .route("/api/mcp/servers/:id/stop", post(handlers::stop_mcp_server))
+        .route("/api/mcp/tools", get(handlers::list_mcp_tools))
+        .route(
+            "/api/mcp/servers/:server_id/tools/:tool_name",
+            post(handlers::call_mcp_tool),
+        )
         // Inject state
         .with_state(state)
         // Enable CORS for local development
