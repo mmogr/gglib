@@ -168,7 +168,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
                 onClick={() => setFilterPopoverOpen(!filterPopoverOpen)}
                 title="Filter models"
               >
-                🔍🔽
+                🔽
                 {hasActiveFilters && <span className="filter-badge" />}
               </button>
               
