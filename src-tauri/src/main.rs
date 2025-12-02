@@ -344,6 +344,17 @@ async fn list_tags(state: tauri::State<'_, AppState>) -> Result<Vec<String>, Str
 }
 
 #[tauri::command]
+async fn get_model_filter_options(
+    state: tauri::State<'_, AppState>,
+) -> Result<gglib::services::database::ModelFilterOptions, String> {
+    state
+        .backend
+        .get_model_filter_options()
+        .await
+        .map_err(|e| format!("Failed to get filter options: {}", e))
+}
+
+#[tauri::command]
 async fn add_model_tag(
     model_id: u32,
     tag: String,
@@ -912,6 +923,7 @@ async fn main() {
             stop_proxy,
             get_proxy_status,
             list_tags,
+            get_model_filter_options,
             add_model_tag,
             remove_model_tag,
             get_model_tags,

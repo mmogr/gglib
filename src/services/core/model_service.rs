@@ -251,6 +251,14 @@ impl ModelService {
     pub async fn get_by_tag(&self, tag: &str) -> Result<Vec<u32>> {
         database::get_models_by_tag(&self.db_pool, tag.to_string()).await
     }
+
+    /// Get filter options for the model library UI.
+    ///
+    /// Returns aggregate data about available models for building
+    /// dynamic filter controls (quantizations, param range, context range).
+    pub async fn get_filter_options(&self) -> Result<database::ModelFilterOptions> {
+        database::get_model_filter_options(&self.db_pool).await
+    }
 }
 
 #[cfg(test)]
