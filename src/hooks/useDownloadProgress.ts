@@ -125,14 +125,19 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
   }, []);
 
   // Cancel download
-  const cancelDownload = useCallback(async (modelId: string) => {
+  // Returns true on success, false on failure
+  const cancelDownload = useCallback(async (modelId: string): Promise<void> => {
     try {
       await TauriService.cancelDownload(modelId);
-      setError('Download cancelled');
+      // Clear progress on successful cancel
       setProgress(null);
+      setError(null);
       await fetchQueueStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel download');
+      // Set error state on failure so callers can check/display it
+      const message = err instanceof Error ? err.message : 'Failed to cancel download';
+      setError(message);
+      throw err; // Re-throw so callers can handle it
     }
   }, [fetchQueueStatus]);
 
