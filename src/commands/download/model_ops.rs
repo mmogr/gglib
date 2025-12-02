@@ -335,9 +335,9 @@ pub async fn add_to_database(
     model.hf_filename = Some(file_path.file_name().unwrap().to_string_lossy().to_string());
     model.download_date = Some(Utc::now());
 
-    // Auto-detect reasoning model support from metadata
+    // Auto-detect reasoning and tool calling capabilities from metadata
     if let Some(ref meta) = gguf_metadata {
-        let tags = crate::utils::gguf_parser::apply_reasoning_detection(&meta.metadata);
+        let tags = crate::utils::gguf_parser::apply_capability_detection(&meta.metadata);
         model.tags = tags;
     }
 

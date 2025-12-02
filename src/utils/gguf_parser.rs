@@ -261,16 +261,9 @@ fn extract_metadata_fields(
                     .insert(key.clone(), format!("Array with {} elements", arr.len()));
             }
         } else if key == "tokenizer.chat_template" {
-            // Truncate very long chat templates
-            let template_str = value.to_string();
-            if template_str.len() > 500 {
-                processed_metadata.insert(
-                    key.clone(),
-                    format!("Chat template ({} chars)", template_str.len()),
-                );
-            } else {
-                processed_metadata.insert(key.clone(), template_str);
-            }
+            // Preserve full chat template for tool/reasoning detection
+            // Full templates are needed for accurate capability detection
+            processed_metadata.insert(key.clone(), value.to_string());
         } else {
             processed_metadata.insert(key.clone(), value.to_string());
         }
@@ -617,6 +610,82 @@ const REASONING_MODEL_NAME_PATTERNS: &[&str] = &[
     "o3",
 ];
 
+// =============================================================================
+// Tool Calling / Function Calling Detection
+// =============================================================================
+
+/// Known tool calling patterns found in chat templates.
+/// These patterns indicate the model supports function/tool calling.
+/// Based on llama.cpp's tool call handler detection (PR #9639).
+///
+/// Note: This constant documents the patterns we detect. The actual detection
+/// uses inline constants with scores in `detect_tool_support()` for finer control.
+#[allow(dead_code)]
+const TOOL_CALLING_PATTERNS: &[&str] = &[
+    // Hermes/NousResearch style (most common)
+    "<tool_call>",
+    "</tool_call>",
+    "<tool_response>",
+    // Llama 3.x native tool calling
+    "<|python_tag|>",
+    "ipython",
+    // Functionary style
+    ">>>",
+    "from functions import",
+    // Mistral/MistralAI style
+    "[TOOL_CALLS]",
+    "[TOOL_RESULTS]",
+    // Firefunction style
+    "functools[",
+    // DeepSeek function calling
+    "<｜tool▁calls▁begin｜>",
+    "<｜tool▁call▁begin｜>",
+    // Generic tool/function indicators in templates
+    "tools",
+    "tool_call",
+    "function_call",
+    "available_tools",
+    // Jinja template conditionals for tools
+    "if tools",
+    "tools is defined",
+    "tools | length",
+];
+
+/// Model name patterns that indicate tool calling capability.
+/// More conservative than template detection.
+const TOOL_CALLING_MODEL_NAME_PATTERNS: &[&str] = &[
+    "hermes",      // NousResearch Hermes models
+    "functionary", // MeetKai Functionary models
+    "firefunction", // Fireworks Firefunction
+    "toolcall",
+    "function",
+    "agent",
+];
+
+/// Result of tool calling capability detection
+#[derive(Debug, Clone)]
+pub struct ToolCallingDetection {
+    /// Whether the model appears to support tool/function calling
+    pub supports_tool_calling: bool,
+    /// Confidence level of the detection (0.0 to 1.0)
+    pub confidence: f32,
+    /// The specific pattern(s) that matched, if any
+    pub matched_patterns: Vec<String>,
+    /// Detected tool calling format (e.g., "hermes", "llama3", "mistral")
+    pub detected_format: Option<String>,
+}
+
+impl Default for ToolCallingDetection {
+    fn default() -> Self {
+        Self {
+            supports_tool_calling: false,
+            confidence: 0.0,
+            matched_patterns: Vec::new(),
+            detected_format: None,
+        }
+    }
+}
+
 /// Result of reasoning capability detection
 #[derive(Debug, Clone)]
 pub struct ReasoningDetection {
@@ -837,6 +906,234 @@ pub fn get_chat_template(metadata: &HashMap<String, String>) -> Option<&String> 
     })
 }
 
+// =============================================================================
+// Tool Calling Detection Functions
+// =============================================================================
+
+/// Detect if a model supports tool/function calling based on its GGUF metadata.
+///
+/// This function analyzes the chat template and model name to determine
+/// if the model supports tool calling (function calling) via the OpenAI-compatible API.
+///
+/// # Arguments
+/// * `metadata` - The processed metadata HashMap from GGUF parsing
+///
+/// # Returns
+/// A `ToolCallingDetection` struct with detection results and confidence
+///
+/// # Examples
+///
+/// ```rust
+/// use std::collections::HashMap;
+/// use gglib::utils::gguf_parser::detect_tool_support;
+///
+/// let mut metadata = HashMap::new();
+/// metadata.insert(
+///     "tokenizer.chat_template".to_string(),
+///     "{% if tools %}<tool_call>{{ tool }}</tool_call>{% endif %}".to_string()
+/// );
+///
+/// let detection = detect_tool_support(&metadata);
+/// assert!(detection.supports_tool_calling);
+/// ```
+pub fn detect_tool_support(metadata: &HashMap<String, String>) -> ToolCallingDetection {
+    let mut detection = ToolCallingDetection::default();
+    let mut confidence_score = 0.0f32;
+
+    // Track which format we detected for format-specific handling
+    let mut detected_formats: Vec<&str> = Vec::new();
+
+    // Check chat template for tool calling patterns (highest confidence)
+    if let Some(template) = metadata.get("tokenizer.chat_template") {
+        let template_lower = template.to_lowercase();
+
+        // High-confidence patterns (explicit tool calling syntax)
+        const HIGH_CONFIDENCE_PATTERNS: &[(&str, &str, f32)] = &[
+            ("<tool_call>", "hermes", 0.5),
+            ("</tool_call>", "hermes", 0.3),
+            ("<tool_response>", "hermes", 0.3),
+            ("[tool_calls]", "mistral", 0.5),
+            ("[tool_results]", "mistral", 0.3),
+            ("<｜tool▁calls▁begin｜>", "deepseek", 0.5),
+            ("<｜tool▁call▁begin｜>", "deepseek", 0.4),
+            ("<|python_tag|>", "llama3", 0.5),
+            ("functools[", "firefunction", 0.5),
+            (">>>", "functionary", 0.3),
+            ("from functions import", "functionary", 0.4),
+        ];
+
+        for (pattern, format, score) in HIGH_CONFIDENCE_PATTERNS {
+            if template_lower.contains(&pattern.to_lowercase()) {
+                detection.matched_patterns.push(pattern.to_string());
+                confidence_score += score;
+                if !detected_formats.contains(format) {
+                    detected_formats.push(format);
+                }
+            }
+        }
+
+        // Medium-confidence patterns (Jinja conditionals that handle tools)
+        const MEDIUM_CONFIDENCE_PATTERNS: &[&str] = &[
+            "if tools",
+            "tools is defined",
+            "tools | length",
+            "available_tools",
+        ];
+
+        for pattern in MEDIUM_CONFIDENCE_PATTERNS {
+            if template_lower.contains(&pattern.to_lowercase()) {
+                detection
+                    .matched_patterns
+                    .push(format!("jinja:{}", pattern));
+                confidence_score += 0.35;
+            }
+        }
+
+        // Low-confidence patterns (might just be documentation)
+        if template_lower.contains("tool_call") && !detection.matched_patterns.iter().any(|p| p.contains("tool_call")) {
+            detection.matched_patterns.push("tool_call".to_string());
+            confidence_score += 0.2;
+        }
+        if template_lower.contains("function_call") {
+            detection.matched_patterns.push("function_call".to_string());
+            confidence_score += 0.2;
+        }
+    }
+
+    // Check model name for tool calling patterns
+    if let Some(name) = metadata.get("general.name") {
+        let name_lower = name.to_lowercase();
+
+        for pattern in TOOL_CALLING_MODEL_NAME_PATTERNS {
+            if name_lower.contains(pattern) {
+                detection.matched_patterns.push(format!("name:{}", pattern));
+                // Higher confidence for explicit tool-calling model names
+                if *pattern == "hermes" || *pattern == "functionary" || *pattern == "firefunction" {
+                    confidence_score += 0.4;
+                    if *pattern == "hermes" && !detected_formats.contains(&"hermes") {
+                        detected_formats.push("hermes");
+                    }
+                } else {
+                    confidence_score += 0.25;
+                }
+            }
+        }
+    }
+
+    // Normalize confidence to 0.0-1.0 range
+    detection.confidence = confidence_score.min(1.0);
+    detection.supports_tool_calling = detection.confidence >= 0.3;
+
+    // Set detected format (prefer explicit template detection over name-based)
+    if !detected_formats.is_empty() {
+        detection.detected_format = Some(detected_formats[0].to_string());
+    }
+
+    detection
+}
+
+/// Check if a model's metadata indicates it supports tool calling.
+/// This is a simplified boolean check for common use cases.
+///
+/// # Arguments
+/// * `metadata` - The processed metadata HashMap from GGUF parsing
+///
+/// # Returns
+/// `true` if the model appears to support tool calling, `false` otherwise
+pub fn is_tool_capable_model(metadata: &HashMap<String, String>) -> bool {
+    detect_tool_support(metadata).supports_tool_calling
+}
+
+/// Apply tool calling detection to GGUF metadata and return tags to add.
+///
+/// This is a shared helper function used by all model add flows:
+/// - CLI `add` command
+/// - GUI "Add Model" from local file
+/// - HuggingFace browser downloads
+///
+/// It analyzes the metadata, logs the detection results to stdout,
+/// and returns a list of tags to apply to the model.
+///
+/// Note: Returns "agent" tag (not "tools") because:
+/// 1. "agent" already triggers --jinja auto-enable in resolve_jinja_flag()
+/// 2. More semantically accurate - tool calling enables agentic capabilities
+///
+/// # Arguments
+/// * `metadata` - The processed metadata HashMap from GGUF parsing
+///
+/// # Returns
+/// A `Vec<String>` of tags to add to the model (e.g., `["agent"]`)
+///
+/// # Examples
+///
+/// ```rust
+/// use std::collections::HashMap;
+/// use gglib::utils::gguf_parser::apply_tool_detection;
+///
+/// let mut metadata = HashMap::new();
+/// metadata.insert(
+///     "tokenizer.chat_template".to_string(),
+///     "{% if tools %}<tool_call>{{ tool }}</tool_call>{% endif %}".to_string()
+/// );
+///
+/// let tags = apply_tool_detection(&metadata);
+/// assert!(tags.contains(&"agent".to_string()));
+/// ```
+pub fn apply_tool_detection(metadata: &HashMap<String, String>) -> Vec<String> {
+    let detection = detect_tool_support(metadata);
+    let mut tags = Vec::new();
+
+    if detection.supports_tool_calling {
+        println!("\n🔧 Detected tool calling capabilities:");
+        println!("  Confidence: {:.0}%", detection.confidence * 100.0);
+        if !detection.matched_patterns.is_empty() {
+            println!(
+                "  Matched patterns: {}",
+                detection.matched_patterns.join(", ")
+            );
+        }
+        if let Some(ref format) = detection.detected_format {
+            println!("  Detected format: {}", format);
+        }
+        println!("  → Auto-adding 'agent' tag (enables --jinja for tool calling)");
+        tags.push("agent".to_string());
+    }
+
+    tags
+}
+
+/// Apply both reasoning and tool calling detection, returning combined tags.
+///
+/// This is the recommended function for model import flows as it handles
+/// both capability detections in a single call and avoids duplicate tags.
+///
+/// # Arguments
+/// * `metadata` - The processed metadata HashMap from GGUF parsing
+///
+/// # Returns
+/// A `Vec<String>` of unique tags to add to the model
+pub fn apply_capability_detection(metadata: &HashMap<String, String>) -> Vec<String> {
+    let mut tags = Vec::new();
+
+    // Apply reasoning detection
+    let reasoning_tags = apply_reasoning_detection(metadata);
+    for tag in reasoning_tags {
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+
+    // Apply tool calling detection
+    let tool_tags = apply_tool_detection(metadata);
+    for tag in tool_tags {
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+
+    tags
+}
+
 #[cfg(test)]
 mod reasoning_detection_tests {
     use super::*;
@@ -972,5 +1269,170 @@ mod reasoning_detection_tests {
 
         let empty_metadata = HashMap::new();
         assert!(!is_reasoning_model(&empty_metadata));
+    }
+}
+
+#[cfg(test)]
+mod tool_calling_detection_tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_hermes_tool_call_tags() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            r#"{% if tools %}<tool_call>{{ tool | tojson }}</tool_call>{% endif %}"#.to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert!(detection.supports_tool_calling);
+        assert!(detection.confidence >= 0.3);
+        assert!(detection.matched_patterns.iter().any(|p| p.contains("tool_call")));
+        assert_eq!(detection.detected_format, Some("hermes".to_string()));
+    }
+
+    #[test]
+    fn test_detect_mistral_tool_calling() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            r#"[TOOL_CALLS] {{ tools | tojson }} [TOOL_RESULTS]"#.to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert!(detection.supports_tool_calling);
+        assert!(detection.matched_patterns.iter().any(|p| p.to_lowercase().contains("tool_calls")));
+        assert_eq!(detection.detected_format, Some("mistral".to_string()));
+    }
+
+    #[test]
+    fn test_detect_llama3_python_tag() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            r#"<|python_tag|>{{ code }}"#.to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert!(detection.supports_tool_calling);
+        assert_eq!(detection.detected_format, Some("llama3".to_string()));
+    }
+
+    #[test]
+    fn test_detect_deepseek_tool_calling() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            r#"<｜tool▁calls▁begin｜>{{ tool_call }}<｜tool▁call▁begin｜>"#.to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert!(detection.supports_tool_calling);
+        assert_eq!(detection.detected_format, Some("deepseek".to_string()));
+    }
+
+    #[test]
+    fn test_detect_jinja_tools_conditional() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            r#"{% if tools is defined and tools | length > 0 %}Available tools: {{ tools }}{% endif %}"#.to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert!(detection.supports_tool_calling);
+        assert!(detection.matched_patterns.iter().any(|p| p.contains("jinja")));
+    }
+
+    #[test]
+    fn test_detect_by_model_name_hermes() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "general.name".to_string(),
+            "NousResearch/Hermes-3-Llama-3.1-8B".to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert!(detection.supports_tool_calling);
+        assert!(detection.matched_patterns.iter().any(|p| p.contains("hermes")));
+    }
+
+    #[test]
+    fn test_detect_by_model_name_functionary() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "general.name".to_string(),
+            "meetkai/functionary-small-v3.2".to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert!(detection.supports_tool_calling);
+    }
+
+    #[test]
+    fn test_no_detection_for_regular_model() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "{% for message in messages %}{{ message.content }}{% endfor %}".to_string(),
+        );
+        metadata.insert("general.name".to_string(), "Llama-2-7B-Chat".to_string());
+
+        let detection = detect_tool_support(&metadata);
+        assert!(!detection.supports_tool_calling);
+        assert!(detection.confidence < 0.3);
+    }
+
+    #[test]
+    fn test_is_tool_capable_model_helper() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<tool_call>test</tool_call>".to_string(),
+        );
+
+        assert!(is_tool_capable_model(&metadata));
+
+        let empty_metadata = HashMap::new();
+        assert!(!is_tool_capable_model(&empty_metadata));
+    }
+
+    #[test]
+    fn test_apply_tool_detection_adds_agent_tag() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<tool_call>test</tool_call>".to_string(),
+        );
+
+        let tags = apply_tool_detection(&metadata);
+        assert!(tags.contains(&"agent".to_string()));
+    }
+
+    #[test]
+    fn test_combined_capability_detection() {
+        let mut metadata = HashMap::new();
+        // Model with both reasoning AND tool calling
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<think>reasoning</think><tool_call>tool</tool_call>".to_string(),
+        );
+
+        let tags = apply_capability_detection(&metadata);
+        assert!(tags.contains(&"reasoning".to_string()));
+        assert!(tags.contains(&"agent".to_string()));
+    }
+
+    #[test]
+    fn test_capability_detection_no_duplicates() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<tool_call>tool</tool_call>".to_string(),
+        );
+
+        let tags = apply_capability_detection(&metadata);
+        // Should only have one "agent" tag
+        assert_eq!(tags.iter().filter(|t| *t == "agent").count(), 1);
     }
 }
