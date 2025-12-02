@@ -19,6 +19,7 @@ import { parseThinkingContent } from '../../utils/thinkingParser';
 import type { ToastType } from '../Toast';
 import ThinkingBlock from './ThinkingBlock';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { ToolsPopover } from '../ToolsPopover';
 import './ChatMessagesPanel.css';
 
 const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
@@ -729,6 +730,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           </span>
         </div>
         <div className="chat-header-actions">
+          <ToolsPopover />
           <button className="icon-btn icon-btn-sm" onClick={onClearConversation} title="Restart conversation">
             ↺
           </button>

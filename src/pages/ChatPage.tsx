@@ -5,6 +5,7 @@ import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { ToastContainer } from '../components/Toast';
+import { GenericToolUI, TimeToolUI } from '../components/ToolUI';
 import { SidebarTab } from '../components/ModelLibraryPanel/SidebarTabs';
 import { useGglibRuntime } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
@@ -268,6 +269,10 @@ export default function ChatPage({
     <div className="chat-page">
       {/* Chat Tab Content - always mounted, hidden when not active */}
       <AssistantRuntimeProvider runtime={runtime}>
+        {/* Tool UI Components - render tool calls in chat messages */}
+        <TimeToolUI />
+        <GenericToolUI />
+        
         <div
           ref={activeTab === 'chat' ? layoutRef : undefined}
           className={`chat-page-layout ${activeTab !== 'chat' ? 'chat-page-layout--hidden' : ''}`}

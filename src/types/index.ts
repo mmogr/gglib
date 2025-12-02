@@ -51,6 +51,8 @@ export interface AppSettings {
   max_download_queue_size?: number | null;
   title_generation_prompt?: string | null;
   show_memory_fit_indicators?: boolean | null;
+  /** Maximum iterations for tool calling agentic loop (default: 10) */
+  max_tool_iterations?: number | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -61,6 +63,8 @@ export interface UpdateSettingsRequest {
   max_download_queue_size?: number | null | undefined;
   title_generation_prompt?: string | null | undefined;
   show_memory_fit_indicators?: boolean | null | undefined;
+  /** Maximum iterations for tool calling agentic loop (default: 10) */
+  max_tool_iterations?: number | null | undefined;
 }
 
 // ============================================================================
