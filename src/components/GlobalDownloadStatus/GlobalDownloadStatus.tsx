@@ -1,8 +1,9 @@
-import { FC, useState, useEffect, useRef } from 'react';
+import { FC, useState, useEffect, useRef, useCallback } from 'react';
 import { DownloadProgress } from '../../hooks/useDownloadProgress';
 import { DownloadQueueStatus } from '../../types';
 import { formatBytes, formatTime } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
+import { ConfirmCancelModal } from './ConfirmCancelModal';
 import styles from './GlobalDownloadStatus.module.css';
 
 interface GlobalDownloadStatusProps {
@@ -37,6 +38,11 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   const [showCompletion, setShowCompletion] = useState(false);
   const [isQueuePopoverOpen, setIsQueuePopoverOpen] = useState(false);
   const previousProgressRef = useRef<DownloadProgress | null>(null);
+
+  // Cancel confirmation modal state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [pendingCancelModelId, setPendingCancelModelId] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Track when downloads complete
   useEffect(() => {
@@ -162,6 +168,40 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
     onRefreshQueue?.();
   };
 
+  // Handle cancel button click - open confirmation modal
+  const handleCancelClick = useCallback(() => {
+    if (displayModelId) {
+      setPendingCancelModelId(displayModelId);
+      setShowCancelModal(true);
+    }
+  }, [displayModelId]);
+
+  // Handle cancel confirmation
+  const handleConfirmCancel = useCallback(async () => {
+    if (!pendingCancelModelId) return;
+    
+    setIsCancelling(true);
+    try {
+      await onCancel(pendingCancelModelId);
+    } finally {
+      setIsCancelling(false);
+      setShowCancelModal(false);
+      setPendingCancelModelId(null);
+    }
+  }, [pendingCancelModelId, onCancel]);
+
+  // Handle cancel modal dismissal
+  const handleCancelModalClose = useCallback(() => {
+    if (!isCancelling) {
+      setShowCancelModal(false);
+      setPendingCancelModelId(null);
+    }
+  }, [isCancelling]);
+
+  // Get shard info for the modal
+  const shardInfo = displayProgress?.shard_progress;
+  const isSharded = shardInfo ? shardInfo.total_shards > 1 : false;
+
   // Show active download progress
   return (
     <div className={styles.container}>
@@ -200,7 +240,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           {displayModelId && !isQueued && (
             <button
               className={styles.cancelBtn}
-              onClick={() => onCancel(displayModelId)}
+              onClick={handleCancelClick}
             >
               Cancel
             </button>
@@ -276,6 +316,18 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           </>
         )}
       </div>
+
+      {/* Cancel Confirmation Modal */}
+      <ConfirmCancelModal
+        isOpen={showCancelModal}
+        modelId={pendingCancelModelId || ''}
+        isSharded={isSharded}
+        shardCount={shardInfo?.total_shards}
+        currentShard={shardInfo ? shardInfo.current_shard + 1 : undefined}
+        isCancelling={isCancelling}
+        onConfirm={handleConfirmCancel}
+        onCancel={handleCancelModalClose}
+      />
     </div>
   );
 };
