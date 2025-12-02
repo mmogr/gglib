@@ -317,26 +317,21 @@ impl AppCore {
     /// ```rust,no_run
     /// # use gglib::services::core::AppCore;
     /// # use gglib::services::mcp::{McpServerConfig, McpServerType};
-    /// # use std::collections::HashMap;
     /// # async fn example(core: &AppCore) -> anyhow::Result<()> {
-    /// // Add an MCP server
-    /// let config = McpServerConfig {
-    ///     id: None,
-    ///     name: "filesystem".to_string(),
-    ///     server_type: McpServerType::Stdio,
-    ///     command: "npx".to_string(),
-    ///     args: vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()],
-    ///     env_vars: HashMap::new(),
-    ///     auto_start: true,
-    ///     enabled: true,
-    /// };
+    /// // Add an MCP server using the helper constructor
+    /// let config = McpServerConfig::new_stdio(
+    ///     "filesystem",
+    ///     "npx",
+    ///     vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()],
+    /// );
     /// let saved = core.mcp().add_server(config).await?;
     ///
     /// // Start the server
-    /// core.mcp().start_server(saved.id.as_ref().unwrap()).await?;
+    /// let id_str = saved.id.unwrap().to_string();
+    /// core.mcp().start_server(&id_str).await?;
     ///
-    /// // List available tools
-    /// let tools = core.mcp().list_all_tools().await?;
+    /// // List available tools from all running servers
+    /// let tools = core.mcp().list_all_tools().await;
     /// # Ok(())
     /// # }
     /// ```
