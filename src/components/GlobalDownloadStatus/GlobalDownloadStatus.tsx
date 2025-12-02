@@ -76,11 +76,55 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
     }
   }, [queueStatus, completedModels]);
 
-  const handleDismiss = () => {
+  const handleDismiss = useCallback(() => {
     setShowCompletion(false);
     setCompletedModels([]);
     onDismiss();
-  };
+  }, [onDismiss]);
+
+  // Handle queue badge click
+  const handleQueueBadgeClick = useCallback(() => {
+    setIsQueuePopoverOpen((prev) => !prev);
+  }, []);
+
+  const handleClosePopover = useCallback(() => {
+    setIsQueuePopoverOpen(false);
+  }, []);
+
+  const handleRefreshQueue = useCallback(() => {
+    onRefreshQueue?.();
+  }, [onRefreshQueue]);
+
+  // Handle cancel button click - open confirmation modal
+  // We need to define this before early returns to follow Rules of Hooks
+  const handleCancelClick = useCallback((modelId: string) => {
+    if (modelId) {
+      setPendingCancelModelId(modelId);
+      setShowCancelModal(true);
+    }
+  }, []);
+
+  // Handle cancel confirmation
+  const handleConfirmCancel = useCallback(async () => {
+    if (!pendingCancelModelId) return;
+    
+    setIsCancelling(true);
+    try {
+      await onCancel(pendingCancelModelId);
+    } finally {
+      setIsCancelling(false);
+      setShowCancelModal(false);
+      setPendingCancelModelId(null);
+    }
+  }, [pendingCancelModelId, onCancel]);
+
+  // Handle cancel modal dismissal
+  const handleCancelModalClose = useCallback(() => {
+    if (!isCancelling) {
+      setShowCancelModal(false);
+      setPendingCancelModelId(null);
+    }
+  }, [isCancelling]);
 
   // Get the current download from queue status (authoritative source)
   const currentDownload = queueStatus?.current;
@@ -155,49 +199,6 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   const displayProgress = relevantProgress;
   const isQueued = !currentDownload && progress?.status === 'queued';
 
-  // Handle queue badge click
-  const handleQueueBadgeClick = () => {
-    setIsQueuePopoverOpen((prev) => !prev);
-  };
-
-  const handleClosePopover = () => {
-    setIsQueuePopoverOpen(false);
-  };
-
-  const handleRefreshQueue = () => {
-    onRefreshQueue?.();
-  };
-
-  // Handle cancel button click - open confirmation modal
-  const handleCancelClick = useCallback(() => {
-    if (displayModelId) {
-      setPendingCancelModelId(displayModelId);
-      setShowCancelModal(true);
-    }
-  }, [displayModelId]);
-
-  // Handle cancel confirmation
-  const handleConfirmCancel = useCallback(async () => {
-    if (!pendingCancelModelId) return;
-    
-    setIsCancelling(true);
-    try {
-      await onCancel(pendingCancelModelId);
-    } finally {
-      setIsCancelling(false);
-      setShowCancelModal(false);
-      setPendingCancelModelId(null);
-    }
-  }, [pendingCancelModelId, onCancel]);
-
-  // Handle cancel modal dismissal
-  const handleCancelModalClose = useCallback(() => {
-    if (!isCancelling) {
-      setShowCancelModal(false);
-      setPendingCancelModelId(null);
-    }
-  }, [isCancelling]);
-
   // Get shard info for the modal
   const shardInfo = displayProgress?.shard_progress;
   const isSharded = shardInfo ? shardInfo.total_shards > 1 : false;
@@ -240,7 +241,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           {displayModelId && !isQueued && (
             <button
               className={styles.cancelBtn}
-              onClick={handleCancelClick}
+              onClick={() => handleCancelClick(displayModelId)}
             >
               Cancel
             </button>
