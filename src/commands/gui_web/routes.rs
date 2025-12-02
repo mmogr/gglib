@@ -39,6 +39,26 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             post(handlers::cancel_download),
         )
         .route(
+            "/api/models/download/pause",
+            post(handlers::pause_downloads),
+        )
+        .route(
+            "/api/models/download/resume",
+            post(handlers::resume_downloads),
+        )
+        .route(
+            "/api/models/download/incomplete",
+            get(handlers::get_incomplete_downloads),
+        )
+        .route(
+            "/api/models/download/incomplete/restore",
+            post(handlers::restore_incomplete_downloads),
+        )
+        .route(
+            "/api/models/download/incomplete/discard",
+            post(handlers::discard_incomplete_downloads),
+        )
+        .route(
             "/api/models/download/progress",
             get(handlers::stream_progress),
         )

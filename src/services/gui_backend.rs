@@ -269,6 +269,40 @@ impl GuiBackend {
         self.core.downloads().cancel(model_id).await
     }
 
+    /// Pause all downloads in the queue.
+    pub async fn pause_downloads(&self) -> Result<()> {
+        self.core.downloads().pause().await
+    }
+
+    /// Resume paused downloads.
+    pub async fn resume_downloads(&self) -> Result<()> {
+        self.core.downloads().resume().await
+    }
+
+    /// Check if downloads are currently paused.
+    pub async fn is_downloads_paused(&self) -> bool {
+        self.core.downloads().is_paused().await
+    }
+
+    /// Get incomplete downloads from disk (for startup recovery prompt).
+    pub async fn get_incomplete_downloads(
+        &self,
+    ) -> Vec<crate::services::core::IncompleteDownload> {
+        self.core.downloads().load_incomplete_downloads().await
+    }
+
+    /// Restore incomplete downloads and add them to the queue.
+    pub async fn restore_incomplete_downloads(
+        &self,
+    ) -> Vec<crate::services::core::IncompleteDownload> {
+        self.core.downloads().restore_incomplete_downloads().await
+    }
+
+    /// Discard incomplete downloads (user chose not to resume).
+    pub async fn discard_incomplete_downloads(&self) -> Result<()> {
+        self.core.downloads().discard_incomplete_downloads().await
+    }
+
     // =========================================================================
     // HuggingFace Browser Operations
     // =========================================================================

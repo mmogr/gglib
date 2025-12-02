@@ -281,6 +281,50 @@ async fn cancel_download(
 }
 
 #[tauri::command]
+async fn pause_downloads(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    state
+        .backend
+        .pause_downloads()
+        .await
+        .map(|_| "Downloads paused".to_string())
+        .map_err(|e| format!("Failed to pause downloads: {}", e))
+}
+
+#[tauri::command]
+async fn resume_downloads(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    state
+        .backend
+        .resume_downloads()
+        .await
+        .map(|_| "Downloads resumed".to_string())
+        .map_err(|e| format!("Failed to resume downloads: {}", e))
+}
+
+#[tauri::command]
+async fn get_incomplete_downloads(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<gglib::services::core::IncompleteDownload>, String> {
+    Ok(state.backend.get_incomplete_downloads().await)
+}
+
+#[tauri::command]
+async fn restore_incomplete_downloads(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<gglib::services::core::IncompleteDownload>, String> {
+    Ok(state.backend.restore_incomplete_downloads().await)
+}
+
+#[tauri::command]
+async fn discard_incomplete_downloads(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    state
+        .backend
+        .discard_incomplete_downloads()
+        .await
+        .map(|_| "Incomplete downloads discarded".to_string())
+        .map_err(|e| format!("Failed to discard incomplete downloads: {}", e))
+}
+
+#[tauri::command]
 async fn search_models(
     query: String,
     limit: u32,
@@ -907,6 +951,11 @@ async fn main() {
             clear_server_logs,
             download_model,
             cancel_download,
+            pause_downloads,
+            resume_downloads,
+            get_incomplete_downloads,
+            restore_incomplete_downloads,
+            discard_incomplete_downloads,
             search_models,
             start_proxy,
             stop_proxy,

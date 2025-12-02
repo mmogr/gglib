@@ -285,6 +285,98 @@ pub async fn cancel_download(
     ))))
 }
 
+/// Pause all downloads
+pub async fn pause_downloads(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    state
+        .backend
+        .pause_downloads()
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success("Downloads paused".to_string())))
+}
+
+/// Resume paused downloads
+pub async fn resume_downloads(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    state
+        .backend
+        .resume_downloads()
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    // Restart the queue processor
+    let backend = state.backend.clone();
+    let progress_tx = state.progress_tx.clone();
+
+    tokio::spawn(async move {
+        let progress_callback = move |event: DownloadProgressEvent| {
+            let _ = progress_tx.send(event.to_json_string());
+        };
+
+        backend
+            .core()
+            .downloads()
+            .process_queue(progress_callback)
+            .await;
+    });
+
+    Ok(Json(ApiResponse::success("Downloads resumed".to_string())))
+}
+
+/// Get incomplete downloads from disk
+pub async fn get_incomplete_downloads(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<crate::services::core::IncompleteDownload>>>, AppError> {
+    let incomplete = state.backend.get_incomplete_downloads().await;
+    Ok(Json(ApiResponse::success(incomplete)))
+}
+
+/// Restore incomplete downloads and add them to the queue
+pub async fn restore_incomplete_downloads(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<Vec<crate::services::core::IncompleteDownload>>>, AppError> {
+    let restored = state.backend.restore_incomplete_downloads().await;
+
+    // Start the queue processor if there are restored downloads
+    if !restored.is_empty() {
+        let backend = state.backend.clone();
+        let progress_tx = state.progress_tx.clone();
+
+        tokio::spawn(async move {
+            let progress_callback = move |event: DownloadProgressEvent| {
+                let _ = progress_tx.send(event.to_json_string());
+            };
+
+            backend
+                .core()
+                .downloads()
+                .process_queue(progress_callback)
+                .await;
+        });
+    }
+
+    Ok(Json(ApiResponse::success(restored)))
+}
+
+/// Discard incomplete downloads
+pub async fn discard_incomplete_downloads(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    state
+        .backend
+        .discard_incomplete_downloads()
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(
+        "Incomplete downloads discarded".to_string(),
+    )))
+}
+
 // Download Queue Handlers
 
 /// Queue a download to be processed
