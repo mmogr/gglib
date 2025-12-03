@@ -346,7 +346,7 @@ async fn test_quantization_detection_modern_formats() {
     for (filename, expected) in test_cases {
         let result = extract_quantization_from_filename(filename);
         assert_eq!(
-            result, expected,
+            result.to_string(), expected,
             "Failed for filename '{}': expected '{}', got '{}'",
             filename, expected, result
         );
@@ -371,7 +371,7 @@ async fn test_quantization_detection_case_insensitive() {
     for (filename, expected) in test_cases {
         let result = extract_quantization_from_filename(filename);
         assert_eq!(
-            result, expected,
+            result.to_string(), expected,
             "Case insensitive test failed for '{}': expected '{}', got '{}'",
             filename, expected, result
         );
@@ -395,7 +395,7 @@ async fn test_quantization_detection_with_prefixes() {
     for (filename, expected) in test_cases {
         let result = extract_quantization_from_filename(filename);
         assert_eq!(
-            result, expected,
+            result.to_string(), expected,
             "Prefix test failed for '{}': expected '{}', got '{}'",
             filename, expected, result
         );
@@ -428,7 +428,7 @@ async fn test_sharded_quantization_detection() {
     for (filename, expected) in test_cases {
         let result = extract_quantization_from_filename(filename);
         assert_eq!(
-            result, expected,
+            result.to_string(), expected,
             "Sharded file test failed for '{}': expected '{}', got '{}'",
             filename, expected, result
         );
@@ -456,7 +456,7 @@ async fn test_quantization_precedence() {
     for (filename, expected) in test_cases {
         let result = extract_quantization_from_filename(filename);
         assert_eq!(
-            result, expected,
+            result.to_string(), expected,
             "Precedence test failed for '{}': expected '{}', got '{}'",
             filename, expected, result
         );
@@ -482,8 +482,8 @@ async fn test_unknown_quantization_formats() {
 
     for filename in test_cases {
         let result = extract_quantization_from_filename(filename);
-        assert_eq!(
-            result, "unknown",
+        assert!(
+            result.is_unknown(),
             "Unknown test failed for '{}': expected 'unknown', got '{}'",
             filename, result
         );

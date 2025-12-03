@@ -1,13 +1,11 @@
-#[cfg(test)]
-mod tests {
-    use crate::commands::download::api::create_hf_api;
-    use crate::commands::download::file_ops::{Quantization, extract_quantization_from_filename};
-    use crate::commands::download::utils::{get_models_directory, sanitize_model_name};
-    use std::env;
-    use tempfile::tempdir;
+use crate::commands::download::api::create_hf_api;
+use crate::commands::download::file_ops::{Quantization, extract_quantization_from_filename};
+use crate::commands::download::utils::{get_models_directory, sanitize_model_name};
+use std::env;
+use tempfile::tempdir;
 
-    #[test]
-    fn test_extract_quantization_from_filename() {
+#[test]
+fn test_extract_quantization_from_filename() {
         let test_cases = vec![
             ("model-Q4_K_M.gguf", Quantization::Q4KM),
             ("llama-7b-Q8_0.gguf", Quantization::Q8_0),
@@ -215,4 +213,3 @@ mod tests {
     // which is complex and better handled in integration tests with test data.
     // The integration tests in tests/integration_download_command.rs handle
     // the database integration aspects of the download functionality.
-}

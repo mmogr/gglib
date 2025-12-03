@@ -182,8 +182,8 @@ async fn test_sharded_file_pattern_detection() {
 
         // Should still extract quantization correctly
         let quant = download::extract_quantization_from_filename(file);
-        assert_ne!(
-            quant, "unknown",
+        assert!(
+            !quant.is_unknown(),
             "Should extract quantization from sharded file: {}",
             file
         );
@@ -194,8 +194,8 @@ async fn test_sharded_file_pattern_detection() {
         assert!(!is_sharded, "Should not detect as sharded: {}", file);
 
         let quant = download::extract_quantization_from_filename(file);
-        assert_ne!(
-            quant, "unknown",
+        assert!(
+            !quant.is_unknown(),
             "Should extract quantization from regular file: {}",
             file
         );
