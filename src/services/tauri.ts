@@ -151,8 +151,8 @@ export class TauriService {
   // Server operations
   static async serveModel(config: ServeConfig): Promise<{ port: number; message: string }> {
     if (isTauriApp) {
-      // Desktop GUI: Use Tauri invoke
-      const message = await invoke<string>('serve_model', {
+      // Desktop GUI: Use Tauri invoke - returns { port, message } from backend
+      const response = await invoke<{ port: number; message: string }>('serve_model', {
         id: config.id,
         ctxSize: config.ctx_size,
         contextLength: config.context_length,
@@ -160,7 +160,7 @@ export class TauriService {
         port: config.port,
         jinja: config.jinja,
       });
-      return { port: config.port || 9000, message };
+      return response;
     } else {
       // Web UI: Use REST API
       const response = await apiFetch(`/models/${config.id}/start`, {
