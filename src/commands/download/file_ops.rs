@@ -506,7 +506,7 @@ pub async fn try_download_with_patterns(
 /// # Examples
 ///
 /// ```rust
-/// use gglib::commands::download::file_ops::{extract_quantization_from_filename, Quantization};
+/// use gglib::commands::download::{extract_quantization_from_filename, Quantization};
 ///
 /// assert_eq!(extract_quantization_from_filename("model-Q4_K_M.gguf"), Quantization::Q4KM);
 /// assert_eq!(extract_quantization_from_filename("llama-F16.gguf"), Quantization::F16);

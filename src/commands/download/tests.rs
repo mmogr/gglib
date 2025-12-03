@@ -1,6 +1,6 @@
-use crate::commands::download::api::create_hf_api;
-use crate::commands::download::file_ops::{Quantization, extract_quantization_from_filename};
-use crate::commands::download::utils::{get_models_directory, sanitize_model_name};
+use super::api::create_hf_api;
+use super::file_ops::{Quantization, extract_quantization_from_filename};
+use super::utils::{get_models_directory, sanitize_model_name};
 use std::env;
 use tempfile::tempdir;
 
