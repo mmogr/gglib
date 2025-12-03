@@ -438,8 +438,9 @@ impl HuggingFaceService {
                     let entry_type = file.get("type").and_then(|v| v.as_str()).unwrap_or("file");
 
                     if entry_type == "file" && path.ends_with(".gguf") {
-                        let quant_name = extract_quantization_from_filename(path).to_string();
-                        if quant_name != "unknown" {
+                        let quant = extract_quantization_from_filename(path);
+                        if !quant.is_unknown() {
+                            let quant_name = quant.to_string();
                             let size_mb = size as f64 / 1_048_576.0;
                             let is_shard =
                                 path.contains("-00001-of-") || path.contains("-00002-of-");
@@ -496,12 +497,10 @@ impl HuggingFaceService {
                                                 dir_shard_count += 1;
 
                                                 if dir_quant_name.is_none() {
-                                                    dir_quant_name = Some(
-                                                        extract_quantization_from_filename(
-                                                            sub_path,
-                                                        )
-                                                        .to_string(),
+                                                    let quant = extract_quantization_from_filename(
+                                                        sub_path,
                                                     );
+                                                    dir_quant_name = Some(quant.to_string());
                                                     dir_first_file = Some(sub_path.to_string());
                                                 }
                                             }
@@ -695,7 +694,7 @@ impl HuggingFaceService {
                 // Direct GGUF files at repo root
                 if entry_type == "file" && filename.ends_with(".gguf") {
                     let file_quant = extract_quantization_from_filename(filename);
-                    if file_quant.to_uppercase() == quant_upper {
+                    if file_quant.to_string().to_uppercase() == quant_upper {
                         let file_size = file.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
                         matching_files.push((filename.to_string(), file_size));
                     }
@@ -708,7 +707,7 @@ impl HuggingFaceService {
                             if let Some(sub_path) = sub_file.get("path").and_then(|v| v.as_str()) {
                                 if sub_path.ends_with(".gguf") {
                                     let sub_quant = extract_quantization_from_filename(sub_path);
-                                    if sub_quant.to_uppercase() == quant_upper {
+                                    if sub_quant.to_string().to_uppercase() == quant_upper {
                                         let file_size = sub_file
                                             .get("size")
                                             .and_then(|v| v.as_u64())

@@ -442,7 +442,7 @@ fn extract_quantization_info(
     // First try filename parsing using the canonical implementation (DRY)
     if let Some(filename) = file_path.file_name().and_then(|s| s.to_str()) {
         let quant = extract_quantization_from_filename(filename);
-        if quant != "unknown" {
+        if !quant.is_unknown() {
             return Some(quant.to_string());
         }
     }

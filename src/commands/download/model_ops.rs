@@ -122,9 +122,11 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
                                                         extract_quantization_from_filename(
                                                             filename,
                                                         );
-                                                    if file_quant.to_uppercase() == quant_upper {
+                                                    let file_quant_str = file_quant.to_string();
+                                                    if file_quant_str.to_uppercase() == quant_upper
+                                                    {
                                                         quantization_files
-                                                            .entry(file_quant.to_uppercase())
+                                                            .entry(file_quant_str.to_uppercase())
                                                             .or_default()
                                                             .push(filename.to_string());
                                                     }
@@ -173,11 +175,12 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
                                                                                     )
                                                                                 {
                                                                                     let sub_quant = extract_quantization_from_filename(sub_path);
-                                                                                    if sub_quant.to_uppercase()
+                                                                                    let sub_quant_str = sub_quant.to_string();
+                                                                                    if sub_quant_str.to_uppercase()
                                                                                         == quant_upper
                                                                                     {
                                                                                         quantization_files
-                                                                                            .entry(sub_quant.to_uppercase())
+                                                                                            .entry(sub_quant_str.to_uppercase())
                                                                                             .or_default()
                                                                                             .push(sub_path.to_string());
                                                                                     }

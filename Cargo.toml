@@ -23,6 +23,8 @@ indicatif = "0.17"
 regex = "1.0"
 urlencoding = "2.1"
 num_cpus = "1.16"
+strum = "0.26"
+strum_macros = "0.26"
 dotenvy = "0.15"
 thiserror = "1.0"
 # Proxy server dependencies
