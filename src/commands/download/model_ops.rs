@@ -123,7 +123,8 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
                                                             filename,
                                                         );
                                                     let file_quant_str = file_quant.to_string();
-                                                    if file_quant_str.to_uppercase() == quant_upper {
+                                                    if file_quant_str.to_uppercase() == quant_upper
+                                                    {
                                                         quantization_files
                                                             .entry(file_quant_str.to_uppercase())
                                                             .or_default()

@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use crate::commands::download::api::create_hf_api;
+    use crate::commands::download::file_ops::{Quantization, extract_quantization_from_filename};
+    use crate::commands::download::utils::{get_models_directory, sanitize_model_name};
     use std::env;
     use tempfile::tempdir;
-    use crate::commands::download::file_ops::{extract_quantization_from_filename, Quantization};
-    use crate::commands::download::utils::{get_models_directory, sanitize_model_name};
-    use crate::commands::download::api::create_hf_api;
 
     #[test]
     fn test_extract_quantization_from_filename() {
@@ -85,10 +85,10 @@ mod tests {
         let edge_cases = vec![
             ("model-q4_k_m-extra.gguf", Quantization::Q4KM), // Should match Q4_K_M even with extra text
             ("Q8_0-model.gguf", Quantization::Q8_0),         // Quantization at start
-            ("model-Q4_K_M-Q8_0.gguf", Quantization::Q4KM),  // Multiple patterns - should match first found (Q4_K_M comes first in pattern table)
+            ("model-Q4_K_M-Q8_0.gguf", Quantization::Q4KM), // Multiple patterns - should match first found (Q4_K_M comes first in pattern table)
             ("model-Mixed-q4_k_m.gguf", Quantization::Q4KM), // Case insensitive
-            ("f16-only.gguf", Quantization::F16),            // Just the quantization type
-            ("model-UNKNOWN.gguf", Quantization::Unknown),   // Unknown pattern
+            ("f16-only.gguf", Quantization::F16),           // Just the quantization type
+            ("model-UNKNOWN.gguf", Quantization::Unknown),  // Unknown pattern
         ];
 
         for (filename, expected) in edge_cases {
