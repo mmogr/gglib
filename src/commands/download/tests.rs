@@ -1,38 +1,37 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::env;
     use tempfile::tempdir;
-    use crate::commands::download::file_ops::extract_quantization_from_filename;
+    use crate::commands::download::file_ops::{extract_quantization_from_filename, Quantization};
     use crate::commands::download::utils::{get_models_directory, sanitize_model_name};
     use crate::commands::download::api::create_hf_api;
 
     #[test]
     fn test_extract_quantization_from_filename() {
         let test_cases = vec![
-            ("model-Q4_K_M.gguf", "Q4_K_M"),
-            ("llama-7b-Q8_0.gguf", "Q8_0"),
-            ("model-f16.gguf", "F16"),
-            ("model-F16.gguf", "F16"),
-            ("model-fp16.gguf", "F16"),
-            ("model-FP16.gguf", "F16"),
-            ("model-Q4_0.gguf", "Q4_0"),
-            ("model-q4_0.gguf", "Q4_0"),
-            ("model-q6_k.gguf", "Q6_K"),
-            ("model-Q6_K.gguf", "Q6_K"),
-            ("model-q4.gguf", "Q4"),
-            ("model-Q4.gguf", "Q4"),
-            ("model-q6.gguf", "Q6"),
-            ("model-Q6.gguf", "Q6"),
-            ("model-q8.gguf", "Q8"),
-            ("model-Q8.gguf", "Q8"),
-            ("model-f32.gguf", "F32"),
-            ("model-F32.gguf", "F32"),
-            ("model-fp32.gguf", "F32"),
-            ("model-FP32.gguf", "F32"),
-            ("random-name.gguf", "unknown"),
-            ("no-extension", "unknown"),
-            ("", "unknown"),
+            ("model-Q4_K_M.gguf", Quantization::Q4KM),
+            ("llama-7b-Q8_0.gguf", Quantization::Q8_0),
+            ("model-f16.gguf", Quantization::F16),
+            ("model-F16.gguf", Quantization::F16),
+            ("model-fp16.gguf", Quantization::F16),
+            ("model-FP16.gguf", Quantization::F16),
+            ("model-Q4_0.gguf", Quantization::Q4_0),
+            ("model-q4_0.gguf", Quantization::Q4_0),
+            ("model-q6_k.gguf", Quantization::Q6K),
+            ("model-Q6_K.gguf", Quantization::Q6K),
+            ("model-q4.gguf", Quantization::Q4),
+            ("model-Q4.gguf", Quantization::Q4),
+            ("model-q6.gguf", Quantization::Q6),
+            ("model-Q6.gguf", Quantization::Q6),
+            ("model-q8.gguf", Quantization::Q8),
+            ("model-Q8.gguf", Quantization::Q8),
+            ("model-f32.gguf", Quantization::F32),
+            ("model-F32.gguf", Quantization::F32),
+            ("model-fp32.gguf", Quantization::F32),
+            ("model-FP32.gguf", Quantization::F32),
+            ("random-name.gguf", Quantization::Unknown),
+            ("no-extension", Quantization::Unknown),
+            ("", Quantization::Unknown),
         ];
 
         for (filename, expected) in test_cases {
@@ -84,12 +83,12 @@ mod tests {
     fn test_quantization_detection_edge_cases() {
         // Test edge cases for quantization detection
         let edge_cases = vec![
-            ("model-q4_k_m-extra.gguf", "Q4_K_M"), // Should match Q4_K_M even with extra text
-            ("Q8_0-model.gguf", "Q8_0"),           // Quantization at start
-            ("model-Q4_K_M-Q8_0.gguf", "Q4_K_M"), // Multiple patterns - should match first found (Q4_K_M comes first in logic)
-            ("model-Mixed-q4_k_m.gguf", "Q4_K_M"), // Case insensitive
-            ("f16-only.gguf", "F16"),           // Just the quantization type
-            ("model-UNKNOWN.gguf", "unknown"),  // Unknown pattern
+            ("model-q4_k_m-extra.gguf", Quantization::Q4KM), // Should match Q4_K_M even with extra text
+            ("Q8_0-model.gguf", Quantization::Q8_0),         // Quantization at start
+            ("model-Q4_K_M-Q8_0.gguf", Quantization::Q4KM),  // Multiple patterns - should match first found (Q4_K_M comes first in pattern table)
+            ("model-Mixed-q4_k_m.gguf", Quantization::Q4KM), // Case insensitive
+            ("f16-only.gguf", Quantization::F16),            // Just the quantization type
+            ("model-UNKNOWN.gguf", Quantization::Unknown),   // Unknown pattern
         ];
 
         for (filename, expected) in edge_cases {
@@ -100,6 +99,45 @@ mod tests {
                 filename
             );
         }
+    }
+
+    #[test]
+    fn test_quantization_prefers_specific_over_generic() {
+        // Test that more specific patterns are matched before generic ones
+        // This verifies the pattern table ordering is correct
+        let specificity_cases = vec![
+            // Q4_K_M should be matched before Q4
+            ("model-Q4_K_M-and-Q4.gguf", Quantization::Q4KM),
+            // Q6_K should be matched before Q6
+            ("model-with-Q6_K-suffix.gguf", Quantization::Q6K),
+            // IQ2_XXS should be matched before IQ2_XS
+            ("model-IQ2_XXS-test.gguf", Quantization::Iq2Xxs),
+        ];
+
+        for (filename, expected) in specificity_cases {
+            let result = extract_quantization_from_filename(filename);
+            assert_eq!(
+                result, expected,
+                "Specificity test failed for filename: {} (got {:?})",
+                filename, result
+            );
+        }
+    }
+
+    #[test]
+    fn test_quantization_to_string() {
+        // Test that the Display implementation works correctly
+        assert_eq!(Quantization::Q4KM.to_string(), "Q4_K_M");
+        assert_eq!(Quantization::F16.to_string(), "F16");
+        assert_eq!(Quantization::Unknown.to_string(), "unknown");
+        assert_eq!(Quantization::Iq2Xxs.to_string(), "IQ2_XXS");
+    }
+
+    #[test]
+    fn test_quantization_is_unknown() {
+        assert!(Quantization::Unknown.is_unknown());
+        assert!(!Quantization::Q4KM.is_unknown());
+        assert!(!Quantization::F16.is_unknown());
     }
 
     #[test]

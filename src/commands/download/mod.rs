@@ -13,6 +13,9 @@ mod progress;
 mod python_bridge;
 mod utils;
 
+#[cfg(test)]
+mod tests;
+
 // Re-export public functions
 pub use api::*;
 pub use file_ops::*;
