@@ -1,5 +1,5 @@
 import { FC, useState, useEffect, useRef } from "react";
-import { TauriService } from "../services/tauri";
+import { getProxyStatus, startProxy, stopProxy } from "../services/tauri";
 import { useClickOutside } from "../hooks/useClickOutside";
 import styles from './ProxyControl.module.css';
 
@@ -52,7 +52,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
 
   const loadStatus = async () => {
     try {
-      const proxyStatus = await TauriService.getProxyStatus();
+      const proxyStatus = await getProxyStatus();
       setStatus(proxyStatus);
     } catch {
       setStatus({ running: false, port: config.port });
@@ -62,7 +62,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const handleStart = async () => {
     try {
       setLoading(true);
-      await TauriService.startProxy(config);
+      await startProxy(config);
       await loadStatus();
     } catch (err) {
       alert(`Failed to start proxy: ${err}`);
@@ -74,7 +74,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const handleStop = async () => {
     try {
       setLoading(true);
-      await TauriService.stopProxy();
+      await stopProxy();
       await loadStatus();
     } catch (err) {
       alert(`Failed to stop proxy: ${err}`);

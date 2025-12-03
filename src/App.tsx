@@ -8,7 +8,7 @@ import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { useToast } from "./hooks/useToast";
 import { SettingsProvider } from "./contexts/SettingsContext";
-import { isTauriApp, TauriService } from "./services/tauri";
+import { isTauriApp, syncMenuStateSilent } from "./services/tauri";
 
 // Tauri event listener (only imported in Tauri context)
 let listen: ((event: string, handler: (event: any) => void) => Promise<() => void>) | null = null;
@@ -58,7 +58,7 @@ function App() {
       setTimeout(() => {
         setShowLlamaModal(false);
         // Sync menu state after llama installation
-        TauriService.syncMenuStateSilent();
+        syncMenuStateSilent();
       }, 2000);
     }
   }, [installProgress?.status]);
@@ -129,7 +129,7 @@ function App() {
 
       // Proxy events - just sync menu state
       unlisteners.push(await listen("menu:proxy-stopped", () => {
-        TauriService.syncMenuStateSilent();
+        syncMenuStateSilent();
       }));
 
       unlisteners.push(await listen("menu:start-proxy", () => {

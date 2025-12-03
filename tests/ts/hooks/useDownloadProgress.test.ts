@@ -17,13 +17,11 @@ vi.mock('../../../src/utils/platform', () => ({
 
 // Mock TauriService
 vi.mock('../../../src/services/tauri', () => ({
-  TauriService: {
-    getDownloadQueue: vi.fn(),
-    cancelDownload: vi.fn(),
-  },
+  getDownloadQueue: vi.fn(),
+  cancelDownload: vi.fn(),
 }));
 
-import { TauriService } from '../../../src/services/tauri';
+import { getDownloadQueue, cancelDownload } from '../../../src/services/tauri';
 import { useDownloadProgress, DownloadProgress } from '../../../src/hooks/useDownloadProgress';
 
 describe('useDownloadProgress', () => {
@@ -33,7 +31,7 @@ describe('useDownloadProgress', () => {
     mockIsTauriApp = false;
 
     // Default mock: empty queue
-    vi.mocked(TauriService.getDownloadQueue).mockResolvedValue({
+    vi.mocked(getDownloadQueue).mockResolvedValue({
       pending: [],
       failed: [],
       max_size: 10,
@@ -63,7 +61,7 @@ describe('useDownloadProgress', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
 
-      expect(TauriService.getDownloadQueue).toHaveBeenCalled();
+      expect(getDownloadQueue).toHaveBeenCalled();
     });
 
     it('sets connection mode for Web UI', async () => {
@@ -80,7 +78,7 @@ describe('useDownloadProgress', () => {
 
   describe('queue status', () => {
     it('reflects queue with pending items', async () => {
-      vi.mocked(TauriService.getDownloadQueue).mockResolvedValue({
+      vi.mocked(getDownloadQueue).mockResolvedValue({
         pending: [{ model_id: 'model1' }, { model_id: 'model2' }],
         failed: [],
         max_size: 10,
@@ -107,23 +105,23 @@ describe('useDownloadProgress', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
 
-      expect(TauriService.getDownloadQueue).toHaveBeenCalledTimes(1);
+      expect(getDownloadQueue).toHaveBeenCalledTimes(1);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2000);
       });
 
-      expect(TauriService.getDownloadQueue).toHaveBeenCalledTimes(2);
+      expect(getDownloadQueue).toHaveBeenCalledTimes(2);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2000);
       });
 
-      expect(TauriService.getDownloadQueue).toHaveBeenCalledTimes(3);
+      expect(getDownloadQueue).toHaveBeenCalledTimes(3);
     });
 
     it('handles queue fetch errors gracefully', async () => {
-      vi.mocked(TauriService.getDownloadQueue).mockRejectedValue(new Error('Network error'));
+      vi.mocked(getDownloadQueue).mockRejectedValue(new Error('Network error'));
 
       const { result } = renderHook(() => useDownloadProgress());
 
@@ -137,8 +135,8 @@ describe('useDownloadProgress', () => {
   });
 
   describe('cancelDownload', () => {
-    it('calls TauriService.cancelDownload and refreshes queue', async () => {
-      vi.mocked(TauriService.cancelDownload).mockResolvedValue('Cancelled');
+    it('calls cancelDownload and refreshes queue', async () => {
+      vi.mocked(cancelDownload).mockResolvedValue('Cancelled');
 
       const { result } = renderHook(() => useDownloadProgress());
 
@@ -150,13 +148,13 @@ describe('useDownloadProgress', () => {
         await result.current.cancelDownload('model-id');
       });
 
-      expect(TauriService.cancelDownload).toHaveBeenCalledWith('model-id');
+      expect(cancelDownload).toHaveBeenCalledWith('model-id');
       // Should refresh queue after cancel
-      expect(TauriService.getDownloadQueue).toHaveBeenCalledTimes(2);
+      expect(getDownloadQueue).toHaveBeenCalledTimes(2);
     });
 
     it('clears progress and error on successful cancel', async () => {
-      vi.mocked(TauriService.cancelDownload).mockResolvedValue('Cancelled');
+      vi.mocked(cancelDownload).mockResolvedValue('Cancelled');
 
       const { result } = renderHook(() => useDownloadProgress());
 
@@ -173,7 +171,7 @@ describe('useDownloadProgress', () => {
     });
 
     it('throws on cancel failure', async () => {
-      vi.mocked(TauriService.cancelDownload).mockRejectedValue(new Error('Cannot cancel'));
+      vi.mocked(cancelDownload).mockRejectedValue(new Error('Cannot cancel'));
 
       const { result } = renderHook(() => useDownloadProgress());
 
@@ -253,13 +251,13 @@ describe('useDownloadProgress', () => {
         await vi.advanceTimersByTimeAsync(100);
       });
 
-      const callsAfterInit = vi.mocked(TauriService.getDownloadQueue).mock.calls.length;
+      const callsAfterInit = vi.mocked(getDownloadQueue).mock.calls.length;
 
       await act(async () => {
         await result.current.fetchQueueStatus();
       });
 
-      expect(TauriService.getDownloadQueue).toHaveBeenCalledTimes(callsAfterInit + 1);
+      expect(getDownloadQueue).toHaveBeenCalledTimes(callsAfterInit + 1);
     });
   });
 
@@ -286,7 +284,7 @@ describe('useDownloadProgress', () => {
         await vi.advanceTimersByTimeAsync(0);
       });
 
-      const callsBefore = vi.mocked(TauriService.getDownloadQueue).mock.calls.length;
+      const callsBefore = vi.mocked(getDownloadQueue).mock.calls.length;
 
       unmount();
 
@@ -295,7 +293,7 @@ describe('useDownloadProgress', () => {
       });
 
       // Should not have polled after unmount
-      expect(TauriService.getDownloadQueue).toHaveBeenCalledTimes(callsBefore);
+      expect(getDownloadQueue).toHaveBeenCalledTimes(callsBefore);
     });
   });
 });

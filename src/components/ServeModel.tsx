@@ -1,6 +1,6 @@
 import { useState, FC, FormEvent } from "react";
 import { GgufModel } from "../types";
-import { TauriService } from "../services/tauri";
+import { serveModel } from "../services/tauri";
 import { useSettings } from "../hooks/useSettings";
 
 interface ServeModelProps {
@@ -46,7 +46,7 @@ const ServeModel: FC<ServeModelProps> = ({ models, onModelServed }) => {
         }
       }
       
-      await TauriService.serveModel({
+      await serveModel({
         id: selectedModelId,
         ctx_size: effectiveCtxSize,
         mlock,

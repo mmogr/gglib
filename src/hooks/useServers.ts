@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TauriService } from '../services/tauri';
+import { listServers, stopServer as stopServerService } from '../services/tauri';
 import { ServerInfo } from '../types';
 
 export function useServers() {
@@ -11,7 +11,7 @@ export function useServers() {
     try {
       setLoading(true);
       setError(null);
-      const serverList = await TauriService.listServers();
+      const serverList = await listServers() as ServerInfo[];
       setServers(serverList);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -29,7 +29,7 @@ export function useServers() {
   }, [loadServers]);
 
   const stopServer = useCallback(async (modelId: number) => {
-    await TauriService.stopServer(modelId);
+    await stopServerService(modelId);
     await loadServers();
   }, [loadServers]);
 

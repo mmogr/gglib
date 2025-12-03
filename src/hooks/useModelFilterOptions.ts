@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TauriService } from '../services/tauri';
+import { getModelFilterOptions } from '../services/tauri';
 import { ModelFilterOptions } from '../types';
 
 /**
@@ -15,7 +15,7 @@ export function useModelFilterOptions() {
     try {
       setLoading(true);
       setError(null);
-      const options = await TauriService.getModelFilterOptions();
+      const options = await getModelFilterOptions();
       setFilterOptions(options);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);

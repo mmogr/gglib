@@ -2,15 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ModelList from '../../../src/components/ModelList';
-import { TauriService } from '../../../src/services/tauri';
+import { removeModel, serveModel } from '../../../src/services/tauri';
 import type { GgufModel } from '../../../src/types';
 
-// Mock TauriService
+// Mock tauri service functions
 vi.mock('../../../src/services/tauri', () => ({
-  TauriService: {
-    removeModel: vi.fn(),
-    serveModel: vi.fn(),
-  },
+  removeModel: vi.fn(),
+  serveModel: vi.fn(),
 }));
 
 // Mock window.confirm and window.alert
@@ -230,12 +228,12 @@ describe('ModelList', () => {
       const removeButton = screen.getByTitle('Remove model');
       fireEvent.click(removeButton);
       
-      expect(TauriService.removeModel).not.toHaveBeenCalled();
+      expect(removeModel).not.toHaveBeenCalled();
     });
 
-    it('calls TauriService.removeModel when confirmed', async () => {
+    it('calls removeModel when confirmed', async () => {
       mockConfirm.mockReturnValue(true);
-      vi.mocked(TauriService.removeModel).mockResolvedValue('Model removed');
+      vi.mocked(removeModel).mockResolvedValue('Model removed');
       
       render(<ModelList {...defaultProps} />);
       
@@ -243,13 +241,13 @@ describe('ModelList', () => {
       fireEvent.click(removeButton);
       
       await waitFor(() => {
-        expect(TauriService.removeModel).toHaveBeenCalledWith('1', false);
+        expect(removeModel).toHaveBeenCalledWith('1', false);
       });
     });
 
     it('calls onModelRemoved after successful removal', async () => {
       mockConfirm.mockReturnValue(true);
-      vi.mocked(TauriService.removeModel).mockResolvedValue('Model removed');
+      vi.mocked(removeModel).mockResolvedValue('Model removed');
       
       render(<ModelList {...defaultProps} />);
       
@@ -263,7 +261,7 @@ describe('ModelList', () => {
 
     it('shows alert on removal error', async () => {
       mockConfirm.mockReturnValue(true);
-      vi.mocked(TauriService.removeModel).mockRejectedValue(new Error('Removal failed'));
+      vi.mocked(removeModel).mockRejectedValue(new Error('Removal failed'));
       
       render(<ModelList {...defaultProps} />);
       
@@ -277,7 +275,7 @@ describe('ModelList', () => {
 
     it('does not call onModelRemoved on removal error', async () => {
       mockConfirm.mockReturnValue(true);
-      vi.mocked(TauriService.removeModel).mockRejectedValue(new Error('Removal failed'));
+      vi.mocked(removeModel).mockRejectedValue(new Error('Removal failed'));
       
       render(<ModelList {...defaultProps} />);
       
@@ -299,7 +297,7 @@ describe('ModelList', () => {
       fireEvent.click(removeButton);
       
       expect(mockConfirm).not.toHaveBeenCalled();
-      expect(TauriService.removeModel).not.toHaveBeenCalled();
+      expect(removeModel).not.toHaveBeenCalled();
     });
   });
 
@@ -384,7 +382,7 @@ describe('ModelList', () => {
     });
 
     it('calls serveModel with correct params when start button clicked', async () => {
-      vi.mocked(TauriService.serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
       
       render(<ModelList {...defaultProps} />);
       
@@ -395,7 +393,7 @@ describe('ModelList', () => {
       fireEvent.click(startButton);
       
       await waitFor(() => {
-        expect(TauriService.serveModel).toHaveBeenCalledWith({
+        expect(serveModel).toHaveBeenCalledWith({
           id: 1,
           context_length: 4096,
           mlock: false,
@@ -405,7 +403,7 @@ describe('ModelList', () => {
     });
 
     it('uses custom context length when provided', async () => {
-      vi.mocked(TauriService.serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
       
       render(<ModelList {...defaultProps} />);
       
@@ -419,7 +417,7 @@ describe('ModelList', () => {
       fireEvent.click(startButton);
       
       await waitFor(() => {
-        expect(TauriService.serveModel).toHaveBeenCalledWith({
+        expect(serveModel).toHaveBeenCalledWith({
           id: 1,
           context_length: 8192,
           mlock: false,
@@ -429,7 +427,7 @@ describe('ModelList', () => {
     });
 
     it('closes modal and calls onRefresh after successful serve', async () => {
-      vi.mocked(TauriService.serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
       
       render(<ModelList {...defaultProps} />);
       
@@ -447,7 +445,7 @@ describe('ModelList', () => {
     });
 
     it('shows alert on serve error', async () => {
-      vi.mocked(TauriService.serveModel).mockRejectedValue(new Error('Serve failed'));
+      vi.mocked(serveModel).mockRejectedValue(new Error('Serve failed'));
       
       render(<ModelList {...defaultProps} />);
       
@@ -467,7 +465,7 @@ describe('ModelList', () => {
       const servePromise = new Promise<{ port: number; message: string }>((resolve) => {
         resolveServe = () => resolve({ port: 9000, message: 'Server started' });
       });
-      vi.mocked(TauriService.serveModel).mockReturnValue(servePromise);
+      vi.mocked(serveModel).mockReturnValue(servePromise);
       
       render(<ModelList {...defaultProps} />);
       
@@ -495,7 +493,7 @@ describe('ModelList', () => {
     });
 
     it('auto-enables jinja for agent-tagged model', async () => {
-      vi.mocked(TauriService.serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
       
       const agentModel = createModel({ tags: ['agent'] });
       render(<ModelList {...defaultProps} models={[agentModel]} />);
@@ -510,7 +508,7 @@ describe('ModelList', () => {
       fireEvent.click(startButton);
       
       await waitFor(() => {
-        expect(TauriService.serveModel).toHaveBeenCalledWith({
+        expect(serveModel).toHaveBeenCalledWith({
           id: 1,
           context_length: 4096,
           mlock: false,
@@ -520,7 +518,7 @@ describe('ModelList', () => {
     });
 
     it('auto-enables jinja for reasoning-tagged model', async () => {
-      vi.mocked(TauriService.serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
       
       const reasoningModel = createModel({ tags: ['reasoning'] });
       render(<ModelList {...defaultProps} models={[reasoningModel]} />);
@@ -535,7 +533,7 @@ describe('ModelList', () => {
       fireEvent.click(startButton);
       
       await waitFor(() => {
-        expect(TauriService.serveModel).toHaveBeenCalledWith({
+        expect(serveModel).toHaveBeenCalledWith({
           id: 1,
           context_length: 4096,
           mlock: false,

@@ -1,6 +1,6 @@
 import { FC, useState, useEffect, useCallback } from 'react';
 import { GgufModel, ServeConfig, ServerInfo, HfModelSummary, DownloadQueueStatus } from '../../types';
-import { TauriService } from '../../services/tauri';
+import { queueDownload, serveModel, openUrl } from '../../services/tauri';
 import { useSettings } from '../../hooks/useSettings';
 import { useToast } from '../../hooks/useToast';
 import { formatParamCount, getHuggingFaceUrl } from '../../utils/format';
@@ -62,7 +62,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // Download handler for HF models - uses queue to support multiple downloads
   const handleHfDownload = useCallback(async (modelId: string, quantization: string) => {
     try {
-      await TauriService.queueDownload(modelId, quantization);
+      await queueDownload(modelId, quantization);
     } catch (error) {
       console.error('Failed to start download:', error);
     }
@@ -181,7 +181,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
         jinja: jinjaOverride === null ? undefined : jinjaOverride,
       };
 
-      const result = await TauriService.serveModel(config);
+      const result = await serveModel(config);
       setShowServeModal(false);
       setCustomPort(''); // Reset port input for next time
       onStartServer();
@@ -393,7 +393,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                       className="hf-link-button"
                       onClick={() => {
                         const url = getHuggingFaceUrl(model.hf_repo_id);
-                        if (url) TauriService.openUrl(url);
+                        if (url) openUrl(url);
                       }}
                       title="Open on HuggingFace"
                       aria-label="Open on HuggingFace"

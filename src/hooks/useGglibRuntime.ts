@@ -1,5 +1,5 @@
 import { useLocalRuntime, type ChatModelAdapter } from '@assistant-ui/react';
-import { TauriService } from '../services/tauri';
+import { listServers } from '../services/tauri';
 import { getApiBase } from '../utils/apiBase';
 import { 
   embedThinkingContent, 
@@ -568,7 +568,7 @@ export function useGglibRuntime(options: GglibRuntimeOptions = {}) {
  */
 export async function fetchAvailableServers(): Promise<ServerInfo[]> {
   try {
-    return await TauriService.listServers();
+    return await listServers() as ServerInfo[];
   } catch (error) {
     console.error('Error fetching servers:', error);
     return [];
