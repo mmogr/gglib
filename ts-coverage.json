@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "TS coverage",
-  "message": "7%",
-  "color": "red"
+  "message": "unknown",
+  "color": "lightgrey"
 }
