@@ -44,12 +44,15 @@ export default function ModelControlCenterPage({
   onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
-  const { tags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
+  const { tags, loadTags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
+  
+  // Ref to hold unified refresh - allows useDownloadProgress to call the latest version
+  const refreshAllRef = useRef<() => Promise<void>>();
   
   // Global download progress - lifted to page level so it's always visible
   const { progress, queueStatus, cancelDownload, fetchQueueStatus } = useDownloadProgress({
-    onCompleted: loadModels,
+    onCompleted: () => refreshAllRef.current?.(),
   });
   const [downloadDismissed, setDownloadDismissed] = useState(false);
   
@@ -83,6 +86,19 @@ export default function ModelControlCenterPage({
       selectedTags: [],
     });
   }, []);
+
+  // Unified refresh function for models, filter options, and tags
+  // This ensures filter UI stays in sync with model/tag changes
+  const handleRefreshAll = useCallback(async () => {
+    await Promise.all([
+      loadModels(),
+      refreshFilterOptions(),
+      loadTags(),
+    ]);
+  }, [loadModels, refreshFilterOptions, loadTags]);
+
+  // Keep ref updated for useDownloadProgress callback
+  refreshAllRef.current = handleRefreshAll;
   
   // Sidebar tab state (for the new tabbed sidebar)
   const [sidebarTab, setSidebarTab] = useState<SidebarTabId>('models');
@@ -107,7 +123,7 @@ export default function ModelControlCenterPage({
     if (onRegisterMenuActions) {
       onRegisterMenuActions({
         refreshModels: () => {
-          loadModels();
+          handleRefreshAll();
         },
         addModelFromFile: () => {
           // Switch to add tab in sidebar
@@ -169,7 +185,7 @@ export default function ModelControlCenterPage({
         },
       });
     }
-  }, [onRegisterMenuActions, loadModels, selectedModelId, servers, stopServer, removeModel, loadServers, selectModel, chatSession]);
+  }, [onRegisterMenuActions, handleRefreshAll, selectedModelId, servers, stopServer, removeModel, loadServers, selectModel, chatSession]);
 
   // Handle resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -257,17 +273,14 @@ export default function ModelControlCenterPage({
   const handleModelAdded = async (filePath: string) => {
     if (filePath) {
       await addModel(filePath);
-      // Refresh filter options when a model is added
-      refreshFilterOptions();
-    } else {
-      await loadModels();
     }
+    // Refresh all filter-related data when a model is added
+    await handleRefreshAll();
   };
 
   const handleModelDownloaded = async () => {
-    await loadModels();
-    // Refresh filter options when a model is downloaded
-    refreshFilterOptions();
+    // Refresh all filter-related data when a model is downloaded
+    await handleRefreshAll();
   };
 
   // Handler for selecting a local model (clears HF selection)
@@ -408,7 +421,7 @@ export default function ModelControlCenterPage({
             onAddTag={addTagToModel}
             onRemoveTag={removeTagFromModel}
             getModelTags={getModelTags}
-            onRefresh={loadModels}
+            onRefresh={handleRefreshAll}
             queueStatus={queueStatus}
           />
         </div>
