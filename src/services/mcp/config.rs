@@ -5,26 +5,22 @@
 use serde::{Deserialize, Serialize};
 
 /// Type of MCP server connection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum McpServerType {
     /// Stdio-based server - gglib spawns and manages the process
+    #[default]
     Stdio,
     /// SSE-based server - external process, gglib connects via HTTP
     Sse,
 }
 
-impl Default for McpServerType {
-    fn default() -> Self {
-        Self::Stdio
-    }
-}
-
 /// Runtime status of an MCP server.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum McpServerStatus {
     /// Server is not running
+    #[default]
     Stopped,
     /// Server is starting up
     Starting,
@@ -32,12 +28,6 @@ pub enum McpServerStatus {
     Running,
     /// Server encountered an error
     Error(String),
-}
-
-impl Default for McpServerStatus {
-    fn default() -> Self {
-        Self::Stopped
-    }
 }
 
 /// Configuration for an MCP server.

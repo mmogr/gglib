@@ -11,6 +11,7 @@ import {
   HfSearchRequest,
   HfSearchResponse,
   HfQuantizationsResponse,
+  HfToolSupportResponse,
 } from "../types";
 import { getApiBase } from "../utils/apiBase";
 import { isTauriApp } from "../utils/platform";
@@ -640,6 +641,31 @@ export class TauriService {
       }
 
       const data: ApiResponse<HfQuantizationsResponse> = await response.json();
+      if (!data.data) {
+        throw new Error('Invalid response from server');
+      }
+      return data.data;
+    }
+  }
+
+  /**
+   * Check if a HuggingFace model supports tool/function calling.
+   * Analyzes the model's chat template using unified detection logic.
+   */
+  static async getHfToolSupport(modelId: string): Promise<HfToolSupportResponse> {
+    if (isTauriApp) {
+      return await invoke<HfToolSupportResponse>('get_hf_tool_support', { modelId });
+    } else {
+      // URL encode the model_id since it contains a slash
+      const encodedModelId = encodeURIComponent(modelId);
+      const response = await apiFetch(`/hf/tool-support/${encodedModelId}`);
+
+      if (!response.ok) {
+        const error: ApiResponse<any> = await response.json();
+        throw new Error(error.error || 'Failed to get tool support info');
+      }
+
+      const data: ApiResponse<HfToolSupportResponse> = await response.json();
       if (!data.data) {
         throw new Error('Invalid response from server');
       }

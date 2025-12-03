@@ -223,6 +223,18 @@ export interface HfQuantizationsResponse {
   quantizations: HfQuantization[];
 }
 
+/**
+ * Response for tool/function calling support detection.
+ */
+export interface HfToolSupportResponse {
+  /** Whether the model supports tool/function calling */
+  supports_tool_calling: boolean;
+  /** Confidence level of the detection (0.0 to 1.0) */
+  confidence: number;
+  /** Detected tool calling format (e.g., "hermes", "llama3", "mistral") */
+  detected_format?: string | null;
+}
+
 // ============================================================================
 // Model Filter Options Types
 // ============================================================================

@@ -8,8 +8,8 @@ use gglib::{
     commands::llama::check_llama_installed,
     models::gui::{
         AddModelRequest, AppSettings, GuiModel, HfQuantizationsResponse, HfSearchRequest,
-        HfSearchResponse, RemoveModelRequest, StartServerRequest, StartServerResponse,
-        UpdateModelRequest, UpdateSettingsRequest,
+        HfSearchResponse, HfToolSupportResponse, RemoveModelRequest, StartServerRequest,
+        StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
     },
     services::core::{DownloadError, DownloadQueueStatus},
     services::gui_backend::GuiBackend,
@@ -541,6 +541,18 @@ async fn get_hf_quantizations(
         .map_err(|e| format!("Failed to get quantizations: {}", e))
 }
 
+#[tauri::command]
+async fn get_hf_tool_support(
+    model_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<HfToolSupportResponse, String> {
+    state
+        .backend
+        .get_hf_tool_support(&model_id)
+        .await
+        .map_err(|e| format!("Failed to get tool support info: {}", e))
+}
+
 /// Check if llama.cpp is installed
 #[tauri::command]
 fn check_llama_status() -> Result<LlamaStatus, String> {
@@ -1069,6 +1081,7 @@ async fn main() {
             clear_failed_downloads,
             browse_hf_models,
             get_hf_quantizations,
+            get_hf_tool_support,
             get_gui_api_port,
             check_llama_status,
             install_llama,

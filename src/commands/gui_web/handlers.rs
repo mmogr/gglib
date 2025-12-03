@@ -10,9 +10,9 @@ use crate::commands::download::{DownloadProgressEvent, ProgressThrottle};
 use crate::commands::gui_web::state::AppState;
 use crate::models::gui::{
     AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
-    HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, ModelsDirectoryInfo,
-    RemoveModelRequest, StartServerRequest, StartServerResponse, UpdateModelRequest,
-    UpdateModelsDirectoryRequest, UpdateSettingsRequest,
+    HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfToolSupportResponse,
+    ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest, StartServerResponse,
+    UpdateModelRequest, UpdateModelsDirectoryRequest, UpdateSettingsRequest,
 };
 use crate::services::core::DownloadQueueStatus;
 use crate::utils::system::SystemMemoryInfo;
@@ -430,6 +430,25 @@ pub async fn get_hf_quantizations(
     let response = state
         .backend
         .get_model_quantizations(&decoded_model_id)
+        .await
+        .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    Ok(Json(ApiResponse::success(response)))
+}
+
+/// Check if a HuggingFace model supports tool/function calling
+pub async fn get_hf_tool_support(
+    State(state): State<Arc<AppState>>,
+    Path(model_id): Path<String>,
+) -> Result<Json<ApiResponse<HfToolSupportResponse>>, AppError> {
+    // URL decode the model_id (it will be URL encoded due to the slash)
+    let decoded_model_id = urlencoding::decode(&model_id)
+        .map_err(|e| AppError::BadRequest(format!("Invalid model ID encoding: {}", e)))?
+        .into_owned();
+
+    let response = state
+        .backend
+        .get_hf_tool_support(&decoded_model_id)
         .await
         .map_err(|e| AppError::ServerError(e.to_string()))?;
 

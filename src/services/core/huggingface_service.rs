@@ -48,8 +48,9 @@ use super::huggingface_models::HuggingFaceError;
 use crate::commands::download::extract_quantization_from_filename;
 use crate::models::gui::{
     HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    HfSortField,
+    HfSortField, HfToolSupportResponse,
 };
+use crate::utils::gguf_parser::detect_tool_support;
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -700,6 +701,66 @@ impl HuggingFaceService {
         matching_files.sort_by(|a, b| a.0.cmp(&b.0));
 
         Ok(matching_files)
+    }
+
+    /// Check if a HuggingFace model supports tool/function calling.
+    ///
+    /// This fetches the model's GGUF metadata from the HuggingFace API and
+    /// analyzes the chat template using the same detection logic as local
+    /// model analysis (`detect_tool_support` from `gguf_parser.rs`).
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID (e.g., "bartowski/Hermes-2-Pro-Llama-3-8B-GGUF")
+    ///
+    /// # Returns
+    ///
+    /// Returns tool support detection results including confidence and format.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use gglib::services::core::HuggingFaceService;
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let service = HuggingFaceService::new();
+    /// let result = service.get_tool_support("bartowski/Hermes-2-Pro-Llama-3-8B-GGUF").await?;
+    /// if result.supports_tool_calling {
+    ///     println!("Model supports {} format", result.detected_format.unwrap_or_default());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_tool_support(&self, model_id: &str) -> Result<HfToolSupportResponse> {
+        // Fetch model info from HuggingFace API
+        let model_info = self.fetch_model_info(model_id).await?;
+
+        // Extract chat_template from gguf metadata
+        let chat_template = model_info
+            .get("gguf")
+            .and_then(|gguf| gguf.get("chat_template"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // Build metadata HashMap in the format expected by detect_tool_support
+        let mut metadata = HashMap::new();
+        if let Some(template) = chat_template {
+            metadata.insert("tokenizer.chat_template".to_string(), template);
+        }
+
+        // Also add general.name if available (for name-based detection fallback)
+        if let Some(name) = model_info.get("id").and_then(|v| v.as_str()) {
+            metadata.insert("general.name".to_string(), name.to_string());
+        }
+
+        // Use the unified detection logic from gguf_parser
+        let detection = detect_tool_support(&metadata);
+
+        Ok(HfToolSupportResponse {
+            supports_tool_calling: detection.supports_tool_calling,
+            confidence: detection.confidence,
+            detected_format: detection.detected_format,
+        })
     }
 }
 
