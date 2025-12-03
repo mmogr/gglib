@@ -48,10 +48,18 @@ use super::huggingface_models::HuggingFaceError;
 use crate::commands::download::extract_quantization_from_filename;
 use crate::models::gui::{
     HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    HfSortField,
+    HfSortField, HfToolSupportResponse,
 };
+use crate::utils::gguf_parser::detect_tool_support;
 use anyhow::Result;
 use std::collections::HashMap;
+use std::time::Duration;
+
+/// Maximum number of retry attempts for transient server errors (5xx).
+const MAX_RETRIES: u32 = 3;
+
+/// Base delay for exponential backoff (500ms, then 1s, then 2s).
+const RETRY_BASE_DELAY_MS: u64 = 500;
 
 /// Base URL for HuggingFace API.
 ///
@@ -93,6 +101,68 @@ impl HuggingFaceService {
             .map(|field| format!("expand[]={}", field))
             .collect::<Vec<_>>()
             .join("&")
+    }
+
+    /// Fetch a URL with automatic retry for transient server errors (5xx).
+    ///
+    /// Uses exponential backoff: 500ms, 1s, 2s between retries.
+    /// Only retries on 5xx errors; 4xx errors fail immediately.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL to fetch
+    ///
+    /// # Returns
+    ///
+    /// Returns the successful response, or the last error after all retries.
+    async fn fetch_with_retry(url: &str) -> Result<reqwest::Response> {
+        let mut last_error: Option<anyhow::Error> = None;
+
+        for attempt in 0..=MAX_RETRIES {
+            if attempt > 0 {
+                let delay = Duration::from_millis(RETRY_BASE_DELAY_MS * 2u64.pow(attempt - 1));
+                tokio::time::sleep(delay).await;
+            }
+
+            match reqwest::get(url).await {
+                Ok(response) => {
+                    let status = response.status();
+                    if status.is_success() {
+                        return Ok(response);
+                    }
+
+                    // 5xx errors are retryable (server-side issues)
+                    if status.is_server_error() && attempt < MAX_RETRIES {
+                        last_error = Some(
+                            HuggingFaceError::ApiRequestFailed {
+                                status: status.as_u16(),
+                                url: url.to_string(),
+                            }
+                            .into(),
+                        );
+                        continue;
+                    }
+
+                    // 4xx errors or final attempt - fail immediately
+                    return Err(HuggingFaceError::ApiRequestFailed {
+                        status: status.as_u16(),
+                        url: url.to_string(),
+                    }
+                    .into());
+                }
+                Err(e) => {
+                    // Network errors are retryable
+                    if attempt < MAX_RETRIES {
+                        last_error = Some(e.into());
+                        continue;
+                    }
+                    return Err(e.into());
+                }
+            }
+        }
+
+        // Should not reach here, but return last error just in case
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Unknown error during fetch")))
     }
 
     /// Build a search URL with all required expand parameters.
@@ -252,15 +322,7 @@ impl HuggingFaceService {
         };
         url.push_str(&format!("&search={}", urlencoding::encode(&search_query)));
 
-        let response = reqwest::get(&url).await?;
-
-        if !response.status().is_success() {
-            return Err(HuggingFaceError::ApiRequestFailed {
-                status: response.status().as_u16(),
-                url: url.clone(),
-            }
-            .into());
-        }
+        let response = Self::fetch_with_retry(&url).await?;
 
         // Check for pagination via Link header
         let has_more = response
@@ -338,15 +400,7 @@ impl HuggingFaceService {
             sort
         );
 
-        let response = reqwest::get(&url).await?;
-
-        if !response.status().is_success() {
-            return Err(HuggingFaceError::ApiRequestFailed {
-                status: response.status().as_u16(),
-                url: url.clone(),
-            }
-            .into());
-        }
+        let response = Self::fetch_with_retry(&url).await?;
 
         let models: Vec<serde_json::Value> = response.json().await?;
         Ok(models)
@@ -368,15 +422,7 @@ impl HuggingFaceService {
         let api_url = format!("{}/{}/tree/main", HF_API_BASE, model_id);
         let mut quantizations: Vec<HfQuantization> = Vec::new();
 
-        let response = reqwest::get(&api_url).await?;
-
-        if !response.status().is_success() {
-            return Err(HuggingFaceError::ApiRequestFailed {
-                status: response.status().as_u16(),
-                url: api_url,
-            }
-            .into());
-        }
+        let response = Self::fetch_with_retry(&api_url).await?;
 
         let data: serde_json::Value = response.json().await?;
 
@@ -431,61 +477,58 @@ impl HuggingFaceService {
                         let sub_api_url =
                             format!("{}/{}/tree/main/{}", HF_API_BASE, model_id, dir_path);
 
-                        if let Ok(sub_response) = reqwest::get(&sub_api_url).await {
-                            if sub_response.status().is_success() {
-                                if let Ok(sub_data) = sub_response.json::<serde_json::Value>().await
-                                {
-                                    if let Some(sub_files) = sub_data.as_array() {
-                                        let mut dir_total_size: u64 = 0;
-                                        let mut dir_shard_count: u32 = 0;
-                                        let mut dir_quant_name: Option<String> = None;
-                                        let mut dir_first_file: Option<String> = None;
+                        // Use retry for subdirectory fetch, but continue on failure
+                        if let Ok(sub_response) = Self::fetch_with_retry(&sub_api_url).await {
+                            if let Ok(sub_data) = sub_response.json::<serde_json::Value>().await {
+                                if let Some(sub_files) = sub_data.as_array() {
+                                    let mut dir_total_size: u64 = 0;
+                                    let mut dir_shard_count: u32 = 0;
+                                    let mut dir_quant_name: Option<String> = None;
+                                    let mut dir_first_file: Option<String> = None;
 
-                                        for sub_file in sub_files {
-                                            if let (Some(sub_path), Some(sub_size)) = (
-                                                sub_file.get("path").and_then(|v| v.as_str()),
-                                                sub_file.get("size").and_then(|v| v.as_u64()),
-                                            ) {
-                                                if sub_path.ends_with(".gguf") {
-                                                    dir_total_size += sub_size;
-                                                    dir_shard_count += 1;
+                                    for sub_file in sub_files {
+                                        if let (Some(sub_path), Some(sub_size)) = (
+                                            sub_file.get("path").and_then(|v| v.as_str()),
+                                            sub_file.get("size").and_then(|v| v.as_u64()),
+                                        ) {
+                                            if sub_path.ends_with(".gguf") {
+                                                dir_total_size += sub_size;
+                                                dir_shard_count += 1;
 
-                                                    if dir_quant_name.is_none() {
-                                                        dir_quant_name = Some(
-                                                            extract_quantization_from_filename(
-                                                                sub_path,
-                                                            )
-                                                            .to_string(),
-                                                        );
-                                                        dir_first_file = Some(sub_path.to_string());
-                                                    }
+                                                if dir_quant_name.is_none() {
+                                                    dir_quant_name = Some(
+                                                        extract_quantization_from_filename(
+                                                            sub_path,
+                                                        )
+                                                        .to_string(),
+                                                    );
+                                                    dir_first_file = Some(sub_path.to_string());
                                                 }
                                             }
                                         }
+                                    }
 
-                                        if let (Some(quant_name), Some(first_file)) =
-                                            (dir_quant_name, dir_first_file)
+                                    if let (Some(quant_name), Some(first_file)) =
+                                        (dir_quant_name, dir_first_file)
+                                    {
+                                        if quant_name != "unknown"
+                                            && !quant_map.contains_key(&quant_name)
                                         {
-                                            if quant_name != "unknown"
-                                                && !quant_map.contains_key(&quant_name)
-                                            {
-                                                quant_map.insert(
-                                                    quant_name.clone(),
-                                                    HfQuantization {
-                                                        name: quant_name,
-                                                        file_path: first_file,
-                                                        size_bytes: dir_total_size,
-                                                        size_mb: dir_total_size as f64
-                                                            / 1_048_576.0,
-                                                        is_sharded: dir_shard_count > 1,
-                                                        shard_count: if dir_shard_count > 1 {
-                                                            Some(dir_shard_count)
-                                                        } else {
-                                                            None
-                                                        },
+                                            quant_map.insert(
+                                                quant_name.clone(),
+                                                HfQuantization {
+                                                    name: quant_name,
+                                                    file_path: first_file,
+                                                    size_bytes: dir_total_size,
+                                                    size_mb: dir_total_size as f64 / 1_048_576.0,
+                                                    is_sharded: dir_shard_count > 1,
+                                                    shard_count: if dir_shard_count > 1 {
+                                                        Some(dir_shard_count)
+                                                    } else {
+                                                        None
                                                     },
-                                                );
-                                            }
+                                                },
+                                            );
                                         }
                                     }
                                 }
@@ -576,15 +619,7 @@ impl HuggingFaceService {
         path: Option<&str>,
     ) -> Result<Vec<serde_json::Value>> {
         let url = Self::build_tree_url(model_id, path);
-        let response = reqwest::get(&url).await?;
-
-        if !response.status().is_success() {
-            return Err(HuggingFaceError::ApiRequestFailed {
-                status: response.status().as_u16(),
-                url,
-            }
-            .into());
-        }
+        let response = Self::fetch_with_retry(&url).await?;
 
         let data: serde_json::Value = response.json().await?;
         data.as_array().cloned().ok_or_else(|| {
@@ -606,15 +641,7 @@ impl HuggingFaceService {
     /// Returns the raw JSON model info.
     pub async fn fetch_model_info(&self, model_id: &str) -> Result<serde_json::Value> {
         let url = Self::build_model_info_url(model_id);
-        let response = reqwest::get(&url).await?;
-
-        if !response.status().is_success() {
-            return Err(HuggingFaceError::ApiRequestFailed {
-                status: response.status().as_u16(),
-                url,
-            }
-            .into());
-        }
+        let response = Self::fetch_with_retry(&url).await?;
 
         Ok(response.json().await?)
     }
@@ -700,6 +727,66 @@ impl HuggingFaceService {
         matching_files.sort_by(|a, b| a.0.cmp(&b.0));
 
         Ok(matching_files)
+    }
+
+    /// Check if a HuggingFace model supports tool/function calling.
+    ///
+    /// This fetches the model's GGUF metadata from the HuggingFace API and
+    /// analyzes the chat template using the same detection logic as local
+    /// model analysis (`detect_tool_support` from `gguf_parser.rs`).
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - HuggingFace model ID (e.g., "bartowski/Hermes-2-Pro-Llama-3-8B-GGUF")
+    ///
+    /// # Returns
+    ///
+    /// Returns tool support detection results including confidence and format.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use gglib::services::core::HuggingFaceService;
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let service = HuggingFaceService::new();
+    /// let result = service.get_tool_support("bartowski/Hermes-2-Pro-Llama-3-8B-GGUF").await?;
+    /// if result.supports_tool_calling {
+    ///     println!("Model supports {} format", result.detected_format.unwrap_or_default());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_tool_support(&self, model_id: &str) -> Result<HfToolSupportResponse> {
+        // Fetch model info from HuggingFace API
+        let model_info = self.fetch_model_info(model_id).await?;
+
+        // Extract chat_template from gguf metadata
+        let chat_template = model_info
+            .get("gguf")
+            .and_then(|gguf| gguf.get("chat_template"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // Build metadata HashMap in the format expected by detect_tool_support
+        let mut metadata = HashMap::new();
+        if let Some(template) = chat_template {
+            metadata.insert("tokenizer.chat_template".to_string(), template);
+        }
+
+        // Also add general.name if available (for name-based detection fallback)
+        if let Some(name) = model_info.get("id").and_then(|v| v.as_str()) {
+            metadata.insert("general.name".to_string(), name.to_string());
+        }
+
+        // Use the unified detection logic from gguf_parser
+        let detection = detect_tool_support(&metadata);
+
+        Ok(HfToolSupportResponse {
+            supports_tool_calling: detection.supports_tool_calling,
+            confidence: detection.confidence,
+            detected_format: detection.detected_format,
+        })
     }
 }
 

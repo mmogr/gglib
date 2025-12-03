@@ -140,6 +140,17 @@ pub struct HfQuantizationsResponse {
     pub quantizations: Vec<HfQuantization>,
 }
 
+/// Response for tool/function calling support detection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HfToolSupportResponse {
+    /// Whether the model supports tool/function calling
+    pub supports_tool_calling: bool,
+    /// Confidence level of the detection (0.0 to 1.0)
+    pub confidence: f32,
+    /// Detected tool calling format (e.g., "hermes", "llama3", "mistral")
+    pub detected_format: Option<String>,
+}
+
 // ============================================================================
 // GUI Model Types
 // ============================================================================

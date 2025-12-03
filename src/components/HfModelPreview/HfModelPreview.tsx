@@ -1,5 +1,5 @@
 import { FC, useState, useEffect, useCallback } from 'react';
-import { HfModelSummary, HfQuantization, HfQuantizationsResponse, FitStatus } from '../../types';
+import { HfModelSummary, HfQuantization, HfQuantizationsResponse, HfToolSupportResponse, FitStatus } from '../../types';
 import { TauriService } from '../../services/tauri';
 import { formatBytes, formatNumber, getHuggingFaceModelUrl } from '../../utils/format';
 import { useSystemMemory } from '../../hooks/useSystemMemory';
@@ -61,6 +61,10 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
   const [quantizations, setQuantizations] = useState<HfQuantization[]>([]);
   const [loadingQuants, setLoadingQuants] = useState(true);
   const [quantError, setQuantError] = useState<string | null>(null);
+  
+  // Tool support detection state
+  const [toolSupport, setToolSupport] = useState<HfToolSupportResponse | null>(null);
+  const [loadingToolSupport, setLoadingToolSupport] = useState(true);
 
   // Memory fit checking
   const { checkFit, getTooltip, loading: memoryLoading } = useSystemMemory();
@@ -120,6 +124,36 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
     };
   }, [model.id]);
 
+  // Load tool support info when model changes (parallel with quantizations)
+  useEffect(() => {
+    let cancelled = false;
+    
+    const loadToolSupport = async () => {
+      setLoadingToolSupport(true);
+      setToolSupport(null);
+      
+      try {
+        const response = await TauriService.getHfToolSupport(model.id);
+        if (!cancelled) {
+          setToolSupport(response);
+        }
+      } catch (err) {
+        // Silently fail - tool support is optional info
+        console.warn('Failed to load tool support info:', err);
+      } finally {
+        if (!cancelled) {
+          setLoadingToolSupport(false);
+        }
+      }
+    };
+
+    loadToolSupport();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [model.id]);
+
   const handleOpenHuggingFace = useCallback(() => {
     const url = getHuggingFaceModelUrl(model.id);
     TauriService.openUrl(url);
@@ -128,6 +162,15 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
   const handleDownload = useCallback((quant: HfQuantization) => {
     onDownload(model.id, quant.name);
   }, [model.id, onDownload]);
+
+  // Build tooltip for tool support badge
+  const getToolSupportTooltip = (): string => {
+    if (!toolSupport) return '';
+    const formatPart = toolSupport.detected_format 
+      ? ` (${toolSupport.detected_format} format)` 
+      : '';
+    return `Supports tool/function calling${formatPart}`;
+  };
 
   return (
     <div className={styles.hfModelPreview}>
@@ -151,6 +194,16 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
           {model.parameters_b && (
             <span className={styles.statBadge}>
               {model.parameters_b.toFixed(1)}B params
+            </span>
+          )}
+          {/* Tool support badge - only show when loaded and supported */}
+          {!loadingToolSupport && toolSupport?.supports_tool_calling && (
+            <span 
+              className={styles.toolBadge}
+              title={getToolSupportTooltip()}
+            >
+              🔧 Tools
+              <span className={styles.infoIcon} aria-hidden="true">ⓘ</span>
             </span>
           )}
           <span className={styles.stat}>

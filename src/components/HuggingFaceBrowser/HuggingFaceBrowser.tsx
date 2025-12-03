@@ -7,6 +7,7 @@ import {
   HfSortField,
 } from "../../types";
 import { formatNumber, getHuggingFaceModelUrl } from "../../utils/format";
+import { useToolSupportCache } from "../../hooks/useToolSupportCache";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
@@ -62,6 +63,9 @@ const ModelCard: FC<ModelCardProps> = ({
   onSelect,
   isSelected,
 }) => {
+  // Lazy-load tool support detection (fires immediately, cached across renders)
+  const { supports: supportsTools } = useToolSupportCache(model.id);
+
   const handleOpenHuggingFace = (e: React.MouseEvent) => {
     e.stopPropagation();
     const url = getHuggingFaceModelUrl(model.id);
@@ -93,6 +97,14 @@ const ModelCard: FC<ModelCardProps> = ({
             {model.parameters_b && (
               <span className={styles.paramBadge}>
                 {model.parameters_b.toFixed(1)}B
+              </span>
+            )}
+            {supportsTools && (
+              <span 
+                className={styles.toolIcon}
+                title="This model likely supports tool/function calling"
+              >
+                🔧
               </span>
             )}
             <span className={styles.stat}>

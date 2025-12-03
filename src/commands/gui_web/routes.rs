@@ -66,6 +66,10 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             "/api/hf/quantizations/:model_id",
             get(handlers::get_hf_quantizations),
         )
+        .route(
+            "/api/hf/tool-support/:model_id",
+            get(handlers::get_hf_tool_support),
+        )
         .route("/api/models/:id", get(handlers::get_model))
         .route("/api/models/:id", put(handlers::update_model))
         .route("/api/models/:id", delete(handlers::remove_model))

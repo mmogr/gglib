@@ -303,6 +303,19 @@
   font-weight: 600;
 }
 
+.toolIcon {
+  padding: 0.15rem 0.35rem;
+  background: rgba(96, 165, 250, 0.15);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: help;
+  transition: background 0.15s ease;
+}
+
+.toolIcon:hover {
+  background: rgba(96, 165, 250, 0.25);
+}
+
 .expandIcon {
   color: #64748b;
   font-size: 0.9rem;

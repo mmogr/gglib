@@ -8,8 +8,8 @@
 
 use crate::models::gui::{
     AddModelRequest, AppSettings, GuiModel, HfQuantizationsResponse, HfSearchRequest,
-    HfSearchResponse, ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest,
-    StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
+    HfSearchResponse, HfToolSupportResponse, ModelsDirectoryInfo, RemoveModelRequest,
+    StartServerRequest, StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
 };
 use crate::services::core::{AppCore, StartServerConfig};
 use crate::services::database;
@@ -300,6 +300,14 @@ impl GuiBackend {
     /// file size and whether it's sharded.
     pub async fn get_model_quantizations(&self, model_id: &str) -> Result<HfQuantizationsResponse> {
         self.core.huggingface().get_quantizations(model_id).await
+    }
+
+    /// Check if a HuggingFace model supports tool/function calling.
+    ///
+    /// Fetches model metadata from HuggingFace API and analyzes the chat template
+    /// using the unified tool detection logic from gguf_parser.
+    pub async fn get_hf_tool_support(&self, model_id: &str) -> Result<HfToolSupportResponse> {
+        self.core.huggingface().get_tool_support(model_id).await
     }
 
     // =========================================================================
