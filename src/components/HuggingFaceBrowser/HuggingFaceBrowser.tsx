@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, FC } from "react";
-import { TauriService } from "../../services/tauri";
+import { browseHfModels, openUrl } from "../../services/tauri";
 import {
   HfModelSummary,
   HfSearchRequest,
@@ -69,7 +69,7 @@ const ModelCard: FC<ModelCardProps> = ({
   const handleOpenHuggingFace = (e: React.MouseEvent) => {
     e.stopPropagation();
     const url = getHuggingFaceModelUrl(model.id);
-    TauriService.openUrl(url);
+    openUrl(url);
   };
 
   return (
@@ -189,7 +189,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
       try {
         const request = buildSearchRequest(page);
         const response: HfSearchResponse =
-          await TauriService.browseHfModels(request);
+          await browseHfModels(request);
 
         if (append) {
           setModels((prev) => [...prev, ...response.models]);

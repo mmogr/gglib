@@ -1,6 +1,6 @@
 import { useState, FC, useMemo } from "react";
 import { GgufModel } from "../types";
-import { TauriService } from "../services/tauri";
+import { removeModel, serveModel } from "../services/tauri";
 import { formatParamCount } from "../utils/format";
 
 interface ModelListProps {
@@ -47,7 +47,7 @@ const ModelList: FC<ModelListProps> = ({
 
     try {
       setRemoving(model.id);
-      await TauriService.removeModel(model.id.toString(), false);
+      await removeModel(model.id.toString(), false);
       onModelRemoved();
     } catch (err) {
       alert(`Failed to remove model: ${err}`);
@@ -80,7 +80,7 @@ const ModelList: FC<ModelListProps> = ({
         contextLength = servingModel.context_length;
       }
       
-      await TauriService.serveModel({
+      await serveModel({
         id: servingModel.id,
         context_length: contextLength,
         mlock: false,

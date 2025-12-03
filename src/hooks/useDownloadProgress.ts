@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { TauriService } from '../services/tauri';
+import { getDownloadQueue, cancelDownload as cancelDownloadService } from '../services/tauri';
 import { isTauriApp } from '../utils/platform';
 import { DownloadQueueStatus } from '../types';
 
@@ -112,7 +112,7 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
   // Fetch the current queue status
   const fetchQueueStatus = useCallback(async () => {
     try {
-      const status = await TauriService.getDownloadQueue();
+      const status = await getDownloadQueue();
       setQueueStatus(status);
     } catch (err) {
       console.error('Failed to fetch queue status:', err);
@@ -128,7 +128,7 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
   // Returns true on success, false on failure
   const cancelDownload = useCallback(async (modelId: string): Promise<void> => {
     try {
-      await TauriService.cancelDownload(modelId);
+      await cancelDownloadService(modelId);
       // Clear progress on successful cancel
       setProgress(null);
       setError(null);

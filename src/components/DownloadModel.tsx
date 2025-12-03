@@ -1,5 +1,10 @@
 import { useState, FC, FormEvent } from "react";
-import { TauriService } from "../services/tauri";
+import {
+  queueDownload,
+  removeFromDownloadQueue,
+  cancelShardGroup,
+  clearFailedDownloads,
+} from "../services/tauri";
 import { DownloadQueueItem } from "../types";
 import { useDownloadProgress } from "../hooks/useDownloadProgress";
 import { formatBytes, formatTime } from "../utils/format";
@@ -56,7 +61,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
       setError(null);
       const trimmedRepoId = repoId.trim();
       
-      await TauriService.queueDownload(
+      await queueDownload(
         trimmedRepoId,
         quantization || undefined,
       );
@@ -76,7 +81,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
 
   const handleRemoveFromQueue = async (modelId: string) => {
     try {
-      await TauriService.removeFromDownloadQueue(modelId);
+      await removeFromDownloadQueue(modelId);
       await fetchQueueStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove from queue");
@@ -85,7 +90,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
 
   const handleCancelShardGroup = async (groupId: string) => {
     try {
-      await TauriService.cancelShardGroup(groupId);
+      await cancelShardGroup(groupId);
       await fetchQueueStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to cancel shard group");
@@ -94,7 +99,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
 
   const handleClearFailed = async () => {
     try {
-      await TauriService.clearFailedDownloads();
+      await clearFailedDownloads();
       await fetchQueueStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to clear failed downloads");
@@ -104,8 +109,8 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
   const handleRetry = async (item: DownloadQueueItem) => {
     try {
       // First remove from failed, then re-queue
-      await TauriService.removeFromDownloadQueue(item.model_id);
-      await TauriService.queueDownload(
+      await removeFromDownloadQueue(item.model_id);
+      await queueDownload(
         item.model_id,
         item.quantization || undefined,
       );

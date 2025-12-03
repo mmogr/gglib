@@ -7,15 +7,13 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { useServers } from '../../../src/hooks/useServers';
 import { ServerInfo } from '../../../src/types';
 
-// Mock the TauriService
+// Mock the tauri service functions
 vi.mock('../../../src/services/tauri', () => ({
-  TauriService: {
-    listServers: vi.fn(),
-    stopServer: vi.fn(),
-  },
+  listServers: vi.fn(),
+  stopServer: vi.fn(),
 }));
 
-import { TauriService } from '../../../src/services/tauri';
+import { listServers, stopServer } from '../../../src/services/tauri';
 
 const mockServers: ServerInfo[] = [
   {
@@ -36,7 +34,7 @@ describe('useServers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.mocked(TauriService.listServers).mockResolvedValue(mockServers);
+    vi.mocked(listServers).mockResolvedValue(mockServers);
   });
 
   afterEach(() => {
@@ -58,13 +56,13 @@ describe('useServers', () => {
 
     expect(result.current.servers).toEqual(mockServers);
     expect(result.current.error).toBeNull();
-    expect(TauriService.listServers).toHaveBeenCalled();
+    expect(listServers).toHaveBeenCalled();
   });
 
   it('handles error when loading servers fails', async () => {
     vi.useRealTimers();
     const error = new Error('Connection refused');
-    vi.mocked(TauriService.listServers).mockRejectedValue(error);
+    vi.mocked(listServers).mockRejectedValue(error);
 
     const { result } = renderHook(() => useServers());
 
@@ -84,21 +82,21 @@ describe('useServers', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(TauriService.listServers).toHaveBeenCalledTimes(1);
+    expect(listServers).toHaveBeenCalledTimes(1);
 
     // Advance timer by 3 seconds
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
 
-    expect(TauriService.listServers).toHaveBeenCalledTimes(2);
+    expect(listServers).toHaveBeenCalledTimes(2);
 
     // Advance by another 3 seconds
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
 
-    expect(TauriService.listServers).toHaveBeenCalledTimes(3);
+    expect(listServers).toHaveBeenCalledTimes(3);
   });
 
   it('cleans up interval on unmount', async () => {
@@ -109,7 +107,7 @@ describe('useServers', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(TauriService.listServers).toHaveBeenCalledTimes(1);
+    expect(listServers).toHaveBeenCalledTimes(1);
 
     // Unmount the hook
     unmount();
@@ -120,12 +118,12 @@ describe('useServers', () => {
     });
 
     // Should still be 1 call (no more after unmount)
-    expect(TauriService.listServers).toHaveBeenCalledTimes(1);
+    expect(listServers).toHaveBeenCalledTimes(1);
   });
 
   it('stops a server and reloads the list', async () => {
     vi.useRealTimers();
-    vi.mocked(TauriService.stopServer).mockResolvedValue('Server stopped');
+    vi.mocked(stopServer).mockResolvedValue('Server stopped');
 
     const { result } = renderHook(() => useServers());
 
@@ -133,15 +131,15 @@ describe('useServers', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    const callCountBefore = vi.mocked(TauriService.listServers).mock.calls.length;
+    const callCountBefore = vi.mocked(listServers).mock.calls.length;
 
     await act(async () => {
       await result.current.stopServer(1);
     });
 
-    expect(TauriService.stopServer).toHaveBeenCalledWith(1);
+    expect(stopServer).toHaveBeenCalledWith(1);
     // Should have reloaded servers
-    expect(TauriService.listServers).toHaveBeenCalledTimes(callCountBefore + 1);
+    expect(listServers).toHaveBeenCalledTimes(callCountBefore + 1);
   });
 
   it('manually reloads servers', async () => {
@@ -153,18 +151,18 @@ describe('useServers', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    const callCountBefore = vi.mocked(TauriService.listServers).mock.calls.length;
+    const callCountBefore = vi.mocked(listServers).mock.calls.length;
 
     await act(async () => {
       await result.current.loadServers();
     });
 
-    expect(TauriService.listServers).toHaveBeenCalledTimes(callCountBefore + 1);
+    expect(listServers).toHaveBeenCalledTimes(callCountBefore + 1);
   });
 
   it('handles empty server list', async () => {
     vi.useRealTimers();
-    vi.mocked(TauriService.listServers).mockResolvedValue([]);
+    vi.mocked(listServers).mockResolvedValue([]);
 
     const { result } = renderHook(() => useServers());
 

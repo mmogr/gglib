@@ -1,7 +1,11 @@
 import { FC, useRef, useState, useCallback, useMemo } from 'react';
 import { DownloadQueueItem } from '../../types';
 import { useClickOutside } from '../../hooks/useClickOutside';
-import { TauriService } from '../../services/tauri';
+import {
+  cancelShardGroup,
+  removeFromDownloadQueue,
+  reorderDownloadQueue,
+} from '../../services/tauri';
 import styles from './DownloadQueuePopover.module.css';
 
 /**
@@ -102,10 +106,10 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     try {
       if (item.group_id) {
         // Cancel entire shard group
-        await TauriService.cancelShardGroup(item.group_id);
+        await cancelShardGroup(item.group_id);
       } else {
         // Remove single item
-        await TauriService.removeFromDownloadQueue(item.model_id);
+        await removeFromDownloadQueue(item.model_id);
       }
       onRefresh();
     } catch (error) {
@@ -124,7 +128,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     const newPosition = index - 1;
     
     try {
-      await TauriService.reorderDownloadQueue(item.model_id, newPosition);
+      await reorderDownloadQueue(item.model_id, newPosition);
       onRefresh();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
@@ -142,7 +146,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     const newPosition = index + 1;
     
     try {
-      await TauriService.reorderDownloadQueue(item.model_id, newPosition);
+      await reorderDownloadQueue(item.model_id, newPosition);
       onRefresh();
     } catch (error) {
       console.error('Failed to reorder queue:', error);

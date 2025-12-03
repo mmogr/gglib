@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { TauriService } from '../services/tauri';
+import { getHfToolSupport } from '../services/tauri';
 
 // Global in-memory cache shared across all hook instances
 // Maps model ID -> { supports: boolean, loading: boolean, promise?: Promise }
@@ -86,7 +86,7 @@ export function useToolSupportCache(modelId: string | null): UseToolSupportResul
     // Start new fetch
     setResult({ supports: null, loading: true });
 
-    const fetchPromise = TauriService.getHfToolSupport(modelId)
+    const fetchPromise = getHfToolSupport(modelId)
       .then((response) => {
         const supports = response.supports_tool_calling;
         toolSupportCache.set(modelId, { supports, loading: false });

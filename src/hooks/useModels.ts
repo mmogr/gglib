@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { GgufModel } from '../types';
-import { TauriService } from '../services/tauri';
+import {
+  listModels,
+  setSelectedModel,
+  addModel as addModelService,
+  removeModel as removeModelService,
+  updateModel as updateModelService,
+} from '../services/tauri';
 
 export function useModels() {
   const [models, setModels] = useState<GgufModel[]>([]);
@@ -12,7 +18,7 @@ export function useModels() {
     try {
       setLoading(true);
       setError(null);
-      const modelList = await TauriService.listModels();
+      const modelList = await listModels();
       setModels(modelList);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -30,7 +36,7 @@ export function useModels() {
   const selectModel = useCallback((id: number | null) => {
     setSelectedModelId(id);
     // Sync with backend for menu state updates (no-op in web mode)
-    TauriService.setSelectedModel(id).catch((err) => {
+    setSelectedModel(id).catch((err) => {
       console.warn('Failed to sync model selection with menu:', err);
     });
   }, []);
@@ -38,12 +44,12 @@ export function useModels() {
   const selectedModel = models.find(m => m.id === selectedModelId) || null;
 
   const addModel = useCallback(async (filePath: string) => {
-    await TauriService.addModel(filePath);
+    await addModelService(filePath);
     await loadModels();
   }, [loadModels]);
 
   const removeModel = useCallback(async (id: number, force: boolean = false) => {
-    await TauriService.removeModel(id.toString(), force);
+    await removeModelService(id.toString(), force);
     if (selectedModelId === id) {
       setSelectedModelId(null);
     }
@@ -55,7 +61,7 @@ export function useModels() {
     quantization?: string;
     file_path?: string;
   }) => {
-    await TauriService.updateModel(id, updates);
+    await updateModelService(id, updates);
     await loadModels();
   }, [loadModels]);
 

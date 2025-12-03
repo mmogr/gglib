@@ -1,6 +1,6 @@
 import { FC, useState, useEffect, useCallback } from 'react';
 import { HfModelSummary, HfQuantization, HfQuantizationsResponse, HfToolSupportResponse, FitStatus } from '../../types';
-import { TauriService } from '../../services/tauri';
+import { getHfQuantizations, getHfToolSupport, openUrl } from '../../services/tauri';
 import { formatBytes, formatNumber, getHuggingFaceModelUrl } from '../../utils/format';
 import { useSystemMemory } from '../../hooks/useSystemMemory';
 import { useSettings } from '../../hooks/useSettings';
@@ -100,7 +100,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       setQuantError(null);
       
       try {
-        const response: HfQuantizationsResponse = await TauriService.getHfQuantizations(model.id);
+        const response: HfQuantizationsResponse = await getHfQuantizations(model.id);
         if (!cancelled) {
           // Sort by size ascending (smallest first)
           const sorted = [...response.quantizations].sort((a, b) => a.size_bytes - b.size_bytes);
@@ -133,7 +133,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       setToolSupport(null);
       
       try {
-        const response = await TauriService.getHfToolSupport(model.id);
+        const response = await getHfToolSupport(model.id);
         if (!cancelled) {
           setToolSupport(response);
         }
@@ -156,7 +156,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
 
   const handleOpenHuggingFace = useCallback(() => {
     const url = getHuggingFaceModelUrl(model.id);
-    TauriService.openUrl(url);
+    openUrl(url);
   }, [model.id]);
 
   const handleDownload = useCallback((quant: HfQuantization) => {

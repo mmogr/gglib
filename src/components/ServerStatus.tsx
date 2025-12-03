@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from "react";
-import { TauriService } from "../services/tauri";
+import { listServers, getProxyStatus, stopServer } from "../services/tauri";
 import styles from './ServerStatus.module.css';
 
 interface ServerInfo {
@@ -27,12 +27,12 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
 
   const loadStatus = async () => {
     try {
-      const serverList = await TauriService.listServers();
+      const serverList = await listServers() as ServerInfo[];
       setServers(serverList);
       
       // Try to get proxy status
       try {
-        const proxy = await TauriService.getProxyStatus();
+        const proxy = await getProxyStatus();
         setProxyStatus(proxy);
       } catch {
         setProxyStatus(null);
@@ -52,7 +52,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
 
   const handleStopServer = async (modelId: number) => {
     try {
-      await TauriService.stopServer(modelId);
+      await stopServer(modelId);
       await loadStatus();
     } catch (err) {
       alert(`Failed to stop server: ${err}`);

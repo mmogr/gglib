@@ -9,7 +9,7 @@ import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
 import { FilterState } from '../components/FilterPopover';
 // Lazy load ChatPage to avoid loading assistant-ui until needed
 const ChatPage = lazy(() => import('./ChatPage'));
-import { TauriService } from '../services/tauri';
+import { syncMenuStateSilent } from '../services/tauri';
 import { ServerInfo, HfModelSummary } from '../types';
 import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
@@ -155,7 +155,7 @@ export default function ModelControlCenterPage({
                 setChatSession(null);
               }
               // Sync menu state after server stop
-              TauriService.syncMenuStateSilent();
+              syncMenuStateSilent();
             }
           }
         },
@@ -163,7 +163,7 @@ export default function ModelControlCenterPage({
           if (selectedModelId) {
             await removeModel(selectedModelId, false);
             // Sync menu state after model removal
-            TauriService.syncMenuStateSilent();
+            syncMenuStateSilent();
           }
         },
         selectModel: (modelId: number, view?: 'chat' | 'console') => {
@@ -337,7 +337,7 @@ export default function ModelControlCenterPage({
     if (chatSession) {
       await stopServer(chatSession.modelId);
       setChatSession(null);
-      TauriService.syncMenuStateSilent();
+      syncMenuStateSilent();
     }
   };
 

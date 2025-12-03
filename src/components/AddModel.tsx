@@ -1,5 +1,5 @@
 import { useState, FC, FormEvent } from "react";
-import { TauriService } from "../services/tauri";
+import { addModel } from "../services/tauri";
 import { isTauriApp } from "../utils/platform";
 import styles from './AddModel.module.css';
 
@@ -61,7 +61,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
     try {
       setAdding(true);
       setError(null);
-      await TauriService.addModel(filePath.trim());
+      await addModel(filePath.trim());
       setFilePath("");
       onModelAdded();
     } catch (err) {

@@ -8,24 +8,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useTags } from '../../../src/hooks/useTags';
 
-// Mock TauriService
+// Mock tauri service functions
 vi.mock('../../../src/services/tauri', () => ({
-  TauriService: {
-    listTags: vi.fn(),
-    addModelTag: vi.fn(),
-    removeModelTag: vi.fn(),
-    getModelTags: vi.fn(),
-  },
+  listTags: vi.fn(),
+  addModelTag: vi.fn(),
+  removeModelTag: vi.fn(),
+  getModelTags: vi.fn(),
 }));
 
-import { TauriService } from '../../../src/services/tauri';
+import {
+  listTags,
+  addModelTag,
+  removeModelTag,
+  getModelTags,
+} from '../../../src/services/tauri';
 
 const mockTags = ['chat', 'code', 'reasoning', 'vision'];
 
 describe('useTags', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(TauriService.listTags).mockResolvedValue(mockTags);
+    vi.mocked(listTags).mockResolvedValue(mockTags);
   });
 
   describe('initial state and loading', () => {
@@ -45,11 +48,11 @@ describe('useTags', () => {
       });
 
       expect(result.current.tags).toEqual(mockTags);
-      expect(TauriService.listTags).toHaveBeenCalledTimes(1);
+      expect(listTags).toHaveBeenCalledTimes(1);
     });
 
     it('handles loading error', async () => {
-      vi.mocked(TauriService.listTags).mockRejectedValue(new Error('Network error'));
+      vi.mocked(listTags).mockRejectedValue(new Error('Network error'));
 
       const { result } = renderHook(() => useTags());
 
@@ -62,7 +65,7 @@ describe('useTags', () => {
     });
 
     it('handles non-Error throw', async () => {
-      vi.mocked(TauriService.listTags).mockRejectedValue('string error');
+      vi.mocked(listTags).mockRejectedValue('string error');
 
       const { result } = renderHook(() => useTags());
 
@@ -80,17 +83,17 @@ describe('useTags', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      expect(TauriService.listTags).toHaveBeenCalledTimes(1);
+      expect(listTags).toHaveBeenCalledTimes(1);
 
       await act(async () => {
         await result.current.loadTags();
       });
 
-      expect(TauriService.listTags).toHaveBeenCalledTimes(2);
+      expect(listTags).toHaveBeenCalledTimes(2);
     });
 
     it('clears error on successful reload', async () => {
-      vi.mocked(TauriService.listTags)
+      vi.mocked(listTags)
         .mockRejectedValueOnce(new Error('First error'))
         .mockResolvedValueOnce(mockTags);
 
@@ -111,7 +114,7 @@ describe('useTags', () => {
 
   describe('addTagToModel', () => {
     it('adds tag and refreshes list', async () => {
-      vi.mocked(TauriService.addModelTag).mockResolvedValue('Tag added');
+      vi.mocked(addModelTag).mockResolvedValue('Tag added');
 
       const { result } = renderHook(() => useTags());
 
@@ -123,12 +126,12 @@ describe('useTags', () => {
         await result.current.addTagToModel(1, 'new-tag');
       });
 
-      expect(TauriService.addModelTag).toHaveBeenCalledWith(1, 'new-tag');
-      expect(TauriService.listTags).toHaveBeenCalledTimes(2);
+      expect(addModelTag).toHaveBeenCalledWith(1, 'new-tag');
+      expect(listTags).toHaveBeenCalledTimes(2);
     });
 
     it('propagates errors', async () => {
-      vi.mocked(TauriService.addModelTag).mockRejectedValue(new Error('Failed'));
+      vi.mocked(addModelTag).mockRejectedValue(new Error('Failed'));
 
       const { result } = renderHook(() => useTags());
 
@@ -146,7 +149,7 @@ describe('useTags', () => {
 
   describe('removeTagFromModel', () => {
     it('removes tag and refreshes list', async () => {
-      vi.mocked(TauriService.removeModelTag).mockResolvedValue('Tag removed');
+      vi.mocked(removeModelTag).mockResolvedValue('Tag removed');
 
       const { result } = renderHook(() => useTags());
 
@@ -158,12 +161,12 @@ describe('useTags', () => {
         await result.current.removeTagFromModel(1, 'chat');
       });
 
-      expect(TauriService.removeModelTag).toHaveBeenCalledWith(1, 'chat');
-      expect(TauriService.listTags).toHaveBeenCalledTimes(2);
+      expect(removeModelTag).toHaveBeenCalledWith(1, 'chat');
+      expect(listTags).toHaveBeenCalledTimes(2);
     });
 
     it('propagates errors', async () => {
-      vi.mocked(TauriService.removeModelTag).mockRejectedValue(new Error('Not found'));
+      vi.mocked(removeModelTag).mockRejectedValue(new Error('Not found'));
 
       const { result } = renderHook(() => useTags());
 
@@ -182,7 +185,7 @@ describe('useTags', () => {
   describe('getModelTags', () => {
     it('returns tags for a specific model', async () => {
       const modelTags = ['chat', 'vision'];
-      vi.mocked(TauriService.getModelTags).mockResolvedValue(modelTags);
+      vi.mocked(getModelTags).mockResolvedValue(modelTags);
 
       const { result } = renderHook(() => useTags());
 
@@ -192,12 +195,12 @@ describe('useTags', () => {
 
       const tags = await result.current.getModelTags(42);
 
-      expect(TauriService.getModelTags).toHaveBeenCalledWith(42);
+      expect(getModelTags).toHaveBeenCalledWith(42);
       expect(tags).toEqual(modelTags);
     });
 
     it('returns empty array when model has no tags', async () => {
-      vi.mocked(TauriService.getModelTags).mockResolvedValue([]);
+      vi.mocked(getModelTags).mockResolvedValue([]);
 
       const { result } = renderHook(() => useTags());
 
