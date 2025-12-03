@@ -8,8 +8,8 @@ use gglib::{
     commands::llama::check_llama_installed,
     models::gui::{
         AddModelRequest, AppSettings, GuiModel, HfQuantizationsResponse, HfSearchRequest,
-        HfSearchResponse, RemoveModelRequest, StartServerRequest, UpdateModelRequest,
-        UpdateSettingsRequest,
+        HfSearchResponse, RemoveModelRequest, StartServerRequest, StartServerResponse,
+        UpdateModelRequest, UpdateSettingsRequest,
     },
     services::core::{DownloadError, DownloadQueueStatus},
     services::gui_backend::GuiBackend,
@@ -108,7 +108,7 @@ async fn serve_model(
     port: Option<u16>,
     jinja: Option<bool>,
     state: tauri::State<'_, AppState>,
-) -> Result<String, String> {
+) -> Result<StartServerResponse, String> {
     debug!(
         model_id = %id,
         ctx_size = ?ctx_size,
@@ -141,20 +141,18 @@ async fn serve_model(
         reasoning_format: None, // Auto-detect from model tags
     };
 
-    let result = state
+    state
         .backend
         .start_server(id, request)
         .await
         .map(|resp| {
             info!(port = %resp.port, "Server started successfully");
-            resp.message
+            resp
         })
         .map_err(|e| {
             error!(error = %e, "Failed to start server");
             format!("Failed to start server: {}", e)
-        });
-
-    result
+        })
 }
 
 #[tauri::command]
