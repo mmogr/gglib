@@ -102,7 +102,11 @@ mod tests {
 
     #[test]
     fn test_hf_result_ok() {
-        let result: HfResult<i32> = Ok(42);
+        fn get_result() -> HfResult<i32> {
+            Ok(42)
+        }
+        let result = get_result();
+        assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
     }
 

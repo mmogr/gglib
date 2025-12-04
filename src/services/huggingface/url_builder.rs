@@ -46,7 +46,7 @@ pub fn build_search_url(config: &HfConfig, query: &HfSearchQuery) -> Url {
         build_expand_params(),
         query.sort_by.as_api_param(),
         direction,
-        query.limit.max(1).min(100), // Clamp to valid range
+        query.limit.clamp(1, 100), // Clamp to valid range
         query.page
     );
 
