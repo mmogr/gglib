@@ -21,7 +21,7 @@ use crate::services::core::PidStorage;
 use super::cli_progress::CliProgressPrinter;
 use super::file_ops::ProgressCallback;
 use super::python_env::{EnvSetupError, PythonEnvironment};
-use super::python_protocol::{parse_line, ProtocolError, PythonEvent};
+use super::python_protocol::{ProtocolError, PythonEvent, parse_line};
 
 // ============================================================================
 // Constants
@@ -156,11 +156,11 @@ async fn run_download_process(
     }
 
     let cleanup_pid = || {
-        if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup) {
-            if let Ok(mut guard) = storage.write() {
-                guard.remove(key);
-                tracing::debug!(key = %key, "Removed PID from tracking");
-            }
+        if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup)
+            && let Ok(mut guard) = storage.write()
+        {
+            guard.remove(key);
+            tracing::debug!(key = %key, "Removed PID from tracking");
         }
     };
 

@@ -298,9 +298,7 @@ fn find_bootstrap_python() -> Result<PathBuf, EnvSetupError> {
         }
     }
 
-    Err(EnvSetupError::PythonNotFound(
-        PYTHON_CANDIDATES.join(", "),
-    ))
+    Err(EnvSetupError::PythonNotFound(PYTHON_CANDIDATES.join(", ")))
 }
 
 /// Run a Python command and check for success.

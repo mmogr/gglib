@@ -117,9 +117,7 @@ pub fn parse_line(line: &str) -> Result<PythonEvent, ProtocolError> {
             let downloaded = envelope
                 .downloaded
                 .ok_or(ProtocolError::MissingField("downloaded"))?;
-            let total = envelope
-                .total
-                .ok_or(ProtocolError::MissingField("total"))?;
+            let total = envelope.total.ok_or(ProtocolError::MissingField("total"))?;
 
             Ok(PythonEvent::Progress {
                 file: envelope.file,
@@ -168,7 +166,8 @@ mod tests {
 
     #[test]
     fn test_parse_progress_with_file() {
-        let line = r#"{"status": "progress", "file": "model.gguf", "downloaded": 1000, "total": 5000}"#;
+        let line =
+            r#"{"status": "progress", "file": "model.gguf", "downloaded": 1000, "total": 5000}"#;
         let event = parse_line(line).unwrap();
 
         assert_eq!(
