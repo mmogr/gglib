@@ -98,18 +98,20 @@ Application settings:
 - `validate(settings)` - Validate settings
 - `get_models_directory()` - Get models directory info
 
-### DownloadService
+### Downloads (via DownloadManager)
 
-HuggingFace downloads with queue management:
-- `queue_download(repo_id, quant, token)` - Add download to queue
-- `queue_sharded_download(repo_id, quant, shards)` - Add sharded model to queue (creates one entry per shard)
-- `get_queue_status()` - Get current queue status (pending, active, failed items)
-- `remove_from_queue(id)` - Remove pending download from queue
-- `remove_shard_group(group_id)` - Remove all shards in a group from queue
+Downloads are handled by `DownloadManager` from the [`src/download/`](../../download/README.md) module.
+Access via `core.downloads()`:
+
+- `queue_download_auto(repo_id, quant)` - Queue download (auto-detects shards)
+- `get_queue_snapshot()` - Get current queue state (pending, active, failed)
+- `active_downloads()` - List currently downloading items
+- `cancel(id)` - Cancel an active download
+- `remove_from_queue(id)` - Remove pending download
+- `reorder_queue(id, position)` - Move item to new queue position
+- `cancel_shard_group(group_id)` - Cancel all shards in a group
 - `clear_failed()` - Clear all failed downloads
-- `cancel(model_id)` - Cancel active download
-- `cancel_shard_group(group_id)` - Cancel active download and remove all related shards
-- `is_downloading(model_id)` - Check if model is currently downloading
+- `retry_failed_download(id)` - Re-queue a failed download
 
 ### HuggingfaceClient
 
@@ -131,22 +133,30 @@ let query = HfSearchQuery::new().with_query("llama");
 let results = core.huggingface().search_models_page(&query).await?;
 ```
 
+**Example:**
+```rust,ignore
+let (id, position, shard_count) = core.downloads()
+    .queue_download_auto("TheBloke/Llama-2-7B-GGUF", "Q4_K_M")
+    .await?;
+```
+
 #### Sharded Model Support
 
-When downloading sharded models (models split into multiple GGUF files), each shard appears as a separate queue item with linked `group_id` and `ShardInfo`:
+When downloading sharded models (models split into multiple GGUF files), `queue_download_auto()` automatically detects shards and creates linked queue items with shared `group_id` and `ShardInfo`:
 
 ```rust,ignore
 pub struct ShardInfo {
-    pub shard_index: usize,    // 0-based index (0, 1, 2, ...)
-    pub total_shards: usize,   // Total count (e.g., 3)
+    pub shard_index: u32,      // 0-based index (0, 1, 2, ...)
+    pub total_shards: u32,     // Total count (e.g., 3)
     pub filename: String,      // Shard filename
+    pub file_size: Option<u64>,// Size in bytes (for aggregate progress)
 }
 ```
 
 - Shards download sequentially (one at a time)
 - Cancelling or failing any shard cancels the entire group
-- Failed sharded models appear as a single retry entry
-- On retry, only missing shards are re-downloaded
+- Progress events include aggregate totals across all shards
+- On retry, the download is re-queued with fresh shard detection
 
 ## Design Principles
 
