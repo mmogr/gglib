@@ -412,10 +412,6 @@ impl DownloadManager {
                         Some(id)
                     }
                 })
-                .or_else(|| {
-                    // Also try parsing the first queued item's group
-                    None
-                })
         };
 
         // Cancel active download if found
