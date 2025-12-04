@@ -118,7 +118,7 @@ impl GgufValue {
 /// Metadata extracted from a GGUF file header.
 ///
 /// This struct represents the parsed metadata from a GGUF file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GgufMetadata {
     /// Model name from general.name metadata
     pub name: Option<String>,
@@ -132,19 +132,6 @@ pub struct GgufMetadata {
     pub context_length: Option<u64>,
     /// All metadata key-value pairs (string representation)
     pub metadata: HashMap<String, String>,
-}
-
-impl Default for GgufMetadata {
-    fn default() -> Self {
-        Self {
-            name: None,
-            architecture: None,
-            param_count_b: None,
-            quantization: None,
-            context_length: None,
-            metadata: HashMap::new(),
-        }
-    }
 }
 
 /// Raw metadata from GGUF parsing (before string conversion).
