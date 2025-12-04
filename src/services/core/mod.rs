@@ -38,11 +38,7 @@
 //! }
 //! ```
 
-pub mod download_models;
 pub mod download_process_manager;
-pub mod download_queue;
-pub mod download_service;
-
 pub mod model_service;
 pub mod proxy_service;
 pub mod server_service;
@@ -56,17 +52,15 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-// Re-export types from download_models (canonical location)
+// Re-export HuggingFace client
 pub use crate::services::huggingface::{DefaultHuggingfaceClient, HfError};
-pub use download_models::{
-    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
-    ShardInfo,
+
+// Re-export download types from canonical src/download/ module
+pub use crate::download::{
+    DownloadError, DownloadEvent, DownloadId, DownloadQueue, DownloadStatus, FailedDownload,
+    QueueSnapshot, QueuedDownload, ShardGroupId, ShardInfo,
 };
 pub use download_process_manager::{DownloadProcessManager, PidStorage};
-pub use download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
-pub use download_service::DownloadService;
-// Re-export new download types from src/download/
-pub use crate::download::{DownloadEvent, DownloadId, QueueSnapshot};
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};
