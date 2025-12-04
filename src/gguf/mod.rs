@@ -52,9 +52,9 @@ pub use metadata::{extract_metadata, parse_gguf_file};
 
 // Re-export capability detection
 pub use capabilities::{
-    apply_capability_detection, apply_reasoning_detection, apply_tool_detection,
-    detect_reasoning_support, detect_tool_support, is_reasoning_model, is_tool_capable_model,
-    ReasoningDetection, ToolCallingDetection,
+    ReasoningDetection, ToolCallingDetection, apply_capability_detection,
+    apply_reasoning_detection, apply_tool_detection, detect_reasoning_support, detect_tool_support,
+    is_reasoning_model, is_tool_capable_model,
 };
 
 // Re-export constants that may be useful externally

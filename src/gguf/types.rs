@@ -173,7 +173,7 @@ mod tests {
     fn test_gguf_value_display() {
         assert_eq!(GgufValue::U32(42).to_string(), "42");
         assert_eq!(GgufValue::String("test".to_string()).to_string(), "test");
-        
+
         let large_array = GgufValue::Array(vec![GgufValue::U8(0); 100]);
         assert!(large_array.to_string().contains("100 elements"));
     }

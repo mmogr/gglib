@@ -77,7 +77,8 @@ pub fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufResult<GgufM
 
     // Convert metadata to string representation, skipping large arrays
     for (key, value) in raw {
-        if key.starts_with("tokenizer.") && matches!(value, GgufValue::Array(arr) if arr.len() > 100)
+        if key.starts_with("tokenizer.")
+            && matches!(value, GgufValue::Array(arr) if arr.len() > 100)
         {
             // Store just a summary for large tokenizer arrays
             if let GgufValue::Array(arr) = value {
@@ -107,14 +108,12 @@ pub fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufResult<GgufM
 
 /// Extract model name from metadata or filename.
 fn extract_name(raw: &RawMetadata, file_path: &Path) -> Option<String> {
-    raw.get("general.name")
-        .map(|v| v.to_string())
-        .or_else(|| {
-            file_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_string())
-        })
+    raw.get("general.name").map(|v| v.to_string()).or_else(|| {
+        file_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+    })
 }
 
 /// Extract model architecture from metadata.
@@ -200,7 +199,7 @@ fn parse_param_from_filename(filename: &str) -> Option<f64> {
     for pattern in &["B", "BILLION"] {
         if let Some(pos) = upper.find(pattern) {
             let before = &upper[..pos];
-            
+
             // Find the last numeric sequence (possibly with decimal)
             let mut number_str = String::new();
             let mut found_digit = false;

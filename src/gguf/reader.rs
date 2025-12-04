@@ -170,7 +170,9 @@ mod tests {
     #[test]
     fn test_read_string() {
         // Length (u64 LE) = 5, then "hello"
-        let data = [0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o'];
+        let data = [
+            0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o',
+        ];
         let mut cursor = Cursor::new(data);
         assert_eq!(read_string(&mut cursor).unwrap(), "hello");
     }
@@ -184,7 +186,10 @@ mod tests {
     #[test]
     fn test_read_magic_invalid() {
         let mut cursor = Cursor::new([0x00, 0x00, 0x00, 0x00]);
-        assert!(matches!(read_magic(&mut cursor), Err(GgufError::InvalidMagic)));
+        assert!(matches!(
+            read_magic(&mut cursor),
+            Err(GgufError::InvalidMagic)
+        ));
     }
 
     #[test]
@@ -198,7 +203,10 @@ mod tests {
     fn test_read_version_invalid() {
         let data = [0x05, 0x00, 0x00, 0x00]; // version 5 - unsupported
         let mut cursor = Cursor::new(data);
-        assert!(matches!(read_version(&mut cursor), Err(GgufError::UnsupportedVersion(5))));
+        assert!(matches!(
+            read_version(&mut cursor),
+            Err(GgufError::UnsupportedVersion(5))
+        ));
     }
 
     #[test]

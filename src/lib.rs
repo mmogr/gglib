@@ -10,10 +10,10 @@ pub mod utils;
 
 // Re-export specific commonly used types
 pub use gguf::{
-    apply_capability_detection, detect_reasoning_support, detect_tool_support, parse_gguf_file,
     GgufError, GgufMetadata, GgufResult, GgufValue, ReasoningDetection, ToolCallingDetection,
+    apply_capability_detection, detect_reasoning_support, detect_tool_support, parse_gguf_file,
 };
-pub use models::gui::{ApiResponse, GuiModel, StartServerRequest, StartServerResponse};
 pub use models::Gguf;
+pub use models::gui::{ApiResponse, GuiModel, StartServerRequest, StartServerResponse};
 pub use services::{database, gui_backend};
 pub use utils::{input, validation};

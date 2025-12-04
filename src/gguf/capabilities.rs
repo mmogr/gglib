@@ -34,21 +34,11 @@ const THINKING_TAG_PATTERNS: &[&str] = &[
 ];
 
 /// High-confidence reasoning model name patterns.
-const REASONING_NAME_HIGH_CONFIDENCE: &[&str] = &[
-    "deepseek-r1",
-    "qwq",
-    "o1",
-    "o3",
-];
+const REASONING_NAME_HIGH_CONFIDENCE: &[&str] = &["deepseek-r1", "qwq", "o1", "o3"];
 
 /// Medium-confidence reasoning model name patterns.
-const REASONING_NAME_MEDIUM_CONFIDENCE: &[&str] = &[
-    "deepseek-v3",
-    "qwen3",
-    "thinking",
-    "reasoning",
-    "cot",
-];
+const REASONING_NAME_MEDIUM_CONFIDENCE: &[&str] =
+    &["deepseek-v3", "qwen3", "thinking", "reasoning", "cot"];
 
 /// Tool calling model name patterns.
 const TOOL_CALLING_NAME_PATTERNS: &[&str] = &[
@@ -217,14 +207,19 @@ pub fn detect_tool_support(metadata: &HashMap<String, String>) -> ToolCallingDet
         // Medium-confidence patterns (Jinja conditionals)
         for pattern in TOOL_PATTERNS_MEDIUM_CONFIDENCE {
             if template_lower.contains(&pattern.to_lowercase()) {
-                detection.matched_patterns.push(format!("jinja:{}", pattern));
+                detection
+                    .matched_patterns
+                    .push(format!("jinja:{}", pattern));
                 score += 0.35;
             }
         }
 
         // Low-confidence patterns
         if template_lower.contains("tool_call")
-            && !detection.matched_patterns.iter().any(|p| p.contains("tool_call"))
+            && !detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("tool_call"))
         {
             detection.matched_patterns.push("tool_call".to_string());
             score += 0.2;
@@ -294,7 +289,10 @@ pub fn apply_reasoning_detection(metadata: &HashMap<String, String>) -> Vec<Stri
         println!("\n🧠 Detected reasoning model capabilities:");
         println!("  Confidence: {:.0}%", detection.confidence * 100.0);
         if !detection.matched_patterns.is_empty() {
-            println!("  Matched patterns: {}", detection.matched_patterns.join(", "));
+            println!(
+                "  Matched patterns: {}",
+                detection.matched_patterns.join(", ")
+            );
         }
         if let Some(ref format) = detection.suggested_format {
             println!("  Suggested format: --reasoning-format {}", format);
@@ -319,7 +317,10 @@ pub fn apply_tool_detection(metadata: &HashMap<String, String>) -> Vec<String> {
         println!("\n🔧 Detected tool calling capabilities:");
         println!("  Confidence: {:.0}%", detection.confidence * 100.0);
         if !detection.matched_patterns.is_empty() {
-            println!("  Matched patterns: {}", detection.matched_patterns.join(", "));
+            println!(
+                "  Matched patterns: {}",
+                detection.matched_patterns.join(", ")
+            );
         }
         if let Some(ref format) = detection.detected_format {
             println!("  Detected format: {}", format);
@@ -365,24 +366,38 @@ mod reasoning_tests {
         let mut metadata = HashMap::new();
         metadata.insert(
             "tokenizer.chat_template".to_string(),
-            "{% if message.role == 'assistant' %}<think>{{ message.thinking }}</think>{% endif %}".to_string(),
+            "{% if message.role == 'assistant' %}<think>{{ message.thinking }}</think>{% endif %}"
+                .to_string(),
         );
 
         let detection = detect_reasoning_support(&metadata);
         assert!(detection.supports_reasoning);
         assert!(detection.confidence >= 0.3);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("think")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("think"))
+        );
         assert_eq!(detection.suggested_format, Some("deepseek".to_string()));
     }
 
     #[test]
     fn test_detect_by_model_name() {
         let mut metadata = HashMap::new();
-        metadata.insert("general.name".to_string(), "DeepSeek-R1-Distill-Qwen-32B".to_string());
+        metadata.insert(
+            "general.name".to_string(),
+            "DeepSeek-R1-Distill-Qwen-32B".to_string(),
+        );
 
         let detection = detect_reasoning_support(&metadata);
         assert!(detection.supports_reasoning);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("deepseek-r1")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("deepseek-r1"))
+        );
     }
 
     #[test]
@@ -402,7 +417,10 @@ mod reasoning_tests {
     #[test]
     fn test_is_reasoning_model_helper() {
         let mut metadata = HashMap::new();
-        metadata.insert("tokenizer.chat_template".to_string(), "<think>test</think>".to_string());
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<think>test</think>".to_string(),
+        );
         assert!(is_reasoning_model(&metadata));
 
         let empty = HashMap::new();
@@ -425,18 +443,31 @@ mod tool_calling_tests {
         let detection = detect_tool_support(&metadata);
         assert!(detection.supports_tool_calling);
         assert!(detection.confidence >= 0.3);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("tool_call")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("tool_call"))
+        );
         assert_eq!(detection.detected_format, Some("hermes".to_string()));
     }
 
     #[test]
     fn test_detect_by_model_name_hermes() {
         let mut metadata = HashMap::new();
-        metadata.insert("general.name".to_string(), "NousResearch/Hermes-3-Llama-3.1-8B".to_string());
+        metadata.insert(
+            "general.name".to_string(),
+            "NousResearch/Hermes-3-Llama-3.1-8B".to_string(),
+        );
 
         let detection = detect_tool_support(&metadata);
         assert!(detection.supports_tool_calling);
-        assert!(detection.matched_patterns.iter().any(|p| p.contains("hermes")));
+        assert!(
+            detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("hermes"))
+        );
     }
 
     #[test]
@@ -456,7 +487,10 @@ mod tool_calling_tests {
     #[test]
     fn test_is_tool_capable_model_helper() {
         let mut metadata = HashMap::new();
-        metadata.insert("tokenizer.chat_template".to_string(), "<tool_call>test</tool_call>".to_string());
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<tool_call>test</tool_call>".to_string(),
+        );
         assert!(is_tool_capable_model(&metadata));
 
         let empty = HashMap::new();
@@ -466,7 +500,10 @@ mod tool_calling_tests {
     #[test]
     fn test_apply_tool_detection_adds_agent_tag() {
         let mut metadata = HashMap::new();
-        metadata.insert("tokenizer.chat_template".to_string(), "<tool_call>test</tool_call>".to_string());
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<tool_call>test</tool_call>".to_string(),
+        );
 
         let tags = apply_tool_detection(&metadata);
         assert!(tags.contains(&"agent".to_string()));
@@ -488,7 +525,10 @@ mod tool_calling_tests {
     #[test]
     fn test_capability_detection_no_duplicates() {
         let mut metadata = HashMap::new();
-        metadata.insert("tokenizer.chat_template".to_string(), "<tool_call>tool</tool_call>".to_string());
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<tool_call>tool</tool_call>".to_string(),
+        );
 
         let tags = apply_capability_detection(&metadata);
         assert_eq!(tags.iter().filter(|t| *t == "agent").count(), 1);

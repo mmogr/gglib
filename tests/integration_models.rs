@@ -4,8 +4,8 @@
 //! data types, edge cases, and serialization scenarios.
 
 use chrono::Utc;
-use gglib::models::Gguf;
 use gglib::GgufMetadata;
+use gglib::models::Gguf;
 use std::collections::HashMap;
 use std::path::PathBuf;
 

@@ -5,8 +5,7 @@
 //! and database storage.
 
 use crate::{
-    gguf,
-    models,
+    gguf, models,
     services::{AppCore, database},
     utils::{input, validation},
 };
