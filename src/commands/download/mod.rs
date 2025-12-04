@@ -12,8 +12,8 @@ mod file_ops;
 mod model_ops;
 mod progress;
 mod python_bridge;
-mod python_env;
-mod python_protocol;
+pub(crate) mod python_env;
+pub(crate) mod python_protocol;
 mod utils;
 
 #[cfg(test)]
