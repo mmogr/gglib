@@ -17,7 +17,7 @@ use super::download_models::{
 };
 use super::download_process_manager::{DownloadProcessManager, PidStorage};
 use super::download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
-use super::huggingface_service::HuggingFaceService;
+use crate::services::huggingface::{DefaultHuggingfaceClient, HfConfig, HfRepoRef};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -491,9 +491,12 @@ impl DownloadService {
         // Get models directory and commit SHA
         let models_dir = get_models_directory()?;
 
-        // Get commit SHA from HuggingFace API using shared service
-        let hf_service = HuggingFaceService::new();
-        let commit_sha = hf_service.get_commit_sha(&model_id).await?;
+        // Get commit SHA from HuggingFace API using new huggingface module
+        let client = DefaultHuggingfaceClient::new(HfConfig::default());
+        let repo = HfRepoRef::parse(&model_id)
+            .ok_or_else(|| anyhow::anyhow!("Invalid model ID: {}", model_id))?;
+        let commit_sha = client.get_commit_sha(&repo).await
+            .map_err(|e| anyhow::anyhow!("Failed to get commit SHA: {}", e))?;
 
         // For sharded models, compute the first shard path for database registration.
         // llama-server requires the first shard to be specified when loading split models.
@@ -1094,11 +1097,14 @@ impl DownloadService {
         model_id: &str,
         quantization: &str,
     ) -> Result<Vec<(String, u64)>> {
-        // Use HuggingFaceService to find GGUF files (DRY - no duplicate API calls)
-        let hf_service = HuggingFaceService::new();
-        let matching_files = hf_service
-            .find_gguf_files_for_quantization(model_id, quantization)
-            .await?;
+        // Use new huggingface module to find GGUF files (DRY - no duplicate API calls)
+        let client = DefaultHuggingfaceClient::new(HfConfig::default());
+        let repo = HfRepoRef::parse(model_id)
+            .ok_or_else(|| anyhow::anyhow!("Invalid model ID: {}", model_id))?;
+        let matching_files = client
+            .find_quantization_files_with_sizes(&repo, quantization)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to find GGUF files: {}", e))?;
 
         if matching_files.is_empty() {
             return Err(anyhow::anyhow!(
