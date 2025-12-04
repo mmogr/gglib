@@ -11,11 +11,12 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
 use crate::download::domain::errors::DownloadError;
+use crate::download::domain::events::DownloadStatus;
 use crate::download::domain::types::{DownloadId, DownloadRequest};
 use crate::download::executor::{EventCallback, ExecutionResult, PythonDownloadExecutor};
 use crate::download::huggingface::{FileResolution, resolve_quantization_files};
 use crate::download::progress::build_queue_snapshot;
-use crate::download::queue::{DownloadQueue, ShardGroupId};
+use crate::download::queue::{DownloadQueue, QueuedDownload, ShardGroupId};
 use crate::services::core::{DownloadProcessManager, PidStorage};
 
 // ============================================================================
@@ -70,6 +71,8 @@ pub struct DownloadManager {
     on_event: Arc<std::sync::RwLock<EventCallback>>,
     /// Cancellation tokens for active downloads.
     cancel_tokens: Arc<RwLock<std::collections::HashMap<String, CancellationToken>>>,
+    /// Currently downloading item (for queue snapshots).
+    current_download: Arc<RwLock<Option<QueuedDownload>>>,
     /// Process manager for synchronous termination on shutdown.
     process_manager: DownloadProcessManager,
 }
@@ -86,6 +89,7 @@ impl DownloadManager {
             executor: PythonDownloadExecutor::with_pid_storage(process_manager.pid_storage()),
             on_event: Arc::new(std::sync::RwLock::new(on_event)),
             cancel_tokens: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            current_download: Arc::new(RwLock::new(None)),
             process_manager,
             config,
         }
@@ -107,6 +111,7 @@ impl DownloadManager {
             executor: PythonDownloadExecutor::with_pid_storage(pid_storage),
             on_event: Arc::new(std::sync::RwLock::new(on_event)),
             cancel_tokens: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            current_download: Arc::new(RwLock::new(None)),
             process_manager,
             config,
         }
@@ -209,6 +214,12 @@ impl DownloadManager {
                 tokens.insert(queued.id.to_string(), cancel_token.clone());
             }
 
+            // Track as current download (for queue snapshots)
+            {
+                let mut current = self.current_download.write().await;
+                *current = Some(queued.clone());
+            }
+
             // Emit queue snapshot (item now "current")
             self.emit_queue_snapshot().await;
 
@@ -223,6 +234,12 @@ impl DownloadManager {
             {
                 let mut tokens = self.cancel_tokens.write().await;
                 tokens.remove(&queued.id.to_string());
+            }
+
+            // Clear current download tracking
+            {
+                let mut current = self.current_download.write().await;
+                *current = None;
             }
 
             // Remove request from pending
@@ -295,7 +312,11 @@ impl DownloadManager {
     /// Get current queue state.
     pub async fn get_queue_snapshot(&self) -> crate::download::queue::QueueSnapshot {
         let queue = self.queue.read().await;
-        queue.snapshot(None)
+        let current = self.current_download.read().await;
+        let current_summary = current
+            .as_ref()
+            .map(|q| q.to_summary(1, DownloadStatus::Downloading));
+        queue.snapshot(current_summary)
     }
 
     /// Retry a failed download.
@@ -622,7 +643,11 @@ impl DownloadManager {
     /// Emit current queue state to frontend.
     async fn emit_queue_snapshot(&self) {
         let queue = self.queue.read().await;
-        let snapshot = queue.snapshot(None);
+        let current = self.current_download.read().await;
+        let current_summary = current
+            .as_ref()
+            .map(|q| q.to_summary(1, DownloadStatus::Downloading));
+        let snapshot = queue.snapshot(current_summary);
         let event = build_queue_snapshot(&snapshot);
         let callback = self.get_event_callback();
         callback(event);
