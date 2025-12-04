@@ -3,6 +3,8 @@
 //! This service provides all model-related operations extracted from
 //! the GUI backend, designed to be used by both CLI and GUI.
 
+use crate::commands::download::get_models_directory;
+use crate::download::DownloadId;
 use crate::models::Gguf;
 use crate::services::database;
 use anyhow::{Result, anyhow};
@@ -89,6 +91,21 @@ impl ModelService {
     /// * `name` - Partial name to search for (case-insensitive)
     pub async fn find_by_name(&self, name: &str) -> Result<Vec<Gguf>> {
         database::find_models_by_name(&self.db_pool, name).await
+    }
+
+    /// Find a model by its file path.
+    ///
+    /// Used for idempotency checks before adding downloaded models.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - Exact file path to search for
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Some(model))` if found, `Ok(None)` if not found.
+    pub async fn find_by_path(&self, file_path: &str) -> Result<Option<Gguf>> {
+        database::find_model_by_path(&self.db_pool, file_path).await
     }
 
     /// Add a new model to the database.
@@ -259,6 +276,44 @@ impl ModelService {
     pub async fn get_filter_options(&self) -> Result<database::ModelFilterOptions> {
         database::get_model_filter_options(&self.db_pool).await
     }
+
+    /// Resolve the path to the downloaded GGUF file for a download.
+    ///
+    /// Looks in the model directory for the first `.gguf` file.
+    /// Used by the completion handler to register downloads in the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `download_id` - The download identifier containing model_id
+    ///
+    /// # Returns
+    ///
+    /// Returns the path to the GGUF file, or an error if not found.
+    pub fn model_path_for_download(download_id: &DownloadId) -> Result<PathBuf> {
+        let models_dir = get_models_directory()?;
+        let model_dir = models_dir.join(sanitize_model_name(download_id.model_id()));
+
+        // Find first .gguf file in the directory
+        let entries = std::fs::read_dir(&model_dir)
+            .map_err(|e| anyhow!("Failed to read model directory {:?}: {}", model_dir, e))?;
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "gguf") {
+                return Ok(path);
+            }
+        }
+
+        Err(anyhow!(
+            "No .gguf file found in model directory {:?}",
+            model_dir
+        ))
+    }
+}
+
+/// Sanitize model name for filesystem use.
+fn sanitize_model_name(model_id: &str) -> String {
+    model_id.replace(['/', '\\'], "_")
 }
 
 #[cfg(test)]

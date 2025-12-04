@@ -156,6 +156,23 @@ pub async fn get_model_by_id(pool: &SqlitePool, id: u32) -> Result<Option<Gguf>>
     Ok(model)
 }
 
+/// Find a model by its file path.
+///
+/// Returns `Ok(Some(Gguf))` if a model with the given path is found,
+/// `Ok(None)` if not found.
+pub async fn find_model_by_path(pool: &SqlitePool, file_path: &str) -> Result<Option<Gguf>> {
+    let query = format!(
+        "SELECT {} FROM models WHERE file_path = ?",
+        MODEL_SELECT_COLUMNS
+    );
+    let model = sqlx::query_as::<_, Gguf>(&query)
+        .bind(file_path)
+        .fetch_optional(pool)
+        .await?;
+
+    Ok(model)
+}
+
 /// Find a model by identifier (name or ID).
 ///
 /// First tries to find by exact name match, then falls back to ID lookup

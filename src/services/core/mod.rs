@@ -54,6 +54,7 @@ use crate::services::process_manager::ProcessManager;
 use crate::utils::paths::get_llama_server_path;
 use sqlx::SqlitePool;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Re-export types from download_models (canonical location)
 pub use crate::services::huggingface::{DefaultHuggingfaceClient, HfError};
@@ -94,6 +95,8 @@ pub struct AppCore {
     settings_service: SettingsService,
     huggingface_client: DefaultHuggingfaceClient,
     mcp_service: McpService,
+    /// Guard to prevent concurrent queue processing.
+    is_processing: AtomicBool,
 }
 
 impl AppCore {
@@ -173,6 +176,7 @@ impl AppCore {
             settings_service,
             huggingface_client,
             mcp_service,
+            is_processing: AtomicBool::new(false),
         }
     }
 
@@ -349,6 +353,92 @@ impl AppCore {
     pub fn mcp(&self) -> &McpService {
         &self.mcp_service
     }
+
+    /// Try to start queue processing if not already running.
+    ///
+    /// Returns `true` if we acquired the lock and should spawn `process_queue()`,
+    /// `false` if another task is already processing.
+    ///
+    /// Use pattern:
+    /// ```rust,ignore
+    /// if core.start_queue_if_idle() {
+    ///     let dm = core.downloads().clone();
+    ///     tokio::spawn(async move {
+    ///         dm.process_queue().await;
+    ///         // After processing, mark idle (via callback or separate call)
+    ///     });
+    /// }
+    /// ```
+    pub fn start_queue_if_idle(&self) -> bool {
+        self.is_processing
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
+
+    /// Mark the queue as idle after processing completes.
+    ///
+    /// Called when `process_queue()` finishes to allow future triggers.
+    pub fn mark_queue_idle(&self) {
+        self.is_processing.store(false, Ordering::SeqCst);
+    }
+
+    /// Handle a download completion event.
+    ///
+    /// Parses the download ID and spawns a task to register the model in the database.
+    /// Uses `tokio::spawn` so the caller doesn't block on database operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `id_str` - The canonical download ID string (e.g., "owner/repo:Q4_K_M")
+    pub fn handle_download_completed(&self, id_str: &str) {
+        use crate::download::DownloadId;
+
+        let download_id: DownloadId = match id_str.parse() {
+            Ok(id) => id,
+            Err(_) => {
+                tracing::error!("Failed to parse download ID: {}", id_str);
+                return;
+            }
+        };
+
+        // Clone what we need for the spawned task (ModelService is Clone)
+        let model_service = self.model_service.clone();
+
+        tokio::spawn(async move {
+            if let Err(e) = register_completed_download(model_service, download_id).await {
+                tracing::error!("Failed to register completed download: {}", e);
+            }
+        });
+    }
+}
+
+/// Register a completed download in the database.
+///
+/// Finds the GGUF file in the model directory and adds it to the database.
+/// Idempotent: skips if the model is already registered.
+async fn register_completed_download(
+    model_service: ModelService,
+    download_id: DownloadId,
+) -> anyhow::Result<()> {
+    // Find the downloaded GGUF file
+    let path = ModelService::model_path_for_download(&download_id)?;
+    let path_str = path.to_string_lossy().to_string();
+
+    // Idempotency check: skip if already in database
+    if model_service.find_by_path(&path_str).await?.is_some() {
+        tracing::debug!("Model already registered: {}", path_str);
+        return Ok(());
+    }
+
+    // Register the model
+    let model = model_service.add_from_file(&path_str, None, None).await?;
+    tracing::info!(
+        "Registered downloaded model: {} (id={})",
+        model.name,
+        model.id.unwrap_or(0)
+    );
+
+    Ok(())
 }
 
 // AppCore is not Clone because ProxyService contains non-Clone RwLock state.

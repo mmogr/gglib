@@ -313,16 +313,15 @@ pub async fn queue_download(
         .map_err(|e| AppError::ServerError(e.to_string()))?;
 
     // Start the queue processor in a background task (if not already running)
-    let backend = state.backend.clone();
-
-    tokio::spawn(async move {
-        // process_queue runs until queue is empty, handles progress internally
-        let _ = backend
-            .core()
-            .downloads()
-            .process_queue()
-            .await;
-    });
+    if state.backend.core().start_queue_if_idle() {
+        let backend = state.backend.clone();
+        tokio::spawn(async move {
+            // process_queue runs until queue is empty, handles progress internally
+            let _ = backend.core().downloads().process_queue().await;
+            // Mark idle when done so future queues can start
+            backend.core().mark_queue_idle();
+        });
+    }
 
     Ok(Json(ApiResponse::success(QueueDownloadResponse {
         position,

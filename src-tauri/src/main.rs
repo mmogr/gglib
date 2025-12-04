@@ -439,16 +439,15 @@ async fn queue_download(
         .map_err(|e| format!("Failed to queue download: {}", e))?;
 
     // Start the queue processor in a background task (if not already running)
-    let backend = state.backend.clone();
-
-    tokio::spawn(async move {
-        // process_queue runs until queue is empty, handles progress internally via on_event
-        let _ = backend
-            .core()
-            .downloads()
-            .process_queue()
-            .await;
-    });
+    if state.backend.core().start_queue_if_idle() {
+        let backend = state.backend.clone();
+        tokio::spawn(async move {
+            // process_queue runs until queue is empty, handles progress internally via on_event
+            let _ = backend.core().downloads().process_queue().await;
+            // Mark idle when done so future queues can start
+            backend.core().mark_queue_idle();
+        });
+    }
 
     Ok(QueueDownloadResponse {
         position,
@@ -934,6 +933,20 @@ async fn main() {
             .await
             .expect("Failed to initialize backend"),
     );
+
+    // Wire download events to Tauri + completion handler
+    {
+        use gglib::download::DownloadEvent;
+        let backend_for_callback = backend.clone();
+        backend.core().downloads().set_event_callback(Arc::new(move |event: DownloadEvent| {
+            // Handle completion: register model in database
+            if let DownloadEvent::DownloadCompleted { id, .. } = &event {
+                backend_for_callback.core().handle_download_completed(id);
+            }
+            // Note: Tauri events are emitted via old DownloadProgressEvent for now
+            // The new event system is wired but frontend uses legacy events
+        }));
+    }
 
     let embedded_api_port = std::env::var("GGLIB_GUI_API_PORT")
         .ok()
