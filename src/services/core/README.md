@@ -11,11 +11,11 @@ The `core` module provides a unified service layer for gglib that can be used by
 │                              AppCore                                     │
 │         (Facade holding SqlitePool + service accessors)                  │
 ├─────────────┬─────────────┬─────────────┬──────────────┬────────────────┤
-│ ModelService│ServerService│ProxyService │SettingsServ │HuggingFaceSvc  │
+│ ModelService│ServerService│ProxyService │SettingsServ │HuggingfaceClnt │
 │             │             │             │              │                │
 │ - list()    │ - start()   │ - start()   │ - get()      │ - search()     │
 │ - get_by_id │ - stop()    │ - stop()    │ - update()   │ - get_quants() │
-│ - add()     │ - list()    │ - status()  │ - validate() │ - fetch_tree() │
+│ - add()     │ - list()    │ - status()  │ - validate() │ - get_sha()    │
 │ - update()  │ - get()     │             │              │                │
 │ - remove()  │             │             │              │                │
 │ - tags...   │             │             │              │                │
@@ -111,31 +111,24 @@ HuggingFace downloads with queue management:
 - `cancel_shard_group(group_id)` - Cancel active download and remove all related shards
 - `is_downloading(model_id)` - Check if model is currently downloading
 
-### HuggingFaceService
+### HuggingfaceClient
 
-HuggingFace Hub API integration for searching and browsing GGUF models:
-- `search_models_paginated(request)` - Search models with pagination, filtering, and sorting
-- `search_models(query, limit, sort)` - Simple search for CLI usage
-- `get_quantizations(model_id)` - Get available quantization variants for a model
-- `fetch_tree(model_id, path)` - Fetch repository file tree
-- `get_commit_sha(model_id)` - Get latest commit SHA for a model
-- `find_gguf_files_for_quantization(model_id, quant)` - Find all GGUF files for a specific quantization
+HuggingFace Hub API integration for searching and browsing GGUF models.
+See [`services::huggingface`](../huggingface/README.md) for the full domain module documentation.
 
-**Search Options:**
-- Sort by: `downloads`, `likes`, `lastModified`, `createdAt`, `id` (alphabetical)
-- Filter by: parameter count range, search query
-- Pagination with configurable page size
+- `search_models_page(query)` - Search models with pagination, filtering, and sorting
+- `list_quantizations(repo)` - Get available quantization variants for a model
+- `find_quantization_files(repo, quant)` - Find all GGUF files for a specific quantization
+- `get_commit_sha(repo)` - Get latest commit SHA for a model
+- `get_tool_support(repo)` - Check if model supports function calling
 
 **Example:**
 ```rust,ignore
+use gglib::services::huggingface::{HfSearchQuery, HfRepoRef};
+
 let core = AppCore::new(pool);
-let request = HfSearchRequest {
-    query: Some("llama".to_string()),
-    sort_by: HfSortField::Likes,
-    sort_ascending: false,
-    ..Default::default()
-};
-let results = core.huggingface().search_models_paginated(request).await?;
+let query = HfSearchQuery::new().with_query("llama");
+let results = core.huggingface().search_models_page(&query).await?;
 ```
 
 #### Sharded Model Support

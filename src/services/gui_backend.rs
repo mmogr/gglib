@@ -7,12 +7,14 @@
 //! GUI-specific functionality like converting models to `GuiModel` with server status.
 
 use crate::models::gui::{
-    AddModelRequest, AppSettings, GuiModel, HfQuantizationsResponse, HfSearchRequest,
-    HfSearchResponse, HfToolSupportResponse, ModelsDirectoryInfo, RemoveModelRequest,
+    AddModelRequest, AppSettings, GuiModel, HfQuantization as GuiHfQuantization,
+    HfQuantizationsResponse, HfSearchRequest, HfSearchResponse as GuiHfSearchResponse,
+    HfToolSupportResponse as GuiHfToolSupportResponse, ModelsDirectoryInfo, RemoveModelRequest,
     StartServerRequest, StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
 };
 use crate::services::core::{AppCore, StartServerConfig};
 use crate::services::database;
+use crate::services::huggingface::{HfRepoRef, HfSearchQuery, HfSortField};
 use crate::services::process_manager::ProcessManager;
 use crate::services::settings::SettingsUpdate;
 use crate::utils::process::ServerInfo;
@@ -287,11 +289,48 @@ impl GuiBackend {
     ///
     /// Returns models matching the search query with optional parameter filtering.
     /// Parameter filtering is done client-side since HuggingFace API doesn't support it.
-    pub async fn browse_hf_models(&self, request: HfSearchRequest) -> Result<HfSearchResponse> {
-        self.core
-            .huggingface()
-            .search_models_paginated(request)
-            .await
+    pub async fn browse_hf_models(&self, request: HfSearchRequest) -> Result<GuiHfSearchResponse> {
+        // Convert GUI request to huggingface module query
+        let query = HfSearchQuery {
+            query: request.query,
+            min_params_b: request.min_params_b,
+            max_params_b: request.max_params_b,
+            page: request.page,
+            limit: request.limit,
+            sort_by: match request.sort_by {
+                crate::models::gui::HfSortField::Downloads => HfSortField::Downloads,
+                crate::models::gui::HfSortField::Likes => HfSortField::Likes,
+                crate::models::gui::HfSortField::Created => HfSortField::Created,
+                crate::models::gui::HfSortField::Modified => HfSortField::Modified,
+                crate::models::gui::HfSortField::Alphabetical => HfSortField::Alphabetical,
+            },
+            sort_ascending: request.sort_ascending,
+            cursor: None,
+        };
+
+        let response = self.core.huggingface().search_models_page(&query).await?;
+
+        // Convert to GUI response type
+        Ok(GuiHfSearchResponse {
+            models: response
+                .items
+                .into_iter()
+                .map(|m| crate::models::gui::HfModelSummary {
+                    id: m.id,
+                    name: m.name,
+                    author: m.author,
+                    downloads: m.downloads,
+                    likes: m.likes,
+                    last_modified: m.last_modified,
+                    parameters_b: m.parameters_b,
+                    description: m.description,
+                    tags: m.tags,
+                })
+                .collect(),
+            has_more: response.has_more,
+            page: response.page,
+            total_count: None,
+        })
     }
 
     /// Get available quantizations for a HuggingFace model.
@@ -299,15 +338,46 @@ impl GuiBackend {
     /// Returns detailed information about each quantization variant including
     /// file size and whether it's sharded.
     pub async fn get_model_quantizations(&self, model_id: &str) -> Result<HfQuantizationsResponse> {
-        self.core.huggingface().get_quantizations(model_id).await
+        let repo =
+            HfRepoRef::parse(model_id).ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
+
+        let quants = self.core.huggingface().list_quantizations(&repo).await?;
+
+        Ok(HfQuantizationsResponse {
+            model_id: model_id.to_string(),
+            quantizations: quants
+                .into_iter()
+                .map(|q| GuiHfQuantization {
+                    name: q.name.clone(),
+                    file_path: q.primary_path().unwrap_or_default().to_string(),
+                    size_bytes: q.total_size,
+                    size_mb: q.size_mb(),
+                    is_sharded: q.is_sharded(),
+                    shard_count: if q.is_sharded() {
+                        Some(q.shard_count as u32)
+                    } else {
+                        None
+                    },
+                })
+                .collect(),
+        })
     }
 
     /// Check if a HuggingFace model supports tool/function calling.
     ///
     /// Fetches model metadata from HuggingFace API and analyzes the chat template
     /// using the unified tool detection logic from gguf_parser.
-    pub async fn get_hf_tool_support(&self, model_id: &str) -> Result<HfToolSupportResponse> {
-        self.core.huggingface().get_tool_support(model_id).await
+    pub async fn get_hf_tool_support(&self, model_id: &str) -> Result<GuiHfToolSupportResponse> {
+        let repo =
+            HfRepoRef::parse(model_id).ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
+
+        let response = self.core.huggingface().get_tool_support(&repo).await?;
+
+        Ok(GuiHfToolSupportResponse {
+            supports_tool_calling: response.supports_tool_calling,
+            confidence: response.confidence,
+            detected_format: response.detected_format,
+        })
     }
 
     // =========================================================================

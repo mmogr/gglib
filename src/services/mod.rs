@@ -4,6 +4,7 @@ pub mod chat_history;
 pub mod core;
 pub mod database;
 pub mod gui_backend;
+pub mod huggingface;
 pub mod mcp;
 pub mod process_manager;
 pub mod settings;

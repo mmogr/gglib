@@ -16,8 +16,8 @@ use super::file_ops::{
 };
 use super::utils::get_models_directory;
 use crate::models::Gguf;
-use crate::services::core::HuggingFaceService;
 use crate::services::core::PidStorage;
+use crate::services::huggingface::build_tree_url_simple;
 
 /// Configuration for downloading sharded files
 pub struct DownloadConfig<'a> {
@@ -87,8 +87,8 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
 
         let quant_upper = quant.to_uppercase();
 
-        // Use HuggingFaceService for consistent URL construction (DRY)
-        let api_url = HuggingFaceService::build_tree_url(context.model_id, None);
+        // Use huggingface module for consistent URL construction (DRY)
+        let api_url = build_tree_url_simple(context.model_id, None);
 
         match reqwest::get(&api_url).await {
             Ok(response) => {
@@ -138,11 +138,10 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
                                                         .to_uppercase()
                                                         .contains(&quant_upper)
                                                 {
-                                                    let sub_api_url =
-                                                        HuggingFaceService::build_tree_url(
-                                                            context.model_id,
-                                                            Some(filename),
-                                                        );
+                                                    let sub_api_url = build_tree_url_simple(
+                                                        context.model_id,
+                                                        Some(filename),
+                                                    );
 
                                                     if let Ok(sub_response) =
                                                         reqwest::get(&sub_api_url).await

@@ -5,7 +5,7 @@ use hf_hub::api::sync::Api;
 use std::path::Path;
 
 use super::utils::format_number;
-use crate::services::core::HuggingFaceService;
+use crate::services::huggingface::{DefaultHuggingfaceClient, HfConfig, HfRepoRef};
 
 /// Create HuggingFace Hub API client
 pub fn create_hf_api(token: Option<String>, models_dir: &Path) -> Result<Api> {
@@ -28,46 +28,48 @@ pub fn create_hf_api(token: Option<String>, models_dir: &Path) -> Result<Api> {
 pub async fn list_available_quantizations(api: &Api, model_id: &str) -> Result<()> {
     println!("Finding available GGUF quantizations for {}...", model_id);
 
-    let repo = api.repo(hf_hub::Repo::with_revision(
+    let hf_api_repo = api.repo(hf_hub::Repo::with_revision(
         model_id.to_string(),
         hf_hub::RepoType::Model,
         "main".to_string(),
     ));
 
-    match repo.info() {
+    match hf_api_repo.info() {
         Ok(info) => {
             println!("Repository found: {}", model_id);
             println!("Commit SHA: {}", info.sha);
 
             println!("\nSearching for GGUF files using HuggingFace API...");
 
-            // Use HuggingFaceService for consistent API access (DRY)
-            let hf_service = HuggingFaceService::new();
+            // Use new huggingface domain module for consistent API access
+            let client = DefaultHuggingfaceClient::new(HfConfig::default());
+            let repo_ref = HfRepoRef::parse(model_id)
+                .ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
 
-            match hf_service.get_quantizations(model_id).await {
-                Ok(response) => {
-                    if response.quantizations.is_empty() {
+            match client.list_quantizations(&repo_ref).await {
+                Ok(quantizations) => {
+                    if quantizations.is_empty() {
                         println!("❌ No GGUF files found in this repository.");
                     } else {
-                        println!("✅ Found {} quantizations:", response.quantizations.len());
-                        for quant in &response.quantizations {
-                            let shard_info = if quant.is_sharded {
-                                format!(" ({} shards)", quant.shard_count.unwrap_or(0))
+                        println!("✅ Found {} quantizations:", quantizations.len());
+                        for quant in &quantizations {
+                            let shard_info = if quant.is_sharded() {
+                                format!(" ({} shards)", quant.shard_count)
                             } else {
                                 String::new()
                             };
-                            println!("  {} ({:.1} MB){}", quant.name, quant.size_mb, shard_info);
+                            println!("  {} ({:.1} MB){}", quant.name, quant.size_mb(), shard_info);
                         }
 
                         println!("\nTo download a specific quantization, use:");
-                        for quant in &response.quantizations {
+                        for quant in &quantizations {
                             println!("  gglib download {} -q {}", model_id, quant.name);
                         }
                     }
                 }
                 Err(e) => {
                     println!("Failed to fetch quantizations: {}", e);
-                    fallback_file_search(&repo, model_id).await?;
+                    fallback_file_search(&hf_api_repo, model_id).await?;
                 }
             }
         }
@@ -129,15 +131,16 @@ async fn fallback_file_search(repo: &hf_hub::api::sync::ApiRepo, model_id: &str)
 pub async fn handle_search(query: String, limit: u32, sort: String, gguf_only: bool) -> Result<()> {
     println!("🔍 Searching HuggingFace Hub for: '{}'...", query);
 
-    let hf_service = HuggingFaceService::new();
+    let client = DefaultHuggingfaceClient::new(HfConfig::default());
 
     // Default to GGUF filtering unless explicitly disabled
     let filter_gguf = gguf_only;
 
     // Use the service to fetch models
-    let models_array = hf_service
-        .search_models(&query, if filter_gguf { limit * 3 } else { limit }, &sort)
-        .await?;
+    let models_array = client
+        .search_models_raw(&query, if filter_gguf { limit * 3 } else { limit }, &sort)
+        .await
+        .map_err(|e| anyhow!("Search failed: {}", e))?;
 
     let mut filtered_models = Vec::new();
 
@@ -146,9 +149,13 @@ pub async fn handle_search(query: String, limit: u32, sort: String, gguf_only: b
         if let Some(model_id) = model.get("id").and_then(|v| v.as_str()) {
             if filter_gguf {
                 // Check if model actually has GGUF files
-                if let Ok(quantizations) = hf_service.get_quantization_names(model_id).await {
-                    if !quantizations.is_empty() {
-                        filtered_models.push((model, quantizations));
+                if let Some(repo) = HfRepoRef::parse(model_id) {
+                    if let Ok(quantizations) = client.list_quantizations(&repo).await {
+                        let names: Vec<String> =
+                            quantizations.iter().map(|q| q.name.clone()).collect();
+                        if !names.is_empty() {
+                            filtered_models.push((model, names));
+                        }
                     }
                 }
             } else {
@@ -159,8 +166,14 @@ pub async fn handle_search(query: String, limit: u32, sort: String, gguf_only: b
                     || model_id.to_lowercase().contains("qwen")
                 {
                     // Quick check for GGUF files
-                    if let Ok(quantizations) = hf_service.get_quantization_names(model_id).await {
-                        filtered_models.push((model, quantizations));
+                    if let Some(repo) = HfRepoRef::parse(model_id) {
+                        if let Ok(quantizations) = client.list_quantizations(&repo).await {
+                            let names: Vec<String> =
+                                quantizations.iter().map(|q| q.name.clone()).collect();
+                            filtered_models.push((model, names));
+                        } else {
+                            filtered_models.push((model, Vec::new()));
+                        }
                     } else {
                         filtered_models.push((model, Vec::new()));
                     }
@@ -241,7 +254,7 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
 
     println!("🌐 Browsing {} GGUF models...", category);
 
-    let hf_service = HuggingFaceService::new();
+    let client = DefaultHuggingfaceClient::new(HfConfig::default());
 
     // Search for models with GGUF-related tags
     let search_query = if let Some(ref model_size) = size {
@@ -251,9 +264,10 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
     };
 
     // Use the service to fetch models
-    let models_array = hf_service
-        .search_models(&search_query, limit, sort_param)
-        .await?;
+    let models_array = client
+        .search_models_raw(&search_query, limit, sort_param)
+        .await
+        .map_err(|e| anyhow!("Search failed: {}", e))?;
 
     if models_array.is_empty() {
         println!("No {} models found.", category);
@@ -278,9 +292,12 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
             );
 
             // Show available quantizations
-            if let Ok(quantizations) = hf_service.get_quantization_names(model_id).await {
-                if !quantizations.is_empty() {
-                    println!("    Quantizations: {}", quantizations.join(", "));
+            if let Some(repo) = HfRepoRef::parse(model_id) {
+                if let Ok(quantizations) = client.list_quantizations(&repo).await {
+                    let names: Vec<&str> = quantizations.iter().map(|q| q.name.as_str()).collect();
+                    if !names.is_empty() {
+                        println!("    Quantizations: {}", names.join(", "));
+                    }
                 }
             }
 

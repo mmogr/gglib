@@ -42,8 +42,7 @@ pub mod download_models;
 pub mod download_process_manager;
 pub mod download_queue;
 pub mod download_service;
-pub mod huggingface_models;
-pub mod huggingface_service;
+
 pub mod model_service;
 pub mod proxy_service;
 pub mod server_service;
@@ -55,6 +54,7 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 
 // Re-export types from download_models (canonical location)
+pub use crate::services::huggingface::{DefaultHuggingfaceClient, HfError};
 pub use download_models::{
     DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
     ShardInfo,
@@ -62,8 +62,6 @@ pub use download_models::{
 pub use download_process_manager::{DownloadProcessManager, PidStorage};
 pub use download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
 pub use download_service::DownloadService;
-pub use huggingface_models::HuggingFaceError;
-pub use huggingface_service::{HF_API_BASE, HuggingFaceService};
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};
@@ -90,7 +88,7 @@ pub struct AppCore {
     proxy_service: ProxyService,
     download_service: DownloadService,
     settings_service: SettingsService,
-    huggingface_service: HuggingFaceService,
+    huggingface_client: DefaultHuggingfaceClient,
     mcp_service: McpService,
 }
 
@@ -149,7 +147,7 @@ impl AppCore {
         let proxy_service = ProxyService::new(db_pool.clone());
         let download_service = DownloadService::new();
         let settings_service = SettingsService::new(db_pool.clone());
-        let huggingface_service = HuggingFaceService::new();
+        let huggingface_client = DefaultHuggingfaceClient::default_client();
         let mcp_service = McpService::new(db_pool.clone());
 
         Self {
@@ -159,7 +157,7 @@ impl AppCore {
             proxy_service,
             download_service,
             settings_service,
-            huggingface_service,
+            huggingface_client,
             mcp_service,
         }
     }
@@ -292,22 +290,19 @@ impl AppCore {
     ///
     /// ```rust,no_run
     /// # use gglib::services::core::AppCore;
-    /// # use gglib::models::gui::HfSearchRequest;
+    /// # use gglib::services::huggingface::HfSearchQuery;
     /// # async fn example(core: &AppCore) -> anyhow::Result<()> {
     /// // Search for models
-    /// let request = HfSearchRequest {
-    ///     query: Some("llama".to_string()),
-    ///     ..Default::default()
-    /// };
-    /// let response = core.huggingface().search_models_paginated(request).await?;
-    /// for model in response.models {
+    /// let query = HfSearchQuery::new().with_query("llama");
+    /// let response = core.huggingface().search_models_page(&query).await?;
+    /// for model in response.items {
     ///     println!("{}: {} likes", model.id, model.likes);
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub fn huggingface(&self) -> &HuggingFaceService {
-        &self.huggingface_service
+    pub fn huggingface(&self) -> &DefaultHuggingfaceClient {
+        &self.huggingface_client
     }
 
     /// Access the MCP (Model Context Protocol) service for managing external tools.
