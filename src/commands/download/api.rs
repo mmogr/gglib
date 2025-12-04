@@ -43,7 +43,8 @@ pub async fn list_available_quantizations(api: &Api, model_id: &str) -> Result<(
 
             // Use new huggingface domain module for consistent API access
             let client = DefaultHuggingfaceClient::new(HfConfig::default());
-            let repo_ref = HfRepoRef::parse(model_id).ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
+            let repo_ref = HfRepoRef::parse(model_id)
+                .ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
 
             match client.list_quantizations(&repo_ref).await {
                 Ok(quantizations) => {
@@ -150,7 +151,8 @@ pub async fn handle_search(query: String, limit: u32, sort: String, gguf_only: b
                 // Check if model actually has GGUF files
                 if let Some(repo) = HfRepoRef::parse(model_id) {
                     if let Ok(quantizations) = client.list_quantizations(&repo).await {
-                        let names: Vec<String> = quantizations.iter().map(|q| q.name.clone()).collect();
+                        let names: Vec<String> =
+                            quantizations.iter().map(|q| q.name.clone()).collect();
                         if !names.is_empty() {
                             filtered_models.push((model, names));
                         }
@@ -166,7 +168,8 @@ pub async fn handle_search(query: String, limit: u32, sort: String, gguf_only: b
                     // Quick check for GGUF files
                     if let Some(repo) = HfRepoRef::parse(model_id) {
                         if let Ok(quantizations) = client.list_quantizations(&repo).await {
-                            let names: Vec<String> = quantizations.iter().map(|q| q.name.clone()).collect();
+                            let names: Vec<String> =
+                                quantizations.iter().map(|q| q.name.clone()).collect();
                             filtered_models.push((model, names));
                         } else {
                             filtered_models.push((model, Vec::new()));

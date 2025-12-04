@@ -267,12 +267,12 @@ pub mod testing {
     #[async_trait]
     impl HttpBackend for FakeBackend {
         async fn get_json<T: DeserializeOwned + Send>(&self, url: &Url) -> HfResult<T> {
-            let response = self.find_response(url.as_str()).ok_or_else(|| {
-                HfError::ApiRequestFailed {
-                    status: 404,
-                    url: url.to_string(),
-                }
-            })?;
+            let response =
+                self.find_response(url.as_str())
+                    .ok_or_else(|| HfError::ApiRequestFailed {
+                        status: 404,
+                        url: url.to_string(),
+                    })?;
 
             serde_json::from_value(response.json).map_err(|e| e.into())
         }
@@ -281,12 +281,12 @@ pub mod testing {
             &self,
             url: &Url,
         ) -> HfResult<(T, bool)> {
-            let response = self.find_response(url.as_str()).ok_or_else(|| {
-                HfError::ApiRequestFailed {
-                    status: 404,
-                    url: url.to_string(),
-                }
-            })?;
+            let response =
+                self.find_response(url.as_str())
+                    .ok_or_else(|| HfError::ApiRequestFailed {
+                        status: 404,
+                        url: url.to_string(),
+                    })?;
 
             let data: T = serde_json::from_value(response.json)?;
             Ok((data, response.has_more))
@@ -367,7 +367,10 @@ mod tests {
             let url = Url::parse("https://example.com/unknown").unwrap();
 
             let result: HfResult<serde_json::Value> = backend.get_json(&url).await;
-            assert!(matches!(result, Err(HfError::ApiRequestFailed { status: 404, .. })));
+            assert!(matches!(
+                result,
+                Err(HfError::ApiRequestFailed { status: 404, .. })
+            ));
         }
 
         #[tokio::test]

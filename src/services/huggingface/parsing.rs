@@ -5,9 +5,7 @@
 //! easily testable with fixture data.
 
 use super::error::{HfError, HfResult};
-use super::models::{
-    HfEntryType, HfFileEntry, HfModelSummary, HfQuantization, HfSearchResponse,
-};
+use super::models::{HfEntryType, HfFileEntry, HfModelSummary, HfQuantization, HfSearchResponse};
 use crate::commands::download::extract_quantization_from_filename;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -66,10 +64,7 @@ pub fn parse_model_summary(json: &Value) -> Option<HfModelSummary> {
         .and_then(|t| t.as_u64())
         .map(|params| params as f64 / 1_000_000_000.0);
 
-    let downloads = json
-        .get("downloads")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let downloads = json.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0);
 
     let likes = json.get("likes").and_then(|v| v.as_u64()).unwrap_or(0);
 
@@ -78,17 +73,14 @@ pub fn parse_model_summary(json: &Value) -> Option<HfModelSummary> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let description = json
-        .get("description")
-        .and_then(|v| v.as_str())
-        .map(|s| {
-            // Truncate long descriptions
-            if s.len() > 200 {
-                format!("{}...", &s[..197])
-            } else {
-                s.to_string()
-            }
-        });
+    let description = json.get("description").and_then(|v| v.as_str()).map(|s| {
+        // Truncate long descriptions
+        if s.len() > 200 {
+            format!("{}...", &s[..197])
+        } else {
+            s.to_string()
+        }
+    });
 
     let tags = json
         .get("tags")
@@ -139,11 +131,7 @@ pub fn parse_model_list(json_array: &[Value]) -> Vec<HfModelSummary> {
 /// # Returns
 ///
 /// Returns a structured search response.
-pub fn parse_search_response(
-    json_array: &[Value],
-    has_more: bool,
-    page: u32,
-) -> HfSearchResponse {
+pub fn parse_search_response(json_array: &[Value], has_more: bool, page: u32) -> HfSearchResponse {
     HfSearchResponse {
         items: parse_model_list(json_array),
         has_more,
@@ -326,7 +314,10 @@ mod tests {
         assert_eq!(model.likes, 42);
         assert!(model.parameters_b.is_some());
         assert!((model.parameters_b.unwrap() - 7.0).abs() < 0.1);
-        assert_eq!(model.description, Some("A fine model for testing".to_string()));
+        assert_eq!(
+            model.description,
+            Some("A fine model for testing".to_string())
+        );
         assert_eq!(model.tags, vec!["llama", "gguf"]);
     }
 

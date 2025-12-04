@@ -495,7 +495,9 @@ impl DownloadService {
         let client = DefaultHuggingfaceClient::new(HfConfig::default());
         let repo = HfRepoRef::parse(&model_id)
             .ok_or_else(|| anyhow::anyhow!("Invalid model ID: {}", model_id))?;
-        let commit_sha = client.get_commit_sha(&repo).await
+        let commit_sha = client
+            .get_commit_sha(&repo)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to get commit SHA: {}", e))?;
 
         // For sharded models, compute the first shard path for database registration.

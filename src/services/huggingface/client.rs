@@ -170,10 +170,7 @@ impl<B: HttpBackend> HuggingfaceClient<B> {
     /// Returns all matching models.
     pub async fn search_all_models(&self, query: HfSearchQuery) -> HfResult<Vec<HfModelSummary>> {
         let mut results = Vec::new();
-        let mut current_query = HfSearchQuery {
-            page: 0,
-            ..query
-        };
+        let mut current_query = HfSearchQuery { page: 0, ..query };
 
         loop {
             let response = self.search_models_page(&current_query).await?;
@@ -360,14 +357,11 @@ impl<B: HttpBackend> HuggingfaceClient<B> {
         quantization: &str,
     ) -> HfResult<Vec<(String, u64)>> {
         let files = self.find_quantization_files(repo, quantization).await?;
-        let mut result: Vec<(String, u64)> = files
-            .into_iter()
-            .map(|f| (f.path, f.size))
-            .collect();
-        
+        let mut result: Vec<(String, u64)> = files.into_iter().map(|f| (f.path, f.size)).collect();
+
         // Sort by path to ensure correct shard order
         result.sort_by(|a, b| a.0.cmp(&b.0));
-        
+
         Ok(result)
     }
 
@@ -553,17 +547,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_quantizations() {
-        let backend = FakeBackend::new()
-            .with_response(
-                "tree/main",
-                CannedResponse {
-                    json: json!([
-                        {"path": "model-Q4_K_M.gguf", "type": "file", "size": 4000000000_u64},
-                        {"path": "model-Q8_0.gguf", "type": "file", "size": 8000000000_u64},
-                    ]),
-                    has_more: false,
-                },
-            );
+        let backend = FakeBackend::new().with_response(
+            "tree/main",
+            CannedResponse {
+                json: json!([
+                    {"path": "model-Q4_K_M.gguf", "type": "file", "size": 4000000000_u64},
+                    {"path": "model-Q8_0.gguf", "type": "file", "size": 8000000000_u64},
+                ]),
+                has_more: false,
+            },
+        );
 
         let client = HuggingfaceClient::with_backend(test_config(), backend);
         let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
@@ -592,7 +585,10 @@ mod tests {
         let client = HuggingfaceClient::with_backend(test_config(), backend);
         let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
 
-        let files = client.find_quantization_files(&repo, "Q4_K_M").await.unwrap();
+        let files = client
+            .find_quantization_files(&repo, "Q4_K_M")
+            .await
+            .unwrap();
 
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].path, "model-Q4_K_M.gguf");
@@ -615,10 +611,7 @@ mod tests {
 
         let result = client.find_quantization_files(&repo, "Q99_Z").await;
 
-        assert!(matches!(
-            result,
-            Err(HfError::QuantizationNotFound { .. })
-        ));
+        assert!(matches!(result, Err(HfError::QuantizationNotFound { .. })));
     }
 
     #[tokio::test]

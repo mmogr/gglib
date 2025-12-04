@@ -70,9 +70,9 @@ pub use models::{
 pub use http_backend::{HttpBackend, ReqwestBackend};
 
 // URL builders (for external use if needed)
-pub use url_builder::{build_download_url, build_model_info_url, build_tree_url, build_tree_url_simple};
+pub use url_builder::{
+    build_download_url, build_model_info_url, build_tree_url, build_tree_url_simple,
+};
 
 // Parsing utilities (for external use if needed)
 pub use parsing::{aggregate_quantizations, filter_files_by_quantization, parse_model_summary};
-
-

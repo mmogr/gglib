@@ -338,8 +338,8 @@ impl GuiBackend {
     /// Returns detailed information about each quantization variant including
     /// file size and whether it's sharded.
     pub async fn get_model_quantizations(&self, model_id: &str) -> Result<HfQuantizationsResponse> {
-        let repo = HfRepoRef::parse(model_id)
-            .ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
+        let repo =
+            HfRepoRef::parse(model_id).ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
 
         let quants = self.core.huggingface().list_quantizations(&repo).await?;
 
@@ -368,8 +368,8 @@ impl GuiBackend {
     /// Fetches model metadata from HuggingFace API and analyzes the chat template
     /// using the unified tool detection logic from gguf_parser.
     pub async fn get_hf_tool_support(&self, model_id: &str) -> Result<GuiHfToolSupportResponse> {
-        let repo = HfRepoRef::parse(model_id)
-            .ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
+        let repo =
+            HfRepoRef::parse(model_id).ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
 
         let response = self.core.huggingface().get_tool_support(&repo).await?;
 

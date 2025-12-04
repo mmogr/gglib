@@ -159,7 +159,10 @@ pub fn build_download_url(repo: &HfRepoRef, file_path: &str, revision: Option<&s
 /// Returns the full API URL for the tree endpoint as a String.
 pub fn build_tree_url_simple(model_id: &str, path: Option<&str>) -> String {
     match path {
-        Some(p) => format!("https://huggingface.co/api/models/{}/tree/main/{}", model_id, p),
+        Some(p) => format!(
+            "https://huggingface.co/api/models/{}/tree/main/{}",
+            model_id, p
+        ),
         None => format!("https://huggingface.co/api/models/{}/tree/main", model_id),
     }
 }

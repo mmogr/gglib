@@ -54,6 +54,7 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 
 // Re-export types from download_models (canonical location)
+pub use crate::services::huggingface::{DefaultHuggingfaceClient, HfError};
 pub use download_models::{
     DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
     ShardInfo,
@@ -61,7 +62,6 @@ pub use download_models::{
 pub use download_process_manager::{DownloadProcessManager, PidStorage};
 pub use download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
 pub use download_service::DownloadService;
-pub use crate::services::huggingface::{DefaultHuggingfaceClient, HfError};
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};

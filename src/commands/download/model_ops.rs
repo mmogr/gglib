@@ -138,11 +138,10 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
                                                         .to_uppercase()
                                                         .contains(&quant_upper)
                                                 {
-                                                    let sub_api_url =
-                                                        build_tree_url_simple(
-                                                            context.model_id,
-                                                            Some(filename),
-                                                        );
+                                                    let sub_api_url = build_tree_url_simple(
+                                                        context.model_id,
+                                                        Some(filename),
+                                                    );
 
                                                     if let Ok(sub_response) =
                                                         reqwest::get(&sub_api_url).await
