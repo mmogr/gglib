@@ -339,7 +339,7 @@ pub async fn add_to_database(
 
     // Auto-detect reasoning and tool calling capabilities from metadata
     if let Some(ref meta) = gguf_metadata {
-        let tags = crate::utils::gguf_parser::apply_capability_detection(&meta.metadata);
+        let tags = crate::gguf::apply_capability_detection(&meta.metadata);
         model.tags = tags;
     }
 

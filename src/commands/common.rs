@@ -3,7 +3,7 @@
 //! This module hosts reusable utilities for building llama.cpp
 //! invocations so that multiple commands can stay DRY.
 
-use crate::utils::gguf_parser;
+use crate::gguf;
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 
@@ -207,7 +207,7 @@ pub fn resolve_reasoning_format_with_metadata(
 
     // 3. Check GGUF metadata for reasoning patterns
     if let Some(meta) = metadata {
-        let detection = gguf_parser::detect_reasoning_support(meta);
+        let detection = gguf::detect_reasoning_support(meta);
         if detection.supports_reasoning {
             return ReasoningFormatResolution {
                 format: detection.suggested_format,

@@ -3,8 +3,7 @@
 //! This module provides validation functions to ensure files are
 //! valid GGUF format and can be safely processed by the parser.
 
-use crate::models::GgufMetadata;
-use crate::utils::gguf_parser;
+use crate::gguf::{self, GgufMetadata};
 use anyhow::{Result, anyhow};
 use std::path::Path;
 
@@ -89,7 +88,7 @@ pub fn validate_and_parse_gguf(file_path: &str) -> Result<GgufMetadata> {
     validate_file(file_path)?;
 
     // Then parse the GGUF metadata
-    let metadata: GgufMetadata = gguf_parser::parse_gguf_metadata(file_path)?;
+    let metadata: GgufMetadata = gguf::parse_gguf_file(file_path)?;
 
     Ok(metadata)
 }
