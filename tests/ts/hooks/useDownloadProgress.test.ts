@@ -98,7 +98,7 @@ describe('useDownloadProgress', () => {
       expect(result.current.queueCount).toBe(3); // 2 pending + 1 current
     });
 
-    it('polls queue status every 2 seconds', async () => {
+    it('fetches queue status on mount (no polling - queue updates come via SSE)', async () => {
       renderHook(() => useDownloadProgress());
 
       await act(async () => {
@@ -107,17 +107,13 @@ describe('useDownloadProgress', () => {
 
       expect(getDownloadQueue).toHaveBeenCalledTimes(1);
 
+      // No longer polls - queue updates come via SSE events (queue_snapshot)
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(2000);
+        await vi.advanceTimersByTimeAsync(4000);
       });
 
-      expect(getDownloadQueue).toHaveBeenCalledTimes(2);
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2000);
-      });
-
-      expect(getDownloadQueue).toHaveBeenCalledTimes(3);
+      // Should still be 1 call (initial fetch only)
+      expect(getDownloadQueue).toHaveBeenCalledTimes(1);
     });
 
     it('handles queue fetch errors gracefully', async () => {
