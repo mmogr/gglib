@@ -280,7 +280,11 @@ impl DownloadQueue {
     /// Retry a failed download by moving it back to the pending queue.
     ///
     /// Returns the 1-based position in the queue on success.
-    pub fn retry_failed(&mut self, id: &DownloadId, has_active: bool) -> Result<u32, DownloadError> {
+    pub fn retry_failed(
+        &mut self,
+        id: &DownloadId,
+        has_active: bool,
+    ) -> Result<u32, DownloadError> {
         // Find and remove from failed list
         let pos = self.failed.iter().position(|f| &f.item.id == id);
         let failed = match pos {
@@ -460,7 +464,10 @@ mod tests {
         queue.queue(test_id("b", None), false).unwrap();
 
         let result = queue.queue(test_id("c", None), false);
-        assert!(matches!(result, Err(DownloadError::QueueFull { max_size: 2 })));
+        assert!(matches!(
+            result,
+            Err(DownloadError::QueueFull { max_size: 2 })
+        ));
     }
 
     #[test]
@@ -485,7 +492,10 @@ mod tests {
         queue.queue(test_id("b", None), false).unwrap();
 
         // Simulate "a" is now active
-        let current = queue.pop_next().unwrap().to_summary(1, DownloadStatus::Downloading);
+        let current = queue
+            .pop_next()
+            .unwrap()
+            .to_summary(1, DownloadStatus::Downloading);
         let snapshot = queue.snapshot(Some(current));
 
         assert!(snapshot.current.is_some());
@@ -517,10 +527,7 @@ mod tests {
     fn test_remove_group() {
         let mut queue = DownloadQueue::new(10);
         let id = test_id("model/x", Some("Q4_K_M"));
-        let shards = vec![
-            ("s1.gguf".to_string(), None),
-            ("s2.gguf".to_string(), None),
-        ];
+        let shards = vec![("s1.gguf".to_string(), None), ("s2.gguf".to_string(), None)];
         queue.queue_sharded(id, shards, false).unwrap();
 
         let group_id = queue.pending.front().unwrap().group_id.clone().unwrap();
@@ -534,10 +541,7 @@ mod tests {
     fn test_fail_group() {
         let mut queue = DownloadQueue::new(10);
         let id = test_id("model/x", Some("Q4_K_M"));
-        let shards = vec![
-            ("s1.gguf".to_string(), None),
-            ("s2.gguf".to_string(), None),
-        ];
+        let shards = vec![("s1.gguf".to_string(), None), ("s2.gguf".to_string(), None)];
         queue.queue_sharded(id, shards, false).unwrap();
 
         let group_id = queue.pending.front().unwrap().group_id.clone().unwrap();

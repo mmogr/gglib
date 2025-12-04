@@ -239,7 +239,9 @@ impl DownloadRequestBuilder {
 /// This enum provides type-safe handling of quantization types commonly used
 /// in GGUF model naming conventions. Use [`Quantization::from_filename`] to
 /// parse a filename into this enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display, EnumIter)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display, EnumIter,
+)]
 pub enum Quantization {
     // 1-bit quantizations
     #[strum(serialize = "IQ1_S")]

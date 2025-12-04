@@ -311,12 +311,10 @@ mod tests {
     fn test_file_resolution_total_size_unknown() {
         let resolution = FileResolution {
             quantization: Quantization::Q4KM,
-            files: vec![
-                ResolvedFile {
-                    path: "model.gguf".to_string(),
-                    size: None,
-                },
-            ],
+            files: vec![ResolvedFile {
+                path: "model.gguf".to_string(),
+                size: None,
+            }],
             is_sharded: false,
         };
 

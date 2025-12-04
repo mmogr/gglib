@@ -149,7 +149,12 @@ mod tests {
         // First call should always emit
         let event = ctx.build_progress(500, 1000).unwrap();
         match event {
-            DownloadEvent::DownloadProgress { id, downloaded, total, .. } => {
+            DownloadEvent::DownloadProgress {
+                id,
+                downloaded,
+                total,
+                ..
+            } => {
                 assert_eq!(id, "model:Q4_K_M");
                 assert_eq!(downloaded, 500);
                 assert_eq!(total, 1000);

@@ -13,7 +13,7 @@ use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
 use crate::commands::download::python_env::{EnvSetupError, PythonEnvironment};
-use crate::commands::download::python_protocol::{parse_line, PythonEvent};
+use crate::commands::download::python_protocol::{PythonEvent, parse_line};
 use crate::download::domain::errors::DownloadError;
 use crate::download::domain::events::DownloadEvent;
 use crate::download::domain::types::{DownloadId, DownloadRequest, ShardInfo};
@@ -210,10 +210,7 @@ impl PythonDownloadExecutor {
 
         // Emit final completion
         let ctx = ProgressContext::new(request.id.to_string());
-        on_event(ctx.build_completed(Some(&format!(
-            "Downloaded {} shards",
-            total_shards
-        ))));
+        on_event(ctx.build_completed(Some(&format!("Downloaded {} shards", total_shards))));
 
         Ok(ExecutionResult::Completed)
     }

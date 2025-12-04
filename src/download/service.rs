@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use crate::download::domain::errors::DownloadError;
 use crate::download::domain::types::{DownloadId, DownloadRequest};
 use crate::download::executor::{EventCallback, ExecutionResult, PythonDownloadExecutor};
-use crate::download::huggingface::{resolve_quantization_files, FileResolution};
+use crate::download::huggingface::{FileResolution, resolve_quantization_files};
 use crate::download::progress::build_queue_snapshot;
 use crate::download::queue::DownloadQueue;
 use crate::services::core::PidStorage;
@@ -74,7 +74,9 @@ impl DownloadManager {
     /// Create a new download manager.
     pub fn new(config: DownloadManagerConfig, on_event: EventCallback) -> Self {
         Self {
-            queue: Arc::new(RwLock::new(DownloadQueue::new(config.max_queue_size as u32))),
+            queue: Arc::new(RwLock::new(DownloadQueue::new(
+                config.max_queue_size as u32,
+            ))),
             pending_requests: Arc::new(RwLock::new(std::collections::HashMap::new())),
             executor: PythonDownloadExecutor::new(),
             on_event,
@@ -90,7 +92,9 @@ impl DownloadManager {
         pid_storage: PidStorage,
     ) -> Self {
         Self {
-            queue: Arc::new(RwLock::new(DownloadQueue::new(config.max_queue_size as u32))),
+            queue: Arc::new(RwLock::new(DownloadQueue::new(
+                config.max_queue_size as u32,
+            ))),
             pending_requests: Arc::new(RwLock::new(std::collections::HashMap::new())),
             executor: PythonDownloadExecutor::with_pid_storage(pid_storage),
             on_event,
@@ -212,7 +216,8 @@ impl DownloadManager {
                 }
                 Err(e) => {
                     let mut queue = self.queue.write().await;
-                    let failed = crate::download::queue::FailedDownload::new(queued.clone(), &e.to_string());
+                    let failed =
+                        crate::download::queue::FailedDownload::new(queued.clone(), &e.to_string());
                     queue.mark_failed(failed);
                 }
             }

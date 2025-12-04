@@ -2,4 +2,4 @@
 
 pub mod file_resolver;
 
-pub use file_resolver::{resolve_quantization_files, FileResolution, QuantizationFileResolver};
+pub use file_resolver::{FileResolution, QuantizationFileResolver, resolve_quantization_files};

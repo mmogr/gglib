@@ -43,7 +43,10 @@ pub enum DownloadError {
 
     /// File not found on HuggingFace.
     #[error("No GGUF files found for quantization '{quantization}' in model '{model_id}'")]
-    QuantizationNotFound { model_id: String, quantization: String },
+    QuantizationNotFound {
+        model_id: String,
+        quantization: String,
+    },
 
     /// Invalid model ID format.
     #[error("Invalid model ID: '{id}'")]
@@ -95,7 +98,10 @@ impl DownloadError {
     }
 
     /// Create a quantization not found error.
-    pub fn quantization_not_found(model_id: impl Into<String>, quantization: impl Into<String>) -> Self {
+    pub fn quantization_not_found(
+        model_id: impl Into<String>,
+        quantization: impl Into<String>,
+    ) -> Self {
         Self::QuantizationNotFound {
             model_id: model_id.into(),
             quantization: quantization.into(),
