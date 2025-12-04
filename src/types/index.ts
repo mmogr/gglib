@@ -110,8 +110,10 @@ export interface ShardInfo {
 }
 
 export interface DownloadQueueItem {
-  model_id: string;
-  quantization?: string | null;
+  /** Canonical ID string (model_id:quantization or just model_id) */
+  id: string;
+  /** Human-readable display name */
+  display_name: string;
   status: DownloadStatus;
   position: number;
   error?: string | null;

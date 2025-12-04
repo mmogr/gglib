@@ -75,8 +75,13 @@ export function useQueueActions({
   const handleRetry = useCallback(async (item: DownloadQueueItem) => {
     try {
       // First remove from failed, then re-queue
-      await removeFromDownloadQueue(item.model_id);
-      await queueDownload(item.model_id, item.quantization || undefined);
+      // The id is in format "model_id:quantization" or just "model_id"
+      await removeFromDownloadQueue(item.id);
+      // Parse id to extract model_id and quantization
+      const parts = item.id.split(':');
+      const modelId = parts[0];
+      const quantization = parts.length > 1 ? parts[1] : undefined;
+      await queueDownload(modelId, quantization);
       await fetchQueueStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to retry download");

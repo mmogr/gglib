@@ -12,10 +12,10 @@ import styles from './DownloadQueuePopover.module.css';
  * Grouped queue item for display - sharded downloads are collapsed into one entry
  */
 interface GroupedQueueItem {
-  /** Primary model_id for the group (or single item) */
-  model_id: string;
-  /** Quantization if available */
-  quantization?: string | null;
+  /** Canonical ID string for the group (or single item) */
+  id: string;
+  /** Human-readable display name */
+  display_name: string;
   /** group_id for sharded models, undefined for single items */
   group_id?: string;
   /** Number of shards in this group (1 for non-sharded) */
@@ -43,13 +43,13 @@ function groupPendingItems(items: DownloadQueueItem[]): GroupedQueueItem[] {
   const groups = new Map<string, GroupedQueueItem>();
   
   for (const item of items) {
-    // Use group_id for sharded, model_id for single items
-    const key = item.group_id || item.model_id;
+    // Use group_id for sharded, id for single items
+    const key = item.group_id || item.id;
     
     if (!groups.has(key)) {
       groups.set(key, {
-        model_id: item.model_id,
-        quantization: item.quantization,
+        id: item.id,
+        display_name: item.display_name,
         group_id: item.group_id || undefined,
         shard_count: 1,
         position: item.position,
@@ -67,15 +67,6 @@ function groupPendingItems(items: DownloadQueueItem[]): GroupedQueueItem[] {
   
   // Sort by position
   return Array.from(groups.values()).sort((a, b) => a.position - b.position);
-}
-
-/**
- * Format model display name from model_id
- * e.g., "unsloth/Qwen3-30B-A3B-GGUF" -> "Qwen3-30B-A3B-GGUF"
- */
-function formatModelName(modelId: string): string {
-  const parts = modelId.split('/');
-  return parts.length > 1 ? parts[1] : modelId;
 }
 
 /**
@@ -109,7 +100,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
         await cancelShardGroup(item.group_id);
       } else {
         // Remove single item
-        await removeFromDownloadQueue(item.model_id);
+        await removeFromDownloadQueue(item.id);
       }
       onRefresh();
     } catch (error) {
@@ -128,7 +119,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     const newPosition = index - 1;
     
     try {
-      await reorderDownloadQueue(item.model_id, newPosition);
+      await reorderDownloadQueue(item.id, newPosition);
       onRefresh();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
@@ -146,7 +137,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     const newPosition = index + 1;
     
     try {
-      await reorderDownloadQueue(item.model_id, newPosition);
+      await reorderDownloadQueue(item.id, newPosition);
       onRefresh();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
@@ -168,7 +159,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
       <div className={styles.content}>
         {groupedItems.map((item, index) => (
           <div
-            key={item.group_id || item.model_id}
+            key={item.group_id || item.id}
             className={styles.queueItem}
           >
             {/* Reorder buttons */}
@@ -195,13 +186,10 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             
             {/* Item info */}
             <div className={styles.itemInfo}>
-              <div className={styles.modelName} title={item.model_id}>
-                {formatModelName(item.model_id)}
+              <div className={styles.modelName} title={item.id}>
+                {item.display_name}
               </div>
               <div className={styles.itemMeta}>
-                {item.quantization && (
-                  <span className={styles.quantization}>{item.quantization}</span>
-                )}
                 {item.shard_count > 1 && (
                   <span className={styles.shardBadge}>
                     {item.shard_count} parts

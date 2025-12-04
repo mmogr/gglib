@@ -129,20 +129,15 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   // Get the current download from queue status (authoritative source)
   const currentDownload = queueStatus?.current;
   
-  // Build the canonical model ID format (model_id:quantization) for comparison
-  // Both queue status and progress events now use this consistent format
-  const currentDownloadFullId = currentDownload 
-    ? (currentDownload.quantization 
-        ? `${currentDownload.model_id}:${currentDownload.quantization}`
-        : currentDownload.model_id)
-    : null;
+  // The id in QueueSnapshot is already the canonical format (model_id:quantization)
+  const currentDownloadFullId = currentDownload?.id || null;
   
   // Match progress events to current download with fallback for edge cases
   // Primary: exact match on canonical ID (model_id:quantization)
   // Fallback: match on base model_id prefix (handles timing edge cases)
   const isProgressMatch = progress && currentDownloadFullId && (
     progress.model_id === currentDownloadFullId ||
-    progress.model_id.startsWith(currentDownload?.model_id + ':') ||
+    progress.model_id.startsWith(currentDownload?.id.split(':')[0] + ':') ||
     currentDownloadFullId.startsWith(progress.model_id + ':')
   );
   

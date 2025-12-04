@@ -48,6 +48,8 @@ pub mod proxy_service;
 pub mod server_service;
 pub mod settings_service;
 
+use crate::commands::download::get_models_directory;
+use crate::download::{DownloadManager, DownloadManagerConfig};
 use crate::services::process_manager::ProcessManager;
 use crate::utils::paths::get_llama_server_path;
 use sqlx::SqlitePool;
@@ -62,6 +64,8 @@ pub use download_models::{
 pub use download_process_manager::{DownloadProcessManager, PidStorage};
 pub use download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
 pub use download_service::DownloadService;
+// Re-export new download types from src/download/
+pub use crate::download::{DownloadId, QueueSnapshot, DownloadEvent};
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};
@@ -86,7 +90,7 @@ pub struct AppCore {
     model_service: ModelService,
     server_service: ServerService,
     proxy_service: ProxyService,
-    download_service: DownloadService,
+    download_manager: DownloadManager,
     settings_service: SettingsService,
     huggingface_client: DefaultHuggingfaceClient,
     mcp_service: McpService,
@@ -145,7 +149,17 @@ impl AppCore {
 
         let server_service = ServerService::new(process_manager, model_service.clone());
         let proxy_service = ProxyService::new(db_pool.clone());
-        let download_service = DownloadService::new();
+
+        // Create DownloadManager with default config and no-op event callback
+        // GUI backends will set up their own callback for Tauri/web events
+        let models_dir = get_models_directory().unwrap_or_else(|_| std::path::PathBuf::from("models"));
+        let download_config = DownloadManagerConfig {
+            models_dir,
+            max_queue_size: 100,
+            hf_token: None,
+        };
+        let download_manager = DownloadManager::new(download_config, Arc::new(|_| {}));
+
         let settings_service = SettingsService::new(db_pool.clone());
         let huggingface_client = DefaultHuggingfaceClient::default_client();
         let mcp_service = McpService::new(db_pool.clone());
@@ -155,7 +169,7 @@ impl AppCore {
             model_service,
             server_service,
             proxy_service,
-            download_service,
+            download_manager,
             settings_service,
             huggingface_client,
             mcp_service,
@@ -240,27 +254,25 @@ impl AppCore {
         &self.proxy_service
     }
 
-    /// Access the download service for HuggingFace model downloads.
+    /// Access the download manager for HuggingFace model downloads.
     ///
     /// # Example
     ///
     /// ```rust,no_run
     /// # use gglib::services::core::AppCore;
     /// # async fn example(core: &AppCore) -> anyhow::Result<()> {
-    /// // Start a download
-    /// core.downloads().download(
-    ///     "TheBloke/Llama-2-7B-GGUF".to_string(),
-    ///     Some("Q4_K_M".to_string()),
-    ///     None,
-    /// ).await?;
+    /// // Queue a download (auto-detects shards)
+    /// let (id, position, shard_count) = core.downloads()
+    ///     .queue_download_auto("TheBloke/Llama-2-7B-GGUF", "Q4_K_M")
+    ///     .await?;
     ///
     /// // Check active downloads
     /// let active = core.downloads().active_downloads().await;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn downloads(&self) -> &DownloadService {
-        &self.download_service
+    pub fn downloads(&self) -> &DownloadManager {
+        &self.download_manager
     }
 
     /// Access the settings service for application configuration.

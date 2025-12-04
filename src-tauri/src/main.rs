@@ -6,12 +6,13 @@ mod menu;
 use dotenvy::dotenv;
 use gglib::{
     commands::llama::check_llama_installed,
+    download::QueueSnapshot,
     models::gui::{
         AddModelRequest, AppSettings, GuiModel, HfQuantizationsResponse, HfSearchRequest,
         HfSearchResponse, HfToolSupportResponse, RemoveModelRequest, StartServerRequest,
         StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
     },
-    services::core::{DownloadError, DownloadQueueStatus},
+    services::core::DownloadError,
     services::gui_backend::GuiBackend,
     services::mcp::{McpServerConfig, McpServerInfo, McpTool, McpToolResult},
 };
@@ -425,7 +426,7 @@ struct QueueDownloadResponse {
 
 #[tauri::command]
 async fn queue_download(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     model_id: String,
     quantization: Option<String>,
     state: tauri::State<'_, AppState>,
@@ -439,21 +440,13 @@ async fn queue_download(
 
     // Start the queue processor in a background task (if not already running)
     let backend = state.backend.clone();
-    let app_clone = app.clone();
 
     tokio::spawn(async move {
-        use gglib::commands::download::DownloadProgressEvent;
-
-        let progress_callback = move |event: DownloadProgressEvent| {
-            if let Err(err) = app_clone.emit("download-progress", &event) {
-                tracing::error!(error = %err, "Failed to emit download progress event");
-            }
-        };
-
-        backend
+        // process_queue runs until queue is empty, handles progress internally via on_event
+        let _ = backend
             .core()
             .downloads()
-            .process_queue(progress_callback)
+            .process_queue()
             .await;
     });
 
@@ -466,7 +459,7 @@ async fn queue_download(
 #[tauri::command]
 async fn get_download_queue(
     state: tauri::State<'_, AppState>,
-) -> Result<DownloadQueueStatus, String> {
+) -> Result<QueueSnapshot, String> {
     Ok(state.backend.get_download_queue().await)
 }
 

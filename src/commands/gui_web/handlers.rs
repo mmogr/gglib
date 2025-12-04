@@ -8,13 +8,13 @@
 
 use crate::commands::download::{DownloadProgressEvent, ProgressThrottle};
 use crate::commands::gui_web::state::AppState;
+use crate::download::QueueSnapshot;
 use crate::models::gui::{
     AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
     HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfToolSupportResponse,
     ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest, StartServerResponse,
     UpdateModelRequest, UpdateModelsDirectoryRequest, UpdateSettingsRequest,
 };
-use crate::services::core::DownloadQueueStatus;
 use crate::utils::system::SystemMemoryInfo;
 use axum::{
     Json,
@@ -314,17 +314,13 @@ pub async fn queue_download(
 
     // Start the queue processor in a background task (if not already running)
     let backend = state.backend.clone();
-    let progress_tx = state.progress_tx.clone();
 
     tokio::spawn(async move {
-        let progress_callback = move |event: DownloadProgressEvent| {
-            let _ = progress_tx.send(event.to_json_string());
-        };
-
-        backend
+        // process_queue runs until queue is empty, handles progress internally
+        let _ = backend
             .core()
             .downloads()
-            .process_queue(progress_callback)
+            .process_queue()
             .await;
     });
 
@@ -337,7 +333,7 @@ pub async fn queue_download(
 /// Get the current download queue status
 pub async fn get_download_queue(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ApiResponse<DownloadQueueStatus>>, AppError> {
+) -> Result<Json<ApiResponse<QueueSnapshot>>, AppError> {
     let status = state.backend.get_download_queue().await;
     Ok(Json(ApiResponse::success(status)))
 }

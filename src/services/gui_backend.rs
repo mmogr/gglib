@@ -12,7 +12,7 @@ use crate::models::gui::{
     HfToolSupportResponse as GuiHfToolSupportResponse, ModelsDirectoryInfo, RemoveModelRequest,
     StartServerRequest, StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
 };
-use crate::services::core::{AppCore, StartServerConfig};
+use crate::services::core::{AppCore, DownloadId, StartServerConfig};
 use crate::services::database;
 use crate::services::huggingface::{HfRepoRef, HfSearchQuery, HfSortField};
 use crate::services::process_manager::ProcessManager;
@@ -263,22 +263,35 @@ impl GuiBackend {
     // Download Operations - Delegate to AppCore
     // =========================================================================
 
-    /// Download a model from HuggingFace Hub
+    /// Queue a model download from HuggingFace Hub.
+    ///
+    /// This uses `queue_download_auto` which auto-detects sharded models.
+    /// Returns `(DownloadId, queue_position, shard_count)`.
     pub async fn download_model(
         &self,
         model_id: String,
         quantization: Option<String>,
-        progress_callback: Option<&crate::commands::download::ProgressCallback>,
+        _progress_callback: Option<&crate::commands::download::ProgressCallback>,
     ) -> Result<String> {
-        self.core
+        let quant = quantization.unwrap_or_else(|| "Q4_K_M".to_string());
+        let (id, _position, _shard_count) = self.core
             .downloads()
-            .download(model_id, quantization, progress_callback)
+            .queue_download_auto(&model_id, &quant)
             .await
+            .map_err(|e| anyhow!("Failed to queue download: {}", e))?;
+
+        Ok(format!("Queued download: {}", id))
     }
 
     /// Cancel an in-flight download if one exists.
     pub async fn cancel_download(&self, model_id: &str) -> Result<()> {
-        self.core.downloads().cancel(model_id).await
+        let id: DownloadId = model_id.parse().unwrap_or_else(|_| DownloadId::from_model(model_id));
+        let cancelled = self.core.downloads().cancel(&id).await;
+        if cancelled {
+            Ok(())
+        } else {
+            Err(anyhow!("No active download found for {}", model_id))
+        }
     }
 
     // =========================================================================
@@ -452,30 +465,34 @@ impl GuiBackend {
     ) -> Result<(usize, usize)> {
         // Use queue_download_auto to auto-detect and handle sharded models
         let quant = quantization.unwrap_or_default();
-        self.core
+        let (_id, position, shard_count) = self.core
             .downloads()
             .queue_download_auto(model_id, quant)
             .await
+            .map_err(|e| anyhow!("Failed to queue download: {}", e))?;
+        Ok((position as usize, shard_count))
     }
 
     /// Get the current status of the download queue.
-    pub async fn get_download_queue(&self) -> crate::services::core::DownloadQueueStatus {
-        self.core.downloads().get_queue_status().await
+    pub async fn get_download_queue(&self) -> crate::download::QueueSnapshot {
+        self.core.downloads().get_queue_snapshot().await
     }
 
     /// Remove an item from the pending download queue.
     pub async fn remove_from_download_queue(&self, model_id: &str) -> Result<()> {
-        self.core.downloads().remove_from_queue(model_id).await
+        let id: DownloadId = model_id.parse().unwrap_or_else(|_| DownloadId::from_model(model_id));
+        self.core.downloads().remove_from_queue(&id).await
+            .map_err(|e| anyhow!("Failed to remove from queue: {}", e))
     }
 
     /// Reorder a queued download to a new position.
     ///
-    /// For sharded models, all shards are moved together as a unit.
+    /// Reorder an item in the download queue.
     ///
     /// # Arguments
     ///
     /// * `model_id` - The model ID to move
-    /// * `new_position` - The target position (0-based index)
+    /// * `new_position` - The target position (1-based index)
     ///
     /// # Returns
     ///
@@ -485,10 +502,13 @@ impl GuiBackend {
         model_id: &str,
         new_position: usize,
     ) -> Result<usize> {
-        self.core
+        let id: DownloadId = model_id.parse().unwrap_or_else(|_| DownloadId::from_model(model_id));
+        let actual_position = self.core
             .downloads()
-            .reorder_queue(model_id, new_position)
+            .reorder_queue(&id, new_position as u32)
             .await
+            .map_err(|e| anyhow!("Failed to reorder queue: {}", e))?;
+        Ok(actual_position as usize)
     }
 
     /// Cancel all shards in a shard group (for sharded model downloads).
@@ -496,7 +516,9 @@ impl GuiBackend {
     /// This removes all pending shards in the group and cancels any active
     /// download belonging to the group.
     pub async fn cancel_shard_group(&self, group_id: &str) -> Result<()> {
-        self.core.downloads().cancel_shard_group(group_id).await
+        let gid = crate::download::ShardGroupId::from(group_id.to_string());
+        self.core.downloads().cancel_shard_group(&gid).await
+            .map_err(|e| anyhow!("Failed to cancel shard group: {}", e))
     }
 
     /// Clear all failed downloads from the list.
