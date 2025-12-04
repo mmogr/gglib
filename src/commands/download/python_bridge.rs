@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-use crate::services::core::download_service::PidStorage;
+use crate::services::core::PidStorage;
 use crate::utils::paths::get_data_root;
 
 use super::file_ops::ProgressCallback;
