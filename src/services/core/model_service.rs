@@ -162,7 +162,7 @@ impl ModelService {
             .unwrap_or(0.0);
 
         // Auto-detect reasoning and tool calling capabilities from metadata
-        let tags = crate::utils::gguf_parser::apply_capability_detection(&gguf_metadata.metadata);
+        let tags = crate::gguf::apply_capability_detection(&gguf_metadata.metadata);
 
         // Create the model instance
         let new_model = Gguf {

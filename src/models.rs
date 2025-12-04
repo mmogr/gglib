@@ -112,26 +112,6 @@ impl Gguf {
     }
 }
 
-/// Metadata extracted from a GGUF file header
-///
-/// This struct represents the parsed metadata from a GGUF file before
-/// it's converted into a full Gguf model instance.
-#[derive(Debug, Clone)]
-pub struct GgufMetadata {
-    /// Model name from general.name metadata
-    pub name: Option<String>,
-    /// Model architecture from general.architecture
-    pub architecture: Option<String>,
-    /// Parameter count calculated from model structure
-    pub param_count_b: Option<f64>,
-    /// Quantization information derived from file_type or filename
-    pub quantization: Option<String>,
-    /// Context length from architecture-specific metadata
-    pub context_length: Option<u64>,
-    /// All metadata key-value pairs
-    pub metadata: HashMap<String, String>,
-}
-
 /// Information about available GGUF files for a HuggingFace model
 #[derive(Debug, Clone)]
 pub struct HfModelInfo {
@@ -161,6 +141,7 @@ pub struct HfGgufFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gguf::GgufMetadata;
     use chrono::Utc;
     use std::path::PathBuf;
 

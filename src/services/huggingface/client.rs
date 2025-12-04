@@ -40,7 +40,7 @@ use super::parsing::{
     parse_tree_entries,
 };
 use super::url_builder::{build_model_info_url, build_search_url, build_tree_url};
-use crate::utils::gguf_parser::detect_tool_support;
+use crate::gguf::detect_tool_support;
 use std::collections::HashMap;
 
 // ============================================================================

@@ -5,9 +5,10 @@
 //! and database storage.
 
 use crate::{
+    gguf,
     models,
     services::{AppCore, database},
-    utils::{gguf_parser, input, validation},
+    utils::{input, validation},
 };
 use anyhow::Result;
 
@@ -100,7 +101,7 @@ pub async fn handle_add(file_path: String) -> Result<()> {
     };
 
     // Auto-detect reasoning and tool calling capabilities from metadata
-    let auto_tags = gguf_parser::apply_capability_detection(&gguf_metadata.metadata);
+    let auto_tags = gguf::apply_capability_detection(&gguf_metadata.metadata);
 
     // Create the model instance with extracted and user-provided metadata
     let new_model: models::Gguf = models::Gguf {
@@ -145,7 +146,7 @@ pub async fn handle_add(file_path: String) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::models::GgufMetadata;
+    use crate::gguf::GgufMetadata;
     use std::collections::HashMap;
 
     // Note: These tests would typically require mocking external dependencies

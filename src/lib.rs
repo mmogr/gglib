@@ -2,13 +2,18 @@
 
 pub mod cli;
 pub mod commands;
+pub mod gguf;
 pub mod models;
 pub mod proxy;
 pub mod services;
 pub mod utils;
 
 // Re-export specific commonly used types
+pub use gguf::{
+    apply_capability_detection, detect_reasoning_support, detect_tool_support, parse_gguf_file,
+    GgufError, GgufMetadata, GgufResult, GgufValue, ReasoningDetection, ToolCallingDetection,
+};
 pub use models::gui::{ApiResponse, GuiModel, StartServerRequest, StartServerResponse};
-pub use models::{Gguf, GgufMetadata};
+pub use models::Gguf;
 pub use services::{database, gui_backend};
-pub use utils::{gguf_parser, input, validation};
+pub use utils::{input, validation};
