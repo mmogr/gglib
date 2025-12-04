@@ -32,7 +32,12 @@ impl ShardGroupId {
 
     /// Generate a unique group ID for a sharded download.
     pub fn generate(model_id: &str, quantization: &str) -> Self {
-        Self(format!("{}:{}:{}", model_id, quantization, uuid::Uuid::new_v4()))
+        Self(format!(
+            "{}:{}:{}",
+            model_id,
+            quantization,
+            uuid::Uuid::new_v4()
+        ))
     }
 
     /// Get the inner string reference.
@@ -155,7 +160,9 @@ impl DownloadQueue {
 
     /// Check if a model is in the failed list.
     pub fn is_failed(&self, model_id: &str) -> bool {
-        self.failed.iter().any(|item| item.item.model_id == model_id)
+        self.failed
+            .iter()
+            .any(|item| item.item.model_id == model_id)
     }
 
     /// Queue a single (non-sharded) download.
@@ -308,7 +315,8 @@ impl DownloadQueue {
 
         // Remove then reinsert at new position
         if let Some(ref gid) = group_id {
-            self.pending.retain(|item| item.group_id.as_ref() != Some(gid));
+            self.pending
+                .retain(|item| item.group_id.as_ref() != Some(gid));
         } else {
             self.pending.retain(|item| item.model_id != model_id);
         }
@@ -567,7 +575,10 @@ mod tests {
         queue.queue("model/a".into(), None, 0).unwrap();
         queue.queue("model/b".into(), None, 0).unwrap();
         let result = queue.queue("model/c".into(), None, 0);
-        assert!(matches!(result, Err(DownloadError::QueueFull { max_size: 2 })));
+        assert!(matches!(
+            result,
+            Err(DownloadError::QueueFull { max_size: 2 })
+        ));
     }
 
     #[test]
@@ -893,7 +904,10 @@ mod tests {
 
         assert_eq!(status.failed.len(), 1);
         assert_eq!(status.failed[0].model_id, "model/a");
-        assert_eq!(status.failed[0].error, Some("Connection timeout".to_string()));
+        assert_eq!(
+            status.failed[0].error,
+            Some("Connection timeout".to_string())
+        );
         assert_eq!(status.failed[0].status, DownloadStatus::Failed);
     }
 

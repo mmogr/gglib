@@ -20,8 +20,8 @@ use super::download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
 use super::huggingface_service::HuggingFaceService;
 use anyhow::Result;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
@@ -121,8 +121,12 @@ impl DownloadService {
         drop(active_downloads);
 
         // Delegate to queue
-        let position = self.queue.write().await.queue(model_id, quantization, active_count)?;
-        
+        let position = self
+            .queue
+            .write()
+            .await
+            .queue(model_id, quantization, active_count)?;
+
         // Convert 0-based to 1-based for UI + account for active downloads
         Ok(active_count + position + 1)
     }
@@ -169,10 +173,8 @@ impl DownloadService {
         drop(active_downloads);
 
         // Convert filenames to (filename, None) tuples for queue_sharded
-        let shard_files: Vec<(String, Option<u64>)> = shard_filenames
-            .into_iter()
-            .map(|f| (f, None))
-            .collect();
+        let shard_files: Vec<(String, Option<u64>)> =
+            shard_filenames.into_iter().map(|f| (f, None)).collect();
 
         // Delegate to queue
         let position = self.queue.write().await.queue_sharded(
@@ -212,10 +214,8 @@ impl DownloadService {
         drop(active_downloads);
 
         // Convert (filename, size) to (filename, Some(size)) for queue_sharded
-        let shard_files_with_sizes: Vec<(String, Option<u64>)> = shard_files
-            .into_iter()
-            .map(|(f, s)| (f, Some(s)))
-            .collect();
+        let shard_files_with_sizes: Vec<(String, Option<u64>)> =
+            shard_files.into_iter().map(|(f, s)| (f, Some(s))).collect();
 
         // Delegate to queue
         let position = self.queue.write().await.queue_sharded(
@@ -234,7 +234,10 @@ impl DownloadService {
     /// This is used when cancelling or failing a sharded download to remove
     /// all remaining shards from the queue.
     pub async fn remove_shard_group(&self, group_id: &str) -> usize {
-        self.queue.write().await.remove_group(&ShardGroupId::from(group_id))
+        self.queue
+            .write()
+            .await
+            .remove_group(&ShardGroupId::from(group_id))
     }
 
     /// Cancel an active download and remove all related shards from queue.
@@ -325,7 +328,10 @@ impl DownloadService {
 
     /// Mark a download as failed (internal use).
     async fn mark_failed(&self, item: QueuedDownload, error: &str) {
-        self.queue.write().await.mark_failed(FailedDownload::new(item, error));
+        self.queue
+            .write()
+            .await
+            .mark_failed(FailedDownload::new(item, error));
     }
 
     /// Download a model from HuggingFace Hub.
@@ -383,9 +389,9 @@ impl DownloadService {
             None,  // token
             false, // force
             progress_callback,
-            Some(cancel_token.clone()),    // Pass token for cancellation
+            Some(cancel_token.clone()), // Pass token for cancellation
             Some(self.process_manager.pid_storage()), // PID storage for shutdown termination
-            Some(model_id.clone()),        // PID key
+            Some(model_id.clone()),     // PID key
         );
         tokio::pin!(download_future);
 
@@ -773,7 +779,10 @@ impl DownloadService {
             return true; // Not a shard, treat as "last"
         };
 
-        self.queue.read().await.is_last_in_group(&ShardGroupId::new(group_id))
+        self.queue
+            .read()
+            .await
+            .is_last_in_group(&ShardGroupId::new(group_id))
     }
 
     /// Get the total size of already completed shards in the same group.

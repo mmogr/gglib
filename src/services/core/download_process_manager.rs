@@ -67,10 +67,7 @@ impl DownloadProcessManager {
 
     /// Get the number of tracked processes.
     pub fn count(&self) -> usize {
-        self.pids
-            .read()
-            .map(|guard| guard.len())
-            .unwrap_or(0)
+        self.pids.read().map(|guard| guard.len()).unwrap_or(0)
     }
 
     /// Synchronously kill all active child processes.
@@ -130,7 +127,7 @@ impl Default for DownloadProcessManager {
 /// * `pid` - The process ID to terminate
 #[cfg(unix)]
 pub fn kill_process_by_pid(pid: u32) {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
     use tracing::warn;
 
@@ -147,7 +144,7 @@ pub fn kill_process_by_pid(pid: u32) {
 pub fn kill_process_by_pid(pid: u32) {
     use tracing::warn;
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
 
     unsafe {
         let handle = OpenProcess(PROCESS_TERMINATE, false, pid);
