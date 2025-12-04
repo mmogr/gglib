@@ -267,6 +267,11 @@ impl DownloadService {
     }
 
     /// Get the current status of the download queue.
+    ///
+    /// Applies UI position semantics:
+    /// - Position 1 = current download (if any)
+    /// - Position 2+ = pending items (when current exists)
+    /// - Position 1+ = pending items (when no current download)
     pub async fn get_queue_status(&self) -> DownloadQueueStatus {
         let active = self.active_downloads.read().await;
 
@@ -275,15 +280,33 @@ impl DownloadService {
             model_id: info.model_id.clone(),
             quantization: info.quantization.clone(),
             status: DownloadStatus::Downloading,
-            position: 1, // Current is position 1 (UI-facing, 1-based)
+            position: 1, // Current is always position 1
             error: None,
             group_id: info.group_id.clone(),
             shard_info: info.shard_info.clone(),
         });
 
-        // Delegate to queue for pending/failed items
-        // Note: Queue returns positions starting at 2 when current is present
-        self.queue.read().await.status(current)
+        // Get raw 0-based status from queue
+        let raw = self.queue.read().await.status();
+
+        // Apply UI position offset: pending starts at 2 if current exists, else 1
+        let offset = if current.is_some() { 2 } else { 1 };
+        let pending = raw
+            .pending
+            .into_iter()
+            .enumerate()
+            .map(|(idx, mut item)| {
+                item.position = idx + offset;
+                item
+            })
+            .collect();
+
+        DownloadQueueStatus {
+            current,
+            pending,
+            failed: raw.failed, // Failed items keep 0-based positions (internal use)
+            max_size: raw.max_size,
+        }
     }
 
     /// Remove an item from the pending queue.
@@ -1457,7 +1480,8 @@ mod tests {
         assert!(status.current.is_none()); // Nothing actively downloading
         assert_eq!(status.pending.len(), 2);
         assert_eq!(status.pending[0].model_id, "model1");
-        assert_eq!(status.pending[0].position, 2); // Position starts at 2 (1 is for current)
+        // When no current download, pending starts at position 1
+        assert_eq!(status.pending[0].position, 1);
     }
 
     #[tokio::test]

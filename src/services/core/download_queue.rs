@@ -350,12 +350,10 @@ impl DownloadQueue {
     ///
     /// # Returns
     ///
-    /// A `DownloadQueueStatus` with UI-facing positions for pending items.
-    /// Positions start at 2 (position 1 is reserved for current download).
-    pub fn status(&self, current: Option<DownloadQueueItem>) -> DownloadQueueStatus {
-        // Position 1 is reserved for current download, pending starts at 2
-        let offset = 2;
-
+    /// A `DownloadQueueStatus` with 0-based positions for pending and failed items.
+    /// The caller (`DownloadService`) is responsible for applying UI position offsets
+    /// and providing the current download.
+    pub fn status(&self) -> DownloadQueueStatus {
         let pending_items: Vec<_> = self
             .pending
             .iter()
@@ -364,7 +362,7 @@ impl DownloadQueue {
                 model_id: item.model_id.clone(),
                 quantization: item.quantization.clone(),
                 status: DownloadStatus::Queued,
-                position: idx + offset, // UI-facing position (starts at 2)
+                position: idx, // 0-based index
                 error: None,
                 group_id: item.group_id.clone(),
                 shard_info: item.shard_info.clone(),
@@ -379,7 +377,7 @@ impl DownloadQueue {
                 model_id: failed.item.model_id.clone(),
                 quantization: failed.item.quantization.clone(),
                 status: DownloadStatus::Failed,
-                position: idx,
+                position: idx, // 0-based index
                 error: Some(failed.error.clone()),
                 group_id: failed.item.group_id.clone(),
                 shard_info: failed.item.shard_info.clone(),
@@ -387,7 +385,7 @@ impl DownloadQueue {
             .collect();
 
         DownloadQueueStatus {
-            current,
+            current: None, // Queue doesn't know about current; caller provides it
             pending: pending_items,
             failed: failed_items,
             max_size: self.max_size,
@@ -652,7 +650,7 @@ mod tests {
         assert_eq!(pos, 0);
         assert_eq!(queue.pending_len(), 2);
 
-        let status = queue.status(None);
+        let status = queue.status();
         assert_eq!(status.pending.len(), 2);
 
         // All items share the same group_id
@@ -675,7 +673,7 @@ mod tests {
             .queue_sharded("model/x".into(), "Q4_K_M".into(), shards, 0)
             .unwrap();
 
-        let status = queue.status(None);
+        let status = queue.status();
 
         let shard0 = status.pending[0].shard_info.as_ref().unwrap();
         assert_eq!(shard0.shard_index, 0);
@@ -885,13 +883,14 @@ mod tests {
         queue.queue("model/a".into(), None, 0).unwrap();
         queue.queue("model/b".into(), None, 0).unwrap();
 
-        let status = queue.status(None);
+        let status = queue.status();
 
-        // Positions start at 2 (position 1 is reserved for current download)
-        assert_eq!(status.pending[0].position, 2);
+        // Queue returns 0-based positions; caller applies UI offset
+        assert_eq!(status.pending[0].position, 0);
         assert_eq!(status.pending[0].model_id, "model/a");
-        assert_eq!(status.pending[1].position, 3);
+        assert_eq!(status.pending[1].position, 1);
         assert_eq!(status.pending[1].model_id, "model/b");
+        assert!(status.current.is_none()); // Queue doesn't know about current
     }
 
     #[test]
@@ -900,7 +899,7 @@ mod tests {
         let item = QueuedDownload::new("model/a".into(), Some("Q4_K_M".into()));
         queue.mark_failed(FailedDownload::new(item, "Connection timeout"));
 
-        let status = queue.status(None);
+        let status = queue.status();
 
         assert_eq!(status.failed.len(), 1);
         assert_eq!(status.failed[0].model_id, "model/a");
