@@ -307,14 +307,3 @@ fn finish_progress(printer: &mut Option<CliProgressPrinter>) {
         p.finish();
     }
 }
-
-// ============================================================================
-// Compatibility
-// ============================================================================
-
-impl PythonBridgeError {
-    /// Check if this error represents a cancellation.
-    pub fn is_cancelled(&self) -> bool {
-        matches!(self, PythonBridgeError::Cancelled)
-    }
-}

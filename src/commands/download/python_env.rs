@@ -157,11 +157,6 @@ impl PythonEnvironment {
         &self.script_path
     }
 
-    /// Get the environment directory path.
-    pub fn env_dir(&self) -> &Path {
-        &self.env_dir
-    }
-
     // ------------------------------------------------------------------------
     // Internal methods
     // ------------------------------------------------------------------------
