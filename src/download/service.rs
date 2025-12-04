@@ -402,16 +402,14 @@ impl DownloadManager {
 
             // Check if any active download belongs to this group
             // by looking at pending items that share the group_id
-            tokens
-                .keys()
-                .find_map(|key| {
-                    let id: DownloadId = key.parse().ok()?;
-                    if queue.is_queued(&id) {
-                        None // Still in queue, not active
-                    } else {
-                        Some(id)
-                    }
-                })
+            tokens.keys().find_map(|key| {
+                let id: DownloadId = key.parse().ok()?;
+                if queue.is_queued(&id) {
+                    None // Still in queue, not active
+                } else {
+                    Some(id)
+                }
+            })
         };
 
         // Cancel active download if found
