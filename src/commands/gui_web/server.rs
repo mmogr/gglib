@@ -41,18 +41,21 @@ pub async fn start_web_server(port: u16, base_port: u16, max_concurrent: usize) 
     // Wire download events to the broadcast channel + completion handler
     let progress_tx = state.progress_tx.clone();
     let backend_for_callback = backend.clone();
-    backend.core().downloads().set_event_callback(Arc::new(move |event: DownloadEvent| {
-        // Forward all events to SSE broadcast
-        if let Ok(json) = serde_json::to_string(&event) {
-            // Ignore send errors (no receivers is fine)
-            let _ = progress_tx.send(json);
-        }
+    backend
+        .core()
+        .downloads()
+        .set_event_callback(Arc::new(move |event: DownloadEvent| {
+            // Forward all events to SSE broadcast
+            if let Ok(json) = serde_json::to_string(&event) {
+                // Ignore send errors (no receivers is fine)
+                let _ = progress_tx.send(json);
+            }
 
-        // Handle completion: register model in database
-        if let DownloadEvent::DownloadCompleted { id, .. } = &event {
-            backend_for_callback.core().handle_download_completed(id);
-        }
-    }));
+            // Handle completion: register model in database
+            if let DownloadEvent::DownloadCompleted { id, .. } = &event {
+                backend_for_callback.core().handle_download_completed(id);
+            }
+        }));
     println!("✓ Download events wired to broadcast channel");
 
     // Build the application router

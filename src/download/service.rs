@@ -129,7 +129,10 @@ impl DownloadManager {
 
     /// Get a cloned event callback for use in async contexts.
     fn get_event_callback(&self) -> EventCallback {
-        self.on_event.read().map(|g| g.clone()).unwrap_or_else(|_| Arc::new(|_| {}))
+        self.on_event
+            .read()
+            .map(|g| g.clone())
+            .unwrap_or_else(|_| Arc::new(|_| {}))
     }
 
     /// Queue a download request.
@@ -373,7 +376,11 @@ impl DownloadManager {
     /// # Returns
     ///
     /// The actual 1-based position where the item(s) were placed.
-    pub async fn reorder_queue(&self, id: &DownloadId, new_position: u32) -> Result<u32, DownloadError> {
+    pub async fn reorder_queue(
+        &self,
+        id: &DownloadId,
+        new_position: u32,
+    ) -> Result<u32, DownloadError> {
         let has_active = !self.cancel_tokens.read().await.is_empty();
         let mut queue = self.queue.write().await;
         let actual_position = queue.reorder(id, new_position, has_active)?;
@@ -541,8 +548,7 @@ impl DownloadManager {
 
         // Re-queue using auto-detect
         let quant = id.quantization().unwrap_or("Q4_K_M");
-        let (_, position, shard_count) =
-            self.queue_download_auto(id.model_id(), quant).await?;
+        let (_, position, shard_count) = self.queue_download_auto(id.model_id(), quant).await?;
 
         Ok((position, shard_count))
     }
@@ -556,10 +562,7 @@ impl DownloadManager {
     /// Get list of currently active download IDs.
     pub async fn active_downloads(&self) -> Vec<DownloadId> {
         let tokens = self.cancel_tokens.read().await;
-        tokens
-            .keys()
-            .filter_map(|k| k.parse().ok())
-            .collect()
+        tokens.keys().filter_map(|k| k.parse().ok()).collect()
     }
 
     // ========================================================================

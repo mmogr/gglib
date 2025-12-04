@@ -274,7 +274,8 @@ impl GuiBackend {
         _progress_callback: Option<&crate::commands::download::ProgressCallback>,
     ) -> Result<String> {
         let quant = quantization.unwrap_or_else(|| "Q4_K_M".to_string());
-        let (id, _position, _shard_count) = self.core
+        let (id, _position, _shard_count) = self
+            .core
             .downloads()
             .queue_download_auto(&model_id, &quant)
             .await
@@ -285,7 +286,9 @@ impl GuiBackend {
 
     /// Cancel an in-flight download if one exists.
     pub async fn cancel_download(&self, model_id: &str) -> Result<()> {
-        let id: DownloadId = model_id.parse().unwrap_or_else(|_| DownloadId::from_model(model_id));
+        let id: DownloadId = model_id
+            .parse()
+            .unwrap_or_else(|_| DownloadId::from_model(model_id));
         let cancelled = self.core.downloads().cancel(&id).await;
         if cancelled {
             Ok(())
@@ -465,7 +468,8 @@ impl GuiBackend {
     ) -> Result<(usize, usize)> {
         // Use queue_download_auto to auto-detect and handle sharded models
         let quant = quantization.unwrap_or_default();
-        let (_id, position, shard_count) = self.core
+        let (_id, position, shard_count) = self
+            .core
             .downloads()
             .queue_download_auto(model_id, quant)
             .await
@@ -480,8 +484,13 @@ impl GuiBackend {
 
     /// Remove an item from the pending download queue.
     pub async fn remove_from_download_queue(&self, model_id: &str) -> Result<()> {
-        let id: DownloadId = model_id.parse().unwrap_or_else(|_| DownloadId::from_model(model_id));
-        self.core.downloads().remove_from_queue(&id).await
+        let id: DownloadId = model_id
+            .parse()
+            .unwrap_or_else(|_| DownloadId::from_model(model_id));
+        self.core
+            .downloads()
+            .remove_from_queue(&id)
+            .await
             .map_err(|e| anyhow!("Failed to remove from queue: {}", e))
     }
 
@@ -502,8 +511,11 @@ impl GuiBackend {
         model_id: &str,
         new_position: usize,
     ) -> Result<usize> {
-        let id: DownloadId = model_id.parse().unwrap_or_else(|_| DownloadId::from_model(model_id));
-        let actual_position = self.core
+        let id: DownloadId = model_id
+            .parse()
+            .unwrap_or_else(|_| DownloadId::from_model(model_id));
+        let actual_position = self
+            .core
             .downloads()
             .reorder_queue(&id, new_position as u32)
             .await
@@ -517,7 +529,10 @@ impl GuiBackend {
     /// download belonging to the group.
     pub async fn cancel_shard_group(&self, group_id: &str) -> Result<()> {
         let gid = crate::download::ShardGroupId::from(group_id.to_string());
-        self.core.downloads().cancel_shard_group(&gid).await
+        self.core
+            .downloads()
+            .cancel_shard_group(&gid)
+            .await
             .map_err(|e| anyhow!("Failed to cancel shard group: {}", e))
     }
 

@@ -66,7 +66,7 @@ pub use download_process_manager::{DownloadProcessManager, PidStorage};
 pub use download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
 pub use download_service::DownloadService;
 // Re-export new download types from src/download/
-pub use crate::download::{DownloadId, QueueSnapshot, DownloadEvent};
+pub use crate::download::{DownloadEvent, DownloadId, QueueSnapshot};
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};
@@ -155,7 +155,8 @@ impl AppCore {
 
         // Create DownloadManager with default config and no-op event callback
         // GUI backends will set up their own callback for Tauri/web events
-        let models_dir = get_models_directory().unwrap_or_else(|_| std::path::PathBuf::from("models"));
+        let models_dir =
+            get_models_directory().unwrap_or_else(|_| std::path::PathBuf::from("models"));
         let download_config = DownloadManagerConfig {
             models_dir,
             max_queue_size: 100,
