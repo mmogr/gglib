@@ -216,8 +216,8 @@ impl DownloadManager {
                 }
                 Err(e) => {
                     let mut queue = self.queue.write().await;
-                    let failed =
-                        crate::download::queue::FailedDownload::new(queued.clone(), &e.to_string());
+                    let error_msg = e.to_string();
+                    let failed = crate::download::queue::FailedDownload::new(queued.clone(), &error_msg);
                     queue.mark_failed(failed);
                 }
             }
@@ -315,7 +315,7 @@ impl DownloadManager {
 
 /// Sanitize model name for filesystem use.
 fn sanitize_model_name(model_id: &str) -> String {
-    model_id.replace('/', "_").replace('\\', "_")
+    model_id.replace(['/', '\\'], "_")
 }
 
 #[cfg(test)]

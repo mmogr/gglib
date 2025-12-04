@@ -29,6 +29,7 @@ struct ThrottleState {
 /// use gglib::download::ProgressThrottle;
 ///
 /// let throttle = ProgressThrottle::responsive_ui();
+/// let (downloaded, total) = (1024u64, 10240u64);
 ///
 /// // During download loop:
 /// if let Some(speed) = throttle.should_emit_with_speed(downloaded, total) {

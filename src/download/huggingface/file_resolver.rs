@@ -211,7 +211,7 @@ impl QuantizationFileResolver {
         }
 
         let mut result: Vec<Quantization> = seen.into_values().collect();
-        result.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+        result.sort_by_key(|q| q.to_string());
 
         Ok(result)
     }

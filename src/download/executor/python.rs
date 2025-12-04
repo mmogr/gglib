@@ -190,7 +190,7 @@ impl PythonDownloadExecutor {
                     &request.repo_id,
                     request.revision.as_deref().unwrap_or("main"),
                     &request.destination,
-                    &[shard.filename.clone()],
+                    std::slice::from_ref(&shard.filename),
                     request.token.as_deref(),
                     request.force,
                     &ctx,
@@ -279,11 +279,11 @@ impl PythonDownloadExecutor {
         }
 
         let cleanup_pid = || {
-            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup) {
-                if let Ok(mut guard) = storage.write() {
-                    guard.remove(key);
-                    tracing::debug!(key = %key, "Removed PID from tracking");
-                }
+            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup)
+                && let Ok(mut guard) = storage.write()
+            {
+                guard.remove(key);
+                tracing::debug!(key = %key, "Removed PID from tracking");
             }
         };
 
