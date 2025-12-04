@@ -3,6 +3,8 @@
 //! This module handles extraction of structured metadata from raw GGUF key-value pairs,
 //! including context length resolution, parameter count parsing, and quantization detection.
 
+#![allow(clippy::collapsible_if)]
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -139,10 +141,10 @@ const CONTEXT_LENGTH_KEYS: &[&str] = &[
 /// Extract context length from architecture-specific metadata.
 fn extract_context_length(raw: &RawMetadata) -> Option<u64> {
     for key in CONTEXT_LENGTH_KEYS {
-        if let Some(value) = raw.get(*key)
-            && let Some(length) = value.as_u64()
-        {
-            return Some(length);
+        if let Some(value) = raw.get(*key) {
+            if let Some(length) = value.as_u64() {
+                return Some(length);
+            }
         }
     }
     None
@@ -151,17 +153,17 @@ fn extract_context_length(raw: &RawMetadata) -> Option<u64> {
 /// Extract parameter count from metadata or filename.
 fn extract_param_count(raw: &RawMetadata, file_path: &Path) -> Option<f64> {
     // Try metadata first
-    if let Some(size_label) = raw.get("general.size_label")
-        && let Some(params) = parse_param_label(&size_label.to_string())
-    {
-        return Some(params);
+    if let Some(size_label) = raw.get("general.size_label") {
+        if let Some(params) = parse_param_label(&size_label.to_string()) {
+            return Some(params);
+        }
     }
 
     // Fallback to filename parsing
-    if let Some(filename) = file_path.file_name().and_then(|s| s.to_str())
-        && let Some(params) = parse_param_from_filename(filename)
-    {
-        return Some(params);
+    if let Some(filename) = file_path.file_name().and_then(|s| s.to_str()) {
+        if let Some(params) = parse_param_from_filename(filename) {
+            return Some(params);
+        }
     }
 
     None
@@ -182,10 +184,10 @@ fn parse_param_label(size_label: &str) -> Option<f64> {
     // Handle "8x7B" (mixture of experts)
     if let Some(x_pos) = upper.find('X') {
         let after_x = &upper[x_pos + 1..];
-        if let Some(number_part) = after_x.strip_suffix('B')
-            && let Ok(num) = number_part.parse::<f64>()
-        {
-            return Some(num);
+        if let Some(number_part) = after_x.strip_suffix('B') {
+            if let Ok(num) = number_part.parse::<f64>() {
+                return Some(num);
+            }
         }
     }
 
@@ -233,10 +235,10 @@ fn extract_quantization(raw: &RawMetadata, file_path: &Path) -> Option<String> {
     }
 
     // Fallback to file_type metadata
-    if let Some(file_type) = raw.get("general.file_type")
-        && let Some(quant) = map_file_type_to_quantization(&file_type.to_string())
-    {
-        return Some(quant);
+    if let Some(file_type) = raw.get("general.file_type") {
+        if let Some(quant) = map_file_type_to_quantization(&file_type.to_string()) {
+            return Some(quant);
+        }
     }
 
     None

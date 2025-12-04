@@ -3,6 +3,8 @@
 //! This module analyzes GGUF metadata to detect model capabilities
 //! such as reasoning/thinking support and tool/function calling.
 
+#![allow(clippy::collapsible_if)]
+
 use std::collections::HashMap;
 
 // =============================================================================
@@ -162,11 +164,11 @@ pub fn detect_reasoning_support(metadata: &HashMap<String, String>) -> Reasoning
     }
 
     // Check architecture
-    if let Some(arch) = metadata.get("general.architecture")
-        && arch.to_lowercase().contains("deepseek")
-    {
-        score += 0.15;
-        detection.matched_patterns.push(format!("arch:{}", arch));
+    if let Some(arch) = metadata.get("general.architecture") {
+        if arch.to_lowercase().contains("deepseek") {
+            score += 0.15;
+            detection.matched_patterns.push(format!("arch:{}", arch));
+        }
     }
 
     // Normalize and finalize
