@@ -20,7 +20,7 @@
 //! }
 //!
 //! // Get quantizations for a specific model
-//! let repo = "TheBloke/Llama-2-7B-GGUF".parse().unwrap();
+//! let repo = gglib::services::huggingface::HfRepoRef::parse("TheBloke/Llama-2-7B-GGUF").unwrap();
 //! let quants = client.list_quantizations(&repo).await?;
 //! for q in quants {
 //!     println!("{}: {:.1} MB", q.name, q.size_mb());

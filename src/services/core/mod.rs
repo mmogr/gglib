@@ -290,7 +290,7 @@ impl AppCore {
     ///
     /// ```rust,no_run
     /// # use gglib::services::core::AppCore;
-    /// # use gglib::models::gui::HfSearchRequest;
+    /// # use gglib::services::huggingface::HfSearchQuery;
     /// # async fn example(core: &AppCore) -> anyhow::Result<()> {
     /// // Search for models
     /// let query = HfSearchQuery::new().with_query("llama");
