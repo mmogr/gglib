@@ -233,7 +233,7 @@ pub mod testing {
         }
 
         /// Add a canned response for a URL pattern.
-        pub fn with_response(mut self, url_contains: &str, response: CannedResponse) -> Self {
+        pub fn with_response(self, url_contains: &str, response: CannedResponse) -> Self {
             self.responses
                 .lock()
                 .unwrap()

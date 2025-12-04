@@ -9,16 +9,13 @@
 //! - HuggingFace service API URL construction (#39)
 
 use gglib::commands::download;
-use gglib::services::core::HuggingFaceService;
+use gglib::services::huggingface::DefaultHuggingfaceClient;
 
-/// Test that HuggingFaceService is constructable and has expected methods
+/// Test that HuggingfaceClient is constructable
 #[tokio::test]
 async fn test_huggingface_service_construction() {
-    let service = HuggingFaceService::new();
-    // Verify service is Clone
-    let _cloned = service.clone();
-    // Verify service is Default
-    let _default = HuggingFaceService;
+    let _client = DefaultHuggingfaceClient::default_client();
+    // Just verify it can be created without panicking
 }
 
 /// Test basic search functionality (mock test since we can't make real API calls in CI)

@@ -75,12 +75,4 @@ pub use url_builder::{build_download_url, build_model_info_url, build_tree_url, 
 // Parsing utilities (for external use if needed)
 pub use parsing::{aggregate_quantizations, filter_files_by_quantization, parse_model_summary};
 
-// ============================================================================
-// Compatibility Re-exports
-// ============================================================================
 
-/// Legacy type alias for backward compatibility.
-///
-/// Use `DefaultHuggingfaceClient` instead for new code.
-#[deprecated(since = "0.2.0", note = "Use DefaultHuggingfaceClient instead")]
-pub type HuggingFaceService = DefaultHuggingfaceClient;
