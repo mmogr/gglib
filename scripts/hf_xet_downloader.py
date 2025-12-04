@@ -46,8 +46,16 @@ def record_progress_emit() -> None:
     _LAST_PROGRESS_EMIT = time.monotonic()
 
 
-def emit(event: str, **payload) -> None:
-    message = {"event": event, **payload}
+def emit(status: str, **payload) -> None:
+    """Emit a JSON protocol message with explicit status field.
+    
+    Protocol schema:
+    - {"status": "progress", "file": "...", "downloaded": N, "total": N}
+    - {"status": "unavailable", "reason": "..."}
+    - {"status": "error", "message": "..."}
+    - {"status": "complete"}
+    """
+    message = {"status": status, **payload}
     sys.stdout.write(json.dumps(message, separators=(",", ":")) + "\n")
     sys.stdout.flush()
 
@@ -58,8 +66,7 @@ def require_hf_xet() -> str:
     except Exception as exc:  # pragma: no cover - surfaced to Rust caller.
         emit(
             "unavailable",
-            reason="missing-hf-xet",
-            detail=str(exc),
+            reason=f"hf_xet not available: {exc}",
         )
         sys.exit(90)
 
@@ -156,7 +163,7 @@ def download_file(
     cache_dir: Optional[Path],
     hf_token: Optional[str],
 ) -> None:
-    emit("file-start", file=spec.display_name, expected=spec.size)
+    # Note: file-start is informational, not part of core protocol
     started = time.monotonic()
     destination_path = dest_root / spec.path
     ensure_dest_dir(destination_path.parent)
@@ -180,14 +187,9 @@ def download_file(
         os.replace(downloaded_path, destination_path)
 
     finished = time.monotonic()
-    emitted_size = destination_path.stat().st_size if destination_path.exists() else None
-    emit(
-        "file-complete",
-        file=spec.display_name,
-        bytes=emitted_size,
-        duration_ms=int((finished - started) * 1000),
-        path=str(destination_path),
-    )
+    # Note: file-complete is informational logging, not protocol
+    duration_ms = int((finished - started) * 1000)
+    sys.stderr.write(f"Downloaded {spec.display_name} in {duration_ms}ms\n")
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -252,14 +254,9 @@ def main() -> int:
     cache_dir = Path(args.cache_dir).expanduser().resolve() if args.cache_dir else None
     hf_token = args.token or None
 
-    emit(
-        "session",
-        repo_id=args.repo_id,
-        revision=args.revision,
-        repo_type=args.repo_type,
-        destination=str(dest_root),
-        huggingface_hub=hub_version,
-        hf_xet=hf_xet_version,
+    # Log session info to stderr (not part of protocol)
+    sys.stderr.write(
+        f"Downloading from {args.repo_id}@{args.revision} to {dest_root}\n"
     )
 
     for spec in file_specs:
@@ -272,10 +269,10 @@ def main() -> int:
                 hf_token=hf_token,
             )
         except Exception as exc:  # pragma: no cover - bubbled to Rust.
-            emit("file-error", file=spec.display_name, message=str(exc))
+            emit("error", message=f"Failed to download {spec.display_name}: {exc}")
             return 65
 
-    emit("complete", files=len(file_specs))
+    emit("complete")
     return 0
 
 

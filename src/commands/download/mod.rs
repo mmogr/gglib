@@ -7,10 +7,13 @@ use crate::services::core::PidStorage;
 
 // Sub-modules
 mod api;
+mod cli_progress;
 mod file_ops;
 mod model_ops;
 mod progress;
 mod python_bridge;
+mod python_env;
+mod python_protocol;
 mod utils;
 
 #[cfg(test)]
