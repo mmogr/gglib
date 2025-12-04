@@ -8,8 +8,8 @@
 
 use crate::commands::download::{DownloadProgressEvent, ProgressThrottle};
 use crate::commands::gui_web::state::AppState;
-use crate::download::progress::build_queue_snapshot;
 use crate::download::QueueSnapshot;
+use crate::download::progress::build_queue_snapshot;
 use crate::models::gui::{
     AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
     HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfToolSupportResponse,
@@ -463,17 +463,17 @@ pub async fn stream_progress(
     let snapshot = state.backend.get_download_queue().await;
     let initial_event = build_queue_snapshot(&snapshot);
     let initial_json = serde_json::to_string(&initial_event).unwrap_or_default();
-    
+
     // Create initial stream with the queue snapshot
     let initial = tokio_stream::once(Ok(Event::default().data(initial_json)));
-    
+
     // Subscribe to broadcast channel for future events
     let rx = state.progress_tx.subscribe();
     let broadcast = BroadcastStream::new(rx).map(|msg| match msg {
         Ok(msg) => Ok(Event::default().data(msg)),
         Err(_) => Ok(Event::default().event("error").data("Stream error")),
     });
-    
+
     // Chain initial event with broadcast stream
     let stream = initial.chain(broadcast);
 
