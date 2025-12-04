@@ -1,6 +1,6 @@
 import { FC, useState } from 'react';
 import AddModel from '../AddModel';
-import DownloadModel from '../DownloadModel';
+import { DownloadModel } from '../DownloadModel';
 import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
 import { HfModelSummary } from '../../types';
 import './AddDownloadContent.css';

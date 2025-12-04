@@ -4,10 +4,10 @@ import {
   removeFromDownloadQueue,
   cancelShardGroup,
   clearFailedDownloads,
-} from "../services/tauri";
-import { DownloadQueueItem } from "../types";
-import { useDownloadProgress } from "../hooks/useDownloadProgress";
-import { formatBytes, formatTime } from "../utils/format";
+} from "../../services/tauri";
+import { DownloadQueueItem } from "../../types";
+import { useDownloadProgress } from "../../hooks/useDownloadProgress";
+import { formatBytes, formatTime } from "../../utils/format";
 import styles from "./DownloadModel.module.css";
 
 interface DownloadModelProps {
