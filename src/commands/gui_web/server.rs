@@ -4,6 +4,7 @@
 //! including static file serving and graceful shutdown.
 
 use crate::commands::gui_web::{routes, state::AppState};
+use crate::download::DownloadEvent;
 use crate::services::gui_backend::GuiBackend;
 use crate::utils::paths::get_resource_root;
 use anyhow::Result;
@@ -36,6 +37,16 @@ pub async fn start_web_server(port: u16, base_port: u16, max_concurrent: usize) 
 
     // Create application state
     let state = Arc::new(AppState::new(backend.clone()));
+
+    // Wire download events to the broadcast channel
+    let progress_tx = state.progress_tx.clone();
+    backend.core().downloads().set_event_callback(Arc::new(move |event: DownloadEvent| {
+        if let Ok(json) = serde_json::to_string(&event) {
+            // Ignore send errors (no receivers is fine)
+            let _ = progress_tx.send(json);
+        }
+    }));
+    println!("✓ Download events wired to broadcast channel");
 
     // Build the application router
     let app = build_router(state);

@@ -66,8 +66,8 @@ pub struct DownloadManager {
     pending_requests: Arc<RwLock<std::collections::HashMap<String, DownloadRequest>>>,
     /// Python executor.
     executor: PythonDownloadExecutor,
-    /// Event callback for frontend updates.
-    on_event: EventCallback,
+    /// Event callback for frontend updates (wrapped in RwLock for runtime replacement).
+    on_event: Arc<std::sync::RwLock<EventCallback>>,
     /// Cancellation tokens for active downloads.
     cancel_tokens: Arc<RwLock<std::collections::HashMap<String, CancellationToken>>>,
     /// Process manager for synchronous termination on shutdown.
@@ -84,7 +84,7 @@ impl DownloadManager {
             ))),
             pending_requests: Arc::new(RwLock::new(std::collections::HashMap::new())),
             executor: PythonDownloadExecutor::with_pid_storage(process_manager.pid_storage()),
-            on_event,
+            on_event: Arc::new(std::sync::RwLock::new(on_event)),
             cancel_tokens: Arc::new(RwLock::new(std::collections::HashMap::new())),
             process_manager,
             config,
@@ -105,11 +105,26 @@ impl DownloadManager {
             ))),
             pending_requests: Arc::new(RwLock::new(std::collections::HashMap::new())),
             executor: PythonDownloadExecutor::with_pid_storage(pid_storage),
-            on_event,
+            on_event: Arc::new(std::sync::RwLock::new(on_event)),
             cancel_tokens: Arc::new(RwLock::new(std::collections::HashMap::new())),
             process_manager,
             config,
         }
+    }
+
+    /// Set the event callback.
+    ///
+    /// This allows replacing the callback at runtime, e.g., to wire up
+    /// broadcast channels after the manager is created.
+    pub fn set_event_callback(&self, callback: EventCallback) {
+        if let Ok(mut guard) = self.on_event.write() {
+            *guard = callback;
+        }
+    }
+
+    /// Get a cloned event callback for use in async contexts.
+    fn get_event_callback(&self) -> EventCallback {
+        self.on_event.read().map(|g| g.clone()).unwrap_or_else(|_| Arc::new(|_| {}))
     }
 
     /// Queue a download request.
@@ -198,9 +213,10 @@ impl DownloadManager {
             self.emit_queue_snapshot().await;
 
             // Execute download
+            let event_callback = self.get_event_callback();
             let result = self
                 .executor
-                .execute(&request, &self.on_event, cancel_token)
+                .execute(&request, &event_callback, cancel_token)
                 .await;
 
             // Remove cancellation token
@@ -608,7 +624,8 @@ impl DownloadManager {
         let queue = self.queue.read().await;
         let snapshot = queue.snapshot(None);
         let event = build_queue_snapshot(&snapshot);
-        (self.on_event)(event);
+        let callback = self.get_event_callback();
+        callback(event);
     }
 }
 
