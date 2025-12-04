@@ -4,7 +4,7 @@ import { useTags } from '../hooks/useTags';
 import { useDownloadProgress } from '../hooks/useDownloadProgress';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
-import ModelInspectorPanel from '../components/ModelInspectorPanel/ModelInspectorPanel';
+import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
 import { FilterState } from '../components/FilterPopover';
 // Lazy load ChatPage to avoid loading assistant-ui until needed
