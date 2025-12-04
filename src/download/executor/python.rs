@@ -279,11 +279,12 @@ impl PythonDownloadExecutor {
         }
 
         let cleanup_pid = || {
-            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup)
-                && let Ok(mut guard) = storage.write()
-            {
-                guard.remove(key);
-                tracing::debug!(key = %key, "Removed PID from tracking");
+            #[allow(clippy::collapsible_if)]
+            if let (Some(storage), Some(key)) = (&pid_storage_for_cleanup, &pid_key_for_cleanup) {
+                if let Ok(mut guard) = storage.write() {
+                    guard.remove(key);
+                    tracing::debug!(key = %key, "Removed PID from tracking");
+                }
             }
         };
 

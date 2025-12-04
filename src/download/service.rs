@@ -217,7 +217,8 @@ impl DownloadManager {
                 Err(e) => {
                     let mut queue = self.queue.write().await;
                     let error_msg = e.to_string();
-                    let failed = crate::download::queue::FailedDownload::new(queued.clone(), &error_msg);
+                    let failed =
+                        crate::download::queue::FailedDownload::new(queued.clone(), &error_msg);
                     queue.mark_failed(failed);
                 }
             }
