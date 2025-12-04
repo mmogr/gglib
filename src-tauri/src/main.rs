@@ -1068,8 +1068,21 @@ async fn main() {
                         DownloadEvent::DownloadCancelled { id } => {
                             Some(DownloadProgressEvent::errored(id, "Download cancelled"))
                         }
-                        DownloadEvent::QueueSnapshot { .. } => {
-                            // Queue snapshots don't need to be sent to the legacy event system
+                        DownloadEvent::QueueSnapshot { items, max_size } => {
+                            // Emit queue snapshot as a separate event for the frontend
+                            // This allows the UI to update queue status in real-time
+                            #[derive(Clone, serde::Serialize)]
+                            struct QueueSnapshotEvent {
+                                items: Vec<gglib::download::DownloadSummary>,
+                                max_size: u32,
+                            }
+                            let snapshot_event = QueueSnapshotEvent {
+                                items: items.clone(),
+                                max_size: *max_size,
+                            };
+                            if let Err(e) = app_handle.emit("download-queue-snapshot", snapshot_event) {
+                                error!(error = %e, "Failed to emit download-queue-snapshot event");
+                            }
                             None
                         }
                     };

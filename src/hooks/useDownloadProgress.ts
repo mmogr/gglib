@@ -289,6 +289,7 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
   // Listen for download events from Tauri or Web SSE
   useEffect(() => {
     let unlistenTauri: (() => void) | undefined;
+    let unlistenTauriQueue: (() => void) | undefined;
     let eventSource: EventSource | undefined;
 
     const setupListener = async () => {
@@ -296,8 +297,7 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
         setConnectionMode('Desktop (Tauri)');
         try {
           const { listen } = await import('@tauri-apps/api/event');
-          // In Tauri, we still receive the old format for now
-          // TODO: Update Tauri backend to emit new DownloadEvent format
+          // Listen for progress events (legacy format)
           unlistenTauri = await listen<DownloadProgress>('download-progress', (event) => {
             const progressData = event.payload;
             throttledSetProgress(progressData);
@@ -308,6 +308,16 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
                 setProgress(null);
               }, 2000);
             }
+          });
+          
+          // Listen for queue snapshot events
+          interface TauriQueueSnapshot {
+            items: DownloadSummary[];
+            max_size: number;
+          }
+          unlistenTauriQueue = await listen<TauriQueueSnapshot>('download-queue-snapshot', (event) => {
+            const snapshot = event.payload;
+            setQueueStatus(snapshotToQueueStatus(snapshot.items, snapshot.max_size));
           });
         } catch (e) {
           console.error('[useDownloadProgress] Failed to setup Tauri listener:', e);
@@ -341,6 +351,9 @@ export function useDownloadProgress(options: UseDownloadProgressOptions = {}): U
     return () => {
       if (unlistenTauri) {
         unlistenTauri();
+      }
+      if (unlistenTauriQueue) {
+        unlistenTauriQueue();
       }
       if (eventSource) {
         eventSource.close();
