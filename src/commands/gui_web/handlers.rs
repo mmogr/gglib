@@ -8,6 +8,7 @@
 
 use crate::commands::download::{DownloadProgressEvent, ProgressThrottle};
 use crate::commands::gui_web::state::AppState;
+use crate::download::progress::build_queue_snapshot;
 use crate::download::QueueSnapshot;
 use crate::models::gui::{
     AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
@@ -451,14 +452,30 @@ pub async fn get_hf_tool_support(
 }
 
 /// Stream download progress events via SSE
+///
+/// On connection, immediately sends the current queue snapshot so clients
+/// know what's currently downloading (avoids race condition where download_started
+/// event was sent before client subscribed).
 pub async fn stream_progress(
     State(state): State<Arc<AppState>>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, axum::Error>>> {
+    // Get initial queue snapshot to send immediately
+    let snapshot = state.backend.get_download_queue().await;
+    let initial_event = build_queue_snapshot(&snapshot);
+    let initial_json = serde_json::to_string(&initial_event).unwrap_or_default();
+    
+    // Create initial stream with the queue snapshot
+    let initial = tokio_stream::once(Ok(Event::default().data(initial_json)));
+    
+    // Subscribe to broadcast channel for future events
     let rx = state.progress_tx.subscribe();
-    let stream = BroadcastStream::new(rx).map(|msg| match msg {
+    let broadcast = BroadcastStream::new(rx).map(|msg| match msg {
         Ok(msg) => Ok(Event::default().data(msg)),
         Err(_) => Ok(Event::default().event("error").data("Stream error")),
     });
+    
+    // Chain initial event with broadcast stream
+    let stream = initial.chain(broadcast);
 
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
 }
