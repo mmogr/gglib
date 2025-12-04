@@ -191,7 +191,8 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
 
   // Get display values - prefer queue status (with full ID), fall back to progress
   const displayModelId = currentDownloadFullId || progress?.model_id || '';
-  const displayProgress = relevantProgress;
+  // Fall back to raw progress when queue status matching fails (e.g., Tauri timing gaps)
+  const displayProgress = relevantProgress || progress;
   const isQueued = !currentDownload && progress?.status === 'queued';
 
   // Get shard info for the modal

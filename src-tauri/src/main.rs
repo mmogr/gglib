@@ -934,19 +934,7 @@ async fn main() {
             .expect("Failed to initialize backend"),
     );
 
-    // Wire download events to Tauri + completion handler
-    {
-        use gglib::download::DownloadEvent;
-        let backend_for_callback = backend.clone();
-        backend.core().downloads().set_event_callback(Arc::new(move |event: DownloadEvent| {
-            // Handle completion: register model in database
-            if let DownloadEvent::DownloadCompleted { id, .. } = &event {
-                backend_for_callback.core().handle_download_completed(id);
-            }
-            // Note: Tauri events are emitted via old DownloadProgressEvent for now
-            // The new event system is wired but frontend uses legacy events
-        }));
-    }
+    // Note: Download event callback is wired in setup() where we have AppHandle
 
     let embedded_api_port = std::env::var("GGLIB_GUI_API_PORT")
         .ok()
@@ -1035,6 +1023,64 @@ async fn main() {
                     }
                 }
             });
+
+            // Wire download events to Tauri events + completion handler
+            {
+                use gglib::commands::download::DownloadProgressEvent;
+                use gglib::download::DownloadEvent;
+                
+                let state: tauri::State<AppState> = app.state();
+                let backend = state.backend.clone();
+                let backend_for_callback = backend.clone();
+                let app_handle = app.handle().clone();
+                
+                backend.core().downloads().set_event_callback(Arc::new(move |event: DownloadEvent| {
+                    // Convert DownloadEvent to the legacy DownloadProgressEvent format
+                    // that the Tauri frontend expects
+                    let progress_event = match &event {
+                        DownloadEvent::DownloadStarted { id } => {
+                            Some(DownloadProgressEvent::starting(id))
+                        }
+                        DownloadEvent::DownloadProgress { id, downloaded, total, speed_bps, .. } => {
+                            Some(DownloadProgressEvent::progress(id, *downloaded, *total, *speed_bps))
+                        }
+                        DownloadEvent::ShardProgress { id, aggregate_downloaded, aggregate_total, speed_bps, shard_index, total_shards, shard_filename, shard_downloaded, shard_total, .. } => {
+                            Some(DownloadProgressEvent::progress_with_shard(
+                                id,
+                                *shard_downloaded,
+                                *shard_total,
+                                *shard_index as usize,
+                                *total_shards as usize,
+                                shard_filename,
+                                *aggregate_downloaded,
+                                *aggregate_total,
+                                *speed_bps,
+                            ))
+                        }
+                        DownloadEvent::DownloadCompleted { id, message } => {
+                            // Also register the model in the database
+                            backend_for_callback.core().handle_download_completed(id);
+                            Some(DownloadProgressEvent::completed(id, message.as_deref()))
+                        }
+                        DownloadEvent::DownloadFailed { id, error } => {
+                            Some(DownloadProgressEvent::errored(id, error))
+                        }
+                        DownloadEvent::DownloadCancelled { id } => {
+                            Some(DownloadProgressEvent::errored(id, "Download cancelled"))
+                        }
+                        DownloadEvent::QueueSnapshot { .. } => {
+                            // Queue snapshots don't need to be sent to the legacy event system
+                            None
+                        }
+                    };
+                    
+                    if let Some(evt) = progress_event {
+                        if let Err(e) = app_handle.emit("download-progress", evt) {
+                            error!(error = %e, "Failed to emit download-progress event");
+                        }
+                    }
+                }));
+            }
 
             Ok(())
         })
