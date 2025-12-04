@@ -82,6 +82,7 @@ GGLib follows a layered architecture where multiple frontends share common backe
 **Core Modules:**
 
 - **[`models`](src/models/README.md)** – GGUF model metadata, GUI/API DTOs, and data structures
+- **[`download`](src/download/README.md)** – Download manager, queue, and HuggingFace file resolution
 - **[`services`](src/services/README.md)** – Business logic layer including:
   - `database`: SQLite operations for model metadata and chat history
   - `gui_backend`: Unified backend service used by Tauri and Web GUI

@@ -6,12 +6,13 @@ mod menu;
 use dotenvy::dotenv;
 use gglib::{
     commands::llama::check_llama_installed,
+    download::QueueSnapshot,
     models::gui::{
         AddModelRequest, AppSettings, GuiModel, HfQuantizationsResponse, HfSearchRequest,
         HfSearchResponse, HfToolSupportResponse, RemoveModelRequest, StartServerRequest,
         StartServerResponse, UpdateModelRequest, UpdateSettingsRequest,
     },
-    services::core::{DownloadError, DownloadQueueStatus},
+    services::core::DownloadError,
     services::gui_backend::GuiBackend,
     services::mcp::{McpServerConfig, McpServerInfo, McpTool, McpToolResult},
 };
@@ -425,7 +426,7 @@ struct QueueDownloadResponse {
 
 #[tauri::command]
 async fn queue_download(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     model_id: String,
     quantization: Option<String>,
     state: tauri::State<'_, AppState>,
@@ -438,24 +439,15 @@ async fn queue_download(
         .map_err(|e| format!("Failed to queue download: {}", e))?;
 
     // Start the queue processor in a background task (if not already running)
-    let backend = state.backend.clone();
-    let app_clone = app.clone();
-
-    tokio::spawn(async move {
-        use gglib::commands::download::DownloadProgressEvent;
-
-        let progress_callback = move |event: DownloadProgressEvent| {
-            if let Err(err) = app_clone.emit("download-progress", &event) {
-                tracing::error!(error = %err, "Failed to emit download progress event");
-            }
-        };
-
-        backend
-            .core()
-            .downloads()
-            .process_queue(progress_callback)
-            .await;
-    });
+    if state.backend.core().start_queue_if_idle() {
+        let backend = state.backend.clone();
+        tokio::spawn(async move {
+            // process_queue runs until queue is empty, handles progress internally via on_event
+            let _ = backend.core().downloads().process_queue().await;
+            // Mark idle when done so future queues can start
+            backend.core().mark_queue_idle();
+        });
+    }
 
     Ok(QueueDownloadResponse {
         position,
@@ -466,7 +458,7 @@ async fn queue_download(
 #[tauri::command]
 async fn get_download_queue(
     state: tauri::State<'_, AppState>,
-) -> Result<DownloadQueueStatus, String> {
+) -> Result<QueueSnapshot, String> {
     Ok(state.backend.get_download_queue().await)
 }
 
@@ -942,6 +934,8 @@ async fn main() {
             .expect("Failed to initialize backend"),
     );
 
+    // Note: Download event callback is wired in setup() where we have AppHandle
+
     let embedded_api_port = std::env::var("GGLIB_GUI_API_PORT")
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
@@ -1029,6 +1023,77 @@ async fn main() {
                     }
                 }
             });
+
+            // Wire download events to Tauri events + completion handler
+            {
+                use gglib::commands::download::DownloadProgressEvent;
+                use gglib::download::DownloadEvent;
+                
+                let state: tauri::State<AppState> = app.state();
+                let backend = state.backend.clone();
+                let backend_for_callback = backend.clone();
+                let app_handle = app.handle().clone();
+                
+                backend.core().downloads().set_event_callback(Arc::new(move |event: DownloadEvent| {
+                    // Convert DownloadEvent to the legacy DownloadProgressEvent format
+                    // that the Tauri frontend expects
+                    let progress_event = match &event {
+                        DownloadEvent::DownloadStarted { id } => {
+                            Some(DownloadProgressEvent::starting(id))
+                        }
+                        DownloadEvent::DownloadProgress { id, downloaded, total, speed_bps, .. } => {
+                            Some(DownloadProgressEvent::progress(id, *downloaded, *total, *speed_bps))
+                        }
+                        DownloadEvent::ShardProgress { id, aggregate_downloaded, aggregate_total, speed_bps, shard_index, total_shards, shard_filename, shard_downloaded, shard_total, .. } => {
+                            Some(DownloadProgressEvent::progress_with_shard(
+                                id,
+                                *shard_downloaded,
+                                *shard_total,
+                                *shard_index as usize,
+                                *total_shards as usize,
+                                shard_filename,
+                                *aggregate_downloaded,
+                                *aggregate_total,
+                                *speed_bps,
+                            ))
+                        }
+                        DownloadEvent::DownloadCompleted { id, message } => {
+                            // Also register the model in the database
+                            backend_for_callback.core().handle_download_completed(id);
+                            Some(DownloadProgressEvent::completed(id, message.as_deref()))
+                        }
+                        DownloadEvent::DownloadFailed { id, error } => {
+                            Some(DownloadProgressEvent::errored(id, error))
+                        }
+                        DownloadEvent::DownloadCancelled { id } => {
+                            Some(DownloadProgressEvent::errored(id, "Download cancelled"))
+                        }
+                        DownloadEvent::QueueSnapshot { items, max_size } => {
+                            // Emit queue snapshot as a separate event for the frontend
+                            // This allows the UI to update queue status in real-time
+                            #[derive(Clone, serde::Serialize)]
+                            struct QueueSnapshotEvent {
+                                items: Vec<gglib::download::DownloadSummary>,
+                                max_size: u32,
+                            }
+                            let snapshot_event = QueueSnapshotEvent {
+                                items: items.clone(),
+                                max_size: *max_size,
+                            };
+                            if let Err(e) = app_handle.emit("download-queue-snapshot", snapshot_event) {
+                                error!(error = %e, "Failed to emit download-queue-snapshot event");
+                            }
+                            None
+                        }
+                    };
+                    
+                    if let Some(evt) = progress_event {
+                        if let Err(e) = app_handle.emit("download-progress", evt) {
+                            error!(error = %e, "Failed to emit download-progress event");
+                        }
+                    }
+                }));
+            }
 
             Ok(())
         })

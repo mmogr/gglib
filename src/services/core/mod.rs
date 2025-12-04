@@ -38,30 +38,29 @@
 //! }
 //! ```
 
-pub mod download_models;
 pub mod download_process_manager;
-pub mod download_queue;
-pub mod download_service;
-
 pub mod model_service;
 pub mod proxy_service;
 pub mod server_service;
 pub mod settings_service;
 
+use crate::commands::download::get_models_directory;
+use crate::download::{DownloadManager, DownloadManagerConfig};
 use crate::services::process_manager::ProcessManager;
 use crate::utils::paths::get_llama_server_path;
 use sqlx::SqlitePool;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-// Re-export types from download_models (canonical location)
+// Re-export HuggingFace client
 pub use crate::services::huggingface::{DefaultHuggingfaceClient, HfError};
-pub use download_models::{
-    DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
-    ShardInfo,
+
+// Re-export download types from canonical src/download/ module
+pub use crate::download::{
+    DownloadError, DownloadEvent, DownloadId, DownloadQueue, DownloadStatus, FailedDownload,
+    QueueSnapshot, QueuedDownload, ShardGroupId, ShardInfo,
 };
 pub use download_process_manager::{DownloadProcessManager, PidStorage};
-pub use download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
-pub use download_service::DownloadService;
 pub use model_service::ModelService;
 pub use proxy_service::ProxyService;
 pub use server_service::{ServerService, StartServerConfig};
@@ -86,10 +85,12 @@ pub struct AppCore {
     model_service: ModelService,
     server_service: ServerService,
     proxy_service: ProxyService,
-    download_service: DownloadService,
+    download_manager: DownloadManager,
     settings_service: SettingsService,
     huggingface_client: DefaultHuggingfaceClient,
     mcp_service: McpService,
+    /// Guard to prevent concurrent queue processing.
+    is_processing: AtomicBool,
 }
 
 impl AppCore {
@@ -145,7 +146,18 @@ impl AppCore {
 
         let server_service = ServerService::new(process_manager, model_service.clone());
         let proxy_service = ProxyService::new(db_pool.clone());
-        let download_service = DownloadService::new();
+
+        // Create DownloadManager with default config and no-op event callback
+        // GUI backends will set up their own callback for Tauri/web events
+        let models_dir =
+            get_models_directory().unwrap_or_else(|_| std::path::PathBuf::from("models"));
+        let download_config = DownloadManagerConfig {
+            models_dir,
+            max_queue_size: 100,
+            hf_token: None,
+        };
+        let download_manager = DownloadManager::new(download_config, Arc::new(|_| {}));
+
         let settings_service = SettingsService::new(db_pool.clone());
         let huggingface_client = DefaultHuggingfaceClient::default_client();
         let mcp_service = McpService::new(db_pool.clone());
@@ -155,10 +167,11 @@ impl AppCore {
             model_service,
             server_service,
             proxy_service,
-            download_service,
+            download_manager,
             settings_service,
             huggingface_client,
             mcp_service,
+            is_processing: AtomicBool::new(false),
         }
     }
 
@@ -240,27 +253,25 @@ impl AppCore {
         &self.proxy_service
     }
 
-    /// Access the download service for HuggingFace model downloads.
+    /// Access the download manager for HuggingFace model downloads.
     ///
     /// # Example
     ///
     /// ```rust,no_run
     /// # use gglib::services::core::AppCore;
     /// # async fn example(core: &AppCore) -> anyhow::Result<()> {
-    /// // Start a download
-    /// core.downloads().download(
-    ///     "TheBloke/Llama-2-7B-GGUF".to_string(),
-    ///     Some("Q4_K_M".to_string()),
-    ///     None,
-    /// ).await?;
+    /// // Queue a download (auto-detects shards)
+    /// let (id, position, shard_count) = core.downloads()
+    ///     .queue_download_auto("TheBloke/Llama-2-7B-GGUF", "Q4_K_M")
+    ///     .await?;
     ///
     /// // Check active downloads
     /// let active = core.downloads().active_downloads().await;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn downloads(&self) -> &DownloadService {
-        &self.download_service
+    pub fn downloads(&self) -> &DownloadManager {
+        &self.download_manager
     }
 
     /// Access the settings service for application configuration.
@@ -337,6 +348,92 @@ impl AppCore {
     pub fn mcp(&self) -> &McpService {
         &self.mcp_service
     }
+
+    /// Try to start queue processing if not already running.
+    ///
+    /// Returns `true` if we acquired the lock and should spawn `process_queue()`,
+    /// `false` if another task is already processing.
+    ///
+    /// Use pattern:
+    /// ```rust,ignore
+    /// if core.start_queue_if_idle() {
+    ///     let dm = core.downloads().clone();
+    ///     tokio::spawn(async move {
+    ///         dm.process_queue().await;
+    ///         // After processing, mark idle (via callback or separate call)
+    ///     });
+    /// }
+    /// ```
+    pub fn start_queue_if_idle(&self) -> bool {
+        self.is_processing
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
+
+    /// Mark the queue as idle after processing completes.
+    ///
+    /// Called when `process_queue()` finishes to allow future triggers.
+    pub fn mark_queue_idle(&self) {
+        self.is_processing.store(false, Ordering::SeqCst);
+    }
+
+    /// Handle a download completion event.
+    ///
+    /// Parses the download ID and spawns a task to register the model in the database.
+    /// Uses `tokio::spawn` so the caller doesn't block on database operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `id_str` - The canonical download ID string (e.g., "owner/repo:Q4_K_M")
+    pub fn handle_download_completed(&self, id_str: &str) {
+        use crate::download::DownloadId;
+
+        let download_id: DownloadId = match id_str.parse() {
+            Ok(id) => id,
+            Err(_) => {
+                tracing::error!("Failed to parse download ID: {}", id_str);
+                return;
+            }
+        };
+
+        // Clone what we need for the spawned task (ModelService is Clone)
+        let model_service = self.model_service.clone();
+
+        tokio::spawn(async move {
+            if let Err(e) = register_completed_download(model_service, download_id).await {
+                tracing::error!("Failed to register completed download: {}", e);
+            }
+        });
+    }
+}
+
+/// Register a completed download in the database.
+///
+/// Finds the GGUF file in the model directory and adds it to the database.
+/// Idempotent: skips if the model is already registered.
+async fn register_completed_download(
+    model_service: ModelService,
+    download_id: DownloadId,
+) -> anyhow::Result<()> {
+    // Find the downloaded GGUF file
+    let path = ModelService::model_path_for_download(&download_id)?;
+    let path_str = path.to_string_lossy().to_string();
+
+    // Idempotency check: skip if already in database
+    if model_service.find_by_path(&path_str).await?.is_some() {
+        tracing::debug!("Model already registered: {}", path_str);
+        return Ok(());
+    }
+
+    // Register the model
+    let model = model_service.add_from_file(&path_str, None, None).await?;
+    tracing::info!(
+        "Registered downloaded model: {} (id={})",
+        model.name,
+        model.id.unwrap_or(0)
+    );
+
+    Ok(())
 }
 
 // AppCore is not Clone because ProxyService contains non-Clone RwLock state.

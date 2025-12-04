@@ -63,7 +63,7 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
 
   const handleCancelCurrent = () => {
     if (queueStatus?.current) {
-      queueActions.handleCancel(queueStatus.current.model_id);
+      queueActions.handleCancel(queueStatus.current.id);
     }
   };
 

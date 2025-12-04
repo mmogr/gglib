@@ -94,6 +94,36 @@ export type FitStatus = 'fits' | 'tight' | 'wont_fit';
 
 export type DownloadStatus = 'downloading' | 'queued' | 'completed' | 'failed';
 
+// ============================================================================
+// Download Event Types (SSE events from DownloadManager)
+// ============================================================================
+
+/**
+ * Summary of a download in the queue (from QueueSnapshot events).
+ */
+export interface DownloadSummary {
+  id: string;
+  display_name: string;
+  status: 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled';
+  position: number;
+  error?: string | null;
+  group_id?: string | null;
+  shard_info?: ShardInfo | null;
+}
+
+/**
+ * Discriminated union of all download events from the backend.
+ * Received via SSE at /api/models/download/progress.
+ */
+export type DownloadEvent =
+  | { type: 'queue_snapshot'; items: DownloadSummary[]; max_size: number }
+  | { type: 'download_started'; id: string }
+  | { type: 'download_progress'; id: string; downloaded: number; total: number; speed_bps: number; eta_seconds: number; percentage: number }
+  | { type: 'shard_progress'; id: string; shard_index: number; total_shards: number; shard_filename: string; shard_downloaded: number; shard_total: number; aggregate_downloaded: number; aggregate_total: number; speed_bps: number; eta_seconds: number; percentage: number }
+  | { type: 'download_completed'; id: string; message?: string | null }
+  | { type: 'download_failed'; id: string; error: string }
+  | { type: 'download_cancelled'; id: string };
+
 /**
  * Information about a shard in a sharded model download.
  * Sharded models are split across multiple files that must be downloaded together.
@@ -110,8 +140,10 @@ export interface ShardInfo {
 }
 
 export interface DownloadQueueItem {
-  model_id: string;
-  quantization?: string | null;
+  /** Canonical ID string (model_id:quantization or just model_id) */
+  id: string;
+  /** Human-readable display name */
+  display_name: string;
   status: DownloadStatus;
   position: number;
   error?: string | null;

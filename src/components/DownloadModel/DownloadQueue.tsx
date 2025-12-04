@@ -71,7 +71,7 @@ const PendingQueue: FC<PendingQueueProps> = ({ items, onRemove, onCancelShardGro
     <ul className={styles.queueList}>
       {items.map((item, index) => (
         <PendingQueueItem
-          key={`${item.model_id}-${index}`}
+          key={`${item.id}-${index}`}
           item={item}
           onRemove={onRemove}
           onCancelShardGroup={onCancelShardGroup}
@@ -98,25 +98,22 @@ const PendingQueueItem: FC<PendingQueueItemProps> = ({ item, onRemove, onCancelS
       <div className={styles.queueItemInfo}>
         <span className={styles.queuePosition}>#{item.position}</span>
         <span className={styles.queueModelId}>
-          {item.model_id}
+          {item.display_name}
           {shardLabel && (
             <span className={styles.shardBadge}>{shardLabel}</span>
           )}
         </span>
-        {item.quantization && (
-          <span className={styles.queueQuant}>{item.quantization}</span>
-        )}
       </div>
       <button
         type="button"
         className={`btn btn-sm ${styles.removeBtn}`}
         onClick={() => item.group_id 
           ? onCancelShardGroup(item.group_id)
-          : onRemove(item.model_id)
+          : onRemove(item.id)
         }
         aria-label={item.group_id 
-          ? `Cancel all shards for ${item.model_id}`
-          : `Remove ${item.model_id} from queue`
+          ? `Cancel all shards for ${item.display_name}`
+          : `Remove ${item.display_name} from queue`
         }
         title={item.group_id ? "Cancel all shards" : "Remove from queue"}
       >
@@ -150,7 +147,7 @@ const FailedDownloads: FC<FailedDownloadsProps> = ({ items, onRetry, onRemove, o
     <ul className={styles.queueList}>
       {items.map((item, index) => (
         <FailedQueueItem
-          key={`failed-${item.model_id}-${index}`}
+          key={`failed-${item.id}-${index}`}
           item={item}
           onRetry={onRetry}
           onRemove={onRemove}
@@ -177,14 +174,11 @@ const FailedQueueItem: FC<FailedQueueItemProps> = ({ item, onRetry, onRemove }) 
       <div className={styles.queueItemInfo}>
         <span className={styles.failedIcon}>❌</span>
         <span className={styles.queueModelId}>
-          {item.model_id}
+          {item.display_name}
           {shardLabel && (
             <span className={styles.shardBadge}>{shardLabel}</span>
           )}
         </span>
-        {item.quantization && (
-          <span className={styles.queueQuant}>{item.quantization}</span>
-        )}
         {item.error && (
           <span className={styles.errorText} title={item.error}>
             {item.error.length > 40 ? item.error.substring(0, 40) + '...' : item.error}
@@ -196,15 +190,15 @@ const FailedQueueItem: FC<FailedQueueItemProps> = ({ item, onRetry, onRemove }) 
           type="button"
           className={`btn btn-sm ${styles.retryBtn}`}
           onClick={() => onRetry(item)}
-          aria-label={`Retry ${item.model_id}`}
+          aria-label={`Retry ${item.display_name}`}
         >
           Retry
         </button>
         <button
           type="button"
           className={`btn btn-sm ${styles.removeBtn}`}
-          onClick={() => onRemove(item.model_id)}
-          aria-label={`Remove ${item.model_id} from failed list`}
+          onClick={() => onRemove(item.id)}
+          aria-label={`Remove ${item.display_name} from failed list`}
         >
           ✕
         </button>

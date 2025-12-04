@@ -8,13 +8,14 @@
 
 use crate::commands::download::{DownloadProgressEvent, ProgressThrottle};
 use crate::commands::gui_web::state::AppState;
+use crate::download::QueueSnapshot;
+use crate::download::progress::build_queue_snapshot;
 use crate::models::gui::{
     AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
     HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfToolSupportResponse,
     ModelsDirectoryInfo, RemoveModelRequest, StartServerRequest, StartServerResponse,
     UpdateModelRequest, UpdateModelsDirectoryRequest, UpdateSettingsRequest,
 };
-use crate::services::core::DownloadQueueStatus;
 use crate::utils::system::SystemMemoryInfo;
 use axum::{
     Json,
@@ -313,20 +314,15 @@ pub async fn queue_download(
         .map_err(|e| AppError::ServerError(e.to_string()))?;
 
     // Start the queue processor in a background task (if not already running)
-    let backend = state.backend.clone();
-    let progress_tx = state.progress_tx.clone();
-
-    tokio::spawn(async move {
-        let progress_callback = move |event: DownloadProgressEvent| {
-            let _ = progress_tx.send(event.to_json_string());
-        };
-
-        backend
-            .core()
-            .downloads()
-            .process_queue(progress_callback)
-            .await;
-    });
+    if state.backend.core().start_queue_if_idle() {
+        let backend = state.backend.clone();
+        tokio::spawn(async move {
+            // process_queue runs until queue is empty, handles progress internally
+            let _ = backend.core().downloads().process_queue().await;
+            // Mark idle when done so future queues can start
+            backend.core().mark_queue_idle();
+        });
+    }
 
     Ok(Json(ApiResponse::success(QueueDownloadResponse {
         position,
@@ -337,7 +333,7 @@ pub async fn queue_download(
 /// Get the current download queue status
 pub async fn get_download_queue(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ApiResponse<DownloadQueueStatus>>, AppError> {
+) -> Result<Json<ApiResponse<QueueSnapshot>>, AppError> {
     let status = state.backend.get_download_queue().await;
     Ok(Json(ApiResponse::success(status)))
 }
@@ -456,14 +452,30 @@ pub async fn get_hf_tool_support(
 }
 
 /// Stream download progress events via SSE
+///
+/// On connection, immediately sends the current queue snapshot so clients
+/// know what's currently downloading (avoids race condition where download_started
+/// event was sent before client subscribed).
 pub async fn stream_progress(
     State(state): State<Arc<AppState>>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, axum::Error>>> {
+    // Get initial queue snapshot to send immediately
+    let snapshot = state.backend.get_download_queue().await;
+    let initial_event = build_queue_snapshot(&snapshot);
+    let initial_json = serde_json::to_string(&initial_event).unwrap_or_default();
+
+    // Create initial stream with the queue snapshot
+    let initial = tokio_stream::once(Ok(Event::default().data(initial_json)));
+
+    // Subscribe to broadcast channel for future events
     let rx = state.progress_tx.subscribe();
-    let stream = BroadcastStream::new(rx).map(|msg| match msg {
+    let broadcast = BroadcastStream::new(rx).map(|msg| match msg {
         Ok(msg) => Ok(Event::default().data(msg)),
         Err(_) => Ok(Event::default().event("error").data("Stream error")),
     });
+
+    // Chain initial event with broadcast stream
+    let stream = initial.chain(broadcast);
 
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
 }

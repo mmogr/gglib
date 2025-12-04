@@ -14,8 +14,8 @@ use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 pub use error::ModelStoreError;
 pub use filters::{ModelFilterOptions, RangeValues, get_model_filter_options};
 pub use models::{
-    add_model, find_model_by_identifier, find_models_by_name, get_model_by_id, list_models,
-    remove_model_by_id, update_model,
+    add_model, find_model_by_identifier, find_model_by_path, find_models_by_name, get_model_by_id,
+    list_models, remove_model_by_id, update_model,
 };
 pub use schema::ensure_column_exists;
 pub use tags::{add_model_tag, get_model_tags, get_models_by_tag, list_tags, remove_model_tag};
