@@ -3,7 +3,7 @@
 use anyhow::Result;
 use tokio_util::sync::CancellationToken;
 
-use crate::services::core::download_service::PidStorage;
+use crate::services::core::PidStorage;
 
 // Sub-modules
 mod api;

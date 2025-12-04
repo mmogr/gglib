@@ -39,6 +39,8 @@
 //! ```
 
 pub mod download_models;
+pub mod download_process_manager;
+pub mod download_queue;
 pub mod download_service;
 pub mod huggingface_models;
 pub mod huggingface_service;
@@ -57,6 +59,8 @@ pub use download_models::{
     DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
     ShardInfo,
 };
+pub use download_process_manager::{DownloadProcessManager, PidStorage};
+pub use download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
 pub use download_service::DownloadService;
 pub use huggingface_models::HuggingFaceError;
 pub use huggingface_service::{HF_API_BASE, HuggingFaceService};

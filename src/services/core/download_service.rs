@@ -3,21 +3,27 @@
 //! This service provides managed downloads with progress tracking,
 //! cancellation support, and download queue management.
 //!
+//! # Architecture
+//!
+//! `DownloadService` is an async orchestrator that delegates to:
+//! - `DownloadQueue` - sync queue management (pending/failed items)
+//! - `DownloadProcessManager` - child process PID tracking (future)
+//! - Progress utilities - event emission and throttling (future)
+//!
 //! Types are defined in the `download_models` module for better organization.
 
 use super::download_models::{
     DownloadError, DownloadQueueItem, DownloadQueueStatus, DownloadStatus, QueuedDownload,
 };
+use super::download_process_manager::{DownloadProcessManager, PidStorage};
+use super::download_queue::{DownloadQueue, FailedDownload, ShardGroupId};
 use super::huggingface_service::HuggingFaceService;
 use anyhow::Result;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-
-/// Type alias for storing child process PIDs for synchronous termination on shutdown.
-/// Uses std::sync::RwLock (not tokio) for synchronous access in shutdown handler.
-pub type PidStorage = Arc<std::sync::RwLock<HashMap<String, u32>>>;
 
 /// Metadata for an active download, stored alongside its cancellation token.
 /// This enables proper UI display of download progress with all relevant information.
@@ -42,16 +48,23 @@ pub struct ActiveDownloadInfo {
 /// - Cancellation support
 /// - Download queue with configurable max size
 /// - Auto-advance to next download on completion/failure
+///
+/// # Architecture
+///
+/// `DownloadService` is a thin async orchestrator that delegates to:
+/// - `DownloadQueue` - sync queue state (pending/failed items)
+/// - `DownloadProcessManager` - PID tracking for child processes (future extraction)
+///
+/// The queue is wrapped in `Arc<RwLock<_>>` for async access.
 pub struct DownloadService {
+    /// Currently active downloads (key: model_id or model_id:quant/filename for shards)
     active_downloads: Arc<RwLock<HashMap<String, ActiveDownloadInfo>>>,
-    pending_queue: Arc<RwLock<VecDeque<QueuedDownload>>>,
-    failed_downloads: Arc<RwLock<Vec<QueuedDownload>>>,
-    max_queue_size: Arc<RwLock<u32>>,
+    /// Queue state (pending and failed items) - sync type wrapped for async access
+    queue: Arc<RwLock<DownloadQueue>>,
     /// Flag to track if queue processor is running
-    processing: Arc<RwLock<bool>>,
-    /// Stores PIDs of active child processes for synchronous termination on app shutdown.
-    /// Uses std::sync::RwLock for synchronous access from the shutdown handler.
-    child_pids: PidStorage,
+    processing: Arc<AtomicBool>,
+    /// Child process manager for synchronous termination on app shutdown.
+    process_manager: DownloadProcessManager,
 }
 
 impl DownloadService {
@@ -59,22 +72,20 @@ impl DownloadService {
     pub fn new() -> Self {
         Self {
             active_downloads: Arc::new(RwLock::new(HashMap::new())),
-            pending_queue: Arc::new(RwLock::new(VecDeque::new())),
-            failed_downloads: Arc::new(RwLock::new(Vec::new())),
-            max_queue_size: Arc::new(RwLock::new(10)),
-            processing: Arc::new(RwLock::new(false)),
-            child_pids: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            queue: Arc::new(RwLock::new(DownloadQueue::default())),
+            processing: Arc::new(AtomicBool::new(false)),
+            process_manager: DownloadProcessManager::new(),
         }
     }
 
     /// Set the maximum queue size.
     pub async fn set_max_queue_size(&self, size: u32) {
-        *self.max_queue_size.write().await = size;
+        self.queue.write().await.set_max_size(size);
     }
 
     /// Get the current max queue size.
     pub async fn get_max_queue_size(&self) -> u32 {
-        *self.max_queue_size.read().await
+        self.queue.read().await.max_size()
     }
 
     /// Add a download to the queue or start immediately if nothing is running.
@@ -86,7 +97,7 @@ impl DownloadService {
     ///
     /// # Returns
     ///
-    /// Returns the queue position (1 = will start immediately).
+    /// Returns the queue position (1-based for UI display).
     ///
     /// # Errors
     ///
@@ -99,49 +110,25 @@ impl DownloadService {
         quantization: Option<String>,
     ) -> Result<usize> {
         // Check if already downloading
-        if self.active_downloads.read().await.contains_key(&model_id) {
+        let active_downloads = self.active_downloads.read().await;
+        if active_downloads.contains_key(&model_id) {
             return Err(DownloadError::AlreadyRunning {
                 model_id: model_id.clone(),
             }
             .into());
         }
+        let active_count = active_downloads.len();
+        drop(active_downloads);
 
-        // Check if already in queue
-        {
-            let queue = self.pending_queue.read().await;
-            if queue.iter().any(|item| item.model_id == model_id) {
-                return Err(DownloadError::AlreadyRunning {
-                    model_id: model_id.clone(),
-                }
-                .into());
-            }
-        }
+        // Delegate to queue
+        let position = self
+            .queue
+            .write()
+            .await
+            .queue(model_id, quantization, active_count)?;
 
-        // Check queue size (active + pending)
-        let active_count = self.active_downloads.read().await.len();
-        let pending_count = self.pending_queue.read().await.len();
-        let max_size = *self.max_queue_size.read().await;
-
-        if (active_count + pending_count) as u32 >= max_size {
-            return Err(DownloadError::QueueFull { max_size }.into());
-        }
-
-        // Remove from failed list if retrying
-        {
-            let mut failed = self.failed_downloads.write().await;
-            failed.retain(|item| item.model_id != model_id);
-        }
-
-        // Add to queue
-        let queued_item = QueuedDownload::new(model_id.clone(), quantization);
-
-        let position = {
-            let mut queue = self.pending_queue.write().await;
-            queue.push_back(queued_item);
-            active_count + queue.len()
-        };
-
-        Ok(position)
+        // Convert 0-based to 1-based for UI + account for active downloads
+        Ok(active_count + position + 1)
     }
 
     /// Add a sharded model download to the queue, creating one entry per shard.
@@ -157,7 +144,7 @@ impl DownloadService {
     ///
     /// # Returns
     ///
-    /// Returns the queue position of the first shard.
+    /// Returns the queue position of the first shard (1-based for UI).
     ///
     /// # Errors
     ///
@@ -170,60 +157,35 @@ impl DownloadService {
         quantization: String,
         shard_filenames: Vec<String>,
     ) -> Result<usize> {
-        let shard_count = shard_filenames.len();
-        if shard_count == 0 {
+        if shard_filenames.is_empty() {
             return Err(anyhow::anyhow!("No shard filenames provided"));
         }
 
-        // Check queue capacity for all shards
-        let active_count = self.active_downloads.read().await.len();
-        let pending_count = self.pending_queue.read().await.len();
-        let max_size = *self.max_queue_size.read().await;
-
-        if (active_count + pending_count + shard_count) as u32 > max_size {
-            return Err(DownloadError::QueueFull { max_size }.into());
-        }
-
-        // Check if model is already in queue or downloading
-        {
-            let queue = self.pending_queue.read().await;
-            if queue.iter().any(|item| item.model_id == model_id) {
-                return Err(DownloadError::AlreadyRunning {
-                    model_id: model_id.clone(),
-                }
-                .into());
-            }
-        }
-
-        if self.active_downloads.read().await.contains_key(&model_id) {
+        // Check if already downloading
+        let active_downloads = self.active_downloads.read().await;
+        if active_downloads.contains_key(&model_id) {
             return Err(DownloadError::AlreadyRunning {
                 model_id: model_id.clone(),
             }
             .into());
         }
+        let active_count = active_downloads.len();
+        drop(active_downloads);
 
-        // Remove from failed list if retrying (by model_id since group_id changes each time)
-        {
-            let mut failed = self.failed_downloads.write().await;
-            failed.retain(|item| item.model_id != model_id);
-        }
+        // Convert filenames to (filename, None) tuples for queue_sharded
+        let shard_files: Vec<(String, Option<u64>)> =
+            shard_filenames.into_iter().map(|f| (f, None)).collect();
 
-        // Add all shards to queue using create_shard_batch
-        let first_position = {
-            let mut queue = self.pending_queue.write().await;
-            let base_position = active_count + queue.len() + 1;
+        // Delegate to queue
+        let position = self.queue.write().await.queue_sharded(
+            model_id,
+            quantization,
+            shard_files,
+            active_count,
+        )?;
 
-            let (_, shard_items) =
-                QueuedDownload::create_shard_batch(&model_id, &quantization, &shard_filenames);
-
-            for item in shard_items {
-                queue.push_back(item);
-            }
-
-            base_position
-        };
-
-        Ok(first_position)
+        // Convert 0-based to 1-based for UI + account for active downloads
+        Ok(active_count + position + 1)
     }
 
     /// Add a sharded model download to the queue with file size information.
@@ -236,63 +198,35 @@ impl DownloadService {
         quantization: String,
         shard_files: Vec<(String, u64)>,
     ) -> Result<usize> {
-        let shard_count = shard_files.len();
-        if shard_count == 0 {
+        if shard_files.is_empty() {
             return Err(anyhow::anyhow!("No shard files provided"));
         }
 
-        // Check queue capacity for all shards
-        let active_count = self.active_downloads.read().await.len();
-        let pending_count = self.pending_queue.read().await.len();
-        let max_size = *self.max_queue_size.read().await;
-
-        if (active_count + pending_count + shard_count) as u32 > max_size {
-            return Err(DownloadError::QueueFull { max_size }.into());
-        }
-
-        // Check if model is already in queue or downloading
-        {
-            let queue = self.pending_queue.read().await;
-            if queue.iter().any(|item| item.model_id == model_id) {
-                return Err(DownloadError::AlreadyRunning {
-                    model_id: model_id.clone(),
-                }
-                .into());
-            }
-        }
-
-        if self.active_downloads.read().await.contains_key(&model_id) {
+        // Check if already downloading
+        let active_downloads = self.active_downloads.read().await;
+        if active_downloads.contains_key(&model_id) {
             return Err(DownloadError::AlreadyRunning {
                 model_id: model_id.clone(),
             }
             .into());
         }
+        let active_count = active_downloads.len();
+        drop(active_downloads);
 
-        // Remove from failed list if retrying
-        {
-            let mut failed = self.failed_downloads.write().await;
-            failed.retain(|item| item.model_id != model_id);
-        }
+        // Convert (filename, size) to (filename, Some(size)) for queue_sharded
+        let shard_files_with_sizes: Vec<(String, Option<u64>)> =
+            shard_files.into_iter().map(|(f, s)| (f, Some(s))).collect();
 
-        // Add all shards to queue with size information
-        let first_position = {
-            let mut queue = self.pending_queue.write().await;
-            let base_position = active_count + queue.len() + 1;
+        // Delegate to queue
+        let position = self.queue.write().await.queue_sharded(
+            model_id,
+            quantization,
+            shard_files_with_sizes,
+            active_count,
+        )?;
 
-            let (_, shard_items, _total_size) = QueuedDownload::create_shard_batch_with_sizes(
-                &model_id,
-                &quantization,
-                &shard_files,
-            );
-
-            for item in shard_items {
-                queue.push_back(item);
-            }
-
-            base_position
-        };
-
-        Ok(first_position)
+        // Convert 0-based to 1-based for UI + account for active downloads
+        Ok(active_count + position + 1)
     }
 
     /// Remove all items belonging to a shard group from the pending queue.
@@ -300,10 +234,10 @@ impl DownloadService {
     /// This is used when cancelling or failing a sharded download to remove
     /// all remaining shards from the queue.
     pub async fn remove_shard_group(&self, group_id: &str) -> usize {
-        let mut queue = self.pending_queue.write().await;
-        let initial_len = queue.len();
-        queue.retain(|item| item.group_id.as_deref() != Some(group_id));
-        initial_len - queue.len()
+        self.queue
+            .write()
+            .await
+            .remove_group(&ShardGroupId::from(group_id))
     }
 
     /// Cancel an active download and remove all related shards from queue.
@@ -311,15 +245,13 @@ impl DownloadService {
     /// If the active download belongs to a shard group, this will also
     /// remove all pending shards in that group.
     pub async fn cancel_shard_group(&self, group_id: &str) -> Result<()> {
-        // First, find and cancel any active download in this group
+        // Find any active model_id for this shard group
         let active_model_id = {
-            let queue = self.pending_queue.read().await;
-            // Check if any pending item in this group gives us information
-            // about what might be actively downloading
-            queue
-                .iter()
-                .find(|item| item.group_id.as_deref() == Some(group_id))
-                .map(|item| item.model_id.clone())
+            let active = self.active_downloads.read().await;
+            active
+                .values()
+                .find(|info| info.group_id.as_deref() == Some(group_id))
+                .map(|info| info.model_id.clone())
         };
 
         // Remove all pending shards in this group
@@ -335,58 +267,45 @@ impl DownloadService {
     }
 
     /// Get the current status of the download queue.
+    ///
+    /// Applies UI position semantics:
+    /// - Position 1 = current download (if any)
+    /// - Position 2+ = pending items (when current exists)
+    /// - Position 1+ = pending items (when no current download)
     pub async fn get_queue_status(&self) -> DownloadQueueStatus {
         let active = self.active_downloads.read().await;
-        let pending = self.pending_queue.read().await;
-        let failed = self.failed_downloads.read().await;
-        let max_size = *self.max_queue_size.read().await;
 
-        // Current download - now includes full metadata from ActiveDownloadInfo
+        // Current download - includes full metadata from ActiveDownloadInfo
         let current = active.values().next().map(|info| DownloadQueueItem {
             model_id: info.model_id.clone(),
             quantization: info.quantization.clone(),
             status: DownloadStatus::Downloading,
-            position: 1,
+            position: 1, // Current is always position 1
             error: None,
             group_id: info.group_id.clone(),
             shard_info: info.shard_info.clone(),
         });
 
-        // Pending items
-        let pending_items: Vec<DownloadQueueItem> = pending
-            .iter()
-            .enumerate()
-            .map(|(idx, item)| DownloadQueueItem {
-                model_id: item.model_id.clone(),
-                quantization: item.quantization.clone(),
-                status: DownloadStatus::Queued,
-                position: idx + 2, // 1 is for current download
-                error: None,
-                group_id: item.group_id.clone(),
-                shard_info: item.shard_info.clone(),
-            })
-            .collect();
+        // Get raw 0-based status from queue
+        let raw = self.queue.read().await.status();
 
-        // Failed items
-        let failed_items: Vec<DownloadQueueItem> = failed
-            .iter()
+        // Apply UI position offset: pending starts at 2 if current exists, else 1
+        let offset = if current.is_some() { 2 } else { 1 };
+        let pending = raw
+            .pending
+            .into_iter()
             .enumerate()
-            .map(|(idx, item)| DownloadQueueItem {
-                model_id: item.model_id.clone(),
-                quantization: item.quantization.clone(),
-                status: DownloadStatus::Failed,
-                position: idx + 1,
-                error: None,
-                group_id: item.group_id.clone(),
-                shard_info: item.shard_info.clone(),
+            .map(|(idx, mut item)| {
+                item.position = idx + offset;
+                item
             })
             .collect();
 
         DownloadQueueStatus {
             current,
-            pending: pending_items,
-            failed: failed_items,
-            max_size,
+            pending,
+            failed: raw.failed, // Failed items keep 0-based positions (internal use)
+            max_size: raw.max_size,
         }
     }
 
@@ -394,24 +313,7 @@ impl DownloadService {
     ///
     /// Cannot remove the currently downloading item (use cancel instead).
     pub async fn remove_from_queue(&self, model_id: &str) -> Result<()> {
-        let mut queue = self.pending_queue.write().await;
-        let initial_len = queue.len();
-        queue.retain(|item| item.model_id != model_id);
-
-        if queue.len() == initial_len {
-            // Also check failed list
-            let mut failed = self.failed_downloads.write().await;
-            let failed_initial = failed.len();
-            failed.retain(|item| item.model_id != model_id);
-
-            if failed.len() == failed_initial {
-                return Err(DownloadError::NotInQueue {
-                    model_id: model_id.to_string(),
-                }
-                .into());
-            }
-        }
-
+        self.queue.write().await.remove(model_id)?;
         Ok(())
     }
 
@@ -433,81 +335,26 @@ impl DownloadService {
     ///
     /// Returns an error if the model is not found in the pending queue.
     pub async fn reorder_queue(&self, model_id: &str, new_position: usize) -> Result<usize> {
-        let mut queue = self.pending_queue.write().await;
-
-        // Find the item to get its group_id (if any)
-        let group_id = queue
-            .iter()
-            .find(|item| item.model_id == model_id)
-            .and_then(|item| item.group_id.clone());
-
-        // Collect indices and items to move (either single item or entire shard group)
-        let items_to_move: Vec<QueuedDownload> = if let Some(ref gid) = group_id {
-            // Move all items in the shard group together
-            queue
-                .iter()
-                .filter(|item| item.group_id.as_deref() == Some(gid))
-                .cloned()
-                .collect()
-        } else {
-            // Single item (non-sharded)
-            queue
-                .iter()
-                .filter(|item| item.model_id == model_id)
-                .cloned()
-                .collect()
-        };
-
-        if items_to_move.is_empty() {
-            return Err(DownloadError::NotInQueue {
-                model_id: model_id.to_string(),
-            }
-            .into());
-        }
-
-        // Remove the items from queue
-        if let Some(ref gid) = group_id {
-            queue.retain(|item| item.group_id.as_deref() != Some(gid));
-        } else {
-            queue.retain(|item| item.model_id != model_id);
-        }
-
-        // Calculate actual insertion position (clamped to queue bounds)
-        let insert_pos = new_position.min(queue.len());
-
-        // Insert items at new position (in order, to preserve shard sequence)
-        for (offset, item) in items_to_move.into_iter().enumerate() {
-            let pos = insert_pos + offset;
-            // VecDeque insert: convert to vec temporarily for easier insertion
-            if pos >= queue.len() {
-                queue.push_back(item);
-            } else {
-                // Insert by rotating: push_back then rotate
-                queue.push_back(item);
-                // Rotate the last element to the target position
-                let len = queue.len();
-                for i in (pos + 1..len).rev() {
-                    queue.swap(i, i - 1);
-                }
-            }
-        }
-
-        Ok(insert_pos)
+        let position = self.queue.write().await.reorder(model_id, new_position)?;
+        Ok(position)
     }
 
     /// Clear all failed downloads from the list.
     pub async fn clear_failed(&self) {
-        self.failed_downloads.write().await.clear();
+        self.queue.write().await.clear_failed();
     }
 
     /// Get the next item from the queue (internal use).
     async fn pop_next(&self) -> Option<QueuedDownload> {
-        self.pending_queue.write().await.pop_front()
+        self.queue.write().await.pop_next()
     }
 
     /// Mark a download as failed (internal use).
-    async fn mark_failed(&self, item: QueuedDownload) {
-        self.failed_downloads.write().await.push(item);
+    async fn mark_failed(&self, item: QueuedDownload, error: &str) {
+        self.queue
+            .write()
+            .await
+            .mark_failed(FailedDownload::new(item, error));
     }
 
     /// Download a model from HuggingFace Hub.
@@ -565,9 +412,9 @@ impl DownloadService {
             None,  // token
             false, // force
             progress_callback,
-            Some(cancel_token.clone()),    // Pass token for cancellation
-            Some(self.child_pids.clone()), // PID storage for shutdown termination
-            Some(model_id.clone()),        // PID key
+            Some(cancel_token.clone()), // Pass token for cancellation
+            Some(self.process_manager.pid_storage()), // PID storage for shutdown termination
+            Some(model_id.clone()),     // PID key
         );
         tokio::pin!(download_future);
 
@@ -669,7 +516,7 @@ impl DownloadService {
                 auth_token: None,
                 progress_callback,
                 cancel_token: Some(cancel_token.clone()),
-                pid_storage: Some(self.child_pids.clone()),
+                pid_storage: Some(self.process_manager.pid_storage()),
                 pid_key: Some(tracking_key.clone()),
             },
             first_shard_path,
@@ -709,13 +556,13 @@ impl DownloadService {
     where
         F: Fn(crate::commands::download::DownloadProgressEvent) + Send + Sync + Clone + 'static,
     {
-        // Check if already processing
+        // Check if already processing (using compare_exchange for atomicity)
+        if self
+            .processing
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
         {
-            let mut processing = self.processing.write().await;
-            if *processing {
-                return;
-            }
-            *processing = true;
+            return;
         }
 
         loop {
@@ -888,12 +735,12 @@ impl DownloadService {
                         // Mark as failed - clone the item to preserve shard info
                         let mut failed_item = item.clone();
                         failed_item.queued_at = None;
-                        self.mark_failed(failed_item).await;
+                        self.mark_failed(failed_item, &error_msg).await;
 
                         // If this was a shard, mark entire group as failed
                         if let Some(ref group_id) = item.group_id {
                             // Move remaining shards to failed list
-                            let removed = self.fail_shard_group(group_id).await;
+                            let removed = self.fail_shard_group(group_id, &error_msg).await;
                             if removed > 0 {
                                 let group_msg =
                                     format!("Shard failed, {} remaining shards cancelled", removed);
@@ -946,7 +793,7 @@ impl DownloadService {
         }
 
         // Done processing
-        *self.processing.write().await = false;
+        self.processing.store(false, Ordering::SeqCst);
     }
 
     /// Check if the given item is the last shard in its group.
@@ -955,8 +802,10 @@ impl DownloadService {
             return true; // Not a shard, treat as "last"
         };
 
-        let queue = self.pending_queue.read().await;
-        !queue.iter().any(|q| q.group_id.as_ref() == Some(group_id))
+        self.queue
+            .read()
+            .await
+            .is_last_in_group(&ShardGroupId::new(group_id))
     }
 
     /// Get the total size of already completed shards in the same group.
@@ -996,29 +845,17 @@ impl DownloadService {
             return 0;
         };
 
-        // Start with the current item's size
-        let mut total = shard_info.file_size.unwrap_or(0);
+        let group_id = ShardGroupId::new(group_id);
+        let queue = self.queue.read().await;
 
-        // Add sizes from remaining pending shards in the same group
-        let queue = self.pending_queue.read().await;
-        for pending in queue.iter() {
-            #[allow(clippy::collapsible_if)]
-            if pending.group_id.as_ref() == Some(group_id) {
-                if let Some(ref pending_shard) = pending.shard_info {
-                    total += pending_shard.file_size.unwrap_or(0);
-                }
-            }
-        }
+        // Start with the current item's size plus remaining pending shards
+        let mut total = shard_info.file_size.unwrap_or(0) + queue.group_remaining_size(&group_id);
 
         // If we have the current shard's size, estimate total for all shards
         // (including completed ones) based on average shard size
         if total > 0 && shard_info.total_shards > 0 {
             let current_size = shard_info.file_size.unwrap_or(0);
-            let remaining_count = queue
-                .iter()
-                .filter(|p| p.group_id.as_ref() == Some(group_id))
-                .count()
-                + 1; // +1 for current
+            let remaining_count = queue.group_pending_count(&group_id) + 1; // +1 for current
 
             // Estimate completed shards size
             let completed_count = shard_info.total_shards - remaining_count;
@@ -1031,25 +868,11 @@ impl DownloadService {
     /// Move all remaining items in a shard group to the failed list.
     ///
     /// Returns the number of items moved.
-    async fn fail_shard_group(&self, group_id: &str) -> usize {
-        let mut queue = self.pending_queue.write().await;
-        let mut failed = self.failed_downloads.write().await;
-
-        let mut removed = Vec::new();
-        queue.retain(|item| {
-            if item.group_id.as_deref() == Some(group_id) {
-                let mut failed_item = item.clone();
-                failed_item.queued_at = None;
-                removed.push(failed_item);
-                false
-            } else {
-                true
-            }
-        });
-
-        let count = removed.len();
-        failed.extend(removed);
-        count
+    async fn fail_shard_group(&self, group_id: &str, error: &str) -> usize {
+        self.queue
+            .write()
+            .await
+            .fail_group(&ShardGroupId::new(group_id), error)
     }
 
     /// Cancel an in-flight download.
@@ -1132,11 +955,7 @@ impl DownloadService {
         if self.active_downloads.read().await.contains_key(model_id) {
             return true;
         }
-        self.pending_queue
-            .read()
-            .await
-            .iter()
-            .any(|item| item.model_id == model_id)
+        self.queue.read().await.is_queued(model_id)
     }
 
     /// Get list of currently active downloads.
@@ -1194,7 +1013,7 @@ impl DownloadService {
     /// This allows the download functions to register their child process PIDs
     /// so they can be killed synchronously on app shutdown.
     pub fn child_pids(&self) -> PidStorage {
-        self.child_pids.clone()
+        self.process_manager.pid_storage()
     }
 
     /// Synchronously kill all active child processes.
@@ -1206,35 +1025,7 @@ impl DownloadService {
     ///
     /// Returns the number of processes that were signaled to terminate.
     pub fn kill_all_processes_sync(&self) -> usize {
-        use tracing::{debug, info};
-
-        // Get all PIDs - use write lock to drain the map
-        let pids: Vec<(String, u32)> = match self.child_pids.write() {
-            Ok(mut guard) => {
-                debug!(tracked_count = guard.len(), "Draining PID storage");
-                guard.drain().collect()
-            }
-            Err(poisoned) => {
-                info!("PID storage lock was poisoned, recovering");
-                poisoned.into_inner().drain().collect()
-            }
-        };
-
-        let count = pids.len();
-        if count == 0 {
-            debug!("No child processes tracked - nothing to kill");
-            return 0;
-        }
-
-        info!(count = count, "Killing all child processes for shutdown");
-
-        for (key, pid) in &pids {
-            info!(key = %key, pid = pid, "Sending SIGKILL to process");
-            kill_process_by_pid(*pid);
-        }
-
-        info!(count = count, "Process termination signals sent");
-        count
+        self.process_manager.kill_all_sync()
     }
 
     /// Search HuggingFace Hub for GGUF models.
@@ -1379,11 +1170,8 @@ impl DownloadService {
     pub async fn retry_failed_download(&self, model_id: &str) -> Result<(usize, usize)> {
         // Find the failed item(s) for this model
         let failed_item = {
-            let failed = self.failed_downloads.read().await;
-            failed
-                .iter()
-                .find(|item| item.model_id == model_id)
-                .cloned()
+            let queue = self.queue.read().await;
+            queue.get_failed(model_id).map(|f| f.item.clone())
         };
 
         let Some(item) = failed_item else {
@@ -1443,52 +1231,6 @@ impl DownloadService {
         }
 
         Ok((completed.len(), total_shards, completed))
-    }
-}
-
-/// Kill a process by PID using platform-specific APIs.
-///
-/// This is a synchronous function that sends a termination signal to the process.
-/// On Unix (macOS/Linux), it sends SIGKILL. On Windows, it uses TerminateProcess.
-///
-/// # Arguments
-///
-/// * `pid` - The process ID to terminate
-#[cfg(unix)]
-fn kill_process_by_pid(pid: u32) {
-    use nix::sys::signal::{Signal, kill};
-    use nix::unistd::Pid;
-    use tracing::warn;
-
-    let nix_pid = Pid::from_raw(pid as i32);
-    if let Err(e) = kill(nix_pid, Signal::SIGKILL) {
-        // ESRCH means process doesn't exist (already terminated) - that's fine
-        if e != nix::errno::Errno::ESRCH {
-            warn!(pid = pid, error = %e, "Failed to kill process");
-        }
-    }
-}
-
-#[cfg(windows)]
-fn kill_process_by_pid(pid: u32) {
-    use tracing::warn;
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
-
-    unsafe {
-        let handle = OpenProcess(PROCESS_TERMINATE, false, pid);
-        match handle {
-            Ok(h) => {
-                if let Err(e) = TerminateProcess(h, 1) {
-                    warn!(pid = pid, error = ?e, "Failed to terminate process");
-                }
-                let _ = CloseHandle(h);
-            }
-            Err(e) => {
-                // ERROR_INVALID_PARAMETER means process doesn't exist - that's fine
-                warn!(pid = pid, error = ?e, "Failed to open process for termination");
-            }
-        }
     }
 }
 
@@ -1738,7 +1480,8 @@ mod tests {
         assert!(status.current.is_none()); // Nothing actively downloading
         assert_eq!(status.pending.len(), 2);
         assert_eq!(status.pending[0].model_id, "model1");
-        assert_eq!(status.pending[0].position, 2); // Position starts at 2 (1 is for current)
+        // When no current download, pending starts at position 1
+        assert_eq!(status.pending[0].position, 1);
     }
 
     #[tokio::test]
@@ -1817,7 +1560,7 @@ mod tests {
         let group_id = status.pending[0].group_id.clone().unwrap();
 
         // Fail all shards in the group
-        let failed_count = service.fail_shard_group(&group_id).await;
+        let failed_count = service.fail_shard_group(&group_id, "test error").await;
         assert_eq!(failed_count, 2);
 
         let status_after = service.get_queue_status().await;
