@@ -23,18 +23,6 @@ export {
 } from "./server";
 
 export {
-  downloadModel,
-  cancelDownload,
-  queueDownload,
-  getDownloadQueue,
-  removeFromDownloadQueue,
-  reorderDownloadQueue,
-  cancelShardGroup,
-  clearFailedDownloads,
-  type QueueDownloadResponse,
-} from "./download";
-
-export {
   getProxyStatus,
   startProxy,
   stopProxy,

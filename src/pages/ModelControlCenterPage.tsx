@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, lazy, Suspense } from 'react';
 import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
-import { useDownloadProgress } from '../hooks/useDownloadProgress';
+import { useDownloadManager } from '../download/hooks/useDownloadManager';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
@@ -47,21 +47,19 @@ export default function ModelControlCenterPage({
   const { tags, loadTags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
   
-  // Ref to hold unified refresh - allows useDownloadProgress to call the latest version
+  // Ref to hold unified refresh - allows useDownloadManager to call the latest version
   const refreshAllRef = useRef<() => Promise<void>>();
   
   // Global download progress - lifted to page level so it's always visible
-  const { progress, queueStatus, cancelDownload, fetchQueueStatus } = useDownloadProgress({
+  const { currentProgress, queueStatus, cancel: cancelDownload, refreshQueue } = useDownloadManager({
     onCompleted: () => refreshAllRef.current?.(),
   });
-  const [downloadDismissed, setDownloadDismissed] = useState(false);
   
   // Reset dismissed state when a new download starts
   useEffect(() => {
-    if (progress && (progress.status === 'started' || progress.status === 'downloading' || progress.status === 'progress')) {
-      setDownloadDismissed(false);
+    if (currentProgress && (currentProgress.status === 'started' || currentProgress.status === 'progress')) {
     }
-  }, [progress?.status]);
+  }, [currentProgress?.status]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('download');
@@ -97,7 +95,7 @@ export default function ModelControlCenterPage({
     ]);
   }, [loadModels, refreshFilterOptions, loadTags]);
 
-  // Keep ref updated for useDownloadProgress callback
+  // Keep ref updated for useDownloadManager callback
   refreshAllRef.current = handleRefreshAll;
   
   // Sidebar tab state (for the new tabbed sidebar)
@@ -399,15 +397,12 @@ export default function ModelControlCenterPage({
         {/* Right Panel: Model Inspector */}
         <div className="grid-panel-container right-panel-container">
           {/* Global Download Status - always visible regardless of selected tab/model */}
-          {!downloadDismissed && (
-            <GlobalDownloadStatus
-              progress={progress}
-              queueStatus={queueStatus}
-              onCancel={cancelDownload}
-              onDismiss={() => setDownloadDismissed(true)}
-              onRefreshQueue={fetchQueueStatus}
-            />
-          )}
+          <GlobalDownloadStatus
+            progress={currentProgress}
+            queueStatus={queueStatus}
+            onCancel={cancelDownload}
+            onRefreshQueue={refreshQueue}
+          />
           
           <ModelInspectorPanel
             model={selectedModel}
