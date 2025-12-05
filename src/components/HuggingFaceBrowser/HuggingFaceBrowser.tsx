@@ -14,7 +14,7 @@ import {
   getButtonVariantForIntent,
 } from "../../utils/modelSearchParser";
 import { queueDownload } from "../../download";
-import { useToast } from "../../hooks/useToast";
+import { useToastContext } from "../../contexts/ToastContext";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
@@ -153,7 +153,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   const [searchError, setSearchError] = useState<string | null>(null);
 
   // Toast for notifications
-  const { showToast } = useToast();
+  const { showToast } = useToastContext();
 
   // Compute search intent from current query
   const searchIntent = useMemo(

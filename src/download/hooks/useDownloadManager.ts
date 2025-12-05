@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cancelDownload, cancelShardGroup, clearFailedDownloads, getQueueSnapshot, queueDownload, subscribeToDownloadEvents, type QueueDownloadResponse } from '../api/downloadApi';
-import type { DownloadEvent, DownloadQueueItem, DownloadQueueStatus, DownloadSummary } from '../api/types';
+import type { DownloadCompletionInfo, DownloadEvent, DownloadQueueItem, DownloadQueueStatus, DownloadSummary } from '../api/types';
 import { isTauriApp } from '../../utils/platform';
 
 export type DownloadProgressStatus = 'started' | 'progress' | 'completed' | 'error';
@@ -43,7 +43,11 @@ export interface UseDownloadManagerResult {
 const PROGRESS_THROTTLE_MS = 200;
 
 interface UseDownloadManagerOptions {
-  onCompleted?: () => void;
+  /**
+   * Called when a download completes. Receives typed completion info
+   * for the UI effects layer to handle refresh and toast logic.
+   */
+  onCompleted?: (info: DownloadCompletionInfo) => void;
 }
 
 function normalizeQueueItem(item: DownloadSummary): DownloadQueueItem {
@@ -119,6 +123,28 @@ function eventToProgress(event: DownloadEvent): DownloadProgressView | null {
   }
 }
 
+/**
+ * Extract completion info from a download ID and queue status.
+ * Parses the ID format (model_id:quantization) and looks up display name from queue.
+ */
+function extractCompletionInfo(id: string, queueStatus: DownloadQueueStatus | null): DownloadCompletionInfo {
+  // Parse ID format: "repo/model:quantization" or just "repo/model"
+  const colonIndex = id.lastIndexOf(':');
+  const quantization = colonIndex > 0 ? id.slice(colonIndex + 1) : undefined;
+  
+  // Try to find display name from current or recently completed item in queue
+  const displayName = queueStatus?.current?.id === id 
+    ? queueStatus.current.display_name 
+    : undefined;
+
+  return {
+    modelId: id,
+    quantization,
+    displayName,
+    source: 'huggingface', // All SSE downloads are from HuggingFace
+  };
+}
+
 export function useDownloadManager(options: UseDownloadManagerOptions = {}): UseDownloadManagerResult {
   const { onCompleted } = options;
   const [queueStatus, setQueueStatus] = useState<DownloadQueueStatus | null>(null);
@@ -129,6 +155,10 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
   const lastProgressUpdateRef = useRef<number>(0);
   const pendingProgressRef = useRef<DownloadProgressView | null>(null);
   const throttleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Ref to access current queue status in event handler without causing re-subscriptions
+  const queueStatusRef = useRef<DownloadQueueStatus | null>(null);
+  queueStatusRef.current = queueStatus;
 
   const throttledSetProgress = useCallback((progressData: DownloadProgressView) => {
     const now = Date.now();
@@ -204,8 +234,10 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
       if (progress) {
         throttledSetProgressRef.current(progress);
 
-        if (progress.status === 'completed') {
-          onCompletedRef.current?.();
+        if (progress.status === 'completed' && event.type === 'download_completed') {
+          // Extract completion info from event for UI effects layer
+          const completionInfo = extractCompletionInfo(event.id, queueStatusRef.current);
+          onCompletedRef.current?.(completionInfo);
           setTimeout(() => setCurrentProgress(null), 2000);
         }
       }

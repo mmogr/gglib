@@ -6,8 +6,8 @@ import LlamaInstallModal from "./components/LlamaInstallModal";
 import { ToastContainer } from "./components/Toast";
 import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
-import { useToast } from "./hooks/useToast";
 import { SettingsProvider } from "./contexts/SettingsContext";
+import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { isTauriApp, syncMenuStateSilent } from "./services/tauri";
 
 // Tauri event listener (only imported in Tauri context)
@@ -18,13 +18,17 @@ if (isTauriApp) {
   });
 }
 
-function App() {
+/**
+ * Inner app component that consumes ToastContext.
+ * Separated so we can use useToastContext() after ToastProvider is mounted.
+ */
+function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
   // Sidebar visibility (for menu toggle, currently not visually implemented)
   const [, setIsSidebarVisible] = useState(true);
   const { servers, loadServers, stopServer } = useServers();
-  const { toasts, showToast, dismissToast } = useToast();
+  const { toasts, showToast, dismissToast } = useToastContext();
   const { 
     status: llamaStatus, 
     loading: llamaLoading,
@@ -195,6 +199,17 @@ function App() {
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </div>
     </SettingsProvider>
+  );
+}
+
+/**
+ * Root App component - wraps everything in providers.
+ */
+function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }
 

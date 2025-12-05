@@ -11,6 +11,7 @@ export type {
   DownloadQueueStatus,
   DownloadEvent,
   ProgressById,
+  DownloadCompletionInfo,
 } from './api/types';
 
 // API functions

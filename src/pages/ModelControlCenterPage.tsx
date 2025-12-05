@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { useModels } from '../hooks/useModels';
 import { useTags } from '../hooks/useTags';
 import { useDownloadManager } from '../download/hooks/useDownloadManager';
+import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
@@ -52,12 +53,15 @@ export default function ModelControlCenterPage({
   const handleRefreshAll = useCallback(async () => {
     await Promise.all([loadModels(), refreshFilterOptions(), loadTags()]);
   }, [loadModels, refreshFilterOptions, loadTags]);
-  const refreshAllRef = useRef(handleRefreshAll);
-  refreshAllRef.current = handleRefreshAll;
+  
+  // Download completion effects - batches completions, triggers refresh, shows toast
+  const { onCompleted } = useDownloadCompletionEffects({
+    refreshModels: handleRefreshAll,
+  });
   
   // Global download progress - lifted to page level so it's always visible
   const { currentProgress, queueStatus, cancel: cancelDownload, refreshQueue } = useDownloadManager({
-    onCompleted: () => refreshAllRef.current?.(),
+    onCompleted,
   });
   
   // Sidebar tab state (for the new tabbed sidebar)
