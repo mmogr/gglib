@@ -618,6 +618,22 @@
 			],
 			"isBackground": false,
 			"group": "none"
+		},
+		{
+			"label": "📊 Complexity Hotspots",
+			"type": "shell",
+			"command": "./scripts/complexity_hotspots.sh",
+			"args": [
+				"${input:complexityThreshold}"
+			],
+			"group": "none",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": true,
+				"clear": true
+			}
 		}
 	],
 	"inputs": [
@@ -632,6 +648,12 @@
 			"type": "promptString",
 			"description": "Enter CLI arguments",
 			"default": "--help"
+		},
+		{
+			"id": "complexityThreshold",
+			"type": "promptString",
+			"description": "Minimum complexity threshold to report (default: 40)",
+			"default": "40"
 		}
 	]
 }
