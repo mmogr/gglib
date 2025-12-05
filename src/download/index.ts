@@ -35,7 +35,3 @@ export {
   type DownloadProgressView,
   type UseDownloadManagerResult,
 } from './hooks/useDownloadManager';
-
-// Components
-export { default as DownloadProgressBar } from './components/DownloadProgressBar';
-export { default as ShardProgressIndicator } from './components/ShardProgressIndicator';
