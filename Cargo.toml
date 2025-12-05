@@ -1,6 +1,6 @@
 [package]
 name = "gglib"
-version = "1.5.2"
+version = "1.5.3"
 authors = ["mmogr"]
 edition = "2024"
 description = "GGUF model manager and runner"
