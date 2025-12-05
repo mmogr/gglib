@@ -1571,7 +1571,7 @@ dependencies = [
 
 [[package]]
 name = "gglib"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1617,7 +1617,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gui"
-version = "1.5.1"
+version = "1.5.2"
 dependencies = [
  "axum",
  "dotenvy",
