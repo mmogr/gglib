@@ -1,9 +1,11 @@
 import { FC, useState, useEffect, useCallback, useRef } from 'react';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
+import { useServerState } from '../../services/serverEvents';
 import './ConsoleInfoPanel.css';
 
 interface ConsoleInfoPanelProps {
+  modelId: number;
   modelName: string;
   serverPort: number;
   contextLength?: number;
@@ -46,6 +48,7 @@ const formatUptime = (startTime: number): string => {
  * Left panel in Console view showing model info, context usage, and stop button.
  */
 const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
+  modelId,
   modelName,
   serverPort,
   contextLength,
@@ -57,13 +60,18 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   const [uptime, setUptime] = useState(() => formatUptime(startTime));
   const [metrics, setMetrics] = useState<ServerMetrics | null>(null);
   const [isStopping, setIsStopping] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const uptimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Get server state from registry - undefined means not running
+  // Polling resumes automatically when status changes to 'running' via server:running event
+  const serverState = useServerState(modelId);
+  const isRunning = serverState?.status === 'running';
 
   // Update uptime every second - sync to wall clock to prevent flicker
   useEffect(() => {
     // Clear any existing interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+    if (uptimeIntervalRef.current) {
+      clearInterval(uptimeIntervalRef.current);
     }
     
     // Initial update
@@ -75,41 +83,66 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
     // First, wait until next whole second, then start interval
     const timeout = setTimeout(() => {
       setUptime(formatUptime(startTime));
-      intervalRef.current = setInterval(() => {
+      uptimeIntervalRef.current = setInterval(() => {
         setUptime(formatUptime(startTime));
       }, 1000);
     }, msUntilNextSecond);
     
     return () => {
       clearTimeout(timeout);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      if (uptimeIntervalRef.current) {
+        clearInterval(uptimeIntervalRef.current);
       }
     };
   }, [startTime]);
 
-  // Poll server metrics
+  // Poll server metrics using setTimeout recursion + AbortController
+  // Only polls when server status is 'running'
+  // On fetch failure: stops local loop, clears metrics, does not affect global state
+  // Polling resumes automatically when status changes to 'running' via server:running event
   useEffect(() => {
-    const fetchMetrics = async () => {
+    // Don't poll if server is not running
+    if (!isRunning) {
+      setMetrics(null);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const fetchMetrics = async (): Promise<void> => {
       try {
-        // Try to fetch from llama-server's /metrics endpoint
-        const response = await fetch(`http://127.0.0.1:${serverPort}/metrics`);
-        if (response.ok) {
+        const response = await fetch(`http://127.0.0.1:${serverPort}/metrics`, {
+          signal: controller.signal,
+        });
+        if (response.ok && !cancelled) {
           const text = await response.text();
-          // Parse Prometheus format
           const parsed = parsePrometheusMetrics(text);
           setMetrics(parsed);
         }
-      } catch {
-        // Metrics endpoint may not be enabled - that's okay
-        setMetrics(null);
+      } catch (error) {
+        // On any error (including abort), clear metrics and stop polling for this effect instance
+        if (!cancelled) {
+          setMetrics(null);
+          // Don't schedule next tick on error - effect will re-run when isRunning changes
+          return;
+        }
+      }
+
+      // Schedule next fetch if not cancelled and still running
+      if (!cancelled && isRunning) {
+        setTimeout(fetchMetrics, 2000);
       }
     };
 
+    // Start polling immediately
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 2000);
-    return () => clearInterval(interval);
-  }, [serverPort]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [serverPort, isRunning]);
 
   const handleStopServer = useCallback(async () => {
     setIsStopping(true);

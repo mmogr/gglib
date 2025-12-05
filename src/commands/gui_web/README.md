@@ -43,6 +43,12 @@ The following endpoints provide access to llama-server stdout/stderr logs:
 - `GET /api/servers/:port/logs/stream` - SSE stream of real-time log entries
 - `DELETE /api/servers/:port/logs` - Clear buffered logs for a server
 
+## Server Events Endpoint
+
+- `GET /api/servers/events` - SSE stream of server lifecycle events. Provides web mode parity with Tauri's event system. Emits:
+  - Initial `snapshot` of all running servers on connection
+  - `running`, `stopping`, `stopped`, `crashed` events as they occur
+
 ## Message Endpoints
 
 The following endpoints manage chat messages:

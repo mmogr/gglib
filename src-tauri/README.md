@@ -32,6 +32,8 @@ The Tauri application uses a hybrid architecture:
 
 4. **Tauri Commands**: Some operations can also use native Tauri IPC commands (the `invoke` API) as an alternative to HTTP for frontend-backend communication.
 
+5. **Server Events**: The backend emits Tauri events (`server:running`, `server:stopping`, `server:stopped`, `server:crashed`, `server:snapshot`) that the frontend subscribes to for real-time server lifecycle updates. This is the authoritative source for server state - the frontend's `serverRegistry` ingests these events and components like `ConsoleInfoPanel` react to state changes.
+
 This architecture means:
 - The desktop GUI uses the exact same API routes as the Web UI
 - Changes to the backend automatically benefit both interfaces

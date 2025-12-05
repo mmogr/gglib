@@ -9,6 +9,7 @@ import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { isTauriApp, syncMenuStateSilent } from "./services/tauri";
+import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 
 // Tauri event listener (only imported in Tauri context)
 let listen: ((event: string, handler: (event: any) => void) => Promise<() => void>) | null = null;
@@ -55,6 +56,12 @@ function AppContent() {
       setShowLlamaModal(true);
     }
   }, [llamaLoading, llamaStatus]);
+
+  // Initialize server lifecycle events (Tauri or SSE based on platform)
+  useEffect(() => {
+    initServerEvents();
+    return () => cleanupServerEvents();
+  }, []);
 
   // Close modal when installation completes
   useEffect(() => {

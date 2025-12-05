@@ -29,5 +29,7 @@ This module contains low-level helper functions and shared utilities used across
 - **`input.rs`**: CLI user input handling (prompts, confirmations).
 - **`process/`**: Low-level process management utilities.
   - **`log_streamer.rs`**: `ServerLogManager` for capturing and broadcasting llama-server stdout/stderr logs. Provides real-time log streaming via broadcast channels and maintains a ring buffer of recent logs per server port.
+  - **`events.rs`**: `ServerEvent` types for lifecycle state synchronization. Defines the event schema used by both Tauri and SSE to notify frontends of server state changes.
+  - **`event_broadcaster.rs`**: `ServerEventBroadcaster` for SSE clients in web mode. Uses a tokio broadcast channel to fan out events to multiple connected clients.
 
 <!-- module-docs:end -->
