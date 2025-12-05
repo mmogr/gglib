@@ -8,8 +8,8 @@
 
 use crate::commands::download::ProgressThrottle;
 use crate::commands::gui_web::state::AppState;
-use crate::download::{DownloadEvent, QueueSnapshot};
 use crate::download::progress::build_queue_snapshot;
+use crate::download::{DownloadEvent, QueueSnapshot};
 use crate::models::gui::{
     AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
     HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfToolSupportResponse,
@@ -251,14 +251,19 @@ pub async fn download_model(
         .await
     {
         Ok(message) => {
-            if let Ok(json) = serde_json::to_string(&DownloadEvent::completed(&completion_model_id, Some(&message))) {
+            if let Ok(json) = serde_json::to_string(&DownloadEvent::completed(
+                &completion_model_id,
+                Some(&message),
+            )) {
                 let _ = progress_tx.send(json);
             }
             Ok(Json(ApiResponse::success(message)))
         }
         Err(e) => {
             let error_msg = e.to_string();
-            if let Ok(json) = serde_json::to_string(&DownloadEvent::failed(&error_model_id, &error_msg)) {
+            if let Ok(json) =
+                serde_json::to_string(&DownloadEvent::failed(&error_model_id, &error_msg))
+            {
                 let _ = progress_tx.send(json);
             }
             Err(AppError::ServerError(error_msg))
