@@ -12,9 +12,8 @@ use tracing::debug;
 const CHANNEL_CAPACITY: usize = 64;
 
 /// Global server event broadcaster
-static EVENT_BROADCASTER: LazyLock<Arc<ServerEventBroadcaster>> = LazyLock::new(|| {
-    Arc::new(ServerEventBroadcaster::new())
-});
+static EVENT_BROADCASTER: LazyLock<Arc<ServerEventBroadcaster>> =
+    LazyLock::new(|| Arc::new(ServerEventBroadcaster::new()));
 
 /// Get the global server event broadcaster
 pub fn get_event_broadcaster() -> Arc<ServerEventBroadcaster> {

@@ -74,7 +74,10 @@ pub async fn start_server(
 
     // Emit server:running event for SSE clients
     let broadcaster = crate::utils::process::get_event_broadcaster();
-    broadcaster.broadcast(crate::utils::process::ServerEvent::running(id, response.port));
+    broadcaster.broadcast(crate::utils::process::ServerEvent::running(
+        id,
+        response.port,
+    ));
 
     Ok(Json(ApiResponse::success(response)))
 }
@@ -90,12 +93,7 @@ pub async fn stop_server(
         .list_servers()
         .await
         .ok()
-        .and_then(|servers| {
-            servers
-                .iter()
-                .find(|s| s.model_id == id)
-                .map(|s| s.port)
-        });
+        .and_then(|servers| servers.iter().find(|s| s.model_id == id).map(|s| s.port));
 
     // Emit server:stopping event for SSE clients
     let broadcaster = crate::utils::process::get_event_broadcaster();
@@ -976,10 +974,10 @@ pub async fn clear_server_logs(
     Ok(Json(ApiResponse::success("Logs cleared".to_string())))
 }
 
-use crate::utils::process::{get_event_broadcaster, ServerEvent, ServerStateInfo, ServerStatus};
+use crate::utils::process::{ServerEvent, ServerStateInfo, ServerStatus, get_event_broadcaster};
 
 /// Stream server lifecycle events as Server-Sent Events (SSE)
-/// 
+///
 /// Emits the same logical events as Tauri desktop mode:
 /// - snapshot: Initial state of all running servers (emitted on connect)
 /// - running: Server started and ready
@@ -991,7 +989,7 @@ pub async fn stream_server_events(
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, std::convert::Infallible>>> {
     let broadcaster = get_event_broadcaster();
     let receiver = broadcaster.subscribe();
-    
+
     // Build initial snapshot of running servers
     let snapshot = match state.backend.list_servers().await {
         Ok(servers) => {
@@ -1006,7 +1004,7 @@ pub async fn stream_server_events(
             None
         }
     };
-    
+
     // Create stream that first emits snapshot, then broadcasts
     let event_stream = BroadcastStream::new(receiver).filter_map(|result| async move {
         match result {
@@ -1016,7 +1014,7 @@ pub async fn stream_server_events(
             Err(_) => None, // Channel lagged, skip
         }
     });
-    
+
     // Prepend snapshot if available
     let full_stream = if let Some(snapshot_event) = snapshot {
         let snapshot_item = std::iter::once(Ok(
@@ -1026,7 +1024,7 @@ pub async fn stream_server_events(
     } else {
         event_stream.boxed()
     };
-    
+
     Sse::new(full_stream)
 }
 

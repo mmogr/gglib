@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Server lifecycle status.
-/// 
+///
 /// The status values directly map to event types for consistency.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -68,19 +68,17 @@ pub enum ServerEvent {
     /// Snapshot of all currently running servers.
     /// Emitted on app init to seed the frontend registry.
     /// Only contains servers with status=running.
-    Snapshot {
-        servers: Vec<ServerStateInfo>,
-    },
-    
+    Snapshot { servers: Vec<ServerStateInfo> },
+
     /// Server has started and is ready to accept requests.
     Running(ServerStateInfo),
-    
+
     /// Server stop has been initiated.
     Stopping(ServerStateInfo),
-    
+
     /// Server has stopped cleanly.
     Stopped(ServerStateInfo),
-    
+
     /// Server crashed or exited unexpectedly.
     Crashed(ServerStateInfo),
 }
@@ -93,7 +91,11 @@ impl ServerEvent {
 
     /// Create a running event for a server that just started.
     pub fn running(model_id: u32, port: u16) -> Self {
-        Self::Running(ServerStateInfo::new(model_id, ServerStatus::Running, Some(port)))
+        Self::Running(ServerStateInfo::new(
+            model_id,
+            ServerStatus::Running,
+            Some(port),
+        ))
     }
 
     /// Create a stopping event for a server about to stop.
