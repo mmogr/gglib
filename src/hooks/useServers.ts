@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { listServers, stopServer as stopServerService } from '../services/tauri';
+import { listServers } from '../services/tauri';
+import { safeStopServer } from '../services/server/safeActions';
 import { ServerInfo } from '../types';
 
 export function useServers() {
@@ -29,7 +30,7 @@ export function useServers() {
   }, [loadServers]);
 
   const stopServer = useCallback(async (modelId: number) => {
-    await stopServerService(modelId);
+    await safeStopServer(modelId);
     await loadServers();
   }, [loadServers]);
 

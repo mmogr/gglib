@@ -137,6 +137,26 @@ export function clearAllServerState(): void {
 }
 
 // ============================================================================
+// Predicates
+// ============================================================================
+
+/**
+ * Internal predicate to check if a ServerState represents a running server.
+ * Used by both hooks and service functions to centralize "what counts as running".
+ */
+function isRunningState(s?: ServerState): boolean {
+  return s?.status === 'running';
+}
+
+/**
+ * Check if a server is currently running by model ID.
+ * For use in services (non-React). UI should use useIsServerRunning() hook.
+ */
+export function isServerRunning(modelId: string | number): boolean {
+  return isRunningState(getServerState(String(modelId)));
+}
+
+// ============================================================================
 // React Hook
 // ============================================================================
 
@@ -164,5 +184,5 @@ export function useServerState(modelId: string | number): ServerState | undefine
  */
 export function useIsServerRunning(modelId: string | number): boolean {
   const state = useServerState(modelId);
-  return state?.status === 'running';
+  return isRunningState(state);
 }
