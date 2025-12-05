@@ -4,12 +4,11 @@ import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
-import { ToastContainer } from '../components/Toast';
 import { GenericToolUI, TimeToolUI } from '../components/ToolUI';
 import { SidebarTab } from '../components/ModelLibraryPanel/SidebarTabs';
 import { useGglibRuntime } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
-import { useToast } from '../hooks/useToast';
+import { useToastContext } from '../contexts/ToastContext';
 import { ChatService, ConversationSummary, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/chat';
 import './ChatPage.css';
 
@@ -66,7 +65,7 @@ export default function ChatPage({
   const isDraggingRef = useRef(false);
 
   // Toast notifications
-  const { toasts, showToast, dismissToast } = useToast();
+  const { showToast } = useToastContext();
 
   // Settings for title generation prompt
   const { settings } = useSettings();
@@ -396,9 +395,6 @@ export default function ChatPage({
           </div>
         </div>
       )}
-
-      {/* Toast Notifications */}
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

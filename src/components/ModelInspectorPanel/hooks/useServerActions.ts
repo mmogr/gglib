@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { GgufModel, ServeConfig, ServerInfo, AppSettings } from '../../../types';
 import { serveModel } from '../../../services/tauri';
-import { useToast } from '../../../hooks/useToast';
+import { useToastContext } from '../../../contexts/ToastContext';
 
 export interface ServerActionsConfig {
   model: GgufModel | null;
@@ -43,7 +43,7 @@ export interface ServerActionsResult {
  * Handles starting/stopping servers, deleting models, and saving edits.
  */
 export function useServerActions(config: ServerActionsConfig): ServerActionsResult {
-  const { showToast } = useToast();
+  const { showToast } = useToastContext();
   
   const {
     model,

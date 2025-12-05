@@ -97,3 +97,23 @@ export type DownloadEvent =
 
 /** Progress map keyed by DownloadId for easy lookup in the UI */
 export type ProgressById = Map<DownloadId, DownloadEvent>;
+
+// ============================================================================
+// Completion Info (for UI effects layer)
+// ============================================================================
+
+/**
+ * Typed payload for download completion events.
+ * Used by the UI effects layer (useDownloadCompletionEffects) to trigger
+ * model refresh and toast notifications.
+ */
+export interface DownloadCompletionInfo {
+  /** Canonical download ID (model_id:quantization or model_id) */
+  modelId: string;
+  /** Quantization variant if applicable (e.g., "Q4_K_M") */
+  quantization?: string;
+  /** Human-readable display name for toast messages */
+  displayName?: string;
+  /** Source of the download for potential future handling differentiation */
+  source: 'huggingface' | 'local' | 'unknown';
+}
