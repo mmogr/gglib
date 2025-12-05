@@ -1,106 +1,10 @@
-//! Native application menu for GGLib GUI.
-//!
-//! Provides a cross-platform menu bar with stateful items that reflect
-//! the current application state (llama.cpp installation, proxy status,
-//! selected model, etc.).
+//! Menu construction.
 
+use super::{ids, AppMenu};
 use tauri::{
     menu::{AboutMetadataBuilder, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     AppHandle, Wry,
 };
-
-/// Menu item IDs for event handling
-pub mod ids {
-    // File menu
-    pub const ADD_MODEL_FILE: &str = "add_model_file";
-    pub const DOWNLOAD_MODEL: &str = "download_model";
-    pub const REFRESH_MODELS: &str = "refresh_models";
-
-    // Model menu
-    pub const START_SERVER: &str = "start_server";
-    pub const STOP_SERVER: &str = "stop_server";
-    pub const REMOVE_MODEL: &str = "remove_model";
-
-    // Proxy menu
-    pub const PROXY_TOGGLE: &str = "proxy_toggle";
-    pub const COPY_PROXY_URL: &str = "copy_proxy_url";
-
-    // View menu
-    pub const SHOW_DOWNLOADS: &str = "show_downloads";
-    pub const SHOW_CHAT: &str = "show_chat";
-    pub const TOGGLE_SIDEBAR: &str = "toggle_sidebar";
-
-    // Help menu
-    pub const INSTALL_LLAMA: &str = "install_llama";
-    pub const CHECK_LLAMA_STATUS: &str = "check_llama_status";
-    pub const OPEN_DOCS: &str = "open_docs";
-
-    // App menu
-    pub const PREFERENCES: &str = "preferences";
-}
-
-/// Holds references to menu items that need dynamic state updates.
-///
-/// This struct is stored in the application state and used to
-/// enable/disable or check/uncheck menu items based on app state.
-pub struct AppMenu {
-    // Model menu items (enabled based on selection/server state)
-    pub start_server: MenuItem<Wry>,
-    pub stop_server: MenuItem<Wry>,
-    pub remove_model: MenuItem<Wry>,
-
-    // Proxy menu items
-    pub proxy_toggle: CheckMenuItem<Wry>,
-    pub copy_proxy_url: MenuItem<Wry>,
-
-    // Help menu items
-    pub install_llama: MenuItem<Wry>,
-}
-
-/// State used to synchronize menu item enabled/checked status
-#[derive(Debug, Clone, Default)]
-pub struct MenuState {
-    pub llama_installed: bool,
-    pub proxy_running: bool,
-    pub model_selected: bool,
-    pub selected_model_server_running: bool,
-}
-
-impl AppMenu {
-    /// Update all stateful menu items based on current application state.
-    ///
-    /// This should be called whenever relevant state changes:
-    /// - Model selection changes
-    /// - Server starts/stops
-    /// - Proxy starts/stops
-    /// - llama.cpp is installed
-    pub fn sync_state(&self, state: &MenuState) -> Result<(), tauri::Error> {
-        // Model menu items
-        // Start Server: enabled if model selected AND not already running
-        self.start_server
-            .set_enabled(state.model_selected && !state.selected_model_server_running)?;
-
-        // Stop Server: enabled if model selected AND currently running
-        self.stop_server
-            .set_enabled(state.model_selected && state.selected_model_server_running)?;
-
-        // Remove Model: enabled if model selected
-        self.remove_model.set_enabled(state.model_selected)?;
-
-        // Proxy menu items
-        // Toggle checked state based on whether proxy is running
-        self.proxy_toggle.set_checked(state.proxy_running)?;
-
-        // Copy URL: only enabled if proxy is running
-        self.copy_proxy_url.set_enabled(state.proxy_running)?;
-
-        // Help menu items
-        // Install llama.cpp: disabled if already installed
-        self.install_llama.set_enabled(!state.llama_installed)?;
-
-        Ok(())
-    }
-}
 
 /// Build the complete application menu.
 ///
