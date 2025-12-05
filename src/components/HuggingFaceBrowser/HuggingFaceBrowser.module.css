@@ -169,6 +169,36 @@
   cursor: not-allowed;
 }
 
+/* Button variants for different intents */
+.searchBtnPrimary {
+  background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+}
+
+.searchBtnPrimary:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.searchBtnAccent {
+  background: linear-gradient(135deg, #34d399, #10b981);
+}
+
+.searchBtnAccent:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* Search input error state */
+.searchInputError {
+  border-color: rgba(239, 68, 68, 0.6) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+.searchErrorText {
+  display: block;
+  font-size: 0.75rem;
+  color: #ef4444;
+  margin-top: 0.35rem;
+}
+
 /* Results Section */
 .resultsSection {
   flex: 1;

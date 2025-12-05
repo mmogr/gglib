@@ -28,7 +28,6 @@ interface ModelLibraryPanelProps {
   
   // Add/Download props
   onModelAdded: (filePath: string) => Promise<void>;
-  onModelDownloaded: () => Promise<void>;
   activeSubTab?: AddDownloadSubTab;
   onSubTabChange?: (subtab: AddDownloadSubTab) => void;
   
@@ -62,7 +61,6 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   onFiltersChange,
   onClearFilters,
   onModelAdded,
-  onModelDownloaded,
   activeSubTab,
   onSubTabChange,
   onSelectHfModel,
@@ -199,7 +197,6 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         ) : (
           <AddDownloadContent
             onModelAdded={onModelAdded}
-            onModelDownloaded={onModelDownloaded}
             activeSubTab={activeSubTab}
             onSubTabChange={onSubTabChange}
             onSelectHfModel={onSelectHfModel}

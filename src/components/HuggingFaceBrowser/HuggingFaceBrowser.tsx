@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, FC } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, FC } from "react";
 import { browseHfModels, openUrl } from "../../services/tauri";
 import {
   HfModelSummary,
@@ -8,6 +8,13 @@ import {
 } from "../../types";
 import { formatNumber, getHuggingFaceModelUrl } from "../../utils/format";
 import { useToolSupportCache } from "../../hooks/useToolSupportCache";
+import {
+  parseModelSearchIntent,
+  getButtonTextForIntent,
+  getButtonVariantForIntent,
+} from "../../utils/modelSearchParser";
+import { queueDownload } from "../../download";
+import { useToast } from "../../hooks/useToast";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
@@ -143,6 +150,23 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Toast for notifications
+  const { showToast } = useToast();
+
+  // Compute search intent from current query
+  const searchIntent = useMemo(
+    () => parseModelSearchIntent(searchQuery),
+    [searchQuery]
+  );
+
+  // Clear search error on query change
+  useEffect(() => {
+    if (searchError) {
+      setSearchError(null);
+    }
+  }, [searchQuery]);
 
   // Debounced search
   const debouncedQuery = useDebounce(searchQuery, 300);
@@ -210,23 +234,101 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
     [buildSearchRequest]
   );
 
-  // Handle search button click
+  // Handle search button click - now handles all intents
   const handleSearch = () => {
     setCurrentPage(0);
     performSearch(0, false);
   };
+
+  // Handle direct download for exact repo:quant pattern
+  const handleDirectDownload = useCallback(async (repo: string, quant: string) => {
+    try {
+      setLoading(true);
+      await queueDownload(repo, quant);
+      showToast(`Download started: ${repo} (${quant})`, "success");
+      setSearchQuery(""); // Clear search after successful queue
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start download";
+      setSearchError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  // Handle view model for exact repo pattern - fetch and select
+  const handleViewRepo = useCallback(async (repo: string) => {
+    try {
+      setLoading(true);
+      // Search for the exact repo to get model summary
+      const request: HfSearchRequest = {
+        query: repo,
+        min_params_b: null,
+        max_params_b: null,
+        page: 0,
+        limit: 10,
+        sort_by: "downloads",
+        sort_ascending: false,
+      };
+      const response = await browseHfModels(request);
+      // Find exact match
+      const exactMatch = response.models.find(m => m.id === repo);
+      if (exactMatch) {
+        onSelectModel?.(exactMatch);
+        setSearchQuery(""); // Clear search after selecting
+      } else {
+        setSearchError(`Model "${repo}" not found on HuggingFace`);
+        showToast(`Model "${repo}" not found`, "error");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to fetch model";
+      setSearchError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [onSelectModel, showToast]);
+
+  // Unified action handler based on current intent
+  const handleSearchAction = useCallback(() => {
+    switch (searchIntent.kind) {
+      case "download":
+        handleDirectDownload(searchIntent.repo, searchIntent.quant);
+        break;
+      case "repo":
+        handleViewRepo(searchIntent.repo);
+        break;
+      case "url":
+        if (searchIntent.quant && searchIntent.repo) {
+          handleDirectDownload(searchIntent.repo, searchIntent.quant);
+        } else if (searchIntent.repo) {
+          handleViewRepo(searchIntent.repo);
+        } else {
+          handleSearch();
+        }
+        break;
+      case "search":
+      default:
+        handleSearch();
+        break;
+    }
+  }, [searchIntent, handleDirectDownload, handleViewRepo, handleSearch]);
 
   // Handle load more
   const handleLoadMore = () => {
     performSearch(currentPage + 1, true);
   };
 
-  // Handle enter key in search input
+  // Handle enter key in search input - uses unified action handler
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      handleSearch();
+      handleSearchAction();
     }
   };
+
+  // Get button text and variant based on intent
+  const buttonText = loading ? "Loading..." : getButtonTextForIntent(searchIntent);
+  const buttonVariant = getButtonVariantForIntent(searchIntent);
 
   // Auto-search on debounced query change (after initial mount)
   useEffect(() => {
@@ -257,19 +359,23 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             <label className={styles.searchLabel}>Search Models</label>
             <input
               type="text"
-              className={styles.searchInput}
+              className={`${styles.searchInput} ${searchError ? styles.searchInputError : ""}`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search GGUF text-generation models..."
+              placeholder="Search, paste user/repo, or user/repo:quant..."
             />
+            {searchError && (
+              <span className={styles.searchErrorText}>{searchError}</span>
+            )}
           </div>
           <button
-            className={styles.searchBtn}
-            onClick={handleSearch}
+            className={`${styles.searchBtn} ${buttonVariant === "accent" ? styles.searchBtnAccent : ""} ${buttonVariant === "primary" ? styles.searchBtnPrimary : ""}`}
+            onClick={handleSearchAction}
             disabled={loading}
+            aria-label={buttonText}
           >
-            {loading ? "Searching..." : "Search"}
+            {buttonText}
           </button>
         </div>
 
