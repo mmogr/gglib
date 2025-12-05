@@ -1,11 +1,11 @@
 import { FC, useRef, useState, useCallback, useMemo } from 'react';
-import { DownloadQueueItem } from '../../types';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import {
   cancelShardGroup,
   removeFromDownloadQueue,
   reorderDownloadQueue,
-} from '../../download/api/downloadApi';
+  type DownloadQueueItem,
+} from '../../download';
 import styles from './DownloadQueuePopover.module.css';
 
 /**

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cancelDownload, cancelShardGroup, clearFailedDownloads, getQueueSnapshot, queueDownload, subscribeToDownloadEvents, type QueueDownloadResponse } from '../api/downloadApi';
-import type { DownloadEvent, DownloadQueueStatus, DownloadSummary } from '../api/types';
-import type { DownloadQueueItem } from '../../types';
+import type { DownloadEvent, DownloadQueueItem, DownloadQueueStatus, DownloadSummary } from '../api/types';
 import { isTauriApp } from '../../utils/platform';
 
 export type DownloadProgressStatus = 'started' | 'progress' | 'completed' | 'error';

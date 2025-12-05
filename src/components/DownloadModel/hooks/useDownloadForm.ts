@@ -1,6 +1,5 @@
 import { useState, useCallback, FormEvent } from "react";
-import type { DownloadQueueStatus } from "../../../types";
-import type { QueueDownloadResponse } from "../../../download/api/downloadApi";
+import type { DownloadQueueStatus, QueueDownloadResponse } from "../../../download";
 
 /**
  * Dependencies for useDownloadForm hook.

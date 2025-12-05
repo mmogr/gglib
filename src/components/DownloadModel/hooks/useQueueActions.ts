@@ -1,6 +1,5 @@
 import { useCallback } from "react";
-import type { DownloadQueueItem } from "../../../types";
-import type { QueueDownloadResponse } from "../../../download/api/downloadApi";
+import type { DownloadQueueItem, QueueDownloadResponse } from "../../../download";
 
 /**
  * Dependencies for useQueueActions hook.
