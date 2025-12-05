@@ -94,6 +94,25 @@ pub enum ExecutionResult {
     Cancelled,
 }
 
+/// Parameters for executing a download.
+#[derive(Clone)]
+pub struct ExecuteParams<'a> {
+    /// Repository identifier (e.g., "unsloth/Llama-3-GGUF").
+    pub repo_id: &'a str,
+    /// List of file paths to download.
+    pub files: &'a [String],
+    /// Local directory to download files into.
+    pub destination: &'a Path,
+    /// Git revision/commit SHA.
+    pub revision: &'a str,
+    /// Optional authentication token.
+    pub token: Option<&'a str>,
+    /// Whether to overwrite existing files.
+    pub force: bool,
+    /// Token for cancellation.
+    pub cancel_token: CancellationToken,
+}
+
 /// Trait for executing file downloads.
 ///
 /// Implementations handle the mechanics of downloading files from
@@ -101,27 +120,10 @@ pub enum ExecutionResult {
 #[async_trait]
 pub trait DownloadExecutor: Send + Sync {
     /// Execute a download of the specified files.
-    ///
-    /// # Arguments
-    ///
-    /// * `repo_id` - Repository identifier (e.g., "unsloth/Llama-3-GGUF")
-    /// * `files` - List of file paths to download
-    /// * `destination` - Local directory to download files into
-    /// * `revision` - Git revision/commit SHA
-    /// * `token` - Optional authentication token
-    /// * `force` - Whether to overwrite existing files
-    /// * `on_event` - Callback for progress events
-    /// * `cancel_token` - Token for cancellation
     async fn execute(
         &self,
-        repo_id: &str,
-        files: &[String],
-        destination: &Path,
-        revision: &str,
-        token: Option<&str>,
-        force: bool,
+        params: ExecuteParams<'_>,
         on_event: &EventCallback,
-        cancel_token: CancellationToken,
     ) -> Result<ExecutionResult, DownloadError>;
 
     /// Prepare the execution environment (e.g., set up Python venv).
