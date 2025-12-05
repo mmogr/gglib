@@ -97,4 +97,111 @@ For more details on the architecture and how all interfaces work together, see:
   - `services/`: API services (Tauri command wrappers)
 - `src-tauri/`: Backend source code (Rust)
   - `src/main.rs`: Tauri application entry point
+  - `src/app/`: Application state and event infrastructure
+  - `src/menu/`: Native menu bar with stateful items
+  - `src/commands/`: Tauri command handlers (organized by domain)
   - `tauri.conf.json`: Tauri configuration
+
+## Backend Module Architecture
+
+The Rust backend is organized into three main modules:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           TAURI APPLICATION                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │                          main.rs                                   │ │
+│  │  • Tauri app setup (plugins, window, menu)                         │ │
+│  │  • Embedded API server startup                                     │ │
+│  │  • Command handler registration                                    │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                    │                                     │
+│          ┌─────────────────────────┼─────────────────────────┐          │
+│          ▼                         ▼                         ▼          │
+│  ┌──────────────┐         ┌──────────────┐         ┌──────────────┐    │
+│  │    app/      │         │    menu/     │         │  commands/   │    │
+│  │              │         │              │         │              │    │
+│  │ • AppState   │◄───────►│ • AppMenu    │         │ • models     │    │
+│  │ • Events     │         │ • MenuState  │         │ • servers    │    │
+│  │ • emit_or_log│         │ • build      │         │ • downloads  │    │
+│  │              │         │ • handlers   │         │ • proxy      │    │
+│  │              │         │ • state_sync │         │ • settings   │    │
+│  │              │         │              │         │ • llama      │    │
+│  │              │         │              │         │ • mcp        │    │
+│  │              │         │              │         │ • tags       │    │
+│  │              │         │              │         │ • huggingface│    │
+│  │              │         │              │         │ • util       │    │
+│  └──────┬───────┘         └──────────────┘         └──────┬───────┘    │
+│         │                                                  │            │
+│         └──────────────────────┬───────────────────────────┘            │
+│                                │                                         │
+│                                ▼                                         │
+│                    ┌───────────────────────┐                            │
+│                    │      GuiBackend       │                            │
+│                    │   (from gglib crate)  │                            │
+│                    └───────────┬───────────┘                            │
+│                                │                                         │
+└────────────────────────────────┼─────────────────────────────────────────┘
+                                 │
+                                 ▼
+                    ┌───────────────────────┐
+                    │      gglib crate      │
+                    │  • Database           │
+                    │  • ProcessManager     │
+                    │  • DownloadService    │
+                    │  • HuggingFaceClient  │
+                    │  • ProxyServer        │
+                    └───────────────────────┘
+```
+
+### Module Responsibilities
+
+| Module | Purpose | Key Components |
+|--------|---------|----------------|
+| **app/** | Central state & event infrastructure | `AppState` (managed state), `emit_or_log()` (event helper), event constants |
+| **menu/** | Native menu bar with state sync | `AppMenu` (item refs), `MenuState`, menu builder, event handlers, state synchronization |
+| **commands/** | 40 Tauri commands in 10 domain modules | Thin wrappers delegating to `GuiBackend` |
+
+### Communication Flow
+
+```text
+┌─────────────────┐                              ┌─────────────────┐
+│   React UI      │                              │  Native Menu    │
+│   (Frontend)    │                              │  (macOS/Win/Lin)│
+└────────┬────────┘                              └────────┬────────┘
+         │                                                │
+         │  invoke("serve_model", {id: 42})              │  Click "Start Server"
+         │                                                │
+         ▼                                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Tauri IPC / Events                           │
+└────────┬───────────────────────────────────────────────────┬────────┘
+         │                                                   │
+         ▼                                                   ▼
+┌─────────────────┐                              ┌─────────────────┐
+│ commands/       │                              │ menu/handlers   │
+│ servers.rs      │                              │ emit event      │
+│ serve_model()   │                              │ "menu:start-    │
+└────────┬────────┘                              │  server"        │
+         │                                       └────────┬────────┘
+         │                                                │
+         ▼                                                ▼
+┌─────────────────┐                              ┌─────────────────┐
+│ AppState        │                              │ React listener  │
+│ .backend        │                              │ calls invoke()  │
+│ .start_server() │◄─────────────────────────────│                 │
+└────────┬────────┘                              └─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│ GuiBackend      │
+│ (gglib crate)   │
+└─────────────────┘
+```
+
+For detailed documentation on each module, see:
+- [app/README.md](src/app/README.md) — State and event infrastructure
+- [menu/README.md](src/menu/README.md) — Native menu implementation
+- [commands/README.md](src/commands/README.md) — Tauri command reference
