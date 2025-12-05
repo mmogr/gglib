@@ -162,25 +162,12 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
     }
   }, []);
 
-  const handleEvent = useCallback(
-    (event: DownloadEvent) => {
-      if (event.type === 'queue_snapshot') {
-        setQueueStatus(snapshotToQueueStatus(event.items, event.max_size));
-        return;
-      }
-
-      const progress = eventToProgress(event);
-      if (progress) {
-        throttledSetProgress(progress);
-
-        if (progress.status === 'completed') {
-          onCompleted?.();
-          setTimeout(() => setCurrentProgress(null), 2000);
-        }
-      }
-    },
-    [throttledSetProgress, onCompleted]
-  );
+  // Use refs to avoid re-creating event handler and causing subscription loops
+  const throttledSetProgressRef = useRef(throttledSetProgress);
+  throttledSetProgressRef.current = throttledSetProgress;
+  
+  const onCompletedRef = useRef(onCompleted);
+  onCompletedRef.current = onCompleted;
 
   useEffect(() => {
     return () => {
@@ -203,21 +190,50 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
     refreshQueue();
 
     let unsubscribe: (() => void) | undefined;
+    let isMounted = true;
+
+    // Stable event handler that reads from refs
+    const handleEvent = (event: DownloadEvent) => {
+      if (!isMounted) return;
+      
+      if (event.type === 'queue_snapshot') {
+        setQueueStatus(snapshotToQueueStatus(event.items, event.max_size));
+        return;
+      }
+
+      const progress = eventToProgress(event);
+      if (progress) {
+        throttledSetProgressRef.current(progress);
+
+        if (progress.status === 'completed') {
+          onCompletedRef.current?.();
+          setTimeout(() => setCurrentProgress(null), 2000);
+        }
+      }
+    };
 
     subscribeToDownloadEvents(handleEvent)
       .then((unsub) => {
-        unsubscribe = unsub;
-        setConnectionMode(isTauriApp ? 'Desktop (Tauri)' : 'Web (SSE)');
+        if (isMounted) {
+          unsubscribe = unsub;
+          setConnectionMode(isTauriApp ? 'Desktop (Tauri)' : 'Web (SSE)');
+        } else {
+          // Component unmounted before subscription completed
+          unsub();
+        }
       })
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Failed to subscribe to download events');
-        setConnectionMode('Error');
+        if (isMounted) {
+          setError(e instanceof Error ? e.message : 'Failed to subscribe to download events');
+          setConnectionMode('Error');
+        }
       });
 
     return () => {
+      isMounted = false;
       if (unsubscribe) unsubscribe();
     };
-  }, [handleEvent, refreshQueue]);
+  }, [refreshQueue]); // Only depend on refreshQueue, not handleEvent
 
   const queueModel = useCallback(async (modelId: string, quantization?: string) => {
     const result = await queueDownload(modelId, quantization);

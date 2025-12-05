@@ -126,6 +126,85 @@ export async function reorderDownloadQueue(modelId: string, newPosition: number)
 
 export type DownloadEventListener = (event: DownloadEvent) => void;
 
+// Shared SSE connection management to prevent multiple connections
+let sharedEventSource: EventSource | null = null;
+let subscriberCount = 0;
+let reconnectAttempts = 0;
+let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY_MS = 1000;
+const eventListeners = new Set<DownloadEventListener>();
+
+function closeEventSource() {
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  if (sharedEventSource) {
+    sharedEventSource.close();
+    sharedEventSource = null;
+  }
+}
+
+function createEventSource(): EventSource {
+  const baseUrl = import.meta.env.DEV ? 'http://localhost:9887' : '';
+  const es = new EventSource(`${baseUrl}/api/models/download/progress`);
+
+  es.onopen = () => {
+    console.log('[downloadApi] SSE connection opened');
+    reconnectAttempts = 0; // Reset on successful connection
+  };
+
+  es.onmessage = (evt) => {
+    if (!evt.data || evt.data.trim() === '') return;
+    try {
+      const parsed = JSON.parse(evt.data) as DownloadEvent;
+      eventListeners.forEach((listener) => listener(parsed));
+    } catch (e) {
+      console.error('[downloadApi] Failed to parse download event', e);
+    }
+  };
+
+  es.onerror = () => {
+    // Close the current connection first to prevent auto-reconnect
+    es.close();
+    
+    if (subscriberCount <= 0) {
+      // No subscribers, don't reconnect
+      sharedEventSource = null;
+      return;
+    }
+
+    reconnectAttempts++;
+    if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+      console.error('[downloadApi] SSE max reconnect attempts exceeded, giving up');
+      sharedEventSource = null;
+      return;
+    }
+
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+    const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1);
+    console.log(`[downloadApi] SSE connection error, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+    
+    reconnectTimeout = setTimeout(() => {
+      reconnectTimeout = null;
+      if (subscriberCount > 0) {
+        sharedEventSource = createEventSource();
+      }
+    }, delay);
+  };
+
+  return es;
+}
+
+function getOrCreateEventSource(): EventSource {
+  if (!sharedEventSource || sharedEventSource.readyState === EventSource.CLOSED) {
+    reconnectAttempts = 0;
+    sharedEventSource = createEventSource();
+  }
+  return sharedEventSource;
+}
+
 export async function subscribeToDownloadEvents(onEvent: DownloadEventListener): Promise<() => void> {
   if (isTauriApp) {
     const { listen } = await import('@tauri-apps/api/event');
@@ -144,24 +223,19 @@ export async function subscribeToDownloadEvents(onEvent: DownloadEventListener):
     };
   }
 
-  const baseUrl = import.meta.env.DEV ? 'http://localhost:9887' : '';
-  const eventSource = new EventSource(`${baseUrl}/api/models/download/progress`);
-
-  eventSource.onmessage = (evt) => {
-    if (!evt.data || evt.data.trim() === '') return;
-    try {
-      const parsed = JSON.parse(evt.data) as DownloadEvent;
-      onEvent(parsed);
-    } catch (e) {
-      console.error('[downloadApi] Failed to parse download event', e);
-    }
-  };
-
-  eventSource.onerror = (err) => {
-    console.error('[downloadApi] SSE error', err);
-  };
+  // Use shared EventSource connection
+  eventListeners.add(onEvent);
+  subscriberCount++;
+  getOrCreateEventSource();
 
   return () => {
-    eventSource.close();
+    eventListeners.delete(onEvent);
+    subscriberCount--;
+    
+    // Close connection when no subscribers remain
+    if (subscriberCount <= 0) {
+      closeEventSource();
+      subscriberCount = 0;
+    }
   };
 }
