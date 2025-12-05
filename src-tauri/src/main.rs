@@ -15,6 +15,7 @@ use gglib::{
     services::core::DownloadError,
     services::gui_backend::GuiBackend,
     services::mcp::{McpServerConfig, McpServerInfo, McpTool, McpToolResult},
+    utils::process::{ServerEvent, ServerStateInfo, ServerStatus},
 };
 use menu::{AppMenu, MenuState};
 use std::sync::Arc;
@@ -108,6 +109,7 @@ async fn serve_model(
     mlock: bool,
     port: Option<u16>,
     jinja: Option<bool>,
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<StartServerResponse, String> {
     debug!(
@@ -148,6 +150,13 @@ async fn serve_model(
         .await
         .map(|resp| {
             info!(port = %resp.port, "Server started successfully");
+            
+            // Emit server:running event
+            let event = ServerEvent::running(id, resp.port);
+            if let Err(e) = app.emit("server:running", &event) {
+                error!(error = %e, "Failed to emit server:running event");
+            }
+            
             resp
         })
         .map_err(|e| {
@@ -157,12 +166,46 @@ async fn serve_model(
 }
 
 #[tauri::command]
-async fn stop_server(model_id: u32, state: tauri::State<'_, AppState>) -> Result<String, String> {
-    state
+async fn stop_server(
+    model_id: u32,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    // Get the server port before stopping (for event payload)
+    let port = state
+        .backend
+        .list_servers()
+        .await
+        .ok()
+        .and_then(|servers| {
+            servers
+                .iter()
+                .find(|s| s.model_id == model_id)
+                .map(|s| s.port)
+        });
+
+    // Emit server:stopping event immediately
+    let stopping_event = ServerEvent::stopping(model_id, port);
+    if let Err(e) = app.emit("server:stopping", &stopping_event) {
+        error!(error = %e, "Failed to emit server:stopping event");
+    }
+
+    // Actually stop the server
+    let result = state
         .backend
         .stop_model(model_id)
         .await
-        .map_err(|e| format!("Failed to stop server: {}", e))
+        .map_err(|e| format!("Failed to stop server: {}", e));
+
+    // Emit server:stopped event after successful stop
+    if result.is_ok() {
+        let stopped_event = ServerEvent::stopped(model_id, port);
+        if let Err(e) = app.emit("server:stopped", &stopped_event) {
+            error!(error = %e, "Failed to emit server:stopped event");
+        }
+    }
+
+    result
 }
 
 #[tauri::command]
@@ -1045,6 +1088,37 @@ async fn main() {
                         error!(error = %e, "Failed to emit download-progress event");
                     }
                 }));
+            }
+
+            // Emit server:snapshot on app init to seed frontend registry
+            {
+                let state: tauri::State<AppState> = app.state();
+                let backend = state.backend.clone();
+                let app_handle = app.handle().clone();
+                
+                tauri::async_runtime::spawn(async move {
+                    // Small delay to ensure frontend is ready
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    
+                    match backend.list_servers().await {
+                        Ok(servers) => {
+                            let server_states: Vec<ServerStateInfo> = servers
+                                .iter()
+                                .map(|s| ServerStateInfo::new(s.model_id, ServerStatus::Running, Some(s.port)))
+                                .collect();
+                            
+                            let snapshot = ServerEvent::snapshot(server_states);
+                            if let Err(e) = app_handle.emit("server:snapshot", &snapshot) {
+                                error!(error = %e, "Failed to emit server:snapshot event");
+                            } else {
+                                debug!(count = servers.len(), "Emitted server:snapshot event");
+                            }
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "Failed to list servers for snapshot");
+                        }
+                    }
+                });
             }
 
             Ok(())

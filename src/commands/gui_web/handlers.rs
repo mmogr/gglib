@@ -26,10 +26,10 @@ use axum::{
         sse::{Event, Sse},
     },
 };
+use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::Error as SqlxError;
 use std::sync::Arc;
-use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{debug, error};
 
@@ -72,6 +72,13 @@ pub async fn start_server(
         .await
         .map_err(|e| AppError::ServerError(e.to_string()))?;
 
+    // Emit server:running event for SSE clients
+    let broadcaster = crate::utils::process::get_event_broadcaster();
+    broadcaster.broadcast(crate::utils::process::ServerEvent::running(
+        id,
+        response.port,
+    ));
+
     Ok(Json(ApiResponse::success(response)))
 }
 
@@ -80,11 +87,27 @@ pub async fn stop_server(
     State(state): State<Arc<AppState>>,
     Path(id): Path<u32>,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
+    // Get the server port before stopping (for event payload)
+    let port = state
+        .backend
+        .list_servers()
+        .await
+        .ok()
+        .and_then(|servers| servers.iter().find(|s| s.model_id == id).map(|s| s.port));
+
+    // Emit server:stopping event for SSE clients
+    let broadcaster = crate::utils::process::get_event_broadcaster();
+    broadcaster.broadcast(crate::utils::process::ServerEvent::stopping(id, port));
+
+    // Actually stop the server
     let message = state
         .backend
         .stop_model(id)
         .await
         .map_err(|e| AppError::ServerError(e.to_string()))?;
+
+    // Emit server:stopped event for SSE clients
+    broadcaster.broadcast(crate::utils::process::ServerEvent::stopped(id, port));
 
     Ok(Json(ApiResponse::success(message)))
 }
@@ -930,11 +953,13 @@ pub async fn stream_server_logs(
     let receiver = log_manager.subscribe();
 
     // Filter to only logs for the requested port
-    let stream = BroadcastStream::new(receiver).filter_map(move |result| match result {
-        Ok(entry) if entry.port == port => Some(Ok(
-            Event::default().data(serde_json::to_string(&entry).unwrap_or_default())
-        )),
-        _ => None,
+    let stream = BroadcastStream::new(receiver).filter_map(move |result| async move {
+        match result {
+            Ok(entry) if entry.port == port => Some(Ok(
+                Event::default().data(serde_json::to_string(&entry).unwrap_or_default())
+            )),
+            _ => None,
+        }
     });
 
     Sse::new(stream)
@@ -947,6 +972,60 @@ pub async fn clear_server_logs(
     let log_manager = get_log_manager();
     log_manager.clear_logs(port);
     Ok(Json(ApiResponse::success("Logs cleared".to_string())))
+}
+
+use crate::utils::process::{ServerEvent, ServerStateInfo, ServerStatus, get_event_broadcaster};
+
+/// Stream server lifecycle events as Server-Sent Events (SSE)
+///
+/// Emits the same logical events as Tauri desktop mode:
+/// - snapshot: Initial state of all running servers (emitted on connect)
+/// - running: Server started and ready
+/// - stopping: Server stop initiated
+/// - stopped: Server stopped cleanly
+/// - crashed: Server exited unexpectedly
+pub async fn stream_server_events(
+    State(state): State<Arc<AppState>>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<Event, std::convert::Infallible>>> {
+    let broadcaster = get_event_broadcaster();
+    let receiver = broadcaster.subscribe();
+
+    // Build initial snapshot of running servers
+    let snapshot = match state.backend.list_servers().await {
+        Ok(servers) => {
+            let server_states: Vec<ServerStateInfo> = servers
+                .iter()
+                .map(|s| ServerStateInfo::new(s.model_id, ServerStatus::Running, Some(s.port)))
+                .collect();
+            Some(ServerEvent::snapshot(server_states))
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to build server snapshot for SSE client");
+            None
+        }
+    };
+
+    // Create stream that first emits snapshot, then broadcasts
+    let event_stream = BroadcastStream::new(receiver).filter_map(|result| async move {
+        match result {
+            Ok(event) => Some(Ok(
+                Event::default().data(serde_json::to_string(&event).unwrap_or_default())
+            )),
+            Err(_) => None, // Channel lagged, skip
+        }
+    });
+
+    // Prepend snapshot if available
+    let full_stream = if let Some(snapshot_event) = snapshot {
+        let snapshot_item = std::iter::once(Ok(
+            Event::default().data(serde_json::to_string(&snapshot_event).unwrap_or_default())
+        ));
+        stream::iter(snapshot_item).chain(event_stream).boxed()
+    } else {
+        event_stream.boxed()
+    };
+
+    Sse::new(full_stream)
 }
 
 // ==================== MCP Server Handlers ====================

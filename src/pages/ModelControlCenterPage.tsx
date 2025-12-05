@@ -192,6 +192,7 @@ export default function ModelControlCenterPage({
       <Suspense fallback={<div className="model-control-center"><div className="loading-chat">Loading chat...</div></div>}>
         <ChatPage
           serverPort={chatSession.serverPort}
+          modelId={chatSession.modelId}
           modelName={chatSession.modelName}
           initialView={chatSession.initialView}
           onClose={handleCloseChat}

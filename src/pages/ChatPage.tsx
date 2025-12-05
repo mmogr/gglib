@@ -25,6 +25,7 @@ const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
 
 interface ChatPageProps {
   serverPort: number;
+  modelId: number;
   modelName: string;
   contextLength?: number;
   serverStartTime?: number; // Unix timestamp in seconds
@@ -34,6 +35,7 @@ interface ChatPageProps {
 
 export default function ChatPage({
   serverPort,
+  modelId,
   modelName,
   contextLength,
   serverStartTime,
@@ -327,6 +329,7 @@ export default function ChatPage({
         {/* Left Panel: Server Info */}
         <div className="grid-panel-container">
           <ConsoleInfoPanel
+            modelId={modelId}
             modelName={modelName}
             serverPort={serverPort}
             contextLength={contextLength}

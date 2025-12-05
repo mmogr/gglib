@@ -4,12 +4,16 @@
 //! across different use cases (proxy, GUI, etc.).
 
 pub mod core;
+pub mod event_broadcaster;
+pub mod events;
 pub mod health;
 pub mod log_streamer;
 pub mod types;
 
 // Re-export commonly used types
 pub use core::ProcessCore;
+pub use event_broadcaster::{ServerEventBroadcaster, get_event_broadcaster};
+pub use events::{ServerEvent, ServerStateInfo, ServerStatus};
 pub use health::{check_process_health, update_health_batch, wait_for_http_health};
 pub use log_streamer::{ServerLogEntry, ServerLogManager, get_log_manager};
 pub use types::{RunningProcess, ServerInfo};

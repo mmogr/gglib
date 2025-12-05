@@ -87,6 +87,8 @@ pub fn api_routes(state: Arc<AppState>) -> Router {
             "/api/servers/:port/logs",
             delete(handlers::clear_server_logs),
         )
+        // Server lifecycle events (SSE)
+        .route("/api/servers/events", get(handlers::stream_server_events))
         // Proxy routes
         .route("/api/proxy/status", get(handlers::get_proxy_status))
         .route("/api/proxy/start", post(handlers::start_proxy))
