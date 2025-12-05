@@ -1,15 +1,14 @@
 import { useCallback } from "react";
-import type { DownloadQueueItem } from "../../../types";
-import type { QueueDownloadResponse } from "../../../services/tauri/download";
+import type { DownloadQueueItem, QueueDownloadResponse } from "../../../download";
 
 /**
  * Dependencies for useQueueActions hook.
  * Uses dependency injection to keep the hook UI-agnostic.
  */
 export interface UseQueueActionsDeps {
-  removeFromDownloadQueue: (modelId: string) => Promise<string>;
-  cancelShardGroup: (groupId: string) => Promise<string>;
-  clearFailedDownloads: () => Promise<string>;
+  removeFromDownloadQueue: (modelId: string) => Promise<void>;
+  cancelShardGroup: (groupId: string) => Promise<void>;
+  clearFailedDownloads: () => Promise<void>;
   queueDownload: (modelId: string, quantization?: string) => Promise<QueueDownloadResponse>;
   cancelDownload: (modelId: string) => Promise<void>;
   fetchQueueStatus: () => Promise<void>;
@@ -91,7 +90,7 @@ export function useQueueActions({
   const handleCancel = useCallback(async (modelId: string) => {
     try {
       await cancelDownload(modelId);
-      // cancelDownload from useDownloadProgress handles state updates
+      // cancelDownload from useDownloadManager handles state updates
     } catch (err) {
       // Error is already set by cancelDownload, but log for debugging
       console.error("Cancel download failed:", err);

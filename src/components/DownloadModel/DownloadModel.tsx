@@ -1,11 +1,6 @@
 import { FC } from "react";
-import {
-  queueDownload,
-  removeFromDownloadQueue,
-  cancelShardGroup,
-  clearFailedDownloads,
-} from "../../services/tauri";
-import { useDownloadProgress } from "../../hooks/useDownloadProgress";
+import { removeFromDownloadQueue } from "../../download/api/downloadApi";
+import { useDownloadManager } from "../../download/hooks/useDownloadManager";
 import { useDownloadForm, useQueueActions } from "./hooks";
 import DownloadForm from "./DownloadForm";
 import CurrentDownloadProgress from "./CurrentDownloadProgress";
@@ -19,7 +14,7 @@ interface DownloadModelProps {
  * Download model orchestrator component.
  * 
  * Wires together:
- * - useDownloadProgress (shared progress/queue state)
+ * - useDownloadManager (shared progress/queue state)
  * - useDownloadForm (form state and submission)
  * - useQueueActions (queue manipulation handlers)
  * 
@@ -31,33 +26,36 @@ interface DownloadModelProps {
 const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
   // Shared download progress and queue state
   const {
-    progress,
+    currentProgress,
     queueStatus,
     connectionMode,
     error,
     setError,
-    fetchQueueStatus,
-    cancelDownload,
+    refreshQueue,
+    cancel,
+    cancelGroup,
+    clearFailed,
+    queueModel,
     isDownloading,
-    queueCount,
-  } = useDownloadProgress({ onCompleted: onModelDownloaded });
+    queueLength,
+  } = useDownloadManager({ onCompleted: onModelDownloaded });
 
   // Form state and submission logic
   const form = useDownloadForm({
-    queueDownload,
+    queueDownload: queueModel,
     queueStatus,
-    fetchQueueStatus,
+    refreshQueue,
     setError,
   });
 
   // Queue action handlers
   const queueActions = useQueueActions({
     removeFromDownloadQueue,
-    cancelShardGroup,
-    clearFailedDownloads,
-    queueDownload,
-    cancelDownload,
-    fetchQueueStatus,
+    cancelShardGroup: cancelGroup,
+    clearFailedDownloads: clearFailed,
+    queueDownload: queueModel,
+    cancelDownload: cancel,
+    fetchQueueStatus: refreshQueue,
     setError,
   });
 
@@ -72,9 +70,9 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
       <h2>Download from HuggingFace</h2>
       <div style={{ fontSize: '0.8em', color: '#666', marginBottom: '10px' }}>
         Mode: {connectionMode}
-        {queueCount > 0 && (
+        {queueLength > 0 && (
           <span style={{ marginLeft: '12px' }}>
-            {queueCount} {queueCount === 1 ? 'download' : 'downloads'} queued
+            {queueLength} {queueLength === 1 ? 'download' : 'downloads'} queued
           </span>
         )}
       </div>
@@ -91,9 +89,9 @@ const DownloadModel: FC<DownloadModelProps> = ({ onModelDownloaded }) => {
         onSubmit={form.handleSubmit}
       />
 
-      {progress && (
+      {currentProgress && (
         <CurrentDownloadProgress
-          progress={progress}
+          progress={currentProgress}
           onCancel={handleCancelCurrent}
         />
       )}

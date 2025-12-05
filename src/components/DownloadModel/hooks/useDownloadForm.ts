@@ -1,6 +1,5 @@
 import { useState, useCallback, FormEvent } from "react";
-import type { DownloadQueueStatus } from "../../../types";
-import type { QueueDownloadResponse } from "../../../services/tauri/download";
+import type { DownloadQueueStatus, QueueDownloadResponse } from "../../../download";
 
 /**
  * Dependencies for useDownloadForm hook.
@@ -9,7 +8,7 @@ import type { QueueDownloadResponse } from "../../../services/tauri/download";
 export interface UseDownloadFormDeps {
   queueDownload: (modelId: string, quantization?: string) => Promise<QueueDownloadResponse>;
   queueStatus: DownloadQueueStatus | null;
-  fetchQueueStatus: () => Promise<void>;
+  refreshQueue: () => Promise<void>;
   setError: (msg: string | null) => void;
 }
 
@@ -38,7 +37,7 @@ export interface DownloadFormState {
 export function useDownloadForm({
   queueDownload,
   queueStatus,
-  fetchQueueStatus,
+  refreshQueue,
   setError,
 }: UseDownloadFormDeps): DownloadFormState {
   const [repoId, setRepoId] = useState("");
@@ -81,13 +80,13 @@ export function useDownloadForm({
       setQuantization("");
 
       // Refresh queue status
-      await fetchQueueStatus();
+      await refreshQueue();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to queue download");
     } finally {
       setSubmitting(false);
     }
-  }, [repoId, quantization, queueStatus, queueDownload, fetchQueueStatus, setError]);
+  }, [repoId, quantization, queueStatus, queueDownload, refreshQueue, setError]);
 
   return {
     repoId,

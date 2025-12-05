@@ -1,5 +1,5 @@
 import { FC } from "react";
-import type { DownloadQueueStatus, DownloadQueueItem } from "../../types";
+import type { DownloadQueueStatus, DownloadQueueItem } from "../../download";
 import type { QueueActionsController } from "./hooks";
 import styles from "./DownloadModel.module.css";
 

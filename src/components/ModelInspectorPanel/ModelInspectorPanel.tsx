@@ -1,6 +1,6 @@
 import { FC, useCallback } from 'react';
-import { GgufModel, ServerInfo, HfModelSummary, DownloadQueueStatus } from '../../types';
-import { queueDownload } from '../../services/tauri';
+import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
+import { queueDownload, type DownloadQueueStatus } from '../../download';
 import { useSettings } from '../../hooks/useSettings';
 import { HfModelPreview } from '../HfModelPreview';
 import {

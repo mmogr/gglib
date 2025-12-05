@@ -1,11 +1,11 @@
 import { FC, useRef, useState, useCallback, useMemo } from 'react';
-import { DownloadQueueItem } from '../../types';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import {
   cancelShardGroup,
   removeFromDownloadQueue,
   reorderDownloadQueue,
-} from '../../services/tauri';
+  type DownloadQueueItem,
+} from '../../download';
 import styles from './DownloadQueuePopover.module.css';
 
 /**
@@ -32,7 +32,7 @@ interface DownloadQueuePopoverProps {
   /** Pending items from queue status */
   pendingItems: DownloadQueueItem[];
   /** Called after an item is removed/reordered to refresh queue */
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }
 
 /**
@@ -102,7 +102,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
         // Remove single item
         await removeFromDownloadQueue(item.id);
       }
-      onRefresh();
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to remove from queue:', error);
     } finally {
@@ -111,16 +111,21 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
   }, [isProcessing, onRefresh]);
 
   // Move item up in queue (decrease position)
+  // Backend expects 1-based queue positions, where position 1 is first in queue.
+  // With an active download, position 1 is the active item, so pending starts at 2.
   const handleMoveUp = useCallback(async (index: number) => {
     if (isProcessing || index === 0) return;
     
     setIsProcessing(true);
     const item = groupedItems[index];
-    const newPosition = index - 1;
+    // Convert 0-based index to 1-based queue position (+1), then account for
+    // active download taking position 1 (+1 more) = index + 2 is current position.
+    // Moving up means target = current position - 1 = index + 1
+    const newPosition = index + 1;
     
     try {
       await reorderDownloadQueue(item.id, newPosition);
-      onRefresh();
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
     } finally {
@@ -134,11 +139,14 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     
     setIsProcessing(true);
     const item = groupedItems[index];
-    const newPosition = index + 1;
+    // Convert 0-based index to 1-based queue position (+1), then account for
+    // active download (+1 more) = index + 2 is current position.
+    // Moving down means target = current position + 1 = index + 3
+    const newPosition = index + 3;
     
     try {
       await reorderDownloadQueue(item.id, newPosition);
-      onRefresh();
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
     } finally {
