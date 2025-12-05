@@ -34,7 +34,11 @@ pub struct DownloadConfig {
 
 impl DownloadConfig {
     /// Create a new download configuration.
-    pub fn new(repo_id: impl Into<String>, quantization: Quantization, destination: PathBuf) -> Self {
+    pub fn new(
+        repo_id: impl Into<String>,
+        quantization: Quantization,
+        destination: PathBuf,
+    ) -> Self {
         Self {
             repo_id: repo_id.into(),
             quantization,

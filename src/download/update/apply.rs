@@ -4,12 +4,14 @@ use std::io::Write;
 
 use anyhow::Result;
 
+use crate::commands::download::{
+    FastDownloadRequest, get_models_directory, run_fast_download, sanitize_model_name,
+};
+use crate::download::DownloadResult;
 use crate::download::domain::types::Quantization;
 use crate::download::huggingface::QuantizationFileResolver;
 use crate::download::workflows::register_model;
-use crate::download::DownloadResult;
 use crate::services::{AppCore, database};
-use crate::commands::download::{get_models_directory, sanitize_model_name, FastDownloadRequest, run_fast_download};
 
 /// Handle the update-model CLI command.
 ///
@@ -63,13 +65,15 @@ pub async fn handle_update_model(model_id: u32, force: bool) -> Result<()> {
 
     // Resolve files using the HuggingFace resolver
     let resolver = QuantizationFileResolver::new();
-    let resolution = resolver.resolve(&hf_repo, &quantization.to_string()).await
+    let resolution = resolver
+        .resolve(&hf_repo, &quantization.to_string())
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to resolve files: {}", e))?;
 
     // Download the files
     let files: Vec<String> = resolution.filenames();
     let model_dir = models_dir.join(sanitize_model_name(&hf_repo));
-    
+
     if !model_dir.exists() {
         std::fs::create_dir_all(&model_dir)?;
     }

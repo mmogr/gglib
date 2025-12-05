@@ -72,13 +72,7 @@ pub async fn register_model(result: &DownloadResult) -> Result<Gguf> {
     }
     model.hf_repo_id = Some(result.repo_id.clone());
     model.hf_commit_sha = Some(result.commit_sha.clone());
-    model.hf_filename = Some(
-        file_path
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .to_string(),
-    );
+    model.hf_filename = Some(file_path.file_name().unwrap().to_string_lossy().to_string());
     model.download_date = Some(Utc::now());
 
     // Auto-detect reasoning and tool calling capabilities from metadata

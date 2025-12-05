@@ -56,7 +56,9 @@ pub async fn download_specific_file(
     commit_sha: &str,
     context: &DownloadContext<'_>,
 ) -> Result<()> {
-    let model_dir = context.models_dir.join(sanitize_model_name(context.model_id));
+    let model_dir = context
+        .models_dir
+        .join(sanitize_model_name(context.model_id));
     if !model_dir.exists() {
         fs::create_dir_all(&model_dir)?;
     }
@@ -77,7 +79,10 @@ pub async fn download_specific_file(
         if context.add_to_db {
             let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
             let quant = extract_quantization_from_filename(
-                db_path.file_name().and_then(|s| s.to_str()).unwrap_or(filename),
+                db_path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(filename),
             );
             add_to_database(context.model_id, commit_sha, db_path, &quant.to_string()).await?;
         }
@@ -103,12 +108,19 @@ pub async fn download_specific_file(
 
     run_fast_download(&fast_request).await?;
     println!("⚡ Downloaded via fast helper: {}", filename);
-    println!("✓ Successfully downloaded {} to {}", filename, local_path.display());
+    println!(
+        "✓ Successfully downloaded {} to {}",
+        filename,
+        local_path.display()
+    );
 
     if context.add_to_db {
         let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
         let quant = extract_quantization_from_filename(
-            db_path.file_name().and_then(|s| s.to_str()).unwrap_or(filename),
+            db_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(filename),
         );
         add_to_database(context.model_id, commit_sha, db_path, &quant.to_string()).await?;
     }
@@ -192,7 +204,10 @@ pub async fn download_sharded_files(
         };
 
         run_fast_download(&fast_request).await?;
-        println!("⚡ Fast helper downloaded {} pending parts", pending_names.len());
+        println!(
+            "⚡ Fast helper downloaded {} pending parts",
+            pending_names.len()
+        );
 
         for part in pending_parts.drain(..) {
             if let Ok(metadata) = std::fs::metadata(&part.local_path) {
@@ -205,7 +220,10 @@ pub async fn download_sharded_files(
                     metadata.len() as f64 / 1_048_576.0
                 );
             } else {
-                println!("✓ Part {}/{} downloaded: {}", part.ordinal, total_parts, part.name);
+                println!(
+                    "✓ Part {}/{} downloaded: {}",
+                    part.ordinal, total_parts, part.name
+                );
             }
             downloaded_files.push(part.local_path);
         }
@@ -221,8 +239,18 @@ pub async fn download_sharded_files(
     if config.add_to_db && !downloaded_files.is_empty() {
         println!("Adding sharded model to database...");
         let primary_file = &downloaded_files[0];
-        let quant_with_note = format!("{} (sharded: {} parts)", config.quantization, filenames.len());
-        add_to_database(config.model_id, config.commit_sha, primary_file, &quant_with_note).await?;
+        let quant_with_note = format!(
+            "{} (sharded: {} parts)",
+            config.quantization,
+            filenames.len()
+        );
+        add_to_database(
+            config.model_id,
+            config.commit_sha,
+            primary_file,
+            &quant_with_note,
+        )
+        .await?;
     }
 
     Ok(())
@@ -235,7 +263,9 @@ pub async fn try_download_with_patterns(
     context: &DownloadContext<'_>,
 ) -> Result<()> {
     let full_model_name = context.model_id.split('/').next_back().unwrap_or("model");
-    let model_name = full_model_name.strip_suffix("-GGUF").unwrap_or(full_model_name);
+    let model_name = full_model_name
+        .strip_suffix("-GGUF")
+        .unwrap_or(full_model_name);
 
     let common_patterns = [
         format!("{}-{}.gguf", model_name, quant),
@@ -250,9 +280,21 @@ pub async fn try_download_with_patterns(
     );
 
     for (i, pattern) in common_patterns.iter().enumerate() {
-        println!("  [{}/{}] Trying: {}", i + 1, common_patterns.len(), pattern);
+        println!(
+            "  [{}/{}] Trying: {}",
+            i + 1,
+            common_patterns.len(),
+            pattern
+        );
 
-        match remote_file_exists(context.model_id, commit_sha, pattern, context.session.token()).await {
+        match remote_file_exists(
+            context.model_id,
+            commit_sha,
+            pattern,
+            context.session.token(),
+        )
+        .await
+        {
             Ok(true) => {
                 println!("Found file via pattern: {}", pattern);
                 return download_specific_file(pattern, commit_sha, context).await;
@@ -292,7 +334,8 @@ pub fn get_first_shard_filename(filename: &str) -> String {
         let total = &caps[2];
         let width = caps[1].len();
         let first_shard = format!("{:0>width$}", 1, width = width);
-        re.replace(filename, format!("-{}-of-{}", first_shard, total)).to_string()
+        re.replace(filename, format!("-{}-of-{}", first_shard, total))
+            .to_string()
     } else {
         filename.to_string()
     }

@@ -85,7 +85,9 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
         hf_hub::RepoType::Model,
         "main".to_string(),
     ));
-    let repo_info = repo.info().map_err(|e| anyhow!("Failed to get repo info: {}", e))?;
+    let repo_info = repo
+        .info()
+        .map_err(|e| anyhow!("Failed to get repo info: {}", e))?;
     let commit_sha = repo_info.sha.clone();
     println!("Found repository, commit SHA: {}", commit_sha);
 
@@ -102,13 +104,19 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
 
     let files = resolution.filenames();
     if resolution.is_sharded {
-        println!("✓ Found {} sharded files for quantization {}", files.len(), quant);
+        println!(
+            "✓ Found {} sharded files for quantization {}",
+            files.len(),
+            quant
+        );
     } else {
         println!("✓ Found file: {}", files[0]);
     }
 
     // Prepare destination directory
-    let model_dir = context.models_dir.join(sanitize_model_name(context.model_id));
+    let model_dir = context
+        .models_dir
+        .join(sanitize_model_name(context.model_id));
     if !model_dir.exists() {
         fs::create_dir_all(&model_dir)?;
     }
@@ -137,7 +145,11 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
         register_model_from_path(context.model_id, &commit_sha, &primary_path, quant).await?;
     }
 
-    println!("✓ Successfully downloaded {} to {}", context.model_id, model_dir.display());
+    println!(
+        "✓ Successfully downloaded {} to {}",
+        context.model_id,
+        model_dir.display()
+    );
     Ok(())
 }
 

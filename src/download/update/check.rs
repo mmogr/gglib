@@ -2,9 +2,9 @@
 
 use anyhow::Result;
 
+use crate::commands::download::{create_hf_api, get_models_directory};
 use crate::models::Gguf;
 use crate::services::{AppCore, database};
-use crate::commands::download::{get_models_directory, create_hf_api};
 
 /// Check if a single model needs updates.
 ///

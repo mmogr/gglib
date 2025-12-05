@@ -57,7 +57,7 @@ pub use domain::errors::DownloadError;
 pub use domain::events::{DownloadEvent, DownloadStatus, DownloadSummary};
 pub use domain::traits::{
     DownloadExecutor, EventCallback as ExecutorEventCallback, ExecutionResult as ExecutorResult,
-    QuantizationResolver, ResolvedFile, Resolution,
+    QuantizationResolver, Resolution, ResolvedFile,
 };
 pub use domain::types::{DownloadId, DownloadRequest, Quantization, ShardInfo};
 pub use executor::{EventCallback, ExecutionResult, PythonDownloadExecutor};
