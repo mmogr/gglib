@@ -25,6 +25,7 @@ pub use file_ops::*;
 pub use model_ops::*;
 pub use progress::*;
 pub(crate) use python_bridge::ensure_fast_helper_ready;
+pub(crate) use python_bridge::{FastDownloadRequest, run_fast_download};
 pub use utils::*;
 
 /// Execute the download command

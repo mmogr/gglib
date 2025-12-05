@@ -48,10 +48,17 @@ pub mod huggingface;
 pub mod progress;
 pub mod queue;
 mod service;
+pub mod update;
+pub mod workflows;
 
 // Re-export public API
+pub use domain::config::{DownloadConfig, DownloadResult, SessionOptions};
 pub use domain::errors::DownloadError;
 pub use domain::events::{DownloadEvent, DownloadStatus, DownloadSummary};
+pub use domain::traits::{
+    DownloadExecutor, EventCallback as ExecutorEventCallback, ExecutionResult as ExecutorResult,
+    QuantizationResolver, ResolvedFile, Resolution,
+};
 pub use domain::types::{DownloadId, DownloadRequest, Quantization, ShardInfo};
 pub use executor::{EventCallback, ExecutionResult, PythonDownloadExecutor};
 pub use huggingface::{FileResolution, QuantizationFileResolver, resolve_quantization_files};
