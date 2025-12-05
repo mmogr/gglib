@@ -1,5 +1,5 @@
 import { apiFetch, isTauriApp, tauriInvoke } from '../../services/tauri';
-import type { DownloadEvent, DownloadQueueStatus, DownloadSummary } from './types';
+import type { DownloadEvent, DownloadQueueStatus } from './types';
 
 export interface QueueDownloadResponse {
   position: number;
@@ -209,18 +209,12 @@ export async function subscribeToDownloadEvents(onEvent: DownloadEventListener):
   if (isTauriApp) {
     const { listen } = await import('@tauri-apps/api/event');
 
-    const unlistenProgress = await listen<DownloadEvent>('download-progress', (event) => {
+    // Single event listener for all download events (including queue_snapshot)
+    const unlisten = await listen<DownloadEvent>('download-progress', (event) => {
       if (event.payload) onEvent(event.payload);
     });
 
-    const unlistenQueue = await listen<{ items: DownloadSummary[]; max_size: number }>('download-queue-snapshot', (event) => {
-      onEvent({ type: 'queue_snapshot', items: event.payload.items, max_size: event.payload.max_size });
-    });
-
-    return () => {
-      unlistenProgress();
-      unlistenQueue();
-    };
+    return unlisten;
   }
 
   // Use shared EventSource connection

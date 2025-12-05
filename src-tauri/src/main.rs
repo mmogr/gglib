@@ -199,13 +199,14 @@ async fn download_model(
     quantization: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
-    use gglib::commands::download::{DownloadProgressEvent, ProgressThrottle};
+    use gglib::commands::download::ProgressThrottle;
+    use gglib::download::DownloadEvent;
 
     // Emit download started event
     debug!(model_id = %model_id, "Attempting to emit download-progress (starting)");
     if let Err(err) = app.emit(
         "download-progress",
-        DownloadProgressEvent::starting(&model_id),
+        DownloadEvent::started(&model_id),
     ) {
         error!(error = %err, "Failed to emit start event");
     } else {
@@ -226,9 +227,9 @@ async fn download_model(
             let Some(speed) = callback_throttle.should_emit_with_speed(downloaded, total) else {
                 return;
             };
-            let event = DownloadProgressEvent::progress(&model_id_clone, downloaded, total, speed);
+            let event = DownloadEvent::progress(&model_id_clone, downloaded, total, speed);
             // debug!(downloaded, total, "Emitting progress"); // Commented out to avoid spam
-            if let Err(err) = app_clone.emit("download-progress", event) {
+            if let Err(err) = app_clone.emit("download-progress", &event) {
                 tracing::error!(error = %err, "Failed to emit progress event");
             }
         });
@@ -243,7 +244,7 @@ async fn download_model(
         Ok(message) => {
             if let Err(err) = app.emit(
                 "download-progress",
-                DownloadProgressEvent::completed(&model_id_clone2, Some(&message)),
+                DownloadEvent::completed(&model_id_clone2, Some(&message)),
             ) {
                 error!(error = %err, "Failed to emit completion event");
             }
@@ -258,7 +259,7 @@ async fn download_model(
             };
             if let Err(err) = app.emit(
                 "download-progress",
-                DownloadProgressEvent::errored(&model_id_clone2, &error_msg),
+                DownloadEvent::failed(&model_id_clone2, &error_msg),
             ) {
                 error!(error = %err, "Failed to emit error event");
             }
@@ -1026,7 +1027,6 @@ async fn main() {
 
             // Wire download events to Tauri events + completion handler
             {
-                use gglib::commands::download::DownloadProgressEvent;
                 use gglib::download::DownloadEvent;
                 
                 let state: tauri::State<AppState> = app.state();
@@ -1035,62 +1035,14 @@ async fn main() {
                 let app_handle = app.handle().clone();
                 
                 backend.core().downloads().set_event_callback(Arc::new(move |event: DownloadEvent| {
-                    // Convert DownloadEvent to the legacy DownloadProgressEvent format
-                    // that the Tauri frontend expects
-                    let progress_event = match &event {
-                        DownloadEvent::DownloadStarted { id } => {
-                            Some(DownloadProgressEvent::starting(id))
-                        }
-                        DownloadEvent::DownloadProgress { id, downloaded, total, speed_bps, .. } => {
-                            Some(DownloadProgressEvent::progress(id, *downloaded, *total, *speed_bps))
-                        }
-                        DownloadEvent::ShardProgress { id, aggregate_downloaded, aggregate_total, speed_bps, shard_index, total_shards, shard_filename, shard_downloaded, shard_total, .. } => {
-                            Some(DownloadProgressEvent::progress_with_shard(
-                                id,
-                                *shard_downloaded,
-                                *shard_total,
-                                *shard_index as usize,
-                                *total_shards as usize,
-                                shard_filename,
-                                *aggregate_downloaded,
-                                *aggregate_total,
-                                *speed_bps,
-                            ))
-                        }
-                        DownloadEvent::DownloadCompleted { id, message } => {
-                            // Also register the model in the database
-                            backend_for_callback.core().handle_download_completed(id);
-                            Some(DownloadProgressEvent::completed(id, message.as_deref()))
-                        }
-                        DownloadEvent::DownloadFailed { id, error } => {
-                            Some(DownloadProgressEvent::errored(id, error))
-                        }
-                        DownloadEvent::DownloadCancelled { id } => {
-                            Some(DownloadProgressEvent::errored(id, "Download cancelled"))
-                        }
-                        DownloadEvent::QueueSnapshot { items, max_size } => {
-                            // Emit queue snapshot as a separate event for the frontend
-                            // This allows the UI to update queue status in real-time
-                            #[derive(Clone, serde::Serialize)]
-                            struct QueueSnapshotEvent {
-                                items: Vec<gglib::download::DownloadSummary>,
-                                max_size: u32,
-                            }
-                            let snapshot_event = QueueSnapshotEvent {
-                                items: items.clone(),
-                                max_size: *max_size,
-                            };
-                            if let Err(e) = app_handle.emit("download-queue-snapshot", snapshot_event) {
-                                error!(error = %e, "Failed to emit download-queue-snapshot event");
-                            }
-                            None
-                        }
-                    };
+                    // Handle download completion: register model in database
+                    if let DownloadEvent::DownloadCompleted { id, .. } = &event {
+                        backend_for_callback.core().handle_download_completed(id);
+                    }
                     
-                    if let Some(evt) = progress_event {
-                        if let Err(e) = app_handle.emit("download-progress", evt) {
-                            error!(error = %e, "Failed to emit download-progress event");
-                        }
+                    // Emit canonical DownloadEvent directly to frontend
+                    if let Err(e) = app_handle.emit("download-progress", &event) {
+                        error!(error = %e, "Failed to emit download-progress event");
                     }
                 }));
             }

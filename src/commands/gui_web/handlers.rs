@@ -6,9 +6,9 @@
 //! All business logic has been moved to the shared GuiBackend service
 //! to eliminate duplication with the Tauri desktop app.
 
-use crate::commands::download::{DownloadProgressEvent, ProgressThrottle};
+use crate::commands::download::ProgressThrottle;
 use crate::commands::gui_web::state::AppState;
-use crate::download::QueueSnapshot;
+use crate::download::{DownloadEvent, QueueSnapshot};
 use crate::download::progress::build_queue_snapshot;
 use crate::models::gui::{
     AddModelRequest, ApiResponse, AppSettings, CancelDownloadRequest, GuiModel,
@@ -235,12 +235,15 @@ pub async fn download_model(
             let Some(speed) = callback_throttle.should_emit_with_speed(downloaded, total) else {
                 return;
             };
-            let event =
-                DownloadProgressEvent::progress(&callback_model_id, downloaded, total, speed);
-            let _ = callback_progress_tx.send(event.to_json_string());
+            let event = DownloadEvent::progress(&callback_model_id, downloaded, total, speed);
+            if let Ok(json) = serde_json::to_string(&event) {
+                let _ = callback_progress_tx.send(json);
+            }
         });
 
-    let _ = progress_tx.send(DownloadProgressEvent::starting(&progress_model_id).to_json_string());
+    if let Ok(json) = serde_json::to_string(&DownloadEvent::started(&progress_model_id)) {
+        let _ = progress_tx.send(json);
+    }
 
     match state
         .backend
@@ -248,16 +251,16 @@ pub async fn download_model(
         .await
     {
         Ok(message) => {
-            let _ = progress_tx.send(
-                DownloadProgressEvent::completed(&completion_model_id, Some(&message))
-                    .to_json_string(),
-            );
+            if let Ok(json) = serde_json::to_string(&DownloadEvent::completed(&completion_model_id, Some(&message))) {
+                let _ = progress_tx.send(json);
+            }
             Ok(Json(ApiResponse::success(message)))
         }
         Err(e) => {
             let error_msg = e.to_string();
-            let _ = progress_tx
-                .send(DownloadProgressEvent::errored(&error_model_id, &error_msg).to_json_string());
+            if let Ok(json) = serde_json::to_string(&DownloadEvent::failed(&error_model_id, &error_msg)) {
+                let _ = progress_tx.send(json);
+            }
             Err(AppError::ServerError(error_msg))
         }
     }
@@ -276,9 +279,9 @@ pub async fn cancel_download(
         .await
         .map_err(|e| AppError::ServerError(e.to_string()))?;
 
-    let _ = state.progress_tx.send(
-        DownloadProgressEvent::errored(&model_id, "Download cancelled by user").to_json_string(),
-    );
+    if let Ok(json) = serde_json::to_string(&DownloadEvent::cancelled(&model_id)) {
+        let _ = state.progress_tx.send(json);
+    }
 
     Ok(Json(ApiResponse::success(format!(
         "Download '{}' cancelled",
