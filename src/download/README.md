@@ -174,12 +174,45 @@ process_queue()
 
 ## Integration with GUI
 
-The `DownloadManager` supports hot-swappable event callbacks via `set_event_callback()`.
-GUI backends wire this up during initialization:
+The `DownloadManager` supports hot-swappable event callbacks via `set_event_callback()`. GUI backends wire this up during initialization:
 
 - **Tauri (Desktop)**: Events are broadcast via `app_handle.emit("download-progress", ...)`
 - **Web (Axum)**: Events are broadcast via SSE at `/api/models/download/progress`
 
 Both backends also call `core.handle_download_completed(id)` to register completed downloads in the database.
+
+### Frontend consumption (React)
+
+Use the unified hook in `src/download/hooks/useDownloadManager`:
+
+```tsx
+import { useDownloadManager } from '../download/hooks/useDownloadManager';
+
+const DownloadStatus = () => {
+    const { currentProgress, queueStatus, queueModel, cancel, clearFailed, connectionMode } = useDownloadManager({
+        onCompleted: () => console.log('Download done; refresh models if needed'),
+    });
+
+    return (
+        <div>
+            <div>Mode: {connectionMode}</div>
+            <div>Active: {currentProgress?.id ?? 'none'}</div>
+            <div>Pending: {queueStatus?.pending.length ?? 0}</div>
+            <button onClick={() => queueModel('TheBloke/Llama-2-7B-GGUF', 'Q4_K_M')}>Queue</button>
+            {currentProgress?.id && <button onClick={() => cancel(currentProgress.id)}>Cancel</button>}
+            <button onClick={() => clearFailed()}>Clear failed</button>
+        </div>
+    );
+};
+```
+
+### UI components
+
+- `GlobalDownloadStatus` shows the active download + queue badge; it no longer renders a completion banner or cancel-confirm modal (keep the page-level banner/notifications in the parent if desired).
+- `DownloadProgressDisplay` uses shared progress components and the new download types.
+
+### Tests
+
+- `tests/ts/hooks/useDownloadManager.test.ts` covers queue snapshot init, progress/completion events (with throttling), enqueue/refresh, and subscription cleanup.
 
 <!-- module-docs:end -->

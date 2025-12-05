@@ -1,10 +1,5 @@
 import { FC } from "react";
-import {
-  queueDownload,
-  removeFromDownloadQueue,
-  cancelShardGroup,
-  clearFailedDownloads,
-} from "../../download/api/downloadApi";
+import { removeFromDownloadQueue } from "../../download/api/downloadApi";
 import { useDownloadManager } from "../../download/hooks/useDownloadManager";
 import { useDownloadForm, useQueueActions } from "./hooks";
 import DownloadForm from "./DownloadForm";

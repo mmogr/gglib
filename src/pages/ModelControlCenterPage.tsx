@@ -107,20 +107,12 @@ export default function ModelControlCenterPage({
     openChatSession,
   });
 
-  // Handle resize
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDraggingRef.current = true;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, []);
-
   const {
     searchQuery,
     setSearchQuery,
     filters,
-    onFiltersChange,
-    onClearFilters,
+    onFiltersChange: handleFiltersChange,
+    onClearFilters: handleClearFilters,
     filteredModels,
     activeSubTab,
     setActiveSubTab,
@@ -188,7 +180,6 @@ export default function ModelControlCenterPage({
     if (chatSession) {
       await stopServer(chatSession.modelId);
       setChatSession(null);
-      syncMenuStateSilent();
     }
   };
 

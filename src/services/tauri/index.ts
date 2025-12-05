@@ -2,7 +2,7 @@
 // Import from "@/services/tauri" to get all functions
 
 // Re-export utilities
-export { isTauriApp, apiFetch, type ApiResponse } from "./base";
+export { isTauriApp, apiFetch, tauriInvoke, type ApiResponse } from "./base";
 
 // Re-export domain modules
 export {

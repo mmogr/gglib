@@ -5,7 +5,7 @@ import {
   cancelShardGroup,
   removeFromDownloadQueue,
   reorderDownloadQueue,
-} from '../../services/tauri';
+} from '../../download/api/downloadApi';
 import styles from './DownloadQueuePopover.module.css';
 
 /**
@@ -32,7 +32,7 @@ interface DownloadQueuePopoverProps {
   /** Pending items from queue status */
   pendingItems: DownloadQueueItem[];
   /** Called after an item is removed/reordered to refresh queue */
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }
 
 /**
@@ -102,7 +102,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
         // Remove single item
         await removeFromDownloadQueue(item.id);
       }
-      onRefresh();
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to remove from queue:', error);
     } finally {
@@ -120,7 +120,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     
     try {
       await reorderDownloadQueue(item.id, newPosition);
-      onRefresh();
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
     } finally {
@@ -138,7 +138,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     
     try {
       await reorderDownloadQueue(item.id, newPosition);
-      onRefresh();
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
     } finally {

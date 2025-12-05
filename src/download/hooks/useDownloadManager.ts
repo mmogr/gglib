@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cancelDownload, cancelShardGroup, clearFailedDownloads, getQueueSnapshot, queueDownload, subscribeToDownloadEvents, type QueueDownloadResponse } from '../api/downloadApi';
 import type { DownloadEvent, DownloadQueueStatus, DownloadSummary } from '../api/types';
+import type { DownloadQueueItem } from '../../types';
 import { isTauriApp } from '../../utils/platform';
 
 export type DownloadProgressStatus = 'started' | 'progress' | 'completed' | 'error';
@@ -46,10 +47,31 @@ interface UseDownloadManagerOptions {
   onCompleted?: () => void;
 }
 
+function normalizeQueueItem(item: DownloadSummary): DownloadQueueItem {
+  const statusMap: Record<string, 'downloading' | 'queued' | 'completed' | 'failed'> = {
+    downloading: 'downloading',
+    queued: 'queued',
+    completed: 'completed',
+    failed: 'failed',
+    cancelled: 'failed',
+  };
+
+  return {
+    id: item.id,
+    display_name: (item as any).display_name ?? item.id,
+    status: statusMap[item.status] ?? 'failed',
+    position: (item as any).position ?? 0,
+    error: (item as any).error,
+    group_id: (item as any).group_id,
+    shard_info: (item as any).shard_info,
+  };
+}
+
 function snapshotToQueueStatus(items: DownloadSummary[], maxSize: number): DownloadQueueStatus {
-  const current = items.find((item) => item.status === 'downloading') ?? null;
-  const pending = items.filter((item) => item.status === 'queued');
-  const failed = items.filter((item) => item.status === 'failed');
+  const normalized = items.map(normalizeQueueItem);
+  const current = normalized.find((item) => item.status === 'downloading') ?? null;
+  const pending = normalized.filter((item) => item.status === 'queued');
+  const failed = normalized.filter((item) => item.status === 'failed');
 
   return { current, pending, failed, max_size: maxSize };
 }
