@@ -59,7 +59,7 @@ export function useMccMenuActions({
       },
       showDownloads: () => {
         setSidebarTab('add');
-        setActiveSubTab('download');
+        setActiveSubTab('browse');
       },
       startServer: () => {
         if (selectedModelId) {

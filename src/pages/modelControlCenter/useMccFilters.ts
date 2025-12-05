@@ -23,8 +23,7 @@ export interface UseMccFiltersResult {
   filteredModels: GgufModel[];
   activeSubTab: AddDownloadSubTab;
   setActiveSubTab: (tab: AddDownloadSubTab) => void;
-  handleModelAdded: (filePath: string) => Promise<void>;
-  handleModelDownloaded: () => Promise<void>;
+  handleModelAdded: (filePath?: string) => Promise<void>;
 }
 
 export function useMccFilters({
@@ -35,7 +34,7 @@ export function useMccFilters({
   loadTags,
 }: UseMccFiltersArgs): UseMccFiltersResult {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('download');
+  const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('browse');
   const [filters, setFilters] = useState<FilterState>({
     paramRange: null,
     contextRange: null,
@@ -91,7 +90,7 @@ export function useMccFilters({
   }, [loadModels, refreshFilterOptions, loadTags]);
 
   const handleModelAdded = useCallback(
-    async (filePath: string) => {
+    async (filePath?: string) => {
       if (filePath) {
         await addModel(filePath);
       }
@@ -99,10 +98,6 @@ export function useMccFilters({
     },
     [addModel, refreshFilterDeps]
   );
-
-  const handleModelDownloaded = useCallback(async () => {
-    await refreshFilterDeps();
-  }, [refreshFilterDeps]);
 
   return {
     searchQuery,
@@ -114,6 +109,5 @@ export function useMccFilters({
     activeSubTab,
     setActiveSubTab,
     handleModelAdded,
-    handleModelDownloaded,
   };
 }

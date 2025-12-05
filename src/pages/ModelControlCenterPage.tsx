@@ -117,7 +117,6 @@ export default function ModelControlCenterPage({
     activeSubTab,
     setActiveSubTab,
     handleModelAdded,
-    handleModelDownloaded,
   } = useMccFilters({
     models,
     addModel,
@@ -224,7 +223,6 @@ export default function ModelControlCenterPage({
             onFiltersChange={handleFiltersChange}
             onClearFilters={handleClearFilters}
             onModelAdded={handleModelAdded}
-            onModelDownloaded={handleModelDownloaded}
             activeSubTab={activeSubTab}
             onSubTabChange={handleSubTabChange}
             onSelectHfModel={handleSelectHfModel}
