@@ -71,7 +71,6 @@ When a model is served, users can switch between Chat and Console views:
 - **`ConsoleInfoPanel/`**: Left panel showing server info (port, uptime, context usage), live metrics from `/metrics` endpoint, and stop button
 
 ### Server Management
-- **`ServeModel.tsx`**: Start llama-server for a model
 - **`ServerStatus.tsx`**: Display server health and status
 - **`ServerList/`**: List of running server instances
 - **`ProxyControl.tsx`**: OpenAI-compatible proxy controls
