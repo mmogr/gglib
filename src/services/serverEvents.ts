@@ -51,6 +51,7 @@ export {
   type ServerStateInfo,
   useServerState,
   useIsServerRunning,
+  isServerRunning,
   getServerState,
   getAllServerStates,
 } from './serverRegistry';

@@ -38,6 +38,7 @@ interface ChatMessagesPanelProps {
   onClearConversation: () => Promise<void>;
   onExportConversation: () => void;
   onUpdateSystemPrompt: (prompt: string | null) => Promise<void>;
+  onClose?: () => void;
   persistedMessageIds: React.MutableRefObject<Set<string>>;
   syncConversations: (options?: { preferredId?: number | null; silent?: boolean }) => Promise<void>;
   chatError: string | null;
@@ -55,6 +56,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   onClearConversation,
   onExportConversation,
   onUpdateSystemPrompt,
+  onClose,
   persistedMessageIds,
   syncConversations,
   chatError,
@@ -404,6 +406,18 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
         {/* Error banner */}
         {chatError && <div className="chat-error-banner">{chatError}</div>}
+
+        {/* Server stopped banner */}
+        {!isServerConnected && (
+          <div className="chat-server-stopped-banner">
+            <span>⚠️ Server not running — Chat is read-only</span>
+            {onClose && (
+              <button type="button" className="btn btn-sm" onClick={onClose}>
+                Close
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Messages area */}
         <div className="chat-messages-surface">

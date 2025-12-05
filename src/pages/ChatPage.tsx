@@ -9,6 +9,7 @@ import { SidebarTab } from '../components/ModelLibraryPanel/SidebarTabs';
 import { useGglibRuntime } from '../hooks/useGglibRuntime';
 import { useSettings } from '../hooks/useSettings';
 import { useToastContext } from '../contexts/ToastContext';
+import { useServerState } from '../services/serverEvents';
 import { ChatService, ConversationSummary, DEFAULT_TITLE_GENERATION_PROMPT } from '../services/chat';
 import './ChatPage.css';
 
@@ -78,6 +79,30 @@ export default function ChatPage({
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
   });
+
+  // Server state from registry - derives isServerRunning reactively
+  const serverState = useServerState(modelId);
+  const isServerRunning = serverState?.status === 'running';
+
+  // Track previous status for transition-only toast
+  const prevStatusRef = useRef(serverState?.status);
+
+  // Show toast only on status transition to stopped/crashed (not on remount)
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const next = serverState?.status;
+
+    if (prev !== next && (next === 'stopped' || next === 'crashed')) {
+      showToast(
+        next === 'crashed'
+          ? 'Server crashed. Chat is now read-only.'
+          : 'Server stopped. Chat is now read-only.',
+        'warning'
+      );
+    }
+
+    prevStatusRef.current = next;
+  }, [serverState?.status, showToast]);
 
   // Sync conversations
   const syncConversations = useCallback(
@@ -303,13 +328,14 @@ export default function ChatPage({
             <ChatMessagesPanel
               activeConversation={activeConversation}
               activeConversationId={activeConversationId}
-              isServerConnected={true}
+              isServerConnected={isServerRunning}
               serverPort={serverPort}
               titleGenerationPrompt={titleGenerationPrompt}
               onRenameConversation={handleRenameConversation}
               onClearConversation={handleClearConversation}
               onExportConversation={handleExportConversation}
               onUpdateSystemPrompt={handleUpdateSystemPrompt}
+              onClose={onClose}
               persistedMessageIds={persistedMessageIds}
               syncConversations={syncConversations}
               chatError={chatError}
