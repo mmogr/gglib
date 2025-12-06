@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "gglib-axum cov",
-  "message": "unknown",
-  "color": "lightgrey"
+  "message": "0%",
+  "color": "red"
 }
