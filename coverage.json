@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "Rust coverage",
-  "message": "44%",
-  "color": "red"
+  "message": "unknown",
+  "color": "lightgrey"
 }
