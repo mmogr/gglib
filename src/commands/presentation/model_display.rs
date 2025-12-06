@@ -67,10 +67,8 @@ pub fn display_model_summary(model: &Gguf, opts: ModelSummaryOpts) {
         println!("{title}");
     }
 
-    if opts.show_id {
-        if let Some(id) = model.id {
-            println!("  ID: {}", id);
-        }
+    if opts.show_id && let Some(id) = model.id {
+        println!("  ID: {}", id);
     }
 
     println!("  Name: {}", model.name);
