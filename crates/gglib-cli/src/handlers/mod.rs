@@ -14,5 +14,8 @@
 //! - Contain business logic
 //! - Manage database connections
 
+pub mod add;
+pub mod config;
 pub mod list;
 pub mod remove;
+pub mod update;

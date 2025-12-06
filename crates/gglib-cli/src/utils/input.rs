@@ -33,6 +33,43 @@ pub fn prompt_string(prompt: &str) -> Result<String> {
     Ok(input.trim().to_string())
 }
 
+/// Prompts the user for a string input with a default value.
+///
+/// Displays a prompt message with a suggested default value. If the user
+/// just presses Enter, the default value is returned.
+///
+/// # Arguments
+///
+/// * `prompt` - The message to display to the user
+/// * `default` - Optional default value to suggest
+///
+/// # Returns
+///
+/// * `Result<String>` - The user's input or default value
+pub fn prompt_string_with_default(prompt: &str, default: Option<&str>) -> Result<String> {
+    if let Some(default_val) = default {
+        println!("{prompt} [{default_val}]: ");
+    } else {
+        println!("{prompt}: ");
+    }
+
+    let mut input: String = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .context("Failed to read user input")?;
+
+    let trimmed: &str = input.trim();
+    if trimmed.is_empty() {
+        if let Some(default_val) = default {
+            Ok(default_val.to_string())
+        } else {
+            Ok(trimmed.to_string())
+        }
+    } else {
+        Ok(trimmed.to_string())
+    }
+}
+
 /// Prompts the user for a yes/no confirmation.
 ///
 /// Accepts 'y', 'yes', 'n', 'no' (case insensitive).

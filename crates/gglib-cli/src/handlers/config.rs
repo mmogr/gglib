@@ -1,22 +1,34 @@
-use crate::cli::{ConfigCommand, ModelsDirCommand, SettingsCommand};
-use crate::services::core::AppCore;
-use crate::services::settings::{Settings, SettingsUpdate, validate_settings};
-use crate::utils::input;
+//! Config command handler.
+//!
+//! Handles configuration management including models directory and settings.
+
+use anyhow::Result;
+
+use crate::bootstrap::CliContext;
+use crate::config_commands::{ConfigCommand, ModelsDirCommand, SettingsCommand};
+use crate::utils::input::prompt_string_with_default;
 use crate::utils::paths::{
     DirectoryCreationStrategy, default_models_dir, ensure_directory, persist_models_dir,
     resolve_models_dir,
 };
-use anyhow::Result;
-use std::sync::Arc;
+use gglib_core::{Settings, SettingsUpdate, validate_settings};
 
-/// Entry point for `gglib config` commands.
-pub fn handle(core: Arc<AppCore>, command: ConfigCommand) -> Result<()> {
+/// Execute the config command.
+///
+/// Dispatches to the appropriate subcommand handler.
+///
+/// # Arguments
+///
+/// * `ctx` - The CLI context providing access to AppCore
+/// * `command` - The config subcommand to execute
+///
+/// # Returns
+///
+/// Returns `Result<()>` indicating the success or failure of the operation.
+pub async fn execute(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
     match command {
         ConfigCommand::ModelsDir { command } => handle_models_dir(command),
-        ConfigCommand::Settings { command } => {
-            // Settings commands need async runtime for database access
-            tokio::runtime::Runtime::new()?.block_on(handle_settings(core, command))
-        }
+        ConfigCommand::Settings { command } => handle_settings(ctx, command).await,
     }
 }
 
@@ -33,12 +45,12 @@ fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
         }
         ModelsDirCommand::Prompt => {
             let default_path = default_models_dir()?.to_string_lossy().to_string();
-            let answer = input::prompt_string_with_default(
+            let answer = prompt_string_with_default(
                 "Where should gglib store downloaded models?",
                 Some(&default_path),
             )?;
             let resolved = resolve_models_dir(Some(&answer))?;
-            ensure_directory(&resolved.path, DirectoryCreationStrategy::PromptUser)?;
+            ensure_directory(&resolved.path, DirectoryCreationStrategy::AutoCreate)?;
             persist_models_dir(&resolved.path)?;
             println!(
                 "✓ Models directory updated to {} (interactive)",
@@ -64,10 +76,10 @@ fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
     }
 }
 
-async fn handle_settings(core: Arc<AppCore>, command: SettingsCommand) -> Result<()> {
+async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<()> {
     match command {
         SettingsCommand::Show => {
-            let settings = core.settings().get().await?;
+            let settings = ctx.app().settings().get().await?;
             println!("Current application settings:");
             println!(
                 "  default_download_path:   {:?}",
@@ -92,7 +104,7 @@ async fn handle_settings(core: Arc<AppCore>, command: SettingsCommand) -> Result
             max_download_queue_size,
             default_download_path,
         } => {
-            // Check if any settings were provided and which ones
+            // Check if any settings were provided
             let has_default_download_path = default_download_path.is_some();
             let has_default_context_size = default_context_size.is_some();
             let has_proxy_port = proxy_port.is_some();
@@ -120,7 +132,7 @@ async fn handle_settings(core: Arc<AppCore>, command: SettingsCommand) -> Result
             };
 
             // Get current settings and apply updates for validation
-            let mut current = core.settings().get().await?;
+            let mut current = ctx.app().settings().get().await?;
             if let Some(Some(v)) = &update.default_download_path {
                 current.default_download_path = Some(v.clone());
             }
@@ -141,7 +153,7 @@ async fn handle_settings(core: Arc<AppCore>, command: SettingsCommand) -> Result
             validate_settings(&current)?;
 
             // Save settings
-            let updated = core.settings().update(update).await?;
+            let updated = ctx.app().settings().update(update).await?;
             println!("✓ Settings updated successfully:");
             if has_default_download_path {
                 println!(
@@ -150,7 +162,10 @@ async fn handle_settings(core: Arc<AppCore>, command: SettingsCommand) -> Result
                 );
             }
             if has_default_context_size {
-                println!("  default_context_size: {:?}", updated.default_context_size);
+                println!(
+                    "  default_context_size: {:?}",
+                    updated.default_context_size
+                );
             }
             if has_proxy_port {
                 println!("  proxy_port: {:?}", updated.proxy_port);
@@ -168,31 +183,28 @@ async fn handle_settings(core: Arc<AppCore>, command: SettingsCommand) -> Result
         }
         SettingsCommand::Reset { force } => {
             if !force {
-                let confirm = input::prompt_confirmation("Reset all settings to defaults?")?;
+                let confirm = crate::utils::input::prompt_confirmation(
+                    "Are you sure you want to reset all settings to defaults?",
+                )?;
                 if !confirm {
-                    println!("Cancelled.");
+                    println!("Reset cancelled.");
                     return Ok(());
                 }
             }
 
-            let defaults = Settings::default();
-            core.settings().save(&defaults).await?;
-            println!("✓ Settings reset to defaults:");
-            println!(
-                "  default_download_path:   {:?}",
-                defaults.default_download_path
-            );
-            println!(
-                "  default_context_size:    {:?}",
-                defaults.default_context_size
-            );
-            println!("  proxy_port:              {:?}", defaults.proxy_port);
-            println!("  server_port:             {:?}", defaults.server_port);
-            println!(
-                "  max_download_queue_size: {:?}",
-                defaults.max_download_queue_size
-            );
+            let defaults = Settings::with_defaults();
+            ctx.app().settings().save(&defaults).await?;
+            println!("✓ All settings have been reset to defaults.");
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_config_handler_exists() {
+        // Placeholder test to ensure module compiles
+        assert!(true);
     }
 }
