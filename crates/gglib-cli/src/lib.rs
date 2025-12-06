@@ -42,6 +42,8 @@ pub mod error;
 pub mod handlers;
 pub mod llama_commands;
 pub mod parser;
+pub mod presentation;
+pub mod utils;
 
 // Re-export primary types for convenient access
 pub use assistant_ui_commands::AssistantUiCommand;

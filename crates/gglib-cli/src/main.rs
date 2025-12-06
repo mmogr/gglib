@@ -1,24 +1,22 @@
 //! CLI entry point - the composition root.
 //!
-//! This is the ONLY place where infrastructure is wired together:
-//! - Database pool creation
-//! - Repository instantiation  
-//! - AppCore construction
-//! - Command dispatch
+//! This is the ONLY place where infrastructure is wired together via bootstrap.
+//! Command dispatch routes to handlers which delegate to AppCore.
 //!
-//! All other CLI code delegates to AppCore without touching infrastructure.
+//! All CLI code uses CliContext for dependency access - no direct
+//! database or pool access outside of bootstrap.
 
 use clap::Parser;
 use std::sync::Arc;
 
 use gglib_cli::{
-    AssistantUiCommand, Cli, Commands, ConfigCommand, LlamaCommand, ModelsDirCommand,
-    SettingsCommand,
+    AssistantUiCommand, Cli, CliConfig, Commands, ConfigCommand, LlamaCommand, ModelsDirCommand,
+    SettingsCommand, bootstrap, handlers,
 };
 
-// Import handlers from root gglib crate (temporary until handlers migrate here)
+// Legacy imports for commands not yet migrated (TODO: migrate in subsequent PRs)
 use gglib::commands;
-use gglib::services::{AppCore, database};
+use gglib::services::AppCore as LegacyAppCore;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -31,11 +29,15 @@ async fn main() -> anyhow::Result<()> {
     // Parse CLI arguments
     let cli = Cli::parse();
 
-    // Set up database pool (composition root responsibility)
-    let pool = database::setup_database().await?;
+    // Bootstrap the CLI context (composition root)
+    let config = CliConfig::with_defaults()?;
+    let ctx = bootstrap(config).await?;
 
-    // Create AppCore (the facade that handlers use)
-    let core = Arc::new(AppCore::new(pool));
+    // Create legacy AppCore for commands not yet migrated
+    // TODO: Remove once all commands use CliContext
+    let legacy_core = Arc::new(LegacyAppCore::new(
+        gglib::services::database::setup_database().await?,
+    ));
 
     // Dispatch to appropriate handler
     let Some(command) = cli.command else {
@@ -50,13 +52,15 @@ async fn main() -> anyhow::Result<()> {
             commands::check_deps::handle_check_deps().await?;
         }
         Commands::Add { file_path } => {
-            commands::add::handle_add(Arc::clone(&core), file_path).await?;
+            commands::add::handle_add(Arc::clone(&legacy_core), file_path).await?;
         }
         Commands::List => {
-            commands::list::handle_list(Arc::clone(&core)).await?;
+            // NEW: Uses CliContext
+            handlers::list::execute(&ctx).await?;
         }
         Commands::Remove { identifier, force } => {
-            commands::remove::handle_remove(Arc::clone(&core), identifier, force).await?;
+            // NEW: Uses CliContext
+            handlers::remove::execute(&ctx, &identifier, force).await?;
         }
         Commands::Serve {
             id,
@@ -65,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
             jinja,
             port,
         } => {
-            commands::serve::handle_serve(Arc::clone(&core), id, ctx_size, mlock, jinja, port)
+            commands::serve::handle_serve(Arc::clone(&legacy_core), id, ctx_size, mlock, jinja, port)
                 .await?;
         }
         Commands::Chat {
@@ -80,7 +84,7 @@ async fn main() -> anyhow::Result<()> {
             simple_io,
         } => {
             commands::chat::handle_chat(
-                Arc::clone(&core),
+                Arc::clone(&legacy_core),
                 commands::chat::ChatCommandArgs {
                     identifier,
                     ctx_size,
@@ -104,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
             force,
         } => {
             commands::download::execute(
-                Arc::clone(&core),
+                Arc::clone(&legacy_core),
                 model_id,
                 quantization,
                 list_quants,
@@ -119,10 +123,10 @@ async fn main() -> anyhow::Result<()> {
             .await?;
         }
         Commands::CheckUpdates { model_id, all } => {
-            commands::download::handle_check_updates(Arc::clone(&core), model_id, all).await?;
+            commands::download::handle_check_updates(Arc::clone(&legacy_core), model_id, all).await?;
         }
         Commands::UpdateModel { model_id, force } => {
-            commands::download::handle_update_model(Arc::clone(&core), model_id, force).await?;
+            commands::download::handle_update_model(Arc::clone(&legacy_core), model_id, force).await?;
         }
         Commands::Search {
             query,
@@ -165,7 +169,7 @@ async fn main() -> anyhow::Result<()> {
                 dry_run,
                 force,
             };
-            commands::update::handle_update(Arc::clone(&core), args).await?;
+            commands::update::handle_update(Arc::clone(&legacy_core), args).await?;
         }
         Commands::Config { command } => {
             // Convert gglib-cli ConfigCommand to legacy cli::ConfigCommand
@@ -207,7 +211,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             };
-            commands::config::handle(Arc::clone(&core), legacy_command)?;
+            commands::config::handle(Arc::clone(&legacy_core), legacy_command)?;
         }
         Commands::Llama { command } => match command {
             LlamaCommand::Install {
@@ -258,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
             llama_port,
             default_context,
         } => {
-            gglib::proxy::start_proxy(host, port, core.models(), llama_port, default_context)
+            gglib::proxy::start_proxy(host, port, legacy_core.models(), llama_port, default_context)
                 .await?;
         }
         Commands::AssistantUi { command } => match command {
