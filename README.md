@@ -36,131 +36,46 @@ gglib provides a simple interface to catalog, organize, and serve GGUF models lo
 
 GGLib is organized as a Cargo workspace with compile-time enforced boundaries. The architecture follows a layered design where adapters depend on core, never the reverse.
 
-<table>
-<tr>
-<td colspan="3" align="center"><b>Core Layer</b></td>
-</tr>
-<tr>
-<td valign="top">
-<pre>
-+---------------+
-|  gglib-core   |
-+---------------+
-</pre>
-<sub>domain • ports • events</sub><br/><br/>
-<a href="crates/gglib-core"><img alt="core tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json" /></a>
-<img alt="core cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-coverage.json" />
-</td>
-<td valign="top" align="center">
-<pre>  ◄──  </pre>
-</td>
-<td valign="top">
-<pre>
-+---------------+
-|   gglib-db    |
-+---------------+
-</pre>
-<sub>sqlite repos • migrations</sub><br/><br/>
-<a href="crates/gglib-db"><img alt="db tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json" /></a>
-<img alt="db cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-coverage.json" />
-</td>
-</tr>
-<tr>
-<td colspan="3" align="center">
-<pre>            │                      │
-            └──────────┬───────────┘
-                       │
-         ┌─────────────┼─────────────┐
-         ▼             ▼             ▼</pre>
-</td>
-</tr>
-<tr>
-<td colspan="3" align="center"><b>Adapter Layer</b></td>
-</tr>
-<tr>
-<td valign="top">
-<pre>
-+---------------+
-|  gglib-cli    |
-+---------------+
-</pre>
-<sub>CLI adapter</sub><br/><br/>
-<a href="crates/gglib-cli"><img alt="cli tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json" /></a>
-<img alt="cli cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-coverage.json" />
-</td>
-<td valign="top">
-<pre>
-+---------------+
-|  gglib-axum   |
-+---------------+
-</pre>
-<sub>HTTP adapter</sub><br/><br/>
-<a href="crates/gglib-axum"><img alt="axum tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json" /></a>
-<img alt="axum cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json" />
-</td>
-<td valign="top">
-<pre>
-+---------------+
-|  gglib-tauri  |
-+---------------+
-</pre>
-<sub>GUI adapter</sub><br/><br/>
-<a href="crates/gglib-tauri"><img alt="tauri tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json" /></a>
-<img alt="tauri cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-coverage.json" />
-</td>
-</tr>
-<tr>
-<td colspan="3" align="center">
-<pre>         │             │             │
-         ▼             ▼             ▼</pre>
-</td>
-</tr>
-<tr>
-<td colspan="3" align="center"><b>External Systems</b></td>
-</tr>
-<tr>
-<td valign="top">
-<pre>
-+---------------+
-|  Web UI (TS)  |
-+---------------+
-</pre>
-<sub>React • TypeScript</sub><br/><br/>
-<img alt="ts tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json" />
-<img alt="ts cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-coverage.json" />
-</td>
-<td valign="top">
-<pre>
-+---------------+
-| llama-server  |
-+---------------+
-</pre>
-<sub>inference engine</sub>
-</td>
-<td valign="top">
-<pre>
-+---------------+
-| OpenAI Proxy  |
-+---------------+
-</pre>
-<sub>API compatibility</sub>
-</td>
-</tr>
-</table>
+```text
+                         ┌─────────────────────────────────────────┐
+                         │              Core Layer                 │
+                         │                                         │
+                         │   ┌─────────────┐   ┌─────────────┐     │
+                         │   │ gglib-core  │◄──│  gglib-db   │     │
+                         │   └─────────────┘   └─────────────┘     │
+                         │                                         │
+                         └─────────────────────────────────────────┘
+```
+**core:** ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json) ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-coverage.json) &nbsp;&nbsp; **db:** ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json) ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-coverage.json)
 
-<details>
-<summary><b>Health Status (compact)</b></summary>
+```text
+                                          │
+                      ┌───────────────────┼───────────────────┐
+                      ▼                   ▼                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Adapter Layer                                  │
+│                                                                             │
+│   ┌─────────────┐       ┌─────────────┐       ┌─────────────┐               │
+│   │  gglib-cli  │       │ gglib-axum  │       │ gglib-tauri │               │
+│   └─────────────┘       └─────────────┘       └─────────────┘               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+**cli:** ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json) ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-coverage.json) &nbsp;&nbsp; **axum:** ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json) &nbsp;&nbsp; **tauri:** ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json) ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-coverage.json)
 
-| Crate | Tests | Coverage |
-|-------|-------|----------|
-| core | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-coverage.json) |
-| db | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-coverage.json) |
-| cli | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-coverage.json) |
-| axum | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json) |
-| tauri | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-coverage.json) |
-| webui | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-coverage.json) |
-
-</details>
+```text
+                      │                   │                   │
+                      ▼                   ▼                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            External Systems                                 │
+│                                                                             │
+│   ┌─────────────┐       ┌─────────────┐       ┌─────────────┐               │
+│   │ Web UI (TS) │       │llama-server │       │ OpenAI Proxy│               │
+│   └─────────────┘       └─────────────┘       └─────────────┘               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+**webui:** ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json) ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-coverage.json)
 
 ### Module Reference
 
