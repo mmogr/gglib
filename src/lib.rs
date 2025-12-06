@@ -32,7 +32,10 @@ pub use core::{
 };
 
 // Re-export infra implementations
-pub use infra::{LlamaProcessRunner, SqliteModelRepository, SqliteSettingsRepository};
+pub use infra::{SqliteModelRepository, SqliteSettingsRepository};
+
+// Re-export runtime crate for process management
+pub use gglib_runtime::LlamaServerRunner;
 
 // =============================================================================
 // Workspace Crate Re-exports

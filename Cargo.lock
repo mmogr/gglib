@@ -905,6 +905,7 @@ dependencies = [
  "futures-util",
  "gglib-core",
  "gglib-db",
+ "gglib-runtime",
  "hf-hub",
  "http-body-util",
  "hyper 1.7.0",

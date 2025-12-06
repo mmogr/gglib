@@ -95,6 +95,7 @@ description = "GGUF model manager and runner"
 # Internal crates for migration
 gglib-core.workspace = true
 gglib-db.workspace = true
+gglib-runtime.workspace = true
 
 # CLI
 clap = { version = "4.0", features = ["derive"] }
