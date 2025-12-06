@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "label": "Rust coverage",
+  "label": "gglib-cli cov",
   "message": "unknown",
   "color": "lightgrey"
 }
