@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "TS tests",
-  "message": "459/460 (99%)",
-  "color": "green"
+  "message": "failed",
+  "color": "red"
 }
