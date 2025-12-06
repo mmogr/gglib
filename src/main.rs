@@ -304,7 +304,45 @@ async fn run_command(core: Arc<AppCore>, command: cli::Commands) -> Result<()> {
             mlock,
             jinja,
             port,
-        } => commands::serve::handle_serve(core, id, ctx_size, mlock, jinja, port).await,
+        } => {
+            // Migrated to gglib-cli; inline stub for legacy binary
+            use std::process::Stdio;
+            use gglib::commands::llama::ensure_llama_initialized;
+            use gglib::commands::llama_args::resolve_context_size;
+            use gglib::commands::llama_invocation::LlamaCommandBuilder;
+            use gglib::utils::paths::get_llama_server_path;
+
+            ensure_llama_initialized().await?;
+            let llama_server_path = get_llama_server_path()?;
+            let model = core.models().get_by_id(id).await?;
+
+            println!("Using model: {} (ID: {})", model.name, model.id.unwrap_or(0));
+            println!("File: {}", model.file_path.display());
+            println!("Server will be available on http://localhost:{}", port);
+
+            let context_resolution = resolve_context_size(ctx_size, model.context_length)?;
+
+            let mut builder = LlamaCommandBuilder::new(&llama_server_path, &model.file_path)
+                .context_resolution(context_resolution)
+                .mlock(mlock)
+                .arg_with_value("--port", port.to_string());
+
+            if jinja {
+                builder = builder.flag("--jinja");
+            }
+
+            let mut cmd = builder.build();
+            cmd.stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::inherit());
+
+            println!("Starting server... (Press Ctrl+C to stop)");
+            let status = cmd.status()?;
+            if status.success() {
+                println!("llama-server exited successfully");
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("llama-server exited with code: {:?}", status.code()))
+            }
+        }
         Commands::Chat {
             identifier,
             ctx_size,
@@ -316,21 +354,62 @@ async fn run_command(core: Arc<AppCore>, command: cli::Commands) -> Result<()> {
             multiline_input,
             simple_io,
         } => {
-            commands::chat::handle_chat(
-                core,
-                commands::chat::ChatCommandArgs {
-                    identifier,
-                    ctx_size,
-                    mlock,
-                    chat_template,
-                    chat_template_file,
-                    jinja,
-                    system_prompt,
-                    multiline_input,
-                    simple_io,
-                },
-            )
-            .await
+            // Migrated to gglib-cli; inline stub for legacy binary
+            use std::process::Stdio;
+            use gglib::commands::llama::ensure_llama_initialized;
+            use gglib::commands::llama_args::resolve_context_size;
+            use gglib::commands::llama_invocation::LlamaCommandBuilder;
+            use gglib::utils::paths::get_llama_cli_path;
+
+            ensure_llama_initialized().await?;
+            let llama_cli_path = get_llama_cli_path()?;
+
+            let models = core.models().find_by_name(&identifier).await?;
+            if models.is_empty() {
+                return Err(anyhow::anyhow!("Model '{}' not found", identifier));
+            }
+            let model = &models[0];
+
+            println!("Using model: {} (ID: {})", model.name, model.id.unwrap_or(0));
+            println!("File: {}", model.file_path.display());
+
+            let context_resolution = resolve_context_size(ctx_size, model.context_length)?;
+
+            let mut cmd = LlamaCommandBuilder::new(&llama_cli_path, &model.file_path)
+                .context_resolution(context_resolution)
+                .mlock(mlock)
+                .flag("--interactive-first")
+                .build();
+
+            if jinja {
+                cmd.arg("--jinja");
+            }
+            if let Some(template) = chat_template {
+                cmd.arg("--chat-template").arg(template);
+            }
+            if let Some(template_file) = chat_template_file {
+                cmd.arg("--chat-template-file").arg(template_file);
+            }
+            if let Some(prompt) = system_prompt {
+                cmd.arg("-sys").arg(prompt);
+            }
+            if multiline_input {
+                cmd.arg("--multiline-input");
+            }
+            if simple_io {
+                cmd.arg("--simple-io");
+            }
+
+            cmd.stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::inherit());
+
+            println!("Chat session ready. Press Ctrl+C to exit.");
+            let status = cmd.status()?;
+            if status.success() {
+                println!("llama-cli exited successfully");
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("llama-cli exited with code: {:?}", status.code()))
+            }
         }
         Commands::Gui { dev } => {
             if dev {
