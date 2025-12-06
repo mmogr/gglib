@@ -22,6 +22,7 @@
 pub mod domain;
 pub mod events;
 pub mod ports;
+pub mod settings;
 
 // Re-export commonly used types for convenience
 pub use domain::{Model, NewModel};
@@ -30,6 +31,7 @@ pub use ports::{
     CoreError, ModelRepository, ProcessError, ProcessHandle, ProcessRunner, RepositoryError,
     ServerConfig, ServerHealth, SettingsRepository,
 };
+pub use settings::{Settings, SettingsError, SettingsUpdate, validate_settings};
 
 // Silence unused dev-dependency warnings until we add mock-based tests
 #[cfg(test)]

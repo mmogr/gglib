@@ -3,11 +3,11 @@
 use async_trait::async_trait;
 use sqlx::{Row, SqlitePool};
 
-use gglib_core::{RepositoryError, SettingsRepository};
+use gglib_core::{RepositoryError, Settings, SettingsRepository};
 
 /// SQLite implementation of the SettingsRepository trait.
 ///
-/// This uses a key-value table structure for flexible settings storage.
+/// Stores settings as a JSON blob in a key-value table for flexibility.
 pub struct SqliteSettingsRepository {
     pool: SqlitePool,
 }
@@ -18,7 +18,7 @@ impl SqliteSettingsRepository {
         Self { pool }
     }
 
-    /// Ensure the key-value settings table exists.
+    /// Ensure the settings table exists.
     ///
     /// Call this during initialization to set up the schema.
     pub async fn ensure_table(&self) -> Result<(), RepositoryError> {
@@ -37,32 +37,36 @@ impl SqliteSettingsRepository {
 
         Ok(())
     }
-
-    /// Get a reference to the underlying pool (for testing/migration only).
-    #[cfg(test)]
-    pub fn pool(&self) -> &SqlitePool {
-        &self.pool
-    }
 }
+
+const SETTINGS_KEY: &str = "app_settings";
 
 #[async_trait]
 impl SettingsRepository for SqliteSettingsRepository {
-    async fn get(&self, key: &str) -> Result<Option<String>, RepositoryError> {
+    async fn load(&self) -> Result<Settings, RepositoryError> {
         let row = sqlx::query("SELECT value FROM settings_kv WHERE key = ?")
-            .bind(key)
+            .bind(SETTINGS_KEY)
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
-        Ok(row.map(|r| r.get("value")))
+        match row {
+            Some(r) => {
+                let json: String = r.get("value");
+                serde_json::from_str(&json).map_err(|e| RepositoryError::Storage(e.to_string()))
+            }
+            None => Ok(Settings::with_defaults()),
+        }
     }
 
-    async fn set(&self, key: &str, value: &str) -> Result<(), RepositoryError> {
+    async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
+        let json =
+            serde_json::to_string(settings).map_err(|e| RepositoryError::Storage(e.to_string()))?;
         let updated_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
         sqlx::query("INSERT OR REPLACE INTO settings_kv (key, value, updated_at) VALUES (?, ?, ?)")
-            .bind(key)
-            .bind(value)
+            .bind(SETTINGS_KEY)
+            .bind(&json)
             .bind(&updated_at)
             .execute(&self.pool)
             .await
@@ -70,26 +74,38 @@ impl SettingsRepository for SqliteSettingsRepository {
 
         Ok(())
     }
+}
 
-    async fn delete(&self, key: &str) -> Result<(), RepositoryError> {
-        sqlx::query("DELETE FROM settings_kv WHERE key = ?")
-            .bind(key)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        Ok(())
+    #[tokio::test]
+    async fn test_load_returns_defaults_when_empty() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let repo = SqliteSettingsRepository::new(pool);
+        repo.ensure_table().await.unwrap();
+
+        let settings = repo.load().await.unwrap();
+        assert_eq!(settings, Settings::with_defaults());
     }
 
-    async fn list(&self) -> Result<Vec<(String, String)>, RepositoryError> {
-        let rows = sqlx::query("SELECT key, value FROM settings_kv ORDER BY key")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+    #[tokio::test]
+    async fn test_save_and_load() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let repo = SqliteSettingsRepository::new(pool);
+        repo.ensure_table().await.unwrap();
 
-        Ok(rows
-            .iter()
-            .map(|r| (r.get("key"), r.get("value")))
-            .collect())
+        let settings = Settings {
+            default_context_size: Some(8192),
+            proxy_port: Some(9090),
+            ..Settings::with_defaults()
+        };
+
+        repo.save(&settings).await.unwrap();
+        let loaded = repo.load().await.unwrap();
+
+        assert_eq!(loaded.default_context_size, Some(8192));
+        assert_eq!(loaded.proxy_port, Some(9090));
     }
 }
