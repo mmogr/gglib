@@ -31,6 +31,7 @@ use tokio_test as _;
 use anyhow as _;
 use gglib as _;
 use gglib_db as _;
+use gglib_runtime as _;
 use serde_json as _;
 use tokio as _;
 use tracing as _;
@@ -40,6 +41,6 @@ pub mod error;
 pub mod routes;
 
 // Re-export primary types
-pub use bootstrap::start_server;
+pub use bootstrap::{bootstrap, start_server, AxumContext, ServerConfig};
 pub use error::HttpError;
 pub use routes::create_router;

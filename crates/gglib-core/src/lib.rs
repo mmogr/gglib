@@ -23,6 +23,7 @@ pub mod domain;
 pub mod download;
 pub mod events;
 pub mod ports;
+pub mod services;
 pub mod settings;
 
 // Re-export commonly used types for convenience
@@ -34,7 +35,8 @@ pub use download::{
 pub use events::{AppEvent, ModelSummary, ServerSnapshotEntry};
 pub use ports::{
     CoreError, ModelRepository, ProcessError, ProcessHandle, ProcessRunner, QuantizationResolver,
-    RepositoryError, ResolvedFile, Resolution, ServerConfig, ServerHealth, SettingsRepository,
+    Repos, RepositoryError, ResolvedFile, Resolution, ServerConfig, ServerHealth,
+    SettingsRepository,
 };
 pub use settings::{Settings, SettingsError, SettingsUpdate, validate_settings};
 

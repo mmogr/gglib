@@ -5,6 +5,7 @@
 //!
 //! # Architecture
 //!
+//! - `bootstrap` - Composition root (wires repos + runtime + services)
 //! - `error` - Tauri-specific error types with JSON serialization
 //! - `gui_backend` - Shared GUI backend service (re-exported from gglib)
 //! - `commands/` - Tauri command handlers (to be added)
@@ -19,15 +20,18 @@ use serde_json as _;
 #[cfg(test)]
 use tokio_test as _;
 
-// Dependencies used by gui_backend module
+// Dependencies used by bootstrap module
 use anyhow as _;
 use gglib as _;
 use gglib_db as _;
+use gglib_runtime as _;
 use tracing as _;
 
+pub mod bootstrap;
 pub mod error;
 pub mod gui_backend;
 
 // Re-export primary types
+pub use bootstrap::{bootstrap, TauriConfig, TauriContext};
 pub use error::TauriError;
 pub use gui_backend::GuiBackend;

@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/gglib-core",
     "crates/gglib-db",
+    "crates/gglib-runtime",
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
@@ -48,6 +49,7 @@ mockall = "0.12"
 # Internal crates (for migration)
 gglib-core = { path = "crates/gglib-core" }
 gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
+gglib-runtime = { path = "crates/gglib-runtime" }
 
 # Workspace-wide lints for consistency
 [workspace.lints.rust]

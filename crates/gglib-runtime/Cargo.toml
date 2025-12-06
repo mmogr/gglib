@@ -1,0 +1,26 @@
+[package]
+name = "gglib-runtime"
+version = "0.1.0"
+edition = "2024"
+description = "Process runtime and OS-level concerns for gglib"
+license = "MIT"
+publish = false
+
+[dependencies]
+gglib-core = { path = "../gglib-core" }
+
+# Runtime dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+
+# HTTP client for health checks
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+
+[lints.rust]
+unsafe_code = "deny"

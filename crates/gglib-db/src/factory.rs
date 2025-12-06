@@ -7,21 +7,9 @@
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
-use gglib_core::{ModelRepository, SettingsRepository};
+use gglib_core::Repos;
 
 use crate::repositories::{SqliteModelRepository, SqliteSettingsRepository};
-
-/// A container for all repository instances.
-///
-/// This struct provides a consistent way to wire repositories across adapters
-/// without turning the factory into a second "app layer". It uses trait objects
-/// so adapters depend only on the port interfaces, not concrete types.
-pub struct Repos {
-    /// Model repository instance.
-    pub models: Arc<dyn ModelRepository>,
-    /// Settings repository instance.
-    pub settings: Arc<dyn SettingsRepository>,
-}
 
 /// Factory for creating repository instances with SQLite backends.
 ///
@@ -48,12 +36,13 @@ impl CoreFactory {
     /// Build all SQLite repositories from a pool.
     ///
     /// This is the recommended way for adapters to obtain repositories.
-    /// Returns a `Repos` struct containing trait-object-wrapped repositories.
+    /// Returns a `Repos` struct from `gglib-core` containing trait-object-wrapped
+    /// repositories.
     pub fn build_repos(pool: SqlitePool) -> Repos {
-        Repos {
-            models: Arc::new(SqliteModelRepository::new(pool.clone())),
-            settings: Arc::new(SqliteSettingsRepository::new(pool)),
-        }
+        Repos::new(
+            Arc::new(SqliteModelRepository::new(pool.clone())),
+            Arc::new(SqliteSettingsRepository::new(pool)),
+        )
     }
 
     /// Create a model repository from a pool.

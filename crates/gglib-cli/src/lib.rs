@@ -31,10 +31,11 @@ use tokio as _;
 use tracing as _;
 use tracing_subscriber as _;
 
-// gglib-db used for database setup in composition root
-use gglib_db as _;
+// gglib-runtime used for process runner in bootstrap
+use gglib_runtime as _;
 
 pub mod assistant_ui_commands;
+pub mod bootstrap;
 pub mod commands;
 pub mod config_commands;
 pub mod error;
@@ -44,6 +45,7 @@ pub mod parser;
 
 // Re-export primary types for convenient access
 pub use assistant_ui_commands::AssistantUiCommand;
+pub use bootstrap::{bootstrap, CliConfig, CliContext};
 pub use commands::Commands;
 pub use config_commands::{ConfigCommand, ModelsDirCommand, SettingsCommand};
 pub use error::CliError;

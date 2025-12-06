@@ -13,6 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
+gglib-runtime = { path = "../gglib-runtime" }
 
 # Root crate for access to legacy handlers (temporary until migration)
 gglib = { path = "../.." }

@@ -15,6 +15,7 @@ pub mod model_repository;
 pub mod process_runner;
 pub mod settings_repository;
 
+use std::sync::Arc;
 use thiserror::Error;
 
 // Re-export repository traits for convenience
@@ -22,6 +23,40 @@ pub use download::{QuantizationResolver, ResolvedFile, Resolution};
 pub use model_repository::ModelRepository;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use settings_repository::SettingsRepository;
+
+/// Container for all repository trait objects.
+///
+/// This struct provides a consistent way to wire repositories across adapters
+/// without coupling them to concrete implementations. It lives in `gglib-core`
+/// so that `AppCore` can accept it without depending on `gglib-db`.
+///
+/// # Example
+///
+/// ```ignore
+/// // In gglib-db factory:
+/// pub fn build_repos(pool: &SqlitePool) -> Repos { ... }
+///
+/// // In adapter bootstrap:
+/// let repos = gglib_db::factory::build_repos(&pool);
+/// let core = AppCore::new(repos, runner);
+/// ```
+#[derive(Clone)]
+pub struct Repos {
+    /// Model repository for CRUD operations on models.
+    pub models: Arc<dyn ModelRepository>,
+    /// Settings repository for application settings.
+    pub settings: Arc<dyn SettingsRepository>,
+}
+
+impl Repos {
+    /// Create a new Repos container.
+    pub fn new(
+        models: Arc<dyn ModelRepository>,
+        settings: Arc<dyn SettingsRepository>,
+    ) -> Self {
+        Self { models, settings }
+    }
+}
 
 /// Domain-specific errors for repository operations.
 ///
