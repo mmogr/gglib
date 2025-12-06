@@ -374,47 +374,82 @@ jobs:
 
       - name: Generate SCC complexity badges
         run: |
-          # Generate per-crate complexity badges
+          # Generate per-crate LOC and complexity badges
           for CRATE in gglib-core gglib-db gglib-cli gglib-axum gglib-tauri; do
             if [ -d "crates/$CRATE" ]; then
-              # Get Rust lines of code
-              LOC=$(scc crates/$CRATE --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0].Code // 0')
+              # Get Rust lines of code and complexity
+              SCC_DATA=$(scc crates/$CRATE --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
+              LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
+              COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
               
-              # Color based on size (smaller is better for focused crates)
-              if [ "$LOC" -lt 200 ]; then COLOR="brightgreen";
-              elif [ "$LOC" -lt 500 ]; then COLOR="green";
-              elif [ "$LOC" -lt 1000 ]; then COLOR="yellowgreen";
-              elif [ "$LOC" -lt 2000 ]; then COLOR="yellow";
-              else COLOR="orange"; fi
+              # LOC color (smaller is better for focused crates)
+              if [ "$LOC" -lt 200 ]; then LOC_COLOR="brightgreen";
+              elif [ "$LOC" -lt 500 ]; then LOC_COLOR="green";
+              elif [ "$LOC" -lt 1000 ]; then LOC_COLOR="yellowgreen";
+              elif [ "$LOC" -lt 2000 ]; then LOC_COLOR="yellow";
+              else LOC_COLOR="orange"; fi
+              
+              # Complexity color (lower is better)
+              if [ "$COMPLEXITY" -lt 10 ]; then CX_COLOR="brightgreen";
+              elif [ "$COMPLEXITY" -lt 25 ]; then CX_COLOR="green";
+              elif [ "$COMPLEXITY" -lt 50 ]; then CX_COLOR="yellowgreen";
+              elif [ "$COMPLEXITY" -lt 100 ]; then CX_COLOR="yellow";
+              else CX_COLOR="orange"; fi
               
               cat <<JSON > badges/$CRATE-loc.json
           {
             "schemaVersion": 1,
             "label": "loc",
             "message": "$LOC",
-            "color": "$COLOR"
+            "color": "$LOC_COLOR"
           }
           JSON
-              echo "$CRATE: $LOC lines"
+              
+              cat <<JSON > badges/$CRATE-complexity.json
+          {
+            "schemaVersion": 1,
+            "label": "complexity",
+            "message": "$COMPLEXITY",
+            "color": "$CX_COLOR"
+          }
+          JSON
+              echo "$CRATE: $LOC loc, $COMPLEXITY complexity"
             fi
           done
           
-          # TypeScript LOC for Web UI
-          TS_LOC=$(scc src --include-ext ts,tsx --format json 2>/dev/null | jq '[.[] | select(.Name == "TypeScript" or .Name == "TypeScript JSX")] | map(.Code) | add // 0')
-          if [ "$TS_LOC" -lt 2000 ]; then TS_COLOR="brightgreen";
-          elif [ "$TS_LOC" -lt 5000 ]; then TS_COLOR="green";
-          elif [ "$TS_LOC" -lt 10000 ]; then TS_COLOR="yellowgreen";
-          else TS_COLOR="yellow"; fi
+          # TypeScript LOC and complexity for Web UI
+          TS_DATA=$(scc src --include-ext ts,tsx --format json 2>/dev/null)
+          TS_LOC=$(echo "$TS_DATA" | jq '[.[] | select(.Name == "TypeScript" or .Name == "TypeScript JSX")] | map(.Code) | add // 0')
+          TS_COMPLEXITY=$(echo "$TS_DATA" | jq '[.[] | select(.Name == "TypeScript" or .Name == "TypeScript JSX")] | map(.Complexity) | add // 0')
+          
+          if [ "$TS_LOC" -lt 2000 ]; then TS_LOC_COLOR="brightgreen";
+          elif [ "$TS_LOC" -lt 5000 ]; then TS_LOC_COLOR="green";
+          elif [ "$TS_LOC" -lt 10000 ]; then TS_LOC_COLOR="yellowgreen";
+          else TS_LOC_COLOR="yellow"; fi
+          
+          if [ "$TS_COMPLEXITY" -lt 50 ]; then TS_CX_COLOR="brightgreen";
+          elif [ "$TS_COMPLEXITY" -lt 150 ]; then TS_CX_COLOR="green";
+          elif [ "$TS_COMPLEXITY" -lt 300 ]; then TS_CX_COLOR="yellowgreen";
+          else TS_CX_COLOR="yellow"; fi
           
           cat <<JSON > badges/ts-loc.json
           {
             "schemaVersion": 1,
             "label": "loc",
             "message": "$TS_LOC",
-            "color": "$TS_COLOR"
+            "color": "$TS_LOC_COLOR"
           }
           JSON
-          echo "Web UI: $TS_LOC lines"
+          
+          cat <<JSON > badges/ts-complexity.json
+          {
+            "schemaVersion": 1,
+            "label": "complexity",
+            "message": "$TS_COMPLEXITY",
+            "color": "$TS_CX_COLOR"
+          }
+          JSON
+          echo "Web UI: $TS_LOC loc, $TS_COMPLEXITY complexity"
 
       - name: Deploy to badges branch
         uses: peaceiris/actions-gh-pages@v3
