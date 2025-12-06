@@ -54,10 +54,24 @@ pub enum DownloadError {
     },
 
     /// Queue is full, cannot add more downloads.
-    #[error("Queue full: maximum {max} downloads allowed")]
+    #[error("Queue full: maximum {max_size} downloads allowed")]
     QueueFull {
         /// Maximum queue capacity.
-        max: u32,
+        max_size: u32,
+    },
+
+    /// Download is already queued.
+    #[error("Already queued: {id}")]
+    AlreadyQueued {
+        /// The download ID that's already in the queue.
+        id: String,
+    },
+
+    /// Download not found in queue.
+    #[error("Not in queue: {id}")]
+    NotInQueue {
+        /// The download ID that wasn't found.
+        id: String,
     },
 
     /// Download was cancelled by user.
@@ -145,8 +159,18 @@ impl DownloadError {
     }
 
     /// Create a queue full error.
-    pub fn queue_full(max: u32) -> Self {
-        Self::QueueFull { max }
+    pub fn queue_full(max_size: u32) -> Self {
+        Self::QueueFull { max_size }
+    }
+
+    /// Create an already queued error.
+    pub fn already_queued(id: impl Into<String>) -> Self {
+        Self::AlreadyQueued { id: id.into() }
+    }
+
+    /// Create a not in queue error.
+    pub fn not_in_queue(id: impl Into<String>) -> Self {
+        Self::NotInQueue { id: id.into() }
     }
 
     /// Create an integrity check failed error.
@@ -196,11 +220,17 @@ impl DownloadError {
                 )
             }
             Self::ResolutionFailed { message } => format!("Could not resolve file: {}", message),
-            Self::QueueFull { max } => {
+            Self::QueueFull { max_size } => {
                 format!(
                     "Download queue is full (max {} items). Wait for a download to complete.",
-                    max
+                    max_size
                 )
+            }
+            Self::AlreadyQueued { id } => {
+                format!("Download '{}' is already in the queue.", id)
+            }
+            Self::NotInQueue { id } => {
+                format!("Download '{}' is not in the queue.", id)
             }
             Self::Cancelled => "Download was cancelled.".to_string(),
             Self::Interrupted { bytes_downloaded } => {

@@ -5,11 +5,13 @@
 //! pure orchestrators - they don't know about concrete implementations.
 
 mod app_core;
+mod model_registrar;
 mod model_service;
 mod server_service;
 mod settings_service;
 
 pub use app_core::AppCore;
+pub use model_registrar::ModelRegistrar;
 pub use model_service::ModelService;
 pub use server_service::ServerService;
 pub use settings_service::SettingsService;

@@ -9,7 +9,10 @@ use std::sync::Arc;
 
 use gglib_core::Repos;
 
-use crate::repositories::{SqliteMcpRepository, SqliteModelRepository, SqliteSettingsRepository};
+use crate::repositories::{
+    SqliteDownloadStateRepository, SqliteMcpRepository, SqliteModelRepository,
+    SqliteSettingsRepository,
+};
 
 /// Factory for creating repository instances with SQLite backends.
 ///
@@ -59,6 +62,11 @@ impl CoreFactory {
     /// Create an MCP server repository from a pool.
     pub fn mcp_repository(pool: SqlitePool) -> Arc<SqliteMcpRepository> {
         Arc::new(SqliteMcpRepository::new(pool))
+    }
+
+    /// Create a download state repository from a pool.
+    pub fn download_state_repository(pool: SqlitePool) -> Arc<SqliteDownloadStateRepository> {
+        Arc::new(SqliteDownloadStateRepository::new(pool))
     }
 }
 
@@ -194,6 +202,30 @@ impl TestDb {
         .execute(&pool)
         .await?;
 
+        // Create download queue table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS download_queue (
+                id TEXT PRIMARY KEY NOT NULL,
+                model_id TEXT NOT NULL,
+                quantization TEXT,
+                display_name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued',
+                position INTEGER NOT NULL DEFAULT 0,
+                downloaded_bytes INTEGER NOT NULL DEFAULT 0,
+                total_bytes INTEGER NOT NULL DEFAULT 0,
+                queued_at INTEGER NOT NULL,
+                started_at INTEGER,
+                completed_at TEXT,
+                group_id TEXT,
+                shard_info TEXT,
+                error_message TEXT
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
         Ok(Self { pool })
     }
 
@@ -215,5 +247,10 @@ impl TestDb {
     /// Create an MCP server repository using this test database.
     pub fn mcp_repository(&self) -> SqliteMcpRepository {
         SqliteMcpRepository::new(self.pool.clone())
+    }
+
+    /// Create a download state repository using this test database.
+    pub fn download_state_repository(&self) -> SqliteDownloadStateRepository {
+        SqliteDownloadStateRepository::new(self.pool.clone())
     }
 }

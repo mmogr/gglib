@@ -21,4 +21,7 @@ pub use factory::CoreFactory;
 pub use factory::TestDb;
 
 // Re-export repository implementations
-pub use repositories::{SqliteMcpRepository, SqliteModelRepository, SqliteSettingsRepository};
+pub use repositories::{
+    SqliteDownloadStateRepository, SqliteMcpRepository, SqliteModelRepository,
+    SqliteSettingsRepository,
+};

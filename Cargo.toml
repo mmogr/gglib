@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/gglib-core",
     "crates/gglib-db",
+    "crates/gglib-download",
     "crates/gglib-hf",
     "crates/gglib-mcp",
     "crates/gglib-runtime",
@@ -56,6 +57,7 @@ mockall = "0.12"
 # Internal crates (for migration)
 gglib-core = { path = "crates/gglib-core" }
 gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
+gglib-download = { path = "crates/gglib-download" }
 gglib-hf = { path = "crates/gglib-hf" }
 gglib-mcp = { path = "crates/gglib-mcp" }
 gglib-runtime = { path = "crates/gglib-runtime" }

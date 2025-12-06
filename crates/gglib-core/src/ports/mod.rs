@@ -11,10 +11,14 @@
 //! - Intent-based methods for process runner (not implementation-leaking)
 
 pub mod download;
+pub mod download_manager;
+pub mod download_state;
 pub mod event_emitter;
+pub mod gguf_parser;
 pub mod huggingface;
 pub mod mcp_error;
 pub mod mcp_repository;
+pub mod model_registrar;
 pub mod model_repository;
 pub mod process_runner;
 pub mod settings_repository;
@@ -24,12 +28,16 @@ use thiserror::Error;
 
 // Re-export repository traits for convenience
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
+pub use download_manager::{DownloadManagerConfig, DownloadManagerPort, DownloadRequest};
+pub use download_state::DownloadStateRepositoryPort;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
+pub use gguf_parser::{GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser};
 pub use huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
 };
 pub use mcp_error::{McpErrorCategory, McpErrorInfo, McpServiceError};
 pub use mcp_repository::{McpRepositoryError, McpServerRepository};
+pub use model_registrar::{CompletedDownload, ModelRegistrarPort};
 pub use model_repository::ModelRepository;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use settings_repository::SettingsRepository;

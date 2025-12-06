@@ -1017,6 +1017,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-download"
+version = "1.5.3"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "gglib-core",
+ "gglib-hf",
+ "mockall",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "gglib-hf"
 version = "1.5.3"
 dependencies = [

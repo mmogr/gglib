@@ -59,10 +59,11 @@ impl AppCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::mcp::{McpServer, NewMcpServer};
     use crate::domain::{Model, NewModel};
     use crate::ports::{
-        ModelRepository, ProcessError, ProcessHandle, ProcessRunner, RepositoryError, ServerConfig,
-        ServerHealth, SettingsRepository,
+        McpRepositoryError, McpServerRepository, ModelRepository, ProcessError, ProcessHandle,
+        ProcessRunner, RepositoryError, ServerConfig, ServerHealth, SettingsRepository,
     };
     use crate::settings::Settings;
     use async_trait::async_trait;
@@ -88,6 +89,33 @@ mod tests {
             unimplemented!()
         }
         async fn delete(&self, _id: i64) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+    }
+
+    struct MockMcpRepo;
+
+    #[async_trait]
+    impl McpServerRepository for MockMcpRepo {
+        async fn insert(&self, _server: NewMcpServer) -> Result<McpServer, McpRepositoryError> {
+            unimplemented!()
+        }
+        async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
+            Err(McpRepositoryError::NotFound(format!("id={}", id)))
+        }
+        async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
+            Err(McpRepositoryError::NotFound(format!("name={}", name)))
+        }
+        async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
+            Ok(vec![])
+        }
+        async fn update(&self, _server: &McpServer) -> Result<(), McpRepositoryError> {
+            unimplemented!()
+        }
+        async fn delete(&self, _id: i64) -> Result<(), McpRepositoryError> {
+            Ok(())
+        }
+        async fn update_last_connected(&self, _id: i64) -> Result<(), McpRepositoryError> {
             Ok(())
         }
     }
@@ -147,6 +175,7 @@ mod tests {
         let repos = Repos {
             models: Arc::new(MockModelRepo),
             settings: Arc::new(MockSettingsRepo::new()),
+            mcp_servers: Arc::new(MockMcpRepo),
         };
         let runner = Arc::new(MockRunner);
 
