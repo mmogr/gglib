@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "Rust tests",
-  "message": "failed",
-  "color": "red"
+  "message": "501/501 (100%)",
+  "color": "brightgreen"
 }
