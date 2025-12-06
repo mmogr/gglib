@@ -58,12 +58,13 @@ gglib-runtime = { path = "crates/gglib-runtime" }
 unsafe_code = "deny"
 
 [workspace.lints.clippy]
-all = "warn"
-pedantic = "warn"
-nursery = "warn"
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
 # Allow these common patterns
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
+collapsible_if = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
