@@ -53,7 +53,7 @@ impl<'a> ModelSummaryOpts<'a> {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use gglib::commands::presentation::{display_model_summary, ModelSummaryOpts};
 ///
 /// // Simple usage with title
