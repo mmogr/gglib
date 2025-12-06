@@ -1,63 +1,162 @@
-//! Application core facade.
+//! AppCore - the primary application facade.
 //!
-//! `AppCore` is the unified entry point for all business logic in gglib.
-//! It accepts trait objects for repositories and process runner, allowing
-//! it to be used with any backend implementation.
-
-use std::sync::Arc;
+//! This is the composition root for core services. Adapters (CLI, GUI, Web)
+//! receive an AppCore instance and use it to access all functionality.
 
 use crate::ports::{ProcessRunner, Repos};
-use crate::services::{ModelService, ServerService, SettingsService};
+use std::sync::Arc;
 
-/// Unified application core providing access to all services.
+use super::{ModelService, ServerService, SettingsService};
+
+/// The core application facade.
 ///
-/// `AppCore` is the central facade for all business logic. It holds
-/// references to services that operate on port traits, making it
-/// independent of any specific infrastructure implementation.
+/// `AppCore` provides access to all core services. It's constructed at the
+/// adapter's composition root (main.rs or bootstrap.rs) with concrete
+/// implementations of repositories and runners.
 ///
 /// # Example
 ///
 /// ```ignore
-/// // In adapter bootstrap:
-/// let repos = gglib_db::CoreFactory::build_repos(pool);
-/// let runner = Arc::new(gglib_runtime::LlamaServerRunner::new(...));
+/// let repos = Repos { models: model_repo, settings: settings_repo };
+/// let runner = Arc::new(LlamaServerRunner::new(...));
 /// let core = AppCore::new(repos, runner);
 ///
-/// // Use services
+/// // Access services
 /// let models = core.models().list().await?;
 /// ```
 pub struct AppCore {
-    model_service: ModelService,
-    server_service: ServerService,
-    settings_service: SettingsService,
+    models: ModelService,
+    settings: SettingsService,
+    servers: ServerService,
 }
 
 impl AppCore {
     /// Create a new AppCore with the given repositories and process runner.
     pub fn new(repos: Repos, runner: Arc<dyn ProcessRunner>) -> Self {
-        let model_service = ModelService::new(Arc::clone(&repos.models));
-        let server_service = ServerService::new(runner, Arc::clone(&repos.models));
-        let settings_service = SettingsService::new(Arc::clone(&repos.settings));
-
         Self {
-            model_service,
-            server_service,
-            settings_service,
+            models: ModelService::new(repos.models),
+            settings: SettingsService::new(repos.settings),
+            servers: ServerService::new(runner),
         }
     }
 
-    /// Access the model service for CRUD operations on models.
+    /// Access the model service.
     pub fn models(&self) -> &ModelService {
-        &self.model_service
+        &self.models
     }
 
-    /// Access the server service for managing llama-server instances.
-    pub fn servers(&self) -> &ServerService {
-        &self.server_service
-    }
-
-    /// Access the settings service for application configuration.
+    /// Access the settings service.
     pub fn settings(&self) -> &SettingsService {
-        &self.settings_service
+        &self.settings
+    }
+
+    /// Access the server service.
+    pub fn servers(&self) -> &ServerService {
+        &self.servers
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Model, NewModel};
+    use crate::ports::{
+        ModelRepository, ProcessError, ProcessHandle, ProcessRunner, RepositoryError,
+        ServerConfig, ServerHealth, SettingsRepository,
+    };
+    use crate::settings::Settings;
+    use async_trait::async_trait;
+    use std::sync::Mutex;
+
+    struct MockModelRepo;
+
+    #[async_trait]
+    impl ModelRepository for MockModelRepo {
+        async fn list(&self) -> Result<Vec<Model>, RepositoryError> {
+            Ok(vec![])
+        }
+        async fn get_by_id(&self, id: i64) -> Result<Model, RepositoryError> {
+            Err(RepositoryError::NotFound(format!("id={}", id)))
+        }
+        async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError> {
+            Err(RepositoryError::NotFound(format!("name={}", name)))
+        }
+        async fn insert(&self, _model: &NewModel) -> Result<Model, RepositoryError> {
+            unimplemented!()
+        }
+        async fn update(&self, _model: &Model) -> Result<(), RepositoryError> {
+            unimplemented!()
+        }
+        async fn delete(&self, _id: i64) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+    }
+
+    struct MockSettingsRepo {
+        settings: Mutex<Settings>,
+    }
+
+    impl MockSettingsRepo {
+        fn new() -> Self {
+            Self {
+                settings: Mutex::new(Settings::with_defaults()),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl SettingsRepository for MockSettingsRepo {
+        async fn load(&self) -> Result<Settings, RepositoryError> {
+            Ok(self.settings.lock().unwrap().clone())
+        }
+        async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
+            *self.settings.lock().unwrap() = settings.clone();
+            Ok(())
+        }
+    }
+
+    struct MockRunner;
+
+    #[async_trait]
+    impl ProcessRunner for MockRunner {
+        async fn start(&self, config: ServerConfig) -> Result<ProcessHandle, ProcessError> {
+            Ok(ProcessHandle::new(
+                config.model_id,
+                config.model_name,
+                Some(12345),
+                9000,
+                0,
+            ))
+        }
+        async fn stop(&self, _handle: &ProcessHandle) -> Result<(), ProcessError> {
+            Ok(())
+        }
+        async fn is_running(&self, _handle: &ProcessHandle) -> bool {
+            false
+        }
+        async fn health(&self, _handle: &ProcessHandle) -> Result<ServerHealth, ProcessError> {
+            Ok(ServerHealth::healthy())
+        }
+        async fn list_running(&self) -> Result<Vec<ProcessHandle>, ProcessError> {
+            Ok(vec![])
+        }
+    }
+
+    #[tokio::test]
+    async fn test_app_core_creation() {
+        let repos = Repos {
+            models: Arc::new(MockModelRepo),
+            settings: Arc::new(MockSettingsRepo::new()),
+        };
+        let runner = Arc::new(MockRunner);
+
+        let core = AppCore::new(repos, runner);
+
+        // Verify services are accessible
+        let models = core.models().list().await.unwrap();
+        assert!(models.is_empty());
+
+        let settings = core.settings().get().await.unwrap();
+        assert_eq!(settings.default_context_size, Some(4096));
     }
 }
