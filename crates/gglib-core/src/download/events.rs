@@ -41,6 +41,31 @@ pub enum DownloadStatus {
     Cancelled,
 }
 
+impl DownloadStatus {
+    /// Convert to string representation for database storage.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DownloadStatus::Queued => "queued",
+            DownloadStatus::Downloading => "downloading",
+            DownloadStatus::Completed => "completed",
+            DownloadStatus::Failed => "failed",
+            DownloadStatus::Cancelled => "cancelled",
+        }
+    }
+
+    /// Parse from string representation.
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "queued" => DownloadStatus::Queued,
+            "downloading" => DownloadStatus::Downloading,
+            "completed" => DownloadStatus::Completed,
+            "failed" => DownloadStatus::Failed,
+            "cancelled" => DownloadStatus::Cancelled,
+            _ => DownloadStatus::Queued, // Default to queued for unknown values
+        }
+    }
+}
+
 /// Single discriminated union for all download events.
 ///
 /// The frontend handles this as a TypeScript discriminated union:

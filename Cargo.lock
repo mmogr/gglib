@@ -951,6 +951,8 @@ dependencies = [
  "gglib",
  "gglib-core",
  "gglib-db",
+ "gglib-download",
+ "gglib-hf",
  "gglib-mcp",
  "gglib-runtime",
  "serde",
@@ -972,6 +974,8 @@ dependencies = [
  "gglib",
  "gglib-core",
  "gglib-db",
+ "gglib-download",
+ "gglib-hf",
  "gglib-mcp",
  "gglib-runtime",
  "tempfile",
@@ -1013,6 +1017,25 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
+ "tracing",
+]
+
+[[package]]
+name = "gglib-download"
+version = "1.5.3"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "gglib-core",
+ "gglib-hf",
+ "mockall",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tokio-util",
  "tracing",
 ]
 
@@ -1070,6 +1093,8 @@ dependencies = [
  "gglib",
  "gglib-core",
  "gglib-db",
+ "gglib-download",
+ "gglib-hf",
  "gglib-mcp",
  "gglib-runtime",
  "serde",

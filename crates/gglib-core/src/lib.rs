@@ -37,12 +37,15 @@ pub use download::{
 };
 pub use events::{AppEvent, McpServerSummary, ModelSummary, ServerSnapshotEntry};
 pub use ports::{
-    AppEventEmitter, CoreError, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
-    HfSearchOptions, HfSearchResult, McpErrorCategory, McpErrorInfo, McpRepositoryError,
-    McpServerRepository, McpServiceError, ModelRepository, NoopEmitter, ProcessError,
-    ProcessHandle, ProcessRunner, QuantizationResolver, Repos, RepositoryError, Resolution,
-    ResolvedFile, ServerConfig, ServerHealth, SettingsRepository,
+    AppEventEmitter, CompletedDownload, CoreError, DownloadManagerConfig, DownloadManagerPort,
+    DownloadRequest, DownloadStateRepositoryPort, GgufMetadata, GgufParseError, GgufParserPort,
+    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
+    HfSearchResult, McpErrorCategory, McpErrorInfo, McpRepositoryError, McpServerRepository,
+    McpServiceError, ModelRegistrarPort, ModelRepository, NoopEmitter, NoopGgufParser,
+    ProcessError, ProcessHandle, ProcessRunner, QuantizationResolver, Repos, RepositoryError,
+    Resolution, ResolvedFile, ServerConfig, ServerHealth, SettingsRepository,
 };
+pub use services::ModelRegistrar;
 pub use settings::{Settings, SettingsError, SettingsUpdate, validate_settings};
 
 // Silence unused dev-dependency warnings until we add mock-based tests

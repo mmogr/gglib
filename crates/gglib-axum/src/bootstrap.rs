@@ -7,6 +7,7 @@
 //! - Process runner (via gglib-runtime)
 //! - Core services (via gglib-core)
 //! - MCP service (via gglib-mcp)
+//! - Download manager (via gglib-download)
 //!
 //! All handler code delegates to AppCore without touching infrastructure.
 
@@ -14,16 +15,21 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use gglib_core::ports::{NoopEmitter, ProcessRunner, Repos};
+use gglib_core::ports::{
+    DownloadManagerConfig, DownloadManagerPort, NoopEmitter, NoopGgufParser, ProcessRunner, Repos,
+};
 use gglib_core::services::AppCore;
+use gglib_core::ModelRegistrar;
 use gglib_db::CoreFactory;
+use gglib_download::{build_download_manager, DownloadManagerDeps};
+use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 
 // Import from legacy gglib crate (temporary until handlers migrate here)
 use gglib::commands::gui_web::{self, state::AppState};
 use gglib::services::gui_backend::GuiBackend;
-use gglib::utils::paths::{get_database_path, get_llama_server_path};
+use gglib::utils::paths::{get_database_path, get_llama_server_path, resolve_models_dir};
 
 /// Server configuration for the Axum adapter.
 #[derive(Debug, Clone)]
@@ -58,6 +64,8 @@ pub struct AxumContext {
     pub runner: Arc<dyn ProcessRunner>,
     /// MCP service for managing MCP servers.
     pub mcp: Arc<McpService>,
+    /// Download manager for handling model downloads.
+    pub downloads: Arc<dyn DownloadManagerPort>,
     /// Server configuration.
     pub config: ServerConfig,
 }
@@ -81,6 +89,7 @@ impl AxumContext {
 /// 2. Creates the process runner
 /// 3. Assembles the AppCore from services
 /// 4. Creates the MCP service with injected repository
+/// 5. Creates the download manager with injected dependencies
 ///
 /// # Arguments
 ///
@@ -94,7 +103,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let db_path = get_database_path()?;
     let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
     let pool = CoreFactory::create_pool(&db_url).await?;
-    let repos = CoreFactory::build_repos(pool);
+    let repos = CoreFactory::build_repos(pool.clone());
 
     // 2. Create process runner
     let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
@@ -110,10 +119,37 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // For Axum, we use NoopEmitter for now. SSE event broadcasting can be added later.
     let mcp = Arc::new(McpService::new(repos.mcp_servers.clone(), Arc::new(NoopEmitter)));
 
+    // 5. Create download manager with injected dependencies
+    let models_dir = resolve_models_dir(None)?.path;
+    let download_config = DownloadManagerConfig::new(models_dir);
+
+    // Create the model registrar (composes over model repository + GGUF parser)
+    let model_registrar = Arc::new(ModelRegistrar::new(
+        repos.models.clone(),
+        Arc::new(NoopGgufParser), // Axum uses noop parser for now
+    ));
+
+    // Create the download state repository
+    let download_repo = CoreFactory::download_state_repository(pool);
+
+    // Create the HuggingFace client
+    let hf_client = Arc::new(DefaultHfClient::new(HfClientConfig::default()));
+
+    // Build the download manager
+    let downloads: Arc<dyn DownloadManagerPort> = Arc::new(build_download_manager(
+        DownloadManagerDeps {
+            model_registrar,
+            download_repo,
+            hf_client,
+            config: download_config,
+        },
+    ));
+
     Ok(AxumContext {
         app,
         runner,
         mcp,
+        downloads,
         config,
     })
 }
@@ -122,6 +158,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
 pub fn bootstrap_with(
     repos: Repos,
     runner: Arc<dyn ProcessRunner>,
+    downloads: Arc<dyn DownloadManagerPort>,
     config: ServerConfig,
 ) -> AxumContext {
     let app = AppCore::new(repos.clone(), runner.clone());
@@ -130,6 +167,7 @@ pub fn bootstrap_with(
         app,
         runner,
         mcp,
+        downloads,
         config,
     }
 }
