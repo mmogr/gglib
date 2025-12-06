@@ -4,6 +4,7 @@
 //! This module is independently testable and has no download logic.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use chrono::Utc;
@@ -11,7 +12,7 @@ use chrono::Utc;
 use crate::download::domain::config::DownloadResult;
 use crate::download::domain::types::Quantization;
 use crate::models::Gguf;
-use crate::services::{AppCore, database};
+use crate::services::AppCore;
 use crate::utils::validation;
 
 /// Register a downloaded model in the database.
@@ -21,12 +22,13 @@ use crate::utils::validation;
 ///
 /// # Arguments
 ///
+/// * `core` - AppCore for database access
 /// * `result` - The download result containing paths and metadata
 ///
 /// # Returns
 ///
 /// Returns the created `Gguf` model on success.
-pub async fn register_model(result: &DownloadResult) -> Result<Gguf> {
+pub async fn register_model(core: Arc<AppCore>, result: &DownloadResult) -> Result<Gguf> {
     let file_path = result.db_path();
     let file_path_str = file_path
         .to_str()
@@ -91,8 +93,6 @@ pub async fn register_model(result: &DownloadResult) -> Result<Gguf> {
 
     println!("Adding model to database...");
 
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
     core.models().add(&model).await?;
 
     println!("✓ Successfully added model to database:");
@@ -110,6 +110,7 @@ pub async fn register_model(result: &DownloadResult) -> Result<Gguf> {
 ///
 /// Prefer using `register_model` with a `DownloadResult` when possible.
 pub async fn register_model_from_path(
+    core: Arc<AppCore>,
     repo_id: &str,
     commit_sha: &str,
     file_path: &Path,
@@ -125,6 +126,6 @@ pub async fn register_model_from_path(
         total_bytes: 0,
     };
 
-    register_model(&result).await?;
+    register_model(core, &result).await?;
     Ok(())
 }

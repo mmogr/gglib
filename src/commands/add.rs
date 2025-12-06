@@ -6,10 +6,11 @@
 
 use crate::{
     gguf, models,
-    services::{AppCore, database},
+    services::AppCore,
     utils::{input, validation},
 };
 use anyhow::Result;
+use std::sync::Arc;
 
 /// Handles the "add" command to add a new GGUF model to the database.
 ///
@@ -40,21 +41,21 @@ use anyhow::Result;
 ///
 /// ```rust,no_run
 /// use gglib::commands::add::handle_add;
+/// use gglib::services::AppCore;
+/// use std::sync::Arc;
 ///
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {
-///     handle_add("/path/to/model.gguf".to_string()).await?;
+///     let pool = gglib::services::database::setup_database().await?;
+///     let core = Arc::new(AppCore::new(pool));
+///     handle_add(core, "/path/to/model.gguf".to_string()).await?;
 ///     Ok(())
 /// }
 /// ```
-pub async fn handle_add(file_path: String) -> Result<()> {
+pub async fn handle_add(core: Arc<AppCore>, file_path: String) -> Result<()> {
     // Validate the GGUF file and extract metadata
     let gguf_metadata = validation::validate_and_parse_gguf(&file_path)?;
     println!("File validation and metadata extraction successful.");
-
-    // Set up AppCore with database connection
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
 
     // Display extracted metadata to the user
     println!("\nExtracted metadata:");

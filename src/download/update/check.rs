@@ -1,10 +1,11 @@
 //! Update checking for downloaded models.
 
 use anyhow::Result;
+use std::sync::Arc;
 
 use crate::commands::download::{create_hf_api, get_models_directory};
 use crate::models::Gguf;
-use crate::services::{AppCore, database};
+use crate::services::AppCore;
 
 /// Check if a single model needs updates.
 ///
@@ -51,10 +52,7 @@ pub async fn check_model_update(model: &Gguf, hf_repo: &str) -> Result<()> {
 /// Handle the check-updates CLI command.
 ///
 /// Can check a single model by ID or all models at once.
-pub async fn handle_check_updates(model_id: Option<u32>, all: bool) -> Result<()> {
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
-
+pub async fn handle_check_updates(core: Arc<AppCore>, model_id: Option<u32>, all: bool) -> Result<()> {
     if all {
         println!("Checking updates for all models...");
         let models = core.models().list().await?;

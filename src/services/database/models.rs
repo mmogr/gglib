@@ -197,6 +197,29 @@ pub async fn find_model_by_identifier(pool: &SqlitePool, identifier: &str) -> Re
     Ok(None)
 }
 
+/// Find a model by name with case-insensitive exact match.
+///
+/// This function searches for a model where the name matches exactly
+/// (ignoring case). Unlike `find_models_by_name`, this returns at most
+/// one model and requires an exact match rather than partial/substring.
+///
+/// Used by ProcessManager for SingleSwap strategy when resolving model names.
+pub async fn find_model_by_name_case_insensitive(
+    pool: &SqlitePool,
+    name: &str,
+) -> Result<Option<Gguf>> {
+    let query = format!(
+        "SELECT {} FROM models WHERE LOWER(name) = LOWER(?) LIMIT 1",
+        MODEL_SELECT_COLUMNS
+    );
+    let model = sqlx::query_as::<_, Gguf>(&query)
+        .bind(name)
+        .fetch_optional(pool)
+        .await?;
+
+    Ok(model)
+}
+
 /// Update a model in the database.
 ///
 /// Updates an existing model record with new values.

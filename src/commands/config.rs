@@ -1,6 +1,5 @@
 use crate::cli::{ConfigCommand, ModelsDirCommand, SettingsCommand};
 use crate::services::core::AppCore;
-use crate::services::database;
 use crate::services::settings::{Settings, SettingsUpdate, validate_settings};
 use crate::utils::input;
 use crate::utils::paths::{
@@ -8,14 +7,15 @@ use crate::utils::paths::{
     resolve_models_dir,
 };
 use anyhow::Result;
+use std::sync::Arc;
 
 /// Entry point for `gglib config` commands.
-pub fn handle(command: ConfigCommand) -> Result<()> {
+pub fn handle(core: Arc<AppCore>, command: ConfigCommand) -> Result<()> {
     match command {
         ConfigCommand::ModelsDir { command } => handle_models_dir(command),
         ConfigCommand::Settings { command } => {
             // Settings commands need async runtime for database access
-            tokio::runtime::Runtime::new()?.block_on(handle_settings(command))
+            tokio::runtime::Runtime::new()?.block_on(handle_settings(core, command))
         }
     }
 }
@@ -64,10 +64,7 @@ fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
     }
 }
 
-async fn handle_settings(command: SettingsCommand) -> Result<()> {
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
-
+async fn handle_settings(core: Arc<AppCore>, command: SettingsCommand) -> Result<()> {
     match command {
         SettingsCommand::Show => {
             let settings = core.settings().get().await?;

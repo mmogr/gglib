@@ -4,8 +4,8 @@
 //! database in a formatted table with key metadata.
 
 use crate::services::core::AppCore;
-use crate::services::database;
 use anyhow::Result;
+use std::sync::Arc;
 
 /// Handles the "list" command to display all GGUF models in the database.
 ///
@@ -27,18 +27,18 @@ use anyhow::Result;
 ///
 /// ```rust,no_run
 /// use gglib::commands::list::handle_list;
+/// use gglib::services::AppCore;
+/// use std::sync::Arc;
 ///
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {
-///     handle_list().await?;
+///     let pool = gglib::services::database::setup_database().await?;
+///     let core = Arc::new(AppCore::new(pool));
+///     handle_list(core).await?;
 ///     Ok(())
 /// }
 /// ```
-pub async fn handle_list() -> Result<()> {
-    // Set up database and AppCore
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
-
+pub async fn handle_list(core: Arc<AppCore>) -> Result<()> {
     // Retrieve all models via AppCore
     let models = core.models().list().await?;
 

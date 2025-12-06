@@ -10,10 +10,9 @@
 
 use crate::commands::common::{resolve_jinja_flag, resolve_reasoning_format_with_metadata};
 use crate::models::Gguf;
-use crate::services::database;
+use crate::services::core::ModelService;
 use crate::utils::process::{ProcessCore, ServerInfo, check_process_health, wait_for_http_health};
 use anyhow::{Result, anyhow};
-use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -25,7 +24,7 @@ pub enum ProcessStrategy {
     Concurrent { max_concurrent: usize },
 
     /// Only allow one model at a time, auto-swap when different model requested
-    SingleSwap { db_pool: SqlitePool },
+    SingleSwap { model_service: Arc<ModelService> },
 }
 
 /// Unified process manager for llama-server instances
@@ -57,14 +56,14 @@ impl ProcessManager {
 
     /// Create a new ProcessManager with SingleSwap strategy (for Proxy)
     pub fn new_single_swap(
-        db_pool: SqlitePool,
+        model_service: Arc<ModelService>,
         base_port: u16,
         llama_server_path: impl Into<String>,
     ) -> Self {
         let core = ProcessCore::new(base_port, llama_server_path);
         Self {
             core: Arc::new(RwLock::new(core)),
-            strategy: ProcessStrategy::SingleSwap { db_pool },
+            strategy: ProcessStrategy::SingleSwap { model_service },
             current_model: Arc::new(RwLock::new(None)),
         }
     }
@@ -176,8 +175,8 @@ impl ProcessManager {
         default_context: u64,
     ) -> Result<u16> {
         // Only works with SingleSwap strategy
-        let db_pool = match &self.strategy {
-            ProcessStrategy::SingleSwap { db_pool } => db_pool.clone(),
+        let model_service = match &self.strategy {
+            ProcessStrategy::SingleSwap { model_service } => Arc::clone(model_service),
             ProcessStrategy::Concurrent { .. } => {
                 return Err(anyhow!(
                     "ensure_model_running() is only available for SingleSwap strategy"
@@ -216,7 +215,7 @@ impl ProcessManager {
         }
 
         // Find the model to get its metadata
-        let model = self.find_model(&db_pool, model_name).await?;
+        let model = self.find_model(&model_service, model_name).await?;
         let model_id = model.id.ok_or_else(|| anyhow!("Model has no ID"))?;
 
         // Determine context size
@@ -260,21 +259,19 @@ impl ProcessManager {
         Ok(port)
     }
 
-    /// Find a model by name in the database (SingleSwap helper)
-    async fn find_model(&self, db_pool: &SqlitePool, model_name: &str) -> Result<Gguf> {
+    /// Find a model by name using ModelService (SingleSwap helper)
+    async fn find_model(&self, model_service: &ModelService, model_name: &str) -> Result<Gguf> {
         // Try exact name match first
-        if let Ok(Some(model)) = database::find_model_by_identifier(db_pool, model_name).await {
+        if let Ok(Some(model)) = model_service.find_by_identifier(model_name).await {
             return Ok(model);
         }
 
         // Try case-insensitive search
-        let query = "SELECT * FROM models WHERE LOWER(name) = LOWER(?) LIMIT 1";
-        let model: Option<Gguf> = sqlx::query_as::<_, Gguf>(query)
-            .bind(model_name)
-            .fetch_optional(db_pool)
-            .await?;
+        if let Ok(Some(model)) = model_service.find_by_name_case_insensitive(model_name).await {
+            return Ok(model);
+        }
 
-        model.ok_or_else(|| anyhow!("Model '{}' not found in database", model_name))
+        Err(anyhow!("Model '{}' not found in database", model_name))
     }
 
     /// Start a llama-server instance for SingleSwap strategy
@@ -495,10 +492,10 @@ impl ProcessManager {
         ))
     }
 
-    /// Get the database pool (for SingleSwap strategy)
-    pub fn get_db_pool(&self) -> Option<SqlitePool> {
+    /// Get the ModelService (for SingleSwap strategy)
+    pub fn get_model_service(&self) -> Option<Arc<ModelService>> {
         match &self.strategy {
-            ProcessStrategy::SingleSwap { db_pool } => Some(db_pool.clone()),
+            ProcessStrategy::SingleSwap { model_service } => Some(Arc::clone(model_service)),
             ProcessStrategy::Concurrent { .. } => None,
         }
     }

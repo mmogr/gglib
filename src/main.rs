@@ -8,6 +8,8 @@
 use anyhow::Result;
 use clap::Parser;
 use gglib::{cli, commands};
+use gglib::services::{AppCore, database};
+use std::sync::Arc;
 
 /// The main entry point for the GGUF library management CLI application.
 ///
@@ -58,7 +60,14 @@ async fn main() -> Result<()> {
     }
 
     match cli.command {
-        Some(command) => run_command(command).await,
+        Some(command) => {
+            // Create centralized AppCore for commands that need database access
+            // Some commands (CheckDeps, Gui, Llama, AssistantUi) don't need it
+            // but creating it is cheap and simplifies the interface
+            let pool = database::setup_database().await?;
+            let core = Arc::new(AppCore::new(pool));
+            run_command(core, command).await
+        }
         None => {
             println!("Use --help to see available commands");
             Ok(())
@@ -67,12 +76,12 @@ async fn main() -> Result<()> {
 }
 
 /// Execute a command by dispatching to the appropriate handler
-async fn run_command(command: cli::Commands) -> Result<()> {
+async fn run_command(core: Arc<AppCore>, command: cli::Commands) -> Result<()> {
     use cli::{AssistantUiCommand, Commands, LlamaCommand};
 
     match command {
         Commands::CheckDeps => commands::check_deps::handle_check_deps().await,
-        Commands::Add { file_path } => commands::add::handle_add(file_path).await,
+        Commands::Add { file_path } => commands::add::handle_add(core, file_path).await,
         Commands::Download {
             model_id,
             quantization,
@@ -82,6 +91,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
             force,
         } => {
             commands::download::execute(
+                core,
                 model_id,
                 quantization,
                 list_quants,
@@ -96,10 +106,10 @@ async fn run_command(command: cli::Commands) -> Result<()> {
             .await
         }
         Commands::CheckUpdates { model_id, all } => {
-            commands::download::handle_check_updates(model_id, all).await
+            commands::download::handle_check_updates(core, model_id, all).await
         }
         Commands::UpdateModel { model_id, force } => {
-            commands::download::handle_update_model(model_id, force).await
+            commands::download::handle_update_model(core, model_id, force).await
         }
         Commands::Search {
             query,
@@ -112,9 +122,9 @@ async fn run_command(command: cli::Commands) -> Result<()> {
             limit,
             size,
         } => commands::download::handle_browse(category, limit, size).await,
-        Commands::List => commands::list::handle_list().await,
+        Commands::List => commands::list::handle_list(core).await,
         Commands::Remove { identifier, force } => {
-            commands::remove::handle_remove(identifier, force).await
+            commands::remove::handle_remove(core, identifier, force).await
         }
         Commands::Update {
             id,
@@ -142,7 +152,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
                 dry_run,
                 force,
             };
-            commands::update::handle_update(args).await
+            commands::update::handle_update(core, args).await
         }
         Commands::Serve {
             id,
@@ -150,7 +160,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
             mlock,
             jinja,
             port,
-        } => commands::serve::handle_serve(id, ctx_size, mlock, jinja, port).await,
+        } => commands::serve::handle_serve(core, id, ctx_size, mlock, jinja, port).await,
         Commands::Chat {
             identifier,
             ctx_size,
@@ -162,7 +172,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
             multiline_input,
             simple_io,
         } => {
-            commands::chat::handle_chat(commands::chat::ChatCommandArgs {
+            commands::chat::handle_chat(core, commands::chat::ChatCommandArgs {
                 identifier,
                 ctx_size,
                 mlock,
@@ -269,8 +279,7 @@ async fn run_command(command: cli::Commands) -> Result<()> {
             llama_port,
             default_context,
         } => {
-            let pool = gglib::services::database::setup_database().await?;
-            gglib::proxy::start_proxy(host, port, pool, llama_port, default_context).await
+            gglib::proxy::start_proxy(host, port, core.models(), llama_port, default_context).await
         }
         Commands::Llama { command } => match command {
             LlamaCommand::Install {
@@ -301,6 +310,6 @@ async fn run_command(command: cli::Commands) -> Result<()> {
                 commands::assistant_ui::handle_status().map_err(|e| anyhow::anyhow!(e))
             }
         },
-        Commands::Config { command } => commands::config::handle(command),
+        Commands::Config { command } => commands::config::handle(core, command),
     }
 }

@@ -3,10 +3,10 @@
 //! This service wraps the proxy module to provide start/stop/status
 //! operations for the OpenAI-compatible proxy server.
 
+use super::ModelService;
 use crate::services::process_manager::ProcessManager;
 use crate::utils::paths::get_llama_server_path;
 use anyhow::{Result, anyhow};
-use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -29,7 +29,7 @@ pub struct ProxyStatus {
 /// The proxy provides an OpenAI-compatible API that automatically
 /// swaps models based on incoming requests.
 pub struct ProxyService {
-    db_pool: SqlitePool,
+    model_service: Arc<ModelService>,
     proxy_manager: Arc<RwLock<Option<ProcessManager>>>,
     proxy_shutdown: Arc<RwLock<Option<tokio::sync::oneshot::Sender<()>>>>,
     proxy_port: Arc<RwLock<Option<u16>>>,
@@ -40,10 +40,10 @@ impl ProxyService {
     ///
     /// # Arguments
     ///
-    /// * `db_pool` - Database pool for model lookups
-    pub fn new(db_pool: SqlitePool) -> Self {
+    /// * `model_service` - ModelService for model lookups
+    pub fn new(model_service: Arc<ModelService>) -> Self {
         Self {
-            db_pool,
+            model_service,
             proxy_manager: Arc::new(RwLock::new(None)),
             proxy_shutdown: Arc::new(RwLock::new(None)),
             proxy_port: Arc::new(RwLock::new(None)),
@@ -87,7 +87,7 @@ impl ProxyService {
             .unwrap_or_else(|_| "llama-server".to_string());
 
         let manager =
-            ProcessManager::new_single_swap(self.db_pool.clone(), start_port, llama_server_path);
+            ProcessManager::new_single_swap(Arc::clone(&self.model_service), start_port, llama_server_path);
 
         // Start proxy server
         crate::proxy::start_proxy_with_shutdown(
@@ -174,7 +174,8 @@ mod tests {
     #[tokio::test]
     async fn test_proxy_service_creation() {
         let pool = database::setup_test_database().await.unwrap();
-        let service = ProxyService::new(pool);
+        let model_service = Arc::new(ModelService::new(pool));
+        let service = ProxyService::new(model_service);
 
         // Should not be running initially
         assert!(!service.is_running().await);
@@ -183,7 +184,8 @@ mod tests {
     #[tokio::test]
     async fn test_proxy_status_not_running() {
         let pool = database::setup_test_database().await.unwrap();
-        let service = ProxyService::new(pool);
+        let model_service = Arc::new(ModelService::new(pool));
+        let service = ProxyService::new(model_service);
 
         let status = service.status().await;
         assert!(!status.running);
@@ -194,7 +196,8 @@ mod tests {
     #[tokio::test]
     async fn test_proxy_stop_when_not_running() {
         let pool = database::setup_test_database().await.unwrap();
-        let service = ProxyService::new(pool);
+        let model_service = Arc::new(ModelService::new(pool));
+        let service = ProxyService::new(model_service);
 
         // Should error when trying to stop a non-running proxy
         let result = service.stop().await;

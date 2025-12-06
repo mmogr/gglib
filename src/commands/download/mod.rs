@@ -1,8 +1,10 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/commands_download_docs.md"))]
 
 use anyhow::Result;
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
+use crate::services::AppCore;
 use crate::services::core::PidStorage;
 
 // Sub-modules
@@ -31,6 +33,7 @@ pub use utils::*;
 /// Execute the download command
 #[allow(clippy::too_many_arguments)]
 pub async fn execute(
+    core: Arc<AppCore>,
     model_id: String,
     quantization: Option<String>,
     list_quants: bool,
@@ -66,6 +69,7 @@ pub async fn execute(
             pid_key,
         },
         first_shard_path: None, // CLI path handles sharding differently via download_sharded_files
+        core: Some(core),
     };
 
     // Download the model

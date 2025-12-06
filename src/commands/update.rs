@@ -4,10 +4,11 @@
 //! including model metadata, architecture information, and custom key-value pairs.
 
 use crate::models::Gguf;
-use crate::services::{AppCore, database};
+use crate::services::AppCore;
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::io::{self, Write};
+use std::sync::Arc;
 use tracing::warn;
 
 /// Arguments for the update command
@@ -26,9 +27,7 @@ pub struct UpdateArgs {
 }
 
 /// Handle the update command from the CLI
-pub async fn handle_update(args: UpdateArgs) -> Result<()> {
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
+pub async fn handle_update(core: Arc<AppCore>, args: UpdateArgs) -> Result<()> {
     execute(&core, args).await
 }
 

@@ -93,6 +93,23 @@ impl ModelService {
         database::find_models_by_name(&self.db_pool, name).await
     }
 
+    /// Find a model by exact name with case-insensitive matching.
+    ///
+    /// Unlike `find_by_identifier`, this performs case-insensitive exact match
+    /// on the name only (no ID fallback). Used by ProcessManager for SingleSwap
+    /// strategy when resolving model names from OpenAI API requests.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Model name to search for (case-insensitive exact match)
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Some(model))` if found, `Ok(None)` if not found.
+    pub async fn find_by_name_case_insensitive(&self, name: &str) -> Result<Option<Gguf>> {
+        database::find_model_by_name_case_insensitive(&self.db_pool, name).await
+    }
+
     /// Find a model by its file path.
     ///
     /// Used for idempotency checks before adding downloaded models.

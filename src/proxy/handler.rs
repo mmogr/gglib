@@ -1,6 +1,7 @@
 //! HTTP handler implementation for the OpenAI-compatible proxy.
 
 use super::models::*;
+use crate::services::core::ModelService;
 use crate::services::process_manager::ProcessManager;
 use axum::{
     Json, Router,
@@ -14,6 +15,7 @@ use bytes::Bytes;
 use futures_util::TryStreamExt;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 
@@ -21,7 +23,7 @@ use tracing::{debug, error, info};
 #[derive(Clone)]
 struct AppState {
     manager: ProcessManager,
-    db_pool: sqlx::SqlitePool,
+    model_service: Arc<ModelService>,
     default_context: u64,
 }
 
@@ -29,7 +31,7 @@ struct AppState {
 pub async fn start_proxy(
     host: String,
     port: u16,
-    db_pool: sqlx::SqlitePool,
+    model_service: Arc<ModelService>,
     start_port: u16,
     default_context: u64,
 ) -> anyhow::Result<()> {
@@ -48,11 +50,11 @@ pub async fn start_proxy(
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "llama-server".to_string());
 
-    let manager = ProcessManager::new_single_swap(db_pool.clone(), start_port, llama_server_path);
+    let manager = ProcessManager::new_single_swap(Arc::clone(&model_service), start_port, llama_server_path);
 
     let state = AppState {
         manager: manager.clone(),
-        db_pool,
+        model_service,
         default_context,
     };
 
@@ -101,14 +103,14 @@ pub async fn start_proxy_with_shutdown(
     info!("Starting OpenAI-compatible proxy on {}:{}", host, port);
     info!("Default context size: {}", default_context);
 
-    // Extract db_pool from manager
-    let db_pool = manager.get_db_pool().ok_or_else(|| {
-        anyhow::anyhow!("ProcessManager must have SingleSwap strategy with db_pool")
+    // Extract model_service from manager
+    let model_service = manager.get_model_service().ok_or_else(|| {
+        anyhow::anyhow!("ProcessManager must have SingleSwap strategy with model_service")
     })?;
 
     let state = AppState {
         manager: manager.clone(),
-        db_pool,
+        model_service,
         default_context,
     };
 
@@ -155,13 +157,14 @@ async fn health_check() -> impl IntoResponse {
 }
 
 /// List all models from the database in OpenAI format
+///
+/// Note: Returns models sorted by added_at (descending) as provided by ModelService.
+/// OpenAI API does not guarantee ordering, so this is acceptable.
 async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
-    // Query all models from database
-    let query = "SELECT * FROM models ORDER BY name";
-    let models: Result<Vec<crate::models::Gguf>, _> =
-        sqlx::query_as(query).fetch_all(&state.db_pool).await;
+    // Use ModelService to list models (no raw SQL in adapter layer)
+    let models = state.model_service.list().await;
 
     match models {
         Ok(models) => {
