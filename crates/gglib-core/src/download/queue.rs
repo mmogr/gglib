@@ -287,7 +287,9 @@ mod tests {
         assert!(snapshot.is_empty());
         assert!(!snapshot.is_full());
 
-        snapshot.items.push(QueuedDownload::new("id1", "model", "Display", 1, 0));
+        snapshot
+            .items
+            .push(QueuedDownload::new("id1", "model", "Display", 1, 0));
         assert!(!snapshot.is_empty());
         assert_eq!(snapshot.len(), 1);
         assert!(snapshot.get("id1").is_some());

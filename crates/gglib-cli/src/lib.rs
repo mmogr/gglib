@@ -45,7 +45,7 @@ pub mod parser;
 
 // Re-export primary types for convenient access
 pub use assistant_ui_commands::AssistantUiCommand;
-pub use bootstrap::{bootstrap, CliConfig, CliContext};
+pub use bootstrap::{CliConfig, CliContext, bootstrap};
 pub use commands::Commands;
 pub use config_commands::{ConfigCommand, ModelsDirCommand, SettingsCommand};
 pub use error::CliError;

@@ -5,7 +5,7 @@ use sqlx::SqlitePool;
 
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
-use super::row_mappers::{row_to_model, normalized_file_path_string, MODEL_SELECT_COLUMNS};
+use super::row_mappers::{MODEL_SELECT_COLUMNS, normalized_file_path_string, row_to_model};
 
 /// SQLite implementation of the ModelRepository trait.
 ///

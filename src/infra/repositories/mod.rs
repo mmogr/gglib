@@ -5,4 +5,3 @@
 
 // SHIM: Re-export from gglib_db crate (remove in Phase 5 final cleanup)
 pub use gglib_db::{SqliteModelRepository, SqliteSettingsRepository};
-

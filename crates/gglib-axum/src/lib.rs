@@ -41,6 +41,6 @@ pub mod error;
 pub mod routes;
 
 // Re-export primary types
-pub use bootstrap::{bootstrap, start_server, AxumContext, ServerConfig};
+pub use bootstrap::{AxumContext, ServerConfig, bootstrap, start_server};
 pub use error::HttpError;
 pub use routes::create_router;

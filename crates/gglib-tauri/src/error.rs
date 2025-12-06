@@ -58,9 +58,13 @@ impl From<RepositoryError> for TauriError {
     fn from(err: RepositoryError) -> Self {
         match err {
             RepositoryError::NotFound(msg) => TauriError::NotFound(msg),
-            RepositoryError::AlreadyExists(msg) => TauriError::InvalidInput(format!("Already exists: {}", msg)),
+            RepositoryError::AlreadyExists(msg) => {
+                TauriError::InvalidInput(format!("Already exists: {}", msg))
+            }
             RepositoryError::Storage(msg) => TauriError::Database(msg),
-            RepositoryError::Serialization(msg) => TauriError::Internal(format!("Serialization: {}", msg)),
+            RepositoryError::Serialization(msg) => {
+                TauriError::Internal(format!("Serialization: {}", msg))
+            }
             RepositoryError::Constraint(msg) => TauriError::InvalidInput(msg),
         }
     }
@@ -72,9 +76,13 @@ impl From<ProcessError> for TauriError {
             ProcessError::NotRunning(msg) => TauriError::Process(format!("Not running: {}", msg)),
             ProcessError::StartFailed(msg) => TauriError::Process(format!("Start failed: {}", msg)),
             ProcessError::StopFailed(msg) => TauriError::Process(format!("Stop failed: {}", msg)),
-            ProcessError::HealthCheckFailed(msg) => TauriError::Process(format!("Health check: {}", msg)),
+            ProcessError::HealthCheckFailed(msg) => {
+                TauriError::Process(format!("Health check: {}", msg))
+            }
             ProcessError::Configuration(msg) => TauriError::InvalidInput(msg),
-            ProcessError::ResourceExhausted(msg) => TauriError::Process(format!("Resource exhausted: {}", msg)),
+            ProcessError::ResourceExhausted(msg) => {
+                TauriError::Process(format!("Resource exhausted: {}", msg))
+            }
             ProcessError::Internal(msg) => TauriError::Internal(msg),
         }
     }

@@ -32,6 +32,6 @@ pub mod error;
 pub mod gui_backend;
 
 // Re-export primary types
-pub use bootstrap::{bootstrap, TauriConfig, TauriContext};
+pub use bootstrap::{TauriConfig, TauriContext, bootstrap};
 pub use error::TauriError;
 pub use gui_backend::GuiBackend;

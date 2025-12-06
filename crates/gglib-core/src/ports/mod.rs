@@ -19,7 +19,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 // Re-export repository traits for convenience
-pub use download::{QuantizationResolver, ResolvedFile, Resolution};
+pub use download::{QuantizationResolver, Resolution, ResolvedFile};
 pub use model_repository::ModelRepository;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use settings_repository::SettingsRepository;
@@ -50,10 +50,7 @@ pub struct Repos {
 
 impl Repos {
     /// Create a new Repos container.
-    pub fn new(
-        models: Arc<dyn ModelRepository>,
-        settings: Arc<dyn SettingsRepository>,
-    ) -> Self {
+    pub fn new(models: Arc<dyn ModelRepository>, settings: Arc<dyn SettingsRepository>) -> Self {
         Self { models, settings }
     }
 }

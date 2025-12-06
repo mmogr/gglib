@@ -43,4 +43,3 @@ pub use crate::services::huggingface::HttpBackend;
 
 // SHIM: Re-export error types from gglib_core (remove duplicates)
 pub use gglib_core::{ProcessError, RepositoryError};
-

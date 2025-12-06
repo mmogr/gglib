@@ -17,4 +17,3 @@
 // TODO: Migrate these handlers here from src/commands/
 pub use gglib::commands::add::handle_add;
 pub use gglib::commands::list::handle_list;
-

@@ -45,11 +45,11 @@ impl CliError {
     pub fn exit_code(&self) -> i32 {
         match self {
             CliError::Core(_) => 1,
-            CliError::Arguments(_) => 2,    // EX_USAGE
-            CliError::Io(_) => 74,          // EX_IOERR
-            CliError::Config(_) => 78,      // EX_CONFIG
-            CliError::Database(_) => 73,    // EX_CANTCREAT (closest fit)
-            CliError::Process(_) => 71,     // EX_OSERR
+            CliError::Arguments(_) => 2, // EX_USAGE
+            CliError::Io(_) => 74,       // EX_IOERR
+            CliError::Config(_) => 78,   // EX_CONFIG
+            CliError::Database(_) => 73, // EX_CANTCREAT (closest fit)
+            CliError::Process(_) => 71,  // EX_OSERR
         }
     }
 }

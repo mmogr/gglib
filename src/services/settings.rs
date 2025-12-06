@@ -9,8 +9,8 @@ use sqlx::SqlitePool;
 // Re-export domain types from gglib-core
 pub use gglib_core::{Settings, SettingsError, SettingsUpdate, validate_settings};
 
-use gglib_db::SqliteSettingsRepository;
 use gglib_core::SettingsRepository;
+use gglib_db::SqliteSettingsRepository;
 
 /// Initialize the settings table in the database.
 ///

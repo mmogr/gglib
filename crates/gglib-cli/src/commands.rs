@@ -4,9 +4,9 @@
 
 use clap::Subcommand;
 
-use crate::llama_commands::LlamaCommand;
-use crate::config_commands::ConfigCommand;
 use crate::assistant_ui_commands::AssistantUiCommand;
+use crate::config_commands::ConfigCommand;
+use crate::llama_commands::LlamaCommand;
 
 /// Available commands for the GGUF library management tool.
 ///

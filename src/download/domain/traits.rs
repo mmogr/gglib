@@ -12,7 +12,7 @@ use super::errors::DownloadError;
 use super::events::DownloadEvent;
 
 // Re-export pure resolution types and trait from gglib-core
-pub use gglib_core::ports::{QuantizationResolver, ResolvedFile, Resolution};
+pub use gglib_core::ports::{QuantizationResolver, Resolution, ResolvedFile};
 
 // ============================================================================
 // Executor Trait (infrastructure - stays here due to CancellationToken, Path)

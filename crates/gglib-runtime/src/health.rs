@@ -15,9 +15,7 @@ use tracing::{debug, info};
 /// whether the server responded successfully.
 pub async fn check_http_health(port: u16) -> Result<bool> {
     let health_url = format!("http://127.0.0.1:{}/health", port);
-    let client = Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()?;
+    let client = Client::builder().timeout(Duration::from_secs(2)).build()?;
 
     match client.get(&health_url).send().await {
         Ok(response) if response.status().is_success() => Ok(true),
@@ -41,9 +39,7 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 
     let max_attempts = timeout_secs;
     let mut attempt = 0;
-    let client = Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()?;
+    let client = Client::builder().timeout(Duration::from_secs(2)).build()?;
 
     loop {
         attempt += 1;

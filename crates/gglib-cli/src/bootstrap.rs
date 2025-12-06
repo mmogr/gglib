@@ -87,13 +87,11 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     let repos = CoreFactory::build_repos(pool);
 
     // 2. Create process runner
-    let runner: Arc<dyn ProcessRunner> = Arc::new(
-        LlamaServerRunner::new(
-            config.base_port,
-            config.llama_server_path.to_string_lossy(),
-            config.max_concurrent,
-        )
-    );
+    let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
+        config.base_port,
+        config.llama_server_path.to_string_lossy(),
+        config.max_concurrent,
+    ));
 
     // 3. Assemble AppCore
     let app = AppCore::new(repos, runner.clone());
@@ -102,10 +100,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
 }
 
 /// Bootstrap with custom repos and runner (for testing).
-pub fn bootstrap_with(
-    repos: Repos,
-    runner: Arc<dyn ProcessRunner>,
-) -> CliContext {
+pub fn bootstrap_with(repos: Repos, runner: Arc<dyn ProcessRunner>) -> CliContext {
     let app = AppCore::new(repos, runner.clone());
     CliContext { app, runner }
 }

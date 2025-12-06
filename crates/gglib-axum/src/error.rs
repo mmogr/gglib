@@ -79,7 +79,9 @@ impl From<RepositoryError> for HttpError {
             RepositoryError::NotFound(msg) => HttpError::NotFound(msg),
             RepositoryError::AlreadyExists(msg) => HttpError::Conflict(msg),
             RepositoryError::Storage(msg) => HttpError::Internal(format!("Storage: {}", msg)),
-            RepositoryError::Serialization(msg) => HttpError::Internal(format!("Serialization: {}", msg)),
+            RepositoryError::Serialization(msg) => {
+                HttpError::Internal(format!("Serialization: {}", msg))
+            }
             RepositoryError::Constraint(msg) => HttpError::BadRequest(msg),
         }
     }

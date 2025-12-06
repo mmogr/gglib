@@ -35,7 +35,7 @@ pub use download::{
 pub use events::{AppEvent, ModelSummary, ServerSnapshotEntry};
 pub use ports::{
     CoreError, ModelRepository, ProcessError, ProcessHandle, ProcessRunner, QuantizationResolver,
-    Repos, RepositoryError, ResolvedFile, Resolution, ServerConfig, ServerHealth,
+    Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig, ServerHealth,
     SettingsRepository,
 };
 pub use settings::{Settings, SettingsError, SettingsUpdate, validate_settings};

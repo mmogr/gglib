@@ -61,8 +61,8 @@ mod tests {
     use super::*;
     use crate::domain::{Model, NewModel};
     use crate::ports::{
-        ModelRepository, ProcessError, ProcessHandle, ProcessRunner, RepositoryError,
-        ServerConfig, ServerHealth, SettingsRepository,
+        ModelRepository, ProcessError, ProcessHandle, ProcessRunner, RepositoryError, ServerConfig,
+        ServerHealth, SettingsRepository,
     };
     use crate::settings::Settings;
     use async_trait::async_trait;

@@ -89,13 +89,11 @@ pub async fn bootstrap(config: TauriConfig) -> Result<TauriContext> {
     let repos = CoreFactory::build_repos(pool);
 
     // 2. Create process runner
-    let runner: Arc<dyn ProcessRunner> = Arc::new(
-        LlamaServerRunner::new(
-            config.base_port,
-            config.llama_server_path.to_string_lossy(),
-            config.max_concurrent,
-        )
-    );
+    let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
+        config.base_port,
+        config.llama_server_path.to_string_lossy(),
+        config.max_concurrent,
+    ));
 
     // 3. Assemble AppCore
     let app = AppCore::new(repos, runner.clone());
@@ -104,10 +102,7 @@ pub async fn bootstrap(config: TauriConfig) -> Result<TauriContext> {
 }
 
 /// Bootstrap with custom repos and runner (for testing).
-pub fn bootstrap_with(
-    repos: Repos,
-    runner: Arc<dyn ProcessRunner>,
-) -> TauriContext {
+pub fn bootstrap_with(repos: Repos, runner: Arc<dyn ProcessRunner>) -> TauriContext {
     let app = AppCore::new(repos, runner.clone());
     TauriContext { app, runner }
 }

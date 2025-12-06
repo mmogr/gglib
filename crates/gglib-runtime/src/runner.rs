@@ -4,9 +4,7 @@
 //! `ProcessRunner` trait from `gglib-core`, managing llama-server processes.
 
 use async_trait::async_trait;
-use gglib_core::ports::{
-    ProcessError, ProcessHandle, ProcessRunner, ServerConfig, ServerHealth,
-};
+use gglib_core::ports::{ProcessError, ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
@@ -171,7 +169,10 @@ impl ProcessRunner for LlamaServerRunner {
                 Ok(health)
             }
             Ok(false) => Ok(ServerHealth::unhealthy("Health check returned non-200")),
-            Err(e) => Ok(ServerHealth::unhealthy(format!("Health check error: {}", e))),
+            Err(e) => Ok(ServerHealth::unhealthy(format!(
+                "Health check error: {}",
+                e
+            ))),
         }
     }
 

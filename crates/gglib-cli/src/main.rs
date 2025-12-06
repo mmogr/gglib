@@ -12,13 +12,13 @@ use clap::Parser;
 use std::sync::Arc;
 
 use gglib_cli::{
-    AssistantUiCommand, Cli, Commands, ConfigCommand, LlamaCommand,
-    ModelsDirCommand, SettingsCommand,
+    AssistantUiCommand, Cli, Commands, ConfigCommand, LlamaCommand, ModelsDirCommand,
+    SettingsCommand,
 };
 
 // Import handlers from root gglib crate (temporary until handlers migrate here)
 use gglib::commands;
-use gglib::services::{database, AppCore};
+use gglib::services::{AppCore, database};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

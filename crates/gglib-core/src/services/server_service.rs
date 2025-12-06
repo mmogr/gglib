@@ -80,12 +80,19 @@ mod tests {
         }
 
         async fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
-            self.handles.lock().unwrap().retain(|h| h.port != handle.port);
+            self.handles
+                .lock()
+                .unwrap()
+                .retain(|h| h.port != handle.port);
             Ok(())
         }
 
         async fn is_running(&self, handle: &ProcessHandle) -> bool {
-            self.handles.lock().unwrap().iter().any(|h| h.port == handle.port)
+            self.handles
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|h| h.port == handle.port)
         }
 
         async fn health(&self, handle: &ProcessHandle) -> Result<ServerHealth, ProcessError> {

@@ -2,8 +2,8 @@
 //!
 //! This module defines the HTTP routes and creates the main router.
 
-use axum::routing::get;
 use axum::Router;
+use axum::routing::get;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -64,7 +64,9 @@ mod tests {
 
     #[test]
     fn test_router_builds() {
-        let state = Arc::new(AppState { model_repo: MockRepo });
+        let state = Arc::new(AppState {
+            model_repo: MockRepo,
+        });
         let _router = create_router(state);
         // If we get here, the router was successfully built
     }

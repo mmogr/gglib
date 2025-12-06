@@ -87,18 +87,20 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let repos = CoreFactory::build_repos(pool);
 
     // 2. Create process runner
-    let runner: Arc<dyn ProcessRunner> = Arc::new(
-        LlamaServerRunner::new(
-            config.base_port,
-            config.llama_server_path.to_string_lossy(),
-            config.max_concurrent,
-        )
-    );
+    let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
+        config.base_port,
+        config.llama_server_path.to_string_lossy(),
+        config.max_concurrent,
+    ));
 
     // 3. Assemble AppCore
     let app = AppCore::new(repos, runner.clone());
 
-    Ok(AxumContext { app, runner, config })
+    Ok(AxumContext {
+        app,
+        runner,
+        config,
+    })
 }
 
 /// Bootstrap with custom repos and runner (for testing).
@@ -108,7 +110,11 @@ pub fn bootstrap_with(
     config: ServerConfig,
 ) -> AxumContext {
     let app = AppCore::new(repos, runner.clone());
-    AxumContext { app, runner, config }
+    AxumContext {
+        app,
+        runner,
+        config,
+    }
 }
 
 // ============================================================================
@@ -140,8 +146,8 @@ pub async fn start_server(port: u16, base_port: u16, max_concurrent: usize) -> R
 
 /// Start the web server with custom GuiBackend (legacy).
 pub async fn start_server_with_backend(backend: Arc<GuiBackend>, port: u16) -> Result<()> {
-    use std::net::SocketAddr;
     use gglib::download::DownloadEvent;
+    use std::net::SocketAddr;
 
     tracing::info!("Starting web server on port {}", port);
 

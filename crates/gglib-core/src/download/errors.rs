@@ -181,21 +181,33 @@ impl DownloadError {
     pub fn user_message(&self) -> String {
         match self {
             Self::Io { message, .. } => format!("File operation failed: {}", message),
-            Self::Network { message, status_code: Some(code) } => {
+            Self::Network {
+                message,
+                status_code: Some(code),
+            } => {
                 format!("Network error (HTTP {}): {}", code, message)
             }
             Self::Network { message, .. } => format!("Network error: {}", message),
             Self::NotFound { message } => format!("Not found: {}", message),
             Self::InvalidQuantization { value } => {
-                format!("Invalid quantization '{}'. Use values like Q4_K_M, Q5_K_S, etc.", value)
+                format!(
+                    "Invalid quantization '{}'. Use values like Q4_K_M, Q5_K_S, etc.",
+                    value
+                )
             }
             Self::ResolutionFailed { message } => format!("Could not resolve file: {}", message),
             Self::QueueFull { max } => {
-                format!("Download queue is full (max {} items). Wait for a download to complete.", max)
+                format!(
+                    "Download queue is full (max {} items). Wait for a download to complete.",
+                    max
+                )
             }
             Self::Cancelled => "Download was cancelled.".to_string(),
             Self::Interrupted { bytes_downloaded } => {
-                format!("Download interrupted after {} bytes. You can resume it.", bytes_downloaded)
+                format!(
+                    "Download interrupted after {} bytes. You can resume it.",
+                    bytes_downloaded
+                )
             }
             Self::IntegrityFailed { .. } => {
                 "File integrity check failed. The download may be corrupted.".to_string()
@@ -240,7 +252,12 @@ mod tests {
     #[test]
     fn test_is_recoverable() {
         assert!(DownloadError::network("timeout").is_recoverable());
-        assert!(DownloadError::Interrupted { bytes_downloaded: 100 }.is_recoverable());
+        assert!(
+            DownloadError::Interrupted {
+                bytes_downloaded: 100
+            }
+            .is_recoverable()
+        );
         assert!(!DownloadError::Cancelled.is_recoverable());
         assert!(!DownloadError::invalid_quantization("bad").is_recoverable());
     }
