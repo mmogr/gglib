@@ -4,6 +4,12 @@
 //! crate only - a separate binary crate can be created later if a standalone
 //! server is needed.
 //!
+//! # Architecture
+//!
+//! - `error` - HTTP error types with status code mapping
+//! - `routes` - Route definitions and router construction
+//! - `handlers/` - Request handlers (to be added as migrated)
+//!
 //! # Usage
 //!
 //! ```rust,ignore
@@ -16,23 +22,18 @@
 //! ```
 
 #![deny(unsafe_code)]
+#![deny(unused_crate_dependencies)]
+
+// Silence unused dev-dependency warnings for planned test infrastructure
+#[cfg(test)]
+use tokio_test as _;
+
+// gglib-db will be used by handlers as they are migrated
+use gglib_db as _;
 
 pub mod error;
+pub mod routes;
 
-use std::sync::Arc;
-
-/// Create an Axum router with all API routes.
-///
-/// This is the main entry point for the web server adapter.
-///
-/// # Arguments
-///
-/// * `core` - The AppCore instance to use for handling requests
-///
-/// # Returns
-///
-/// An Axum Router ready to be served.
-pub fn create_router<T>(_core: Arc<T>) -> axum::Router {
-    // Placeholder - will be populated during extraction
-    axum::Router::new()
-}
+// Re-export primary types
+pub use error::HttpError;
+pub use routes::create_router;

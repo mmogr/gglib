@@ -14,21 +14,22 @@ path = "src/lib.rs"
 gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
 
-# Universal dependencies
-tokio = { workspace = true }
+# Shared deps
 serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
-async-trait = { workspace = true }
-anyhow = { workspace = true }
 
-# Tauri-specific dependencies - defined locally, not in workspace
+# Tauri-specific dependencies - will be added when commands are migrated
 # Note: tauri version should match src-tauri/Cargo.toml
 # tauri = "2.x"
+# tokio = { workspace = true }
+# serde_json = { workspace = true }
+# tracing = { workspace = true }
+# async-trait = { workspace = true }
+# anyhow = { workspace = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+serde_json = { workspace = true }
 
 [lints.rust]
 unsafe_code = "deny"
