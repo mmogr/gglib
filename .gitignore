@@ -66,3 +66,4 @@ tarpaulin-report.html
 
 # Local environment overrides
 .env
+boundary-status.json

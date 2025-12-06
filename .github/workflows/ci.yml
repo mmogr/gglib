@@ -54,8 +54,19 @@ jobs:
           npm install
           npm run build
 
-      - name: Run Rust tests
+      - name: Run Rust tests (aggregate)
         run: cargo test --verbose 2>&1 | tee rust-test-output.txt
+
+      - name: Run per-crate Rust tests
+        run: |
+          cargo test -p gglib-core --verbose 2>&1 | tee rust-test-gglib-core.txt
+          cargo test -p gglib-db --verbose 2>&1 | tee rust-test-gglib-db.txt
+          cargo test -p gglib-cli --verbose 2>&1 | tee rust-test-gglib-cli.txt
+          cargo test -p gglib-axum --verbose 2>&1 | tee rust-test-gglib-axum.txt
+          cargo test -p gglib-tauri --verbose 2>&1 | tee rust-test-gglib-tauri.txt
+
+      - name: Check crate boundaries
+        run: ./scripts/check_boundaries.sh
 
       - name: Run doctests
         run: cargo test --doc --verbose
@@ -70,6 +81,12 @@ jobs:
           name: test-results
           path: |
             rust-test-output.txt
+            rust-test-gglib-core.txt
+            rust-test-gglib-db.txt
+            rust-test-gglib-cli.txt
+            rust-test-gglib-axum.txt
+            rust-test-gglib-tauri.txt
+            boundary-status.json
             ts-test-output.txt
             ts-test-results.json
           retention-days: 30
