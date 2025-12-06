@@ -116,7 +116,8 @@ Access via `core.downloads()`:
 ### HuggingfaceClient
 
 HuggingFace Hub API integration for searching and browsing GGUF models.
-See [`services::huggingface`](../huggingface/README.md) for the full domain module documentation.
+See the [`gglib-hf`](../../../crates/gglib-hf/README.md) crate for the full implementation.
+Uses the `HfClientPort` trait from `gglib-core` for abstraction.
 
 - `search_models_page(query)` - Search models with pagination, filtering, and sorting
 - `list_quantizations(repo)` - Get available quantization variants for a model
@@ -126,11 +127,15 @@ See [`services::huggingface`](../huggingface/README.md) for the full domain modu
 
 **Example:**
 ```rust,ignore
-use gglib::services::huggingface::{HfSearchQuery, HfRepoRef};
+use gglib_core::ports::huggingface::{HfClientPort, HfSearchOptions};
+use gglib_hf::DefaultHfClient;
 
 let core = AppCore::new(pool);
-let query = HfSearchQuery::new().with_query("llama");
-let results = core.huggingface().search_models_page(&query).await?;
+let options = HfSearchOptions {
+    query: Some("llama".to_string()),
+    ..Default::default()
+};
+let results = core.huggingface().search(&options).await?;
 ```
 
 **Example:**

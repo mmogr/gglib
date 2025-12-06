@@ -34,12 +34,11 @@ pub mod settings_repository {
     pub use gglib_core::ports::settings_repository::SettingsRepository;
 }
 
-// Re-export download/HF traits from their current locations (not yet migrated to crate)
+// Re-export download traits from their current locations (not yet migrated to crate)
 pub use crate::download::domain::traits::{
     DownloadExecutor, EventCallback, ExecuteParams, ExecutionResult, QuantizationResolver,
     Resolution, ResolvedFile,
 };
-pub use crate::services::huggingface::HttpBackend;
 
 // SHIM: Re-export error types from gglib_core (remove duplicates)
 pub use gglib_core::{ProcessError, RepositoryError};

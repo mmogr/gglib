@@ -10,7 +10,21 @@ use serde_json;
 use thiserror::Error;
 
 use crate::download::domain::types::Quantization;
-use crate::services::huggingface::build_tree_url_simple;
+
+// ============================================================================
+// URL Helpers
+// ============================================================================
+
+/// Build the URL for listing files in a HuggingFace model repository.
+fn build_tree_url(model_id: &str, path: Option<&str>) -> String {
+    match path {
+        Some(p) => format!(
+            "https://huggingface.co/api/models/{}/tree/main/{}",
+            model_id, p
+        ),
+        None => format!("https://huggingface.co/api/models/{}/tree/main", model_id),
+    }
+}
 
 // ============================================================================
 // Error Types
@@ -99,7 +113,7 @@ impl QuantizationFileResolver {
         let quant_upper = quantization.to_uppercase();
 
         // Query top-level directory
-        let api_url = build_tree_url_simple(repo_id, None);
+        let api_url = build_tree_url(repo_id, None);
         let response = self.client.get(&api_url).send().await?;
 
         if !response.status().is_success() {
@@ -167,7 +181,7 @@ impl QuantizationFileResolver {
         &self,
         repo_id: &str,
     ) -> Result<Vec<Quantization>, FileResolutionError> {
-        let api_url = build_tree_url_simple(repo_id, None);
+        let api_url = build_tree_url(repo_id, None);
         let response = self.client.get(&api_url).send().await?;
 
         if !response.status().is_success() {
@@ -223,7 +237,7 @@ impl QuantizationFileResolver {
         dir_path: &str,
         quant_upper: &str,
     ) -> Result<Vec<ResolvedFile>, FileResolutionError> {
-        let sub_url = build_tree_url_simple(repo_id, Some(dir_path));
+        let sub_url = build_tree_url(repo_id, Some(dir_path));
         let response = self.client.get(&sub_url).send().await?;
 
         if !response.status().is_success() {

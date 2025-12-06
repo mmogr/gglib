@@ -24,8 +24,8 @@ pub use gglib_core::{
     RepositoryError, ServerConfig, ServerHealth, SettingsRepository,
 };
 
-// Re-export download/HF traits from their current locations (not yet migrated to crate)
+// Re-export download traits from their current locations (not yet migrated to crate)
 pub use ports::{
-    DownloadExecutor, EventCallback, ExecuteParams, ExecutionResult, HttpBackend,
+    DownloadExecutor, EventCallback, ExecuteParams, ExecutionResult,
     QuantizationResolver, Resolution, ResolvedFile,
 };
