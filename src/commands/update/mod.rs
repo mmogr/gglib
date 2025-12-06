@@ -20,7 +20,9 @@ use tracing::warn;
 pub use args::UpdateArgs;
 pub use metadata_ops::{create_updated_model, parse_metadata_removals, parse_metadata_updates};
 
-use metadata_ops::{parse_metadata_removals as parse_removals, parse_metadata_updates as parse_updates};
+use metadata_ops::{
+    parse_metadata_removals as parse_removals, parse_metadata_updates as parse_updates,
+};
 use preview::show_changes_preview;
 
 /// Handle the update command from the CLI

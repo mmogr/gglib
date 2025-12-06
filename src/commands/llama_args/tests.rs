@@ -1,9 +1,9 @@
 //! Unit tests for llama argument resolution.
 
-use super::context::{resolve_context_size, ContextResolutionSource};
-use super::jinja::{resolve_jinja_flag, JinjaResolutionSource};
+use super::context::{ContextResolutionSource, resolve_context_size};
+use super::jinja::{JinjaResolutionSource, resolve_jinja_flag};
 use super::reasoning::{
-    resolve_reasoning_format, resolve_reasoning_format_with_metadata, ReasoningFormatSource,
+    ReasoningFormatSource, resolve_reasoning_format, resolve_reasoning_format_with_metadata,
 };
 use std::collections::HashMap;
 
@@ -129,11 +129,8 @@ fn tag_overrides_metadata_detection() {
     );
 
     // Tag should take precedence over metadata (both should result in deepseek anyway)
-    let result = resolve_reasoning_format_with_metadata(
-        None,
-        &["reasoning".to_string()],
-        Some(&metadata),
-    );
+    let result =
+        resolve_reasoning_format_with_metadata(None, &["reasoning".to_string()], Some(&metadata));
     assert_eq!(result.format, Some("deepseek".to_string()));
     assert_eq!(result.source, ReasoningFormatSource::ReasoningTag);
 }

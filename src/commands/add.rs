@@ -5,7 +5,7 @@
 //! and database storage.
 
 use crate::{
-    commands::presentation::{display_model_summary, ModelSummaryOpts},
+    commands::presentation::{ModelSummaryOpts, display_model_summary},
     gguf, models,
     services::AppCore,
     utils::{input, validation},
@@ -124,7 +124,10 @@ pub async fn handle_add(core: Arc<AppCore>, file_path: String) -> Result<()> {
     };
 
     // Display clean summary using shared presentation
-    display_model_summary(&new_model, ModelSummaryOpts::with_title("\nModel successfully created:"));
+    display_model_summary(
+        &new_model,
+        ModelSummaryOpts::with_title("\nModel successfully created:"),
+    );
 
     // Save to database via AppCore
     core.models().add(&new_model).await?;

@@ -7,5 +7,5 @@ pub mod model_display;
 pub mod tables;
 
 // Re-export commonly used items
-pub use model_display::{display_model_summary, DisplayStyle, ModelSummaryOpts};
+pub use model_display::{DisplayStyle, ModelSummaryOpts, display_model_summary};
 pub use tables::{format_optional, print_separator, truncate_string};

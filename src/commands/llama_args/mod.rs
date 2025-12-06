@@ -11,9 +11,9 @@ pub mod reasoning;
 mod tests;
 
 // Re-export public API to maintain backward compatibility
-pub use context::{resolve_context_size, ContextResolution, ContextResolutionSource};
-pub use jinja::{resolve_jinja_flag, JinjaResolution, JinjaResolutionSource};
+pub use context::{ContextResolution, ContextResolutionSource, resolve_context_size};
+pub use jinja::{JinjaResolution, JinjaResolutionSource, resolve_jinja_flag};
 pub use reasoning::{
-    resolve_reasoning_format, resolve_reasoning_format_with_metadata, ReasoningFormatResolution,
-    ReasoningFormatSource,
+    ReasoningFormatResolution, ReasoningFormatSource, resolve_reasoning_format,
+    resolve_reasoning_format_with_metadata,
 };

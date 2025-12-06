@@ -4,7 +4,7 @@
 //! model entries from the database. The actual model files remain on disk
 //! unchanged - only the database entries are removed.
 
-use crate::commands::presentation::{display_model_summary, ModelSummaryOpts};
+use crate::commands::presentation::{ModelSummaryOpts, display_model_summary};
 use crate::models::Gguf;
 use crate::services::core::AppCore;
 use crate::utils::input;

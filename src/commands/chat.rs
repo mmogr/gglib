@@ -1,7 +1,7 @@
 //! Chat command implementation that launches llama-cli directly.
 
-use crate::commands::llama_args::resolve_context_size;
 use crate::commands::llama::ensure_llama_initialized;
+use crate::commands::llama_args::resolve_context_size;
 use crate::commands::llama_invocation::{
     LlamaCommandBuilder, log_command_execution, log_context_info, log_mlock_info, log_model_info,
     resolve_model_for_invocation,
