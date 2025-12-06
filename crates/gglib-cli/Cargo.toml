@@ -14,19 +14,19 @@ path = "src/main.rs"
 gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
 
-# Universal dependencies
-tokio = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-anyhow = { workspace = true }
-
 # CLI-specific dependencies - defined locally, not in workspace
 clap = { version = "4.0", features = ["derive"] }
-indicatif = "0.17"
-dotenvy = "0.15"
+thiserror = { workspace = true }
+
+# These will be used as command handlers are migrated
+# tokio = { workspace = true }
+# serde = { workspace = true }
+# serde_json = { workspace = true }
+# tracing = { workspace = true }
+# tracing-subscriber = { workspace = true }
+# anyhow = { workspace = true }
+# indicatif = "0.17"
+# dotenvy = "0.15"
 
 [dev-dependencies]
 tempfile = { workspace = true }
