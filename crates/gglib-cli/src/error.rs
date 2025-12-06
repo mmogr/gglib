@@ -59,6 +59,7 @@ impl From<CoreError> for CliError {
         match err {
             CoreError::Repository(repo_err) => CliError::Database(repo_err.to_string()),
             CoreError::Process(proc_err) => CliError::Process(proc_err.to_string()),
+            CoreError::Settings(settings_err) => CliError::Config(settings_err.to_string()),
             CoreError::Validation(msg) => CliError::Arguments(msg),
             CoreError::Configuration(msg) => CliError::Config(msg),
             CoreError::ExternalService(msg) => CliError::Core(format!("External service: {}", msg)),

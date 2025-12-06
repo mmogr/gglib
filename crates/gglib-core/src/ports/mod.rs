@@ -135,6 +135,10 @@ pub enum CoreError {
     #[error(transparent)]
     Process(#[from] ProcessError),
 
+    /// Settings validation error.
+    #[error(transparent)]
+    Settings(#[from] crate::settings::SettingsError),
+
     /// Validation error (invalid input).
     #[error("Validation error: {0}")]
     Validation(String),

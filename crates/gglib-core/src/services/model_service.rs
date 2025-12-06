@@ -33,12 +33,49 @@ impl ModelService {
         self.repo.get_by_id(id).await.map_err(CoreError::Repository)
     }
 
-    /// Get a model by name.
+    /// Get a model by ID (alias for compatibility).
+    pub async fn get_by_id(&self, id: i64) -> Result<Model, CoreError> {
+        self.get(id).await
+    }
+
+    /// Get a model by name (exact match).
     pub async fn get_by_name(&self, name: &str) -> Result<Model, CoreError> {
         self.repo
             .get_by_name(name)
             .await
             .map_err(CoreError::Repository)
+    }
+
+    /// Find a model by identifier (ID or name).
+    ///
+    /// First tries to parse as numeric ID, then searches by exact name match.
+    pub async fn find_by_identifier(&self, identifier: &str) -> Result<Option<Model>, CoreError> {
+        // Try parsing as ID first
+        if let Ok(id) = identifier.parse::<i64>() {
+            match self.repo.get_by_id(id).await {
+                Ok(model) => return Ok(Some(model)),
+                Err(_) => {} // Fall through to name search
+            }
+        }
+
+        // Try exact name match
+        match self.repo.get_by_name(identifier).await {
+            Ok(model) => Ok(Some(model)),
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// Find models by partial name match.
+    ///
+    /// Returns all models whose names contain the search string (case-insensitive).
+    pub async fn find_by_name(&self, name: &str) -> Result<Vec<Model>, CoreError> {
+        // Get all models and filter by name containing the search string
+        let all_models = self.repo.list().await.map_err(CoreError::Repository)?;
+        let name_lower = name.to_lowercase();
+        Ok(all_models
+            .into_iter()
+            .filter(|m| m.name.to_lowercase().contains(&name_lower))
+            .collect())
     }
 
     /// Add a new model.
@@ -54,5 +91,10 @@ impl ModelService {
     /// Delete a model by ID.
     pub async fn delete(&self, id: i64) -> Result<(), CoreError> {
         self.repo.delete(id).await.map_err(CoreError::Repository)
+    }
+
+    /// Remove a model by ID (alias for delete).
+    pub async fn remove(&self, id: i64) -> Result<(), CoreError> {
+        self.delete(id).await
     }
 }

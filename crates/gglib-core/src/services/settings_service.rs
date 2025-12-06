@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use crate::ports::{CoreError, SettingsRepository};
-use crate::settings::{Settings, SettingsUpdate};
+use crate::settings::{Settings, SettingsUpdate, validate_settings};
 
 /// Service for managing application settings.
 #[derive(Clone)]
@@ -31,7 +31,14 @@ impl SettingsService {
     pub async fn update(&self, update: SettingsUpdate) -> Result<Settings, CoreError> {
         let mut settings = self.repo.load().await.map_err(CoreError::Repository)?;
         settings.merge(&update);
+        validate_settings(&settings).map_err(CoreError::Settings)?;
         self.repo.save(&settings).await.map_err(CoreError::Repository)?;
         Ok(settings)
+    }
+
+    /// Save complete settings (replaces all values).
+    pub async fn save(&self, settings: &Settings) -> Result<(), CoreError> {
+        validate_settings(settings).map_err(CoreError::Settings)?;
+        self.repo.save(settings).await.map_err(CoreError::Repository)
     }
 }

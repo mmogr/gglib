@@ -64,6 +64,7 @@ impl From<CoreError> for HttpError {
         match err {
             CoreError::Repository(repo_err) => repo_err.into(),
             CoreError::Process(proc_err) => proc_err.into(),
+            CoreError::Settings(settings_err) => HttpError::BadRequest(settings_err.to_string()),
             CoreError::Validation(msg) => HttpError::BadRequest(msg),
             CoreError::Configuration(msg) => HttpError::Internal(format!("Config: {}", msg)),
             CoreError::ExternalService(msg) => HttpError::ServiceUnavailable(msg),

@@ -45,6 +45,7 @@ impl From<CoreError> for TauriError {
         match err {
             CoreError::Repository(repo_err) => repo_err.into(),
             CoreError::Process(proc_err) => proc_err.into(),
+            CoreError::Settings(settings_err) => TauriError::InvalidInput(settings_err.to_string()),
             CoreError::Validation(msg) => TauriError::InvalidInput(msg),
             CoreError::Configuration(msg) => TauriError::Internal(format!("Config: {}", msg)),
             CoreError::ExternalService(msg) => TauriError::ServiceUnavailable(msg),
