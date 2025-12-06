@@ -4,31 +4,111 @@
 //! with SQLite repositories. It is focused purely on construction and
 //! should not contain any domain logic.
 
-/// Factory for creating AppCore instances with SQLite backends.
+use sqlx::SqlitePool;
+use std::sync::Arc;
+
+use crate::repositories::{SqliteModelRepository, SqliteSettingsRepository};
+
+/// Factory for creating repository instances with SQLite backends.
+///
+/// This struct provides composition utilities only — no domain logic.
 pub struct CoreFactory;
 
 impl CoreFactory {
-    /// Build an AppCore instance with SQLite storage.
+    /// Create a SQLite connection pool.
     ///
     /// # Arguments
     ///
-    /// * `db_path` - Path to the SQLite database file
-    ///
-    /// # Returns
-    ///
-    /// A fully configured AppCore instance ready for use.
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// let core = CoreFactory::build_sqlite("~/.gglib/gglib.db").await?;
-    /// ```
-    pub async fn build_sqlite(_db_path: &str) -> anyhow::Result<()> {
-        // Placeholder - will be populated during extraction
-        // let pool = create_pool(db_path).await?;
-        // let model_repo = Arc::new(SqliteModelRepository::new(pool.clone()));
-        // let settings_repo = Arc::new(SqliteSettingsRepository::new(pool.clone()));
-        // Ok(AppCore::new(model_repo, settings_repo))
-        todo!("CoreFactory::build_sqlite not yet implemented")
+    /// * `db_url` - SQLite connection URL (e.g., "sqlite:~/.gglib/gglib.db")
+    pub async fn create_pool(db_url: &str) -> anyhow::Result<SqlitePool> {
+        let pool = SqlitePool::connect(db_url).await?;
+        Ok(pool)
+    }
+
+    /// Create an in-memory SQLite pool for testing.
+    pub async fn create_test_pool() -> anyhow::Result<SqlitePool> {
+        let pool = SqlitePool::connect("sqlite::memory:").await?;
+        Ok(pool)
+    }
+
+    /// Create a model repository from a pool.
+    pub fn model_repository(pool: SqlitePool) -> Arc<SqliteModelRepository> {
+        Arc::new(SqliteModelRepository::new(pool))
+    }
+
+    /// Create a settings repository from a pool.
+    pub fn settings_repository(pool: SqlitePool) -> Arc<SqliteSettingsRepository> {
+        Arc::new(SqliteSettingsRepository::new(pool))
+    }
+}
+
+/// Test database helper for integration tests.
+///
+/// Provides an in-memory SQLite database with schema already applied.
+#[cfg(any(test, feature = "test-utils"))]
+pub struct TestDb {
+    pool: SqlitePool,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl TestDb {
+    /// Create a new in-memory test database with schema.
+    pub async fn new() -> anyhow::Result<Self> {
+        let pool = SqlitePool::connect("sqlite::memory:").await?;
+
+        // Create models table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS models (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                file_path TEXT NOT NULL UNIQUE,
+                param_count_b REAL NOT NULL,
+                architecture TEXT,
+                quantization TEXT,
+                context_length INTEGER,
+                metadata TEXT NOT NULL DEFAULT '{}',
+                added_at TEXT NOT NULL,
+                hf_repo_id TEXT,
+                hf_commit_sha TEXT,
+                hf_filename TEXT,
+                download_date TEXT,
+                last_update_check TEXT,
+                tags TEXT NOT NULL DEFAULT '[]'
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create settings table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS settings_kv (
+                key TEXT PRIMARY KEY NOT NULL,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        Ok(Self { pool })
+    }
+
+    /// Get the underlying pool.
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
+    /// Create a model repository using this test database.
+    pub fn model_repository(&self) -> SqliteModelRepository {
+        SqliteModelRepository::new(self.pool.clone())
+    }
+
+    /// Create a settings repository using this test database.
+    pub fn settings_repository(&self) -> SqliteSettingsRepository {
+        SqliteSettingsRepository::new(self.pool.clone())
     }
 }

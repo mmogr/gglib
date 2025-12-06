@@ -17,8 +17,7 @@
 //! - Error types are semantic, not representational
 
 #![deny(unsafe_code)]
-// TODO: Re-enable after extraction complete
-// #![deny(unused_crate_dependencies)]
+#![deny(unused_crate_dependencies)]
 
 pub mod domain;
 pub mod events;
@@ -32,4 +31,8 @@ pub use ports::{
     ServerConfig, ServerHealth, SettingsRepository,
 };
 
-// Placeholder modules - will be populated during extraction
+// Silence unused dev-dependency warnings until we add mock-based tests
+#[cfg(test)]
+use mockall as _;
+#[cfg(test)]
+use tokio_test as _;
