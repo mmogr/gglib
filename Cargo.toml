@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/gglib-core",
     "crates/gglib-db",
+    "crates/gglib-hf",
     "crates/gglib-runtime",
     "crates/gglib-cli",
     "crates/gglib-axum",
@@ -51,6 +52,7 @@ mockall = "0.12"
 # Internal crates (for migration)
 gglib-core = { path = "crates/gglib-core" }
 gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
+gglib-hf = { path = "crates/gglib-hf" }
 gglib-runtime = { path = "crates/gglib-runtime" }
 
 # Workspace-wide lints for consistency
@@ -98,6 +100,7 @@ description = "GGUF model manager and runner"
 # Internal crates for migration
 gglib-core.workspace = true
 gglib-db.workspace = true
+gglib-hf.workspace = true
 gglib-runtime.workspace = true
 
 # CLI

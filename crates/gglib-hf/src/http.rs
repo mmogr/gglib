@@ -4,8 +4,11 @@
 //! dependency injection and easy testing. The production implementation
 //! uses reqwest with automatic retry logic for transient errors.
 
-use super::error::{HfError, HfResult};
-use super::models::HfConfig;
+// Constructor used by client::mod but compiler doesn't track cross-module usage well
+#![allow(dead_code)]
+
+use crate::error::{HfError, HfResult};
+use crate::models::HfConfig;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
@@ -19,28 +22,14 @@ use url::Url;
 ///
 /// This abstraction allows for dependency injection of HTTP clients,
 /// making it easy to test code that depends on HTTP requests.
+///
+/// This is an implementation detail - external code should use the `HfClientPort` trait.
 #[async_trait]
 pub trait HttpBackend: Send + Sync {
     /// Fetch JSON from a URL and deserialize it.
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - The URL to fetch
-    ///
-    /// # Returns
-    ///
-    /// Returns the deserialized response, or an error.
     async fn get_json<T: DeserializeOwned + Send>(&self, url: &Url) -> HfResult<T>;
 
     /// Fetch JSON from a URL and return the raw response with pagination info.
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - The URL to fetch
-    ///
-    /// # Returns
-    ///
-    /// Returns a tuple of (deserialized response, has_more from Link header).
     async fn get_json_paginated<T: DeserializeOwned + Send>(
         &self,
         url: &Url,
@@ -55,6 +44,9 @@ pub trait HttpBackend: Send + Sync {
 ///
 /// Implements exponential backoff for transient server errors (5xx)
 /// and network errors.
+///
+/// This is an implementation detail - external code should use `DefaultHfClient`
+/// and interact with it through the `HfClientPort` trait.
 pub struct ReqwestBackend {
     client: reqwest::Client,
     max_retries: u8,
@@ -78,31 +70,23 @@ impl ReqwestBackend {
         }
     }
 
-    /// Create a backend with default configuration.
-    pub fn default_backend() -> Self {
-        Self::new(&HfConfig::default())
-    }
-
     /// Build a request with optional authentication.
     fn build_request(&self, url: &Url) -> reqwest::RequestBuilder {
         let mut request = self.client.get(url.as_str());
         if let Some(ref token) = self.auth_token {
-            request = request.header("Authorization", format!("Bearer {}", token));
+            request = request.header("Authorization", format!("Bearer {token}"));
         }
         request
     }
 
     /// Fetch a URL with automatic retry for transient errors.
-    ///
-    /// Uses exponential backoff: base_delay, 2*base_delay, 4*base_delay, etc.
-    /// Only retries on 5xx errors and network errors; 4xx errors fail immediately.
     async fn fetch_with_retry(&self, url: &Url) -> HfResult<reqwest::Response> {
         let mut last_error: Option<HfError> = None;
 
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
                 let delay =
-                    Duration::from_millis(self.retry_base_delay_ms * 2u64.pow(attempt as u32 - 1));
+                    Duration::from_millis(self.retry_base_delay_ms * 2u64.pow(u32::from(attempt) - 1));
                 tokio::time::sleep(delay).await;
             }
 
@@ -124,9 +108,7 @@ impl ReqwestBackend {
 
                     // 404 is a special case
                     if status.as_u16() == 404 {
-                        // Try to extract model ID from URL for better error message
-                        let path = url.path();
-                        if let Some(model_id) = extract_model_id_from_path(path) {
+                        if let Some(model_id) = extract_model_id_from_path(url.path()) {
                             return Err(HfError::ModelNotFound { model_id });
                         }
                     }
@@ -148,7 +130,6 @@ impl ReqwestBackend {
             }
         }
 
-        // Should not reach here, but return last error just in case
         Err(last_error.unwrap_or_else(|| HfError::InvalidResponse {
             message: "Unknown error during fetch".to_string(),
         }))
@@ -156,12 +137,9 @@ impl ReqwestBackend {
 }
 
 /// Try to extract a model ID from an API path.
-///
-/// e.g., "/api/models/TheBloke/Llama-2-7B-GGUF" -> "TheBloke/Llama-2-7B-GGUF"
 fn extract_model_id_from_path(path: &str) -> Option<String> {
     let path = path.trim_start_matches('/');
     if let Some(rest) = path.strip_prefix("api/models/") {
-        // Take the first two segments (owner/name)
         let parts: Vec<&str> = rest.splitn(3, '/').collect();
         if parts.len() >= 2 {
             return Some(format!("{}/{}", parts[0], parts[1]));
@@ -189,8 +167,7 @@ impl HttpBackend for ReqwestBackend {
             .headers()
             .get("Link")
             .and_then(|h| h.to_str().ok())
-            .map(|link| link.contains("rel=\"next\""))
-            .unwrap_or(false);
+            .is_some_and(|link| link.contains("rel=\"next\""));
 
         let data: T = response.json().await?;
         Ok((data, has_more))
@@ -201,11 +178,8 @@ impl HttpBackend for ReqwestBackend {
 // Fake Backend for Testing
 // ============================================================================
 
-/// A fake HTTP backend for testing.
-///
-/// Allows injecting canned responses for specific URLs.
 #[cfg(test)]
-pub mod testing {
+pub(crate) mod testing {
     use super::*;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};

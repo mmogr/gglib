@@ -1,11 +1,12 @@
 #![allow(clippy::collapsible_if)]
 
 use anyhow::{Result, anyhow};
+use gglib_core::ports::huggingface::HfClientPort;
+use gglib_hf::{DefaultHfClient, HfClientConfig};
 use hf_hub::api::sync::Api;
 use std::path::Path;
 
 use super::utils::format_number;
-use crate::services::huggingface::{DefaultHuggingfaceClient, HfConfig, HfRepoRef};
 
 /// Create HuggingFace Hub API client
 pub fn create_hf_api(token: Option<String>, models_dir: &Path) -> Result<Api> {
@@ -41,24 +42,23 @@ pub async fn list_available_quantizations(api: &Api, model_id: &str) -> Result<(
 
             println!("\nSearching for GGUF files using HuggingFace API...");
 
-            // Use new huggingface domain module for consistent API access
-            let client = DefaultHuggingfaceClient::new(HfConfig::default());
-            let repo_ref = HfRepoRef::parse(model_id)
-                .ok_or_else(|| anyhow!("Invalid model ID: {}", model_id))?;
+            // Use the new gglib-hf crate for HuggingFace API access
+            let client = DefaultHfClient::new(HfClientConfig::default());
 
-            match client.list_quantizations(&repo_ref).await {
+            match client.list_quantizations(model_id).await {
                 Ok(quantizations) => {
                     if quantizations.is_empty() {
                         println!("❌ No GGUF files found in this repository.");
                     } else {
                         println!("✅ Found {} quantizations:", quantizations.len());
                         for quant in &quantizations {
-                            let shard_info = if quant.is_sharded() {
+                            let shard_info = if quant.shard_count > 1 {
                                 format!(" ({} shards)", quant.shard_count)
                             } else {
                                 String::new()
                             };
-                            println!("  {} ({:.1} MB){}", quant.name, quant.size_mb(), shard_info);
+                            let size_mb = quant.total_size as f64 / 1_048_576.0;
+                            println!("  {} ({:.1} MB){}", quant.name, size_mb, shard_info);
                         }
 
                         println!("\nTo download a specific quantization, use:");
@@ -131,59 +131,63 @@ async fn fallback_file_search(repo: &hf_hub::api::sync::ApiRepo, model_id: &str)
 pub async fn handle_search(query: String, limit: u32, sort: String, gguf_only: bool) -> Result<()> {
     println!("🔍 Searching HuggingFace Hub for: '{}'...", query);
 
-    let client = DefaultHuggingfaceClient::new(HfConfig::default());
+    let client = DefaultHfClient::new(HfClientConfig::default());
 
     // Default to GGUF filtering unless explicitly disabled
     let filter_gguf = gguf_only;
 
+    // Build search options
+    let options = gglib_core::ports::huggingface::HfSearchOptions {
+        query: Some(query.clone()),
+        limit: if filter_gguf { limit * 3 } else { limit },
+        page: 0,
+        sort_by: sort.clone(),
+        sort_ascending: false,
+        min_params_b: None,
+        max_params_b: None,
+    };
+
     // Use the service to fetch models
-    let models_array = client
-        .search_models_raw(&query, if filter_gguf { limit * 3 } else { limit }, &sort)
+    let response = client
+        .search(&options)
         .await
         .map_err(|e| anyhow!("Search failed: {}", e))?;
 
     let mut filtered_models = Vec::new();
 
     // Filter models based on gguf_only flag
-    for model in &models_array {
-        if let Some(model_id) = model.get("id").and_then(|v| v.as_str()) {
-            if filter_gguf {
-                // Check if model actually has GGUF files
-                if let Some(repo) = HfRepoRef::parse(model_id) {
-                    if let Ok(quantizations) = client.list_quantizations(&repo).await {
-                        let names: Vec<String> =
-                            quantizations.iter().map(|q| q.name.clone()).collect();
-                        if !names.is_empty() {
-                            filtered_models.push((model, names));
-                        }
-                    }
-                }
-            } else {
-                // Just check for any potential GGUF indicators in the name
-                if model_id.to_lowercase().contains("gguf")
-                    || model_id.to_lowercase().contains("llama")
-                    || model_id.to_lowercase().contains("mistral")
-                    || model_id.to_lowercase().contains("qwen")
-                {
-                    // Quick check for GGUF files
-                    if let Some(repo) = HfRepoRef::parse(model_id) {
-                        if let Ok(quantizations) = client.list_quantizations(&repo).await {
-                            let names: Vec<String> =
-                                quantizations.iter().map(|q| q.name.clone()).collect();
-                            filtered_models.push((model, names));
-                        } else {
-                            filtered_models.push((model, Vec::new()));
-                        }
-                    } else {
-                        filtered_models.push((model, Vec::new()));
-                    }
+    for model in &response.items {
+        let model_id = &model.model_id;
+        if filter_gguf {
+            // Check if model actually has GGUF files
+            if let Ok(quantizations) = client.list_quantizations(model_id).await {
+                let names: Vec<String> =
+                    quantizations.iter().map(|q| q.name.clone()).collect();
+                if !names.is_empty() {
+                    filtered_models.push((model, names));
                 }
             }
+        } else {
+            // Just check for any potential GGUF indicators in the name
+            if model_id.to_lowercase().contains("gguf")
+                || model_id.to_lowercase().contains("llama")
+                || model_id.to_lowercase().contains("mistral")
+                || model_id.to_lowercase().contains("qwen")
+            {
+                // Quick check for GGUF files
+                if let Ok(quantizations) = client.list_quantizations(model_id).await {
+                    let names: Vec<String> =
+                        quantizations.iter().map(|q| q.name.clone()).collect();
+                    filtered_models.push((model, names));
+                } else {
+                    filtered_models.push((model, Vec::new()));
+                }
+            }
+        }
 
-            // Limit results
-            if filtered_models.len() >= limit as usize {
-                break;
-            }
+        // Limit results
+        if filtered_models.len() >= limit as usize {
+            break;
         }
     }
 
@@ -204,37 +208,31 @@ pub async fn handle_search(query: String, limit: u32, sort: String, gguf_only: b
     println!("{}", "─".repeat(80));
 
     for (i, (model, quantizations)) in filtered_models.iter().enumerate() {
-        if let Some(model_id) = model.get("id").and_then(|v| v.as_str()) {
-            let downloads = model.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0);
+        println!(
+            " {}. {} (↓{} ❤{})",
+            i + 1,
+            model.model_id,
+            format_number(model.downloads),
+            model.likes
+        );
 
-            let likes = model.get("likes").and_then(|v| v.as_u64()).unwrap_or(0);
-
-            println!(
-                " {}. {} (↓{} ❤{})",
-                i + 1,
-                model_id,
-                format_number(downloads),
-                likes
-            );
-
-            // Show available quantizations for GGUF models
-            if !quantizations.is_empty() {
-                println!("    Quantizations: {}", quantizations.join(", "));
-            }
-
-            if let Some(desc) = model.get("description").and_then(|v| v.as_str()) {
-                if !desc.is_empty() {
-                    let short_desc = if desc.len() > 80 {
-                        format!("{}...", &desc[..77])
-                    } else {
-                        desc.to_string()
-                    };
-                    println!("    {}", short_desc);
-                }
-            }
-
-            println!();
+        // Show available quantizations for GGUF models
+        if !quantizations.is_empty() {
+            println!("    Quantizations: {}", quantizations.join(", "));
         }
+
+        if let Some(ref desc) = model.description {
+            if !desc.is_empty() {
+                let short_desc = if desc.len() > 80 {
+                    format!("{}...", &desc[..77])
+                } else {
+                    desc.to_string()
+                };
+                println!("    {}", short_desc);
+            }
+        }
+
+        println!();
     }
 
     println!("💡 To download a model: gglib download <model_id>");
@@ -254,7 +252,7 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
 
     println!("🌐 Browsing {} GGUF models...", category);
 
-    let client = DefaultHuggingfaceClient::new(HfConfig::default());
+    let client = DefaultHfClient::new(HfClientConfig::default());
 
     // Search for models with GGUF-related tags
     let search_query = if let Some(ref model_size) = size {
@@ -263,13 +261,24 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
         "gguf".to_string()
     };
 
+    // Build search options
+    let options = gglib_core::ports::huggingface::HfSearchOptions {
+        query: Some(search_query),
+        limit,
+        page: 0,
+        sort_by: sort_param.to_string(),
+        sort_ascending: false,
+        min_params_b: None,
+        max_params_b: None,
+    };
+
     // Use the service to fetch models
-    let models_array = client
-        .search_models_raw(&search_query, limit, sort_param)
+    let response = client
+        .search(&options)
         .await
         .map_err(|e| anyhow!("Search failed: {}", e))?;
 
-    if models_array.is_empty() {
+    if response.items.is_empty() {
         println!("No {} models found.", category);
         return Ok(());
     }
@@ -277,43 +286,35 @@ pub async fn handle_browse(category: String, limit: u32, size: Option<String>) -
     println!("\n🏆 {} GGUF Models:", category.to_uppercase());
     println!("{}", "─".repeat(80));
 
-    for (i, model) in models_array.iter().enumerate() {
-        if let Some(model_id) = model.get("id").and_then(|v| v.as_str()) {
-            let downloads = model.get("downloads").and_then(|v| v.as_u64()).unwrap_or(0);
+    for (i, model) in response.items.iter().enumerate() {
+        println!(
+            "{:2}. {} (↓{} ❤{})",
+            i + 1,
+            model.model_id,
+            format_number(model.downloads),
+            model.likes
+        );
 
-            let likes = model.get("likes").and_then(|v| v.as_u64()).unwrap_or(0);
-
-            println!(
-                "{:2}. {} (↓{} ❤{})",
-                i + 1,
-                model_id,
-                format_number(downloads),
-                likes
-            );
-
-            // Show available quantizations
-            if let Some(repo) = HfRepoRef::parse(model_id) {
-                if let Ok(quantizations) = client.list_quantizations(&repo).await {
-                    let names: Vec<&str> = quantizations.iter().map(|q| q.name.as_str()).collect();
-                    if !names.is_empty() {
-                        println!("    Quantizations: {}", names.join(", "));
-                    }
-                }
+        // Show available quantizations
+        if let Ok(quantizations) = client.list_quantizations(&model.model_id).await {
+            let names: Vec<&str> = quantizations.iter().map(|q| q.name.as_str()).collect();
+            if !names.is_empty() {
+                println!("    Quantizations: {}", names.join(", "));
             }
-
-            if let Some(desc) = model.get("description").and_then(|v| v.as_str()) {
-                if !desc.is_empty() {
-                    let short_desc = if desc.len() > 100 {
-                        format!("{}...", &desc[..97])
-                    } else {
-                        desc.to_string()
-                    };
-                    println!("    {}", short_desc);
-                }
-            }
-
-            println!();
         }
+
+        if let Some(ref desc) = model.description {
+            if !desc.is_empty() {
+                let short_desc = if desc.len() > 100 {
+                    format!("{}...", &desc[..97])
+                } else {
+                    desc.to_string()
+                };
+                println!("    {}", short_desc);
+            }
+        }
+
+        println!();
     }
 
     println!("💡 To download a model: gglib download <model_id>");

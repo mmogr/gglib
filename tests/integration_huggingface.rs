@@ -9,12 +9,12 @@
 //! - HuggingFace service API URL construction (#39)
 
 use gglib::commands::download;
-use gglib::services::huggingface::DefaultHuggingfaceClient;
+use gglib_hf::{DefaultHfClient, HfClientConfig};
 
-/// Test that HuggingfaceClient is constructable
+/// Test that DefaultHfClient is constructable
 #[tokio::test]
 async fn test_huggingface_service_construction() {
-    let _client = DefaultHuggingfaceClient::default_client();
+    let _client = DefaultHfClient::new(HfClientConfig::default());
     // Just verify it can be created without panicking
 }
 

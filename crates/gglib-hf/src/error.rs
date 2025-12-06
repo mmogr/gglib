@@ -1,16 +1,16 @@
-//! Error types for the HuggingFace service.
+//! Internal error types for HuggingFace operations.
 //!
-//! This module provides domain-specific error types for HuggingFace API
-//! operations, enabling precise error handling and better debugging.
+//! These errors are internal to `gglib-hf` and are mapped to core port errors
+//! at the boundary.
 
 use thiserror::Error;
 
 /// Result type alias for HuggingFace operations.
-pub type HfResult<T> = Result<T, HfError>;
+pub(crate) type HfResult<T> = Result<T, HfError>;
 
 /// Errors related to HuggingFace API operations.
 #[derive(Debug, Error)]
-pub enum HfError {
+pub(crate) enum HfError {
     /// API request failed with an HTTP error status.
     #[error("HuggingFace API request failed with status {status}: {url}")]
     ApiRequestFailed {

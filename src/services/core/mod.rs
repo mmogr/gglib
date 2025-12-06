@@ -48,12 +48,16 @@ use crate::commands::download::get_models_directory;
 use crate::download::{DownloadManager, DownloadManagerConfig};
 use crate::services::process_manager::ProcessManager;
 use crate::utils::paths::get_llama_server_path;
+use gglib_hf::{DefaultHfClient, HfClientConfig};
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-// Re-export HuggingFace client
-pub use crate::services::huggingface::{DefaultHuggingfaceClient, HfError};
+// Re-export HuggingFace client and port types for consumers
+pub use gglib_core::ports::huggingface::{
+    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
+};
+pub use gglib_hf::DefaultHfClient as HuggingfaceClient;
 
 // Re-export download types from canonical src/download/ module
 pub use crate::download::{
@@ -87,7 +91,7 @@ pub struct AppCore {
     proxy_service: ProxyService,
     download_manager: DownloadManager,
     settings_service: SettingsService,
-    huggingface_client: DefaultHuggingfaceClient,
+    huggingface_client: DefaultHfClient,
     mcp_service: McpService,
     /// Guard to prevent concurrent queue processing.
     is_processing: AtomicBool,
@@ -159,7 +163,7 @@ impl AppCore {
         let download_manager = DownloadManager::new(download_config, Arc::new(|_| {}));
 
         let settings_service = SettingsService::new(db_pool.clone());
-        let huggingface_client = DefaultHuggingfaceClient::default_client();
+        let huggingface_client = DefaultHfClient::new(HfClientConfig::default());
         let mcp_service = McpService::new(db_pool.clone());
 
         Self {
@@ -300,19 +304,21 @@ impl AppCore {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use gglib::services::core::AppCore;
-    /// # use gglib::services::huggingface::HfSearchQuery;
+    /// # use gglib::services::core::{AppCore, HfClientPort, HfSearchOptions};
     /// # async fn example(core: &AppCore) -> anyhow::Result<()> {
-    /// // Search for models
-    /// let query = HfSearchQuery::new().with_query("llama");
-    /// let response = core.huggingface().search_models_page(&query).await?;
+    /// // Search for models using the port trait
+    /// let options = HfSearchOptions {
+    ///     query: Some("llama".to_string()),
+    ///     ..Default::default()
+    /// };
+    /// let response = core.huggingface().search(&options).await?;
     /// for model in response.items {
-    ///     println!("{}: {} likes", model.id, model.likes);
+    ///     println!("{}: {} likes", model.model_id, model.likes);
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub fn huggingface(&self) -> &DefaultHuggingfaceClient {
+    pub fn huggingface(&self) -> &impl HfClientPort {
         &self.huggingface_client
     }
 

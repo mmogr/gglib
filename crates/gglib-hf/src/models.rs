@@ -1,19 +1,21 @@
-//! Domain types for the HuggingFace service.
+//! Internal API response types for HuggingFace Hub.
 //!
-//! This module contains the core data structures used throughout the
-//! HuggingFace integration, including configuration, repository references,
-//! file entries, and model metadata.
+//! These types are internal to `gglib-hf` and are not exposed to consumers.
+//! External consumers should use the port DTOs defined in `gglib-core`.
+
+// Some helper methods are not yet used but will be useful for future features
+#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 // ============================================================================
-// Configuration
+// Configuration (used internally, see config.rs for public config)
 // ============================================================================
 
-/// Configuration for the HuggingFace client.
+/// Internal configuration for the HuggingFace client.
 #[derive(Debug, Clone)]
-pub struct HfConfig {
+pub(crate) struct HfConfig {
     /// Base URL for the HuggingFace API (default: https://huggingface.co/api/models)
     pub base_url: Url,
     /// Optional authentication token for private models
@@ -41,10 +43,8 @@ impl Default for HfConfig {
 // ============================================================================
 
 /// Reference to a HuggingFace repository.
-///
-/// Represents a model repository on the HuggingFace Hub.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct HfRepoRef {
+pub(crate) struct HfRepoRef {
     /// Repository owner (user or organization)
     pub owner: String,
     /// Repository name
@@ -61,16 +61,6 @@ impl HfRepoRef {
     }
 
     /// Parse a repository reference from a model ID string.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use gglib::services::huggingface::HfRepoRef;
-    ///
-    /// let repo = HfRepoRef::parse("TheBloke/Llama-2-7B-GGUF").unwrap();
-    /// assert_eq!(repo.owner, "TheBloke");
-    /// assert_eq!(repo.name, "Llama-2-7B-GGUF");
-    /// ```
     pub fn parse(model_id: &str) -> Option<Self> {
         let parts: Vec<&str> = model_id.splitn(2, '/').collect();
         if parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() {
@@ -102,7 +92,7 @@ impl std::fmt::Display for HfRepoRef {
 /// Type of entry in a repository tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum HfEntryType {
+pub(crate) enum HfEntryType {
     /// Regular file
     File,
     /// Directory
@@ -111,7 +101,7 @@ pub enum HfEntryType {
 
 /// Entry in a HuggingFace repository file tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfFileEntry {
+pub(crate) struct HfFileEntry {
     /// Path relative to repository root
     pub path: String,
     /// Entry type (file or directory)
@@ -138,12 +128,12 @@ impl HfFileEntry {
 }
 
 // ============================================================================
-// Quantization
+// Quantization (internal)
 // ============================================================================
 
 /// Information about a quantization variant in a repository.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfQuantization {
+pub(crate) struct HfQuantization {
     /// Quantization name (e.g., "Q4_K_M", "Q8_0")
     pub name: String,
     /// Number of files (1 for single file, >1 for sharded)
@@ -172,12 +162,12 @@ impl HfQuantization {
 }
 
 // ============================================================================
-// Model Summary
+// Model Summary (API response)
 // ============================================================================
 
 /// Summary of a HuggingFace model from the search API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfModelSummary {
+pub(crate) struct HfModelSummary {
     /// Model ID (e.g., "TheBloke/Llama-2-7B-GGUF")
     pub id: String,
     /// Human-readable model name (derived from id)
@@ -213,7 +203,7 @@ impl HfModelSummary {
 /// Sort field options for HuggingFace model search.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum HfSortField {
+pub(crate) enum HfSortField {
     /// Sort by download count (default)
     #[default]
     Downloads,
@@ -232,18 +222,18 @@ impl HfSortField {
     /// Get the API parameter value for this sort field.
     pub fn as_api_param(&self) -> &'static str {
         match self {
-            HfSortField::Downloads => "downloads",
-            HfSortField::Likes => "likes",
-            HfSortField::Modified => "lastModified",
-            HfSortField::Created => "createdAt",
-            HfSortField::Alphabetical => "id",
+            Self::Downloads => "downloads",
+            Self::Likes => "likes",
+            Self::Modified => "lastModified",
+            Self::Created => "createdAt",
+            Self::Alphabetical => "id",
         }
     }
 }
 
 /// Query parameters for searching HuggingFace models.
 #[derive(Debug, Clone, Default)]
-pub struct HfSearchQuery {
+pub(crate) struct HfSearchQuery {
     /// Search query (model name)
     pub query: Option<String>,
     /// Minimum parameters in billions
@@ -258,8 +248,6 @@ pub struct HfSearchQuery {
     pub sort_by: HfSortField,
     /// Sort direction: true = ascending, false = descending
     pub sort_ascending: bool,
-    /// Cursor for pagination (optional, from previous response)
-    pub cursor: Option<String>,
 }
 
 impl HfSearchQuery {
@@ -306,30 +294,13 @@ impl HfSearchQuery {
 
 /// Response from HuggingFace model search.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfSearchResponse {
+pub(crate) struct HfSearchResponse {
     /// Models matching the search criteria
     pub items: Vec<HfModelSummary>,
     /// Whether more results are available
     pub has_more: bool,
-    /// Cursor for next page (if available)
-    pub cursor: Option<String>,
     /// Current page number (0-indexed)
     pub page: u32,
-}
-
-// ============================================================================
-// Tool Support
-// ============================================================================
-
-/// Response for tool/function calling support detection.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfToolSupportResponse {
-    /// Whether the model supports tool/function calling
-    pub supports_tool_calling: bool,
-    /// Confidence level of the detection (0.0 to 1.0)
-    pub confidence: f32,
-    /// Detected tool calling format (e.g., "hermes", "llama3", "mistral")
-    pub detected_format: Option<String>,
 }
 
 #[cfg(test)]
