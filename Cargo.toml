@@ -10,6 +10,8 @@ members = [
     # Legacy monolith - re-enabled for gradual migration, will be removed after extraction complete
     ".",
 ]
+# Tauri app is excluded because it builds separately with its own workspace context
+exclude = ["src-tauri"]
 
 # Shared package metadata for all workspace crates
 [workspace.package]

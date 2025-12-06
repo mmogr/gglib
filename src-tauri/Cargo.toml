@@ -7,6 +7,10 @@ license = "MIT"
 repository = "https://github.com/mmogr/gglib"
 edition = "2021"
 
+# Prevent this package from being part of the parent workspace
+# Tauri builds separately with its own workspace context
+[workspace]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
