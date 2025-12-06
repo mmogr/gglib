@@ -6,8 +6,8 @@ use anyhow::Result;
 use chrono::Utc;
 use gglib::commands::chat::{ChatCommandArgs, handle_chat};
 use gglib::models::Gguf;
-use gglib::services::database;
 use gglib::services::AppCore;
+use gglib::services::database;
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -105,17 +105,20 @@ async fn chat_command_passes_expected_arguments() {
         std::env::set_var("LLAMA_CLI_LOG", &log_path);
     }
 
-    handle_chat(core, ChatCommandArgs {
-        identifier: model.name.clone(),
-        ctx_size: Some("max".into()),
-        mlock: true,
-        chat_template: Some("llama3".into()),
-        chat_template_file: Some(template_file.to_string_lossy().into()),
-        jinja: true,
-        system_prompt: Some("Be helpful".into()),
-        multiline_input: true,
-        simple_io: true,
-    })
+    handle_chat(
+        core,
+        ChatCommandArgs {
+            identifier: model.name.clone(),
+            ctx_size: Some("max".into()),
+            mlock: true,
+            chat_template: Some("llama3".into()),
+            chat_template_file: Some(template_file.to_string_lossy().into()),
+            jinja: true,
+            system_prompt: Some("Be helpful".into()),
+            multiline_input: true,
+            simple_io: true,
+        },
+    )
     .await
     .unwrap();
 
