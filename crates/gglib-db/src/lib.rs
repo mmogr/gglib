@@ -15,3 +15,6 @@ pub mod repositories;
 
 // Re-export factory for convenient access
 pub use factory::CoreFactory;
+
+// Re-export repository implementations
+pub use repositories::{SqliteModelRepository, SqliteSettingsRepository};
