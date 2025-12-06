@@ -366,13 +366,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # SCC badges only update on Release (LOC/complexity don't change often)
       - name: Install scc
+        if: steps.download.outputs.workflow_name == 'Release'
         run: |
           curl -sL https://github.com/boyter/scc/releases/download/v3.2.0/scc_Linux_x86_64.tar.gz | tar xz
           chmod +x scc
           sudo mv scc /usr/local/bin/
 
       - name: Generate SCC complexity badges
+        if: steps.download.outputs.workflow_name == 'Release'
         run: |
           # Generate per-crate LOC and complexity badges
           for CRATE in gglib-core gglib-db gglib-cli gglib-axum gglib-tauri; do

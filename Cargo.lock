@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.1.0"
+version = "1.5.3"
 dependencies = [
  "axum",
  "gglib-core",
@@ -669,7 +669,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-cli"
-version = "0.1.0"
+version = "1.5.3"
 dependencies = [
  "clap",
  "gglib-core",
@@ -681,7 +681,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.1.0"
+version = "1.5.3"
 dependencies = [
  "async-trait",
  "chrono",
@@ -694,7 +694,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.1.0"
+version = "1.5.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.1.0"
+version = "1.5.3"
 dependencies = [
  "gglib-core",
  "gglib-db",

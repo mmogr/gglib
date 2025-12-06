@@ -10,6 +10,14 @@ members = [
     # ".",
 ]
 
+# Shared package metadata for all workspace crates
+[workspace.package]
+version = "1.5.3"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/mmogr/gglib"
+authors = ["mmogr"]
+
 # Workspace-wide dependencies: ONLY truly universal crates
 # Adapter-specific deps (sqlx, clap, tauri, axum) are defined locally per crate
 [workspace.dependencies]
