@@ -15,7 +15,9 @@
 //! - Manage database connections
 
 pub mod add;
+pub mod chat;
 pub mod config;
 pub mod list;
 pub mod remove;
+pub mod serve;
 pub mod update;

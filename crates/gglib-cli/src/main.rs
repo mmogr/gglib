@@ -69,8 +69,8 @@ async fn main() -> anyhow::Result<()> {
             jinja,
             port,
         } => {
-            commands::serve::handle_serve(Arc::clone(&legacy_core), id, ctx_size, mlock, jinja, port)
-                .await?;
+            // NEW: Uses CliContext
+            handlers::serve::execute(&ctx, id, ctx_size, mlock, jinja, port).await?;
         }
         Commands::Chat {
             identifier,
@@ -83,21 +83,19 @@ async fn main() -> anyhow::Result<()> {
             multiline_input,
             simple_io,
         } => {
-            commands::chat::handle_chat(
-                Arc::clone(&legacy_core),
-                commands::chat::ChatCommandArgs {
-                    identifier,
-                    ctx_size,
-                    mlock,
-                    chat_template,
-                    chat_template_file,
-                    jinja,
-                    system_prompt,
-                    multiline_input,
-                    simple_io,
-                },
-            )
-            .await?;
+            // NEW: Uses CliContext
+            let args = handlers::chat::ChatArgs {
+                identifier,
+                ctx_size,
+                mlock,
+                chat_template,
+                chat_template_file,
+                jinja,
+                system_prompt,
+                multiline_input,
+                simple_io,
+            };
+            handlers::chat::execute(&ctx, args).await?;
         }
         Commands::Download {
             model_id,

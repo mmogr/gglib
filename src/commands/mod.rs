@@ -2,7 +2,7 @@
 
 // add: Migrated to gglib-cli/src/handlers/add.rs (#180)
 pub mod assistant_ui;
-pub mod chat;
+// chat: Migrated to gglib-cli/src/handlers/chat.rs (#180)
 pub mod check_deps;
 // config: Migrated to gglib-cli/src/handlers/config.rs (#180)
 pub mod download;
@@ -13,5 +13,5 @@ pub mod llama_args;
 pub mod llama_invocation;
 pub mod presentation;
 // remove: Migrated to gglib-cli/src/handlers/remove.rs (#180)
-pub mod serve;
+// serve: Migrated to gglib-cli/src/handlers/serve.rs (#180)
 // update: Migrated to gglib-cli/src/handlers/update.rs (#180)
