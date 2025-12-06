@@ -8,6 +8,7 @@
 //! The CLI is organized into distinct modules:
 //! - `parser` - Main CLI struct with global options
 //! - `commands` - Primary command enum
+//! - `handlers` - Command execution logic (delegating to AppCore)
 //! - `llama_commands` - llama.cpp management subcommands
 //! - `config_commands` - Configuration management subcommands
 //! - `assistant_ui_commands` - assistant-ui management subcommands
@@ -22,17 +23,27 @@ use tempfile as _;
 #[cfg(test)]
 use tokio_test as _;
 
-// gglib-db will be used by command handlers as they are migrated
+// Dependencies used by handlers module (will be used as handlers are migrated)
+use anyhow as _;
+use dotenvy as _;
+use gglib as _;
+use tokio as _;
+use tracing as _;
+use tracing_subscriber as _;
+
+// gglib-db used for database setup in composition root
 use gglib_db as _;
 
 pub mod assistant_ui_commands;
 pub mod commands;
 pub mod config_commands;
 pub mod error;
+pub mod handlers;
 pub mod llama_commands;
 pub mod parser;
 
 // Re-export primary types for convenient access
+pub use assistant_ui_commands::AssistantUiCommand;
 pub use commands::Commands;
 pub use config_commands::{ConfigCommand, ModelsDirCommand, SettingsCommand};
 pub use error::CliError;

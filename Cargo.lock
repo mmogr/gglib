@@ -955,12 +955,18 @@ dependencies = [
 name = "gglib-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
+ "dotenvy",
+ "gglib",
  "gglib-core",
  "gglib-db",
  "tempfile",
  "thiserror 1.0.69",
+ "tokio",
  "tokio-test",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

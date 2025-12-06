@@ -13,20 +13,17 @@ path = "src/main.rs"
 [dependencies]
 gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
+# Root crate for AppCore and services (temporary until AppCore moves to core)
+gglib = { path = "../.." }
 
-# CLI-specific dependencies - defined locally, not in workspace
+# CLI-specific dependencies
 clap = { version = "4.0", features = ["derive"] }
 thiserror = { workspace = true }
-
-# These will be used as command handlers are migrated
-# tokio = { workspace = true }
-# serde = { workspace = true }
-# serde_json = { workspace = true }
-# tracing = { workspace = true }
-# tracing-subscriber = { workspace = true }
-# anyhow = { workspace = true }
-# indicatif = "0.17"
-# dotenvy = "0.15"
+tokio = { workspace = true }
+anyhow = { workspace = true }
+dotenvy = "0.15"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
