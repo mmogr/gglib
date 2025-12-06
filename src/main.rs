@@ -7,8 +7,8 @@
 
 use anyhow::Result;
 use clap::Parser;
-use gglib::{cli, commands};
 use gglib::services::{AppCore, database};
+use gglib::{cli, commands};
 use std::sync::Arc;
 
 /// The main entry point for the GGUF library management CLI application.
@@ -172,17 +172,20 @@ async fn run_command(core: Arc<AppCore>, command: cli::Commands) -> Result<()> {
             multiline_input,
             simple_io,
         } => {
-            commands::chat::handle_chat(core, commands::chat::ChatCommandArgs {
-                identifier,
-                ctx_size,
-                mlock,
-                chat_template,
-                chat_template_file,
-                jinja,
-                system_prompt,
-                multiline_input,
-                simple_io,
-            })
+            commands::chat::handle_chat(
+                core,
+                commands::chat::ChatCommandArgs {
+                    identifier,
+                    ctx_size,
+                    mlock,
+                    chat_template,
+                    chat_template_file,
+                    jinja,
+                    system_prompt,
+                    multiline_input,
+                    simple_io,
+                },
+            )
             .await
         }
         Commands::Gui { dev } => {

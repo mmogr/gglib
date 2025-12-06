@@ -50,7 +50,8 @@ pub async fn start_proxy(
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "llama-server".to_string());
 
-    let manager = ProcessManager::new_single_swap(Arc::clone(&model_service), start_port, llama_server_path);
+    let manager =
+        ProcessManager::new_single_swap(Arc::clone(&model_service), start_port, llama_server_path);
 
     let state = AppState {
         manager: manager.clone(),

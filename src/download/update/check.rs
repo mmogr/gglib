@@ -52,7 +52,11 @@ pub async fn check_model_update(model: &Gguf, hf_repo: &str) -> Result<()> {
 /// Handle the check-updates CLI command.
 ///
 /// Can check a single model by ID or all models at once.
-pub async fn handle_check_updates(core: Arc<AppCore>, model_id: Option<u32>, all: bool) -> Result<()> {
+pub async fn handle_check_updates(
+    core: Arc<AppCore>,
+    model_id: Option<u32>,
+    all: bool,
+) -> Result<()> {
     if all {
         println!("Checking updates for all models...");
         let models = core.models().list().await?;

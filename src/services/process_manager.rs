@@ -267,7 +267,10 @@ impl ProcessManager {
         }
 
         // Try case-insensitive search
-        if let Ok(Some(model)) = model_service.find_by_name_case_insensitive(model_name).await {
+        if let Ok(Some(model)) = model_service
+            .find_by_name_case_insensitive(model_name)
+            .await
+        {
             return Ok(model);
         }
 

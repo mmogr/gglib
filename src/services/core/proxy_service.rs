@@ -86,8 +86,11 @@ impl ProxyService {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| "llama-server".to_string());
 
-        let manager =
-            ProcessManager::new_single_swap(Arc::clone(&self.model_service), start_port, llama_server_path);
+        let manager = ProcessManager::new_single_swap(
+            Arc::clone(&self.model_service),
+            start_port,
+            llama_server_path,
+        );
 
         // Start proxy server
         crate::proxy::start_proxy_with_shutdown(
