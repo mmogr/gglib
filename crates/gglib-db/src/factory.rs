@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use gglib_core::Repos;
 
-use crate::repositories::{SqliteModelRepository, SqliteSettingsRepository};
+use crate::repositories::{SqliteMcpRepository, SqliteModelRepository, SqliteSettingsRepository};
 
 /// Factory for creating repository instances with SQLite backends.
 ///
@@ -41,7 +41,8 @@ impl CoreFactory {
     pub fn build_repos(pool: SqlitePool) -> Repos {
         Repos::new(
             Arc::new(SqliteModelRepository::new(pool.clone())),
-            Arc::new(SqliteSettingsRepository::new(pool)),
+            Arc::new(SqliteSettingsRepository::new(pool.clone())),
+            Arc::new(SqliteMcpRepository::new(pool)),
         )
     }
 
@@ -53,6 +54,11 @@ impl CoreFactory {
     /// Create a settings repository from a pool.
     pub fn settings_repository(pool: SqlitePool) -> Arc<SqliteSettingsRepository> {
         Arc::new(SqliteSettingsRepository::new(pool))
+    }
+
+    /// Create an MCP server repository from a pool.
+    pub fn mcp_repository(pool: SqlitePool) -> Arc<SqliteMcpRepository> {
+        Arc::new(SqliteMcpRepository::new(pool))
     }
 }
 
@@ -204,5 +210,10 @@ impl TestDb {
     /// Create a settings repository using this test database.
     pub fn settings_repository(&self) -> SqliteSettingsRepository {
         SqliteSettingsRepository::new(self.pool.clone())
+    }
+
+    /// Create an MCP server repository using this test database.
+    pub fn mcp_repository(&self) -> SqliteMcpRepository {
+        SqliteMcpRepository::new(self.pool.clone())
     }
 }

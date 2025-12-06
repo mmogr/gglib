@@ -5,8 +5,10 @@
 //! the port trait signatures.
 
 mod row_mappers;
+mod sqlite_mcp_repository;
 mod sqlite_model_repository;
 mod sqlite_settings_repository;
 
+pub use sqlite_mcp_repository::SqliteMcpRepository;
 pub use sqlite_model_repository::SqliteModelRepository;
 pub use sqlite_settings_repository::SqliteSettingsRepository;

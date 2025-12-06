@@ -951,6 +951,7 @@ dependencies = [
  "gglib",
  "gglib-core",
  "gglib-db",
+ "gglib-mcp",
  "gglib-runtime",
  "serde",
  "serde_json",
@@ -971,6 +972,7 @@ dependencies = [
  "gglib",
  "gglib-core",
  "gglib-db",
+ "gglib-mcp",
  "gglib-runtime",
  "tempfile",
  "thiserror 1.0.69",
@@ -1000,6 +1002,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "gglib-core",
  "libsqlite3-sys",
@@ -1031,6 +1034,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-mcp"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "gglib-core",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
+]
+
+[[package]]
 name = "gglib-runtime"
 version = "0.1.0"
 dependencies = [
@@ -1052,6 +1070,7 @@ dependencies = [
  "gglib",
  "gglib-core",
  "gglib-db",
+ "gglib-mcp",
  "gglib-runtime",
  "serde",
  "serde_json",

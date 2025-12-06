@@ -8,6 +8,7 @@
 //! - `app` - Application-level events (model added/removed/updated)
 //! - `download` - Download progress and completion events
 //! - `server` - Model server lifecycle events
+//! - `mcp` - MCP server lifecycle events
 //!
 //! # Wire Format
 //!
@@ -19,12 +20,16 @@
 
 mod app;
 mod download;
+mod mcp;
 mod server;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ports::McpErrorInfo;
+
 // Re-export event types
 pub use app::ModelSummary;
+pub use mcp::McpServerSummary;
 pub use server::ServerSnapshotEntry;
 
 /// Canonical event types for all adapters.
@@ -146,6 +151,46 @@ pub enum AppEvent {
         /// Summary of the updated model.
         model: ModelSummary,
     },
+
+    // ========== MCP Server Events ==========
+    /// An MCP server was added to the configuration.
+    McpServerAdded {
+        /// Summary of the added server.
+        server: McpServerSummary,
+    },
+
+    /// An MCP server was removed from the configuration.
+    McpServerRemoved {
+        /// ID of the removed server.
+        #[serde(rename = "serverId")]
+        server_id: i64,
+    },
+
+    /// An MCP server has started and is ready.
+    McpServerStarted {
+        /// ID of the server.
+        #[serde(rename = "serverId")]
+        server_id: i64,
+        /// Name of the server.
+        #[serde(rename = "serverName")]
+        server_name: String,
+    },
+
+    /// An MCP server has been stopped.
+    McpServerStopped {
+        /// ID of the server.
+        #[serde(rename = "serverId")]
+        server_id: i64,
+        /// Name of the server.
+        #[serde(rename = "serverName")]
+        server_name: String,
+    },
+
+    /// An MCP server encountered an error.
+    McpServerError {
+        /// User-safe error information.
+        error: McpErrorInfo,
+    },
 }
 
 impl AppEvent {
@@ -166,6 +211,11 @@ impl AppEvent {
             Self::ModelAdded { .. } => "model:added",
             Self::ModelRemoved { .. } => "model:removed",
             Self::ModelUpdated { .. } => "model:updated",
+            Self::McpServerAdded { .. } => "mcp:added",
+            Self::McpServerRemoved { .. } => "mcp:removed",
+            Self::McpServerStarted { .. } => "mcp:started",
+            Self::McpServerStopped { .. } => "mcp:stopped",
+            Self::McpServerError { .. } => "mcp:error",
         }
     }
 }

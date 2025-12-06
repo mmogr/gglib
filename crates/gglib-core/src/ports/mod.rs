@@ -11,7 +11,10 @@
 //! - Intent-based methods for process runner (not implementation-leaking)
 
 pub mod download;
+pub mod event_emitter;
 pub mod huggingface;
+pub mod mcp_error;
+pub mod mcp_repository;
 pub mod model_repository;
 pub mod process_runner;
 pub mod settings_repository;
@@ -21,9 +24,12 @@ use thiserror::Error;
 
 // Re-export repository traits for convenience
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
+pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
 };
+pub use mcp_error::{McpErrorCategory, McpErrorInfo, McpServiceError};
+pub use mcp_repository::{McpRepositoryError, McpServerRepository};
 pub use model_repository::ModelRepository;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use settings_repository::SettingsRepository;
@@ -50,12 +56,22 @@ pub struct Repos {
     pub models: Arc<dyn ModelRepository>,
     /// Settings repository for application settings.
     pub settings: Arc<dyn SettingsRepository>,
+    /// MCP server repository for MCP server configurations.
+    pub mcp_servers: Arc<dyn McpServerRepository>,
 }
 
 impl Repos {
     /// Create a new Repos container.
-    pub fn new(models: Arc<dyn ModelRepository>, settings: Arc<dyn SettingsRepository>) -> Self {
-        Self { models, settings }
+    pub fn new(
+        models: Arc<dyn ModelRepository>,
+        settings: Arc<dyn SettingsRepository>,
+        mcp_servers: Arc<dyn McpServerRepository>,
+    ) -> Self {
+        Self {
+            models,
+            settings,
+            mcp_servers,
+        }
     }
 }
 

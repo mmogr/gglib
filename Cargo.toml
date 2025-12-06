@@ -4,6 +4,7 @@ members = [
     "crates/gglib-core",
     "crates/gglib-db",
     "crates/gglib-hf",
+    "crates/gglib-mcp",
     "crates/gglib-runtime",
     "crates/gglib-cli",
     "crates/gglib-axum",
@@ -34,6 +35,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 
+# Encoding
+base64 = "0.22"
+
 # Error handling
 thiserror = "1.0"
 anyhow = "1.0"
@@ -53,6 +57,7 @@ mockall = "0.12"
 gglib-core = { path = "crates/gglib-core" }
 gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
 gglib-hf = { path = "crates/gglib-hf" }
+gglib-mcp = { path = "crates/gglib-mcp" }
 gglib-runtime = { path = "crates/gglib-runtime" }
 
 # Workspace-wide lints for consistency

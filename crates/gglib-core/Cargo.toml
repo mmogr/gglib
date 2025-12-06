@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 # Only deps actually used in core - no adapter-specific crates
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
@@ -17,7 +18,6 @@ chrono = { workspace = true }
 mockall = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 tokio-test = { workspace = true }
-serde_json = { workspace = true }
 
 [lints]
 workspace = true

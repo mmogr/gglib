@@ -1,6 +1,6 @@
-//! Core domain types.
+//! Model domain types.
 //!
-//! These types represent the pure domain model, independent of any
+//! These types represent models in the system, independent of any
 //! infrastructure concerns (database, filesystem, etc.).
 
 use chrono::{DateTime, Utc};
