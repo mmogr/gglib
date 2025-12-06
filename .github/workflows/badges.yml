@@ -234,6 +234,43 @@ jobs:
           }
           JSON
 
+          # --- PER-CRATE RUST COVERAGE ---
+          for CRATE in gglib-core gglib-db gglib-cli gglib-axum gglib-tauri; do
+            CRATE_LCOV_FILE=$(find artifacts -name "$CRATE-lcov.info" -type f 2>/dev/null | head -1)
+            
+            if [ -n "$CRATE_LCOV_FILE" ] && [ -f "$CRATE_LCOV_FILE" ]; then
+              echo "Parsing $CRATE coverage from: $CRATE_LCOV_FILE"
+              CRATE_TOTAL_LINES=$(grep -h '^LF:' "$CRATE_LCOV_FILE" | awk -F ':' '{sum += $2} END {print sum+0}')
+              CRATE_COVERED_LINES=$(grep -h '^LH:' "$CRATE_LCOV_FILE" | awk -F ':' '{sum += $2} END {print sum+0}')
+              
+              if [ "$CRATE_TOTAL_LINES" -gt 0 ]; then
+                CRATE_COVERAGE=$(awk -v covered="$CRATE_COVERED_LINES" -v total="$CRATE_TOTAL_LINES" 'BEGIN { printf "%d", (covered / total) * 100 }')
+                CRATE_COV_MESSAGE="$CRATE_COVERAGE%"
+                
+                if [ "$CRATE_COVERAGE" -gt 90 ]; then CRATE_COV_COLOR="brightgreen";
+                elif [ "$CRATE_COVERAGE" -gt 80 ]; then CRATE_COV_COLOR="green";
+                elif [ "$CRATE_COVERAGE" -gt 70 ]; then CRATE_COV_COLOR="yellowgreen";
+                elif [ "$CRATE_COVERAGE" -gt 60 ]; then CRATE_COV_COLOR="yellow";
+                else CRATE_COV_COLOR="red"; fi
+              else
+                CRATE_COV_MESSAGE="0%"
+                CRATE_COV_COLOR="red"
+              fi
+            else
+              CRATE_COV_MESSAGE="unknown"
+              CRATE_COV_COLOR="lightgrey"
+            fi
+            
+            cat <<JSON > badges/$CRATE-coverage.json
+          {
+            "schemaVersion": 1,
+            "label": "$CRATE cov",
+            "message": "$CRATE_COV_MESSAGE",
+            "color": "$CRATE_COV_COLOR"
+          }
+          JSON
+          done
+
           # --- TYPESCRIPT TESTS ---
           # Try JSON file first (more reliable), fall back to text output
           TS_JSON_FILE=$(find artifacts -name "ts-test-results.json" -type f 2>/dev/null | head -1)

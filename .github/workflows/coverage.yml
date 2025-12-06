@@ -60,6 +60,14 @@ jobs:
       - name: Run Rust tests with coverage
         run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info 2>&1 | tee rust-test-output.txt
 
+      - name: Run per-crate Rust coverage
+        run: |
+          cargo llvm-cov --package gglib-core --lcov --output-path gglib-core-lcov.info
+          cargo llvm-cov --package gglib-db --lcov --output-path gglib-db-lcov.info
+          cargo llvm-cov --package gglib-cli --lcov --output-path gglib-cli-lcov.info
+          cargo llvm-cov --package gglib-axum --lcov --output-path gglib-axum-lcov.info
+          cargo llvm-cov --package gglib-tauri --lcov --output-path gglib-tauri-lcov.info
+
       - name: Run TypeScript tests with coverage
         run: npm run test:coverage -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
 
@@ -74,6 +82,11 @@ jobs:
           path: |
             target/llvm-cov/html/
             lcov.info
+            gglib-core-lcov.info
+            gglib-db-lcov.info
+            gglib-cli-lcov.info
+            gglib-axum-lcov.info
+            gglib-tauri-lcov.info
             coverage/
             rust-test-output.txt
             ts-test-output.txt

@@ -129,13 +129,13 @@ The codebase is organized as a Cargo workspace with compile-time enforced bounda
 
 **Crate Health:**
 
-| Crate | Tests | Description |
-|-------|-------|-------------|
-| [`gglib-core`](crates/gglib-core) | ![core](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json) | Domain types, ports, events |
-| [`gglib-db`](crates/gglib-db) | ![db](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json) | SQLite repositories |
-| [`gglib-cli`](crates/gglib-cli) | ![cli](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json) | Command-line interface |
-| [`gglib-axum`](crates/gglib-axum) | ![axum](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) | HTTP API server |
-| [`gglib-tauri`](crates/gglib-tauri) | ![tauri](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json) | Desktop GUI backend |
+| Crate | Tests | Coverage | Description |
+|-------|-------|----------|-------------|
+| [`gglib-core`](crates/gglib-core) | ![core](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json) | ![cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-coverage.json) | Domain types, ports, events |
+| [`gglib-db`](crates/gglib-db) | ![db](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json) | ![cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-coverage.json) | SQLite repositories |
+| [`gglib-cli`](crates/gglib-cli) | ![cli](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json) | ![cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-coverage.json) | Command-line interface |
+| [`gglib-axum`](crates/gglib-axum) | ![axum](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) | ![cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json) | HTTP API server |
+| [`gglib-tauri`](crates/gglib-tauri) | ![tauri](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json) | ![cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-coverage.json) | Desktop GUI backend |
 
 <!-- crate-docs:end -->
 
