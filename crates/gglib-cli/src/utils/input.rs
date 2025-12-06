@@ -1,0 +1,64 @@
+//! User input utilities for interactive command-line prompts.
+//!
+//! This module provides functions for safely collecting user input
+//! including strings and confirmations.
+
+use anyhow::{Context, Result};
+use std::io;
+
+/// Prompts the user for a string input.
+///
+/// Displays a prompt message and waits for the user to enter text.
+/// The input is read from stdin and returned with whitespace trimmed.
+///
+/// # Arguments
+///
+/// * `prompt` - The message to display to the user
+///
+/// # Returns
+///
+/// * `Result<String>` - The user's input as a trimmed string
+///
+/// # Errors
+///
+/// Returns an error if reading from stdin fails.
+pub fn prompt_string(prompt: &str) -> Result<String> {
+    println!("{prompt}: ");
+
+    let mut input: String = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .context("Failed to read user input")?;
+
+    Ok(input.trim().to_string())
+}
+
+/// Prompts the user for a yes/no confirmation.
+///
+/// Accepts 'y', 'yes', 'n', 'no' (case insensitive).
+/// Empty input is treated as 'no'.
+///
+/// # Arguments
+///
+/// * `prompt` - The message to display to the user
+///
+/// # Returns
+///
+/// * `Result<bool>` - true if user confirms, false otherwise
+///
+/// # Errors
+///
+/// Returns an error if reading from stdin fails.
+pub fn prompt_confirmation(prompt: &str) -> Result<bool> {
+    loop {
+        let input = prompt_string(&format!("{prompt} (y/N)"))?;
+        match input.to_lowercase().as_str() {
+            "y" | "yes" => return Ok(true),
+            "n" | "no" | "" => return Ok(false),
+            _ => {
+                eprintln!("Please enter 'y' for yes or 'n' for no.");
+                continue;
+            }
+        }
+    }
+}

@@ -25,8 +25,8 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 
-// Use legacy path utilities until they move to gglib-core
-use gglib::utils::paths::{get_database_path, get_llama_server_path, resolve_models_dir};
+// Local path utilities (moved from legacy gglib crate)
+use crate::utils::paths::{get_database_path, get_llama_server_path, resolve_models_dir};
 
 /// Bootstrap configuration for the CLI.
 #[derive(Debug, Clone)]

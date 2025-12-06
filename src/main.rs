@@ -122,9 +122,45 @@ async fn run_command(core: Arc<AppCore>, command: cli::Commands) -> Result<()> {
             limit,
             size,
         } => commands::download::handle_browse(category, limit, size).await,
-        Commands::List => commands::list::handle_list(core).await,
+        Commands::List => {
+            // Migrated to gglib-cli; inline stub for legacy binary
+            let models = core.models().list().await?;
+            if models.is_empty() {
+                println!("No models found. Use 'gglib add <file_path>' to add your first model.");
+            } else {
+                println!("Found {} model(s):", models.len());
+                for model in models {
+                    println!(
+                        "  [{}] {} - {}",
+                        model.id.map(|id| id.to_string()).unwrap_or_else(|| "?".to_string()),
+                        model.name,
+                        model.file_path.display()
+                    );
+                }
+            }
+            Ok(())
+        }
         Commands::Remove { identifier, force } => {
-            commands::remove::handle_remove(core, identifier, force).await
+            // Migrated to gglib-cli; inline stub for legacy binary
+            use gglib::utils::input;
+            let models = core.models().find_by_name(&identifier).await?;
+            if models.is_empty() {
+                println!("No model found matching: '{identifier}'");
+                return Ok(());
+            }
+            let model = &models[0];
+            if !force {
+                println!("Model: {} ({})", model.name, model.file_path.display());
+                if !input::prompt_confirmation("Remove this model from the database?")? {
+                    println!("Cancelled.");
+                    return Ok(());
+                }
+            }
+            if let Some(id) = model.id {
+                core.models().remove(id).await?;
+                println!("✅ Model '{}' removed.", model.name);
+            }
+            Ok(())
         }
         Commands::Update {
             id,

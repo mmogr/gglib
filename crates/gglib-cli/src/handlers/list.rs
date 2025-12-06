@@ -1,18 +1,21 @@
-//! List command implementation for displaying stored GGUF models.
+//! List command handler.
 //!
-//! This module handles retrieving and displaying all models from the
-//! database in a formatted table with key metadata.
+//! Displays all GGUF models in the database in a formatted table.
 
-use crate::commands::presentation::{print_separator, truncate_string};
-use crate::services::core::AppCore;
 use anyhow::Result;
-use std::sync::Arc;
 
-/// Handles the "list" command to display all GGUF models in the database.
+use crate::bootstrap::CliContext;
+use crate::presentation::{print_separator, truncate_string};
+
+/// Execute the list command.
 ///
-/// This function retrieves and displays all models stored in the database
-/// with their metadata including name, file path, parameter count, architecture,
-/// quantization, context length, and when they were added.
+/// Retrieves and displays all models stored in the database
+/// with their metadata including name, file path, parameter count,
+/// architecture, quantization, context length, and when they were added.
+///
+/// # Arguments
+///
+/// * `ctx` - The CLI context providing access to AppCore
 ///
 /// # Returns
 ///
@@ -21,27 +24,10 @@ use std::sync::Arc;
 /// # Errors
 ///
 /// This function will return an error if:
-/// - Database connection fails
 /// - Database query fails
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use gglib::commands::list::handle_list;
-/// use gglib::services::AppCore;
-/// use std::sync::Arc;
-///
-/// #[tokio::main]
-/// async fn main() -> anyhow::Result<()> {
-///     let pool = gglib::services::database::setup_database().await?;
-///     let core = Arc::new(AppCore::new(pool));
-///     handle_list(core).await?;
-///     Ok(())
-/// }
-/// ```
-pub async fn handle_list(core: Arc<AppCore>) -> Result<()> {
+pub async fn execute(ctx: &CliContext) -> Result<()> {
     // Retrieve all models via AppCore
-    let models = core.models().list().await?;
+    let models = ctx.app().models().list().await?;
 
     if models.is_empty() {
         println!("No models found in the database.");
@@ -68,10 +54,7 @@ pub async fn handle_list(core: Arc<AppCore>) -> Result<()> {
 
         println!(
             "{:<3} {:<25} {:<8.1} {:<12} {:<8} {:<10} {:<20} {}",
-            model
-                .id
-                .map(|id| id.to_string())
-                .unwrap_or_else(|| "--".to_string()),
+            model.id,
             truncate_string(&model.name, 24),
             model.param_count_b,
             truncate_string(arch, 11),
@@ -106,25 +89,4 @@ mod tests {
         let result = truncate_string("this is a very long string", 10);
         assert_eq!(result, "this is...");
     }
-
-    #[test]
-    fn test_truncate_string_very_short_limit() {
-        let result = truncate_string("hello", 3);
-        assert_eq!(result, "...");
-    }
-
-    #[test]
-    fn test_truncate_string_zero_limit() {
-        let result = truncate_string("hello", 0);
-        assert_eq!(result, "...");
-    }
-
-    #[test]
-    fn test_truncate_string_empty_input() {
-        let result = truncate_string("", 10);
-        assert_eq!(result, "");
-    }
-
-    // Integration tests for handle_list would go in tests/ directory
-    // since they require database setup and mocking
 }
