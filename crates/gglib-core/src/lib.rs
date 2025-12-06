@@ -27,17 +27,21 @@ pub mod services;
 pub mod settings;
 
 // Re-export commonly used types for convenience
-pub use domain::{Model, NewModel};
+pub use domain::{
+    McpEnvEntry, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
+    McpToolResult, Model, NewMcpServer, NewModel,
+};
 pub use download::{
     DownloadError, DownloadEvent, DownloadId, DownloadResult, DownloadStatus, DownloadSummary,
     FailedDownload, Quantization, QueueSnapshot, QueuedDownload, ShardInfo,
 };
-pub use events::{AppEvent, ModelSummary, ServerSnapshotEntry};
+pub use events::{AppEvent, McpServerSummary, ModelSummary, ServerSnapshotEntry};
 pub use ports::{
-    CoreError, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
-    HfSearchResult, ModelRepository, ProcessError, ProcessHandle, ProcessRunner,
-    QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig,
-    ServerHealth, SettingsRepository,
+    AppEventEmitter, CoreError, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
+    HfSearchOptions, HfSearchResult, McpErrorCategory, McpErrorInfo, McpRepositoryError,
+    McpServerRepository, McpServiceError, ModelRepository, NoopEmitter, ProcessError,
+    ProcessHandle, ProcessRunner, QuantizationResolver, Repos, RepositoryError, Resolution,
+    ResolvedFile, ServerConfig, ServerHealth, SettingsRepository,
 };
 pub use settings::{Settings, SettingsError, SettingsUpdate, validate_settings};
 

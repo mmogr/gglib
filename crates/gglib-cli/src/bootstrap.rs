@@ -5,6 +5,7 @@
 //! - Database pool and repositories (via gglib-db)
 //! - Process runner (via gglib-runtime)
 //! - Core services (via gglib-core)
+//! - MCP service (via gglib-mcp)
 //!
 //! Command handlers receive the fully-composed AppCore and delegate work to it.
 
@@ -12,9 +13,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use gglib_core::ports::{ProcessRunner, Repos};
+use gglib_core::ports::{NoopEmitter, ProcessRunner, Repos};
 use gglib_core::services::AppCore;
 use gglib_db::CoreFactory;
+use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 
 // Use legacy path utilities until they move to gglib-core
@@ -51,6 +53,8 @@ pub struct CliContext {
     pub app: AppCore,
     /// Process runner for direct server operations.
     pub runner: Arc<dyn ProcessRunner>,
+    /// MCP service for managing MCP servers.
+    pub mcp: Arc<McpService>,
 }
 
 impl CliContext {
@@ -63,6 +67,11 @@ impl CliContext {
     pub fn runner(&self) -> &Arc<dyn ProcessRunner> {
         &self.runner
     }
+
+    /// Access the MCP service.
+    pub fn mcp(&self) -> &Arc<McpService> {
+        &self.mcp
+    }
 }
 
 /// Bootstrap the CLI application.
@@ -71,6 +80,7 @@ impl CliContext {
 /// 1. Creates the database pool and repositories
 /// 2. Creates the process runner
 /// 3. Assembles the AppCore from services
+/// 4. Creates the MCP service with injected repository
 ///
 /// # Arguments
 ///
@@ -94,15 +104,20 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     ));
 
     // 3. Assemble AppCore
-    let app = AppCore::new(repos, runner.clone());
+    let app = AppCore::new(repos.clone(), runner.clone());
 
-    Ok(CliContext { app, runner })
+    // 4. Create MCP service with injected repository
+    // CLI uses NoopEmitter since there's no frontend to broadcast events to
+    let mcp = Arc::new(McpService::new(repos.mcp_servers.clone(), Arc::new(NoopEmitter)));
+
+    Ok(CliContext { app, runner, mcp })
 }
 
 /// Bootstrap with custom repos and runner (for testing).
 pub fn bootstrap_with(repos: Repos, runner: Arc<dyn ProcessRunner>) -> CliContext {
-    let app = AppCore::new(repos, runner.clone());
-    CliContext { app, runner }
+    let app = AppCore::new(repos.clone(), runner.clone());
+    let mcp = Arc::new(McpService::new(repos.mcp_servers.clone(), Arc::new(NoopEmitter)));
+    CliContext { app, runner, mcp }
 }
 
 #[cfg(test)]

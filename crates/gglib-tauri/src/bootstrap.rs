@@ -6,6 +6,7 @@
 //! - Database pool and repositories (via gglib-db)
 //! - Process runner (via gglib-runtime)
 //! - Core services (via gglib-core)
+//! - MCP service (via gglib-mcp)
 //!
 //! Tauri command handlers receive the fully-composed TauriContext and
 //! delegate work to AppCore.
@@ -14,9 +15,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use gglib_core::ports::{ProcessRunner, Repos};
+use gglib_core::ports::{NoopEmitter, ProcessRunner, Repos};
 use gglib_core::services::AppCore;
 use gglib_db::CoreFactory;
+use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 
 // Use legacy path utilities until they move to gglib-core
@@ -53,6 +55,8 @@ pub struct TauriContext {
     pub app: AppCore,
     /// Process runner for direct server operations.
     pub runner: Arc<dyn ProcessRunner>,
+    /// MCP service for managing MCP servers.
+    pub mcp: Arc<McpService>,
 }
 
 impl TauriContext {
@@ -65,6 +69,11 @@ impl TauriContext {
     pub fn runner(&self) -> &Arc<dyn ProcessRunner> {
         &self.runner
     }
+
+    /// Access the MCP service.
+    pub fn mcp(&self) -> &Arc<McpService> {
+        &self.mcp
+    }
 }
 
 /// Bootstrap the Tauri desktop application.
@@ -73,6 +82,7 @@ impl TauriContext {
 /// 1. Creates the database pool and repositories
 /// 2. Creates the process runner
 /// 3. Assembles the AppCore from services
+/// 4. Creates the MCP service with injected repository
 ///
 /// # Arguments
 ///
@@ -96,15 +106,21 @@ pub async fn bootstrap(config: TauriConfig) -> Result<TauriContext> {
     ));
 
     // 3. Assemble AppCore
-    let app = AppCore::new(repos, runner.clone());
+    let app = AppCore::new(repos.clone(), runner.clone());
 
-    Ok(TauriContext { app, runner })
+    // 4. Create MCP service with injected repository
+    // For Tauri, we'll eventually use a real event emitter that broadcasts to frontend.
+    // For now, use NoopEmitter until the Tauri event bridge is implemented.
+    let mcp = Arc::new(McpService::new(repos.mcp_servers.clone(), Arc::new(NoopEmitter)));
+
+    Ok(TauriContext { app, runner, mcp })
 }
 
 /// Bootstrap with custom repos and runner (for testing).
 pub fn bootstrap_with(repos: Repos, runner: Arc<dyn ProcessRunner>) -> TauriContext {
-    let app = AppCore::new(repos, runner.clone());
-    TauriContext { app, runner }
+    let app = AppCore::new(repos.clone(), runner.clone());
+    let mcp = Arc::new(McpService::new(repos.mcp_servers.clone(), Arc::new(NoopEmitter)));
+    TauriContext { app, runner, mcp }
 }
 
 #[cfg(test)]

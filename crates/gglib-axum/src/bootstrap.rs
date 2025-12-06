@@ -6,6 +6,7 @@
 //! - Database pool and repositories (via gglib-db)
 //! - Process runner (via gglib-runtime)
 //! - Core services (via gglib-core)
+//! - MCP service (via gglib-mcp)
 //!
 //! All handler code delegates to AppCore without touching infrastructure.
 
@@ -13,9 +14,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use gglib_core::ports::{ProcessRunner, Repos};
+use gglib_core::ports::{NoopEmitter, ProcessRunner, Repos};
 use gglib_core::services::AppCore;
 use gglib_db::CoreFactory;
+use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 
 // Import from legacy gglib crate (temporary until handlers migrate here)
@@ -54,6 +56,8 @@ pub struct AxumContext {
     pub app: AppCore,
     /// Process runner for direct server operations.
     pub runner: Arc<dyn ProcessRunner>,
+    /// MCP service for managing MCP servers.
+    pub mcp: Arc<McpService>,
     /// Server configuration.
     pub config: ServerConfig,
 }
@@ -63,6 +67,11 @@ impl AxumContext {
     pub fn app(&self) -> &AppCore {
         &self.app
     }
+
+    /// Access the MCP service.
+    pub fn mcp(&self) -> &Arc<McpService> {
+        &self.mcp
+    }
 }
 
 /// Bootstrap the Axum server application.
@@ -71,6 +80,7 @@ impl AxumContext {
 /// 1. Creates the database pool and repositories
 /// 2. Creates the process runner
 /// 3. Assembles the AppCore from services
+/// 4. Creates the MCP service with injected repository
 ///
 /// # Arguments
 ///
@@ -94,11 +104,16 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     ));
 
     // 3. Assemble AppCore
-    let app = AppCore::new(repos, runner.clone());
+    let app = AppCore::new(repos.clone(), runner.clone());
+
+    // 4. Create MCP service with injected repository
+    // For Axum, we use NoopEmitter for now. SSE event broadcasting can be added later.
+    let mcp = Arc::new(McpService::new(repos.mcp_servers.clone(), Arc::new(NoopEmitter)));
 
     Ok(AxumContext {
         app,
         runner,
+        mcp,
         config,
     })
 }
@@ -109,10 +124,12 @@ pub fn bootstrap_with(
     runner: Arc<dyn ProcessRunner>,
     config: ServerConfig,
 ) -> AxumContext {
-    let app = AppCore::new(repos, runner.clone());
+    let app = AppCore::new(repos.clone(), runner.clone());
+    let mcp = Arc::new(McpService::new(repos.mcp_servers.clone(), Arc::new(NoopEmitter)));
     AxumContext {
         app,
         runner,
+        mcp,
         config,
     }
 }
