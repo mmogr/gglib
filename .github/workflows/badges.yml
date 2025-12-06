@@ -123,6 +123,79 @@ jobs:
           }
           JSON
 
+          # --- PER-CRATE RUST TESTS ---
+          # Generate badges for each workspace crate
+          for CRATE in gglib-core gglib-db gglib-cli gglib-axum gglib-tauri; do
+            CRATE_TEST_FILE=$(find artifacts -name "rust-test-$CRATE.txt" -type f 2>/dev/null | head -1)
+            
+            if [ -n "$CRATE_TEST_FILE" ] && [ -f "$CRATE_TEST_FILE" ]; then
+              echo "Parsing $CRATE test results from: $CRATE_TEST_FILE"
+              CRATE_PASSED=$(grep -o "test result: ok\. [0-9]* passed" "$CRATE_TEST_FILE" | grep -o "[0-9]*" | awk '{sum += $1} END {print sum+0}')
+              CRATE_FAILED=$(grep -o "[0-9]* failed" "$CRATE_TEST_FILE" | grep -o "[0-9]*" | awk '{sum += $1} END {print sum+0}')
+              CRATE_TOTAL=$((CRATE_PASSED + CRATE_FAILED))
+              
+              if [ "$CRATE_TOTAL" -eq 0 ]; then
+                CRATE_MESSAGE="0/0"
+                CRATE_COLOR="yellow"
+              else
+                CRATE_PERCENTAGE=$((CRATE_PASSED * 100 / CRATE_TOTAL))
+                CRATE_MESSAGE="$CRATE_PASSED/$CRATE_TOTAL"
+                
+                if [ "$CRATE_PERCENTAGE" -eq 100 ]; then CRATE_COLOR="brightgreen";
+                elif [ "$CRATE_PERCENTAGE" -gt 90 ]; then CRATE_COLOR="green";
+                elif [ "$CRATE_PERCENTAGE" -gt 80 ]; then CRATE_COLOR="yellowgreen";
+                elif [ "$CRATE_PERCENTAGE" -gt 60 ]; then CRATE_COLOR="yellow";
+                else CRATE_COLOR="red"; fi
+              fi
+            else
+              CRATE_MESSAGE="unknown"
+              CRATE_COLOR="lightgrey"
+            fi
+            
+            cat <<JSON > badges/$CRATE-tests.json
+          {
+            "schemaVersion": 1,
+            "label": "$CRATE",
+            "message": "$CRATE_MESSAGE",
+            "color": "$CRATE_COLOR"
+          }
+          JSON
+          done
+
+          # --- BOUNDARY CHECK ---
+          BOUNDARY_FILE=$(find artifacts -name "boundary-status.json" -type f 2>/dev/null | head -1)
+          
+          if [ -n "$BOUNDARY_FILE" ] && [ -f "$BOUNDARY_FILE" ]; then
+            echo "Parsing boundary check results from: $BOUNDARY_FILE"
+            BOUNDARY_OVERALL=$(jq -r '.overall // "unknown"' "$BOUNDARY_FILE" 2>/dev/null || echo "unknown")
+            
+            if [ "$BOUNDARY_OVERALL" == "pass" ]; then
+              BOUNDARY_MESSAGE="✓ clean"
+              BOUNDARY_COLOR="brightgreen"
+            elif [ "$BOUNDARY_OVERALL" == "fail" ]; then
+              BOUNDARY_MESSAGE="✗ violation"
+              BOUNDARY_COLOR="red"
+            else
+              BOUNDARY_MESSAGE="unknown"
+              BOUNDARY_COLOR="lightgrey"
+            fi
+          elif [ "$CONCLUSION" == "failure" ]; then
+            BOUNDARY_MESSAGE="failed"
+            BOUNDARY_COLOR="red"
+          else
+            BOUNDARY_MESSAGE="unknown"
+            BOUNDARY_COLOR="lightgrey"
+          fi
+          
+          cat <<JSON > badges/boundary.json
+          {
+            "schemaVersion": 1,
+            "label": "boundaries",
+            "message": "$BOUNDARY_MESSAGE",
+            "color": "$BOUNDARY_COLOR"
+          }
+          JSON
+
           # --- RUST COVERAGE ---
           LCOV_FILE=$(find artifacts -name "lcov.info" -type f 2>/dev/null | head -1)
           
