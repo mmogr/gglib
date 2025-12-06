@@ -1,33 +1,31 @@
 //! Core domain types and port definitions.
 //!
-//! This module contains the pure domain logic, traits (ports), and domain types
-//! that form the heart of the application. No infrastructure dependencies (sqlx,
-//! filesystem, process management) should appear here.
+//! **MIGRATION SHIM**: This module re-exports from `gglib_core` crate.
+//! Direct usage of submodules is deprecated — import from the crate or this module.
 //!
 //! # Structure
 //!
 //! - `domain` - Core domain types (`Model`, `NewModel`, server configuration)
 //! - `ports` - Trait definitions for repositories and external systems
 
-pub mod domain;
+// SHIM: Re-export domain module from crate (remove in Phase 5 final cleanup)
+pub mod domain {
+    //! Domain types re-exported from gglib_core.
+    pub use gglib_core::domain::{Model, NewModel};
+}
+
+// Keep local ports module for download/HF traits not yet migrated
 pub mod ports;
 
 // Re-export commonly used types for convenience
-pub use domain::{Model, NewModel};
+// SHIM: These come from gglib_core now
+pub use gglib_core::{
+    AppEvent, Model, ModelRepository, NewModel, ProcessError, ProcessHandle, ProcessRunner,
+    RepositoryError, ServerConfig, ServerHealth, SettingsRepository,
+};
+
+// Re-export download/HF traits from their current locations (not yet migrated to crate)
 pub use ports::{
-    DownloadExecutor,
-    EventCallback,
-    ExecuteParams,
-    ExecutionResult,
-    // Re-export existing traits (canonical import path)
-    HttpBackend,
-    ProcessError,
-    QuantizationResolver,
-    RepositoryError,
-    Resolution,
-    ResolvedFile,
-    events::AppEvent,
-    model_repository::ModelRepository,
-    process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth},
-    settings_repository::SettingsRepository,
+    DownloadExecutor, EventCallback, ExecuteParams, ExecutionResult, HttpBackend,
+    QuantizationResolver, Resolution, ResolvedFile,
 };

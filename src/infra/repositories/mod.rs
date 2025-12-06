@@ -1,11 +1,8 @@
 //! Repository implementations using SQLite.
 //!
-//! These implementations encapsulate all SQL queries and database access.
-//! The `SqlitePool` is confined to this module and never exposed through
-//! the port trait signatures.
+//! **MIGRATION SHIM**: Repository implementations are now in `gglib_db` crate.
+//! This module re-exports for backwards compatibility during migration.
 
-mod sqlite_model_repository;
-mod sqlite_settings_repository;
+// SHIM: Re-export from gglib_db crate (remove in Phase 5 final cleanup)
+pub use gglib_db::{SqliteModelRepository, SqliteSettingsRepository};
 
-pub use sqlite_model_repository::SqliteModelRepository;
-pub use sqlite_settings_repository::SqliteSettingsRepository;

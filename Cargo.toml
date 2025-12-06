@@ -6,8 +6,8 @@ members = [
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
-    # Legacy monolith - will be removed after extraction complete
-    # ".",
+    # Legacy monolith - re-enabled for gradual migration, will be removed after extraction complete
+    ".",
 ]
 
 # Shared package metadata for all workspace crates
@@ -45,6 +45,10 @@ async-trait = "0.1.89"
 tempfile = "3.8"
 mockall = "0.12"
 
+# Internal crates (for migration)
+gglib-core = { path = "crates/gglib-core" }
+gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
+
 # Workspace-wide lints for consistency
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -70,3 +74,95 @@ opt-level = 0
 
 [profile.test]
 opt-level = 0
+
+# ============================================================================
+# Legacy Monolith Package (for gradual migration)
+# This section will be removed once all code is extracted to workspace crates
+# ============================================================================
+
+[package]
+name = "gglib"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "GGUF model manager and runner"
+
+[dependencies]
+# Internal crates for migration
+gglib-core.workspace = true
+gglib-db.workspace = true
+
+# CLI
+clap = { version = "4.0", features = ["derive"] }
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Async runtime
+tokio.workspace = true
+async-trait.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+
+# Database (still needed during transition)
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono"] }
+libsqlite3-sys = { version = "0.27", features = ["bundled", "unlock_notify"] }
+
+# HTTP/Networking
+reqwest = { version = "0.11", features = ["json", "stream"] }
+url = "2.5"
+hf-hub = "0.4"
+
+# CLI utilities
+indicatif = "0.17"
+regex = "1.0"
+urlencoding = "2.1"
+num_cpus = "1.16"
+strum = "0.26"
+strum_macros = "0.26"
+dotenvy = "0.15"
+
+# Proxy server
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+hyper = { version = "1.0", features = ["client", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "http2", "tokio"] }
+http-body-util = "0.1"
+
+# Logging/tracing
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Utilities
+bytes = "1.5"
+sysinfo = "0.36.1"
+dirs = "6.0.0"
+futures-util = "0.3"
+tokio-stream = { version = "0.1.17", features = ["sync"] }
+which = "5.0"
+tokio-util = "0.7"
+zip = "2.2"
+uuid = { version = "1.18.1", features = ["v4"] }
+base64 = "0.22"
+
+# Platform-specific process termination
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["signal"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
+[build-dependencies]
+regex = "1.10"
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-test.workspace = true
+mockall.workspace = true

@@ -4,7 +4,8 @@
 //! (`Model`, `NewModel`) and the legacy `Gguf` type used throughout
 //! the existing codebase.
 
-use crate::core::domain::{Model, NewModel};
+use gglib_core::{Model, NewModel};
+
 use crate::models::Gguf;
 
 /// Convert a `Gguf` (legacy type) to a `Model` (domain type).
