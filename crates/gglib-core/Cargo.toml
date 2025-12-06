@@ -1,0 +1,27 @@
+[package]
+name = "gglib-core"
+version = "0.1.0"
+edition = "2024"
+description = "Core domain types and port definitions for gglib"
+license = "MIT"
+publish = false
+
+[dependencies]
+# Universal dependencies only - no adapter-specific crates
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }
+tokio-test = { workspace = true }
+
+[lints.rust]
+unsafe_code = "deny"
+# TODO: Re-enable after extraction complete
+# unused_crate_dependencies = "deny"

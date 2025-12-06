@@ -1,0 +1,36 @@
+[package]
+name = "gglib-cli"
+version = "0.1.0"
+edition = "2024"
+description = "CLI interface for gglib"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "gglib"
+path = "src/main.rs"
+
+[dependencies]
+gglib-core = { path = "../gglib-core" }
+gglib-db = { path = "../gglib-db" }
+
+# Universal dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+
+# CLI-specific dependencies - defined locally, not in workspace
+clap = { version = "4.0", features = ["derive"] }
+indicatif = "0.17"
+dotenvy = "0.15"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio-test = { workspace = true }
+
+[lints.rust]
+unsafe_code = "deny"
