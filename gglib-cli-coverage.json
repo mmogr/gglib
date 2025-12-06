@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "gglib-cli cov",
-  "message": "unknown",
-  "color": "lightgrey"
+  "message": "1%",
+  "color": "red"
 }
