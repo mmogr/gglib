@@ -6,19 +6,18 @@
 //!
 //! # Architecture
 //!
+//! - `bootstrap` - Server startup (composition root)
 //! - `error` - HTTP error types with status code mapping
-//! - `routes` - Route definitions and router construction
+//! - `routes` - Route definitions and router construction (stub - delegates to legacy)
 //! - `handlers/` - Request handlers (to be added as migrated)
 //!
 //! # Usage
 //!
 //! ```rust,ignore
-//! use gglib_axum::create_router;
-//! use gglib_db::CoreFactory;
+//! use gglib_axum::bootstrap;
 //!
-//! let core = CoreFactory::build_sqlite("~/.gglib/gglib.db").await?;
-//! let router = create_router(core);
-//! axum::serve(listener, router).await?;
+//! // Start the web server
+//! bootstrap::start_server(9887, 9000, 5).await?;
 //! ```
 
 #![deny(unsafe_code)]
@@ -28,12 +27,19 @@
 #[cfg(test)]
 use tokio_test as _;
 
-// gglib-db will be used by handlers as they are migrated
+// Dependencies used by bootstrap module
+use anyhow as _;
+use gglib as _;
 use gglib_db as _;
+use serde_json as _;
+use tokio as _;
+use tracing as _;
 
+pub mod bootstrap;
 pub mod error;
 pub mod routes;
 
 // Re-export primary types
+pub use bootstrap::start_server;
 pub use error::HttpError;
 pub use routes::create_router;

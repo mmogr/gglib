@@ -942,13 +942,18 @@ dependencies = [
 name = "gglib-axum"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
+ "gglib",
  "gglib-core",
  "gglib-db",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
+ "tokio",
  "tokio-test",
  "tower-http 0.5.2",
+ "tracing",
 ]
 
 [[package]]
