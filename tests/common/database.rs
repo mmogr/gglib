@@ -1,34 +1,18 @@
 //! Database test utilities.
 //!
-//! Provides functions for creating isolated in-memory test databases
-//! that match the production schema exactly.
+//! MIGRATION SHIM: Re-exports test database utilities from gglib-db.
+//! This maintains API compatibility while the crate migration is in progress.
 
 use anyhow::Result;
-use gglib::services::database;
+use gglib_db::TestDb;
 use sqlx::SqlitePool;
 
 /// Creates an in-memory SQLite database with the full production schema.
 ///
-/// This function creates a fresh database for each test, ensuring complete
-/// isolation between tests. The schema matches production exactly by reusing
-/// the `create_schema()` function from the database module.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use crate::common::database::setup_test_pool;
-///
-/// #[tokio::test]
-/// async fn test_something() {
-///     let pool = setup_test_pool().await.unwrap();
-///     // Test with the pool...
-/// }
-/// ```
+/// # Migration Note
+/// This is a shim that wraps `gglib_db::TestDb`. It will be removed
+/// once all tests are updated to use `TestDb` directly.
 pub async fn setup_test_pool() -> Result<SqlitePool> {
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
-
-    // Reuse the production schema to ensure parity
-    database::create_schema(&pool).await?;
-
-    Ok(pool)
+    let test_db = TestDb::new().await?;
+    Ok(test_db.pool().clone())
 }

@@ -166,3 +166,4 @@ regex = "1.10"
 tempfile.workspace = true
 tokio-test.workspace = true
 mockall.workspace = true
+gglib-db = { workspace = true, features = ["test-utils"] }

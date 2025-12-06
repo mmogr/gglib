@@ -69,7 +69,8 @@ impl CoreFactory {
 
 /// Test database helper for integration tests.
 ///
-/// Provides an in-memory SQLite database with schema already applied.
+/// Provides an in-memory SQLite database with full schema already applied.
+/// Matches the production schema to ensure test parity.
 #[cfg(any(test, feature = "test-utils"))]
 pub struct TestDb {
     pool: SqlitePool,
@@ -77,7 +78,7 @@ pub struct TestDb {
 
 #[cfg(any(test, feature = "test-utils"))]
 impl TestDb {
-    /// Create a new in-memory test database with schema.
+    /// Create a new in-memory test database with full schema.
     pub async fn new() -> anyhow::Result<Self> {
         let pool = SqlitePool::connect("sqlite::memory:").await?;
 
@@ -113,6 +114,85 @@ impl TestDb {
                 key TEXT PRIMARY KEY NOT NULL,
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create chat_conversations table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS chat_conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                model_id INTEGER,
+                system_prompt TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE SET NULL
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create chat_messages table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant')),
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create index on conversation_id for faster message queries
+        sqlx::query(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_messages_conversation 
+            ON chat_messages(conversation_id)
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create MCP servers table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS mcp_servers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
+                enabled INTEGER NOT NULL DEFAULT 1,
+                auto_start INTEGER NOT NULL DEFAULT 0,
+                command TEXT,
+                args TEXT,
+                cwd TEXT,
+                url TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_connected_at TEXT
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create MCP server environment variables table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS mcp_server_env (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                server_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                FOREIGN KEY (server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE
             )
             "#,
         )
