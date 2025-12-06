@@ -3,7 +3,7 @@
 //! This module provides a DRY abstraction for building llama-cli and llama-server
 //! command invocations, eliminating duplication between chat, serve, and other commands.
 
-use crate::commands::common::{ContextResolution, ContextResolutionSource};
+use crate::commands::llama_args::{ContextResolution, ContextResolutionSource};
 use crate::models::Gguf;
 use crate::services::AppCore;
 use anyhow::{Result, anyhow};

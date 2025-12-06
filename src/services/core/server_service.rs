@@ -8,7 +8,7 @@
 //! process with inherited stdio, which is a different use case and doesn't
 //! use this service.
 
-use crate::commands::common::{
+use crate::commands::llama_args::{
     JinjaResolutionSource, ReasoningFormatSource, resolve_jinja_flag, resolve_reasoning_format,
 };
 use crate::models::gui::StartServerResponse;

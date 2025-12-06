@@ -3,7 +3,7 @@
 //! This module handles serving GGUF models using llama-server, including
 //! context size detection and process management.
 
-use crate::commands::common::{
+use crate::commands::llama_args::{
     JinjaResolution, JinjaResolutionSource, resolve_context_size, resolve_jinja_flag,
 };
 use crate::commands::llama::ensure_llama_initialized;
