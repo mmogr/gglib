@@ -6,6 +6,7 @@
 [![Release](https://github.com/mmogr/gglib/actions/workflows/release.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/release.yml)
 ![Version](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/version.json)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Boundaries](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/boundary.json)
 
 ![Rust Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/tests.json)
 ![Rust Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/coverage.json)
@@ -99,6 +100,42 @@ GGLib follows a layered architecture where multiple frontends share common backe
 - **Web UI (Axum)** → HTTP handlers in `src/commands/gui_web/handlers.rs` call `GuiBackend` methods
 
 The `GuiBackend` service provides a unified interface for GUI operations, while the CLI commands access services directly for efficiency.
+
+### Workspace Crates (Phase 5)
+
+The codebase is organized as a Cargo workspace with compile-time enforced boundaries:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Core Layer                                     │
+│  ┌─────────────────────────────────┐    ┌─────────────────────────────────┐ │
+│  │          gglib-core             │◄───│           gglib-db              │ │
+│  │   Pure domain types & ports     │    │   SQLite repository impls       │ │
+│  │   (no infra dependencies)       │    │   (core + sqlx)                 │ │
+│  └─────────────────────────────────┘    └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            Adapter Layer                                    │
+│  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────────┐   │
+│  │    gglib-cli      │  │    gglib-axum     │  │     gglib-tauri       │   │
+│  │  CLI interface    │  │   HTTP API        │  │    Desktop GUI        │   │
+│  │  (core+db+clap)   │  │  (core+db+axum)   │  │   (core+db+tauri)     │   │
+│  └───────────────────┘  └───────────────────┘  └───────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Crate Health:**
+
+| Crate | Tests | Description |
+|-------|-------|-------------|
+| [`gglib-core`](crates/gglib-core) | ![core](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json) | Domain types, ports, events |
+| [`gglib-db`](crates/gglib-db) | ![db](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json) | SQLite repositories |
+| [`gglib-cli`](crates/gglib-cli) | ![cli](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json) | Command-line interface |
+| [`gglib-axum`](crates/gglib-axum) | ![axum](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) | HTTP API server |
+| [`gglib-tauri`](crates/gglib-tauri) | ![tauri](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json) | Desktop GUI backend |
 
 <!-- crate-docs:end -->
 
@@ -400,3 +437,17 @@ The documentation is automatically updated with every release, so you'll always 
 ### Integrations
 ![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Hub-yellow?style=flat-square)
 ![Llama.cpp](https://img.shields.io/badge/Llama.cpp-Inference-lightgrey?style=flat-square)
+
+### Health Status
+
+**Rust Workspace:**
+![core](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json&style=flat-square)
+![db](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json&style=flat-square)
+![cli](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json&style=flat-square)
+![axum](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json&style=flat-square)
+![tauri](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json&style=flat-square)
+![boundaries](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/boundary.json&style=flat-square)
+
+**Web UI:**
+![TS Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json&style=flat-square)
+![TS Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-coverage.json&style=flat-square)
