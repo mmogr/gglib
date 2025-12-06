@@ -4,6 +4,7 @@
 //! model entries from the database. The actual model files remain on disk
 //! unchanged - only the database entries are removed.
 
+use crate::commands::presentation::{ModelSummaryOpts, display_model_summary};
 use crate::models::Gguf;
 use crate::services::core::AppCore;
 use crate::utils::input;
@@ -93,21 +94,7 @@ async fn remove_with_confirmation(core: &AppCore, model: Gguf, force: bool) -> R
         .ok_or_else(|| anyhow!("Model '{}' does not have an ID", model.name))?;
 
     if !force {
-        println!("Model to remove:");
-        println!("  ID: {}", model_id);
-        println!("  Name: {}", model.name);
-        println!("  File: {}", model.file_path.display());
-        println!("  Parameters: {:.1}B", model.param_count_b);
-        if let Some(arch) = &model.architecture {
-            println!("  Architecture: {arch}");
-        }
-        if let Some(quant) = &model.quantization {
-            println!("  Quantization: {quant}");
-        }
-        println!(
-            "  Added: {}",
-            model.added_at.format("%Y-%m-%d %H:%M:%S UTC")
-        );
+        display_model_summary(&model, ModelSummaryOpts::for_removal());
         println!();
 
         let confirm = input::prompt_confirmation(

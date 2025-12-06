@@ -5,6 +5,7 @@
 //! and database storage.
 
 use crate::{
+    commands::presentation::{ModelSummaryOpts, display_model_summary},
     gguf, models,
     services::AppCore,
     utils::{input, validation},
@@ -122,20 +123,11 @@ pub async fn handle_add(core: Arc<AppCore>, file_path: String) -> Result<()> {
         tags: auto_tags,
     };
 
-    // Display clean summary instead of debug dump
-    println!("\nModel successfully created:");
-    println!("  Name: {}", new_model.name);
-    println!("  Parameters: {}B", new_model.param_count_b);
-    if let Some(arch) = &new_model.architecture {
-        println!("  Architecture: {arch}");
-    }
-    if let Some(quant) = &new_model.quantization {
-        println!("  Quantization: {quant}");
-    }
-    if let Some(ctx) = new_model.context_length {
-        println!("  Context Length: {ctx} tokens");
-    }
-    println!("  File: {}", new_model.file_path.display());
+    // Display clean summary using shared presentation
+    display_model_summary(
+        &new_model,
+        ModelSummaryOpts::with_title("\nModel successfully created:"),
+    );
 
     // Save to database via AppCore
     core.models().add(&new_model).await?;

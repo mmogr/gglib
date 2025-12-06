@@ -3,6 +3,7 @@
 //! This module handles retrieving and displaying all models from the
 //! database in a formatted table with key metadata.
 
+use crate::commands::presentation::{print_separator, truncate_string};
 use crate::services::core::AppCore;
 use anyhow::Result;
 use std::sync::Arc;
@@ -55,7 +56,7 @@ pub async fn handle_list(core: Arc<AppCore>) -> Result<()> {
         "{:<3} {:<25} {:<8} {:<12} {:<8} {:<10} {:<20} File Path",
         "ID", "Name", "Params", "Arch", "Quant", "Context", "Added"
     );
-    println!("{}", "-".repeat(115));
+    print_separator(115);
 
     for model in models {
         let arch = model.architecture.as_deref().unwrap_or("--");
@@ -82,15 +83,6 @@ pub async fn handle_list(core: Arc<AppCore>) -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Truncates a string to a maximum length, adding "..." if needed.
-fn truncate_string(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
-    }
 }
 
 #[cfg(test)]

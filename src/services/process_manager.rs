@@ -8,7 +8,7 @@
 //!
 //! This replaces the old MultiManager and ModelManager with a cleaner, unified API.
 
-use crate::commands::common::{resolve_jinja_flag, resolve_reasoning_format_with_metadata};
+use crate::commands::llama_args::{resolve_jinja_flag, resolve_reasoning_format_with_metadata};
 use crate::models::Gguf;
 use crate::services::core::ModelService;
 use crate::utils::process::{ProcessCore, ServerInfo, check_process_health, wait_for_http_health};
