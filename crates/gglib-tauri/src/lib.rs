@@ -24,6 +24,8 @@ use tokio_test as _;
 use anyhow as _;
 use gglib as _;
 use gglib_db as _;
+use gglib_download as _;
+use gglib_hf as _;
 use gglib_runtime as _;
 use tracing as _;
 
