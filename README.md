@@ -8,11 +8,6 @@
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Boundaries](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/boundary.json)
 
-![Rust Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/tests.json)
-![Rust Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/coverage.json)
-![TS Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json)
-![TS Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-coverage.json)
-
 <!-- crate-docs:start -->
 
 A multi-interface platform for managing and serving GGUF (GPT-Generated Unified Format) model files, providing CLI, desktop GUI, and web-based access.
@@ -39,95 +34,46 @@ gglib provides a simple interface to catalog, organize, and serve GGUF models lo
 
 ## Architecture Overview
 
-GGLib follows a layered architecture where multiple frontends share common backend services:
+GGLib is organized as a Cargo workspace with compile-time enforced boundaries. The architecture follows a layered design where adapters depend on core, never the reverse.
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                         Frontends                               │
-│  ┌──────────┐      ┌──────────────┐      ┌──────────────────┐   │
-│  │   CLI    │      │ Desktop GUI  │      │   Web UI/API     │   │
-│  │ Commands │      │   (Tauri)    │      │    (Axum)        │   │
-│  └────┬─────┘      └──────┬───────┘      └────────┬─────────┘   │
-│       │                   │                       │             │
-│       │                   └───────────┬───────────┘             │
-│       │                               │                         │
-└───────┼───────────────────────────────┼─────────────────────────┘
-        │                               ▼
-        │              ┌──────────────────────────────────────┐
-        │              │         GuiBackend                   │
-        │              │  • Model operations                  │
-        │              │  • Server/process management         │
-        │              │  • Proxy management                  │
-        │              │  • Chat history                      │
-        │              └──────────────────────────────────────┘
-        │                               │
-        ▼                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Shared Services                              │
-│  ┌────────────┐  ┌────────────┐  ┌──────────────┐               │
-│  │  Database  │  │  Process   │  │  Proxy       │               │
-│  │  (SQLite)  │  │  Manager   │  │  Service     │               │
-│  └────────────┘  └────────────┘  └──────────────┘               │
-└─────────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              External Processes                                 │
-│  ┌──────────────────┐          ┌──────────────────────┐         │
-│  │  llama-server    │          │ OpenAI-compatible    │         │
-│  │   instances      │          │       Proxy          │         │
-│  └──────────────────┘          └──────────────────────┘         │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                    Core Layer                                       │
+│                                                                                     │
+│   ┌─────────────────────────────────────┐   ┌─────────────────────────────────────┐ │
+│   │            gglib-core               │◄──│             gglib-db                │ │
+│   │     Pure domain types & ports       │   │      SQLite repository impls        │ │
+│   │     (no infra dependencies)         │   │         (core + sqlx)               │ │
+│   └─────────────────────────────────────┘   └─────────────────────────────────────┘ │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                      ┌───────────────────┼───────────────────┐
+                      ▼                   ▼                   ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                   Adapter Layer                                     │
+│                                                                                     │
+│   ┌─────────────────────────┐ ┌─────────────────────────┐ ┌─────────────────────┐   │
+│   │       gglib-cli         │ │       gglib-axum        │ │     gglib-tauri     │   │
+│   │    CLI interface        │ │      HTTP API server    │ │    Desktop GUI      │   │
+│   │    (core+db+clap)       │ │     (core+db+axum)      │ │   (core+db+tauri)   │   │
+│   └────────────┬────────────┘ └────────────┬────────────┘ └──────────┬──────────┘   │
+│                │                           │                         │              │
+└────────────────┼───────────────────────────┼─────────────────────────┼──────────────┘
+                 │                           │                         │
+                 ▼                           ▼                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                  External Systems                                   │
+│                                                                                     │
+│   ┌─────────────────────────┐ ┌─────────────────────────┐ ┌─────────────────────┐   │
+│   │     llama-server        │ │   OpenAI-compatible     │ │      React UI       │   │
+│   │      instances          │ │        Proxy            │ │     (TypeScript)    │   │
+│   └─────────────────────────┘ └─────────────────────────┘ └─────────────────────┘   │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Core Modules:**
-
-- **[`models`](src/models/README.md)** – GGUF model metadata, GUI/API DTOs, and data structures
-- **[`download`](src/download/README.md)** – Download manager, queue, and HuggingFace file resolution
-- **[`services`](src/services/README.md)** – Business logic layer including:
-  - `database`: SQLite operations for model metadata and chat history
-  - `gui_backend`: Unified backend service used by Tauri and Web GUI
-  - `process_manager`: Manages llama-server processes and health checks
-  - `chat_history`: Stores and retrieves conversation history
-- **[`commands`](src/commands/README.md)** – CLI command handlers and web API endpoints
-- **[`utils`](src/utils/README.md)** – Lower-level helpers for process management, path resolution, and parsing
-- **[`proxy`](src/proxy/README.md)** – OpenAI-compatible HTTP proxy with automatic model swapping
-
-**How Frontends Connect:**
-
-- **CLI** → Directly calls database and service layer functions from command handlers in `src/commands/`
-- **Desktop GUI (Tauri)** → Tauri commands call `GuiBackend` methods, which coordinate services. Spawns embedded HTTP server for React frontend
-- **Web UI (Axum)** → HTTP handlers in `src/commands/gui_web/handlers.rs` call `GuiBackend` methods
-
-The `GuiBackend` service provides a unified interface for GUI operations, while the CLI commands access services directly for efficiency.
-
-### Workspace Crates (Phase 5)
-
-The codebase is organized as a Cargo workspace with compile-time enforced boundaries:
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Core Layer                                     │
-│  ┌─────────────────────────────────┐    ┌─────────────────────────────────┐ │
-│  │          gglib-core             │◄───│           gglib-db              │ │
-│  │   Pure domain types & ports     │    │   SQLite repository impls       │ │
-│  │   (no infra dependencies)       │    │   (core + sqlx)                 │ │
-│  └─────────────────────────────────┘    └─────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                    ┌───────────────┼───────────────┐
-                    ▼               ▼               ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            Adapter Layer                                    │
-│  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────────┐   │
-│  │    gglib-cli      │  │    gglib-axum     │  │     gglib-tauri       │   │
-│  │  CLI interface    │  │   HTTP API        │  │    Desktop GUI        │   │
-│  │  (core+db+clap)   │  │  (core+db+axum)   │  │   (core+db+tauri)     │   │
-│  └───────────────────┘  └───────────────────┘  └───────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Crate Health:**
+### Crate Health
 
 | Crate | Tests | Coverage | Description |
 |-------|-------|----------|-------------|
@@ -136,6 +82,16 @@ The codebase is organized as a Cargo workspace with compile-time enforced bounda
 | [`gglib-cli`](crates/gglib-cli) | ![cli](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json) | ![cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-coverage.json) | Command-line interface |
 | [`gglib-axum`](crates/gglib-axum) | ![axum](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) | ![cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json) | HTTP API server |
 | [`gglib-tauri`](crates/gglib-tauri) | ![tauri](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json) | ![cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-coverage.json) | Desktop GUI backend |
+| **Web UI** | ![ts](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json) | ![ts-cov](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-coverage.json) | React/TypeScript frontend |
+
+### Module Reference
+
+- **[`models`](src/models/README.md)** – GGUF model metadata, GUI/API DTOs, and data structures
+- **[`download`](src/download/README.md)** – Download manager, queue, and HuggingFace file resolution
+- **[`services`](src/services/README.md)** – Business logic (database, process manager, chat history)
+- **[`commands`](src/commands/README.md)** – CLI command handlers and web API endpoints
+- **[`utils`](src/utils/README.md)** – Lower-level helpers for process management and parsing
+- **[`proxy`](src/proxy/README.md)** – OpenAI-compatible HTTP proxy with automatic model swapping
 
 <!-- crate-docs:end -->
 
@@ -437,17 +393,3 @@ The documentation is automatically updated with every release, so you'll always 
 ### Integrations
 ![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Hub-yellow?style=flat-square)
 ![Llama.cpp](https://img.shields.io/badge/Llama.cpp-Inference-lightgrey?style=flat-square)
-
-### Health Status
-
-**Rust Workspace:**
-![core](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json&style=flat-square)
-![db](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json&style=flat-square)
-![cli](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json&style=flat-square)
-![axum](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json&style=flat-square)
-![tauri](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json&style=flat-square)
-![boundaries](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/boundary.json&style=flat-square)
-
-**Web UI:**
-![TS Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-tests.json&style=flat-square)
-![TS Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-coverage.json&style=flat-square)
