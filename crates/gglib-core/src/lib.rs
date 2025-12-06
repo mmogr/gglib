@@ -20,16 +20,21 @@
 #![deny(unused_crate_dependencies)]
 
 pub mod domain;
+pub mod download;
 pub mod events;
 pub mod ports;
 pub mod settings;
 
 // Re-export commonly used types for convenience
 pub use domain::{Model, NewModel};
+pub use download::{
+    DownloadError, DownloadEvent, DownloadId, DownloadResult, DownloadStatus, DownloadSummary,
+    FailedDownload, Quantization, QueueSnapshot, QueuedDownload, ShardInfo,
+};
 pub use events::{AppEvent, ModelSummary, ServerSnapshotEntry};
 pub use ports::{
-    CoreError, ModelRepository, ProcessError, ProcessHandle, ProcessRunner, RepositoryError,
-    ServerConfig, ServerHealth, SettingsRepository,
+    CoreError, ModelRepository, ProcessError, ProcessHandle, ProcessRunner, QuantizationResolver,
+    RepositoryError, ResolvedFile, Resolution, ServerConfig, ServerHealth, SettingsRepository,
 };
 pub use settings::{Settings, SettingsError, SettingsUpdate, validate_settings};
 

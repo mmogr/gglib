@@ -10,6 +10,7 @@
 //! - Traits are minimal and CRUD-focused for repositories
 //! - Intent-based methods for process runner (not implementation-leaking)
 
+pub mod download;
 pub mod model_repository;
 pub mod process_runner;
 pub mod settings_repository;
@@ -17,6 +18,7 @@ pub mod settings_repository;
 use thiserror::Error;
 
 // Re-export repository traits for convenience
+pub use download::{QuantizationResolver, ResolvedFile, Resolution};
 pub use model_repository::ModelRepository;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use settings_repository::SettingsRepository;
