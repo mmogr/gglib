@@ -1010,12 +1010,15 @@ dependencies = [
 name = "gglib-tauri"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "gglib",
  "gglib-core",
  "gglib-db",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio-test",
+ "tracing",
 ]
 
 [[package]]
