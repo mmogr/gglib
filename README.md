@@ -36,9 +36,10 @@ gglib provides a simple interface to catalog, organize, and serve GGUF models lo
 
 GGLib is organized as a Cargo workspace with compile-time enforced boundaries. The architecture follows a layered design where adapters depend on core, never the reverse.
 
-### Core Layer
-
 <table>
+<tr>
+<td colspan="3" align="center"><b>Core Layer</b></td>
+</tr>
 <tr>
 <td valign="top">
 <pre>
@@ -49,6 +50,9 @@ GGLib is organized as a Cargo workspace with compile-time enforced boundaries. T
 <sub>domain • ports • events</sub><br/><br/>
 <a href="crates/gglib-core"><img alt="core tests" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json" /></a>
 <img alt="core cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-coverage.json" />
+</td>
+<td valign="top" align="center">
+<pre>  ◄──  </pre>
 </td>
 <td valign="top">
 <pre>
@@ -61,11 +65,18 @@ GGLib is organized as a Cargo workspace with compile-time enforced boundaries. T
 <img alt="db cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-coverage.json" />
 </td>
 </tr>
-</table>
-
-### Adapter Layer
-
-<table>
+<tr>
+<td colspan="3" align="center">
+<pre>            │                      │
+            └──────────┬───────────┘
+                       │
+         ┌─────────────┼─────────────┐
+         ▼             ▼             ▼</pre>
+</td>
+</tr>
+<tr>
+<td colspan="3" align="center"><b>Adapter Layer</b></td>
+</tr>
 <tr>
 <td valign="top">
 <pre>
@@ -98,11 +109,15 @@ GGLib is organized as a Cargo workspace with compile-time enforced boundaries. T
 <img alt="tauri cov" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-coverage.json" />
 </td>
 </tr>
-</table>
-
-### External Systems
-
-<table>
+<tr>
+<td colspan="3" align="center">
+<pre>         │             │             │
+         ▼             ▼             ▼</pre>
+</td>
+</tr>
+<tr>
+<td colspan="3" align="center"><b>External Systems</b></td>
+</tr>
 <tr>
 <td valign="top">
 <pre>
