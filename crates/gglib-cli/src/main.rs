@@ -10,8 +10,7 @@ use clap::Parser;
 use std::sync::Arc;
 
 use gglib_cli::{
-    AssistantUiCommand, Cli, CliConfig, Commands, ConfigCommand, LlamaCommand, ModelsDirCommand,
-    SettingsCommand, bootstrap, handlers,
+    AssistantUiCommand, Cli, CliConfig, Commands, LlamaCommand, bootstrap, handlers,
 };
 
 // Legacy imports for commands not yet migrated (TODO: migrate in subsequent PRs)
@@ -52,7 +51,8 @@ async fn main() -> anyhow::Result<()> {
             commands::check_deps::handle_check_deps().await?;
         }
         Commands::Add { file_path } => {
-            commands::add::handle_add(Arc::clone(&legacy_core), file_path).await?;
+            // NEW: Uses CliContext
+            handlers::add::execute(&ctx, &file_path).await?;
         }
         Commands::List => {
             // NEW: Uses CliContext
@@ -156,7 +156,8 @@ async fn main() -> anyhow::Result<()> {
             dry_run,
             force,
         } => {
-            let args = commands::update::UpdateArgs {
+            // NEW: Uses CliContext
+            let args = handlers::update::UpdateArgs {
                 id,
                 name,
                 param_count,
@@ -169,49 +170,11 @@ async fn main() -> anyhow::Result<()> {
                 dry_run,
                 force,
             };
-            commands::update::handle_update(Arc::clone(&legacy_core), args).await?;
+            handlers::update::execute(&ctx, args).await?;
         }
         Commands::Config { command } => {
-            // Convert gglib-cli ConfigCommand to legacy cli::ConfigCommand
-            let legacy_command = match command {
-                ConfigCommand::ModelsDir { command } => {
-                    let legacy_dir_cmd = match command {
-                        ModelsDirCommand::Show => gglib::cli::ModelsDirCommand::Show,
-                        ModelsDirCommand::Prompt => gglib::cli::ModelsDirCommand::Prompt,
-                        ModelsDirCommand::Set { path, no_create } => {
-                            gglib::cli::ModelsDirCommand::Set { path, no_create }
-                        }
-                    };
-                    gglib::cli::ConfigCommand::ModelsDir {
-                        command: legacy_dir_cmd,
-                    }
-                }
-                ConfigCommand::Settings { command } => {
-                    let legacy_settings_cmd = match command {
-                        SettingsCommand::Show => gglib::cli::SettingsCommand::Show,
-                        SettingsCommand::Set {
-                            default_context_size,
-                            proxy_port,
-                            server_port,
-                            max_download_queue_size,
-                            default_download_path,
-                        } => gglib::cli::SettingsCommand::Set {
-                            default_context_size,
-                            proxy_port,
-                            server_port,
-                            max_download_queue_size,
-                            default_download_path,
-                        },
-                        SettingsCommand::Reset { force } => {
-                            gglib::cli::SettingsCommand::Reset { force }
-                        }
-                    };
-                    gglib::cli::ConfigCommand::Settings {
-                        command: legacy_settings_cmd,
-                    }
-                }
-            };
-            commands::config::handle(Arc::clone(&legacy_core), legacy_command)?;
+            // NEW: Uses CliContext
+            handlers::config::execute(&ctx, command).await?;
         }
         Commands::Llama { command } => match command {
             LlamaCommand::Install {
