@@ -76,15 +76,25 @@ pub async fn download_specific_file(
             "File already exists: {} (use --force to overwrite)",
             local_path.display()
         );
+        #[allow(clippy::collapsible_if)]
         if context.add_to_db {
-            let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
-            let quant = extract_quantization_from_filename(
-                db_path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or(filename),
-            );
-            add_to_database(context.model_id, commit_sha, db_path, &quant.to_string()).await?;
+            if let Some(core) = &context.core {
+                let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
+                let quant = extract_quantization_from_filename(
+                    db_path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(filename),
+                );
+                add_to_database(
+                    core.clone(),
+                    context.model_id,
+                    commit_sha,
+                    db_path,
+                    &quant.to_string(),
+                )
+                .await?;
+            }
         }
         return Ok(());
     }
@@ -114,15 +124,25 @@ pub async fn download_specific_file(
         local_path.display()
     );
 
+    #[allow(clippy::collapsible_if)]
     if context.add_to_db {
-        let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
-        let quant = extract_quantization_from_filename(
-            db_path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or(filename),
-        );
-        add_to_database(context.model_id, commit_sha, db_path, &quant.to_string()).await?;
+        if let Some(core) = &context.core {
+            let db_path = context.first_shard_path.as_ref().unwrap_or(&local_path);
+            let quant = extract_quantization_from_filename(
+                db_path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(filename),
+            );
+            add_to_database(
+                core.clone(),
+                context.model_id,
+                commit_sha,
+                db_path,
+                &quant.to_string(),
+            )
+            .await?;
+        }
     }
 
     Ok(())
@@ -236,21 +256,25 @@ pub async fn download_sharded_files(
         total_size as f64 / 1_048_576.0
     );
 
+    #[allow(clippy::collapsible_if)]
     if config.add_to_db && !downloaded_files.is_empty() {
-        println!("Adding sharded model to database...");
-        let primary_file = &downloaded_files[0];
-        let quant_with_note = format!(
-            "{} (sharded: {} parts)",
-            config.quantization,
-            filenames.len()
-        );
-        add_to_database(
-            config.model_id,
-            config.commit_sha,
-            primary_file,
-            &quant_with_note,
-        )
-        .await?;
+        if let Some(core) = &context.core {
+            println!("Adding sharded model to database...");
+            let primary_file = &downloaded_files[0];
+            let quant_with_note = format!(
+                "{} (sharded: {} parts)",
+                config.quantization,
+                filenames.len()
+            );
+            add_to_database(
+                core.clone(),
+                config.model_id,
+                config.commit_sha,
+                primary_file,
+                &quant_with_note,
+            )
+            .await?;
+        }
     }
 
     Ok(())

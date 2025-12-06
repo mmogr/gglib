@@ -82,7 +82,7 @@ pub use crate::models::gui::{ModelsDirectoryInfo, StartServerResponse};
 /// individual service modules.
 pub struct AppCore {
     db_pool: SqlitePool,
-    model_service: ModelService,
+    model_service: Arc<ModelService>,
     server_service: ServerService,
     proxy_service: ProxyService,
     download_manager: DownloadManager,
@@ -131,7 +131,7 @@ impl AppCore {
     /// * `base_port` - Base port for llama-server instances
     /// * `max_concurrent` - Maximum number of concurrent servers
     pub fn with_config(db_pool: SqlitePool, base_port: u16, max_concurrent: usize) -> Self {
-        let model_service = ModelService::new(db_pool.clone());
+        let model_service = Arc::new(ModelService::new(db_pool.clone()));
 
         // Create shared ProcessManager for server service
         let llama_server_path = get_llama_server_path()
@@ -144,8 +144,8 @@ impl AppCore {
             llama_server_path,
         ));
 
-        let server_service = ServerService::new(process_manager, model_service.clone());
-        let proxy_service = ProxyService::new(db_pool.clone());
+        let server_service = ServerService::new(process_manager, (*model_service).clone());
+        let proxy_service = ProxyService::new(Arc::clone(&model_service));
 
         // Create DownloadManager with default config and no-op event callback
         // GUI backends will set up their own callback for Tauri/web events
@@ -197,8 +197,8 @@ impl AppCore {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn models(&self) -> &ModelService {
-        &self.model_service
+    pub fn models(&self) -> Arc<ModelService> {
+        Arc::clone(&self.model_service)
     }
 
     /// Access the server service for managing llama-server instances.
@@ -412,7 +412,7 @@ impl AppCore {
 /// Finds the GGUF file in the model directory and adds it to the database.
 /// Idempotent: skips if the model is already registered.
 async fn register_completed_download(
-    model_service: ModelService,
+    model_service: Arc<ModelService>,
     download_id: DownloadId,
 ) -> anyhow::Result<()> {
     // Find the downloaded GGUF file

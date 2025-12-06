@@ -16,7 +16,9 @@ use super::python_bridge::{FastDownloadRequest, run_fast_download};
 use super::utils::sanitize_model_name;
 use crate::download::huggingface::QuantizationFileResolver;
 use crate::download::workflows::register_model_from_path;
+use crate::services::AppCore;
 use crate::services::core::PidStorage;
+use std::sync::Arc;
 
 // Re-export update handlers from the new location
 pub use crate::download::update::{check_model_update, handle_check_updates, handle_update_model};
@@ -60,6 +62,8 @@ pub struct DownloadContext<'a> {
     pub add_to_db: bool,
     pub session: SessionOptions<'a>,
     pub first_shard_path: Option<PathBuf>,
+    /// AppCore for database operations (optional for backwards compatibility)
+    pub core: Option<Arc<AppCore>>,
 }
 
 // ============================================================================
@@ -141,8 +145,19 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
 
     // Register in database if requested
     if context.add_to_db {
-        let primary_path = model_dir.join(&files[0]);
-        register_model_from_path(context.model_id, &commit_sha, &primary_path, quant).await?;
+        if let Some(core) = &context.core {
+            let primary_path = model_dir.join(&files[0]);
+            register_model_from_path(
+                Arc::clone(core),
+                context.model_id,
+                &commit_sha,
+                &primary_path,
+                quant,
+            )
+            .await?;
+        } else {
+            return Err(anyhow!("AppCore required for database registration"));
+        }
     }
 
     println!(
@@ -157,10 +172,11 @@ pub async fn download_model(api: &Api, context: DownloadContext<'_>) -> Result<(
 ///
 /// Prefer using `crate::download::workflows::register_model` directly.
 pub async fn add_to_database(
+    core: Arc<AppCore>,
     model_id: &str,
     commit_sha: &str,
     file_path: &Path,
     quantization: &str,
 ) -> Result<()> {
-    register_model_from_path(model_id, commit_sha, file_path, quantization).await
+    register_model_from_path(core, model_id, commit_sha, file_path, quantization).await
 }

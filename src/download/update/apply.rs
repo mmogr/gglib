@@ -1,6 +1,7 @@
 //! Update application for downloaded models.
 
 use std::io::Write;
+use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -11,15 +12,12 @@ use crate::download::DownloadResult;
 use crate::download::domain::types::Quantization;
 use crate::download::huggingface::QuantizationFileResolver;
 use crate::download::workflows::register_model;
-use crate::services::{AppCore, database};
+use crate::services::AppCore;
 
 /// Handle the update-model CLI command.
 ///
 /// Re-downloads a model to get the latest version from HuggingFace.
-pub async fn handle_update_model(model_id: u32, force: bool) -> Result<()> {
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
-
+pub async fn handle_update_model(core: Arc<AppCore>, model_id: u32, force: bool) -> Result<()> {
     let model = match core.models().get_by_id(model_id).await {
         Ok(m) => m,
         Err(_) => {
@@ -106,7 +104,7 @@ pub async fn handle_update_model(model_id: u32, force: bool) -> Result<()> {
         total_bytes: 0,
     };
 
-    register_model(&result).await?;
+    register_model(core, &result).await?;
 
     println!("✓ Model updated successfully!");
 

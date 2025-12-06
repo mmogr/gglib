@@ -6,11 +6,13 @@ use anyhow::Result;
 use chrono::Utc;
 use gglib::commands::chat::{ChatCommandArgs, handle_chat};
 use gglib::models::Gguf;
+use gglib::services::AppCore;
 use gglib::services::database;
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use std::sync::Arc;
 use tempfile::tempdir;
 
 fn write_stub_llama_cli(bin_path: &Path) -> Result<()> {
@@ -34,8 +36,9 @@ exit 0
     Ok(())
 }
 
-async fn seed_database(model_path: &Path) -> Result<Gguf> {
+async fn seed_database(model_path: &Path) -> Result<(Arc<AppCore>, Gguf)> {
     let pool = database::setup_database().await?;
+    let core = Arc::new(AppCore::new(pool.clone()));
 
     let mut metadata = HashMap::new();
     metadata.insert("general.name".to_string(), "Chat Test".to_string());
@@ -64,7 +67,7 @@ async fn seed_database(model_path: &Path) -> Result<Gguf> {
         .into_iter()
         .next()
         .expect("model should exist");
-    Ok(stored)
+    Ok((core, stored))
 }
 
 #[tokio::test]
@@ -94,7 +97,7 @@ async fn chat_command_passes_expected_arguments() {
     let template_file = repo_path.join("tmpl.jinja");
     fs::write(&template_file, "{{ user }}").unwrap();
 
-    let model = seed_database(&model_path).await.unwrap();
+    let (core, model) = seed_database(&model_path).await.unwrap();
 
     let log_path = repo_path.join("llama-cli.log");
     let prev_log = std::env::var("LLAMA_CLI_LOG").ok();
@@ -102,17 +105,20 @@ async fn chat_command_passes_expected_arguments() {
         std::env::set_var("LLAMA_CLI_LOG", &log_path);
     }
 
-    handle_chat(ChatCommandArgs {
-        identifier: model.name.clone(),
-        ctx_size: Some("max".into()),
-        mlock: true,
-        chat_template: Some("llama3".into()),
-        chat_template_file: Some(template_file.to_string_lossy().into()),
-        jinja: true,
-        system_prompt: Some("Be helpful".into()),
-        multiline_input: true,
-        simple_io: true,
-    })
+    handle_chat(
+        core,
+        ChatCommandArgs {
+            identifier: model.name.clone(),
+            ctx_size: Some("max".into()),
+            mlock: true,
+            chat_template: Some("llama3".into()),
+            chat_template_file: Some(template_file.to_string_lossy().into()),
+            jinja: true,
+            system_prompt: Some("Be helpful".into()),
+            multiline_input: true,
+            simple_io: true,
+        },
+    )
     .await
     .unwrap();
 

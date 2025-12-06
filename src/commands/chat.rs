@@ -6,10 +6,11 @@ use crate::commands::llama_invocation::{
     LlamaCommandBuilder, log_command_execution, log_context_info, log_mlock_info, log_model_info,
     resolve_model_for_invocation,
 };
-use crate::services::{AppCore, database};
+use crate::services::AppCore;
 use crate::utils::paths::get_llama_cli_path;
 use anyhow::Result;
 use std::process::Stdio;
+use std::sync::Arc;
 
 /// Arguments supported by the `gglib chat` command.
 #[derive(Debug, Clone)]
@@ -26,15 +27,13 @@ pub struct ChatCommandArgs {
 }
 
 /// Launch llama-cli interactively for the requested model.
-pub async fn handle_chat(args: ChatCommandArgs) -> Result<()> {
+pub async fn handle_chat(core: Arc<AppCore>, args: ChatCommandArgs) -> Result<()> {
     // Ensure llama.cpp is installed
     ensure_llama_initialized().await?;
 
     // Resolve llama-cli binary
     let llama_cli_path = get_llama_cli_path()?;
 
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
     let ChatCommandArgs {
         identifier,
         ctx_size,

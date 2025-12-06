@@ -11,10 +11,11 @@ use crate::commands::llama_invocation::{
     LlamaCommandBuilder, log_command_execution, log_context_info, log_mlock_info, log_model_info,
     resolve_model_for_invocation,
 };
-use crate::services::{AppCore, database};
+use crate::services::AppCore;
 use crate::utils::paths::get_llama_server_path;
 use anyhow::Result;
 use std::process::Stdio;
+use std::sync::Arc;
 
 /// Handle the serve command to start llama-server with a GGUF model.
 ///
@@ -43,6 +44,7 @@ use std::process::Stdio;
 /// - The model file doesn't exist
 /// - llama-server fails to start
 pub async fn handle_serve(
+    core: Arc<AppCore>,
     id: u32,
     ctx_size: Option<String>,
     mlock: bool,
@@ -54,10 +56,6 @@ pub async fn handle_serve(
 
     // Get llama-server binary path
     let llama_server_path = get_llama_server_path()?;
-
-    // Set up AppCore with database connection
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
 
     // Use shared model resolution helper
     let resolved = resolve_model_for_invocation(&core, &id.to_string()).await?;

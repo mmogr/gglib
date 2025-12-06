@@ -6,9 +6,9 @@
 
 use crate::models::Gguf;
 use crate::services::core::AppCore;
-use crate::services::database;
 use crate::utils::input;
 use anyhow::{Result, anyhow};
+use std::sync::Arc;
 
 /// Handles the "remove" command to delete a GGUF model from the database.
 ///
@@ -37,21 +37,22 @@ use anyhow::{Result, anyhow};
 ///
 /// ```rust,no_run
 /// use gglib::commands::remove;
+/// use gglib::services::AppCore;
+/// use std::sync::Arc;
 ///
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {
+///     let pool = gglib::services::database::setup_database().await?;
+///     let core = Arc::new(AppCore::new(pool));
 ///     // Remove with confirmation
-///     remove::handle_remove("my-model".to_string(), false).await?;
+///     remove::handle_remove(core.clone(), "my-model".to_string(), false).await?;
 ///     
 ///     // Force remove without confirmation
-///     remove::handle_remove("my-model".to_string(), true).await?;
+///     remove::handle_remove(core, "my-model".to_string(), true).await?;
 ///     Ok(())
 /// }
 /// ```
-pub async fn handle_remove(identifier: String, force: bool) -> Result<()> {
-    let pool = database::setup_database().await?;
-    let core = AppCore::new(pool);
-
+pub async fn handle_remove(core: Arc<AppCore>, identifier: String, force: bool) -> Result<()> {
     if let Some(model) = core.models().find_by_identifier(&identifier).await? {
         remove_with_confirmation(&core, model, force).await
     } else {
