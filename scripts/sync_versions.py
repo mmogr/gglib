@@ -1,36 +1,56 @@
+#!/usr/bin/env python3
+"""
+Sync version from workspace Cargo.toml to non-workspace files.
+
+Workspace crates (crates/*) inherit version via `version.workspace = true`,
+so they don't need syncing. This script handles:
+- src-tauri/Cargo.toml (Tauri binary, not a workspace member)
+- package.json (npm/frontend)
+- src-tauri/tauri.conf.json (Tauri app metadata)
+"""
+
 import re
 import json
 import os
 
-def get_main_version():
+
+def get_workspace_version():
+    """Get version from [workspace.package] section in root Cargo.toml"""
     with open('Cargo.toml', 'r') as f:
         content = f.read()
-        match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
-        if match:
-            return match.group(1)
+    
+    # Look for version after [workspace.package] section
+    match = re.search(
+        r'\[workspace\.package\].*?^version\s*=\s*"([^"]+)"',
+        content,
+        re.MULTILINE | re.DOTALL
+    )
+    if match:
+        return match.group(1)
+    
     return None
 
+
 def update_cargo_toml(path, version):
+    """Update version in a Cargo.toml [package] section"""
     with open(path, 'r') as f:
         content = f.read()
     
-    # Replace version under [package]
-    # We need to be careful not to replace dependency versions
-    # Usually [package] is at the top.
-    
-    # A simple regex that looks for version = "..." inside the file, 
-    # assuming the package version is the first one or explicitly under [package]
-    # But Cargo.toml can have dependencies with version keys.
-    # However, the package version is usually `version = "x.y.z"` at the top level indentation.
-    # Dependencies are usually `{ version = ... }` or `dep = "..."`
-    
-    new_content = re.sub(r'(^version\s*=\s*)"[^"]+"', f'\\1"{version}"', content, count=1, flags=re.MULTILINE)
+    new_content = re.sub(
+        r'(^version\s*=\s*)"[^"]+"',
+        f'\\1"{version}"',
+        content,
+        count=1,
+        flags=re.MULTILINE
+    )
     
     with open(path, 'w') as f:
         f.write(new_content)
-    print(f"Updated {path} to version {version}")
+    print(f"  ✓ {path}")
+
 
 def update_json(path, version):
+    """Update version in a JSON file"""
     with open(path, 'r') as f:
         data = json.load(f)
     
@@ -39,31 +59,28 @@ def update_json(path, version):
         
     with open(path, 'w') as f:
         json.dump(data, f, indent=2)
-        # Add a newline at the end to be nice
         f.write('\n')
-    print(f"Updated {path} to version {version}")
+    print(f"  ✓ {path}")
+
 
 def main():
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(root_dir)
     
-    version = get_main_version()
+    version = get_workspace_version()
     if not version:
-        print("Could not find version in Cargo.toml")
+        print("❌ Could not find version in [workspace.package]")
         exit(1)
         
-    print(f"Syncing version {version} from Cargo.toml...")
+    print(f"Syncing version {version} to non-workspace files...")
     
-    # Update src-tauri/Cargo.toml
+    # These files are NOT workspace members and need explicit version sync
     update_cargo_toml('src-tauri/Cargo.toml', version)
-    
-    # Update package.json
     update_json('package.json', version)
-    
-    # Update src-tauri/tauri.conf.json
     update_json('src-tauri/tauri.conf.json', version)
     
     print("Done!")
+
 
 if __name__ == '__main__':
     main()

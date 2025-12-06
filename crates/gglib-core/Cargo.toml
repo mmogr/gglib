@@ -1,0 +1,23 @@
+[package]
+name = "gglib-core"
+version = "0.1.0"
+edition = "2024"
+description = "Core domain types and port definitions for gglib"
+license = "MIT"
+publish = false
+
+[dependencies]
+# Only deps actually used in core - no adapter-specific crates
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+tokio-test = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

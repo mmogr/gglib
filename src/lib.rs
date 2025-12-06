@@ -32,4 +32,24 @@ pub use core::{
 };
 
 // Re-export infra implementations
-pub use infra::{LlamaProcessRunner, SqliteModelRepository, SqliteSettingsRepository};
+pub use infra::{SqliteModelRepository, SqliteSettingsRepository};
+
+// Re-export runtime crate for process management
+pub use gglib_runtime::LlamaServerRunner;
+
+// =============================================================================
+// Workspace Crate Re-exports
+// =============================================================================
+// These re-exports allow users to access workspace crate types via either:
+//   - gglib::core_types::Model (via this crate)
+//   - gglib_core::Model (directly from workspace crate)
+
+/// Re-export of gglib-core types for convenience.
+pub mod core_types {
+    pub use gglib_core::*;
+}
+
+/// Re-export of gglib-db types for convenience.
+pub mod db {
+    pub use gglib_db::*;
+}

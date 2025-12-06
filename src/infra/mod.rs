@@ -6,14 +6,15 @@
 //!
 //! # Structure
 //!
-//! - `repositories` - Database implementations of repository traits
+//! - `repositories` - Database implementations of repository traits (now in gglib-db)
 //! - `mappers` - Boundary conversions between legacy and domain types
-//! - `process` - Process runner implementations
+//! - `process` - Process runner implementations (now in gglib-runtime)
 
 pub mod mappers;
-pub mod process;
 pub mod repositories;
 
 // Re-export commonly used implementations
-pub use process::LlamaProcessRunner;
 pub use repositories::{SqliteModelRepository, SqliteSettingsRepository};
+
+// NOTE: LlamaProcessRunner is now in gglib-runtime crate as LlamaServerRunner
+// The legacy process module is retained for now but not re-exported.

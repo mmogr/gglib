@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 
 use super::RepositoryError;
-use crate::core::domain::{Model, NewModel};
+use crate::domain::{Model, NewModel};
 
 /// Repository for model persistence operations.
 ///
