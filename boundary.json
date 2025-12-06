@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "boundaries",
-  "message": "unknown",
-  "color": "lightgrey"
+  "message": "✓ clean",
+  "color": "brightgreen"
 }
