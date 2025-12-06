@@ -191,10 +191,7 @@ impl ProcessRunner for LlamaProcessRunner {
         }
 
         // Check process health using PID if available
-        let is_healthy = handle
-            .pid
-            .map(check_process_health)
-            .unwrap_or(false);
+        let is_healthy = handle.pid.map(check_process_health).unwrap_or(false);
 
         let info = core.get_info(handle.model_id as u32);
         let context_size = info.and_then(|i| i.context_size);

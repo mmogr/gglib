@@ -121,16 +121,19 @@ pub struct ServerHealth {
 }
 
 impl ServerHealth {
+    /// Get the current Unix timestamp in seconds.
+    fn now_secs() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    }
+
     /// Create a healthy server status.
     pub fn healthy() -> Self {
         Self {
             healthy: true,
-            last_check: Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-            ),
+            last_check: Some(Self::now_secs()),
             context_size: None,
             message: None,
         }
@@ -140,12 +143,7 @@ impl ServerHealth {
     pub fn unhealthy(message: impl Into<String>) -> Self {
         Self {
             healthy: false,
-            last_check: Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-            ),
+            last_check: Some(Self::now_secs()),
             context_size: None,
             message: Some(message.into()),
         }
