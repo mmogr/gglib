@@ -99,8 +99,8 @@ export const ServeModal: FC<ServeModalProps> = ({
               type="number"
               className="context-input"
               placeholder={
-                settings?.server_port
-                  ? `Auto (from ${settings.server_port})`
+                settings?.llama_base_port
+                  ? `Auto (from ${settings.llama_base_port})`
                   : 'Auto (from 9000)'
               }
               value={customPort}

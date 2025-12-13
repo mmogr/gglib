@@ -56,7 +56,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     if (settings) {
       setContextSizeInput(settings.default_context_size?.toString() || "");
       setProxyPortInput(settings.proxy_port?.toString() || "");
-      setServerPortInput(settings.server_port?.toString() || "");
+      setServerPortInput(settings.llama_base_port?.toString() || "");
       setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "");
       setTitlePromptInput(settings.title_generation_prompt || "");
       setShowFitIndicators(settings.show_memory_fit_indicators !== false);
@@ -92,7 +92,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         const updates: UpdateSettingsRequest = {
           default_context_size: parseNumericInput(contextSizeInput),
           proxy_port: parseNumericInput(proxyPortInput),
-          server_port: parseNumericInput(serverPortInput),
+          llama_base_port: parseNumericInput(serverPortInput),
           max_download_queue_size: parseNumericInput(maxQueueSizeInput),
           title_generation_prompt: titlePromptInput.trim() || null,
           show_memory_fit_indicators: showFitIndicators,
@@ -102,7 +102,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         const hasUpdates = 
           updates.default_context_size !== undefined ||
           updates.proxy_port !== undefined ||
-          updates.server_port !== undefined ||
+          updates.llama_base_port !== undefined ||
           updates.max_download_queue_size !== undefined ||
           updates.title_generation_prompt !== undefined;
 
@@ -125,7 +125,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     if (settings) {
       setContextSizeInput(settings.default_context_size?.toString() || "4096");
       setProxyPortInput(settings.proxy_port?.toString() || "8080");
-      setServerPortInput(settings.server_port?.toString() || "9000");
+      setServerPortInput(settings.llama_base_port?.toString() || "9000");
       setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "10");
       setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
       setShowFitIndicators(true); // Default is enabled
