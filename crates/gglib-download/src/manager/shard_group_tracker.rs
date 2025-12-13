@@ -49,9 +49,14 @@ impl ShardGroupState {
     }
 
     /// Record a shard completion (idempotent per index).
+    ///
+    /// If a path is already recorded for this index, it is kept (first-wins).
     fn record_shard(&mut self, index: u32, path: PathBuf) {
         if (index as usize) < self.paths_by_index.len() {
-            self.paths_by_index[index as usize] = Some(path);
+            let slot = &mut self.paths_by_index[index as usize];
+            if slot.is_none() {
+                *slot = Some(path);
+            }
             self.last_updated = Instant::now();
         }
     }
