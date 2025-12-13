@@ -83,13 +83,13 @@ mod tests {
         );
         assert_eq!(
             base_shard_filename("prefix-of-test.gguf"),
-            "prefix-of-test.gguf"  // No digits, should not strip
+            "prefix-of-test.gguf" // No digits, should not strip
         );
 
         // No extension edge case
         assert_eq!(
             base_shard_filename("model-00001-of-00005"),
-            "model-00001-of-00005"  // No dot, return unchanged
+            "model-00001-of-00005" // No dot, return unchanged
         );
     }
 }

@@ -171,9 +171,8 @@ impl ShardGroupTracker {
         let now = Instant::now();
         let before_count = self.groups.len();
 
-        self.groups.retain(|_, state| {
-            now.duration_since(state.last_updated) < ttl
-        });
+        self.groups
+            .retain(|_, state| now.duration_since(state.last_updated) < ttl);
 
         before_count - self.groups.len()
     }
@@ -234,9 +233,18 @@ mod tests {
 
         let complete = result3.unwrap();
         assert_eq!(complete.ordered_paths.len(), 3);
-        assert_eq!(complete.ordered_paths[0], PathBuf::from("/path/shard-0.gguf"));
-        assert_eq!(complete.ordered_paths[1], PathBuf::from("/path/shard-1.gguf"));
-        assert_eq!(complete.ordered_paths[2], PathBuf::from("/path/shard-2.gguf"));
+        assert_eq!(
+            complete.ordered_paths[0],
+            PathBuf::from("/path/shard-0.gguf")
+        );
+        assert_eq!(
+            complete.ordered_paths[1],
+            PathBuf::from("/path/shard-1.gguf")
+        );
+        assert_eq!(
+            complete.ordered_paths[2],
+            PathBuf::from("/path/shard-2.gguf")
+        );
     }
 
     #[test]
@@ -274,7 +282,10 @@ mod tests {
         let complete = result.unwrap();
         assert_eq!(complete.ordered_paths.len(), 2);
         // First recording of shard 0 should be kept
-        assert_eq!(complete.ordered_paths[0], PathBuf::from("/path/shard-0.gguf"));
+        assert_eq!(
+            complete.ordered_paths[0],
+            PathBuf::from("/path/shard-0.gguf")
+        );
     }
 
     #[test]

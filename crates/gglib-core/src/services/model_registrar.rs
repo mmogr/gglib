@@ -77,7 +77,7 @@ impl ModelRegistrarPort for ModelRegistrar {
         model.hf_commit_sha = Some(download.commit_sha.clone());
         model.hf_filename = Some(file_path.file_name().unwrap().to_string_lossy().to_string());
         model.download_date = Some(Utc::now());
-        
+
         // Pass through file_paths for sharded models
         model.file_paths = download.file_paths.clone();
 

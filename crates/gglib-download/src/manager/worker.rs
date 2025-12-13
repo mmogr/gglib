@@ -104,10 +104,9 @@ fn percent_encode_revision(revision: &str) -> String {
     let mut out = String::new();
     for b in revision.as_bytes() {
         match *b {
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-' | b'_' | b'.' | b'~' => out.push(*b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*b as char)
+            }
             b'/' => out.push_str("%2F"),
             b'#' => out.push_str("%23"),
             b'@' => out.push_str("%40"),
@@ -150,7 +149,8 @@ pub async fn run_job(job: DownloadJob, deps: &WorkerDeps) -> Result<CompletedJob
 
     // Extract metadata from download ID
     let repo_id = job.id.model_id().to_string();
-    let commit_sha = job.revision
+    let commit_sha = job
+        .revision
         .as_ref()
         .map(|r| format!("rev:{}", percent_encode_revision(r)))
         .unwrap_or_else(|| "rev:main".to_string());
@@ -254,13 +254,16 @@ mod tests {
         assert_eq!(percent_encode_revision("abc123-def"), "abc123-def");
 
         // Branch names with slashes
-        assert_eq!(percent_encode_revision("feature/branch"), "feature%2Fbranch");
+        assert_eq!(
+            percent_encode_revision("feature/branch"),
+            "feature%2Fbranch"
+        );
         assert_eq!(percent_encode_revision("hotfix/v1.2"), "hotfix%2Fv1.2");
 
         // Special characters that could cause ambiguity
         assert_eq!(percent_encode_revision("tag#123"), "tag%23123");
         assert_eq!(percent_encode_revision("user@commit"), "user%40commit");
-        
+
         // Complex case
         assert_eq!(
             percent_encode_revision("feature/test@v1#fix"),
@@ -274,12 +277,12 @@ mod tests {
         assert!(encoded.contains("%23"), "Should encode #");
         assert!(encoded.contains("%40"), "Should encode @");
         // Verify it encodes the CJK character (模 = E6 A8 A1 in UTF-8)
-        assert!(encoded.contains("%E6%A8%A1"), "Should contain UTF-8 encoded 模");
-        
-        // Full verification
-        assert_eq!(
-            percent_encode_revision("café"),
-            "caf%C3%A9"
+        assert!(
+            encoded.contains("%E6%A8%A1"),
+            "Should contain UTF-8 encoded 模"
         );
+
+        // Full verification
+        assert_eq!(percent_encode_revision("café"), "caf%C3%A9");
     }
 }

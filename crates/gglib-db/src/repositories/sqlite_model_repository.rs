@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use sqlx::SqlitePool;
 
-use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 use gglib_core::utils::shard_filename::base_shard_filename;
+use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
 use super::row_mappers::{MODEL_SELECT_COLUMNS, normalized_file_path_string, row_to_model};
 
@@ -100,14 +100,16 @@ impl ModelRepository for SqliteModelRepository {
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
 
         let file_path_string = normalized_file_path_string(&model.file_path);
-        
+
         let tags_json = serde_json::to_string(&model.tags).unwrap_or_else(|_| "[]".to_string());
-        
+
         // Compute model key for deduplication
         let model_key = compute_model_key(model);
-        
+
         // Serialize file_paths if present
-        let file_paths_json = model.file_paths.as_ref()
+        let file_paths_json = model
+            .file_paths
+            .as_ref()
             .and_then(|paths| serde_json::to_string(paths).ok());
 
         // Use UPSERT to make registration idempotent
@@ -124,27 +126,27 @@ impl ModelRepository for SqliteModelRepository {
                 download_date = excluded.download_date,
                 last_update_check = excluded.last_update_check,
                 tags = excluded.tags
-            "#
+            "#,
         )
-            .bind(&model.name)
-            .bind(&file_path_string)
-            .bind(model.param_count_b)
-            .bind(&model.architecture)
-            .bind(&model.quantization)
-            .bind(model.context_length.map(|c| c as i64))
-            .bind(&metadata_json)
-            .bind(model.added_at.to_string())
-            .bind(&model.hf_repo_id)
-            .bind(&model.hf_commit_sha)
-            .bind(&model.hf_filename)
-            .bind(model.download_date.as_ref().map(|d| d.to_string()))
-            .bind(model.last_update_check.as_ref().map(|d| d.to_string()))
-            .bind(&tags_json)
-            .bind(&model_key)
-            .bind(&file_paths_json)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+        .bind(&model.name)
+        .bind(&file_path_string)
+        .bind(model.param_count_b)
+        .bind(&model.architecture)
+        .bind(&model.quantization)
+        .bind(model.context_length.map(|c| c as i64))
+        .bind(&metadata_json)
+        .bind(model.added_at.to_string())
+        .bind(&model.hf_repo_id)
+        .bind(&model.hf_commit_sha)
+        .bind(&model.hf_filename)
+        .bind(model.download_date.as_ref().map(|d| d.to_string()))
+        .bind(model.last_update_check.as_ref().map(|d| d.to_string()))
+        .bind(&tags_json)
+        .bind(&model_key)
+        .bind(&file_paths_json)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
         // Get the model by model_key (works for both insert and update)
         let row = sqlx::query(&format!(

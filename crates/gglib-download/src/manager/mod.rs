@@ -371,10 +371,12 @@ impl DownloadManagerImpl {
                     if let Some(shard_info) = &item.shard_info {
                         // This is a shard - coordinate with tracker
                         // Use stable base filename so all shards compute the same identity
-                        let base_filename = completed.files.first()
+                        let base_filename = completed
+                            .files
+                            .first()
                             .map(|f| base_shard_filename(f))
                             .unwrap_or_else(|| "unknown".to_string());
-                        
+
                         let metadata = GroupMetadata {
                             repo_id: completed.repo_id.clone(),
                             commit_sha: completed.commit_sha.clone(),
@@ -416,7 +418,9 @@ impl DownloadManagerImpl {
                         repo_id: completed.repo_id.clone(),
                         commit_sha: completed.commit_sha.clone(),
                         quantization: completed.quantization,
-                        primary_filename: completed.files.first()
+                        primary_filename: completed
+                            .files
+                            .first()
                             .map(|s| s.clone())
                             .unwrap_or_else(|| "unknown".to_string()),
                     };
@@ -429,25 +433,29 @@ impl DownloadManagerImpl {
             }
             Err(DownloadError::Cancelled) => {
                 tracing::info!(id = %item.id, "Download cancelled");
-                
+
                 // Clean up shard tracker if this was part of a group
                 if let Some(group_id) = &item.group_id {
                     self.shard_tracker.lock().await.on_group_failed(group_id);
                 }
-                
-                self.event_emitter
-                    .emit(DownloadEvent::DownloadCancelled { id: item.id.to_string() });
+
+                self.event_emitter.emit(DownloadEvent::DownloadCancelled {
+                    id: item.id.to_string(),
+                });
             }
             Err(e) => {
                 tracing::warn!(id = %item.id, error = %e, "Download failed");
-                
+
                 // Clean up shard tracker if this was part of a group
                 if let Some(group_id) = &item.group_id {
                     self.shard_tracker.lock().await.on_group_failed(group_id);
                 }
-                
+
                 let queued_item = QueuedItem::new(item.id.clone());
-                self.queue.write().await.mark_failed(queued_item, e.to_string());
+                self.queue
+                    .write()
+                    .await
+                    .mark_failed(queued_item, e.to_string());
             }
         }
     }
@@ -459,7 +467,9 @@ impl DownloadManagerImpl {
     async fn register_completed_model(&self, complete: shard_group_tracker::GroupComplete) {
         use gglib_core::ports::CompletedDownload;
 
-        let primary_path = complete.ordered_paths.first()
+        let primary_path = complete
+            .ordered_paths
+            .first()
             .expect("GroupComplete should have at least one path");
 
         let completed = CompletedDownload {
@@ -486,10 +496,13 @@ impl DownloadManagerImpl {
                     shard_count = complete.ordered_paths.len(),
                     "Model registered successfully"
                 );
-                
+
                 // Emit completion event
                 self.event_emitter.emit(DownloadEvent::DownloadCompleted {
-                    id: format!("{}:{}", complete.metadata.repo_id, complete.metadata.quantization),
+                    id: format!(
+                        "{}:{}",
+                        complete.metadata.repo_id, complete.metadata.quantization
+                    ),
                     message: Some(format!(
                         "Downloaded {} to {}",
                         if completed.is_sharded {
