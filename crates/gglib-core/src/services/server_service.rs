@@ -118,6 +118,7 @@ mod tests {
             1,
             "test-model".to_string(),
             PathBuf::from("/path/to/model.gguf"),
+            9000,
         );
 
         let handle = service.start(config).await.unwrap();
