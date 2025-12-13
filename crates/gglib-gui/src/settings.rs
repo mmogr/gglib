@@ -95,7 +95,7 @@ impl<'a> SettingsOps<'a> {
             default_download_path: settings.default_download_path,
             default_context_size: settings.default_context_size,
             proxy_port: settings.proxy_port,
-            server_port: settings.server_port,
+            llama_base_port: settings.llama_base_port,
             max_download_queue_size: settings.max_download_queue_size,
             show_memory_fit_indicators: settings.show_memory_fit_indicators,
         })
@@ -107,7 +107,7 @@ impl<'a> SettingsOps<'a> {
             default_download_path: request.default_download_path,
             default_context_size: request.default_context_size,
             proxy_port: request.proxy_port,
-            server_port: request.server_port,
+            llama_base_port: request.llama_base_port,
             max_download_queue_size: request.max_download_queue_size,
             show_memory_fit_indicators: request.show_memory_fit_indicators,
         };
@@ -127,7 +127,7 @@ impl<'a> SettingsOps<'a> {
             default_download_path: settings.default_download_path,
             default_context_size: settings.default_context_size,
             proxy_port: settings.proxy_port,
-            server_port: settings.server_port,
+            llama_base_port: settings.llama_base_port,
             max_download_queue_size: settings.max_download_queue_size,
             show_memory_fit_indicators: settings.show_memory_fit_indicators,
         })

@@ -5,10 +5,17 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Default port for the OpenAI-compatible proxy server.
+pub const DEFAULT_PROXY_PORT: u16 = 8080;
+
+/// Default base port for llama-server instance allocation.
+pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
+
 /// Application settings structure.
 ///
 /// All fields are optional to support partial updates and graceful defaults.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct Settings {
     /// Default directory for downloading models.
     pub default_download_path: Option<String>,
@@ -19,8 +26,9 @@ pub struct Settings {
     /// Port for the OpenAI-compatible proxy server.
     pub proxy_port: Option<u16>,
 
-    /// Base port for llama-server instances.
-    pub server_port: Option<u16>,
+    /// Base port for llama-server instance allocation (first port in range).
+    /// Note: The OpenAI-compatible proxy listens on `proxy_port`.
+    pub llama_base_port: Option<u16>,
 
     /// Maximum number of downloads that can be queued (1-50).
     pub max_download_queue_size: Option<u32>,
@@ -36,10 +44,28 @@ impl Settings {
         Self {
             default_download_path: None,
             default_context_size: Some(4096),
-            proxy_port: Some(8080),
-            server_port: Some(9000),
+            proxy_port: Some(DEFAULT_PROXY_PORT),
+            llama_base_port: Some(DEFAULT_LLAMA_BASE_PORT),
             max_download_queue_size: Some(10),
             show_memory_fit_indicators: Some(true),
+        }
+    }
+
+    /// Get the effective proxy port (with default fallback).
+    #[must_use]
+    pub const fn effective_proxy_port(&self) -> u16 {
+        match self.proxy_port {
+            Some(port) => port,
+            None => DEFAULT_PROXY_PORT,
+        }
+    }
+
+    /// Get the effective llama-server base port (with default fallback).
+    #[must_use]
+    pub const fn effective_llama_base_port(&self) -> u16 {
+        match self.llama_base_port {
+            Some(port) => port,
+            None => DEFAULT_LLAMA_BASE_PORT,
         }
     }
 
@@ -54,8 +80,8 @@ impl Settings {
         if let Some(ref port) = other.proxy_port {
             self.proxy_port = *port;
         }
-        if let Some(ref port) = other.server_port {
-            self.server_port = *port;
+        if let Some(ref port) = other.llama_base_port {
+            self.llama_base_port = *port;
         }
         if let Some(ref queue_size) = other.max_download_queue_size {
             self.max_download_queue_size = *queue_size;
@@ -77,7 +103,7 @@ pub struct SettingsUpdate {
     pub default_download_path: Option<Option<String>>,
     pub default_context_size: Option<Option<u64>>,
     pub proxy_port: Option<Option<u16>>,
-    pub server_port: Option<Option<u16>>,
+    pub llama_base_port: Option<Option<u16>>,
     pub max_download_queue_size: Option<Option<u32>>,
     pub show_memory_fit_indicators: Option<Option<bool>>,
 }
@@ -114,8 +140,8 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         }
     }
 
-    // Validate server port
-    if let Some(port) = settings.server_port {
+    // Validate llama-server base port
+    if let Some(port) = settings.llama_base_port {
         if port < 1024 {
             return Err(SettingsError::InvalidPort(port));
         }
@@ -148,8 +174,8 @@ mod tests {
     fn test_default_settings() {
         let settings = Settings::with_defaults();
         assert_eq!(settings.default_context_size, Some(4096));
-        assert_eq!(settings.proxy_port, Some(8080));
-        assert_eq!(settings.server_port, Some(9000));
+        assert_eq!(settings.proxy_port, Some(DEFAULT_PROXY_PORT));
+        assert_eq!(settings.llama_base_port, Some(DEFAULT_LLAMA_BASE_PORT));
         assert_eq!(settings.default_download_path, None);
         assert_eq!(settings.max_download_queue_size, Some(10));
         assert_eq!(settings.show_memory_fit_indicators, Some(true));
@@ -245,6 +271,23 @@ mod tests {
 
         assert_eq!(settings.default_context_size, Some(8192));
         assert_eq!(settings.proxy_port, None);
-        assert_eq!(settings.server_port, Some(9000)); // Unchanged
+        assert_eq!(settings.llama_base_port, Some(DEFAULT_LLAMA_BASE_PORT)); // Unchanged
+    }
+
+    #[test]
+    fn test_effective_ports() {
+        let settings = Settings::with_defaults();
+        assert_eq!(settings.effective_proxy_port(), DEFAULT_PROXY_PORT);
+        assert_eq!(
+            settings.effective_llama_base_port(),
+            DEFAULT_LLAMA_BASE_PORT
+        );
+
+        let settings_none = Settings::default();
+        assert_eq!(settings_none.effective_proxy_port(), DEFAULT_PROXY_PORT);
+        assert_eq!(
+            settings_none.effective_llama_base_port(),
+            DEFAULT_LLAMA_BASE_PORT
+        );
     }
 }

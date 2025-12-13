@@ -34,7 +34,10 @@ pub use ports::{
     SettingsRepository,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
-pub use settings::{Settings, SettingsError, SettingsUpdate, validate_settings};
+pub use settings::{
+    DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT, Settings, SettingsError, SettingsUpdate,
+    validate_settings,
+};
 
 // Re-export path utilities
 pub use paths::{

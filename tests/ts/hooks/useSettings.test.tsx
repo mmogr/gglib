@@ -23,7 +23,7 @@ const mockSettings: AppSettings = {
   default_download_path: '/models',
   default_context_size: 4096,
   proxy_port: 8080,
-  server_port: 9000,
+  llama_base_port: 9000,
   max_download_queue_size: 10,
 };
 
@@ -165,7 +165,7 @@ describe('useSettings', () => {
       default_download_path: null,
       default_context_size: null,
       proxy_port: null,
-      server_port: null,
+      llama_base_port: null,
       max_download_queue_size: null,
     };
     vi.mocked(fetchSettings).mockResolvedValue(nullSettings);

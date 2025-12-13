@@ -52,7 +52,7 @@ pub enum SettingsCommand {
         proxy_port: Option<u16>,
         /// Base port for llama-server instances (>= 1024)
         #[arg(long)]
-        server_port: Option<u16>,
+        llama_base_port: Option<u16>,
         /// Maximum number of downloads that can be queued (1-50)
         #[arg(long)]
         max_download_queue_size: Option<u32>,

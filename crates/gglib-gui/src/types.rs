@@ -268,7 +268,7 @@ pub struct AppSettings {
     pub default_download_path: Option<String>,
     pub default_context_size: Option<u64>,
     pub proxy_port: Option<u16>,
-    pub server_port: Option<u16>,
+    pub llama_base_port: Option<u16>,
     pub max_download_queue_size: Option<u32>,
     pub show_memory_fit_indicators: Option<bool>,
 }
@@ -279,7 +279,7 @@ pub struct UpdateSettingsRequest {
     pub default_download_path: Option<Option<String>>,
     pub default_context_size: Option<Option<u64>>,
     pub proxy_port: Option<Option<u16>>,
-    pub server_port: Option<Option<u16>>,
+    pub llama_base_port: Option<Option<u16>>,
     pub max_download_queue_size: Option<Option<u32>>,
     pub show_memory_fit_indicators: Option<Option<bool>>,
 }

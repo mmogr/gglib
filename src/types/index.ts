@@ -46,7 +46,7 @@ export interface AppSettings {
   default_download_path?: string | null;
   default_context_size?: number | null;
   proxy_port?: number | null;
-  server_port?: number | null;
+  llama_base_port?: number | null;
   max_download_queue_size?: number | null;
   title_generation_prompt?: string | null;
   show_memory_fit_indicators?: boolean | null;
@@ -58,7 +58,7 @@ export interface UpdateSettingsRequest {
   default_download_path?: string | null | undefined;
   default_context_size?: number | null | undefined;
   proxy_port?: number | null | undefined;
-  server_port?: number | null | undefined;
+  llama_base_port?: number | null | undefined;
   max_download_queue_size?: number | null | undefined;
   title_generation_prompt?: string | null | undefined;
   show_memory_fit_indicators?: boolean | null | undefined;

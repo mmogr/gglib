@@ -49,8 +49,7 @@ pub struct StartProxyArgs {
     pub port: Option<u16>,
     /// Default context size for models
     pub default_context: Option<u64>,
-    /// Base port for llama-server instances (also accepts start_port)
-    #[serde(alias = "start_port")]
+    /// Base port for llama-server instances
     pub llama_base_port: Option<u16>,
     /// Path to llama-server binary
     pub llama_server_path: Option<String>,
@@ -75,8 +74,8 @@ pub async fn start_proxy(
         default_context: args.default_context.unwrap_or(4096),
     };
 
-    // Get llama paths from settings or use defaults
-    let llama_base_port = args.llama_base_port.unwrap_or(9100);
+    // Backend resolves llama_base_port from override → settings → default
+    let llama_base_port_override = args.llama_base_port;
     let llama_server_path = args.llama_server_path.unwrap_or_else(|| {
         gglib_core::paths::llama_server_path()
             .map(|p| p.to_string_lossy().to_string())
@@ -85,7 +84,7 @@ pub async fn start_proxy(
 
     let addr = state
         .gui
-        .proxy_start(proxy_config, llama_base_port, llama_server_path)
+        .proxy_start(proxy_config, llama_base_port_override, llama_server_path)
         .await
         .map_err(|e| e.to_string())?;
 

@@ -9,7 +9,6 @@
 export interface ProxyConfig {
   host: string;
   port: number;
-  start_port: number;
   default_context: number;
 }
 

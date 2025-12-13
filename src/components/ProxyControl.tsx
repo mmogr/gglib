@@ -13,7 +13,6 @@ interface ProxyStatus {
 interface ProxyConfig {
   host: string;
   port: number;
-  start_port: number;
   default_context: number;
 }
 interface ProxyControlProps {
@@ -34,7 +33,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const [config, setConfig] = useState<ProxyConfig>({
     host: "127.0.0.1",
     port: 8080,
-    start_port: 9000,
     default_context: 8192,
   });
   const [loading, setLoading] = useState(false);
@@ -166,14 +164,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
                       type="number"
                       value={config.port}
                       onChange={(e) => setConfig({ ...config, port: parseInt(e.target.value) })}
-                    />
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label>Start Port:</label>
-                    <input
-                      type="number"
-                      value={config.start_port}
-                      onChange={(e) => setConfig({ ...config, start_port: parseInt(e.target.value) })}
                     />
                   </div>
                   <div className={styles.formGroup}>

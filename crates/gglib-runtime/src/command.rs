@@ -261,6 +261,7 @@ mod tests {
             model_id: 1,
             model_name: "test-model".to_string(),
             model_path: PathBuf::from("/tmp/test.gguf"),
+            base_port: 9000,
             port: Some(8080),
             context_size: None,
             gpu_layers: None,

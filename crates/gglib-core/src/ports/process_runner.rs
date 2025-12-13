@@ -23,6 +23,8 @@ pub struct ServerConfig {
     pub model_path: PathBuf,
     /// Port to listen on (if None, a free port will be assigned).
     pub port: Option<u16>,
+    /// Base port for allocation when port is None.
+    pub base_port: u16,
     /// Context size to use (if None, use model default).
     pub context_size: Option<u64>,
     /// Number of GPU layers to offload (if None, use default).
@@ -34,12 +36,18 @@ pub struct ServerConfig {
 impl ServerConfig {
     /// Create a new server configuration with required fields.
     #[must_use]
-    pub const fn new(model_id: i64, model_name: String, model_path: PathBuf) -> Self {
+    pub const fn new(
+        model_id: i64,
+        model_name: String,
+        model_path: PathBuf,
+        base_port: u16,
+    ) -> Self {
         Self {
             model_id,
             model_name,
             model_path,
             port: None,
+            base_port,
             context_size: None,
             gpu_layers: None,
             extra_args: Vec::new(),
