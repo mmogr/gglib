@@ -124,7 +124,7 @@ impl TestDb {
             CREATE TABLE IF NOT EXISTS models (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                file_path TEXT NOT NULL UNIQUE,
+                file_path TEXT,
                 param_count_b REAL NOT NULL,
                 architecture TEXT,
                 quantization TEXT,
@@ -136,12 +136,19 @@ impl TestDb {
                 hf_filename TEXT,
                 download_date TEXT,
                 last_update_check TEXT,
-                tags TEXT NOT NULL DEFAULT '[]'
+                tags TEXT NOT NULL DEFAULT '[]',
+                model_key TEXT NOT NULL,
+                file_paths_json TEXT
             )
             "#,
         )
         .execute(&pool)
         .await?;
+
+        // Create unique index on model_key
+        sqlx::query("CREATE UNIQUE INDEX idx_models_model_key ON models(model_key)")
+            .execute(&pool)
+            .await?;
 
         // Create settings table
         sqlx::query(

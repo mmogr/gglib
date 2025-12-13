@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tempfile::tempdir;
 
 use gglib_core::utils::validation;
-use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
+use gglib_core::{Model, ModelRepository, NewModel};
 use gglib_db::SqliteModelRepository;
 
 /// Create a test GGUF file with minimal valid header
@@ -120,7 +120,11 @@ async fn test_add_command_database_integration() {
 
     // Add model to database
     let result = repo.insert(&new_model).await;
-    assert!(result.is_ok(), "Adding model to database should succeed");
+    assert!(
+        result.is_ok(),
+        "Adding model to database should succeed: {:?}",
+        result.err()
+    );
 
     // Verify model was added
     let models = repo.list().await.unwrap();
@@ -154,9 +158,11 @@ async fn test_add_command_duplicate_model_handling() {
     new_model1.context_length = Some(4096);
 
     // Add first model
-    repo.insert(&new_model1).await.unwrap();
+    let first_model = repo.insert(&new_model1).await.unwrap();
+    assert_eq!(first_model.param_count_b, 7.0);
+    assert_eq!(first_model.quantization, Some("Q4_0".to_string()));
 
-    // Try to add second model with same file path (should fail - duplicates rejected)
+    // Add second model with same file path (should update via UPSERT for sharded download support)
     let mut new_model2 = NewModel::new(
         "Duplicate Test".to_string(),
         file_path.clone(),
@@ -167,27 +173,32 @@ async fn test_add_command_duplicate_model_handling() {
     new_model2.quantization = Some("Q8_0".to_string());
     new_model2.context_length = Some(8192);
 
-    let err = repo
-        .insert(&new_model2)
-        .await
-        .expect_err("Duplicate file path should be rejected");
+    // This should succeed and update the existing model (UPSERT behavior)
+    let updated_model = repo.insert(&new_model2).await.unwrap();
 
-    match err {
-        RepositoryError::AlreadyExists(msg) => {
-            assert!(
-                msg.contains("duplicate_test"),
-                "Error message should contain file path"
-            );
-        }
-        other => panic!("Expected AlreadyExists error, got {other:?}"),
-    }
+    // Verify it's the same model ID (updated, not inserted)
+    assert_eq!(
+        updated_model.id, first_model.id,
+        "Should update existing model, not create new one"
+    );
 
-    // Verify only the first model exists
+    // Verify the fields were updated as per UPSERT logic
+    assert_eq!(
+        updated_model.file_path, first_model.file_path,
+        "File path should remain the same"
+    );
+    assert_eq!(
+        updated_model.quantization,
+        Some("Q8_0".to_string()),
+        "Quantization should be updated"
+    );
+
+    // Verify only one model exists in the database
     let models = repo.list().await.unwrap();
     assert_eq!(
         models.len(),
         1,
-        "Database should contain only the original model"
+        "Database should contain only one model (updated via UPSERT)"
     );
 }
 

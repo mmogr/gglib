@@ -115,15 +115,22 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             hf_filename TEXT,
             download_date TEXT,
             last_update_check TEXT,
-            tags TEXT DEFAULT '[]'
+            tags TEXT DEFAULT '[]',
+            model_key TEXT NOT NULL,
+            file_paths_json TEXT
         )
         "#,
     )
     .execute(pool)
     .await?;
 
-    // Unique index on file path
-    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")
+    // Index on file path for lookups (no longer unique)
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_models_file_path ON models(file_path)")
+        .execute(pool)
+        .await?;
+
+    // Unique index on model_key (canonical identity)
+    sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_models_model_key ON models(model_key)")
         .execute(pool)
         .await?;
 

@@ -113,6 +113,7 @@ impl DownloadQueue {
         &mut self,
         id: &DownloadId,
         shard_files: Vec<(String, Option<u64>)>,
+        revision: Option<&str>,
         has_active: bool,
     ) -> Result<u32, DownloadError> {
         if shard_files.is_empty() {
@@ -129,7 +130,7 @@ impl DownloadQueue {
             self.pending.len() as u32 + 1
         };
 
-        let items = self.create_shard_items(id, shard_files);
+        let items = self.create_shard_items(id, shard_files, revision);
         self.pending.extend(items);
 
         Ok(first_position)
@@ -405,6 +406,7 @@ impl DownloadQueue {
         &self,
         id: &DownloadId,
         shard_files: Vec<(String, Option<u64>)>,
+        revision: Option<&str>,
     ) -> Vec<QueuedItem> {
         let group_id = ShardGroupId::generate(id);
         let total_shards = shard_files.len() as u32;
@@ -417,7 +419,9 @@ impl DownloadQueue {
                     Some(s) => ShardInfo::with_size(idx as u32, total_shards, filename, s),
                     None => ShardInfo::new(idx as u32, total_shards, filename),
                 };
-                QueuedItem::new_shard(id.clone(), group_id.clone(), shard_info)
+                let mut item = QueuedItem::new_shard(id.clone(), group_id.clone(), shard_info);
+                item.revision = revision.map(String::from);
+                item
             })
             .collect()
     }
@@ -534,7 +538,7 @@ mod tests {
             ("shard-002.gguf".to_string(), Some(2000u64)),
         ];
 
-        let pos = queue.queue_sharded(&id, shards, false).unwrap();
+        let pos = queue.queue_sharded(&id, shards, None, false).unwrap();
         assert_eq!(pos, 1);
         assert_eq!(queue.pending_len(), 2);
 
@@ -549,7 +553,7 @@ mod tests {
         let mut queue = DownloadQueue::new(10);
         let id = test_id("model/x", Some("Q4_K_M"));
         let shards = vec![("s1.gguf".to_string(), None), ("s2.gguf".to_string(), None)];
-        queue.queue_sharded(&id, shards, false).unwrap();
+        queue.queue_sharded(&id, shards, None, false).unwrap();
 
         let group_id = queue.pending.front().unwrap().group_id.clone().unwrap();
         let removed = queue.remove_group(&group_id);
@@ -563,7 +567,7 @@ mod tests {
         let mut queue = DownloadQueue::new(10);
         let id = test_id("model/x", Some("Q4_K_M"));
         let shards = vec![("s1.gguf".to_string(), None), ("s2.gguf".to_string(), None)];
-        queue.queue_sharded(&id, shards, false).unwrap();
+        queue.queue_sharded(&id, shards, None, false).unwrap();
 
         let group_id = queue.pending.front().unwrap().group_id.clone().unwrap();
         let failed_count = queue.fail_group(&group_id, "Network error");
@@ -677,7 +681,7 @@ mod tests {
         let id_sharded = test_id("sharded", Some("Q4"));
         let shards = vec![("s1.gguf".to_string(), None), ("s2.gguf".to_string(), None)];
         queue
-            .queue_sharded(&id_sharded.clone(), shards, false)
+            .queue_sharded(&id_sharded.clone(), shards, None, false)
             .unwrap();
 
         queue.queue(test_id("b", None), false).unwrap();

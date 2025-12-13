@@ -99,6 +99,7 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
         download_date: None,
         last_update_check: None,
         tags: auto_tags,
+        file_paths: None,
     };
 
     // Save to database via AppCore
