@@ -9,16 +9,16 @@
 //! - Worker receives a `DownloadJob` (value type) and `WorkerDeps` (cloned Arcs)
 //! - Worker only writes to `watch::Sender` for progress, never emits events directly
 //! - Cancellation is handled via `tokio::select!` around IO operations
-//! - Registration errors are soft-fail (logged, don't fail the download)
+//! - Registration is deferred to the manager after shard group completion
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{DownloadError, DownloadId, Quantization};
-use gglib_core::ports::{CompletedDownload, DownloadManagerConfig, ModelRegistrarPort};
+use gglib_core::ports::DownloadManagerConfig;
 
 use crate::cli_exec::{FastDownloadRequest, PythonBridgeError, run_fast_download};
 
@@ -30,8 +30,6 @@ use super::paths::DownloadDestination;
 /// to operate independently of the manager's state.
 #[derive(Clone)]
 pub struct WorkerDeps {
-    /// Port for registering completed downloads as models.
-    pub model_registrar: Arc<dyn ModelRegistrarPort>,
     /// Configuration (models directory, HF token, etc.).
     pub config: DownloadManagerConfig,
 }
@@ -45,6 +43,8 @@ pub struct DownloadJob {
     pub id: DownloadId,
     /// Planned destination (model directory + files).
     pub destination: DownloadDestination,
+    /// Git revision/tag/commit (e.g., "main", "v1.0", SHA).
+    pub revision: Option<String>,
     /// Cancellation token for this job.
     pub cancel: CancellationToken,
     /// Progress sender for this job.
@@ -82,6 +82,39 @@ pub struct CompletedJob {
     pub primary_path: PathBuf,
     /// All downloaded file paths.
     pub all_paths: Vec<PathBuf>,
+    /// Repository ID for model registration.
+    pub repo_id: String,
+    /// Commit SHA for model registration.
+    pub commit_sha: String,
+    /// Quantization for model registration.
+    pub quantization: Quantization,
+    /// List of file names downloaded.
+    pub files: Vec<String>,
+}
+
+/// Percent-encode a revision string to safely use in model_key.
+///
+/// Encodes characters that could cause ambiguity in the key format:
+/// - `/` → `%2F` (branch names like `feature/branch`)
+/// - `#` → `%23` (could conflict with filename delimiter)
+/// - `@` → `%40` (could conflict with revision delimiter)
+///
+/// Uses proper UTF-8 byte encoding for all non-ASCII characters.
+fn percent_encode_revision(revision: &str) -> String {
+    let mut out = String::new();
+    for b in revision.as_bytes() {
+        match *b {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-' | b'_' | b'.' | b'~' => out.push(*b as char),
+            b'/' => out.push_str("%2F"),
+            b'#' => out.push_str("%23"),
+            b'@' => out.push_str("%40"),
+            b => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
 }
 
 /// Run a download job to completion.
@@ -89,10 +122,10 @@ pub struct CompletedJob {
 /// This function executes the full download pipeline:
 /// 1. Ensures destination directory exists
 /// 2. Downloads files with progress reporting
-/// 3. Registers the completed model (soft-fail on error)
 ///
 /// Progress is reported through `job.progress_tx` only; no events are emitted.
 /// The bridge task (spawned by the manager) handles event emission.
+/// Model registration is deferred to the manager after all shards complete.
 ///
 /// # Cancellation
 ///
@@ -108,26 +141,37 @@ pub async fn run_job(job: DownloadJob, deps: &WorkerDeps) -> Result<CompletedJob
     // Handle cancellation or errors
     let () = download_result?;
 
-    // Step 3: Register completed model (soft-fail)
+    // Step 3: Prepare result with metadata for manager
     let primary_path = job
         .destination
         .primary_path()
         .ok_or_else(|| DownloadError::other("No files in download"))?;
     let all_paths = job.destination.all_paths();
 
-    register_model(
-        &deps.model_registrar,
-        &job.id,
-        &primary_path,
-        &all_paths,
-        &job.destination.files,
-    )
-    .await;
+    // Extract metadata from download ID
+    let repo_id = job.id.model_id().to_string();
+    let commit_sha = job.revision
+        .as_ref()
+        .map(|r| format!("rev:{}", percent_encode_revision(r)))
+        .unwrap_or_else(|| "rev:main".to_string());
+    let quantization = job.id.quantization().map_or_else(
+        || {
+            job.destination
+                .files
+                .first()
+                .map_or(Quantization::Unknown, |f| Quantization::from_filename(f))
+        },
+        Quantization::from_filename,
+    );
 
     Ok(CompletedJob {
         id: job.id,
         primary_path,
         all_paths,
+        repo_id,
+        commit_sha,
+        quantization,
+        files: job.destination.files.clone(),
     })
 }
 
@@ -182,56 +226,6 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
     }
 }
 
-/// Register a completed download as a model (soft-fail).
-///
-/// Logs success or warning but never fails the download.
-async fn register_model(
-    registrar: &Arc<dyn ModelRegistrarPort>,
-    id: &DownloadId,
-    primary_path: &Path,
-    all_paths: &[PathBuf],
-    files: &[String],
-) {
-    // Determine quantization from ID or filename
-    let quantization = id.quantization().map_or_else(
-        || {
-            files
-                .first()
-                .map_or(Quantization::Unknown, |f| Quantization::from_filename(f))
-        },
-        Quantization::from_filename,
-    );
-
-    let completed = CompletedDownload {
-        primary_path: primary_path.to_path_buf(),
-        all_paths: all_paths.to_vec(),
-        quantization,
-        repo_id: id.model_id().to_string(),
-        commit_sha: "main".to_string(), // TODO: capture actual commit SHA
-        is_sharded: files.len() > 1,
-        total_bytes: 0, // TODO: track total bytes
-    };
-
-    match registrar.register_model(&completed).await {
-        Ok(model) => {
-            tracing::info!(
-                download_id = %id,
-                model_id = model.id,
-                model_name = %model.name,
-                "Model registered successfully"
-            );
-        }
-        Err(e) => {
-            tracing::warn!(
-                download_id = %id,
-                error = %e,
-                path = %primary_path.display(),
-                "Failed to register model - file downloaded but won't appear in library"
-            );
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,5 +244,42 @@ mod tests {
         assert_eq!(update.downloaded, 0);
         assert_eq!(update.total, 0);
         assert_eq!(update.seq, 0);
+    }
+
+    #[test]
+    fn test_percent_encode_revision() {
+        // Normal alphanumeric revisions pass through
+        assert_eq!(percent_encode_revision("main"), "main");
+        assert_eq!(percent_encode_revision("v1.0.2"), "v1.0.2");
+        assert_eq!(percent_encode_revision("abc123-def"), "abc123-def");
+
+        // Branch names with slashes
+        assert_eq!(percent_encode_revision("feature/branch"), "feature%2Fbranch");
+        assert_eq!(percent_encode_revision("hotfix/v1.2"), "hotfix%2Fv1.2");
+
+        // Special characters that could cause ambiguity
+        assert_eq!(percent_encode_revision("tag#123"), "tag%23123");
+        assert_eq!(percent_encode_revision("user@commit"), "user%40commit");
+        
+        // Complex case
+        assert_eq!(
+            percent_encode_revision("feature/test@v1#fix"),
+            "feature%2Ftest%40v1%23fix"
+        );
+
+        // Unicode (UTF-8 encoding)
+        let encoded = percent_encode_revision("café/模型#x@y");
+        assert!(encoded.contains("%C3%A9"), "Should contain UTF-8 encoded é");
+        assert!(encoded.contains("%2F"), "Should encode /");
+        assert!(encoded.contains("%23"), "Should encode #");
+        assert!(encoded.contains("%40"), "Should encode @");
+        // Verify it encodes the CJK character (模 = E6 A8 A1 in UTF-8)
+        assert!(encoded.contains("%E6%A8%A1"), "Should contain UTF-8 encoded 模");
+        
+        // Full verification
+        assert_eq!(
+            percent_encode_revision("café"),
+            "caf%C3%A9"
+        );
     }
 }
