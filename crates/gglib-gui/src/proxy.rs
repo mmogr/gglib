@@ -24,10 +24,12 @@ use crate::error::GuiError;
 /// Precedence: override → settings.llama_base_port → DEFAULT_LLAMA_BASE_PORT
 ///
 /// Validates that the port is in the valid range (1024-65535).
-fn resolve_llama_base_port(
+///
+/// Returns (port, source_description) for logging.
+pub(crate) fn resolve_llama_base_port(
     override_port: Option<u16>,
     settings: &Settings,
-) -> Result<u16, GuiError> {
+) -> Result<(u16, &'static str), GuiError> {
     let (port, source) = if let Some(port) = override_port {
         (port, "override")
     } else if let Some(port) = settings.llama_base_port {
@@ -50,7 +52,7 @@ fn resolve_llama_base_port(
         "Starting llama-server with base port"
     );
 
-    Ok(port)
+    Ok((port, source))
 }
 
 /// Proxy operations facade.
@@ -94,7 +96,7 @@ impl ProxyOps {
             .get()
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to load settings: {}", e)))?;
-        let llama_base_port = resolve_llama_base_port(llama_base_port_override, &settings)?;
+        let (llama_base_port, _source) = resolve_llama_base_port(llama_base_port_override, &settings)?;
 
         // Create catalog port from model repository
         let catalog: Arc<dyn ModelCatalogPort> =
@@ -155,8 +157,9 @@ mod tests {
     #[test]
     fn test_resolve_llama_base_port_override_wins() {
         let settings = Settings::with_defaults();
-        let port = resolve_llama_base_port(Some(9500), &settings).unwrap();
+        let (port, source) = resolve_llama_base_port(Some(9500), &settings).unwrap();
         assert_eq!(port, 9500);
+        assert_eq!(source, "override");
     }
 
     #[test]
@@ -165,15 +168,17 @@ mod tests {
             llama_base_port: Some(9200),
             ..Default::default()
         };
-        let port = resolve_llama_base_port(None, &settings).unwrap();
+        let (port, source) = resolve_llama_base_port(None, &settings).unwrap();
         assert_eq!(port, 9200);
+        assert_eq!(source, "saved setting");
     }
 
     #[test]
     fn test_resolve_llama_base_port_default_fallback() {
         let settings = Settings::default();
-        let port = resolve_llama_base_port(None, &settings).unwrap();
+        let (port, source) = resolve_llama_base_port(None, &settings).unwrap();
         assert_eq!(port, DEFAULT_LLAMA_BASE_PORT);
+        assert_eq!(source, "default");
     }
 
     #[test]
