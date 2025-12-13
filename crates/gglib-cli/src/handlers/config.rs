@@ -90,7 +90,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
                 settings.default_context_size
             );
             println!("  proxy_port:              {:?}", settings.proxy_port);
-            println!("  server_port:             {:?}", settings.server_port);
+            println!("  llama_base_port:         {:?}", settings.llama_base_port);
             println!(
                 "  max_download_queue_size: {:?}",
                 settings.max_download_queue_size
@@ -100,7 +100,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
         SettingsCommand::Set {
             default_context_size,
             proxy_port,
-            server_port,
+            llama_base_port,
             max_download_queue_size,
             default_download_path,
         } => {
@@ -108,13 +108,13 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
             let has_default_download_path = default_download_path.is_some();
             let has_default_context_size = default_context_size.is_some();
             let has_proxy_port = proxy_port.is_some();
-            let has_server_port = server_port.is_some();
+            let has_llama_base_port = llama_base_port.is_some();
             let has_max_download_queue_size = max_download_queue_size.is_some();
 
             if !has_default_download_path
                 && !has_default_context_size
                 && !has_proxy_port
-                && !has_server_port
+                && !has_llama_base_port
                 && !has_max_download_queue_size
             {
                 println!("No settings provided. Use --help to see available options.");
@@ -126,7 +126,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
                 default_download_path: default_download_path.map(Some),
                 default_context_size: default_context_size.map(Some),
                 proxy_port: proxy_port.map(Some),
-                server_port: server_port.map(Some),
+                llama_base_port: llama_base_port.map(Some),
                 max_download_queue_size: max_download_queue_size.map(Some),
                 show_memory_fit_indicators: None,
             };
@@ -142,8 +142,8 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
             if let Some(Some(v)) = update.proxy_port {
                 current.proxy_port = Some(v);
             }
-            if let Some(Some(v)) = update.server_port {
-                current.server_port = Some(v);
+            if let Some(Some(v)) = update.llama_base_port {
+                current.llama_base_port = Some(v);
             }
             if let Some(Some(v)) = update.max_download_queue_size {
                 current.max_download_queue_size = Some(v);
@@ -167,8 +167,8 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
             if has_proxy_port {
                 println!("  proxy_port: {:?}", updated.proxy_port);
             }
-            if has_server_port {
-                println!("  server_port: {:?}", updated.server_port);
+            if has_llama_base_port {
+                println!("  llama_base_port: {:?}", updated.llama_base_port);
             }
             if has_max_download_queue_size {
                 println!(
