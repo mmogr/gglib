@@ -77,6 +77,9 @@ impl ModelRegistrarPort for ModelRegistrar {
         model.hf_commit_sha = Some(download.commit_sha.clone());
         model.hf_filename = Some(file_path.file_name().unwrap().to_string_lossy().to_string());
         model.download_date = Some(Utc::now());
+        
+        // Pass through file_paths for sharded models
+        model.file_paths = download.file_paths.clone();
 
         // Auto-detect capabilities from metadata
         if let Some(ref meta) = gguf_metadata {
@@ -112,6 +115,7 @@ impl ModelRegistrarPort for ModelRegistrar {
             commit_sha: commit_sha.to_string(),
             is_sharded: false,
             total_bytes: 0,
+            file_paths: None,
         };
 
         self.register_model(&download).await
@@ -215,6 +219,7 @@ mod tests {
             commit_sha: "abc123".to_string(),
             is_sharded: false,
             total_bytes: 1024,
+            file_paths: None,
         };
 
         let result = registrar.register_model(&download).await;
@@ -246,6 +251,7 @@ mod tests {
             commit_sha: "def456".to_string(),
             is_sharded: true,
             total_bytes: 4096,
+            file_paths: None,
         };
 
         let result = registrar.register_model(&download).await;

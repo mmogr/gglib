@@ -109,6 +109,8 @@ pub struct NewModel {
     pub last_update_check: Option<DateTime<Utc>>,
     /// User-defined tags for organizing models.
     pub tags: Vec<String>,
+    /// Ordered list of all file paths for sharded models (None for single-file models).
+    pub file_paths: Option<Vec<PathBuf>>,
 }
 
 impl NewModel {
@@ -137,6 +139,7 @@ impl NewModel {
             download_date: None,
             last_update_check: None,
             tags: Vec::new(),
+            file_paths: None,
         }
     }
 }
@@ -162,6 +165,7 @@ impl Model {
             download_date: self.download_date,
             last_update_check: self.last_update_check,
             tags: self.tags.clone(),
+            file_paths: None, // Not preserved in conversion
         }
     }
 }
