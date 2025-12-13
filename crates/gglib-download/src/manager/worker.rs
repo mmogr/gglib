@@ -150,13 +150,10 @@ pub async fn run_job(job: DownloadJob, deps: &WorkerDeps) -> Result<CompletedJob
 
     // Extract metadata from download ID
     let repo_id = job.id.model_id().to_string();
-    let commit_sha = job
-        .revision
-        .as_ref()
-        .map_or_else(
-            || "rev:main".to_string(),
-            |r| format!("rev:{}", percent_encode_revision(r)),
-        );
+    let commit_sha = job.revision.as_ref().map_or_else(
+        || "rev:main".to_string(),
+        |r| format!("rev:{}", percent_encode_revision(r)),
+    );
     let quantization = job.id.quantization().map_or_else(
         || {
             job.destination
