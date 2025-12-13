@@ -28,18 +28,15 @@ struct RunningProcess {
 pub struct ProcessCore {
     /// Running processes keyed by `model_id`.
     processes: HashMap<i64, RunningProcess>,
-    /// Base port for allocation.
-    base_port: u16,
     /// Path to llama-server binary.
     llama_server_path: PathBuf,
 }
 
 impl ProcessCore {
     /// Create a new `ProcessCore`.
-    pub fn new(base_port: u16, llama_server_path: impl Into<PathBuf>) -> Self {
+    pub fn new(llama_server_path: impl Into<PathBuf>) -> Self {
         Self {
             processes: HashMap::new(),
-            base_port,
             llama_server_path: llama_server_path.into(),
         }
     }
@@ -57,7 +54,7 @@ impl ProcessCore {
             ));
         }
 
-        let port = self.resolve_port(config.port)?;
+        let port = self.resolve_port(config)?;
         let mut child = command::build_and_spawn(Some(&self.llama_server_path), config, port)?;
         let pid = child.id();
 
@@ -149,12 +146,12 @@ impl ProcessCore {
     }
 
     /// Resolve port from config or allocate a new one.
-    fn resolve_port(&self, requested: Option<u16>) -> Result<u16> {
-        match requested {
+    fn resolve_port(&self, config: &ServerConfig) -> Result<u16> {
+        match config.port {
             Some(p) if p < 1024 => Err(anyhow!("Port {} is privileged. Use >= 1024.", p)),
             Some(p) if !Self::is_port_available(p) => Err(anyhow!("Port {} is in use.", p)),
             Some(p) => Ok(p),
-            None => self.allocate_port(),
+            None => self.allocate_port(config.base_port),
         }
     }
 
@@ -162,12 +159,12 @@ impl ProcessCore {
         TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
 
-    fn allocate_port(&self) -> Result<u16> {
+    fn allocate_port(&self, base_port: u16) -> Result<u16> {
         let used: Vec<u16> = self.processes.values().map(|p| p.handle.port).collect();
 
         for attempt in 0..3 {
             for offset in 0..100 {
-                let port = self.base_port + offset;
+                let port = base_port + offset;
                 if used.contains(&port) {
                     continue;
                 }
@@ -185,8 +182,8 @@ impl ProcessCore {
 
         Err(anyhow!(
             "No available ports in range {}-{}",
-            self.base_port,
-            self.base_port + 99
+            base_port,
+            base_port + 99
         ))
     }
 
