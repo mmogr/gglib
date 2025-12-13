@@ -26,6 +26,8 @@ pub struct QueuedItem {
     pub group_id: Option<ShardGroupId>,
     /// Shard-specific information if this is part of a sharded model.
     pub shard_info: Option<ShardInfo>,
+    /// Git revision/tag/commit (e.g., "main", "v1.0", SHA).
+    pub revision: Option<String>,
     /// When this item was queued (for ordering/debugging).
     pub queued_at: Instant,
 }
@@ -37,6 +39,7 @@ impl QueuedItem {
             id,
             group_id: None,
             shard_info: None,
+            revision: None,
             queued_at: Instant::now(),
         }
     }
@@ -47,6 +50,7 @@ impl QueuedItem {
             id,
             group_id: Some(group_id),
             shard_info: Some(shard_info),
+            revision: None,
             queued_at: Instant::now(),
         }
     }
