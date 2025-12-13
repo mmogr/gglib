@@ -111,7 +111,7 @@ impl ModelRepository for SqliteModelRepository {
             .and_then(|paths| serde_json::to_string(paths).ok());
 
         // Use UPSERT to make registration idempotent
-        let result = sqlx::query(
+        let _result = sqlx::query(
             r#"INSERT INTO models (
                 name, file_path, param_count_b, architecture, quantization, 
                 context_length, metadata, added_at, hf_repo_id, hf_commit_sha, 

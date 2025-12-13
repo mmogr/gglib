@@ -113,6 +113,7 @@ impl<'a> ModelOps<'a> {
             download_date: None,
             last_update_check: None,
             tags: Vec::new(),
+            file_paths: None,
         };
 
         let model = self

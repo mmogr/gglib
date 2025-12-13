@@ -58,7 +58,8 @@ impl ShardGroupState {
 
     /// Check if all shards have been downloaded.
     fn is_complete(&self) -> bool {
-        self.paths_by_index.iter().all(Option::is_some)
+        self.paths_by_index.len() == self.expected_total as usize
+            && self.paths_by_index.iter().all(Option::is_some)
     }
 
     /// Extract ordered paths (only call if is_complete).
@@ -165,6 +166,7 @@ impl ShardGroupTracker {
     /// # Arguments
     ///
     /// * `ttl` - Time-to-live for shard groups
+    #[allow(dead_code)]
     pub fn gc_expired(&mut self, ttl: Duration) -> usize {
         let now = Instant::now();
         let before_count = self.groups.len();
