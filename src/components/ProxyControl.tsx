@@ -173,7 +173,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
                       value={config.default_context}
                       onChange={(e) => setConfig({ ...config, default_context: parseInt(e.target.value) })}
                     />
-                    />
                   </div>
                 </div>
               )}
