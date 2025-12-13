@@ -394,14 +394,20 @@ impl GuiBackend {
     /// Start the OpenAI-compatible proxy server.
     ///
     /// Creates a SingleSwap ProcessManager internally for model launching.
+    /// The llama_base_port is resolved from: override → saved settings → default.
     pub async fn proxy_start(
         &self,
         config: ProxyConfig,
-        llama_base_port: u16,
+        llama_base_port_override: Option<u16>,
         llama_server_path: String,
     ) -> Result<SocketAddr, GuiError> {
         self.proxy_ops()
-            .start(config, llama_base_port, llama_server_path)
+            .start(
+                self.deps.settings(),
+                config,
+                llama_base_port_override,
+                llama_server_path,
+            )
             .await
     }
 
