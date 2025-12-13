@@ -134,7 +134,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
 
     // 2. Create process runner
     let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
-        config.base_port,
         config.llama_server_path.clone(),
         config.max_concurrent,
     ));

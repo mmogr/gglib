@@ -43,8 +43,6 @@ use gglib_core::paths::{
 /// Configuration for the Tauri adapter.
 #[derive(Debug, Clone)]
 pub struct TauriConfig {
-    /// Base port for llama-server instances.
-    pub base_port: u16,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
     /// Maximum concurrent model servers.
@@ -55,7 +53,6 @@ impl TauriConfig {
     /// Create config with default paths.
     pub fn with_defaults() -> Result<Self> {
         Ok(Self {
-            base_port: 9000,
             llama_server_path: llama_server_path()?,
             max_concurrent: 4,
         })
@@ -205,7 +202,6 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
 
     // 2. Create process runner
     let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
-        config.base_port,
         config.llama_server_path.clone(),
         config.max_concurrent,
     ));
@@ -346,7 +342,6 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
 
     // 2. Create process runner
     let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
-        config.base_port,
         config.llama_server_path.clone(),
         config.max_concurrent,
     ));
