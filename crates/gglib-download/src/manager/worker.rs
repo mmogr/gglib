@@ -11,6 +11,7 @@
 //! - Cancellation is handled via `tokio::select!` around IO operations
 //! - Registration is deferred to the manager after shard group completion
 
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -92,7 +93,7 @@ pub struct CompletedJob {
     pub files: Vec<String>,
 }
 
-/// Percent-encode a revision string to safely use in model_key.
+/// Percent-encode a revision string to safely use in `model_key`.
 ///
 /// Encodes characters that could cause ambiguity in the key format:
 /// - `/` → `%2F` (branch names like `feature/branch`)
@@ -105,12 +106,12 @@ fn percent_encode_revision(revision: &str) -> String {
     for b in revision.as_bytes() {
         match *b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(*b as char)
+                out.push(*b as char);
             }
             b'/' => out.push_str("%2F"),
             b'#' => out.push_str("%23"),
             b'@' => out.push_str("%40"),
-            b => out.push_str(&format!("%{:02X}", b)),
+            b => write!(&mut out, "%{b:02X}").unwrap(),
         }
     }
     out
@@ -152,8 +153,10 @@ pub async fn run_job(job: DownloadJob, deps: &WorkerDeps) -> Result<CompletedJob
     let commit_sha = job
         .revision
         .as_ref()
-        .map(|r| format!("rev:{}", percent_encode_revision(r)))
-        .unwrap_or_else(|| "rev:main".to_string());
+        .map_or_else(
+            || "rev:main".to_string(),
+            |r| format!("rev:{}", percent_encode_revision(r)),
+        );
     let quantization = job.id.quantization().map_or_else(
         || {
             job.destination

@@ -79,7 +79,7 @@ impl ModelRegistrarPort for ModelRegistrar {
         model.download_date = Some(Utc::now());
 
         // Pass through file_paths for sharded models
-        model.file_paths = download.file_paths.clone();
+        model.file_paths.clone_from(&download.file_paths);
 
         // Auto-detect capabilities from metadata
         if let Some(ref meta) = gguf_metadata {

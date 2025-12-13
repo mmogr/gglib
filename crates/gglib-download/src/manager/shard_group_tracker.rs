@@ -12,7 +12,7 @@ use gglib_core::download::Quantization;
 use crate::queue::ShardGroupId;
 
 /// Metadata needed to register a completed model.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupMetadata {
     /// Repository ID (e.g., "unsloth/Llama-3-GGUF").
     pub repo_id: String,
@@ -62,11 +62,11 @@ impl ShardGroupState {
             && self.paths_by_index.iter().all(Option::is_some)
     }
 
-    /// Extract ordered paths (only call if is_complete).
+    /// Extract ordered paths (only call if `is_complete`).
     fn ordered_paths(&self) -> Vec<PathBuf> {
         self.paths_by_index
             .iter()
-            .filter_map(|p| p.clone())
+            .filter_map(Clone::clone)
             .collect()
     }
 }
@@ -116,11 +116,11 @@ impl ShardGroupTracker {
     /// metadata. This catches bugs where shards compute different identities.
     pub fn on_shard_done(
         &mut self,
-        group_id: ShardGroupId,
+        group_id: &ShardGroupId,
         index: u32,
         path: PathBuf,
         expected_total: u32,
-        metadata: GroupMetadata,
+        metadata: &GroupMetadata,
     ) -> Option<GroupComplete> {
         // Get or create the group state
         let state = self
@@ -130,9 +130,8 @@ impl ShardGroupTracker {
 
         // Guard: in debug builds, assert metadata consistency
         debug_assert_eq!(
-            state.metadata, metadata,
-            "Metadata mismatch for group {:?}! All shards must compute identical identity.",
-            group_id
+            state.metadata, *metadata,
+            "Metadata mismatch for group {group_id:?}! All shards must compute identical identity."
         );
 
         // Record this shard (idempotent)
@@ -141,7 +140,7 @@ impl ShardGroupTracker {
         // Check if complete
         if state.is_complete() {
             // Remove from tracking and return complete group
-            if let Some(state) = self.groups.remove(&group_id) {
+            if let Some(state) = self.groups.remove(group_id) {
                 return Some(GroupComplete {
                     ordered_paths: state.ordered_paths(),
                     metadata: state.metadata,
@@ -205,29 +204,29 @@ mod tests {
 
         // Complete shards out of order: 2, 0, 1
         let result1 = tracker.on_shard_done(
-            group_id.clone(),
+            &group_id,
             2,
             PathBuf::from("/path/shard-2.gguf"),
             3,
-            metadata.clone(),
+            &metadata,
         );
         assert!(result1.is_none(), "Should not complete after shard 2");
 
         let result2 = tracker.on_shard_done(
-            group_id.clone(),
+            &group_id,
             0,
             PathBuf::from("/path/shard-0.gguf"),
             3,
-            metadata.clone(),
+            &metadata,
         );
         assert!(result2.is_none(), "Should not complete after shard 0");
 
         let result3 = tracker.on_shard_done(
-            group_id.clone(),
+            &group_id,
             1,
             PathBuf::from("/path/shard-1.gguf"),
             3,
-            metadata.clone(),
+            &metadata,
         );
         assert!(result3.is_some(), "Should complete after shard 1");
 
@@ -255,27 +254,27 @@ mod tests {
 
         // Record shard 0 twice
         tracker.on_shard_done(
-            group_id.clone(),
+            &group_id,
             0,
             PathBuf::from("/path/shard-0.gguf"),
             2,
-            metadata.clone(),
+            &metadata,
         );
         tracker.on_shard_done(
-            group_id.clone(),
+            &group_id,
             0,
             PathBuf::from("/path/shard-0-duplicate.gguf"),
             2,
-            metadata.clone(),
+            &metadata,
         );
 
         // Complete with shard 1
         let result = tracker.on_shard_done(
-            group_id.clone(),
+            &group_id,
             1,
             PathBuf::from("/path/shard-1.gguf"),
             2,
-            metadata.clone(),
+            &metadata,
         );
 
         assert!(result.is_some());
@@ -296,11 +295,11 @@ mod tests {
 
         // Start a group
         tracker.on_shard_done(
-            group_id.clone(),
+            &group_id,
             0,
             PathBuf::from("/path/shard-0.gguf"),
             3,
-            metadata,
+            &metadata,
         );
 
         assert_eq!(tracker.active_count(), 1);
@@ -319,11 +318,11 @@ mod tests {
 
         // Add a shard
         tracker.on_shard_done(
-            group_id.clone(),
+            &group_id,
             0,
             PathBuf::from("/path/shard-0.gguf"),
             3,
-            metadata,
+            &metadata,
         );
 
         assert_eq!(tracker.active_count(), 1);

@@ -113,7 +113,7 @@ impl DownloadQueue {
         &mut self,
         id: &DownloadId,
         shard_files: Vec<(String, Option<u64>)>,
-        revision: Option<String>,
+        revision: Option<&str>,
         has_active: bool,
     ) -> Result<u32, DownloadError> {
         if shard_files.is_empty() {
@@ -406,7 +406,7 @@ impl DownloadQueue {
         &self,
         id: &DownloadId,
         shard_files: Vec<(String, Option<u64>)>,
-        revision: Option<String>,
+        revision: Option<&str>,
     ) -> Vec<QueuedItem> {
         let group_id = ShardGroupId::generate(id);
         let total_shards = shard_files.len() as u32;
@@ -420,7 +420,7 @@ impl DownloadQueue {
                     None => ShardInfo::new(idx as u32, total_shards, filename),
                 };
                 let mut item = QueuedItem::new_shard(id.clone(), group_id.clone(), shard_info);
-                item.revision.clone_from(&revision);
+                item.revision = revision.map(String::from);
                 item
             })
             .collect()

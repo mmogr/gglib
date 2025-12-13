@@ -21,6 +21,7 @@ mod paths;
 mod shard_group_tracker;
 mod worker;
 
+use crate::queue::ShardGroupId;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -365,99 +366,123 @@ impl DownloadManagerImpl {
         result: Result<CompletedJob, DownloadError>,
     ) {
         match result {
-            Ok(completed) => {
-                // Check if this is part of a shard group
-                if let Some(group_id) = &item.group_id {
-                    if let Some(shard_info) = &item.shard_info {
-                        // This is a shard - coordinate with tracker
-                        // Use stable base filename so all shards compute the same identity
-                        let base_filename = completed
-                            .files
-                            .first()
-                            .map(|f| base_shard_filename(f))
-                            .unwrap_or_else(|| "unknown".to_string());
+            Ok(completed) => self.handle_success(item, completed).await,
+            Err(DownloadError::Cancelled) => self.handle_cancellation(item).await,
+            Err(e) => self.handle_failure(item, e).await,
+        }
+    }
 
-                        let metadata = GroupMetadata {
-                            repo_id: completed.repo_id.clone(),
-                            commit_sha: completed.commit_sha.clone(),
-                            quantization: completed.quantization,
-                            primary_filename: base_filename,
-                        };
-
-                        let group_complete = {
-                            let mut tracker = self.shard_tracker.lock().await;
-                            tracker.on_shard_done(
-                                group_id.clone(),
-                                shard_info.shard_index,
-                                completed.primary_path.clone(),
-                                shard_info.total_shards,
-                                metadata,
-                            )
-                        };
-
-                        // Only register and emit event if group is complete
-                        if let Some(complete) = group_complete {
-                            tracing::info!(
-                                id = %item.id,
-                                shard_count = complete.ordered_paths.len(),
-                                "All shards downloaded, registering model"
-                            );
-                            self.register_completed_model(complete).await;
-                        } else {
-                            tracing::debug!(
-                                id = %item.id,
-                                shard = shard_info.shard_index,
-                                "Shard downloaded, waiting for remaining shards"
-                            );
-                        }
-                    }
-                } else {
-                    // Single-file download - register immediately
-                    tracing::info!(id = %item.id, "Single-file download completed");
-                    let metadata = GroupMetadata {
-                        repo_id: completed.repo_id.clone(),
-                        commit_sha: completed.commit_sha.clone(),
-                        quantization: completed.quantization,
-                        primary_filename: completed
-                            .files
-                            .first()
-                            .map(|s| s.clone())
-                            .unwrap_or_else(|| "unknown".to_string()),
-                    };
-                    let complete = shard_group_tracker::GroupComplete {
-                        ordered_paths: completed.all_paths.clone(),
-                        metadata,
-                    };
-                    self.register_completed_model(complete).await;
-                }
-            }
-            Err(DownloadError::Cancelled) => {
-                tracing::info!(id = %item.id, "Download cancelled");
-
-                // Clean up shard tracker if this was part of a group
-                if let Some(group_id) = &item.group_id {
-                    self.shard_tracker.lock().await.on_group_failed(group_id);
-                }
-
-                self.event_emitter.emit(DownloadEvent::DownloadCancelled {
-                    id: item.id.to_string(),
-                });
-            }
-            Err(e) => {
-                tracing::warn!(id = %item.id, error = %e, "Download failed");
-
-                // Clean up shard tracker if this was part of a group
-                if let Some(group_id) = &item.group_id {
-                    self.shard_tracker.lock().await.on_group_failed(group_id);
-                }
-
-                let queued_item = QueuedItem::new(item.id.clone());
-                self.queue
-                    .write()
-                    .await
-                    .mark_failed(queued_item, e.to_string());
+    /// Handle successful download completion.
+    async fn handle_success(&self, item: &QueuedItem, completed: CompletedJob) {
+        if let Some(group_id) = &item.group_id {
+            if let Some(shard_info) = &item.shard_info {
+                self.handle_shard_completion(item, group_id, shard_info, completed)
+                    .await;
+                return;
             }
         }
+
+        // Single-file download - register immediately
+        self.handle_single_file_completion(item, completed).await;
+    }
+
+    /// Handle completion of a shard in a multi-shard download.
+    async fn handle_shard_completion(
+        &self,
+        item: &QueuedItem,
+        group_id: &ShardGroupId,
+        shard_info: &ShardInfo,
+        completed: CompletedJob,
+    ) {
+        // Use stable base filename so all shards compute the same identity
+        let base_filename = completed
+            .files
+            .first()
+            .map_or_else(|| "unknown".to_string(), |f| base_shard_filename(f));
+
+        let metadata = GroupMetadata {
+            repo_id: completed.repo_id.clone(),
+            commit_sha: completed.commit_sha.clone(),
+            quantization: completed.quantization,
+            primary_filename: base_filename,
+        };
+
+        let group_complete = {
+            let mut tracker = self.shard_tracker.lock().await;
+            tracker.on_shard_done(
+                group_id,
+                shard_info.shard_index,
+                completed.primary_path.clone(),
+                shard_info.total_shards,
+                &metadata,
+            )
+        };
+
+        // Only register and emit event if group is complete
+        if let Some(complete) = group_complete {
+            tracing::info!(
+                id = %item.id,
+                shard_count = complete.ordered_paths.len(),
+                "All shards downloaded, registering model"
+            );
+            self.register_completed_model(complete).await;
+        } else {
+            tracing::debug!(
+                id = %item.id,
+                shard = shard_info.shard_index,
+                "Shard downloaded, waiting for remaining shards"
+            );
+        }
+    }
+
+    /// Handle completion of a single-file download.
+    async fn handle_single_file_completion(&self, item: &QueuedItem, completed: CompletedJob) {
+        tracing::info!(id = %item.id, "Single-file download completed");
+        let metadata = GroupMetadata {
+            repo_id: completed.repo_id.clone(),
+            commit_sha: completed.commit_sha.clone(),
+            quantization: completed.quantization,
+            primary_filename: completed
+                .files
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string()),
+        };
+        let complete = shard_group_tracker::GroupComplete {
+            ordered_paths: completed.all_paths.clone(),
+            metadata,
+        };
+        self.register_completed_model(complete).await;
+    }
+
+    /// Handle download cancellation.
+    async fn handle_cancellation(&self, item: &QueuedItem) {
+        tracing::info!(id = %item.id, "Download cancelled");
+
+        // Clean up shard tracker if this was part of a group
+        if let Some(group_id) = &item.group_id {
+            self.shard_tracker.lock().await.on_group_failed(group_id);
+        }
+
+        self.event_emitter.emit(DownloadEvent::DownloadCancelled {
+            id: item.id.to_string(),
+        });
+    }
+
+    /// Handle download failure.
+    async fn handle_failure(&self, item: &QueuedItem, e: DownloadError) {
+        tracing::warn!(id = %item.id, error = %e, "Download failed");
+
+        // Clean up shard tracker if this was part of a group
+        if let Some(group_id) = &item.group_id {
+            self.shard_tracker.lock().await.on_group_failed(group_id);
+        }
+
+        let queued_item = QueuedItem::new(item.id.clone());
+        self.queue
+            .write()
+            .await
+            .mark_failed(queued_item, e.to_string());
     }
 
     /// Register a completed model (all shards downloaded).
@@ -807,7 +832,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
         // Minimal lock scope: mutate queue and get snapshot
         let position = {
             let mut queue = self.queue.write().await;
-            queue.queue_sharded(&id, shard_files, request.revision.clone(), has_active)?
+            queue.queue_sharded(&id, shard_files, request.revision.as_deref(), has_active)?
         };
 
         tracing::info!(
