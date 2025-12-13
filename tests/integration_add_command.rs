@@ -177,11 +177,21 @@ async fn test_add_command_duplicate_model_handling() {
     let updated_model = repo.insert(&new_model2).await.unwrap();
 
     // Verify it's the same model ID (updated, not inserted)
-    assert_eq!(updated_model.id, first_model.id, "Should update existing model, not create new one");
-    
+    assert_eq!(
+        updated_model.id, first_model.id,
+        "Should update existing model, not create new one"
+    );
+
     // Verify the fields were updated as per UPSERT logic
-    assert_eq!(updated_model.file_path, first_model.file_path, "File path should remain the same");
-    assert_eq!(updated_model.quantization, Some("Q8_0".to_string()), "Quantization should be updated");
+    assert_eq!(
+        updated_model.file_path, first_model.file_path,
+        "File path should remain the same"
+    );
+    assert_eq!(
+        updated_model.quantization,
+        Some("Q8_0".to_string()),
+        "Quantization should be updated"
+    );
 
     // Verify only one model exists in the database
     let models = repo.list().await.unwrap();
