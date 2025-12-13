@@ -37,15 +37,13 @@ impl LlamaServerRunner {
     ///
     /// # Arguments
     ///
-    /// * `base_port` - Base port for server allocation
     /// * `llama_server_path` - Path to the llama-server binary
     /// * `max_concurrent` - Maximum concurrent servers (0 = unlimited)
     pub fn new(
-        base_port: u16,
         llama_server_path: impl Into<PathBuf>,
         max_concurrent: usize,
     ) -> Self {
-        let core = ProcessCore::new(base_port, llama_server_path);
+        let core = ProcessCore::new(llama_server_path);
         Self {
             core: Arc::new(RwLock::new(core)),
             max_concurrent,
@@ -53,13 +51,13 @@ impl LlamaServerRunner {
     }
 
     /// Create a runner with no concurrency limit.
-    pub fn unlimited(base_port: u16, llama_server_path: impl Into<PathBuf>) -> Self {
-        Self::new(base_port, llama_server_path, 0)
+    pub fn unlimited(llama_server_path: impl Into<PathBuf>) -> Self {
+        Self::new(llama_server_path, 0)
     }
 
     /// Create a runner for single-server mode (max 1 concurrent).
-    pub fn single(base_port: u16, llama_server_path: impl Into<PathBuf>) -> Self {
-        Self::new(base_port, llama_server_path, 1)
+    pub fn single(llama_server_path: impl Into<PathBuf>) -> Self {
+        Self::new(llama_server_path, 1)
     }
 
     /// Get the path to the llama-server binary.
