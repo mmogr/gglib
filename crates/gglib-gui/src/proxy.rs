@@ -96,7 +96,8 @@ impl ProxyOps {
             .get()
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to load settings: {}", e)))?;
-        let (llama_base_port, _source) = resolve_llama_base_port(llama_base_port_override, &settings)?;
+        let (llama_base_port, _source) =
+            resolve_llama_base_port(llama_base_port_override, &settings)?;
 
         // Create catalog port from model repository
         let catalog: Arc<dyn ModelCatalogPort> =

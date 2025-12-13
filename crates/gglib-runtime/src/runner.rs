@@ -39,10 +39,7 @@ impl LlamaServerRunner {
     ///
     /// * `llama_server_path` - Path to the llama-server binary
     /// * `max_concurrent` - Maximum concurrent servers (0 = unlimited)
-    pub fn new(
-        llama_server_path: impl Into<PathBuf>,
-        max_concurrent: usize,
-    ) -> Self {
+    pub fn new(llama_server_path: impl Into<PathBuf>, max_concurrent: usize) -> Self {
         let core = ProcessCore::new(llama_server_path);
         Self {
             core: Arc::new(RwLock::new(core)),

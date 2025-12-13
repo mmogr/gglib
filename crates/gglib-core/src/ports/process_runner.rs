@@ -36,7 +36,12 @@ pub struct ServerConfig {
 impl ServerConfig {
     /// Create a new server configuration with required fields.
     #[must_use]
-    pub const fn new(model_id: i64, model_name: String, model_path: PathBuf, base_port: u16) -> Self {
+    pub const fn new(
+        model_id: i64,
+        model_name: String,
+        model_path: PathBuf,
+        base_port: u16,
+    ) -> Self {
         Self {
             model_id,
             model_name,

@@ -154,7 +154,12 @@ impl<'a> ServerOps<'a> {
 
     /// Build a ServerConfig from a model and GUI request.
     fn build_config(model: &Model, request: &StartServerRequest, base_port: u16) -> ServerConfig {
-        let mut config = ServerConfig::new(model.id, model.name.clone(), model.file_path.clone(), base_port);
+        let mut config = ServerConfig::new(
+            model.id,
+            model.name.clone(),
+            model.file_path.clone(),
+            base_port,
+        );
 
         if let Some(ctx) = request.context_length.or(model.context_length) {
             config = config.with_context_size(ctx);
@@ -210,9 +215,12 @@ impl<'a> ServerOps<'a> {
 
         // Resolve base_port from settings at serve-time (not bootstrap-time)
         use crate::proxy::resolve_llama_base_port;
-        let settings = self.deps.settings().get().await.map_err(|e| {
-            GuiError::Internal(format!("Failed to load settings: {}", e))
-        })?;
+        let settings = self
+            .deps
+            .settings()
+            .get()
+            .await
+            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {}", e)))?;
         let (base_port, source) = resolve_llama_base_port(None, &settings)?;
         debug!(
             base_port = %base_port,
