@@ -35,7 +35,7 @@ impl ProxyStatus {
 pub struct StartProxyConfig {
     pub host: Option<String>,
     pub port: Option<u16>,
-    pub start_port: Option<u16>,
+    pub llama_base_port: Option<u16>,
     pub default_context: Option<u64>,
 }
 
