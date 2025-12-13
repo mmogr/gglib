@@ -1,0 +1,37 @@
+[package]
+name = "gglib-hf"
+description = "HuggingFace Hub client for gglib"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Internal crates
+gglib-core.workspace = true
+
+# Async runtime
+tokio = { workspace = true, features = ["time"] }
+async-trait.workspace = true
+
+# Serialization
+serde = { workspace = true }
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# HTTP client (rustls to avoid OpenSSL headaches)
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+
+# URL handling
+url = "2.5"
+urlencoding = "2.1"
+
+[dev-dependencies]
+mockall.workspace = true
+tokio-test.workspace = true

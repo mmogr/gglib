@@ -1,0 +1,132 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Cargo registry and target directory
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y bc
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Web UI
+        run: |
+          npm install
+          npm run build
+
+      - name: Run Rust tests with coverage
+        run: |
+          cargo llvm-cov --all-features \
+            -p gglib-core \
+            -p gglib-db \
+            -p gglib-gguf \
+            -p gglib-hf \
+            -p gglib-download \
+            -p gglib-mcp \
+            -p gglib-proxy \
+            -p gglib-runtime \
+            -p gglib-gui \
+            -p gglib-cli \
+            -p gglib-axum \
+            --lcov --output-path lcov.info 2>&1 | tee rust-test-output.txt
+
+      - name: Run per-crate Rust coverage
+        run: |
+          cargo llvm-cov --all-features --package gglib-core --lcov --output-path gglib-core-lcov.info
+          cargo llvm-cov --all-features --package gglib-db --lcov --output-path gglib-db-lcov.info
+          cargo llvm-cov --all-features --package gglib-gguf --lcov --output-path gglib-gguf-lcov.info
+          cargo llvm-cov --all-features --package gglib-hf --lcov --output-path gglib-hf-lcov.info
+          cargo llvm-cov --all-features --package gglib-download --lcov --output-path gglib-download-lcov.info
+          cargo llvm-cov --all-features --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
+          cargo llvm-cov --all-features --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
+          cargo llvm-cov --all-features --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
+          cargo llvm-cov --all-features --package gglib-gui --lcov --output-path gglib-gui-lcov.info
+          cargo llvm-cov --all-features --package gglib-cli --lcov --output-path gglib-cli-lcov.info
+          cargo llvm-cov --all-features --package gglib-axum --lcov --output-path gglib-axum-lcov.info
+
+      - name: Run TypeScript tests with coverage
+        run: npm run test:coverage -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
+
+      - name: Generate HTML report
+        run: |
+          cargo llvm-cov --all-features \
+            -p gglib-core \
+            -p gglib-db \
+            -p gglib-gguf \
+            -p gglib-hf \
+            -p gglib-download \
+            -p gglib-mcp \
+            -p gglib-proxy \
+            -p gglib-runtime \
+            -p gglib-gui \
+            -p gglib-cli \
+            -p gglib-axum \
+            --html
+
+      - name: Archive coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            target/llvm-cov/html/
+            lcov.info
+            gglib-core-lcov.info
+            gglib-db-lcov.info
+            gglib-gguf-lcov.info
+            gglib-hf-lcov.info
+            gglib-download-lcov.info
+            gglib-mcp-lcov.info
+            gglib-proxy-lcov.info
+            gglib-runtime-lcov.info
+            gglib-gui-lcov.info
+            gglib-cli-lcov.info
+            gglib-axum-lcov.info
+            coverage/
+            rust-test-output.txt
+            ts-test-output.txt
+            ts-test-results.json
+          retention-days: 30

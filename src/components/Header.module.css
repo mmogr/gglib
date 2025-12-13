@@ -1,0 +1,174 @@
+/* Header Component */
+
+.headerContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.headerLeft {
+  display: flex;
+  flex-direction: column;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+.headerButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: 0 calc(var(--spacing-lg) + var(--spacing-xs));
+  height: var(--button-height-base);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-elevated);
+  color: inherit;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--transition-all);
+}
+
+.headerButton:hover:not(:disabled) {
+  border-color: var(--color-border-hover);
+  background: var(--color-background-hover);
+}
+
+.headerButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.headerButtonActive {
+  border-color: var(--color-primary);
+  color: var(--color-primary-light);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+}
+
+.headerButtonIconOnly {
+  width: var(--button-height-base);
+  padding: 0;
+  position: relative;
+}
+
+/* Server button wrapper for popover positioning */
+.serverButtonWrapper {
+  position: relative;
+}
+
+/* Server count badge */
+.serverBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--color-online, #10b981);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+/* Mobile menu toggle button */
+.menuToggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--button-height-base);
+  height: var(--button-height-base);
+  padding: 0;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-elevated);
+  color: inherit;
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  transition: var(--transition-all);
+}
+
+.menuToggle:hover {
+  border-color: var(--color-border-hover);
+  background: var(--color-background-hover);
+}
+
+/* Desktop navigation wrapper */
+.desktopNav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+/* Mobile dropdown menu */
+.mobileMenu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: var(--spacing-base);
+  min-width: 180px;
+  padding: var(--spacing-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+}
+
+.mobileMenu.open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.mobileMenuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-base);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-all);
+}
+
+.mobileMenuItem:hover {
+  background: var(--color-background-hover);
+}
+
+.mobileMenuItemActive {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* Responsive: hide desktop nav, show hamburger on narrow screens */
+@media (max-width: 600px) {
+  .headerRight {
+    position: relative;
+  }
+
+  .desktopNav {
+    display: none;
+  }
+
+  .menuToggle {
+    display: flex;
+  }
+}

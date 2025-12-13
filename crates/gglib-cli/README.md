@@ -1,0 +1,135 @@
+# gglib-cli
+
+![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json)
+![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-coverage.json)
+![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json)
+![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-complexity.json)
+
+Command-line interface for gglib — the primary user-facing CLI application.
+
+## Architecture
+
+This crate is in the **Adapter Layer** — it wires together all infrastructure crates and exposes them via CLI commands.
+
+```text
+                              ┌──────────────────┐
+                              │    gglib-cli     │
+                              │  CLI interface   │
+                              └────────┬─────────┘
+                                       │
+         ┌─────────────┬───────────────┼───────────────┬─────────────┐
+         ▼             ▼               ▼               ▼             ▼
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│  gglib-db   │ │gglib-download│ │gglib-runtime│ │  gglib-hf   │ │  gglib-mcp  │
+│   SQLite    │ │  Downloads  │ │   Servers   │ │  HF client  │ │ MCP servers │
+└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+         │             │               │               │             │
+         └─────────────┴───────────────┴───────────────┴─────────────┘
+                                       │
+                                       ▼
+                              ┌──────────────────┐
+                              │    gglib-core    │
+                              │   (all ports)    │
+                              └──────────────────┘
+```
+
+See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
+
+## Architecture
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                gglib-cli                                            │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
+│  │   main.rs   │ ──► │  parser.rs  │ ──► │ commands.rs │ ──► │  handlers/  │        │
+│  │  Entry pt   │     │   clap CLI  │     │  Dispatch   │     │  Command    │        │
+│  │             │     │   parsing   │     │   table     │     │  handlers   │        │
+│  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
+│                                                                                     │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
+│  │bootstrap.rs │     │presentation/│     │   utils/    │     │  error.rs   │        │
+│  │  DI setup   │     │  Table fmt  │     │   Helpers   │     │   Errors    │        │
+│  │  & wiring   │     │  & output   │     │             │     │             │        │
+│  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
+│                                                                                     │
+│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
+│  │                          *_commands.rs modules                                │  │
+│  │   llama_commands │ config_commands │ assistant_ui_commands │ ...             │  │
+│  └───────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+| Module | LOC | Complexity | Coverage | Tests |
+|--------|-----|------------|----------|-------|
+| [`assistant_ui_commands.rs`](src/assistant_ui_commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-assistant_ui_commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-assistant_ui_commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-assistant_ui_commands-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-assistant_ui_commands-tests.json) |
+| [`bootstrap.rs`](src/bootstrap.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-bootstrap-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-bootstrap-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-bootstrap-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-bootstrap-tests.json) |
+| [`commands.rs`](src/commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-commands-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-commands-tests.json) |
+| [`config_commands.rs`](src/config_commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-config_commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-config_commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-config_commands-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-config_commands-tests.json) |
+| [`error.rs`](src/error.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-error-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-error-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-error-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-error-tests.json) |
+| [`llama_commands.rs`](src/llama_commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-llama_commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-llama_commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-llama_commands-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-llama_commands-tests.json) |
+| [`parser.rs`](src/parser.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-parser-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-parser-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-parser-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-parser-tests.json) |
+| [`handlers/`](src/handlers/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-tests.json) |
+| [`presentation/`](src/presentation/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-presentation-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-presentation-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-presentation-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-presentation-tests.json) |
+| [`utils/`](src/utils/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-utils-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-utils-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-utils-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-utils-tests.json) |
+
+</details>
+
+**Module Descriptions:**
+- **`assistant_ui_commands.rs`** — Interactive assistant UI command definitions
+- **`bootstrap.rs`** — Dependency injection and service wiring
+- **`commands.rs`** — Command dispatch and routing
+- **`config_commands.rs`** — Configuration management commands
+- **`error.rs`** — CLI error types and handling
+- **`llama_commands.rs`** — Llama server/chat command definitions
+- **`parser.rs`** — Clap-based CLI argument parsing
+- **`handlers/`** — Individual command handler implementations
+- **`presentation/`** — Table formatting and output helpers
+- **`utils/`** — CLI-specific utility functions
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `add <path>` | Add a GGUF model to the library |
+| `list` | List all models with metadata |
+| `remove <id>` | Remove a model from the library |
+| `serve <id>` | Start llama-server for a model |
+| `chat <id>` | Start interactive llama-cli chat |
+| `proxy` | Start the OpenAI-compatible proxy |
+| `hf search <query>` | Search HuggingFace Hub for models |
+| `hf download <repo>` | Download a model from HuggingFace |
+| `mcp list` | List configured MCP servers |
+| `mcp start <id>` | Start an MCP server |
+| `config show` | Show current configuration |
+
+## Usage
+
+```bash
+# Add a local model
+gglib add ~/models/llama-2-7b.Q4_K_M.gguf
+
+# List all models
+gglib list
+
+# Start a server
+gglib serve 1 --port 8080
+
+# Search HuggingFace
+gglib hf search "llama 3 GGUF"
+
+# Download from HuggingFace
+gglib hf download TheBloke/Llama-2-7B-GGUF --quant Q4_K_M
+```
+
+## Design Decisions
+
+1. **Composition Root** — `bootstrap.rs` wires all dependencies (DI without framework)
+2. **Clap Derive** — Uses clap's derive macros for type-safe argument parsing
+3. **Handler Pattern** — Each command has a dedicated handler for testability
+4. **No Event Emitter** — Uses `NoopEmitter` since CLI has direct stdout
