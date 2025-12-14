@@ -8,7 +8,7 @@
 
 use gglib_axum::{
     bootstrap::{CorsConfig, ServerConfig, bootstrap},
-    embedded::{start_embedded_server, EmbeddedServerConfig},
+    embedded::{EmbeddedServerConfig, start_embedded_server},
 };
 
 /// Helper to create a test config that doesn't require llama-server.
@@ -30,25 +30,25 @@ async fn test_health_endpoint_no_auth() {
         Ok(ctx) => ctx,
         Err(_) => return, // Skip test if bootstrap fails in CI
     };
-    
+
     let config = EmbeddedServerConfig {
         cors_origins: vec!["http://localhost:3000".to_string()],
     };
-    
+
     let (info, _handle) = start_embedded_server(ctx, config)
         .await
         .expect("Failed to start embedded server");
-    
+
     let client = reqwest::Client::new();
     let base_url = format!("http://127.0.0.1:{}", info.port);
-    
+
     // Act: Access /health without auth
     let response = client
         .get(format!("{}/health", base_url))
         .send()
         .await
         .expect("Request failed");
-    
+
     // Assert: Should succeed without token
     assert_eq!(response.status(), 200);
 }
@@ -60,28 +60,28 @@ async fn test_api_requires_auth() {
         Ok(ctx) => ctx,
         Err(_) => return, // Skip test if bootstrap fails in CI
     };
-    
+
     let config = EmbeddedServerConfig {
         cors_origins: vec!["http://localhost:3000".to_string()],
     };
-    
+
     // Start embedded server to get the auth middleware wired up
     let (info, _handle) = start_embedded_server(ctx, config)
         .await
         .expect("Failed to start embedded server");
-    
+
     let client = reqwest::Client::new();
     let base_url = format!("http://127.0.0.1:{}", info.port);
-    
+
     // Act & Assert: No auth header → 401
     let response = client
         .get(format!("{}/api/models", base_url))
         .send()
         .await
         .expect("Request failed");
-    
+
     assert_eq!(response.status(), 401);
-    
+
     // Act & Assert: Wrong token → 401
     let response = client
         .get(format!("{}/api/models", base_url))
@@ -89,9 +89,9 @@ async fn test_api_requires_auth() {
         .send()
         .await
         .expect("Request failed");
-    
+
     assert_eq!(response.status(), 401);
-    
+
     // Act & Assert: Correct token → 200
     let response = client
         .get(format!("{}/api/models", base_url))
@@ -99,7 +99,7 @@ async fn test_api_requires_auth() {
         .send()
         .await
         .expect("Request failed");
-    
+
     assert_eq!(response.status(), 200);
 }
 
@@ -110,18 +110,18 @@ async fn test_api_malformed_auth_header() {
         Ok(ctx) => ctx,
         Err(_) => return,
     };
-    
+
     let config = EmbeddedServerConfig {
         cors_origins: vec!["http://localhost:3000".to_string()],
     };
-    
+
     let (info, _handle) = start_embedded_server(ctx, config)
         .await
         .expect("Failed to start embedded server");
-    
+
     let client = reqwest::Client::new();
     let base_url = format!("http://127.0.0.1:{}", info.port);
-    
+
     // Act & Assert: Missing "Bearer " prefix → 401
     let response = client
         .get(format!("{}/api/models", base_url))
@@ -129,9 +129,9 @@ async fn test_api_malformed_auth_header() {
         .send()
         .await
         .expect("Request failed");
-    
+
     assert_eq!(response.status(), 401);
-    
+
     // Act & Assert: Wrong scheme → 401
     let response = client
         .get(format!("{}/api/models", base_url))
@@ -139,7 +139,6 @@ async fn test_api_malformed_auth_header() {
         .send()
         .await
         .expect("Request failed");
-    
+
     assert_eq!(response.status(), 401);
 }
-

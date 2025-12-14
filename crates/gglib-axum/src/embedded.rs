@@ -81,12 +81,12 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
+    Router,
     extract::Request,
-    http::{header, Method, StatusCode},
+    http::{Method, StatusCode, header},
     middleware::{self, Next},
     response::Response,
     routing::get,
-    Router,
 };
 use tokio::task::JoinHandle;
 use tower_http::cors::CorsLayer;
@@ -178,7 +178,10 @@ pub async fn start_embedded_server(
         if std::env::var("GGLIB_LOG_EMBEDDED_TOKEN").is_ok() {
             tracing::info!(token = %token, "Generated API token (debug mode)");
         } else {
-            tracing::info!(token_prefix = &token[..8], "Generated API token (set GGLIB_LOG_EMBEDDED_TOKEN=1 to see full token)");
+            tracing::info!(
+                token_prefix = &token[..8],
+                "Generated API token (set GGLIB_LOG_EMBEDDED_TOKEN=1 to see full token)"
+            );
         }
     }
     #[cfg(not(debug_assertions))]
