@@ -8,9 +8,7 @@ mod menu;
 use app::events::{emit_or_log, names};
 use app::AppState;
 use dotenvy::dotenv;
-use gglib_core::services::AppCore;
-use gglib_gui::GuiBackend;
-use gglib_mcp::McpService;
+use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
 use gglib_runtime::process::get_log_manager;
 use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
 use menu::state_sync::sync_menu_state_or_log;
@@ -31,12 +29,6 @@ fn main() {
         .try_init()
         .ok(); // Ignore error if already initialized
 
-    // Embedded API port from env or default
-    let embedded_api_port = std::env::var("GGLIB_GUI_API_PORT")
-        .ok()
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(8888);
-
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
@@ -54,30 +46,35 @@ fn main() {
             let mcp = ctx.mcp.clone();
             let core = ctx.app.clone();
 
+            // Build AxumContext for the embedded server
+            // This mirrors TauriContext but is used by Axum handlers
+            let axum_ctx = gglib_axum::AxumContext {
+                gui: gui.clone(),
+                core: core.clone(),
+                mcp: mcp.clone(),
+                downloads: ctx.downloads.clone(),
+                hf_client: ctx.hf_client.clone(),
+                runner: ctx.runner.clone(),
+                sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
+            };
+
+            // Start embedded API server with auth and ephemeral port
+            let config = EmbeddedServerConfig {
+                cors_origins: gglib_axum::embedded::default_embedded_cors_origins(),
+            };
+            
+            let (embedded_api, _server_handle) = tauri::async_runtime::block_on(async {
+                start_embedded_server(axum_ctx, config)
+                    .await
+                    .expect("Failed to start embedded API server")
+            });
+
             // Create and manage app state
-            let app_state = AppState::new(core.clone(), gui.clone(), mcp.clone(), embedded_api_port);
+            let app_state = AppState::new(core.clone(), gui.clone(), mcp.clone(), embedded_api);
             app.manage(app_state);
 
             // Continue with rest of setup
             setup_app(app)?;
-
-            // Start embedded API server
-            let gui_for_server = gui.clone();
-            let core_for_server = core.clone();
-            let mcp_for_server = mcp.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = start_embedded_api_server(
-                    gui_for_server,
-                    core_for_server,
-                    mcp_for_server,
-                    embedded_api_port,
-                )
-                .await
-                {
-                    error!(error = %e, "Failed to start embedded API server");
-                    // TODO: Show error dialog to user
-                }
-            });
 
             Ok(())
         })
@@ -163,6 +160,7 @@ fn main() {
             // Utility
             commands::open_url,
             commands::get_gui_api_port,
+            commands::get_embedded_api_info,
             commands::set_selected_model,
             commands::sync_menu_state,
         ])
@@ -264,47 +262,4 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Start embedded Axum API server for Tauri.
-///
-/// This provides HTTP endpoints at `http://localhost:{port}/api/*` for:
-/// - Chat history CRUD (`/api/conversations`, `/api/messages`)
-/// - Chat streaming (`/api/chat`) - required by useGglibRuntime
-///
-/// Other API endpoints (downloads, HF, servers, etc.) are handled via Tauri IPC.
-async fn start_embedded_api_server(
-    gui: Arc<GuiBackend>,
-    core: Arc<AppCore>,
-    _mcp: Arc<McpService>, // Kept for API compatibility, not used
-    port: u16,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use gglib_axum::chat_api::{ChatApiContext, chat_routes};
-    use std::net::SocketAddr;
-    use tower_http::cors::{Any, CorsLayer};
 
-    // Create minimal ChatApiContext - no need for full AxumContext
-    let chat_state = Arc::new(ChatApiContext { core, gui });
-
-    // Build chat-only router with permissive CORS for localhost
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
-    let app = chat_routes(chat_state).layer(cors);
-
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    info!(port = port, "Starting embedded chat API server");
-
-    match tokio::net::TcpListener::bind(addr).await {
-        Ok(listener) => {
-            info!(port = port, "✓ Embedded chat API listening at http://localhost:{}", port);
-            axum::serve(listener, app).await?;
-        }
-        Err(e) => {
-            error!(port = port, error = %e, "Failed to bind embedded chat API server");
-            return Err(Box::new(e));
-        }
-    }
-
-    Ok(())
-}
