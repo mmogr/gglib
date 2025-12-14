@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 
 use crate::error::HttpError;
-use crate::routes::AppState;
+use crate::state::AppState;
 use gglib_core::ModelFilterOptions;
 use gglib_gui::types::{AddModelRequest, GuiModel, RemoveModelRequest, UpdateModelRequest};
 

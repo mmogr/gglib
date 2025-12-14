@@ -5,18 +5,15 @@
 
 use axum::Router;
 use axum::routing::{delete, get, post, put};
-use gglib_core::contracts::http::hf as hf_routes;
 use std::path::Path;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::bootstrap::{AxumContext, CorsConfig};
-use crate::chat_api::{ChatApiContext, chat_routes};
+use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
-
-/// Application state shared across handlers.
-pub type AppState = Arc<AxumContext>;
+use crate::state::AppState;
 
 /// Build CORS layer from configuration.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
@@ -36,6 +33,113 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
     }
 }
 
+/// Build all API routes without `/api` prefix (for nesting under /api).
+///
+/// Returns a router typed as `Router<AppState>` (state inferred from handlers)
+/// but WITHOUT `.with_state()` applied. The caller must apply `.with_state()` before
+/// nesting. All endpoints are defined without the `/api` prefix since this router
+/// will be nested under `/api` by the caller.
+pub(crate) fn api_routes() -> Router<AppState> {
+    Router::new()
+        // Models API
+        .route(
+            "/models",
+            get(handlers::models::list).post(handlers::models::add),
+        )
+        .route(
+            "/models/:id",
+            get(handlers::models::get)
+                .put(handlers::models::update)
+                .delete(handlers::models::remove),
+        )
+        .route(
+            "/models/:id/tags",
+            get(handlers::models::get_model_tags).post(handlers::models::add_tag_body),
+        )
+        .route(
+            "/models/:id/tags/:tag",
+            post(handlers::models::add_tag).delete(handlers::models::remove_tag),
+        )
+        .route(
+            "/models/filter-options",
+            get(handlers::models::filter_options),
+        )
+        // Tags API
+        .route("/tags", get(handlers::models::list_tags))
+        .route("/tags/:tag/models", get(handlers::models::get_by_tag))
+        // Settings API
+        .route(
+            "/settings",
+            get(handlers::settings::get)
+                .put(handlers::settings::update)
+                .patch(handlers::settings::update),
+        )
+        .route("/system/memory", get(handlers::settings::memory))
+        .route(
+            "/system/models-directory",
+            get(handlers::settings::models_directory)
+                .put(handlers::settings::update_models_directory),
+        )
+        // Servers API
+        .route("/servers", get(handlers::servers::list))
+        .route("/servers/start", post(handlers::servers::start_body))
+        .route("/servers/stop", post(handlers::servers::stop_body))
+        .route("/servers/:id/start", post(handlers::servers::start))
+        .route("/servers/:id/stop", post(handlers::servers::stop))
+        // Downloads API
+        .route("/downloads", get(handlers::downloads::list))
+        .route(
+            "/downloads/queue",
+            get(handlers::downloads::list).post(handlers::downloads::queue),
+        )
+        .route("/downloads/:id", delete(handlers::downloads::remove))
+        .route("/downloads/:id/cancel", post(handlers::downloads::cancel))
+        .route("/downloads/reorder", post(handlers::downloads::reorder))
+        .route(
+            "/downloads/reorder-full",
+            post(handlers::downloads::reorder_full),
+        )
+        .route(
+            "/downloads/shard-group/:id/cancel",
+            post(handlers::downloads::cancel_shard_group),
+        )
+        .route(
+            "/downloads/failed/clear",
+            post(handlers::downloads::clear_failed),
+        )
+        // MCP API
+        .route(
+            "/mcp/servers",
+            get(handlers::mcp::list).post(handlers::mcp::add),
+        )
+        .route(
+            "/mcp/servers/:id",
+            put(handlers::mcp::update).delete(handlers::mcp::remove),
+        )
+        .route("/mcp/servers/:id/start", post(handlers::mcp::start))
+        .route("/mcp/servers/:id/stop", post(handlers::mcp::stop))
+        .route("/mcp/servers/:id/tools", get(handlers::mcp::list_tools))
+        .route("/mcp/tools/call", post(handlers::mcp::call_tool))
+        // Proxy API
+        .route("/proxy/status", get(handlers::proxy::status))
+        .route("/proxy/start", post(handlers::proxy::start))
+        .route("/proxy/stop", post(handlers::proxy::stop))
+        // Hugging Face API (strip /api prefix since we're nested under /api)
+        .route("/hf/search", post(handlers::hf::search))
+        .route(
+            "/hf/quantizations/:model_id",
+            get(handlers::hf::quantizations),
+        )
+        .route(
+            "/hf/tool-support/:model_id",
+            get(handlers::hf::tool_support),
+        )
+        // Events (SSE)
+        .route("/events", get(handlers::events::stream))
+        // Chat routes (merged without prefix since we're already building /api)
+        .merge(chat_routes_no_prefix())
+}
+
 /// Create the main Axum router with all API routes.
 ///
 /// This creates the API routes only. For serving static assets,
@@ -49,123 +153,9 @@ pub fn create_router(ctx: AxumContext, cors_config: &CorsConfig) -> Router {
     let state: AppState = Arc::new(ctx);
     let cors = build_cors_layer(cors_config);
 
-    // Build non-chat API routes and bind AppState
-    let app_routes = Router::new()
-        // Health check endpoint
+    Router::new()
         .route("/health", get(health_check))
-        // Models API
-        .route(
-            "/api/models",
-            get(handlers::models::list).post(handlers::models::add),
-        )
-        .route(
-            "/api/models/:id",
-            get(handlers::models::get)
-                .put(handlers::models::update)
-                .delete(handlers::models::remove),
-        )
-        .route(
-            "/api/models/:id/tags",
-            get(handlers::models::get_model_tags).post(handlers::models::add_tag_body),
-        )
-        .route(
-            "/api/models/:id/tags/:tag",
-            post(handlers::models::add_tag).delete(handlers::models::remove_tag),
-        )
-        .route(
-            "/api/models/filter-options",
-            get(handlers::models::filter_options),
-        )
-        // Tags API
-        .route("/api/tags", get(handlers::models::list_tags))
-        .route("/api/tags/:tag/models", get(handlers::models::get_by_tag))
-        // Settings API
-        // Accept both PUT and PATCH - frontend sends PUT, standard REST uses PATCH for partial updates
-        .route(
-            "/api/settings",
-            get(handlers::settings::get)
-                .put(handlers::settings::update)
-                .patch(handlers::settings::update),
-        )
-        .route("/api/system/memory", get(handlers::settings::memory))
-        .route(
-            "/api/system/models-directory",
-            get(handlers::settings::models_directory)
-                .put(handlers::settings::update_models_directory),
-        )
-        // Servers API
-        // Collection routes (body-based) - matches frontend transport
-        .route("/api/servers", get(handlers::servers::list))
-        .route("/api/servers/start", post(handlers::servers::start_body))
-        .route("/api/servers/stop", post(handlers::servers::stop_body))
-        // Resource routes (path-based) - legacy/alternative access
-        .route("/api/servers/:id/start", post(handlers::servers::start))
-        .route("/api/servers/:id/stop", post(handlers::servers::stop))
-        // Downloads API
-        .route("/api/downloads", get(handlers::downloads::list))
-        .route(
-            "/api/downloads/queue",
-            get(handlers::downloads::list).post(handlers::downloads::queue),
-        )
-        .route("/api/downloads/:id", delete(handlers::downloads::remove))
-        .route(
-            "/api/downloads/:id/cancel",
-            post(handlers::downloads::cancel),
-        )
-        .route("/api/downloads/reorder", post(handlers::downloads::reorder))
-        .route(
-            "/api/downloads/reorder-full",
-            post(handlers::downloads::reorder_full),
-        )
-        .route(
-            "/api/downloads/shard-group/:id/cancel",
-            post(handlers::downloads::cancel_shard_group),
-        )
-        .route(
-            "/api/downloads/failed/clear",
-            post(handlers::downloads::clear_failed),
-        )
-        // MCP API
-        .route(
-            "/api/mcp/servers",
-            get(handlers::mcp::list).post(handlers::mcp::add),
-        )
-        .route(
-            "/api/mcp/servers/:id",
-            put(handlers::mcp::update).delete(handlers::mcp::remove),
-        )
-        .route("/api/mcp/servers/:id/start", post(handlers::mcp::start))
-        .route("/api/mcp/servers/:id/stop", post(handlers::mcp::stop))
-        .route("/api/mcp/servers/:id/tools", get(handlers::mcp::list_tools))
-        .route("/api/mcp/tools/call", post(handlers::mcp::call_tool))
-        // Proxy API (temporarily disabled during Phase 2 refactor #221)
-        .route("/api/proxy/status", get(handlers::proxy::status))
-        .route("/api/proxy/start", post(handlers::proxy::start))
-        .route("/api/proxy/stop", post(handlers::proxy::stop))
-        // Hugging Face API
-        .route(hf_routes::SEARCH_PATH, post(handlers::hf::search))
-        .route(
-            &format!("{}/:model_id", hf_routes::QUANTIZATIONS_PATH),
-            get(handlers::hf::quantizations),
-        )
-        .route(
-            &format!("{}/:model_id", hf_routes::TOOL_SUPPORT_PATH),
-            get(handlers::hf::tool_support),
-        )
-        // Events (SSE)
-        .route("/api/events", get(handlers::events::stream))
-        // Bind AppState to non-chat routes
-        .with_state(state.clone());
-
-    // Build chat routes with minimal ChatState (already state-applied)
-    let chat_state = Arc::new(ChatApiContext {
-        core: state.core.clone(),
-        gui: state.gui.clone(),
-    });
-    let chat = chat_routes(chat_state);
-
-    // Merge both routers (now both are state-applied) and add CORS
-    app_routes.merge(chat).layer(cors)
+        .nest("/api", api_routes().with_state(state).layer(cors))
 }
 
 /// Create a router with API routes and static asset serving.
@@ -205,6 +195,6 @@ pub fn create_spa_router<P: AsRef<Path>>(
 }
 
 /// Health check endpoint.
-async fn health_check() -> &'static str {
+pub(crate) async fn health_check() -> &'static str {
     "OK"
 }

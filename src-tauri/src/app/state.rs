@@ -1,5 +1,6 @@
 //! Application state shared across all Tauri commands.
 
+use gglib_axum::EmbeddedApiInfo;
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
 use gglib_tauri::gui_backend::GuiBackend;
@@ -19,8 +20,8 @@ pub struct AppState {
     pub gui: Arc<GuiBackend>,
     /// MCP service for managing MCP servers
     pub mcp: Arc<McpService>,
-    /// Port for the embedded API server
-    pub api_port: u16,
+    /// Embedded API server info (port and auth token)
+    pub embedded_api: EmbeddedApiInfo,
     /// Menu state for dynamic updates
     pub menu: Arc<RwLock<Option<AppMenu>>>,
     /// Currently selected model ID (for menu state sync)
@@ -33,13 +34,13 @@ impl AppState {
         core: Arc<AppCore>,
         gui: Arc<GuiBackend>,
         mcp: Arc<McpService>,
-        api_port: u16,
+        embedded_api: EmbeddedApiInfo,
     ) -> Self {
         Self {
             core,
             gui,
             mcp,
-            api_port,
+            embedded_api,
             menu: Arc::new(RwLock::new(None)),
             selected_model_id: Arc::new(RwLock::new(None)),
         }

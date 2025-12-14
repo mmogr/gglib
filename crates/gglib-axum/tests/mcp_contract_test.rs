@@ -52,56 +52,56 @@ async fn test_list_mcp_servers_json_structure() {
     assert!(json.is_array(), "Response should be an array");
 
     // If there are servers, verify the structure
-    if let Some(servers) = json.as_array() {
-        if let Some(server) = servers.first() {
-            // Verify nested structure: server.server.id, not server.id
-            assert!(
-                server.get("server").is_some(),
-                "Each item should have a 'server' field"
-            );
-            assert!(
-                server.get("status").is_some(),
-                "Each item should have a 'status' field"
-            );
-            assert!(
-                server.get("tools").is_some(),
-                "Each item should have a 'tools' field"
-            );
+    if let Some(servers) = json.as_array()
+        && let Some(server) = servers.first()
+    {
+        // Verify nested structure: server.server.id, not server.id
+        assert!(
+            server.get("server").is_some(),
+            "Each item should have a 'server' field"
+        );
+        assert!(
+            server.get("status").is_some(),
+            "Each item should have a 'status' field"
+        );
+        assert!(
+            server.get("tools").is_some(),
+            "Each item should have a 'tools' field"
+        );
 
-            // Verify server object structure
-            let server_obj = server.get("server").unwrap();
-            assert!(server_obj.get("id").is_some(), "server.id should exist");
-            assert!(server_obj.get("name").is_some(), "server.name should exist");
-            assert!(
-                server_obj.get("server_type").is_some(),
-                "server.server_type should exist"
-            );
-            assert!(
-                server_obj.get("config").is_some(),
-                "server.config should exist"
-            );
-            assert!(
-                server_obj.get("enabled").is_some(),
-                "server.enabled should exist"
-            );
-            assert!(
-                server_obj.get("auto_start").is_some(),
-                "server.auto_start should exist"
-            );
+        // Verify server object structure
+        let server_obj = server.get("server").unwrap();
+        assert!(server_obj.get("id").is_some(), "server.id should exist");
+        assert!(server_obj.get("name").is_some(), "server.name should exist");
+        assert!(
+            server_obj.get("server_type").is_some(),
+            "server.server_type should exist"
+        );
+        assert!(
+            server_obj.get("config").is_some(),
+            "server.config should exist"
+        );
+        assert!(
+            server_obj.get("enabled").is_some(),
+            "server.enabled should exist"
+        );
+        assert!(
+            server_obj.get("auto_start").is_some(),
+            "server.auto_start should exist"
+        );
 
-            // Verify status is string or object
-            let status = server.get("status").unwrap();
-            assert!(
-                status.is_string() || status.is_object(),
-                "status should be string or error object"
-            );
+        // Verify status is string or object
+        let status = server.get("status").unwrap();
+        assert!(
+            status.is_string() || status.is_object(),
+            "status should be string or error object"
+        );
 
-            // Verify tools is array
-            assert!(
-                server.get("tools").unwrap().is_array(),
-                "tools should be an array"
-            );
-        }
+        // Verify tools is array
+        assert!(
+            server.get("tools").unwrap().is_array(),
+            "tools should be an array"
+        );
     }
 }
 

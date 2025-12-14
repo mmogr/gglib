@@ -30,9 +30,10 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
 
-# Axum-specific dependencies - defined locally, not in workspace
-axum = "0.7"
-tower-http = { version = "0.5", features = ["cors", "fs"] }
+# Axum-specific dependencies - use workspace versions for consistency
+axum = { workspace = true }
+tower-http = { workspace = true }
+uuid = { workspace = true }
 tracing-subscriber = { workspace = true }
 futures-util = "0.3"
 tokio-stream = { version = "0.1", features = ["sync"] }
