@@ -4,12 +4,23 @@
 
 use crate::app::AppState;
 use crate::menu::state_sync;
+use gglib_axum::EmbeddedApiInfo;
 use tauri::AppHandle;
 
-/// Get the GUI API port.
+/// Get embedded API server info (port and auth token).
+///
+/// The frontend should call this once at startup to discover the embedded
+/// server's ephemeral port and authentication token for API requests.
 #[tauri::command]
+pub fn get_embedded_api_info(state: tauri::State<'_, AppState>) -> EmbeddedApiInfo {
+    state.embedded_api.clone()
+}
+
+/// Get the GUI API port (deprecated - use get_embedded_api_info instead).
+#[tauri::command]
+#[deprecated(note = "Use get_embedded_api_info instead")]
 pub fn get_gui_api_port(state: tauri::State<'_, AppState>) -> u16 {
-    state.api_port
+    state.embedded_api.port
 }
 
 /// Open a URL in the system's default browser.
