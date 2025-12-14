@@ -1,27 +1,10 @@
-//! Chat-only API router for embedded use cases.
+//! Chat API routes and handlers.
 //!
-//! This module provides a minimal router with just chat-related endpoints,
-//! suitable for embedding in Tauri or other contexts that don't need the
-//! full AxumContext (downloads, HF client, process runner, etc.).
+//! This module provides chat-related endpoints for conversation management
+//! and chat completion proxying to llama-server instances.
 //!
-//! This is the **single source of truth** for chat HTTP handlers. The full
-//! Axum router in `routes.rs` merges these routes, and Tauri's embedded
-//! server uses them directly.
-//!
-//! # Usage
-//!
-//! ```ignore
-//! use gglib_axum::chat_api::{ChatApiContext, chat_routes};
-//!
-//! let state = Arc::new(ChatApiContext {
-//!     core: app_core.clone(),
-//!     gui: gui_backend.clone(),
-//! });
-//!
-//! let router = chat_routes(state);
-//! ```
-
-use std::sync::Arc;
+//! Chat handlers use the unified `AppState` from `routes.rs` and access
+//! `core` and `gui` services through it.
 
 use axum::body::Body;
 use axum::extract::{Path, State};
@@ -34,27 +17,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::error::HttpError;
+use crate::state::AppState;
 use gglib_core::domain::chat::{Conversation, Message, MessageRole, NewMessage};
-use gglib_core::services::AppCore;
-use gglib_gui::GuiBackend;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Chat API Context (minimal state for chat-only endpoints)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Minimal application context for chat-only API.
-///
-/// This is a subset of the full `AxumContext` containing only what's needed
-/// for chat history CRUD operations and chat completion proxying.
-pub struct ChatApiContext {
-    /// Core application services (provides chat_history()).
-    pub core: Arc<AppCore>,
-    /// GUI backend facade (provides list_servers() for port validation).
-    pub gui: Arc<GuiBackend>,
-}
-
-/// Shared state type for chat API handlers.
-pub type ChatState = Arc<ChatApiContext>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request/Response DTOs
@@ -184,29 +148,30 @@ pub struct ChatUsage {
 /// ```ignore
 /// let router = chat_routes(state).layer(cors_layer);
 /// ```
-pub fn chat_routes(state: ChatState) -> Router {
+/// Build chat routes without `/api` prefix for nesting under /api.
+///
+/// Returns a router typed as `Router<AppState>` (state inferred from handlers)
+/// but WITHOUT `.with_state()` applied. The caller must apply `.with_state()` before
+/// nesting. All routes use handlers that expect `State<AppState>`.
+pub(crate) fn chat_routes_no_prefix() -> Router<AppState> {
     Router::new()
-        // Conversation endpoints
+        // Conversation endpoints (no /api prefix - will be nested)
         .route(
-            "/api/conversations",
+            "/conversations",
             get(list_conversations).post(create_conversation),
         )
         .route(
-            "/api/conversations/:id",
+            "/conversations/:id",
             get(get_conversation)
                 .put(update_conversation)
                 .delete(delete_conversation),
         )
         // Message endpoints
-        .route("/api/conversations/:id/messages", get(get_messages))
-        .route("/api/messages", post(save_message))
-        .route(
-            "/api/messages/:id",
-            put(update_message).delete(delete_message),
-        )
+        .route("/conversations/:id/messages", get(get_messages))
+        .route("/messages", post(save_message))
+        .route("/messages/:id", put(update_message).delete(delete_message))
         // Chat completion proxy (forwards to llama-server)
-        .route("/api/chat", post(proxy_chat))
-        .with_state(state)
+        .route("/chat", post(proxy_chat))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -216,7 +181,7 @@ pub fn chat_routes(state: ChatState) -> Router {
 /// List all conversations.
 /// GET /api/conversations
 pub async fn list_conversations(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
 ) -> Result<Json<Vec<Conversation>>, HttpError> {
     let conversations = state.core.chat_history().list_conversations().await?;
     Ok(Json(conversations))
@@ -225,7 +190,7 @@ pub async fn list_conversations(
 /// Create a new conversation.
 /// POST /api/conversations
 pub async fn create_conversation(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
 ) -> Result<Json<i64>, HttpError> {
     let title = req.title.unwrap_or_else(|| "New Conversation".to_string());
@@ -240,7 +205,7 @@ pub async fn create_conversation(
 /// Get a single conversation by ID.
 /// GET /api/conversations/:id
 pub async fn get_conversation(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Conversation>, HttpError> {
     let conversation = state
@@ -255,7 +220,7 @@ pub async fn get_conversation(
 /// Update a conversation.
 /// PUT /api/conversations/:id
 pub async fn update_conversation(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateConversationRequest>,
 ) -> Result<(), HttpError> {
@@ -270,7 +235,7 @@ pub async fn update_conversation(
 /// Delete a conversation and all its messages.
 /// DELETE /api/conversations/:id
 pub async fn delete_conversation(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<(), HttpError> {
     state.core.chat_history().delete_conversation(id).await?;
@@ -284,7 +249,7 @@ pub async fn delete_conversation(
 /// Get all messages for a conversation.
 /// GET /api/conversations/:id/messages
 pub async fn get_messages(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Path(conversation_id): Path<i64>,
 ) -> Result<Json<Vec<Message>>, HttpError> {
     let messages = state
@@ -298,7 +263,7 @@ pub async fn get_messages(
 /// Save a new message.
 /// POST /api/messages
 pub async fn save_message(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Json(req): Json<SaveMessageRequest>,
 ) -> Result<Json<i64>, HttpError> {
     let role = MessageRole::parse(&req.role)
@@ -319,7 +284,7 @@ pub async fn save_message(
 /// Update a message's content.
 /// PUT /api/messages/:id
 pub async fn update_message(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<UpdateMessageRequest>,
 ) -> Result<(), HttpError> {
@@ -334,7 +299,7 @@ pub async fn update_message(
 /// Delete a message and all subsequent messages in the conversation.
 /// DELETE /api/messages/:id
 pub async fn delete_message(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<i64>, HttpError> {
     let deleted_count = state
@@ -356,9 +321,9 @@ const MAX_ALLOWED_PORT: u16 = 65535;
 
 /// Validate the requested port is within allowed range and corresponds
 /// to a running server.
-async fn validate_port(state: &ChatState, port: u16) -> Result<(), HttpError> {
+async fn validate_port(state: &AppState, port: u16) -> Result<(), HttpError> {
     // Basic range check
-    if port < MIN_ALLOWED_PORT || port > MAX_ALLOWED_PORT {
+    if !(MIN_ALLOWED_PORT..=MAX_ALLOWED_PORT).contains(&port) {
         return Err(HttpError::BadRequest(format!(
             "Port {} is outside allowed range ({}-{})",
             port, MIN_ALLOWED_PORT, MAX_ALLOWED_PORT
@@ -392,7 +357,7 @@ async fn validate_port(state: &ChatState, port: u16) -> Result<(), HttpError> {
 /// - Port must be within allowed range (1024-65535)
 /// - Port must correspond to a currently running server
 pub async fn proxy_chat(
-    State(state): State<ChatState>,
+    State(state): State<AppState>,
     Json(request): Json<ChatProxyRequest>,
 ) -> Result<Response, HttpError> {
     // Validate the port
@@ -426,10 +391,10 @@ pub async fn proxy_chat(
     });
 
     // Add tools if provided
-    if let Some(tools) = &request.tools {
-        if !tools.is_empty() {
-            forward_body["tools"] = serde_json::json!(tools);
-        }
+    if let Some(tools) = &request.tools
+        && !tools.is_empty()
+    {
+        forward_body["tools"] = serde_json::json!(tools);
     }
     if let Some(tool_choice) = &request.tool_choice {
         forward_body["tool_choice"] = tool_choice.clone();
@@ -484,7 +449,7 @@ pub async fn proxy_chat(
         // Streaming mode: pass through SSE stream unchanged
         let stream = response
             .bytes_stream()
-            .map(|result| result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+            .map(|result| result.map_err(std::io::Error::other));
 
         let body = Body::from_stream(stream);
 
