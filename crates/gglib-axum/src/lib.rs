@@ -28,16 +28,20 @@ use tokio as _;
 use tokio_stream as _;
 use tracing as _;
 use tracing_subscriber as _; // Used by main.rs binary
+use uuid as _; // Will be used by embedded module
 
 pub mod bootstrap;
 pub mod chat_api;
+pub mod embedded;
 pub mod error;
 pub mod handlers;
 pub mod routes;
 pub mod sse;
+pub mod state;
 
 // Re-export primary types
 pub use bootstrap::{AxumContext, CorsConfig, ServerConfig, bootstrap, start_server};
-pub use chat_api::{ChatApiContext, ChatState, chat_routes};
+pub use embedded::{EmbeddedApiInfo, EmbeddedServerConfig, start_embedded_server};
 pub use error::HttpError;
 pub use routes::{create_router, create_spa_router};
+pub use state::AppState;
