@@ -17,7 +17,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::error::HttpError;
-use crate::routes::AppState;
+use crate::state::AppState;
 
 /// Allowed port range for llama-server connections.
 /// Prevents the endpoint from becoming a generic SSRF dialer.
@@ -94,7 +94,7 @@ pub struct ChatUsage {
 /// to a running server.
 async fn validate_port(state: &AppState, port: u16) -> Result<(), HttpError> {
     // Basic range check
-    if port < MIN_ALLOWED_PORT || port > MAX_ALLOWED_PORT {
+    if !(MIN_ALLOWED_PORT..=MAX_ALLOWED_PORT).contains(&port) {
         return Err(HttpError::BadRequest(format!(
             "Port {} is outside allowed range ({}-{})",
             port, MIN_ALLOWED_PORT, MAX_ALLOWED_PORT
@@ -162,10 +162,10 @@ pub async fn proxy_chat(
     });
 
     // Add tools if provided
-    if let Some(tools) = &request.tools {
-        if !tools.is_empty() {
-            forward_body["tools"] = serde_json::json!(tools);
-        }
+    if let Some(tools) = &request.tools
+        && !tools.is_empty()
+    {
+        forward_body["tools"] = serde_json::json!(tools);
     }
     if let Some(tool_choice) = &request.tool_choice {
         forward_body["tool_choice"] = tool_choice.clone();
@@ -220,7 +220,7 @@ pub async fn proxy_chat(
         // Streaming mode: pass through SSE stream unchanged
         let stream = response
             .bytes_stream()
-            .map(|result| result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+            .map(|result| result.map_err(std::io::Error::other));
 
         let body = Body::from_stream(stream);
 
