@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::State;
 
 use crate::error::HttpError;
-use crate::routes::AppState;
+use crate::state::AppState;
 use gglib_gui::types::{AppSettings, ModelsDirectoryInfo, SystemMemoryInfo, UpdateSettingsRequest};
 
 /// Get application settings.

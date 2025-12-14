@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 
 use crate::error::HttpError;
-use crate::routes::AppState;
+use crate::state::AppState;
 use gglib_core::download::QueueSnapshot;
 
 /// Request to queue a download.
