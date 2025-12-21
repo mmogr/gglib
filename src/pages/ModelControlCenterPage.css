@@ -1,0 +1,128 @@
+/* Model Control Center Page - Main Layout */
+
+.model-control-center {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.mcc-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.grid-panel-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.grid-panel-container > .mcc-panel {
+  flex: 1;
+  min-height: 0;
+}
+
+.mcc-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-right: 1px solid var(--color-border);
+  position: relative;
+}
+
+.mcc-panel:last-child {
+  border-right: none;
+}
+
+.mcc-panel-header {
+  padding: var(--spacing-base);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background);
+  flex-shrink: 0;
+}
+
+.mcc-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Resize handles */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: var(--z-base);
+  transition: var(--transition-base);
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--color-primary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .model-control-center {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
+  .mcc-layout {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+
+  .grid-panel-container {
+    min-height: auto;
+    height: auto;
+  }
+
+  .mcc-panel {
+    height: auto;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .mcc-panel:last-child {
+    border-bottom: none;
+  }
+
+  .resize-handle {
+    display: none;
+  }
+}
+
+/* Right panel container - allows GlobalDownloadStatus + inspector to stack */
+.right-panel-container {
+  padding: var(--spacing-base);
+  gap: 0;
+}
+
+.right-panel-container > .mcc-panel {
+  /* Inspector panel takes remaining space after download status */
+  flex: 1;
+  min-height: 0;
+}

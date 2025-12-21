@@ -1,0 +1,128 @@
+/* Console Log Panel - Terminal-style output viewer */
+
+.console-log-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-surface);
+}
+
+.console-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.console-log-title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.console-log-controls {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.console-log-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  background: #1e1e1e;
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: var(--spacing-sm);
+}
+
+.console-log-lines {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.console-log-line {
+  padding: 1px 0;
+  color: #d4d4d4;
+}
+
+/* ANSI color classes from Anser */
+.console-log-line .ansi-black-fg { color: #000000; }
+.console-log-line .ansi-red-fg { color: #cd3131; }
+.console-log-line .ansi-green-fg { color: #0dbc79; }
+.console-log-line .ansi-yellow-fg { color: #e5e510; }
+.console-log-line .ansi-blue-fg { color: #2472c8; }
+.console-log-line .ansi-magenta-fg { color: #bc3fbc; }
+.console-log-line .ansi-cyan-fg { color: #11a8cd; }
+.console-log-line .ansi-white-fg { color: #e5e5e5; }
+
+.console-log-line .ansi-bright-black-fg { color: #666666; }
+.console-log-line .ansi-bright-red-fg { color: #f14c4c; }
+.console-log-line .ansi-bright-green-fg { color: #23d18b; }
+.console-log-line .ansi-bright-yellow-fg { color: #f5f543; }
+.console-log-line .ansi-bright-blue-fg { color: #3b8eea; }
+.console-log-line .ansi-bright-magenta-fg { color: #d670d6; }
+.console-log-line .ansi-bright-cyan-fg { color: #29b8db; }
+.console-log-line .ansi-bright-white-fg { color: #ffffff; }
+
+.console-log-line .ansi-black-bg { background-color: #000000; }
+.console-log-line .ansi-red-bg { background-color: #cd3131; }
+.console-log-line .ansi-green-bg { background-color: #0dbc79; }
+.console-log-line .ansi-yellow-bg { background-color: #e5e510; }
+.console-log-line .ansi-blue-bg { background-color: #2472c8; }
+.console-log-line .ansi-magenta-bg { background-color: #bc3fbc; }
+.console-log-line .ansi-cyan-bg { background-color: #11a8cd; }
+.console-log-line .ansi-white-bg { background-color: #e5e5e5; }
+
+.console-log-line .ansi-bold { font-weight: bold; }
+.console-log-line .ansi-dim { opacity: 0.7; }
+.console-log-line .ansi-italic { font-style: italic; }
+.console-log-line .ansi-underline { text-decoration: underline; }
+
+/* Empty state */
+.console-log-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: #808080;
+  text-align: center;
+  gap: var(--spacing-sm);
+}
+
+.console-log-empty-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.console-log-empty p {
+  margin: 0;
+}
+
+.console-log-empty-hint {
+  font-size: var(--font-size-xs);
+  opacity: 0.7;
+}
+
+/* Scrollbar styling for dark theme */
+.console-log-content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.console-log-content::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+.console-log-content::-webkit-scrollbar-thumb {
+  background: #555555;
+  border-radius: 5px;
+}
+
+.console-log-content::-webkit-scrollbar-thumb:hover {
+  background: #666666;
+}

@@ -1,0 +1,38 @@
+[package]
+name = "gglib-gui"
+version.workspace = true
+edition.workspace = true
+description = "Shared GUI backend facade for gglib adapters (Tauri, Axum)"
+license.workspace = true
+publish = false
+
+[lib]
+name = "gglib_gui"
+path = "src/lib.rs"
+
+[dependencies]
+# Core domain and ports only - no adapter crates
+gglib-core = { path = "../gglib-core" }
+gglib-mcp = { path = "../gglib-mcp" }
+gglib-hf = { path = "../gglib-hf" }
+gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
+
+# Shared deps
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = "0.1"
+tokio-util = "0.7"
+futures-util = "0.3"
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+
+[lints.rust]
+unsafe_code = "deny"

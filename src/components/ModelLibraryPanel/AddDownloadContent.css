@@ -1,0 +1,67 @@
+/* Add/Download Content Component */
+
+.add-download-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.add-download-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.add-download-subtab {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  transition: var(--transition-all);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: var(--spacing-sm) var(--spacing-xs);
+}
+
+.add-download-subtab:hover {
+  background: var(--color-background-hover);
+}
+
+.add-download-subtab.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.add-download-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-base) 0;
+  min-height: 0;
+}
+
+/* Responsive: narrower widths */
+@media (max-width: 500px) {
+  .add-download-subtabs {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .add-download-subtab {
+    flex: 1 1 auto;
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+    white-space: normal;
+  }
+}

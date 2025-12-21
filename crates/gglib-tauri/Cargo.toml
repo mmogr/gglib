@@ -1,0 +1,39 @@
+[package]
+name = "gglib-tauri"
+version.workspace = true
+edition.workspace = true
+description = "Tauri GUI backend adapter for gglib"
+license.workspace = true
+publish = false
+
+[lib]
+name = "gglib_tauri"
+path = "src/lib.rs"
+
+[dependencies]
+gglib-core = { path = "../gglib-core" }
+gglib-db = { path = "../gglib-db" }
+gglib-download = { path = "../gglib-download" }
+gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root
+gglib-gui = { path = "../gglib-gui" }
+gglib-hf = { path = "../gglib-hf" }
+gglib-mcp = { path = "../gglib-mcp" }
+gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
+
+# Shared deps
+serde = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+
+# Tauri-specific dependencies
+# Note: version should match src-tauri/Cargo.toml
+tauri = "2.8"
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+serde_json = { workspace = true }
+
+[lints.rust]
+unsafe_code = "deny"

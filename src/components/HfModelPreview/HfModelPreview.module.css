@@ -1,0 +1,323 @@
+/* HfModelPreview Component - Uses app design system variables */
+
+.hfModelPreview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--spacing-base);
+}
+
+/* Model Header */
+.modelHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding-bottom: var(--spacing-base);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modelTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.modelName {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.hfButton {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-base);
+  transition: background-color 0.15s ease;
+}
+
+.hfButton:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.modelAuthor {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.statsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  align-items: center;
+  margin-top: var(--spacing-sm);
+}
+
+.statBadge {
+  background-color: var(--color-primary);
+  color: white;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Tool/Agent capability badge */
+.toolBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: help;
+  transition: background-color 0.15s ease;
+}
+
+.toolBadge:hover {
+  background-color: rgba(37, 99, 235, 0.25);
+}
+
+.infoIcon {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-left: 0.15rem;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.statIcon {
+  font-size: var(--font-size-sm);
+}
+
+/* Quantization Section */
+.quantSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.loadingState,
+.errorState,
+.emptyState {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-elevated);
+  border-radius: var(--radius-lg);
+}
+
+.errorState {
+  color: var(--color-error);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: var(--spacing-sm);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Quantization Table */
+.quantTable {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: var(--color-surface);
+}
+
+.quantTableHeader {
+  display: grid;
+  grid-template-columns: 1fr 80px 60px 50px 90px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-base);
+  background-color: var(--color-surface-elevated);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.quantTableBody {
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.quantRow {
+  display: grid;
+  grid-template-columns: 1fr 80px 60px 50px 90px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-base);
+  align-items: center;
+  border-bottom: 1px solid var(--color-border-light);
+  transition: background-color 0.15s ease;
+}
+
+.quantRow:last-child {
+  border-bottom: none;
+}
+
+.quantRow:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.colQuant {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quantName {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.colSize {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+.colShards {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.colFit {
+  text-align: center;
+}
+
+.colAction {
+  text-align: right;
+}
+
+/* Fit Indicators */
+.fitIndicator {
+  font-size: 1rem;
+  cursor: help;
+}
+
+.fitIndicatorFits {
+  filter: none;
+}
+
+.fitIndicatorTight {
+  filter: none;
+}
+
+.fitIndicatorWontFit {
+  filter: none;
+}
+
+.fitIndicatorUnknown {
+  filter: grayscale(100%);
+  opacity: 0.6;
+}
+
+/* Download Button */
+.downloadBtn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: white;
+  background-color: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.downloadBtn:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.downloadBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Description Section */
+.descriptionSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+/* Tags Section */
+.tagsSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.tagsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.tag {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-elevated);
+  border-radius: var(--radius-base);
+}
+
+.moreTagsIndicator {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+}

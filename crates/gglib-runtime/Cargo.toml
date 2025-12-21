@@ -1,0 +1,58 @@
+[package]
+name = "gglib-runtime"
+version.workspace = true
+edition.workspace = true
+description = "Process runtime and OS-level concerns for gglib"
+license.workspace = true
+publish = false
+
+[features]
+default = []
+# Feature flags still gate code, but dependencies are always available to avoid missing crates on CI
+prebuilt = []
+cli = ["prebuilt"]
+
+[dependencies]
+gglib-core = { path = "../gglib-core" }
+gglib-proxy = { path = "../gglib-proxy" }
+
+# Runtime dependencies
+tokio = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+
+# HTTP client for health checks and downloads
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+
+# Async utilities
+futures-util = "0.3"
+async-stream = "0.3"
+tokio-util = "0.7"
+
+# System info
+num_cpus = "1.16"
+sysinfo = { workspace = true }
+
+# Archive extraction (used by prebuilt downloads)
+zip = { version = "2.2" }
+
+# CLI progress (used by cli feature)
+indicatif = { workspace = true }
+
+# Unix signal handling
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["signal", "process"] }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+tempfile = { workspace = true }
+
+[lints.rust]
+unsafe_code = "deny"

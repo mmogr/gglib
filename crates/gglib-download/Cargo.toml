@@ -1,0 +1,58 @@
+[package]
+name = "gglib-download"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Download manager for gglib - handles model downloads from HuggingFace"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# Internal crates
+gglib-core.workspace = true
+gglib-hf.workspace = true
+
+# Async runtime
+tokio = { workspace = true, features = ["process", "io-util", "sync", "time", "macros"] }
+tokio-util = "0.7"
+async-trait.workspace = true
+
+# Serialization
+serde = { workspace = true }
+serde_json.workspace = true
+chrono.workspace = true
+
+# Collections
+indexmap = "2.0"
+uuid = { workspace = true, features = ["v4", "serde"] }
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# HuggingFace Hub SDK (for CLI execution)
+hf-hub.workspace = true
+
+# HTTP client (for API calls)
+reqwest = { workspace = true }
+
+# Progress display (for CLI)
+indicatif = "0.17"
+
+# System utilities (for python env)
+which = "7"
+
+# Temp files
+tempfile.workspace = true
+
+[dev-dependencies]
+tokio-test.workspace = true
+mockall.workspace = true
+tempfile.workspace = true

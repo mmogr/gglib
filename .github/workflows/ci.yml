@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  boundaries:
+    name: Check Boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check crate boundaries
+        run: ./scripts/check_boundaries.sh
+
+      - name: Upload boundary results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: boundary-results
+          path: boundary-status.json
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+
+      - name: Lockfile guard
+        run: |
+          cargo metadata --locked --format-version 1 > /dev/null
+          cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
+
+      - name: Cache Cargo registry and target directory
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Web UI
+        run: |
+          npm install
+          npm run build
+
+      - name: Run Rust tests (aggregate)
+        run: cargo test --verbose 2>&1 | tee rust-test-output.txt
+
+      - name: Run per-crate Rust tests
+        run: |
+          cargo test -p gglib-core --verbose 2>&1 | tee rust-test-gglib-core.txt
+          cargo test -p gglib-db --verbose 2>&1 | tee rust-test-gglib-db.txt
+          cargo test -p gglib-gguf --verbose 2>&1 | tee rust-test-gglib-gguf.txt
+          cargo test -p gglib-hf --verbose 2>&1 | tee rust-test-gglib-hf.txt
+          cargo test -p gglib-download --verbose 2>&1 | tee rust-test-gglib-download.txt
+          cargo test -p gglib-mcp --verbose 2>&1 | tee rust-test-gglib-mcp.txt
+          cargo test -p gglib-proxy --verbose 2>&1 | tee rust-test-gglib-proxy.txt
+          cargo test -p gglib-runtime --verbose 2>&1 | tee rust-test-gglib-runtime.txt
+          cargo test -p gglib-gui --verbose 2>&1 | tee rust-test-gglib-gui.txt
+          cargo test -p gglib-cli --verbose 2>&1 | tee rust-test-gglib-cli.txt
+          cargo test -p gglib-axum --verbose 2>&1 | tee rust-test-gglib-axum.txt
+          cargo test -p gglib-tauri --verbose 2>&1 | tee rust-test-gglib-tauri.txt
+
+      - name: Run doctests
+        run: cargo test --doc --verbose
+
+      - name: Run TypeScript tests
+        run: npm run test:run -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt || true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            rust-test-output.txt
+            rust-test-gglib-core.txt
+            rust-test-gglib-db.txt
+            rust-test-gglib-gguf.txt
+            rust-test-gglib-hf.txt
+            rust-test-gglib-download.txt
+            rust-test-gglib-mcp.txt
+            rust-test-gglib-proxy.txt
+            rust-test-gglib-runtime.txt
+            rust-test-gglib-gui.txt
+            rust-test-gglib-cli.txt
+            rust-test-gglib-axum.txt
+            rust-test-gglib-tauri.txt
+            ts-test-output.txt
+            ts-test-results.json
+          retention-days: 30
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: clippy
+
+      - name: Cache Cargo registry and target directory
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Web UI
+        run: |
+          npm install
+          npm run build
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [boundaries, test, clippy, fmt]
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more CI jobs failed"
+            exit 1
+          fi
+          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more CI jobs were cancelled"
+            exit 1
+          fi
+          echo "All CI jobs passed successfully"
