@@ -242,11 +242,15 @@ Start the web-based GUI server.
 **Options:**
 - `--port <PORT>`: Port to serve the web GUI on (default: 9887)
 - `--base-port <PORT>`: Base port for llama-server instances (default: 9000)
+- `--api-only`: Serve API endpoints only (do not serve static UI assets)
 
 **Example:**
 ```bash
 # Start web server (accessible from LAN by default)
 gglib web --port 9887
+
+# API-only mode (useful when running the React dev server separately)
+gglib web --api-only --port 9887
 
 # Use different base port for model servers
 gglib web --port 9887 --base-port 9000
