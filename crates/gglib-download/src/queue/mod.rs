@@ -71,12 +71,6 @@ impl DownloadQueue {
         self.failed.len()
     }
 
-    /// Check if the queue is empty.
-    #[cfg(test)]
-    pub fn is_empty(&self) -> bool {
-        self.pending.is_empty()
-    }
-
     /// Check if a download ID is currently queued.
     pub fn is_queued(&self, id: &DownloadId) -> bool {
         self.pending.iter().any(|item| &item.id == id)
@@ -150,12 +144,6 @@ impl DownloadQueue {
     /// Pop the next item from the front of the queue.
     pub fn dequeue(&mut self) -> Option<QueuedItem> {
         self.pending.pop_front()
-    }
-
-    /// Peek at the next item without removing it.
-    #[cfg(test)]
-    pub fn peek_next(&self) -> Option<&QueuedItem> {
-        self.pending.front()
     }
 
     /// Clear all items from the queue (pending and failed).
@@ -303,12 +291,6 @@ impl DownloadQueue {
         self.failed.clear();
     }
 
-    /// Get a failed download by ID (for retry).
-    #[cfg(test)]
-    pub fn get_failed(&self, id: &DownloadId) -> Option<&FailedItem> {
-        self.failed.iter().find(|f| &f.item.id == id)
-    }
-
     /// Retry a failed download by moving it back to the pending queue.
     ///
     /// Returns the 1-based position in the queue on success.
@@ -365,35 +347,6 @@ impl DownloadQueue {
             self.failed.push(FailedItem::new(item, error));
         }
         count
-    }
-
-    /// Check if there are no more pending items in a shard group.
-    #[cfg(test)]
-    pub fn is_last_in_group(&self, group_id: &ShardGroupId) -> bool {
-        !self
-            .pending
-            .iter()
-            .any(|item| item.group_id.as_ref() == Some(group_id))
-    }
-
-    /// Get the total remaining size of pending shards in a group.
-    #[cfg(test)]
-    pub fn group_remaining_size(&self, group_id: &ShardGroupId) -> u64 {
-        self.pending
-            .iter()
-            .filter(|item| item.group_id.as_ref() == Some(group_id))
-            .filter_map(|item| item.shard_info.as_ref())
-            .filter_map(|shard| shard.file_size)
-            .sum()
-    }
-
-    /// Count pending items in a shard group.
-    #[cfg(test)]
-    pub fn group_pending_count(&self, group_id: &ShardGroupId) -> usize {
-        self.pending
-            .iter()
-            .filter(|item| item.group_id.as_ref() == Some(group_id))
-            .count()
     }
 
     // --- Private helpers ---

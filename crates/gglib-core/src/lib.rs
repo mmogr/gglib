@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unused_crate_dependencies)]
 
 pub mod contracts;

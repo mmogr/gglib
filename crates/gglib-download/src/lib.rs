@@ -1,4 +1,4 @@
-#![doc = include_str!("../README.md")]
+#![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 //! - `resolver` - `HuggingFace` file resolution
 
 // Re-export core types for convenience

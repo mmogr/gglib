@@ -100,7 +100,8 @@ generate_badge_row() {
     fi
     
     local link_text="$entry"
-    local link_target="$entry"
+    # Strip .rs extension from link target for rustdoc compatibility
+    local link_target="${entry%.rs}"
     if $is_dir; then
         link_text="$entry/"
         link_target="$entry/"
