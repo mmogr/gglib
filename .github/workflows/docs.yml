@@ -68,19 +68,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-registry-
 
-      - name: Fix README links for rustdoc
-        run: |
-          # README files use src/ prefix for GitHub compatibility, but rustdoc
-          # needs paths relative to the module. Fix the links before building docs.
-          echo "Fixing README links for rustdoc..."
-          for readme in crates/*/README.md; do
-            if grep -q '](src/' "$readme"; then
-              echo "  Fixing: $readme"
-              # Change ](src/foo) to ](foo) for rustdoc compatibility
-              sed -i 's/](src\//](/g' "$readme"
-            fi
-          done
-
       - name: Build documentation
         run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-tauri
 
