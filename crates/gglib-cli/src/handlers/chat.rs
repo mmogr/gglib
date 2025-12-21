@@ -69,7 +69,6 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
     let mut cmd = LlamaCommandBuilder::new(&llama_cli_path, &model.file_path)
         .context_resolution(context_resolution)
         .mlock(mlock)
-        .flag("-i")
         .build();
 
     // Add chat-specific flags
