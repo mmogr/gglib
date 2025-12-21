@@ -1,11 +1,11 @@
 /* GlobalDownloadStatus - Uses app design system variables */
 
 .container {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  background: var(--color-background);
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
   padding: var(--spacing-base);
-  margin-bottom: var(--spacing-base);
+  margin-bottom: 0;
 }
 
 /* Progress Section (Active Download) */
