@@ -205,6 +205,13 @@ pub enum Commands {
         /// Base port for llama-server instances (Note: Port 5000 conflicts with macOS AirPlay)
         #[arg(long, default_value = "9000")]
         base_port: u16,
+        /// Serve API endpoints only (do not serve static UI assets)
+        ///
+        /// By default, `gglib web` will auto-detect a built frontend (e.g. `./web_ui`) and
+        /// serve it with SPA fallback. Use this flag when running the React dev server (Vite)
+        /// separately.
+        #[arg(long)]
+        api_only: bool,
         /// Path to the directory containing built frontend assets (e.g., ./web_ui/dist)
         #[arg(long)]
         static_dir: Option<std::path::PathBuf>,
