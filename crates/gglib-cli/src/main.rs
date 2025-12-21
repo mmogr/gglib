@@ -239,6 +239,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Web {
             port,
             base_port,
+            api_only,
             static_dir,
         } => {
             use gglib_axum::{ServerConfig, start_server};
@@ -254,17 +255,19 @@ async fn main() -> anyhow::Result<()> {
                 cors: gglib_axum::CorsConfig::AllowAll,
             };
 
-            // Resolve static directory: explicit flag > default location > API-only
-            if let Some(dir) = static_dir {
-                config.static_dir = Some(dir);
-            } else {
-                // Try default locations (order matters - prefer built assets first)
-                let candidates = ["./web_ui/dist", "./dist", "./web_ui/assets", "./web_ui"];
-                for candidate in &candidates {
-                    let path = std::path::Path::new(candidate);
-                    if path.join("index.html").exists() {
-                        config.static_dir = Some(path.to_path_buf());
-                        break;
+            // Resolve static directory: api-only flag > explicit flag > default location > API-only
+            if !api_only {
+                if let Some(dir) = static_dir {
+                    config.static_dir = Some(dir);
+                } else {
+                    // Try default locations (order matters - prefer built assets first)
+                    let candidates = ["./web_ui/dist", "./dist", "./web_ui/assets", "./web_ui"];
+                    for candidate in &candidates {
+                        let path = std::path::Path::new(candidate);
+                        if path.join("index.html").exists() {
+                            config.static_dir = Some(path.to_path_buf());
+                            break;
+                        }
                     }
                 }
             }

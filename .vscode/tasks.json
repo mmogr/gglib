@@ -473,7 +473,7 @@
 			}
 		},
 		{
-			"label": "🎨 Start Frontend Dev Server",
+			"label": "🎨 Run Frontend Dev",
 			"type": "shell",
 			"command": "npm",
 			"args": [
@@ -500,6 +500,98 @@
 					"endsPattern": "Local:.*http"
 				}
 			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🧠 Run Backend Dev (API-only)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"run",
+				"--package",
+				"gglib-cli",
+				"--",
+				"web",
+				"--api-only",
+				"--port",
+				"9887",
+				"--base-port",
+				"9000"
+			],
+			"isBackground": true,
+			"group": "none",
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(.*)$",
+					"message": 1
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".",
+					"endsPattern": "API:"
+				}
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🌐 Cargo Web",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"run",
+				"--package",
+				"gglib-cli",
+				"--",
+				"web",
+				"--port",
+				"9887",
+				"--base-port",
+				"9000",
+				"--static-dir",
+				"./web_ui"
+			],
+			"isBackground": true,
+			"group": "none",
+			"dependsOn": [
+				"🎨 Build Frontend"
+			],
+			"problemMatcher": {
+				"pattern": {
+					"regexp": "^(.*)$",
+					"message": 1
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".",
+					"endsPattern": "Serving UI from:"
+				}
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "🚀 Run Dev (Frontend + Backend)",
+			"dependsOn": [
+				"🎨 Run Frontend Dev",
+				"🧠 Run Backend Dev (API-only)"
+			],
+			"dependsOrder": "parallel",
+			"group": "none",
+			"problemMatcher": [],
 			"presentation": {
 				"reveal": "always",
 				"panel": "shared",
