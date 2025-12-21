@@ -1525,7 +1525,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
@@ -1558,7 +1558,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1583,7 +1583,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1622,7 +1622,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1648,7 +1648,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1678,7 +1678,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -1695,7 +1695,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-lib"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1715,7 +1715,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1729,7 +1729,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1749,7 +1749,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "gglib-core",
