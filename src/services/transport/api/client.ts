@@ -177,8 +177,9 @@ function buildClient(config: HttpClientConfig): HttpClient {
     const { method = 'GET', body } = options || {};
     const hasBody = body !== undefined;
     
-    // Include Content-Type header for requests with a body (POST, PUT, DELETE)
-    const shouldIncludeContentType = hasBody && method !== 'GET';
+    // Include Content-Type header for POST/PUT/DELETE requests (even if body is undefined)
+    // Backend may expect application/json header to parse Json<Option<T>> types
+    const shouldIncludeContentType = method !== 'GET';
     
     try {
       const response = await fetch(`${baseUrl}${path}`, {
