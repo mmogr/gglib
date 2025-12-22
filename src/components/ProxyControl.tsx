@@ -1,5 +1,6 @@
 import { FC, useState, useEffect, useRef } from "react";
 import { getProxyStatus, startProxy, stopProxy } from "../services/clients/servers";
+import { setProxyState } from "../services/platform";
 import { useClickOutside } from "../hooks/useClickOutside";
 import styles from './ProxyControl.module.css';
 
@@ -60,7 +61,8 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const handleStart = async () => {
     try {
       setLoading(true);
-      await startProxy(config);
+      const proxyStatus = await startProxy(config);
+      await setProxyState(true, proxyStatus.port);
       await loadStatus();
     } catch (err) {
       alert(`Failed to start proxy: ${err}`);
@@ -73,6 +75,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
     try {
       setLoading(true);
       await stopProxy();
+      await setProxyState(false, null);
       await loadStatus();
     } catch (err) {
       alert(`Failed to stop proxy: ${err}`);
