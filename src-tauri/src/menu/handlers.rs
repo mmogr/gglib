@@ -79,28 +79,39 @@ pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 
 /// Handle proxy toggle menu item.
 ///
-/// NOTE: Proxy not yet integrated with Tauri menu.
+/// For now, proxy integration is handled entirely on the frontend via HTTP API.
+/// We emit an event to let the frontend toggle proxy state.
 fn handle_proxy_toggle(app: &AppHandle) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
-        // Proxy integration pending
-        warn!("Proxy toggle requested but proxy not yet integrated with menu");
-        emit_or_log(
-            &app_clone,
-            names::MENU_PROXY_ERROR,
-            "Proxy is temporarily disabled during refactor".to_string(),
-        );
+        // Get current proxy state from app state
+        let state: tauri::State<AppState> = app_clone.state();
+        let proxy_enabled = *state.proxy_enabled.read().await;
+        
+        // Emit event for frontend to handle the actual start/stop
+        if proxy_enabled {
+            // Tell frontend to stop proxy
+            emit_or_log(&app_clone, names::MENU_PROXY_STOPPED, ());
+        } else {
+            // Tell frontend to start proxy
+            emit_or_log(&app_clone, names::MENU_START_PROXY, ());
+        }
 
-        // Sync menu state
-        let _state: tauri::State<AppState> = app_clone.state();
+        // Sync menu state after toggle
         state_sync::sync_menu_state_or_log(&app_clone, &app_clone.state()).await;
     });
 }
 
 /// Handle copy proxy URL menu item.
 fn handle_copy_proxy_url(app: &AppHandle) {
-    // Proxy is disabled during Phase 2 refactor
-    // Just emit a default URL format
-    let url = "http://127.0.0.1:8080/v1".to_string();
-    emit_or_log(app, names::MENU_COPY_TO_CLIPBOARD, url);
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state: tauri::State<AppState> = app_clone.state();
+        let proxy_port = *state.proxy_port.read().await;
+        
+        // Build URL from stored proxy port (or default)
+        let port = proxy_port.unwrap_or(8080);
+        let url = format!("http://127.0.0.1:{}/v1", port);
+        emit_or_log(&app_clone, names::MENU_COPY_TO_CLIPBOARD, url);
+    });
 }
