@@ -4,6 +4,7 @@ import { useTags } from '../hooks/useTags';
 import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
+import { useToastContext } from '../contexts/ToastContext';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
@@ -48,6 +49,7 @@ export default function ModelControlCenterPage({
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
   const { tags, loadTags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
+  const { showToast } = useToastContext();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
   
   // Unified refresh function for models, filter options, and tags
@@ -126,6 +128,7 @@ export default function ModelControlCenterPage({
     closeChatSession: () => setChatSession(null),
     openChatSession,
     onOpenServeModal: () => openServeModalRef.current?.(),
+    showToast,
   });
 
   const {

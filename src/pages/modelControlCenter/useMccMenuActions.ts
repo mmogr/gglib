@@ -30,6 +30,7 @@ interface UseMccMenuActionsArgs {
   closeChatSession: () => void;
   openChatSession: (modelId: number, view: 'chat' | 'console') => void;
   onOpenServeModal?: () => void;
+  showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error', duration?: number) => void;
 }
 
 export function useMccMenuActions({
@@ -49,6 +50,7 @@ export function useMccMenuActions({
   closeChatSession,
   openChatSession,
   onOpenServeModal,
+  showToast,
 }: UseMccMenuActionsArgs) {
   useEffect(() => {
     if (!onRegisterMenuActions) return;
@@ -82,8 +84,10 @@ export function useMccMenuActions({
         
         if (serverToOpen) {
           openChatSession(serverToOpen.model_id, 'chat');
+        } else {
+          // No servers running - show helpful message
+          showToast('No servers are currently running. Start a server first to use chat.', 'warning');
         }
-        // If no servers running, do nothing (could show a toast in the future)
       },
       startServer: () => {
         if (selectedModelId && onOpenServeModal) {
@@ -150,5 +154,6 @@ export function useMccMenuActions({
     closeChatSession,
     openChatSession,
     onOpenServeModal,
+    showToast,
   ]);
 }
