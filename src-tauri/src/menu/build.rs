@@ -2,7 +2,7 @@
 
 use super::{ids, AppMenu};
 use tauri::{
-    menu::{AboutMetadataBuilder, CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{AboutMetadataBuilder, Menu, MenuItem, PredefinedMenuItem, Submenu},
     AppHandle, Wry,
 };
 
@@ -157,13 +157,20 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
     // =========================================================================
     // Proxy Menu
     // =========================================================================
-    let proxy_toggle_item = CheckMenuItem::with_id(
+    let start_proxy_item = MenuItem::with_id(
         app,
-        ids::PROXY_TOGGLE,
-        "Enable Proxy",
+        ids::START_PROXY,
+        "Start Proxy",
         true,
-        false, // Initially unchecked
         Some("CmdOrCtrl+P"),
+    )?;
+
+    let stop_proxy_item = MenuItem::with_id(
+        app,
+        ids::STOP_PROXY,
+        "Stop Proxy",
+        false, // Initially disabled (proxy not running)
+        None,
     )?;
 
     let copy_proxy_url_item = MenuItem::with_id(
@@ -179,7 +186,8 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
         "Proxy",
         true,
         &[
-            &proxy_toggle_item,
+            &start_proxy_item,
+            &stop_proxy_item,
             &PredefinedMenuItem::separator(app)?,
             &copy_proxy_url_item,
         ],
@@ -289,7 +297,8 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
         start_server: start_server_item,
         stop_server: stop_server_item,
         remove_model: remove_model_item,
-        proxy_toggle: proxy_toggle_item,
+        start_proxy: start_proxy_item,
+        stop_proxy: stop_proxy_item,
         copy_proxy_url: copy_proxy_url_item,
         install_llama: install_llama_item,
     };

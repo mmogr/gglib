@@ -1,8 +1,7 @@
 //! Menu event handling.
 
 use crate::app::events::{emit_or_log, names};
-use crate::app::AppState;
-use crate::menu::{ids, state_sync};
+use crate::menu::ids;
 use tauri::{AppHandle, Manager};
 use tracing::debug;
 
@@ -36,8 +35,11 @@ pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         }
 
         // Proxy menu
-        ids::PROXY_TOGGLE => {
-            handle_proxy_toggle(app);
+        ids::START_PROXY => {
+            emit_or_log(app, names::MENU_START_PROXY, ());
+        }
+        ids::STOP_PROXY => {
+            emit_or_log(app, names::MENU_PROXY_STOPPED, ());
         }
         ids::COPY_PROXY_URL => {
             handle_copy_proxy_url(app);
@@ -72,31 +74,6 @@ pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             debug!(menu_id = %id, "Unhandled menu event");
         }
     }
-}
-
-/// Handle proxy toggle menu item.
-///
-/// For now, proxy integration is handled entirely on the frontend via HTTP API.
-/// We emit an event to let the frontend toggle proxy state.
-fn handle_proxy_toggle(app: &AppHandle) {
-    let app_clone = app.clone();
-    tauri::async_runtime::spawn(async move {
-        // Get current proxy state from app state
-        let state: tauri::State<AppState> = app_clone.state();
-        let proxy_enabled = *state.proxy_enabled.read().await;
-        
-        // Emit event for frontend to handle the actual start/stop
-        if proxy_enabled {
-            // Tell frontend to stop proxy
-            emit_or_log(&app_clone, names::MENU_PROXY_STOPPED, ());
-        } else {
-            // Tell frontend to start proxy
-            emit_or_log(&app_clone, names::MENU_START_PROXY, ());
-        }
-
-        // Sync menu state after toggle
-        state_sync::sync_menu_state_or_log(&app_clone, &app_clone.state()).await;
-    });
 }
 
 /// Handle copy proxy URL menu item.
