@@ -20,6 +20,10 @@ pub struct AppState {
     pub menu: Arc<RwLock<Option<AppMenu>>>,
     /// Currently selected model ID (for menu state sync)
     pub selected_model_id: Arc<RwLock<Option<i64>>>,
+    /// Proxy server enabled state (for menu sync)
+    pub proxy_enabled: Arc<RwLock<bool>>,
+    /// Proxy server port (for copy URL)
+    pub proxy_port: Arc<RwLock<Option<u16>>>,
 }
 
 impl AppState {
@@ -33,6 +37,8 @@ impl AppState {
             embedded_api,
             menu: Arc::new(RwLock::new(None)),
             selected_model_id: Arc::new(RwLock::new(None)),
+            proxy_enabled: Arc::new(RwLock::new(false)),
+            proxy_port: Arc::new(RwLock::new(None)),
         }
     }
 }

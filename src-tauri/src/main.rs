@@ -103,6 +103,7 @@ fn main() {
             // OS integration: menu sync
             commands::util::set_selected_model,
             commands::util::sync_menu_state,
+            commands::util::set_proxy_state,
             // OS integration: llama.cpp binary management
             commands::llama::check_llama_status,
             commands::llama::install_llama,

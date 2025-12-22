@@ -37,3 +37,15 @@ export function syncMenuStateSilent(): void {
     // Silently ignore - menu sync is best-effort
   });
 }
+
+/**
+ * Update proxy state and sync menu.
+ * Call this when the proxy is started or stopped.
+ */
+export async function setProxyState(running: boolean, port: number | null): Promise<void> {
+  if (isDesktop()) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke('set_proxy_state', { running, port });
+  }
+  // No-op for web UI
+}

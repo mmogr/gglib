@@ -177,8 +177,9 @@ function buildClient(config: HttpClientConfig): HttpClient {
     const { method = 'GET', body } = options || {};
     const hasBody = body !== undefined;
     
-    // Include Content-Type header for requests with a body (POST, PUT, DELETE)
-    const shouldIncludeContentType = hasBody && method !== 'GET';
+    // Include Content-Type header for POST/PUT/DELETE requests (even if body is undefined)
+    // Backend may expect application/json header to parse Json<Option<T>> types
+    const shouldIncludeContentType = method !== 'GET';
     
     try {
       const response = await fetch(`${baseUrl}${path}`, {
@@ -264,7 +265,9 @@ export async function get<T>(path: string): Promise<T> {
  */
 export async function post<T>(path: string, body?: unknown): Promise<T> {
   const client = await getClient();
-  return client.request<T>(path, { method: 'POST', body });
+  // Some backend handlers use Json<Option<T>>; they require valid JSON even when
+  // "no body" is intended. Sending `null` is valid JSON and deserializes to None.
+  return client.request<T>(path, { method: 'POST', body: body === undefined ? null : body });
 }
 
 /**
@@ -283,7 +286,7 @@ export async function put<T>(path: string, body: unknown): Promise<T> {
  */
 export async function del<T>(path: string, body?: unknown): Promise<T> {
   const client = await getClient();
-  return client.request<T>(path, { method: 'DELETE', body });
+  return client.request<T>(path, { method: 'DELETE', body: body === undefined ? null : body });
 }
 
 /**

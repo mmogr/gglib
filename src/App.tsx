@@ -8,8 +8,9 @@ import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
-import { syncMenuStateSilent, listenToMenuEvents } from "./services/platform";
+import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
+import { startProxy, stopProxy } from "./services/clients/servers";
 
 /**
  * Inner app component that consumes ToastContext.
@@ -36,6 +37,8 @@ function AppContent() {
   const menuActionsRef = useRef<{
     refreshModels: () => void;
     addModelFromFile: () => void;
+    showDownloads: () => void;
+    showChat: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
@@ -71,22 +74,45 @@ function AppContent() {
     let cleanup: (() => void) | null = null;
 
     listenToMenuEvents({
-      'menu:open-settings': () => setIsSettingsOpen(true),
-      'menu:toggle-sidebar': () => setIsSidebarVisible(prev => !prev),
-      'menu:add-model-file': () => menuActionsRef.current?.addModelFromFile?.(),
-      'menu:refresh-models': () => menuActionsRef.current?.refreshModels?.(),
-      'menu:start-server': () => menuActionsRef.current?.startServer?.(),
-      'menu:stop-server': () => menuActionsRef.current?.stopServer?.(),
-      'menu:remove-model': () => menuActionsRef.current?.removeModel?.(),
-      'menu:install-llama': () => setShowLlamaModal(true),
-      'menu:check-llama-status': () => checkLlamaStatus(),
-      'menu:copy-to-clipboard': (payload) => {
+      [MENU_EVENTS.OPEN_SETTINGS]: () => setIsSettingsOpen(true),
+      [MENU_EVENTS.TOGGLE_SIDEBAR]: () => setIsSidebarVisible(prev => !prev),
+      [MENU_EVENTS.ADD_MODEL_FILE]: () => menuActionsRef.current?.addModelFromFile?.(),
+      [MENU_EVENTS.SHOW_DOWNLOADS]: () => menuActionsRef.current?.showDownloads?.(),
+      [MENU_EVENTS.SHOW_CHAT]: () => menuActionsRef.current?.showChat?.(),
+      [MENU_EVENTS.REFRESH_MODELS]: () => menuActionsRef.current?.refreshModels?.(),
+      [MENU_EVENTS.START_SERVER]: () => menuActionsRef.current?.startServer?.(),
+      [MENU_EVENTS.STOP_SERVER]: () => menuActionsRef.current?.stopServer?.(),
+      [MENU_EVENTS.REMOVE_MODEL]: () => menuActionsRef.current?.removeModel?.(),
+      [MENU_EVENTS.INSTALL_LLAMA]: () => setShowLlamaModal(true),
+      [MENU_EVENTS.CHECK_LLAMA_STATUS]: () => checkLlamaStatus(),
+      [MENU_EVENTS.COPY_TO_CLIPBOARD]: (payload) => {
         if (payload) {
           navigator.clipboard.writeText(payload).catch(console.error);
         }
       },
-      'menu:proxy-stopped': () => syncMenuStateSilent(),
-      'menu:start-proxy': () => setIsSettingsOpen(true),
+      [MENU_EVENTS.PROXY_ERROR]: (message) => {
+        showToast(message, 'warning');
+      },
+      [MENU_EVENTS.PROXY_STOPPED]: async () => {
+        try {
+          await stopProxy();
+          await setProxyState(false, null);
+          showToast('Proxy stopped', 'success');
+        } catch (error) {
+          showToast('Failed to stop proxy', 'error');
+          console.error('Failed to stop proxy:', error);
+        }
+      },
+      [MENU_EVENTS.START_PROXY]: async () => {
+        try {
+          const status = await startProxy();
+          await setProxyState(true, status.port);
+          showToast(`Proxy started on port ${status.port}`, 'success');
+        } catch (error) {
+          showToast('Failed to start proxy', 'error');
+          console.error('Failed to start proxy:', error);
+        }
+      },
     }).then(unsubscribe => {
       cleanup = unsubscribe;
     });
@@ -94,7 +120,7 @@ function AppContent() {
     return () => {
       cleanup?.();
     };
-  }, [checkLlamaStatus]);
+  }, [checkLlamaStatus, showToast]);
 
   // Handler for selecting a model from the header popover
   const handleSelectModelFromHeader = useCallback((modelId: number, view?: 'chat' | 'console') => {
@@ -105,6 +131,8 @@ function AppContent() {
   const registerMenuActions = useCallback((actions: {
     refreshModels: () => void;
     addModelFromFile: () => void;
+    showDownloads: () => void;
+    showChat: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;

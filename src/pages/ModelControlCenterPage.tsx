@@ -4,6 +4,7 @@ import { useTags } from '../hooks/useTags';
 import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
+import { useToastContext } from '../contexts/ToastContext';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
@@ -32,6 +33,7 @@ interface ModelControlCenterPageProps {
     refreshModels: () => void;
     addModelFromFile: () => void;
     showDownloads: () => void;
+    showChat: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
@@ -47,6 +49,7 @@ export default function ModelControlCenterPage({
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
   const { tags, loadTags, addTagToModel, removeTagFromModel, getModelTags } = useTags();
+  const { showToast } = useToastContext();
   const { filterOptions, refresh: refreshFilterOptions } = useModelFilterOptions();
   
   // Unified refresh function for models, filter options, and tags
@@ -87,6 +90,9 @@ export default function ModelControlCenterPage({
   // Ref for file input (for menu-triggered file add)
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Ref for opening serve modal from menu
+  const openServeModalRef = useRef<(() => void) | null>(null);
+  
   // Panel width state (percentages) - now just two columns
   const { leftPanelWidth, layoutRef, handleMouseDown } = useMccLayout();
 
@@ -109,6 +115,7 @@ export default function ModelControlCenterPage({
     onRegisterMenuActions,
     selectedModelId,
     servers,
+    models,
     loadServers,
     stopServer,
     removeModel,
@@ -120,6 +127,8 @@ export default function ModelControlCenterPage({
     chatSessionModelId: chatSession?.modelId ?? null,
     closeChatSession: () => setChatSession(null),
     openChatSession,
+    onOpenServeModal: () => openServeModalRef.current?.(),
+    showToast,
   });
 
   const {
@@ -281,6 +290,7 @@ export default function ModelControlCenterPage({
             getModelTags={getModelTags}
             onRefresh={handleRefreshAll}
             queueStatus={queueStatus}
+            onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
           />
         </div>
       </div>

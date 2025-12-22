@@ -2,9 +2,9 @@
 
 use crate::app::events::{emit_or_log, names};
 use crate::app::AppState;
-use crate::menu::{ids, state_sync};
+use crate::menu::ids;
 use tauri::{AppHandle, Manager};
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Handle menu item click events.
 pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
@@ -36,17 +36,17 @@ pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         }
 
         // Proxy menu
-        ids::PROXY_TOGGLE => {
-            handle_proxy_toggle(app);
+        ids::START_PROXY => {
+            emit_or_log(app, names::MENU_START_PROXY, ());
+        }
+        ids::STOP_PROXY => {
+            emit_or_log(app, names::MENU_PROXY_STOPPED, ());
         }
         ids::COPY_PROXY_URL => {
             handle_copy_proxy_url(app);
         }
 
         // View menu
-        ids::SHOW_DOWNLOADS => {
-            emit_or_log(app, names::MENU_SHOW_DOWNLOADS, ());
-        }
         ids::SHOW_CHAT => {
             emit_or_log(app, names::MENU_SHOW_CHAT, ());
         }
@@ -77,30 +77,16 @@ pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     }
 }
 
-/// Handle proxy toggle menu item.
-///
-/// NOTE: Proxy not yet integrated with Tauri menu.
-fn handle_proxy_toggle(app: &AppHandle) {
-    let app_clone = app.clone();
-    tauri::async_runtime::spawn(async move {
-        // Proxy integration pending
-        warn!("Proxy toggle requested but proxy not yet integrated with menu");
-        emit_or_log(
-            &app_clone,
-            names::MENU_PROXY_ERROR,
-            "Proxy is temporarily disabled during refactor".to_string(),
-        );
-
-        // Sync menu state
-        let _state: tauri::State<AppState> = app_clone.state();
-        state_sync::sync_menu_state_or_log(&app_clone, &app_clone.state()).await;
-    });
-}
-
 /// Handle copy proxy URL menu item.
 fn handle_copy_proxy_url(app: &AppHandle) {
-    // Proxy is disabled during Phase 2 refactor
-    // Just emit a default URL format
-    let url = "http://127.0.0.1:8080/v1".to_string();
-    emit_or_log(app, names::MENU_COPY_TO_CLIPBOARD, url);
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state: tauri::State<AppState> = app_clone.state();
+        let proxy_port = *state.proxy_port.read().await;
+        
+        // Build URL from stored proxy port (or default)
+        let port = proxy_port.unwrap_or(8080);
+        let url = format!("http://127.0.0.1:{}/v1", port);
+        emit_or_log(&app_clone, names::MENU_COPY_TO_CLIPBOARD, url);
+    });
 }
