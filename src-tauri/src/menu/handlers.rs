@@ -4,7 +4,7 @@ use crate::app::events::{emit_or_log, names};
 use crate::app::AppState;
 use crate::menu::{ids, state_sync};
 use tauri::{AppHandle, Manager};
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Handle menu item click events.
 pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
