@@ -67,23 +67,23 @@ export function useMccMenuActions({
         setActiveSubTab('browse');
       },
       showChat: () => {
-        // Open chat for selected model if it has a running server
+        // Open chat for any running server, preferring the selected model's server
+        let serverToOpen = null;
+        
         if (selectedModelId) {
-          const server = servers.find((s) => s.model_id === selectedModelId);
-          if (server) {
-            openChatSession(selectedModelId, 'chat');
-          } else {
-            // No server running - still open chat page, it will show "server not running" message
-            // For now, we need a server to open chat, so we'll just select the model
-            // The ChatPage will handle showing the appropriate message
-            const selectedModel = models.find(m => m.id === selectedModelId);
-            if (selectedModel) {
-              // We can't open chat without a server yet, so just ensure model is selected
-              // TODO: Update ChatPage to handle no-server state
-              selectModel(selectedModelId);
-            }
-          }
+          // Try to find server for selected model
+          serverToOpen = servers.find((s) => s.model_id === selectedModelId);
         }
+        
+        if (!serverToOpen && servers.length > 0) {
+          // Fall back to first running server
+          serverToOpen = servers[0];
+        }
+        
+        if (serverToOpen) {
+          openChatSession(serverToOpen.model_id, 'chat');
+        }
+        // If no servers running, do nothing (could show a toast in the future)
       },
       startServer: () => {
         if (selectedModelId && onOpenServeModal) {

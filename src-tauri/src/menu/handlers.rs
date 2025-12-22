@@ -44,9 +44,6 @@ pub fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         }
 
         // View menu
-        ids::SHOW_DOWNLOADS => {
-            emit_or_log(app, names::MENU_SHOW_DOWNLOADS, ());
-        }
         ids::SHOW_CHAT => {
             emit_or_log(app, names::MENU_SHOW_CHAT, ());
         }

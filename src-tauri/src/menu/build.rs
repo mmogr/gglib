@@ -188,16 +188,8 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
     // =========================================================================
     // View Menu
     // =========================================================================
-    let show_downloads_item = MenuItem::with_id(
-        app,
-        ids::SHOW_DOWNLOADS,
-        "Show Downloads Panel",
-        true,
-        Some("CmdOrCtrl+1"),
-    )?;
-
     let show_chat_item =
-        MenuItem::with_id(app, ids::SHOW_CHAT, "Show Chat", true, Some("CmdOrCtrl+2"))?;
+        MenuItem::with_id(app, ids::SHOW_CHAT, "Show Chat", true, Some("CmdOrCtrl+1"))?;
 
     // Toggle sidebar is currently not visually implemented in the UI
     let toggle_sidebar_item = MenuItem::with_id(
@@ -213,7 +205,6 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
         "View",
         true,
         &[
-            &show_downloads_item,
             &show_chat_item,
             &PredefinedMenuItem::separator(app)?,
             &toggle_sidebar_item,
