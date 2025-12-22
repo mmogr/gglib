@@ -9,6 +9,7 @@ interface UseMccMenuActionsArgs {
     refreshModels: () => void;
     addModelFromFile: () => void;
     showDownloads: () => void;
+    showChat: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
@@ -16,6 +17,7 @@ interface UseMccMenuActionsArgs {
   }) => void;
   selectedModelId: number | null;
   servers: ServerInfo[];
+  models: Array<{ id?: number; name?: string }>;
   loadServers: () => Promise<void>;
   stopServer: (modelId: number) => Promise<void>;
   removeModel: (id: number, force?: boolean) => Promise<void>;
@@ -27,12 +29,14 @@ interface UseMccMenuActionsArgs {
   chatSessionModelId: number | null;
   closeChatSession: () => void;
   openChatSession: (modelId: number, view: 'chat' | 'console') => void;
+  onOpenServeModal?: () => void;
 }
 
 export function useMccMenuActions({
   onRegisterMenuActions,
   selectedModelId,
   servers,
+  models,
   loadServers,
   stopServer,
   removeModel,
@@ -44,6 +48,7 @@ export function useMccMenuActions({
   chatSessionModelId,
   closeChatSession,
   openChatSession,
+  onOpenServeModal,
 }: UseMccMenuActionsArgs) {
   useEffect(() => {
     if (!onRegisterMenuActions) return;
@@ -61,8 +66,31 @@ export function useMccMenuActions({
         setSidebarTab('add');
         setActiveSubTab('browse');
       },
-      startServer: () => {
+      showChat: () => {
+        // Open chat for selected model if it has a running server
         if (selectedModelId) {
+          const server = servers.find((s) => s.model_id === selectedModelId);
+          if (server) {
+            openChatSession(selectedModelId, 'chat');
+          } else {
+            // No server running - still open chat page, it will show "server not running" message
+            // For now, we need a server to open chat, so we'll just select the model
+            // The ChatPage will handle showing the appropriate message
+            const selectedModel = models.find(m => m.id === selectedModelId);
+            if (selectedModel) {
+              // We can't open chat without a server yet, so just ensure model is selected
+              // TODO: Update ChatPage to handle no-server state
+              selectModel(selectedModelId);
+            }
+          }
+        }
+      },
+      startServer: () => {
+        if (selectedModelId && onOpenServeModal) {
+          // Open the serve modal for the selected model
+          onOpenServeModal();
+        } else if (selectedModelId) {
+          // Fallback: if no modal callback, just load servers (old behavior)
           loadServers();
         }
       },
@@ -79,6 +107,18 @@ export function useMccMenuActions({
       },
       removeModel: async () => {
         if (!selectedModelId) return;
+        
+        // Find model name for confirmation
+        const selectedModel = models.find(m => m.id === selectedModelId);
+        const modelName = selectedModel?.name || 'this model';
+        
+        // Show confirmation dialog
+        const confirmed = window.confirm(
+          `Are you sure you want to remove "${modelName}" from the library?\n\nThis will not delete the model file from disk.`
+        );
+        
+        if (!confirmed) return;
+        
         await removeModel(selectedModelId, false);
         syncMenuStateSilent();
       },
@@ -97,6 +137,7 @@ export function useMccMenuActions({
     onRegisterMenuActions,
     selectedModelId,
     servers,
+    models,
     loadServers,
     stopServer,
     removeModel,
@@ -108,5 +149,6 @@ export function useMccMenuActions({
     chatSessionModelId,
     closeChatSession,
     openChatSession,
+    onOpenServeModal,
   ]);
 }
