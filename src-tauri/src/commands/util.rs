@@ -46,3 +46,21 @@ pub async fn sync_menu_state(
 ) -> Result<(), String> {
     state_sync::sync_menu_state_internal(&app, &state).await
 }
+
+/// Update proxy running state and sync menu.
+///
+/// Called by frontend when proxy is started or stopped to keep menu in sync.
+#[tauri::command]
+pub async fn set_proxy_state(
+    running: bool,
+    port: Option<u16>,
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    // Update proxy state
+    *state.proxy_enabled.write().await = running;
+    *state.proxy_port.write().await = port;
+
+    // Sync menu state
+    state_sync::sync_menu_state_internal(&app, &state).await
+}
