@@ -199,11 +199,12 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
     let show_chat_item =
         MenuItem::with_id(app, ids::SHOW_CHAT, "Show Chat", true, Some("CmdOrCtrl+2"))?;
 
+    // Toggle sidebar is currently not visually implemented in the UI
     let toggle_sidebar_item = MenuItem::with_id(
         app,
         ids::TOGGLE_SIDEBAR,
         "Toggle Sidebar",
-        true,
+        false, // Disabled until visual implementation is added
         Some("CmdOrCtrl+\\"),
     )?;
 
