@@ -1,6 +1,7 @@
 //! Menu event handling.
 
 use crate::app::events::{emit_or_log, names};
+use crate::app::AppState;
 use crate::menu::ids;
 use tauri::{AppHandle, Manager};
 use tracing::debug;

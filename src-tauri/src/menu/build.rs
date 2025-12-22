@@ -170,7 +170,7 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
         ids::STOP_PROXY,
         "Stop Proxy",
         false, // Initially disabled (proxy not running)
-        None,
+        None::<&str>,
     )?;
 
     let copy_proxy_url_item = MenuItem::with_id(
