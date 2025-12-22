@@ -32,6 +32,7 @@ interface ModelControlCenterPageProps {
     refreshModels: () => void;
     addModelFromFile: () => void;
     showDownloads: () => void;
+    showChat: () => void;
     startServer: () => void;
     stopServer: () => void;
     removeModel: () => void;
@@ -87,6 +88,9 @@ export default function ModelControlCenterPage({
   // Ref for file input (for menu-triggered file add)
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Ref for opening serve modal from menu
+  const openServeModalRef = useRef<(() => void) | null>(null);
+  
   // Panel width state (percentages) - now just two columns
   const { leftPanelWidth, layoutRef, handleMouseDown } = useMccLayout();
 
@@ -109,6 +113,7 @@ export default function ModelControlCenterPage({
     onRegisterMenuActions,
     selectedModelId,
     servers,
+    models,
     loadServers,
     stopServer,
     removeModel,
@@ -120,6 +125,7 @@ export default function ModelControlCenterPage({
     chatSessionModelId: chatSession?.modelId ?? null,
     closeChatSession: () => setChatSession(null),
     openChatSession,
+    onOpenServeModal: () => openServeModalRef.current?.(),
   });
 
   const {
@@ -281,6 +287,7 @@ export default function ModelControlCenterPage({
             getModelTags={getModelTags}
             onRefresh={handleRefreshAll}
             queueStatus={queueStatus}
+            onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
           />
         </div>
       </div>
