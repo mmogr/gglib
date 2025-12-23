@@ -2,6 +2,8 @@ import { FC } from 'react';
 import type { GgufModel } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
+import { Icon } from '../../ui/Icon';
+import { Copy, ExternalLink } from 'lucide-react';
 
 interface ModelMetadataGridProps {
   model: GgufModel;
@@ -51,7 +53,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
               onClick={() => copyToClipboard(model.file_path)}
               title="Copy path"
             >
-              📋
+              <Icon icon={Copy} size={14} />
             </button>
           </span>
         </div>
@@ -69,7 +71,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
                 title="Open on HuggingFace"
                 aria-label="Open on HuggingFace"
               >
-                🤗
+                <Icon icon={ExternalLink} size={14} />
               </button>
             </span>
           </div>

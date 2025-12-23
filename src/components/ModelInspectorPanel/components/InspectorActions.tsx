@@ -1,4 +1,6 @@
 import { FC } from 'react';
+import { Check, Pencil, Rocket, Square, Trash2, X } from 'lucide-react';
+import { Icon } from '../../ui/Icon';
 
 interface InspectorActionsProps {
   isRunning: boolean;
@@ -30,25 +32,40 @@ export const InspectorActions: FC<InspectorActionsProps> = ({
         onClick={onToggleServer}
         disabled={isEditMode}
       >
-        {isRunning ? '⏹️ Stop Endpoint' : '🚀 Start Endpoint'}
+        <span className="inline-flex items-center gap-2">
+          <Icon icon={isRunning ? Square : Rocket} size={16} />
+          {isRunning ? 'Stop Endpoint' : 'Start Endpoint'}
+        </span>
       </button>
       <div className="secondary-actions">
         {isEditMode ? (
           <>
             <button className="btn btn-primary" onClick={onSave}>
-              ✓ Save
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={Check} size={14} />
+                Save
+              </span>
             </button>
             <button className="btn btn-secondary" onClick={onCancel}>
-              ✕ Cancel
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={X} size={14} />
+                Cancel
+              </span>
             </button>
           </>
         ) : (
           <>
             <button className="btn btn-secondary" onClick={onEdit}>
-              ✏️ Edit
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={Pencil} size={14} />
+                Edit
+              </span>
             </button>
             <button className="btn btn-secondary" onClick={onDelete}>
-              🗑️ Delete
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={Trash2} size={14} />
+                Delete
+              </span>
             </button>
           </>
         )}

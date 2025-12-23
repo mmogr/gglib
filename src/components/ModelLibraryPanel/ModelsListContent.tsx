@@ -1,6 +1,8 @@
 import { FC } from 'react';
+import { Box, Plus } from 'lucide-react';
 import { GgufModel, ServerInfo } from '../../types';
 import { formatParamCount } from '../../utils/format';
+import { Icon } from '../ui/Icon';
 
 interface ModelsListContentProps {
   models: GgufModel[];
@@ -31,7 +33,9 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
   if (models.length === 0) {
     return (
       <div className="empty-state">
-        <div className="empty-icon">📦</div>
+        <div className="empty-icon" aria-hidden>
+          <Icon icon={Box} size={20} />
+        </div>
         <h3>No models yet</h3>
         <p>Add your first model to get started!</p>
         <div className="empty-actions">
@@ -39,7 +43,10 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
             className="btn btn-primary" 
             onClick={onSwitchToAddTab}
           >
-            ➕ Add Models
+            <span className="inline-flex items-center gap-2">
+              <Icon icon={Plus} size={14} />
+              Add Models
+            </span>
           </button>
         </div>
       </div>
