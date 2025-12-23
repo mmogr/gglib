@@ -16,6 +16,7 @@ import {
 } from "../services/clients/mcp";
 import type { McpServerInfo } from "../services/clients/mcp";
 import { Icon } from "./ui/Icon";
+import { Button } from "./ui/Button";
 import styles from "./McpServersPanel.module.css";
 
 interface McpServersPanelProps {
@@ -173,21 +174,23 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
           </span>
         </div>
         <div className={styles.headerActions}>
-          <button
+          <Button
             type="button"
-            className="btn btn-secondary btn-sm"
+            variant="secondary"
+            size="sm"
             onClick={refresh}
           >
             Refresh
-          </button>
+          </Button>
           {onAddServer && (
-            <button
+            <Button
               type="button"
-              className="btn btn-primary btn-sm"
+              variant="primary"
+              size="sm"
               onClick={onAddServer}
             >
               Add Server
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -212,13 +215,13 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
             Add servers for web search, file access, and more.
           </p>
           {onAddServer && (
-            <button
+            <Button
               type="button"
-              className="btn btn-primary"
+              variant="primary"
               onClick={onAddServer}
             >
               Add Your First Server
-            </button>
+            </Button>
           )}
         </div>
       ) : (
@@ -283,54 +286,59 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                 </div>
                 <div className={styles.serverActions}>
                   {!info.server.is_valid && info.server.server_type === "stdio" && (
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-warning btn-sm"
+                      variant="warning"
+                      size="sm"
                       onClick={() => handleAutoFix(info)}
                       disabled={isLoading}
                       title="Attempt to resolve executable path automatically"
                     >
                       Auto-fix
-                    </button>
+                    </Button>
                   )}
                   {isRunning ? (
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-secondary btn-sm"
+                      variant="secondary"
+                      size="sm"
                       onClick={() => handleStop(info)}
                       disabled={isLoading}
                     >
                       {isLoading ? "..." : "Stop"}
-                    </button>
+                    </Button>
                   ) : (
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-primary btn-sm"
+                      variant="primary"
+                      size="sm"
                       onClick={() => handleStart(info)}
                       disabled={isLoading || !info.server.enabled}
                     >
                       {isLoading ? "..." : "Start"}
-                    </button>
+                    </Button>
                   )}
                   {onEditServer && (
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-secondary btn-sm"
+                      variant="secondary"
+                      size="sm"
                       onClick={() => onEditServer(info)}
                       disabled={isLoading}
                     >
                       Edit
-                    </button>
+                    </Button>
                   )}
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-danger btn-sm"
+                    variant="danger"
+                    size="sm"
                     onClick={() => handleRemove(info)}
                     disabled={isLoading || isRunning}
                     title={isRunning ? "Stop server before removing" : undefined}
                   >
                     Remove
-                  </button>
+                  </Button>
                 </div>
               </div>
             );
