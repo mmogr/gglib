@@ -76,6 +76,14 @@ export async function stopMcpServer(id: McpServerId): Promise<void> {
 }
 
 /**
+ * List tools available across MCP servers.
+ */
+export async function listMcpTools(): Promise<McpTool[]> {
+  const servers = await getTransport().listMcpServers();
+  return servers.flatMap((info) => info.tools ?? []);
+}
+
+/**
  * Call an MCP tool on a specific server.
  */
 export async function callMcpTool(

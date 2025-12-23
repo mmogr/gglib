@@ -33,6 +33,10 @@ describe('useTags', () => {
 
   describe('initial state and loading', () => {
     it('starts with loading state', async () => {
+      // Prevent the mount effect from resolving after the test ends.
+      // This avoids React "not wrapped in act(...)" warnings for this specific test.
+      vi.mocked(listTags).mockImplementation(() => new Promise<string[]>(() => {}));
+
       const { result } = renderHook(() => useTags());
 
       expect(result.current.loading).toBe(true);

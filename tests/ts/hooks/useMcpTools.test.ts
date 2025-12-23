@@ -60,6 +60,10 @@ describe('useMcpTools', () => {
 
   describe('initial state and loading', () => {
     it('starts with loading state', () => {
+      // Prevent the mount effect from resolving after the test ends.
+      // This avoids React "not wrapped in act(...)" warnings for this specific test.
+      mockListMcpServers.mockImplementation(() => new Promise(() => {}));
+
       const { result } = renderHook(() => useMcpTools());
       
       expect(result.current).toBeDefined();
@@ -161,6 +165,10 @@ describe('useMcpTools', () => {
     it('can be called before loading completes', async () => {
       const toolResult = { success: true };
       mockCallMcpTool.mockResolvedValue(toolResult);
+
+      // Keep the tool-loading effect pending so it doesn't resolve and update state
+      // after this test completes.
+      mockListMcpServers.mockImplementation(() => new Promise(() => {}));
 
       const { result } = renderHook(() => useMcpTools());
 

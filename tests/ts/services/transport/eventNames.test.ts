@@ -29,12 +29,14 @@ describe('Event Names Contract', () => {
         'download:completed',
         'download:failed',
         'download:cancelled',
+        'download:queue_snapshot',
+        'download:queue_run_complete',
       ]);
     });
 
     it('maintains consistent array length', () => {
       // This protects against accidental additions/removals
-      expect(DOWNLOAD_EVENT_NAMES).toHaveLength(5);
+      expect(DOWNLOAD_EVENT_NAMES).toHaveLength(7);
     });
 
     it('contains only string literals', () => {

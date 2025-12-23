@@ -93,6 +93,12 @@ describe('useMcpServers', () => {
 
   describe('initial state and loading', () => {
     it('starts with loading state', async () => {
+      // Prevent the mount effect from resolving after the test ends.
+      // This avoids React "not wrapped in act(...)" warnings for this specific test.
+      vi.mocked(listMcpServers).mockImplementation(
+        () => new Promise<McpServerInfo[]>(() => {})
+      );
+
       const { result } = renderHook(() => useMcpServers());
 
       expect(result.current.loading).toBe(true);
@@ -380,11 +386,16 @@ describe('useMcpServers', () => {
       });
 
       // First call throws
-      await expect(
-        act(async () => {
+      let firstError: unknown;
+      await act(async () => {
+        try {
           await result.current.addServer({ name: 'New', type: 'stdio', enabled: true, auto_start: false, env: [] });
-        })
-      ).rejects.toThrow('First error');
+        } catch (error) {
+          firstError = error;
+        }
+      });
+      expect(firstError).toBeInstanceOf(Error);
+      expect((firstError as Error).message).toBe('First error');
 
       // Second call succeeds
       await act(async () => {

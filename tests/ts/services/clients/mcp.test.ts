@@ -34,7 +34,6 @@ describe('mcp client', () => {
     removeMcpServer: vi.fn(),
     startMcpServer: vi.fn(),
     stopMcpServer: vi.fn(),
-    listMcpTools: vi.fn(),
     callMcpTool: vi.fn(),
   };
 
@@ -116,14 +115,25 @@ describe('mcp client', () => {
       expect(mockTransport.stopMcpServer).toHaveBeenCalledWith(1);
     });
 
-    it('listMcpTools delegates to transport', async () => {
+    it('listMcpTools aggregates tools from listMcpServers', async () => {
       const mockTools = [{ name: 'tool1' }, { name: 'tool2' }];
-      mockTransport.listMcpTools.mockResolvedValue(mockTools);
+      mockTransport.listMcpServers.mockResolvedValue([
+        {
+          server: { id: 1, name: 'A', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          status: 'running',
+          tools: [mockTools[0]],
+        },
+        {
+          server: { id: 2, name: 'B', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          status: 'running',
+          tools: [mockTools[1]],
+        },
+      ]);
 
       const result = await listMcpTools();
 
-      expect(mockTransport.listMcpTools).toHaveBeenCalled();
-      expect(result).toBe(mockTools);
+      expect(mockTransport.listMcpServers).toHaveBeenCalled();
+      expect(result).toEqual(mockTools);
     });
 
     it('callMcpTool delegates to transport', async () => {
