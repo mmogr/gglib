@@ -1,7 +1,9 @@
 import { FC } from 'react';
+import { ExternalLink } from 'lucide-react';
 import type { GgufModel } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
+import { Icon } from '../../ui/Icon';
 
 interface ModelEditFormProps {
   model: GgufModel;
@@ -78,7 +80,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
                 title="Open on HuggingFace"
                 aria-label="Open on HuggingFace"
               >
-                🤗
+                <Icon icon={ExternalLink} size={14} />
               </button>
             </span>
           </div>

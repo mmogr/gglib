@@ -1,8 +1,12 @@
 import { FC, useState } from 'react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Download, Loader2, XCircle } from 'lucide-react';
 import { LlamaInstallProgress } from '../hooks/useLlamaStatus';
 import { formatBytes } from '../utils/format';
+import { installLlama } from '../services/platform/llamaInstall';
+import { Button } from './ui/Button';
+import { Icon } from './ui/Icon';
+import { Modal } from './ui/Modal';
 import styles from './LlamaInstallModal.module.css';
-import { invoke } from '@tauri-apps/api/core';
 
 interface LlamaInstallModalProps {
   isOpen?: boolean;
@@ -52,7 +56,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
     setLocalError(null);
     
     try {
-      await invoke('install_llama');
+      await installLlama();
       // Installation successful
       if (onInstalled) {
         onInstalled();
@@ -70,155 +74,132 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Error-triggered mode UI
-  if (metadata) {
+  const renderProgress = () => {
+    if (!installing || !progress) return null;
+
+    const isIndeterminate = progress.status === 'started';
+
     return (
-      <div className={styles.overlay}>
-        <div className={styles.modal}>
-          <div className={styles.icon}>
-            {installing ? '⏳' : '🦙'}
-          </div>
-          
-          <h2 className={styles.title}>
-            llama-server Not Installed
-          </h2>
-          
-          <div className={styles.description}>
-            <p>
-              The llama-server binary was not found at:
-            </p>
-            <code className={styles.path}>{metadata.expectedPath}</code>
-            
-            {metadata.legacyPath && (
-              <>
-                <p style={{ marginTop: '1rem' }}>
-                  Found an older installation at:
-                </p>
-                <code className={styles.path}>{metadata.legacyPath}</code>
-                <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                  Consider moving or symlinking it to the new location.
-                </p>
-              </>
-            )}
-            
-            <p style={{ marginTop: '1rem' }}>
-              Reason: <strong>{metadata.reason}</strong>
-            </p>
-          </div>
-
-          {error && (
-            <div className={styles.error}>{error}</div>
-          )}
-
-          {!installing && (
-            <div className={styles.actions}>
-              <button 
-                className={styles.installButton}
-                onClick={handleErrorModeInstall}
-              >
-                Install Now
-              </button>
-              <button 
-                className={styles.skipButton}
-                onClick={onClose}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
-          {installing && (
-            <div className={styles.progressContainer}>
-              <div className={styles.progressBar}>
-                <div className={`${styles.progressBarFill} ${styles.indeterminate}`} />
-              </div>
-              <div className={styles.progressMessage}>Installing llama.cpp...</div>
-            </div>
+      <div className={styles.progressBlock}>
+        <div className={styles.progressBar}>
+          <div
+            className={`${styles.progressBarFill} ${isIndeterminate ? styles.indeterminate : ''}`}
+            style={!isIndeterminate ? { width: `${progress.percentage}%` } : undefined}
+          />
+        </div>
+        <div className={styles.progressMeta}>
+          <span>{progress.percentage.toFixed(1)}%</span>
+          {progress.total > 0 && (
+            <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
           )}
         </div>
+        <div className={styles.progressMessage}>{progress.message}</div>
       </div>
     );
-  }
+  };
 
-  return (
-    <div className={styles.overlay}>
-      <div className={styles.modal}>
-        <div className={styles.icon}>
-          {isCompleted ? '✅' : isError ? '❌' : '🦙'}
+  const renderMetadataContent = () => (
+    <>
+      <div className={styles.lede}>
+        <div className={styles.iconCircle}>
+          <Icon icon={installing ? Loader2 : AlertTriangle} size={28} className={installing ? styles.iconSpin : ''} />
         </div>
-        
-        <h2 className={styles.title}>
-          {isCompleted ? 'Installation Complete!' : 'llama.cpp Required'}
-        </h2>
-        
-        {!installing && !isCompleted && (
-          <p className={styles.description}>
-            {canDownload 
-              ? 'gglib needs llama.cpp to run models. Pre-built binaries are available for your platform and will be downloaded automatically (~15 MB).'
-              : 'gglib needs llama.cpp to run models. Please build from source using the CLI: gglib llama install'}
-          </p>
-        )}
+        <div>
+          <h2 className={styles.title}>llama-server Not Installed</h2>
+          <p className={styles.subtitle}>{metadata?.reason}</p>
+        </div>
+      </div>
 
-        {error && !installing && (
-          <div className={styles.error}>{error}</div>
-        )}
-
-        {installing && progress && (
-          <div className={styles.progressContainer}>
-            <div className={styles.progressBar}>
-              <div 
-                className={`${styles.progressBarFill} ${progress.status === 'started' ? styles.indeterminate : ''}`}
-                style={progress.status !== 'started' ? { width: `${progress.percentage}%` } : undefined}
-              />
-            </div>
-            <div className={styles.progressDetails}>
-              <span>{progress.percentage.toFixed(1)}%</span>
-              {progress.total > 0 && (
-                <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
-              )}
-            </div>
-            <div className={styles.progressMessage}>{progress.message}</div>
-          </div>
-        )}
-
-        {isCompleted && (
-          <p className={styles.success}>
-            llama.cpp is ready! You can now serve models.
-          </p>
-        )}
-
-        {!installing && !isCompleted && canDownload && (
-          <div className={styles.actions}>
-            <button 
-              className={styles.installButton}
-              onClick={onInstall}
-              disabled={installing}
-            >
-              Install llama.cpp
-            </button>
-            {onSkip && (
-              <button 
-                className={styles.skipButton}
-                onClick={onSkip}
-              >
-                Skip for now
-              </button>
-            )}
-          </div>
-        )}
-
-        {!installing && !isCompleted && !canDownload && onSkip && (
-          <div className={styles.actions}>
-            <button 
-              className={styles.skipButton}
-              onClick={onSkip}
-            >
-              I understand
-            </button>
+      <div className={styles.block}>
+        <p className={styles.description}>The llama-server binary was not found at:</p>
+        <code className={styles.code}>{metadata?.expectedPath}</code>
+        {metadata?.legacyPath && (
+          <div className={styles.callout}>
+            <p className={styles.calloutTitle}>Older installation detected</p>
+            <code className={styles.code}>{metadata.legacyPath}</code>
+            <p className={styles.calloutNote}>Move or symlink it to the expected path to reuse.</p>
           </div>
         )}
       </div>
-    </div>
+
+      {error ? <div className={styles.error}>{error}</div> : null}
+
+      <div className={styles.actions}>
+        <Button onClick={handleErrorModeInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
+          Install now
+        </Button>
+        <Button variant="ghost" onClick={onClose} disabled={installing}>
+          Cancel
+        </Button>
+      </div>
+
+      {installing ? renderProgress() : null}
+    </>
+  );
+
+  const renderStandardContent = () => (
+    <>
+      <div className={styles.lede}>
+        <div className={styles.iconCircle}>
+          <Icon
+            icon={isCompleted ? CheckCircle2 : isError ? XCircle : AlertCircle}
+            size={28}
+            className={installing ? styles.iconPulse : ''}
+          />
+        </div>
+        <div>
+          <h2 className={styles.title}>{isCompleted ? 'Installation complete' : 'llama.cpp required'}</h2>
+          {!installing && !isCompleted && (
+            <p className={styles.subtitle}>
+              {canDownload
+                ? 'We will download a prebuilt binary for your platform (~15 MB).'
+                : 'Please build llama.cpp via the CLI: gglib llama install'}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {error && !installing ? <div className={styles.error}>{error}</div> : null}
+
+      {renderProgress()}
+
+      {isCompleted ? (
+        <p className={styles.success}>llama.cpp is ready! You can now serve models.</p>
+      ) : null}
+
+      {!installing && !isCompleted && canDownload ? (
+        <div className={styles.actions}>
+          <Button onClick={onInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
+            Install llama.cpp
+          </Button>
+          {onSkip ? (
+            <Button variant="ghost" onClick={onSkip} disabled={installing}>
+              Skip for now
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!installing && !isCompleted && !canDownload && onSkip ? (
+        <div className={styles.actions}>
+          <Button variant="ghost" onClick={onSkip}>
+            I understand
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <Modal
+      open={isOpen}
+      onClose={onClose ?? (() => {})}
+      title="Llama installation"
+      size="md"
+      preventClose={installing}
+    >
+      <div className={styles.content}>{metadata ? renderMetadataContent() : renderStandardContent()}</div>
+    </Modal>
   );
 };
 

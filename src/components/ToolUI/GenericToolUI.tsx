@@ -5,6 +5,17 @@
 
 import React from 'react';
 import { makeAssistantToolUI } from '@assistant-ui/react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Loader2,
+  Wrench,
+  XCircle,
+} from 'lucide-react';
+import { Icon } from '../ui/Icon';
 import styles from './ToolUI.module.css';
 
 /**
@@ -14,17 +25,19 @@ const StatusBadge: React.FC<{
   status: 'running' | 'complete' | 'error' | 'incomplete';
 }> = ({ status }) => {
   const statusConfig = {
-    running: { icon: '⏳', label: 'Running', className: styles.statusRunning },
-    complete: { icon: '✅', label: 'Complete', className: styles.statusComplete },
-    error: { icon: '❌', label: 'Error', className: styles.statusError },
-    incomplete: { icon: '⚠️', label: 'Incomplete', className: styles.statusIncomplete },
+    running: { icon: Loader2, label: 'Running', className: styles.statusRunning },
+    complete: { icon: CheckCircle2, label: 'Complete', className: styles.statusComplete },
+    error: { icon: XCircle, label: 'Error', className: styles.statusError },
+    incomplete: { icon: AlertTriangle, label: 'Incomplete', className: styles.statusIncomplete },
   };
 
   const config = statusConfig[status];
 
   return (
     <span className={`${styles.statusBadge} ${config.className}`}>
-      <span className={styles.statusIcon}>{config.icon}</span>
+      <span className={styles.statusIcon} aria-hidden>
+        <Icon icon={config.icon} size={14} />
+      </span>
       <span className={styles.statusLabel}>{config.label}</span>
     </span>
   );
@@ -66,7 +79,9 @@ const JsonViewer: React.FC<{
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
       >
-        <span className={styles.jsonToggleIcon}>{expanded ? '▼' : '▶'}</span>
+        <span className={styles.jsonToggleIcon} aria-hidden>
+          <Icon icon={expanded ? ChevronDown : ChevronRight} size={14} />
+        </span>
         <span className={styles.jsonLabel}>{label}</span>
         {!expanded && (
           <span className={styles.jsonPreview}>
@@ -112,7 +127,9 @@ export const GenericToolUI = makeAssistantToolUI<
     return (
       <div className={styles.toolCard}>
         <div className={styles.toolHeader}>
-          <span className={styles.toolIcon}>🔧</span>
+          <span className={styles.toolIcon} aria-hidden>
+            <Icon icon={Wrench} size={14} />
+          </span>
           <span className={styles.toolName}>{displayName}</span>
           <StatusBadge status={displayStatus} />
         </div>
@@ -175,7 +192,9 @@ export const TimeToolUI = makeAssistantToolUI<
     return (
       <div className={styles.toolCard}>
         <div className={styles.toolHeader}>
-          <span className={styles.toolIcon}>🕐</span>
+          <span className={styles.toolIcon} aria-hidden>
+            <Icon icon={Clock3} size={14} />
+          </span>
           <span className={styles.toolName}>{displayName}</span>
           <StatusBadge status={displayStatus} />
         </div>

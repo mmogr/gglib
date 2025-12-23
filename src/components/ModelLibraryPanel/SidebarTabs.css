@@ -45,6 +45,14 @@
 
 .sidebar-tab-icon {
   font-size: var(--font-size-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-tab-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .sidebar-tab-label {

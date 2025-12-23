@@ -3,7 +3,7 @@
  * Wraps @tauri-apps/api/event with typed handlers.
  */
 
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { Unsubscribe, EventHandler } from '../types/common';
 import type { AppEventType, AppEventMap, ServerEvent, DownloadEvent, LogEvent } from '../types/events';
 import {
@@ -11,6 +11,8 @@ import {
   SERVER_EVENT_NAMES,
   LOG_EVENT_NAMES,
 } from './eventNames';
+
+const eventModulePromise = import('@tauri-apps/api/event');
 
 /**
  * Map AppEventType to the set of granular event names from the backend.
@@ -41,20 +43,24 @@ export function subscribeTauriEvent<K extends AppEventType>(
 
   // Subscribe to each granular event name
   const setupPromises = eventNames.map((eventName) =>
-    listen<AppEventMap[K]>(eventName, (event) => {
-      if (!cancelled) {
-        handler(event.payload);
-      }
-    }).then((fn) => {
-      if (cancelled) {
-        // Already unsubscribed before listener was ready - clean up immediately
-        fn();
-      } else {
-        unlistenFns.push(fn);
-      }
-    }).catch((error) => {
-      console.error(`Failed to subscribe to Tauri event ${eventName}:`, error);
-    })
+    eventModulePromise
+      .then(({ listen }) =>
+        listen<AppEventMap[K]>(eventName, (event) => {
+          if (!cancelled) {
+            handler(event.payload);
+          }
+        }).then((fn) => {
+          if (cancelled) {
+            // Already unsubscribed before listener was ready - clean up immediately
+            fn();
+          } else {
+            unlistenFns.push(fn);
+          }
+        })
+      )
+      .catch((error) => {
+        console.error(`Failed to subscribe to Tauri event ${eventName}:`, error);
+      })
   );
 
   // Wait for all listeners to be set up

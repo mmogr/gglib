@@ -1,7 +1,9 @@
 import { FC, useRef, useEffect } from 'react';
+import { RotateCcw } from 'lucide-react';
 import { ServerInfo } from '../../types';
 import { ServerList } from '../ServerList';
 import { useClickOutside } from '../../hooks/useClickOutside';
+import { Icon } from '../ui/Icon';
 import './RunsPopover.css';
 
 interface RunsPopoverProps {
@@ -55,7 +57,7 @@ const RunsPopover: FC<RunsPopoverProps> = ({
             onClick={onRefresh}
             title="Refresh servers"
           >
-            🔄
+            <Icon icon={RotateCcw} size={14} />
           </button>
         )}
       </div>

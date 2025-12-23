@@ -4,8 +4,10 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { Calculator, Clock3, FileText, Search, SunMedium, Wrench } from 'lucide-react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { getToolRegistry, type ToolDefinition } from '../../services/tools';
+import { Icon } from '../ui/Icon';
 import styles from './ToolsPopover.module.css';
 
 /**
@@ -22,13 +24,13 @@ const formatToolName = (name: string): string => {
 /**
  * Get an icon for a tool based on its name.
  */
-const getToolIcon = (name: string): string => {
-  if (name.includes('time') || name.includes('date')) return '🕐';
-  if (name.includes('file') || name.includes('read') || name.includes('write')) return '📄';
-  if (name.includes('search') || name.includes('web')) return '🔍';
-  if (name.includes('calc') || name.includes('math')) return '🔢';
-  if (name.includes('weather')) return '🌤️';
-  return '🔧';
+const getToolIcon = (name: string) => {
+  if (name.includes('time') || name.includes('date')) return Clock3;
+  if (name.includes('file') || name.includes('read') || name.includes('write')) return FileText;
+  if (name.includes('search') || name.includes('web')) return Search;
+  if (name.includes('calc') || name.includes('math')) return Calculator;
+  if (name.includes('weather')) return SunMedium;
+  return Wrench;
 };
 
 export const ToolsPopover: React.FC = () => {
@@ -117,7 +119,7 @@ export const ToolsPopover: React.FC = () => {
         onClick={() => setIsOpen(!isOpen)}
         title="Tools"
       >
-        🔧
+        <Icon icon={Wrench} size={14} />
         {enabledTools.size > 0 && (
           <span className={styles.badge}>{enabledTools.size}</span>
         )}
@@ -126,7 +128,10 @@ export const ToolsPopover: React.FC = () => {
       {isOpen && (
         <div className={styles.popover} ref={popoverRef}>
           <div className={styles.header}>
-            <span className={styles.title}>🔧 Tools</span>
+            <span className={styles.title}>
+              <Icon icon={Wrench} size={14} />
+              <span style={{ marginLeft: 6 }}>Tools</span>
+            </span>
             <span className={styles.count}>
               {enabledTools.size}/{tools.length} active
             </span>
@@ -178,7 +183,9 @@ export const ToolsPopover: React.FC = () => {
                           onChange={(e) => handleToggleTool(name, e.target.checked)}
                           className={styles.checkbox}
                         />
-                        <span className={styles.toolIcon}>{icon}</span>
+                        <span className={styles.toolIcon} aria-hidden>
+                          <Icon icon={icon} size={14} />
+                        </span>
                         <div className={styles.toolInfo}>
                           <span className={styles.toolName}>{displayName}</span>
                           <span className={styles.toolDescription}>{description}</span>

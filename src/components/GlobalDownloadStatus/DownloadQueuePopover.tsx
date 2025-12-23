@@ -1,4 +1,5 @@
 import { FC, useRef, useState, useCallback, useMemo } from 'react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import {
   cancelShardGroup,
@@ -6,6 +7,7 @@ import {
   reorderQueue,
 } from '../../services/clients/downloads';
 import type { DownloadQueueItem } from '../../services/transport/types/downloads';
+import { Icon } from '../ui/Icon';
 import styles from './DownloadQueuePopover.module.css';
 
 /**
@@ -175,7 +177,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
                 title="Move up"
                 aria-label="Move up in queue"
               >
-                ▲
+                <Icon icon={ChevronUp} size={16} />
               </button>
               <button
                 className={styles.reorderBtn}
@@ -184,7 +186,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
                 title="Move down"
                 aria-label="Move down in queue"
               >
-                ▼
+                <Icon icon={ChevronDown} size={16} />
               </button>
             </div>
             
@@ -209,7 +211,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
               disabled={isProcessing}
               title="Remove from queue"
             >
-              ✕
+              <Icon icon={X} size={14} />
             </button>
           </div>
         ))}

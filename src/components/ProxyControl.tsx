@@ -1,7 +1,9 @@
 import { FC, useState, useEffect, useRef } from "react";
+import { ClipboardCopy, Power, Repeat2 } from "lucide-react";
 import { getProxyStatus, startProxy, stopProxy } from "../services/clients/servers";
 import { setProxyState } from "../services/platform";
 import { useClickOutside } from "../hooks/useClickOutside";
+import { Icon } from "./ui/Icon";
 import styles from './ProxyControl.module.css';
 
 interface ProxyStatus {
@@ -107,7 +109,9 @@ const ProxyControl: FC<ProxyControlProps> = ({
         onClick={() => setIsOpen(!isOpen)}
         type="button"
       >
-        <span className="proxy-icon">🔄</span>
+        <span className="proxy-icon" aria-hidden>
+          <Icon icon={Repeat2} size={16} />
+        </span>
         <span className="proxy-label">Proxy</span>
         {status.running && <span className={dotClasses}></span>}
       </button>
@@ -129,7 +133,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                   <div className={styles.urlDisplay}>
                     <code>http://{config.host}:{status.port}/v1</code>
                     <button onClick={copyProxyUrl} className={styles.copyButton} title="Copy URL">
-                      📋
+                      <Icon icon={ClipboardCopy} size={14} />
                     </button>
                   </div>
                 </div>
@@ -146,7 +150,10 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 onClick={handleStop}
                 disabled={loading}
               >
-                {loading ? 'Stopping...' : 'Stop Proxy'}
+                <span className="inline-flex items-center gap-2">
+                  <Icon icon={Power} size={14} />
+                  {loading ? 'Stopping...' : 'Stop Proxy'}
+                </span>
               </button>
             </>
           ) : (
@@ -192,7 +199,10 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 onClick={handleStart}
                 disabled={loading}
               >
-                {loading ? 'Starting...' : 'Start Proxy'}
+                <span className="inline-flex items-center gap-2">
+                  <Icon icon={Power} size={14} />
+                  {loading ? 'Starting...' : 'Start Proxy'}
+                </span>
               </button>
 
               <div className={styles.helpText}>

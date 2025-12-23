@@ -1,7 +1,9 @@
 import { FC } from 'react';
+import { Plus, X } from 'lucide-react';
 import type { ConversationSummary } from '../../services/clients/chat';
-import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
+import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
+import { Icon } from '../ui/Icon';
 import './ConversationListPanel.css';
 
 interface ConversationListPanelProps {
@@ -80,14 +82,20 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
               onClick={onNewConversation}
               title="New conversation"
             >
-              ＋ New
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={Plus} size={14} />
+                New
+              </span>
             </button>
             <button
               className="btn btn-danger btn-sm"
               onClick={onClose}
               title="Stop server and close chat"
             >
-              ✕ Close
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={X} size={14} />
+                Close
+              </span>
             </button>
           </div>
         </div>
@@ -136,7 +144,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
                   }}
                   title="Delete conversation"
                 >
-                  ✕
+                  <Icon icon={X} size={12} />
                 </button>
               </button>
             ))}

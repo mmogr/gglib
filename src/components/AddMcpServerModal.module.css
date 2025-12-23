@@ -165,18 +165,14 @@
 }
 
 .addBtn {
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding-left: 0;
+  padding-right: 0;
   font-size: var(--font-size-xs);
-  background: rgba(99, 102, 241, 0.15);
   color: var(--color-primary);
-  border: none;
-  border-radius: var(--radius-base);
-  cursor: pointer;
 }
 
 .addBtn:hover {
-  background: var(--color-primary);
-  color: white;
+  color: var(--color-primary);
 }
 
 /* Checkboxes */

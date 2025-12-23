@@ -5,6 +5,8 @@ import {
   ActionBarPrimitive,
   useMessage,
 } from '@assistant-ui/react';
+import { Bot, Copy, Pencil, Trash2, User as UserIcon } from 'lucide-react';
+import { Icon } from '../../ui/Icon';
 import { parseThinkingContent } from '../../../utils/thinkingParser';
 import ThinkingBlock from '../ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
@@ -41,7 +43,9 @@ export const AssistantMessageBubble: React.FC = () => {
   return (
     <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-assistant-message')}>
       <div className="chat-message-meta">
-        <div className="chat-message-avatar">🤖</div>
+        <div className="chat-message-avatar" aria-hidden>
+          <Icon icon={Bot} size={18} />
+        </div>
         <div>
           <div className="chat-message-author">Assistant</div>
           <div className="chat-message-timestamp">
@@ -95,7 +99,9 @@ export const UserMessageBubble: React.FC = () => {
   return (
     <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-user-message')}>
       <div className="chat-message-meta">
-        <div className="chat-message-avatar">🧑‍💻</div>
+        <div className="chat-message-avatar" aria-hidden>
+          <Icon icon={UserIcon} size={18} />
+        </div>
         <div>
           <div className="chat-message-author">You</div>
           <div className="chat-message-timestamp">{timestamp}</div>
@@ -106,10 +112,10 @@ export const UserMessageBubble: React.FC = () => {
       </div>
       <ActionBarPrimitive.Root className="chat-message-actions">
         <ActionBarPrimitive.Copy className="chat-action-btn" title="Copy message" aria-label="Copy message">
-          📋
+          <Icon icon={Copy} size={14} />
         </ActionBarPrimitive.Copy>
         <ActionBarPrimitive.Edit className="chat-action-btn chat-edit-btn" title="Edit message" aria-label="Edit message">
-          ✏️
+          <Icon icon={Pencil} size={14} />
         </ActionBarPrimitive.Edit>
         <button
           className="chat-action-btn chat-delete-btn"
@@ -117,7 +123,7 @@ export const UserMessageBubble: React.FC = () => {
           title="Delete message"
           aria-label="Delete message"
         >
-          🗑️
+          <Icon icon={Trash2} size={14} />
         </button>
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
@@ -142,7 +148,9 @@ export const EditComposer: React.FC = () => {
   return (
     <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-user-message', 'chat-edit-mode')}>
       <div className="chat-message-meta">
-        <div className="chat-message-avatar">🧑‍💻</div>
+        <div className="chat-message-avatar" aria-hidden>
+          <Icon icon={UserIcon} size={18} />
+        </div>
         <div>
           <div className="chat-message-author">You</div>
           <div className="chat-message-timestamp">{timestamp}</div>

@@ -1,9 +1,11 @@
 import { FC, useState } from 'react';
+import { Box, CheckCircle2, Download, RotateCcw } from 'lucide-react';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
 import type { DownloadProgressView, DownloadUiState } from '../../hooks/useDownloadManager';
 import type { QueueRunSummary } from '../../services/transport/types/events';
 import { formatBytes, formatTime } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
+import { Icon } from '../ui/Icon';
 import styles from './GlobalDownloadStatus.module.css';
 
 interface GlobalDownloadStatusProps {
@@ -74,7 +76,9 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
       <div className={styles.container}>
         <div className={styles.completionSection}>
           <div className={styles.completionHeader}>
-            <span className={styles.completionIcon}>✅</span>
+            <span className={styles.completionIcon} aria-hidden>
+              <Icon icon={CheckCircle2} size={16} />
+            </span>
             <span className={styles.completionTitle}>
               {uniqueTotal === 1 ? 'Download Complete' : `${uniqueTotal} Downloads Complete`}
             </span>
@@ -84,7 +88,10 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               <>
                 {displayItems.map((item, idx) => (
                   <div key={idx} className={styles.completedItem}>
-                    📦 {item.display_name}
+                    <span className={styles.completedIcon} aria-hidden>
+                      <Icon icon={Box} size={14} />
+                    </span>
+                    {item.display_name}
                   </div>
                 ))}
                 {remaining > 0 && (
@@ -95,14 +102,20 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               </>
             ) : (
               <div className={styles.completedItem}>
-                📦 {uniqueTotal} {uniqueTotal === 1 ? 'model' : 'models'} downloaded
+                <span className={styles.completedIcon} aria-hidden>
+                  <Icon icon={Box} size={14} />
+                </span>
+                {uniqueTotal} {uniqueTotal === 1 ? 'model' : 'models'} downloaded
                 {lastQueueSummary.truncated && ' (details truncated)'}
               </div>
             )}
           </div>
           {hasRetries && (
             <div className={styles.retryNotice}>
-              🔁 {totalAttempts} total attempts
+              <span className={styles.retryIcon} aria-hidden>
+                <Icon icon={RotateCcw} size={14} />
+              </span>
+              {totalAttempts} total attempts
             </div>
           )}
           <button className={styles.dismissBtn} onClick={onDismissSummary}>
@@ -124,7 +137,9 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
       <div className={styles.progressSection}>
         <div className={styles.progressHeader}>
           <div className={styles.progressInfo}>
-            <span className={styles.statusIcon}>📥</span>
+            <span className={styles.statusIcon} aria-hidden>
+              <Icon icon={Download} size={16} />
+            </span>
             <span className={styles.statusText}>
               {isSharded && shard ? `Downloading shard ${shard.index + 1}/${shard.total}` : 'Downloading'}
             </span>

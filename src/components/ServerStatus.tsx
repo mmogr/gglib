@@ -1,8 +1,10 @@
 import { FC, useEffect, useState } from "react";
+import { Circle, MessageCircle, RotateCcw, Square } from "lucide-react";
 import { listServers, getProxyStatus } from "../services/clients/servers";
 import { safeStopServer } from "../services/server/safeActions";
 import type { ServerInfo } from "../types";
 import type { ProxyStatus } from "../services/transport/types/proxy";
+import { Icon } from "./ui/Icon";
 import styles from './ServerStatus.module.css';
 
 interface ServerStatusProps {
@@ -67,7 +69,9 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
       {/* Proxy Status */}
       {proxyStatus && proxyStatus.running && (
         <div className={`${styles.statusItem} ${styles.proxyStatus}`}>
-          <span className={styles.statusIcon}>🔄</span>
+          <span className={styles.statusIcon} aria-hidden>
+            <Icon icon={RotateCcw} size={16} />
+          </span>
           <div className={styles.statusInfo}>
             <strong>Proxy Active</strong>
             <span className={styles.statusDetail}>
@@ -83,8 +87,8 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
       {/* Running Servers */}
       {servers.map((server) => (
         <div key={server.model_id} className={styles.statusItem}>
-          <span className={`${styles.statusIcon} ${isServerHealthy(server) ? styles.healthy : ''}`}>
-            {isServerHealthy(server) ? '🟢' : '🔴'}
+          <span className={`${styles.statusIcon} ${isServerHealthy(server) ? styles.healthy : ''}`} aria-hidden>
+            <Icon icon={Circle} size={14} />
           </span>
           <div className={styles.statusInfo}>
             <strong>{server.model_name}</strong>
@@ -96,7 +100,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
               onClick={() => onOpenChat(server.port, server.model_name)}
               title="Open chat"
             >
-              💬
+              <Icon icon={MessageCircle} size={14} />
             </button>
           )}
           <button
@@ -104,7 +108,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
             onClick={() => handleStopServer(server.model_id)}
             title="Stop server"
           >
-            ⏹️
+            <Icon icon={Square} size={14} />
           </button>
         </div>
       ))}

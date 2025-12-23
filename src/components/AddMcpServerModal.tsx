@@ -6,6 +6,10 @@ import { FC, useState, useCallback, useEffect, FormEvent } from "react";
 import type { NewMcpServer, McpServerInfo, McpEnvEntry } from "../services/clients/mcp";
 import type { McpServerType } from "../services/transport/types/mcp";
 import styles from "./AddMcpServerModal.module.css";
+import { Modal } from "./ui/Modal";
+import { Button } from "./ui/Button";
+import { Icon } from "./ui/Icon";
+import { Plus, X } from "lucide-react";
 
 interface AddMcpServerModalProps {
   isOpen: boolean;
@@ -198,36 +202,17 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     [name, serverType, command, args, workingDir, pathExtra, url, envVars, autoStart, enabled, onSave, onClose]
   );
 
-  const handleOverlayClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget && !saving) {
-        onClose();
-      }
-    },
-    [onClose, saving]
-  );
-
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onMouseDown={handleOverlayClick}>
-      <div className="modal modal-md">
-        <div className="modal-header">
-          <h2 className="modal-title">
-            {isEditing ? "Edit MCP Server" : "Add MCP Server"}
-          </h2>
-          <button
-            className="modal-close"
-            onClick={onClose}
-            aria-label="Close"
-            disabled={saving}
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <form onSubmit={handleSubmit} className={styles.form}>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title={isEditing ? "Edit MCP Server" : "Add MCP Server"}
+      size="lg"
+      preventClose={saving}
+    >
+      <form onSubmit={handleSubmit} className={styles.form}>
             {/* Templates (only for new servers) */}
             {!isEditing && (
               <div className={styles.section}>
@@ -384,14 +369,17 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <label className={styles.label}>Environment Variables</label>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={styles.addBtn}
                   onClick={addEnvVar}
                   disabled={saving}
                 >
-                  + Add
-                </button>
+                  <Icon icon={Plus} size={14} />
+                  Add variable
+                </Button>
               </div>
               {envVars.length === 0 ? (
                 <p className={styles.hint}>
@@ -424,7 +412,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                         disabled={saving}
                         aria-label="Remove variable"
                       >
-                        ×
+                        <Icon icon={X} size={14} />
                       </button>
                     </div>
                   ))}
@@ -461,26 +449,24 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             )}
 
             <div className="modal-footer">
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary"
+                variant="ghost"
                 onClick={onClose}
                 disabled={saving}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
-                className="btn btn-primary"
+                variant="primary"
                 disabled={saving}
               >
                 {saving ? "Saving..." : isEditing ? "Update" : "Add Server"}
-              </button>
+              </Button>
             </div>
-          </form>
-        </div>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 };
 

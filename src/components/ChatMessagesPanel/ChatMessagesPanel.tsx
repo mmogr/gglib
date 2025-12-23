@@ -7,11 +7,13 @@ import {
   useThread,
 } from '@assistant-ui/react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
+import { AlertTriangle, Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { getMessages, deleteMessage } from '../../services/clients/chat';
 import type { ConversationSummary } from '../../services/clients/chat';
 import type { ToastType } from '../Toast';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ToolsPopover } from '../ToolsPopover';
+import { Icon } from '../ui/Icon';
 import {
   MessageActionsContext,
   AssistantMessageBubble,
@@ -328,7 +330,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             title="Rename conversation"
             onClick={startRenaming}
           >
-            ✏️
+            <Icon icon={Pencil} size={14} />
           </button>
           <button
             className={cx('icon-btn icon-btn-sm', isGeneratingTitle && 'generating')}
@@ -345,7 +347,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             {isGeneratingTitle ? (
               <span className="icon-btn-spinner" aria-label="Generating title…" />
             ) : (
-              '✨'
+              <Icon icon={Sparkles} size={14} />
             )}
           </button>
           <span className={cx('chat-status-badge', isThreadRunning && 'active')}>
@@ -355,10 +357,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         <div className="chat-header-actions">
           <ToolsPopover />
           <button className="icon-btn icon-btn-sm" onClick={onClearConversation} title="Restart conversation">
-            ↺
+            <Icon icon={RotateCcw} size={14} />
           </button>
           <button className="icon-btn icon-btn-sm" onClick={onExportConversation} title="Export conversation">
-            ⤓
+            <Icon icon={Download} size={14} />
           </button>
         </div>
       </div>
@@ -443,7 +445,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         {/* Server stopped banner */}
         {!isServerConnected && (
           <div className="chat-server-stopped-banner">
-            <span>⚠️ Server not running — Chat is read-only</span>
+            <span className="inline-flex items-center gap-2">
+              <Icon icon={AlertTriangle} size={16} />
+              Server not running — Chat is read-only
+            </span>
             {onClose && (
               <button type="button" className="btn btn-sm" onClick={onClose}>
                 Close

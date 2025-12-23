@@ -1,4 +1,5 @@
 import { useState, FC, useMemo } from "react";
+import { Brain, Package, Rocket, RotateCcw, Trash2, Wrench, X } from "lucide-react";
 import { GgufModel } from "../types";
 import { removeModel } from "../services/clients/models";
 import { serveModel } from "../services/clients/servers";
@@ -7,6 +8,7 @@ import { TransportError, LlamaServerNotInstalledMetadata } from "../services/tra
 import { LlamaInstallModal } from "./LlamaInstallModal";
 import { ServerHealthIndicator } from "./ServerHealthIndicator";
 import { useIsServerRunning } from "../services/serverRegistry";
+import { Icon } from "./ui/Icon";
 
 interface ModelListProps {
   models: GgufModel[];
@@ -45,7 +47,10 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove }) => 
           {isRunning && <ServerHealthIndicator modelId={model.id ?? 0} />}
         </div>
         {model.hf_repo_id && (
-          <div className="name-secondary">📦 {model.hf_repo_id}</div>
+          <div className="name-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+            <Icon icon={Package} size={14} className="shrink-0" />
+            <span>{model.hf_repo_id}</span>
+          </div>
         )}
       </div>
       <div className="cell">{formatParamCount(model.param_count_b)}</div>
@@ -62,7 +67,7 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove }) => 
           className="action-button serve-button"
           title="Serve model"
         >
-          🚀
+          <Icon icon={Rocket} size={16} />
         </button>
         <button
           onClick={() => onRemove(model)}
@@ -70,7 +75,7 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove }) => 
           disabled={removing === model.id}
           title="Remove model"
         >
-          {removing === model.id ? "..." : "🗑️"}
+          {removing === model.id ? "..." : <Icon icon={Trash2} size={16} />}
         </button>
       </div>
     </div>
@@ -183,7 +188,12 @@ const ModelList: FC<ModelListProps> = ({
       <div className="list-header">
         <h2>Your Models ({models.length})</h2>
         <button onClick={onRefresh} className="refresh-button" disabled={loading}>
-          {loading ? "Loading..." : "🔄 Refresh"}
+          {loading ? "Loading..." : (
+            <span className="inline-flex items-center gap-2">
+              <Icon icon={RotateCcw} size={16} />
+              Refresh
+            </span>
+          )}
         </button>
       </div>
 
@@ -226,7 +236,7 @@ const ModelList: FC<ModelListProps> = ({
                 onClick={() => setServingModel(null)}
                 disabled={isServing}
               >
-                ✕
+                <Icon icon={X} size={14} />
               </button>
             </div>
             
@@ -255,7 +265,8 @@ const ModelList: FC<ModelListProps> = ({
                       }}
                       title="Model supports chain-of-thought reasoning with thinking tags"
                     >
-                      🧠 Reasoning
+                      <Icon icon={Brain} size={14} />
+                      Reasoning
                     </span>
                   )}
                   {hasTag(servingModel, 'agent') && (
@@ -274,7 +285,8 @@ const ModelList: FC<ModelListProps> = ({
                       }}
                       title="Model supports tool/function calling for agentic workflows"
                     >
-                      🔧 Agent
+                      <Icon icon={Wrench} size={14} />
+                      Agent
                     </span>
                   )}
                 </div>

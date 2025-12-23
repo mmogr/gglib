@@ -6,6 +6,7 @@
  */
 
 import { FC, useState, useCallback } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useMcpServers } from "../hooks/useMcpServers";
 import {
   isServerRunning,
@@ -14,6 +15,7 @@ import {
   resolveMcpServerPath,
 } from "../services/clients/mcp";
 import type { McpServerInfo } from "../services/clients/mcp";
+import { Icon } from "./ui/Icon";
 import styles from "./McpServersPanel.module.css";
 
 interface McpServersPanelProps {
@@ -239,7 +241,8 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                     </span>
                     {!info.server.is_valid && (
                       <span className={styles.invalidBadge} title={info.server.last_error || "Invalid configuration"}>
-                        ⚠️ Needs relink
+                        <Icon icon={AlertTriangle} size={14} />
+                        <span style={{ marginLeft: 6 }}>Needs relink</span>
                       </span>
                     )}
                     {info.server.server_type === "stdio" && info.server.config.command && (
