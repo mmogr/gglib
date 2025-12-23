@@ -9,8 +9,9 @@ import styles from "./AddMcpServerModal.module.css";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
-import { Icon } from "./ui/Icon";
-import { Plus, X } from "lucide-react";
+import { ServerTemplatePicker, type ServerTemplate } from "./AddMcpServerModal/ServerTemplatePicker";
+import { ServerTypeConfig } from "./AddMcpServerModal/ServerTypeConfig";
+import { EnvVarManager } from "./AddMcpServerModal/EnvVarManager";
 
 interface AddMcpServerModalProps {
   isOpen: boolean;
@@ -19,42 +20,6 @@ interface AddMcpServerModalProps {
   /** If provided, the modal is in edit mode */
   editingServer?: McpServerInfo;
 }
-
-/** Preset MCP server templates */
-const SERVER_TEMPLATES = [
-  {
-    name: "Tavily Web Search",
-    type: "stdio" as McpServerType,
-    command: "npx",
-    args: ["-y", "tavily-mcp"],
-    envKeys: ["TAVILY_API_KEY"],
-    description: "Search the web using Tavily API (may download package on first run)",
-  },
-  {
-    name: "Filesystem Access",
-    type: "stdio" as McpServerType,
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed"],
-    envKeys: [],
-    description: "Read/write files in allowed directories (may download package on first run)",
-  },
-  {
-    name: "GitHub",
-    type: "stdio" as McpServerType,
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-github"],
-    envKeys: ["GITHUB_PERSONAL_ACCESS_TOKEN"],
-    description: "Interact with GitHub repositories (may download package on first run)",
-  },
-  {
-    name: "Brave Search",
-    type: "stdio" as McpServerType,
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-brave-search"],
-    envKeys: ["BRAVE_API_KEY"],
-    description: "Search the web using Brave Search API (may download package on first run)",
-  },
-];
 
 export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   isOpen,
@@ -112,7 +77,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     }
   }, [isOpen, editingServer]);
 
-  const applyTemplate = useCallback((template: (typeof SERVER_TEMPLATES)[0]) => {
+  const applyTemplate = useCallback((template: ServerTemplate) => {
     setName(template.name);
     setServerType(template.type);
     setCommand(template.command);
@@ -215,24 +180,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     >
       <form onSubmit={handleSubmit} className={styles.form}>
             {/* Templates (only for new servers) */}
-            {!isEditing && (
-              <div className={styles.section}>
-                <label className={styles.label}>Quick Start Templates</label>
-                <div className={styles.templates}>
-                  {SERVER_TEMPLATES.map((template) => (
-                    <button
-                      key={template.name}
-                      type="button"
-                      className={styles.templateBtn}
-                      onClick={() => applyTemplate(template)}
-                    >
-                      <span className={styles.templateName}>{template.name}</span>
-                      <span className={styles.templateDesc}>{template.description}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {!isEditing && <ServerTemplatePicker onSelectTemplate={applyTemplate} />}
 
             {/* Basic Info */}
             <div className={styles.section}>
@@ -250,170 +198,36 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
               />
             </div>
 
-            <div className={styles.section}>
-              <label className={styles.label}>Connection Type</label>
-              <div className={styles.radioGroup}>
-                <label className={styles.radioLabel}>
-                  <input
-                    type="radio"
-                    name="serverType"
-                    checked={serverType === "stdio"}
-                    onChange={() => setServerType("stdio")}
-                    disabled={saving}
-                  />
-                  <span>Stdio (spawn process)</span>
-                </label>
-                <label className={styles.radioLabel}>
-                  <input
-                    type="radio"
-                    name="serverType"
-                    checked={serverType === "sse"}
-                    onChange={() => setServerType("sse")}
-                    disabled={saving}
-                  />
-                  <span>SSE (connect to URL)</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Stdio-specific fields */}
-            {serverType === "stdio" && (
-              <>
-                <div className={styles.section}>
-                  <label className={styles.label} htmlFor="mcp-command">
-                    Command *
-                  </label>
-                  <Input
-                    id="mcp-command"
-                    type="text"
-                    value={command}
-                    onChange={(e) => setCommand(e.target.value)}
-                    placeholder="npx, python3, node"
-                    disabled={saving}
-                  />
-                  <span className={styles.hint}>
-                    Single executable name or path (no arguments). Will be resolved via PATH.
-                  </span>
-                </div>
-
-                <div className={styles.section}>
-                  <label className={styles.label} htmlFor="mcp-args">
-                    Arguments
-                  </label>
-                  <Input
-                    id="mcp-args"
-                    type="text"
-                    value={args}
-                    onChange={(e) => setArgs(e.target.value)}
-                    placeholder="-y @tavily/mcp-server"
-                    disabled={saving}
-                  />
-                  <span className={styles.hint}>Space-separated arguments</span>
-                </div>
-
-                <div className={styles.section}>
-                  <label className={styles.label} htmlFor="mcp-working-dir">
-                    Working Directory
-                  </label>
-                  <Input
-                    id="mcp-working-dir"
-                    type="text"
-                    value={workingDir}
-                    onChange={(e) => setWorkingDir(e.target.value)}
-                    placeholder="(optional) /absolute/path/to/directory"
-                    disabled={saving}
-                  />
-                  <span className={styles.hint}>Must be absolute if specified</span>
-                </div>
-
-                <div className={styles.section}>
-                  <label className={styles.label} htmlFor="mcp-path-extra">
-                    Additional PATH Entries
-                  </label>
-                  <Input
-                    id="mcp-path-extra"
-                    type="text"
-                    value={pathExtra}
-                    onChange={(e) => setPathExtra(e.target.value)}
-                    placeholder="(optional) /custom/bin:/other/path"
-                    disabled={saving}
-                  />
-                  <span className={styles.hint}>Colon-separated paths added to child process PATH</span>
-                </div>
-              </>
-            )}
-
-            {/* SSE-specific fields */}
-            {serverType === "sse" && (
-              <div className={styles.section}>
-                <label className={styles.label} htmlFor="mcp-url">
-                  Server URL *
-                </label>
-                <Input
-                  id="mcp-url"
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="http://localhost:3001/sse"
-                  disabled={saving}
-                />
-              </div>
-            )}
+            <ServerTypeConfig
+              serverType={serverType}
+              setServerType={setServerType}
+              stdioProps={{
+                command,
+                setCommand,
+                args,
+                setArgs,
+                workingDir,
+                setWorkingDir,
+                pathExtra,
+                setPathExtra,
+                disabled: saving,
+              }}
+              sseProps={{
+                url,
+                setUrl,
+                disabled: saving,
+              }}
+              disabled={saving}
+            />
 
             {/* Environment Variables */}
-            <div className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <label className={styles.label}>Environment Variables</label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.addBtn}
-                  onClick={addEnvVar}
-                  disabled={saving}
-                >
-                  <Icon icon={Plus} size={14} />
-                  Add variable
-                </Button>
-              </div>
-              {envVars.length === 0 ? (
-                <p className={styles.hint}>
-                  Add environment variables for API keys and secrets
-                </p>
-              ) : (
-                <div className={styles.envVars}>
-                  {envVars.map(([key, value], index) => (
-                    <div key={index} className={styles.envRow}>
-                      <Input
-                        type="text"
-                        className={styles.envKey}
-                        value={key}
-                        onChange={(e) => updateEnvVar(index, 0, e.target.value)}
-                        placeholder="KEY"
-                        disabled={saving}
-                      />
-                      <Input
-                        type="password"
-                        className={styles.envValue}
-                        value={value}
-                        onChange={(e) => updateEnvVar(index, 1, e.target.value)}
-                        placeholder="value"
-                        disabled={saving}
-                      />
-                      <button
-                        type="button"
-                        className={styles.envRemove}
-                        onClick={() => removeEnvVar(index)}
-                        disabled={saving}
-                        aria-label="Remove variable"
-                      >
-                        <Icon icon={X} size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <EnvVarManager
+              envVars={envVars}
+              onAdd={addEnvVar}
+              onRemove={removeEnvVar}
+              onUpdate={updateEnvVar}
+              disabled={saving}
+            />
 
             {/* Options */}
             <div className={styles.section}>
