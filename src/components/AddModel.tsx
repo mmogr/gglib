@@ -2,6 +2,7 @@ import { useState, FC, FormEvent } from "react";
 import { addModel } from "../services/clients/models";
 import { pickGgufFile, isDesktop } from "../services/platform";
 import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
 import styles from './AddModel.module.css';
 
 interface AddModelProps {
@@ -57,13 +58,13 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
         <div className="form-group">
           <label htmlFor="filePath">Model File Path:</label>
           <div className={styles.fileInputGroup}>
-            <input
+            <Input
               type="text"
               id="filePath"
               value={filePath}
               onChange={(e) => setFilePath(e.target.value)}
               placeholder="/path/to/your/model.gguf"
-              className={`form-input ${styles.formInput}`}
+              className={styles.formInput}
             />
             <button
               type="button"

@@ -12,6 +12,7 @@ import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Row } from "./primitives";
 import styles from "./ModelList.module.css";
+import { Input } from "./ui/Input";
 
 interface ModelListProps {
   models: GgufModel[];
@@ -278,7 +279,7 @@ const ModelList: FC<ModelListProps> = ({
                   Context Length
                   <span className="label-hint"> (optional)</span>
                 </label>
-                <input
+                <Input
                   id="context-input"
                   type="number"
                   className="context-input"

@@ -15,6 +15,8 @@ import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ToolsPopover } from '../ToolsPopover';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+import { Textarea } from '../ui/Textarea';
 import {
   MessageActionsContext,
   AssistantMessageBubble,
@@ -312,7 +314,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       <div className="mcc-panel-header chat-header">
         <div className="chat-title-group">
           {isRenaming ? (
-            <input
+            <Input
               className="chat-title-input"
               value={titleDraft}
               autoFocus
@@ -402,7 +404,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           </div>
           {isEditingPrompt && (
             <>
-              <textarea
+              <Textarea
                 ref={promptTextareaRef}
                 className="chat-prompt-textarea"
                 value={systemPromptDraft}

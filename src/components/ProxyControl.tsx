@@ -5,6 +5,7 @@ import { setProxyState } from "../services/platform";
 import { useClickOutside } from "../hooks/useClickOutside";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
 import styles from './ProxyControl.module.css';
 
 interface ProxyStatus {
@@ -169,7 +170,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 <div className={styles.settingsSection}>
                   <div className={styles.formGroup}>
                     <label>Host:</label>
-                    <input
+                    <Input
                       type="text"
                       value={config.host}
                       onChange={(e) => setConfig({ ...config, host: e.target.value })}
@@ -177,7 +178,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                   </div>
                   <div className={styles.formGroup}>
                     <label>Proxy Port:</label>
-                    <input
+                    <Input
                       type="number"
                       value={config.port}
                       onChange={(e) => setConfig({ ...config, port: parseInt(e.target.value) })}
@@ -185,7 +186,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                   </div>
                   <div className={styles.formGroup}>
                     <label>Default Context:</label>
-                    <input
+                    <Input
                       type="number"
                       value={config.default_context}
                       onChange={(e) => setConfig({ ...config, default_context: parseInt(e.target.value) })}

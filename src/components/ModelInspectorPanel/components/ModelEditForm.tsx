@@ -4,6 +4,7 @@ import type { GgufModel } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
 import { Icon } from '../../ui/Icon';
+import { Input } from '../../ui/Input';
 
 interface ModelEditFormProps {
   model: GgufModel;
@@ -42,7 +43,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
         )}
         <div className="metadata-row">
           <span className="metadata-label">Quantization:</span>
-          <input
+          <Input
             type="text"
             className="metadata-value-edit"
             value={editedQuantization}
@@ -58,7 +59,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
         )}
         <div className="metadata-row">
           <span className="metadata-label">Path:</span>
-          <input
+          <Input
             type="text"
             className="metadata-value-edit path-edit"
             value={editedFilePath}

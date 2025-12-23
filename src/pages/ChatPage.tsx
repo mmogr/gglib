@@ -6,6 +6,9 @@ import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI, TimeToolUI } from '../components/ToolUI';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Textarea } from '../components/ui/Textarea';
 import { useGglibRuntime, TOOL_ENABLED_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
@@ -20,7 +23,6 @@ import {
   DEFAULT_TITLE_GENERATION_PROMPT,
 } from '../services/clients/chat';
 import type { ConversationSummary } from '../services/clients/chat';
-import { Button } from '../components/ui/Button';
 import './ChatPage.css';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
@@ -454,7 +456,7 @@ export default function ChatPage({
             <h3 className="chat-modal-title">Start a new chat</h3>
             <label className="chat-modal-label">
               Title
-              <input
+              <Input
                 className="chat-modal-input"
                 value={newConversationTitle}
                 onChange={(e) => setNewConversationTitle(e.target.value)}
@@ -463,7 +465,7 @@ export default function ChatPage({
             </label>
             <label className="chat-modal-label">
               System Prompt
-              <textarea
+              <Textarea
                 className="chat-modal-textarea"
                 value={newConversationPrompt}
                 onChange={(e) => setNewConversationPrompt(e.target.value)}

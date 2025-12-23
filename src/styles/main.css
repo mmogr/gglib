@@ -9,7 +9,6 @@
 @import './base/typography.css';
 
 /* Components Layer - Reusable UI Components */
-@import './components/forms.css';
 @import './components/modals.css';
 
 /* Utilities Layer - Helper Classes */

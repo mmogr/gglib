@@ -2,6 +2,7 @@ import { FC } from 'react';
 import { Loader2, Play } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
+import { Input } from '../../ui/Input';
 import { Modal } from '../../ui/Modal';
 import type { GgufModel, AppSettings } from '../../../types';
 import { formatParamCount } from '../../../utils/format';
@@ -58,7 +59,7 @@ export const ServeModal: FC<ServeModalProps> = ({
             Context Length
             <span className="label-hint"> (optional)</span>
           </label>
-          <input
+          <Input
             id="context-input"
             type="number"
             className="context-input"
@@ -86,7 +87,7 @@ export const ServeModal: FC<ServeModalProps> = ({
             Port
             <span className="label-hint"> (optional)</span>
           </label>
-          <input
+          <Input
             id="port-input"
             type="number"
             className="context-input"
