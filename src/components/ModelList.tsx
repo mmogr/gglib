@@ -9,6 +9,7 @@ import { LlamaInstallModal } from "./LlamaInstallModal";
 import { ServerHealthIndicator } from "./ServerHealthIndicator";
 import { useIsServerRunning } from "../services/serverRegistry";
 import { Icon } from "./ui/Icon";
+import { Button } from "./ui/Button";
 
 interface ModelListProps {
   models: GgufModel[];
@@ -353,26 +354,19 @@ const ModelList: FC<ModelListProps> = ({
             </div>
             
             <div className="modal-footer">
-              <button 
-                className="btn btn-secondary" 
+              <Button 
+                variant="secondary" 
                 onClick={() => setServingModel(null)}
                 disabled={isServing}
               >
                 Cancel
-              </button>
-              <button 
-                className={`btn btn-primary ${isServing ? 'btn-loading' : ''}`}
+              </Button>
+              <Button 
+                variant="primary"
                 onClick={handleConfirmServe}
-                disabled={isServing}
+                isLoading={isServing}
               >
-                {isServing ? (
-                  <>
-                    <span className="spinner"></span>
-                    Loading model...
-                  </>
-                ) : (
-                  'Start Server'
-                )}
+                {isServing ? 'Loading model...' : 'Start Server'}
               </button>
             </div>
           </div>

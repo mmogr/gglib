@@ -8,6 +8,7 @@ import type { McpServerInfo } from "../services/clients/mcp";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { Modal } from "./ui/Modal";
+import { Button } from "./ui/Button";
 import styles from "./SettingsModal.module.css";
 
 type SettingsTab = "general" | "mcp";
@@ -408,16 +409,16 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 {successMessage && <p className={styles.success} role="status" aria-live="polite">{successMessage}</p>}
 
                 <div className="modal-footer modal-footer-between">
-                  <button type="button" className="btn btn-secondary" onClick={handleRefresh} disabled={loading || saving}>
+                  <Button type="button" variant="secondary" onClick={handleRefresh} disabled={loading || saving}>
                     Refresh
-                  </button>
+                  </Button>
                   <div className={styles.footerActions}>
-                    <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
+                    <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
                       Cancel
-                    </button>
-                    <button type="submit" className="btn btn-primary" disabled={saving}>
+                    </Button>
+                    <Button type="submit" variant="primary" disabled={saving}>
                       {saving ? "Saving…" : "Save changes"}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </form>
