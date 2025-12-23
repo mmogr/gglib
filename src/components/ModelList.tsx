@@ -367,7 +367,7 @@ const ModelList: FC<ModelListProps> = ({
                 isLoading={isServing}
               >
                 {isServing ? 'Loading model...' : 'Start Server'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

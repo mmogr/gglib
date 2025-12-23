@@ -293,12 +293,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
               leftIcon={!isStopping ? <Icon icon={StopCircle} size={18} /> : undefined}
             >
               {isStopping ? 'Stopping...' : 'Stop Server'}
-                <span className="inline-flex items-center gap-2">
-                  <Icon icon={StopCircle} size={18} />
-                  Stop Server
-                </span>
-              )}
-            </button>
+            </Button>
           </section>
         </div>
       </div>

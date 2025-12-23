@@ -490,7 +490,7 @@ export default function ChatPage({
                 disabled={creatingConversation}
               >
                 {creatingConversation ? 'Creating…' : 'Create chat'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
