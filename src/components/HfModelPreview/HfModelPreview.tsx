@@ -1,10 +1,23 @@
 import { FC, useState, useEffect, useCallback } from 'react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  Heart,
+  HelpCircle,
+  Info,
+  Wrench,
+  XCircle,
+} from 'lucide-react';
 import { HfModelSummary, HfQuantization, HfQuantizationsResponse, HfToolSupportResponse, FitStatus } from '../../types';
 import { getHfQuantizations, getHfToolSupport } from '../../services/clients/huggingface';
 import { openUrl } from '../../services/platform';
 import { formatBytes, formatNumber, getHuggingFaceModelUrl } from '../../utils/format';
 import { useSystemMemory } from '../../hooks/useSystemMemory';
 import { useSettings } from '../../hooks/useSettings';
+import { Icon } from '../ui/Icon';
 import styles from './HfModelPreview.module.css';
 
 interface HfModelPreviewProps {
@@ -29,11 +42,11 @@ const FitIndicator: FC<FitIndicatorProps> = ({ sizeBytes, checkFit, getTooltip }
   const status = checkFit(sizeBytes);
   const tooltip = getTooltip(sizeBytes);
 
-  const iconMap: Record<FitStatus, { icon: string; className: string }> = {
-    fits: { icon: '✅', className: styles.fitIndicatorFits },
-    tight: { icon: '⚠️', className: styles.fitIndicatorTight },
-    wont_fit: { icon: '❌', className: styles.fitIndicatorWontFit },
-    unknown: { icon: '❓', className: styles.fitIndicatorUnknown },
+  const iconMap: Record<FitStatus, { icon: typeof CheckCircle2; className: string }> = {
+    fits: { icon: CheckCircle2, className: styles.fitIndicatorFits },
+    tight: { icon: AlertTriangle, className: styles.fitIndicatorTight },
+    wont_fit: { icon: XCircle, className: styles.fitIndicatorWontFit },
+    unknown: { icon: HelpCircle, className: styles.fitIndicatorUnknown },
   };
 
   const { icon, className } = iconMap[status];
@@ -44,7 +57,7 @@ const FitIndicator: FC<FitIndicatorProps> = ({ sizeBytes, checkFit, getTooltip }
       title={tooltip}
       aria-label={tooltip}
     >
-      {icon}
+      <Icon icon={icon} size={14} />
     </span>
   );
 };
@@ -186,7 +199,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
             title="Open on HuggingFace"
             aria-label="Open on HuggingFace"
           >
-            🤗
+            <Icon icon={ExternalLink} size={16} />
           </button>
         </div>
         <div className={styles.modelAuthor}>by {model.author || model.id.split('/')[0]}</div>
@@ -204,21 +217,32 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
               className={styles.toolBadge}
               title={getToolSupportTooltip()}
             >
-              🔧 Tools
-              <span className={styles.infoIcon} aria-hidden="true">ⓘ</span>
+              <span className={styles.toolBadgeIcon} aria-hidden>
+                <Icon icon={Wrench} size={14} />
+              </span>
+              <span>Tools</span>
+              <span className={styles.infoIcon} aria-hidden="true">
+                <Icon icon={Info} size={12} />
+              </span>
             </span>
           )}
           <span className={styles.stat}>
-            <span className={styles.statIcon}>⬇️</span>
+            <span className={styles.statIcon} aria-hidden>
+              <Icon icon={Download} size={14} />
+            </span>
             {formatNumber(model.downloads)}
           </span>
           <span className={styles.stat}>
-            <span className={styles.statIcon}>❤️</span>
+            <span className={styles.statIcon} aria-hidden>
+              <Icon icon={Heart} size={14} />
+            </span>
             {formatNumber(model.likes)}
           </span>
           {model.last_modified && (
             <span className={styles.stat}>
-              <span className={styles.statIcon}>📅</span>
+              <span className={styles.statIcon} aria-hidden>
+                <Icon icon={CalendarClock} size={14} />
+              </span>
               {formatLastModified(model.last_modified)}
             </span>
           )}

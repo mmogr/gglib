@@ -1,8 +1,10 @@
 import { FC } from "react";
+import { Download, ExternalLink, Heart, Wrench } from "lucide-react";
 import { HfModelSummary } from "../../../types";
 import { formatNumber, getHuggingFaceModelUrl } from "../../../utils/format";
 import { useToolSupportCache } from "../../../hooks/useToolSupportCache";
 import { openUrl } from "../../../services/platform";
+import { Icon } from "../../ui/Icon";
 import styles from "../HuggingFaceBrowser.module.css";
 
 export interface ModelCardProps {
@@ -46,7 +48,7 @@ export const ModelCard: FC<ModelCardProps> = ({
                 title="Open on HuggingFace"
                 aria-label="Open on HuggingFace"
               >
-                🤗
+                <Icon icon={ExternalLink} size={14} />
               </button>
             </h3>
             <span className={styles.modelId}>{model.id}</span>
@@ -62,15 +64,19 @@ export const ModelCard: FC<ModelCardProps> = ({
                 className={styles.toolIcon}
                 title="This model likely supports tool/function calling"
               >
-                🔧
+                <Icon icon={Wrench} size={14} />
               </span>
             )}
             <span className={styles.stat}>
-              <span className={styles.statIcon}>⬇️</span>
+              <span className={styles.statIcon} aria-hidden>
+                <Icon icon={Download} size={14} />
+              </span>
               {formatNumber(model.downloads)}
             </span>
             <span className={styles.stat}>
-              <span className={styles.statIcon}>❤️</span>
+              <span className={styles.statIcon} aria-hidden>
+                <Icon icon={Heart} size={14} />
+              </span>
               {formatNumber(model.likes)}
             </span>
           </div>
