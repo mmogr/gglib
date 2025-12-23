@@ -11,9 +11,7 @@
  * @module useThinkingContent
  */
 
-import {
-  parseStreamingThinkingContent,
-} from '../../utils/thinkingParser';
+import { parseStreamingThinkingContent } from '../../utils/thinkingParser';
 import { PartsAccumulator } from './partsAccumulator';
 
 // =============================================================================
@@ -26,6 +24,15 @@ export interface ThinkingContentHandler {
    * Handle a reasoning_content delta from SSE stream.
    * Updates the accumulator's current reasoning block.
    * @param content - The reasoning content delta
+   * @param acc - The parts accumulator to update
+   */
+  handleReasoningDelta(content: string, acc?: PartsAccumulator): void;
+
+  /**
+   * Handle main content delta that may contain inline <think> tags.
+   * Updates the accumulator's text and/or reasoning.
+   * @param content - The main content delta
+   * @param accumulated - The total accumulated main content so far
    * @param acc - The parts accumulator to update
    */
   handleReasoningDelta(content: string, acc: PartsAccumulator): void;
@@ -102,7 +109,7 @@ export function createThinkingContentHandler(): ThinkingContentHandler {
       acc.startReasoningBlock(blockId);
       reasoningStarted = true;
     }
-    
+
     // Append to current reasoning block
     acc.appendToCurrentReasoning(content);
   }
@@ -126,6 +133,10 @@ export function createThinkingContentHandler(): ThinkingContentHandler {
         current.text = parsed.thinking;
       }
       lastInlineThinking = parsed.thinking;
+
+      if (parsed.isThinkingComplete) {
+        reasoningFinalized = true;
+      }
     }
 
     // Update main text (without think tags)

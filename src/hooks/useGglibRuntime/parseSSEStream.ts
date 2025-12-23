@@ -199,10 +199,16 @@ function parseLine(line: string): ParseLineResult {
 
     return null;
   } catch {
-    // Check if this looks like truncated JSON (starts with { but doesn't parse)
+    // If it starts like JSON but doesn't parse, decide whether it's incomplete or malformed.
+    // - Incomplete: likely missing closing brace/bracket (common when chunks split)
+    // - Malformed: looks complete but invalid; skip it so subsequent valid events still parse
     if (dataLine.startsWith('{') || dataLine.startsWith('[')) {
-      // This is likely truncated JSON - return marker to signal caller to buffer
-      return { incomplete: INCOMPLETE_JSON_MARKER, data: dataLine };
+      const trimmedData = dataLine.trimEnd();
+      const endsWithClose = trimmedData.endsWith('}') || trimmedData.endsWith(']');
+      if (!endsWithClose) {
+        return { incomplete: INCOMPLETE_JSON_MARKER, data: dataLine };
+      }
+      return null;
     }
     // Skip non-JSON lines (e.g., comments, keep-alive, event: prefixes)
     return null;
