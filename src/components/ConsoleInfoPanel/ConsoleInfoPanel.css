@@ -137,7 +137,7 @@
 .context-usage-fill[style*="width: 8"],
 .context-usage-fill[style*="width: 9"],
 .context-usage-fill[style*="width: 10"] {
-  background: linear-gradient(90deg, #f97316 0%, #ea580c 100%);
+  background: linear-gradient(90deg, var(--color-warning) 0%, var(--color-warning-hover) 100%);
 }
 
 .context-usage-stats {

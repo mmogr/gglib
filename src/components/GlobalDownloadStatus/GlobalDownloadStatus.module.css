@@ -59,9 +59,9 @@
 }
 
 .cancelBtn {
-  background: rgba(248, 113, 113, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: var(--radius-base);
   padding: 0.3rem 0.75rem;
   font-size: var(--font-size-sm);
@@ -71,20 +71,20 @@
 }
 
 .cancelBtn:hover {
-  background: rgba(248, 113, 113, 0.25);
-  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
 }
 
 .cancelBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  background: rgba(248, 113, 113, 0.1);
-  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
 }
 
 .cancelBtn:disabled:hover {
-  background: rgba(248, 113, 113, 0.1);
-  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
 }
 
 .modelName {
@@ -113,7 +113,7 @@
 
 .progressBarFill {
   height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), #0ea5e9);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-info));
   border-radius: var(--radius-sm);
   transition: width 0.2s ease;
 }
@@ -166,7 +166,7 @@
 .shardLabel {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
-  color: #fbbf24;
+  color: var(--color-warning);
 }
 
 .shardFilename {
@@ -184,7 +184,7 @@
 
 .shardProgressFill {
   height: 100%;
-  background: #fbbf24;
+  background: var(--color-warning);
   border-radius: 2px;
   transition: width 0.2s ease;
 }
@@ -209,7 +209,7 @@
 .completionTitle {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
-  color: #4ade80;
+  color: var(--color-success);
 }
 
 .completedList {
@@ -236,9 +236,9 @@
 
 .dismissBtn {
   align-self: flex-end;
-  background: rgba(74, 222, 128, 0.15);
-  color: #4ade80;
-  border: 1px solid rgba(74, 222, 128, 0.3);
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
   border-radius: var(--radius-base);
   padding: 0.4rem 1.25rem;
   font-size: var(--font-size-sm);

@@ -80,7 +80,7 @@
   gap: 0.25rem;
   padding: var(--spacing-xs) var(--spacing-sm);
   background-color: rgba(37, 99, 235, 0.15);
-  color: #60a5fa;
+  color: var(--color-primary-light);
   border-radius: var(--radius-base);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);

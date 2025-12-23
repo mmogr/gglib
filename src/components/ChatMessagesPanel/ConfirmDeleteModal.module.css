@@ -48,7 +48,7 @@
 }
 
 .warningIcon {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .actions {
