@@ -1,0 +1,68 @@
+import { FC, ReactNode } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
+import { Icon } from "./Icon";
+
+interface ModalProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  description?: ReactNode;
+  children: ReactNode;
+  size?: "sm" | "md" | "lg";
+  preventClose?: boolean;
+}
+
+const sizeClassMap: Record<NonNullable<ModalProps["size"]>, string> = {
+  sm: "modal-sm",
+  md: "modal-md",
+  lg: "modal-lg",
+};
+
+export const Modal: FC<ModalProps> = ({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  size = "md",
+  preventClose = false,
+}) => {
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && preventClose) return;
+    if (!nextOpen) onClose();
+  };
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="modal-overlay" />
+        <DialogPrimitive.Content
+          className={`modal ${sizeClassMap[size]}`}
+          onPointerDownOutside={(event) => {
+            if (preventClose) event.preventDefault();
+          }}
+          onEscapeKeyDown={(event) => {
+            if (preventClose) event.preventDefault();
+          }}
+        >
+          <div className="modal-header">
+            <DialogPrimitive.Title className="modal-title">{title}</DialogPrimitive.Title>
+            <DialogPrimitive.Close asChild>
+              <button
+                className="modal-close"
+                onClick={onClose}
+                aria-label="Close dialog"
+                disabled={preventClose}
+              >
+                <Icon icon={X} size={14} />
+              </button>
+            </DialogPrimitive.Close>
+          </div>
+          {description ? <div className="modal-description">{description}</div> : null}
+          <div className="modal-body">{children}</div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+};
