@@ -276,6 +276,17 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
     try {
       const snapshot = await getDownloadQueue();
       setQueueStatus(snapshot);
+
+      // Keep UI state in sync when we refresh snapshots (tests + cold starts).
+      if (snapshot.current) {
+        setDownloadUiState((prev) => ({
+          activeId: snapshot.current!.id,
+          phase: prev.phase === 'cancelling' ? 'cancelling' : 'active',
+        }));
+      } else if (downloadUiStateRef.current.phase !== 'cancelling') {
+        setDownloadUiState({ activeId: null, phase: null });
+        setCurrentProgress(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue');
     }
@@ -286,8 +297,7 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
 
     // Stable event handler that reads from refs
     const handleEvent = (wrappedEvent: { type: 'download'; event: DownloadEvent }) => {
-      // Unwrap the download event from the AppEvent wrapper
-      const event = wrappedEvent.event;
+      const event: DownloadEvent = wrappedEvent.event;
       
       if (event.type === 'queue_snapshot') {
         const snapshot = snapshotToQueueStatus(event.items, event.max_size);
