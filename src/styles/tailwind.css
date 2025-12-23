@@ -9,36 +9,36 @@
 @import './base/variables.css';
 
 @theme {
-  --color-background: var(--color-background);
-  --color-foreground: var(--color-text);
+  --color-background: var(--ds-color-background);
+  --color-foreground: var(--ds-color-text);
 
-  --color-card: var(--color-surface);
-  --color-card-foreground: var(--color-text);
+  --color-card: var(--ds-color-surface);
+  --color-card-foreground: var(--ds-color-text);
 
-  --color-popover: var(--color-background-elevated);
-  --color-popover-foreground: var(--color-text);
+  --color-popover: var(--ds-color-background-elevated);
+  --color-popover-foreground: var(--ds-color-text);
 
-  --color-primary: var(--color-primary);
-  --color-primary-foreground: #ffffff;
+  --color-primary: var(--ds-color-primary);
+  --color-primary-foreground: var(--ds-color-text);
 
-  --color-secondary: var(--color-surface-elevated);
-  --color-secondary-foreground: var(--color-text);
+  --color-secondary: var(--ds-color-surface-elevated);
+  --color-secondary-foreground: var(--ds-color-text);
 
-  --color-muted: var(--color-background-hover);
-  --color-muted-foreground: var(--color-text-secondary);
+  --color-muted: var(--ds-color-background-hover);
+  --color-muted-foreground: var(--ds-color-text-secondary);
 
-  --color-accent: var(--color-background-hover);
-  --color-accent-foreground: var(--color-text);
+  --color-accent: var(--ds-color-background-hover);
+  --color-accent-foreground: var(--ds-color-text);
 
-  --color-destructive: var(--color-danger);
-  --color-destructive-foreground: #ffffff;
+  --color-destructive: var(--ds-color-danger);
+  --color-destructive-foreground: var(--ds-color-text);
 
-  --color-border: var(--color-border);
-  --color-input: var(--color-background-input);
-  --color-ring: var(--color-border-focus);
+  --color-border: var(--ds-color-border);
+  --color-input: var(--ds-color-background-input);
+  --color-ring: var(--ds-color-primary);
 
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius-md);
-  --radius-lg: var(--radius-lg);
-  --radius-xl: var(--radius-xl);
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius-md);
+  --radius-lg: var(--ds-radius-lg);
+  --radius-xl: var(--ds-radius-xl);
 }

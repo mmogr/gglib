@@ -53,12 +53,6 @@ pub fn handle_update() -> Result<(), String> {
     let update_result = Command::new("npm")
         .arg("update")
         .arg("@assistant-ui/react")
-        .arg("@assistant-ui/react-ai-sdk")
-        .arg("ai")
-        .arg("@ai-sdk/openai")
-        .arg("react-markdown")
-        .arg("remark-gfm")
-        .arg("rehype-highlight")
         .status();
 
     match update_result {
@@ -105,12 +99,6 @@ pub fn handle_status() -> Result<(), String> {
     // Check each required package
     let packages = vec![
         "@assistant-ui/react",
-        "@assistant-ui/react-ai-sdk",
-        "ai",
-        "@ai-sdk/openai",
-        "react-markdown",
-        "remark-gfm",
-        "rehype-highlight",
     ];
 
     let mut all_installed = true;
@@ -142,7 +130,7 @@ pub fn handle_status() -> Result<(), String> {
 
 /// Verify assistant-ui installation
 fn verify_installation() -> bool {
-    let critical_packages = vec!["@assistant-ui/react", "@assistant-ui/react-ai-sdk"];
+    let critical_packages = vec!["@assistant-ui/react"];
 
     for package in critical_packages {
         let parts: Vec<&str> = package.split('/').collect();
