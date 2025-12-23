@@ -4,6 +4,7 @@ import type { ConversationSummary } from '../../services/clients/chat';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import './ConversationListPanel.css';
 
 interface ConversationListPanelProps {
@@ -77,26 +78,24 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
             <h2 className="conversation-list-title">{modelName}</h2>
           </div>
           <div className="conversation-list-actions">
-            <button
-              className="btn btn-primary btn-sm"
+            <Button
+              variant="primary"
+              size="sm"
               onClick={onNewConversation}
               title="New conversation"
+              leftIcon={<Icon icon={Plus} size={14} />}
             >
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={Plus} size={14} />
-                New
-              </span>
-            </button>
-            <button
-              className="btn btn-danger btn-sm"
+              New
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
               onClick={onClose}
               title="Stop server and close chat"
+              leftIcon={<Icon icon={X} size={14} />}
             >
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={X} size={14} />
-                Close
-              </span>
-            </button>
+              Close
+            </Button>
           </div>
         </div>
         

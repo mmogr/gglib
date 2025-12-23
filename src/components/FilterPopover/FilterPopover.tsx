@@ -2,6 +2,7 @@ import { FC, useRef } from 'react';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { RangeSlider } from '../RangeSlider';
 import { ModelFilterOptions } from '../../types';
+import { Button } from '../ui/Button';
 import './FilterPopover.css';
 
 export interface FilterState {
@@ -149,13 +150,15 @@ const FilterPopover: FC<FilterPopoverProps> = ({
       <div className="filter-popover-header">
         <span className="filter-popover-title">Filter Models</span>
         {hasActiveFilters && (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             className="filter-clear-btn"
             onClick={onClearFilters}
             title="Clear all filters"
           >
             Clear
-          </button>
+          </Button>
         )}
       </div>
 

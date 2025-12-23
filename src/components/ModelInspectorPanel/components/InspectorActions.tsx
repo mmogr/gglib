@@ -1,6 +1,7 @@
 import { FC } from 'react';
 import { Check, Pencil, Rocket, Square, Trash2, X } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
+import { Button } from '../../ui/Button';
 
 interface InspectorActionsProps {
   isRunning: boolean;
@@ -27,46 +28,50 @@ export const InspectorActions: FC<InspectorActionsProps> = ({
 }) => {
   return (
     <section className="inspector-section actions-section">
-      <button 
-        className={`btn btn-lg ${isRunning ? 'btn-danger' : 'btn-primary'}`}
+      <Button 
+        variant={isRunning ? 'danger' : 'primary'}
+        size="lg"
+        className="btn-large"
         onClick={onToggleServer}
         disabled={isEditMode}
+        leftIcon={<Icon icon={isRunning ? Square : Rocket} size={16} />}
       >
-        <span className="inline-flex items-center gap-2">
-          <Icon icon={isRunning ? Square : Rocket} size={16} />
-          {isRunning ? 'Stop Endpoint' : 'Start Endpoint'}
-        </span>
-      </button>
+        {isRunning ? 'Stop Endpoint' : 'Start Endpoint'}
+      </Button>
       <div className="secondary-actions">
         {isEditMode ? (
           <>
-            <button className="btn btn-primary" onClick={onSave}>
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={Check} size={14} />
-                Save
-              </span>
-            </button>
-            <button className="btn btn-secondary" onClick={onCancel}>
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={X} size={14} />
-                Cancel
-              </span>
-            </button>
+            <Button 
+              variant="primary"
+              onClick={onSave}
+              leftIcon={<Icon icon={Check} size={14} />}
+            >
+              Save
+            </Button>
+            <Button 
+              variant="secondary"
+              onClick={onCancel}
+              leftIcon={<Icon icon={X} size={14} />}
+            >
+              Cancel
+            </Button>
           </>
         ) : (
           <>
-            <button className="btn btn-secondary" onClick={onEdit}>
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={Pencil} size={14} />
-                Edit
-              </span>
-            </button>
-            <button className="btn btn-secondary" onClick={onDelete}>
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={Trash2} size={14} />
-                Delete
-              </span>
-            </button>
+            <Button 
+              variant="secondary"
+              onClick={onEdit}
+              leftIcon={<Icon icon={Pencil} size={14} />}
+            >
+              Edit
+            </Button>
+            <Button 
+              variant="secondary"
+              onClick={onDelete}
+              leftIcon={<Icon icon={Trash2} size={14} />}
+            >
+              Delete
+            </Button>
           </>
         )}
       </div>

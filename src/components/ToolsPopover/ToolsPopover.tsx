@@ -8,6 +8,7 @@ import { Calculator, Clock3, FileText, Search, SunMedium, Wrench } from 'lucide-
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { getToolRegistry, type ToolDefinition } from '../../services/tools';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import styles from './ToolsPopover.module.css';
 
 /**
@@ -114,16 +115,19 @@ export const ToolsPopover: React.FC = () => {
 
   return (
     <div className={styles.container} ref={containerRef}>
-      <button
-        className={`icon-btn icon-btn-sm ${styles.triggerButton}`}
+      <Button
+        variant="ghost"
+        size="sm"
+        className={styles.triggerButton}
         onClick={() => setIsOpen(!isOpen)}
         title="Tools"
+        iconOnly
       >
         <Icon icon={Wrench} size={14} />
         {enabledTools.size > 0 && (
           <span className={styles.badge}>{enabledTools.size}</span>
         )}
-      </button>
+      </Button>
 
       {isOpen && (
         <div className={styles.popover} ref={popoverRef}>

@@ -14,6 +14,7 @@ import type { ToastType } from '../Toast';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ToolsPopover } from '../ToolsPopover';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import {
   MessageActionsContext,
   AssistantMessageBubble,
@@ -325,15 +326,19 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           ) : (
             <h2 className="chat-title">{activeConversation?.title || 'New Chat'}</h2>
           )}
-          <button
-            className="icon-btn icon-btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             title="Rename conversation"
             onClick={startRenaming}
+            iconOnly
           >
             <Icon icon={Pencil} size={14} />
-          </button>
-          <button
-            className={cx('icon-btn icon-btn-sm', isGeneratingTitle && 'generating')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cx(isGeneratingTitle && 'generating')}
             title={
               !activeConversationId
                 ? 'No active conversation'
@@ -343,25 +348,26 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             }
             onClick={() => generateTitle()}
             disabled={!activeConversationId || !serverPort || isGeneratingTitle || isThreadRunning}
+            iconOnly
           >
             {isGeneratingTitle ? (
               <span className="icon-btn-spinner" aria-label="Generating title…" />
             ) : (
               <Icon icon={Sparkles} size={14} />
             )}
-          </button>
+          </Button>
           <span className={cx('chat-status-badge', isThreadRunning && 'active')}>
             {isThreadRunning ? 'Responding…' : 'Idle'}
           </span>
         </div>
         <div className="chat-header-actions">
           <ToolsPopover />
-          <button className="icon-btn icon-btn-sm" onClick={onClearConversation} title="Restart conversation">
+          <Button variant="ghost" size="sm" onClick={onClearConversation} title="Restart conversation" iconOnly>
             <Icon icon={RotateCcw} size={14} />
-          </button>
-          <button className="icon-btn icon-btn-sm" onClick={onExportConversation} title="Export conversation">
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onExportConversation} title="Export conversation" iconOnly>
             <Icon icon={Download} size={14} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -380,9 +386,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
               {isEditingPrompt ? (
                 <span className="chat-prompt-editing-badge">Editing…</span>
               ) : (
-                <button
-                  type="button"
-                  className="btn btn-sm"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
                     setSystemPromptDraft(activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT);
                     setIsEditingPrompt(true);
@@ -390,7 +396,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   disabled={!activeConversation}
                 >
                   Edit
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -406,17 +412,17 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 onKeyDown={handlePromptKeyDown}
               />
               <div className="chat-prompt-editor-actions">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setSystemPromptDraft(DEFAULT_SYSTEM_PROMPT)}
                 >
                   Reset
-                </button>
+                </Button>
                 <div className="chat-prompt-editor-btns">
-                  <button
-                    type="button"
-                    className="btn btn-sm"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => {
                       setIsEditingPrompt(false);
                       setSystemPromptDraft(activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT);
@@ -424,15 +430,15 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     disabled={savingSystemPrompt}
                   >
                     Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-primary"
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={handleSaveSystemPrompt}
                     disabled={savingSystemPrompt || !promptHasChanges}
                   >
                     {savingSystemPrompt ? 'Saving…' : 'Save'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </>

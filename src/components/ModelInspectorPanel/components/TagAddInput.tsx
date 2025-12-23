@@ -1,4 +1,5 @@
 import { FC, KeyboardEvent } from 'react';
+import { Button } from '../../ui/Button';
 
 interface TagAddInputProps {
   value: string;
@@ -26,13 +27,14 @@ export const TagAddInput: FC<TagAddInputProps> = ({ value, onChange, onAdd }) =>
         onChange={(e) => onChange(e.target.value)}
         onKeyPress={handleKeyPress}
       />
-      <button
-        className="btn btn-secondary btn-sm"
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={onAdd}
         disabled={!value.trim()}
       >
         Add
-      </button>
+      </Button>
     </div>
   );
 };

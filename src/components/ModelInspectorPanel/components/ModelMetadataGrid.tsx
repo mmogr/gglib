@@ -3,6 +3,7 @@ import type { GgufModel } from '../../../types';
 import { formatParamCount, getHuggingFaceUrl } from '../../../utils/format';
 import { openUrl } from '../../../services/platform';
 import { Icon } from '../../ui/Icon';
+import { Button } from '../../ui/Button';
 import { Copy, ExternalLink } from 'lucide-react';
 
 interface ModelMetadataGridProps {
@@ -48,13 +49,15 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
           <span className="metadata-label">Path:</span>
           <span className="metadata-value path">
             {model.file_path}
-            <button
-              className="icon-btn icon-btn-sm"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => copyToClipboard(model.file_path)}
               title="Copy path"
+              iconOnly
             >
               <Icon icon={Copy} size={14} />
-            </button>
+            </Button>
           </span>
         </div>
         {model.hf_repo_id && (

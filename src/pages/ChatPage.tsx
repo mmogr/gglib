@@ -20,6 +20,7 @@ import {
   DEFAULT_TITLE_GENERATION_PROMPT,
 } from '../services/clients/chat';
 import type { ConversationSummary } from '../services/clients/chat';
+import { Button } from '../components/ui/Button';
 import './ChatPage.css';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
@@ -474,22 +475,22 @@ export default function ChatPage({
               The system prompt steers the assistant's behavior for the entire conversation.
             </p>
             <div className="chat-modal-actions">
-              <button
+              <Button
                 type="button"
-                className="btn"
+                variant="secondary"
                 onClick={() => setIsNewConversationModalOpen(false)}
                 disabled={creatingConversation}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="btn btn-primary"
+                variant="primary"
                 onClick={handleCreateConversation}
                 disabled={creatingConversation}
               >
                 {creatingConversation ? 'Creating…' : 'Create chat'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

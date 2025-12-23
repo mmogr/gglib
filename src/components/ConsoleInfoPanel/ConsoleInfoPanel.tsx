@@ -1,9 +1,10 @@
 import { FC, useState, useEffect, useCallback, useRef } from 'react';
-import { Copy, Loader2, StopCircle } from 'lucide-react';
+import { Copy, StopCircle } from 'lucide-react';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { useServerState } from '../../services/serverEvents';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import './ConsoleInfoPanel.css';
 
 interface ConsoleInfoPanelProps {
@@ -191,13 +192,15 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
                 <span className="console-info-key">Port</span>
                 <span className="console-info-value">
                   <code>{serverPort}</code>
-                  <button
-                    className="icon-btn icon-btn-sm"
+                  <Button
+                    iconOnly
+                    size="sm"
+                    variant="ghost"
                     onClick={() => navigator.clipboard.writeText(`http://127.0.0.1:${serverPort}`)}
                     title="Copy server URL"
                   >
                     <Icon icon={Copy} size={14} />
-                  </button>
+                  </Button>
                 </span>
               </div>
               <div className="console-info-row">
@@ -282,23 +285,15 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
 
           {/* Stop Server Button */}
           <section className="console-info-section console-info-actions">
-            <button
-              className="btn btn-lg btn-danger"
+            <Button
+              variant="danger"
+              size="lg"
               onClick={handleStopServer}
-              disabled={isStopping}
+              isLoading={isStopping}
+              leftIcon={!isStopping ? <Icon icon={StopCircle} size={18} /> : undefined}
             >
-              {isStopping ? (
-                <span className="inline-flex items-center gap-2">
-                  <Icon icon={Loader2} size={18} />
-                  Stopping...
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-2">
-                  <Icon icon={StopCircle} size={18} />
-                  Stop Server
-                </span>
-              )}
-            </button>
+              {isStopping ? 'Stopping...' : 'Stop Server'}
+            </Button>
           </section>
         </div>
       </div>

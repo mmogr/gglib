@@ -1,6 +1,7 @@
 import { useState, FC, FormEvent } from "react";
 import { addModel } from "../services/clients/models";
 import { pickGgufFile, isDesktop } from "../services/platform";
+import { Button } from "./ui/Button";
 import styles from './AddModel.module.css';
 
 interface AddModelProps {
@@ -77,13 +78,13 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
         {error && <div className="error-message">{error}</div>}
 
         <div className="form-actions">
-          <button
+          <Button
             type="submit"
             disabled={adding || !filePath.trim()}
-            className="btn btn-primary"
+            variant="primary"
           >
             {adding ? "Adding Model..." : "Add Model"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

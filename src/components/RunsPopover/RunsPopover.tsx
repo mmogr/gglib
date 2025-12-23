@@ -4,6 +4,7 @@ import { ServerInfo } from '../../types';
 import { ServerList } from '../ServerList';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import './RunsPopover.css';
 
 interface RunsPopoverProps {
@@ -52,13 +53,15 @@ const RunsPopover: FC<RunsPopoverProps> = ({
       <div className="runs-popover-header">
         <span className="runs-popover-title">Running Servers</span>
         {onRefresh && (
-          <button
-            className="icon-btn icon-btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onRefresh}
             title="Refresh servers"
+            iconOnly
           >
             <Icon icon={RotateCcw} size={14} />
-          </button>
+          </Button>
         )}
       </div>
       <div className="runs-popover-content">

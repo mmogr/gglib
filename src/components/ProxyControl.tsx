@@ -4,6 +4,7 @@ import { getProxyStatus, startProxy, stopProxy } from "../services/clients/serve
 import { setProxyState } from "../services/platform";
 import { useClickOutside } from "../hooks/useClickOutside";
 import { Icon } from "./ui/Icon";
+import { Button } from "./ui/Button";
 import styles from './ProxyControl.module.css';
 
 interface ProxyStatus {
@@ -132,9 +133,16 @@ const ProxyControl: FC<ProxyControlProps> = ({
                   <label>URL:</label>
                   <div className={styles.urlDisplay}>
                     <code>http://{config.host}:{status.port}/v1</code>
-                    <button onClick={copyProxyUrl} className={styles.copyButton} title="Copy URL">
+                    <Button 
+                      variant="ghost"
+                      size="sm"
+                      onClick={copyProxyUrl}
+                      className={styles.copyButton}
+                      title="Copy URL"
+                      iconOnly
+                    >
                       <Icon icon={ClipboardCopy} size={14} />
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 {status.current_model && (
@@ -145,16 +153,15 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 )}
               </div>
 
-              <button
+              <Button
+                variant="danger"
                 className={`${styles.actionButton} ${styles.stop}`}
                 onClick={handleStop}
                 disabled={loading}
+                leftIcon={<Icon icon={Power} size={14} />}
               >
-                <span className="inline-flex items-center gap-2">
-                  <Icon icon={Power} size={14} />
-                  {loading ? 'Stopping...' : 'Stop Proxy'}
-                </span>
-              </button>
+                {loading ? 'Stopping...' : 'Stop Proxy'}
+              </Button>
             </>
           ) : (
             <>
@@ -187,23 +194,23 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 </div>
               )}
 
-              <button
+              <Button
+                variant="ghost"
                 className={styles.settingsToggle}
                 onClick={() => setShowSettings(!showSettings)}
               >
                 {showSettings ? '▲ Hide' : '▼ Show'} Settings
-              </button>
+              </Button>
 
-              <button
+              <Button
+                variant="primary"
                 className={`${styles.actionButton} ${styles.start}`}
                 onClick={handleStart}
                 disabled={loading}
+                leftIcon={<Icon icon={Power} size={14} />}
               >
-                <span className="inline-flex items-center gap-2">
-                  <Icon icon={Power} size={14} />
-                  {loading ? 'Starting...' : 'Start Proxy'}
-                </span>
-              </button>
+                {loading ? 'Starting...' : 'Start Proxy'}
+              </Button>
 
               <div className={styles.helpText}>
                 <small>
