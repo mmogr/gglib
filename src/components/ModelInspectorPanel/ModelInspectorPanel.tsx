@@ -1,4 +1,4 @@
-import { FC, useCallback, useState } from 'react';
+import { FC, useCallback, useState, useEffect } from 'react';
 import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
 import { queueDownload } from '../../services/clients/downloads';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
@@ -43,6 +43,7 @@ interface ModelInspectorPanelProps {
   getModelTags: (modelId: number) => Promise<string[]>;
   onRefresh?: () => Promise<void>;
   queueStatus?: DownloadQueueStatus | null;
+  onRegisterServeModalOpener?: (opener: () => void) => void;
 }
 
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
@@ -59,6 +60,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   getModelTags,
   onRefresh,
   queueStatus,
+  onRegisterServeModalOpener,
 }) => {
   const { settings } = useSettings();
   const { showToast } = useToastContext();
@@ -84,6 +86,13 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   });
   const serveModal = useServeModal(model?.id);
   const deleteModal = useDeleteModal();
+
+  // Register serve modal opener for menu actions
+  useEffect(() => {
+    if (onRegisterServeModalOpener && model) {
+      onRegisterServeModalOpener(serveModal.openServeModal);
+    }
+  }, [onRegisterServeModalOpener, model, serveModal.openServeModal]);
 
   // Compute derived state
   const combinedTags = tags.modelTags.length > 0 ? tags.modelTags : (model?.tags || []);

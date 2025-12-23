@@ -11,11 +11,11 @@ pub const STOP_SERVER: &str = "stop_server";
 pub const REMOVE_MODEL: &str = "remove_model";
 
 // Proxy menu
-pub const PROXY_TOGGLE: &str = "proxy_toggle";
+pub const START_PROXY: &str = "start_proxy";
+pub const STOP_PROXY: &str = "stop_proxy";
 pub const COPY_PROXY_URL: &str = "copy_proxy_url";
 
 // View menu
-pub const SHOW_DOWNLOADS: &str = "show_downloads";
 pub const SHOW_CHAT: &str = "show_chat";
 pub const TOGGLE_SIDEBAR: &str = "toggle_sidebar";
 

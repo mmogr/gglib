@@ -30,8 +30,8 @@ pub async fn sync_menu_state_internal(
     // Gather current state
     let llama_installed = check_llama_installed();
 
-    // Proxy is disabled during Phase 2 refactor
-    let proxy_running = false;
+    // Get real proxy state from app state
+    let proxy_running = *state.proxy_enabled.read().await;
 
     let selected_id = *state.selected_model_id.read().await;
     let model_selected = selected_id.is_some();

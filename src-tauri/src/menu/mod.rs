@@ -19,7 +19,7 @@ pub mod state_sync;
 pub use build::build_app_menu;
 
 use tauri::{
-    menu::{CheckMenuItem, MenuItem},
+    menu::MenuItem,
     Wry,
 };
 
@@ -34,7 +34,8 @@ pub struct AppMenu {
     pub remove_model: MenuItem<Wry>,
 
     // Proxy menu items
-    pub proxy_toggle: CheckMenuItem<Wry>,
+    pub start_proxy: MenuItem<Wry>,
+    pub stop_proxy: MenuItem<Wry>,
     pub copy_proxy_url: MenuItem<Wry>,
 
     // Help menu items
@@ -72,10 +73,9 @@ impl AppMenu {
         self.remove_model.set_enabled(state.model_selected)?;
 
         // Proxy menu items
-        // Toggle checked state based on whether proxy is running
-        self.proxy_toggle.set_checked(state.proxy_running)?;
-
-        // Copy URL: only enabled if proxy is running
+        // Start/Stop reflect proxy running state
+        self.start_proxy.set_enabled(!state.proxy_running)?;
+        self.stop_proxy.set_enabled(state.proxy_running)?;
         self.copy_proxy_url.set_enabled(state.proxy_running)?;
 
         // Help menu items
