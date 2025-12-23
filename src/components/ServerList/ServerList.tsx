@@ -1,8 +1,10 @@
 import { FC, useState } from 'react';
+import { RotateCcw, ServerOff, Square } from 'lucide-react';
 import { ServerInfo } from '../../types';
-import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
+import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { ServerHealthIndicator } from '../ServerHealthIndicator';
+import { Icon } from '../ui/Icon';
 import './ServerList.css';
 
 interface ServerListProps {
@@ -48,7 +50,9 @@ const ServerList: FC<ServerListProps> = ({
   if (servers.length === 0) {
     return (
       <div className={`server-list-empty ${compact ? 'compact' : ''}`}>
-        <div className="empty-icon">💤</div>
+        <div className="empty-icon" aria-hidden>
+          <Icon icon={ServerOff} size={22} />
+        </div>
         <p>No active servers</p>
         {!compact && <p className="text-muted-small">Start a model to see it here</p>}
       </div>
@@ -68,7 +72,7 @@ const ServerList: FC<ServerListProps> = ({
               onClick={onRefresh}
               title="Refresh servers"
             >
-              🔄
+              <Icon icon={RotateCcw} size={14} />
             </button>
           )}
         </div>
@@ -99,7 +103,10 @@ const ServerList: FC<ServerListProps> = ({
                 onClick={(e) => handleStop(server.model_id, e)}
                 title="Stop server"
               >
-                ⏹️{!compact && ' Stop'}
+                <span className="inline-flex items-center gap-2">
+                  <Icon icon={Square} size={14} />
+                  {!compact && 'Stop'}
+                </span>
               </button>
             </div>
             {expandedServerId === server.model_id && onSelectModel && (
