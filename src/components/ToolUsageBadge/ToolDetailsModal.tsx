@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import type { ThreadMessage } from '@assistant-ui/react';
+import { Check, CheckCircle2, Clipboard, Loader2, Wrench, X, XCircle, ChevronRight } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { Icon } from '../ui/Icon';
+import { Modal } from '../ui/Modal';
 import styles from './ToolDetailsModal.module.css';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
 interface ToolDetailsModalProps {
   toolCalls: ToolCallPart[];
+  isOpen?: boolean;
   onClose: () => void;
 }
 
@@ -13,7 +18,7 @@ interface ToolDetailsModalProps {
  * Modal displaying detailed information about tool executions.
  * Shows tool name, arguments, and results in expandable sections.
  */
-const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, onClose }) => {
+const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen = true, onClose }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -56,105 +61,122 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, onClose 
       .join(' ');
   };
 
-  const getStatusIcon = (call: ToolCallPart): string => {
+  const getStatusIcon = (call: ToolCallPart): typeof CheckCircle2 => {
     if ('result' in call) {
       const result = call.result as any;
       if (result && typeof result === 'object') {
         if ('error' in result || result.success === false) {
-          return '❌';
+          return XCircle;
         }
       }
-      return '✅';
+      return CheckCircle2;
     }
-    return '⏳';
+    return Loader2;
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.header}>
-          <h2 className={styles.title}>Tool Execution Details</h2>
-          <button className={styles.closeButton} onClick={onClose} title="Close">
-            ✕
-          </button>
-        </div>
-
-        <div className={styles.content}>
-          {toolCalls.map((call, index) => {
-            const argsId = `args-${index}`;
-            const resultId = `result-${index}`;
-            const argsExpanded = expandedSections.has(argsId);
-            const resultExpanded = expandedSections.has(resultId);
-
-            const formattedArgs = JSON.stringify(call.args, null, 2);
-            const result = 'result' in call ? call.result : null;
-            const formattedResult = result ? JSON.stringify(result, null, 2) : 'No result';
-
-            return (
-              <div key={call.toolCallId || index} className={styles.toolCard}>
-                <div className={styles.toolHeader}>
-                  <span className={styles.statusIcon}>{getStatusIcon(call)}</span>
-                  <span className={styles.toolName}>{formatToolName(call.toolName)}</span>
-                  <span className={styles.toolNameRaw}>({call.toolName})</span>
-                </div>
-
-                {/* Arguments Section */}
-                <div className={styles.section}>
-                  <button
-                    className={styles.sectionHeader}
-                    onClick={() => toggleSection(argsId)}
-                  >
-                    <span className={`${styles.chevron} ${argsExpanded ? styles.chevronExpanded : ''}`}>
-                      ▶
-                    </span>
-                    <span className={styles.sectionTitle}>Arguments</span>
-                    <button
-                      className={styles.copyButton}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(formattedArgs, argsId);
-                      }}
-                      title="Copy to clipboard"
-                    >
-                      {copiedId === argsId ? '✓' : '📋'}
-                    </button>
-                  </button>
-                  {argsExpanded && (
-                    <pre className={styles.jsonContent}>{formattedArgs}</pre>
-                  )}
-                </div>
-
-                {/* Result Section */}
-                <div className={styles.section}>
-                  <button
-                    className={styles.sectionHeader}
-                    onClick={() => toggleSection(resultId)}
-                  >
-                    <span className={`${styles.chevron} ${resultExpanded ? styles.chevronExpanded : ''}`}>
-                      ▶
-                    </span>
-                    <span className={styles.sectionTitle}>Result</span>
-                    <button
-                      className={styles.copyButton}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(formattedResult, resultId);
-                      }}
-                      title="Copy to clipboard"
-                    >
-                      {copiedId === resultId ? '✓' : '📋'}
-                    </button>
-                  </button>
-                  {resultExpanded && (
-                    <pre className={styles.jsonContent}>{formattedResult}</pre>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+    <Modal open={isOpen} onClose={onClose} title="Tool execution details" size="lg">
+      <div className={styles.heading}>
+        <span className={styles.headingIcon}>
+          <Icon icon={Wrench} size={16} />
+        </span>
+        <div>
+          <p className={styles.headingTitle}>Tool calls</p>
+          <p className={styles.headingSubtitle}>Inspect arguments and results from each tool execution.</p>
         </div>
       </div>
-    </div>
+
+      <div className={styles.content}>
+        {toolCalls.map((call, index) => {
+          const argsId = `args-${index}`;
+          const resultId = `result-${index}`;
+          const argsExpanded = expandedSections.has(argsId);
+          const resultExpanded = expandedSections.has(resultId);
+
+          const formattedArgs = JSON.stringify(call.args, null, 2);
+          const result = 'result' in call ? call.result : null;
+          const formattedResult = result ? JSON.stringify(result, null, 2) : 'No result';
+
+          const StatusIcon = getStatusIcon(call);
+
+          return (
+            <div key={call.toolCallId || index} className={styles.toolCard}>
+              <div className={styles.toolHeader}>
+                <span className={`${styles.statusIcon} ${StatusIcon === XCircle ? styles.statusError : StatusIcon === Loader2 ? styles.statusPending : styles.statusSuccess}`}>
+                  <Icon icon={StatusIcon} size={16} className={StatusIcon === Loader2 ? styles.spinner : ''} />
+                </span>
+                <span className={styles.toolName}>{formatToolName(call.toolName)}</span>
+                <span className={styles.toolNameRaw}>({call.toolName})</span>
+              </div>
+
+              <div className={styles.section}>
+                <div className={styles.sectionHeader} onClick={() => toggleSection(argsId)} role="button" tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSection(argsId);
+                    }
+                  }}
+                >
+                  <ChevronRight className={`${styles.chevron} ${argsExpanded ? styles.chevronExpanded : ''}`} size={14} />
+                  <span className={styles.sectionTitle}>Arguments</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={styles.copyButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyToClipboard(formattedArgs, argsId);
+                    }}
+                    leftIcon={<Icon icon={copiedId === argsId ? Check : Clipboard} size={14} />}
+                  >
+                    {copiedId === argsId ? 'Copied' : 'Copy'}
+                  </Button>
+                </div>
+                {argsExpanded && <pre className={styles.jsonContent}>{formattedArgs}</pre>}
+              </div>
+
+              <div className={styles.section}>
+                <div className={styles.sectionHeader} onClick={() => toggleSection(resultId)} role="button" tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggleSection(resultId);
+                    }
+                  }}
+                >
+                  <ChevronRight className={`${styles.chevron} ${resultExpanded ? styles.chevronExpanded : ''}`} size={14} />
+                  <span className={styles.sectionTitle}>Result</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={styles.copyButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyToClipboard(formattedResult, resultId);
+                    }}
+                    leftIcon={<Icon icon={copiedId === resultId ? Check : Clipboard} size={14} />}
+                  >
+                    {copiedId === resultId ? 'Copied' : 'Copy'}
+                  </Button>
+                </div>
+                {resultExpanded && <pre className={styles.jsonContent}>{formattedResult}</pre>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className={styles.footerActions}>
+        <Button variant="ghost" onClick={onClose} rightIcon={<Icon icon={X} size={14} />}>
+          Close
+        </Button>
+      </div>
+    </Modal>
   );
 };
 

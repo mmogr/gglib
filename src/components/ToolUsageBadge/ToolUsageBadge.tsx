@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useMessage } from '@assistant-ui/react';
 import type { ThreadMessage } from '@assistant-ui/react';
 import ToolDetailsModal from './ToolDetailsModal';
+import { Wrench } from 'lucide-react';
 import styles from './ToolUsageBadge.module.css';
+import { Icon } from '../ui/Icon';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
@@ -70,7 +72,9 @@ const ToolUsageBadge: React.FC = () => {
         onClick={() => setIsModalOpen(true)}
         title="Click to view tool execution details"
       >
-        <span className={styles.badgeIcon}>🔧</span>
+        <span className={styles.badgeIcon} aria-hidden="true">
+          <Icon icon={Wrench} size={14} />
+        </span>
         <span className={styles.badgeText}>{displayNames}</span>
       </button>
 
