@@ -48,6 +48,12 @@
   --color-text-disabled: #666666;
   --color-text-inverse: #0a0a0a;
   
+  /* Semantic Aliases - for component consistency */
+  --color-background-secondary: var(--color-background-elevated);
+  --color-background-tertiary: var(--color-surface-elevated);
+  --color-text-primary: var(--color-text);
+  --color-accent: var(--color-primary-light);
+  
   /* Status Colors */
   --color-online: #10b981;
   --color-offline: #6b7280;
