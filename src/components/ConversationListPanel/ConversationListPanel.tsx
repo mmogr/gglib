@@ -5,6 +5,7 @@ import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 import './ConversationListPanel.css';
 
 interface ConversationListPanelProps {
@@ -100,12 +101,13 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
         </div>
         
         <div className="search-bar">
-          <input
+          <Input
             type="text"
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="form-input form-input-sm search-input"
+            className="search-input"
+            size="sm"
           />
         </div>
       </div>

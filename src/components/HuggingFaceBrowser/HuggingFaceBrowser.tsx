@@ -2,6 +2,8 @@ import { FC } from "react";
 import { HfModelSummary, HfSortField } from "../../types";
 import { ModelCard } from "./components/ModelCard";
 import { useHuggingFaceSearch, SORT_OPTIONS } from "./hooks/useHuggingFaceSearch";
+import { Input } from "../ui/Input";
+import { Select } from "../ui/Select";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
@@ -61,9 +63,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
         <div className={styles.searchRow}>
           <div className={styles.searchInputWrapper}>
             <label className={styles.searchLabel}>Search Models</label>
-            <input
+            <Input
               type="text"
-              className={`${styles.searchInput} ${searchError ? styles.searchInputError : ""}`}
+              className={styles.searchInput}
+              variant={searchError ? "error" : "default"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -86,7 +89,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
         <div className={styles.filterRow}>
           <div className={styles.filterGroup}>
             <label className={styles.searchLabel}>Min Params (B)</label>
-            <input
+            <Input
               type="number"
               className={styles.filterInput}
               value={minParams}
@@ -98,7 +101,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
           </div>
           <div className={styles.filterGroup}>
             <label className={styles.searchLabel}>Max Params (B)</label>
-            <input
+            <Input
               type="number"
               className={styles.filterInput}
               value={maxParams}
@@ -111,7 +114,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
           <div className={styles.filterGroup}>
             <label className={styles.searchLabel}>Sort By</label>
             <div className={styles.sortWrapper}>
-              <select
+              <Select
                 className={styles.sortSelect}
                 value={sortBy}
                 onChange={(e) => handleSortChange(e.target.value as HfSortField)}
@@ -121,7 +124,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button
                 className={styles.sortDirectionBtn}
                 onClick={() => setSortAscending(!sortAscending)}

@@ -7,6 +7,7 @@ import AddDownloadContent, { AddDownloadSubTab } from './AddDownloadContent';
 import ProxyControl from '../ProxyControl';
 import { FilterPopover, FilterState } from '../FilterPopover';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 import './ModelLibraryPanel.css';
 
 interface ModelLibraryPanelProps {
@@ -155,12 +156,13 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         {activeTab === 'models' && (
           <div className="search-filter-row">
             <div className="search-bar">
-              <input
+              <Input
                 type="text"
                 placeholder="Search models..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="form-input form-input-sm search-input"
+                className="search-input"
+                size="sm"
               />
             </div>
 
