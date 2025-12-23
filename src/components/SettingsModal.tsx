@@ -1,4 +1,6 @@
 import { FC, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
 import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
@@ -66,13 +68,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setShowFitIndicators(settings.show_memory_fit_indicators !== false);
     }
   }, [settings]);
-
-  const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
-    // Only close if mousedown is directly on the overlay, not bubbled from children
-    if (e.target === e.currentTarget && !saving) {
-      onClose();
-    }
-  }, [onClose, saving]);
 
   const handleSubmit = useCallback(
     async (event: FormEvent) => {
@@ -166,20 +161,37 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     return sourceLabels[info.source] || info.source;
   }, [info]);
 
-  if (!isOpen) {
-    return null;
-  }
+  const handleRequestClose = useCallback(
+    (open: boolean) => {
+      if (!open && !saving) {
+        onClose();
+      }
+    },
+    [onClose, saving]
+  );
 
   return (
-    <div className="modal-overlay" onMouseDown={handleOverlayMouseDown}>
-      <div className="modal modal-md">
-        <div className="modal-header">
-          <h2 className="modal-title">Settings</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close settings dialog">
-            ×
-          </button>
-        </div>
-        <div className="modal-body">
+    <Dialog.Root open={isOpen} onOpenChange={handleRequestClose}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="modal-overlay" />
+        <Dialog.Content
+          className="modal modal-md"
+          onPointerDownOutside={(event) => {
+            if (saving) event.preventDefault();
+          }}
+          onEscapeKeyDown={(event) => {
+            if (saving) event.preventDefault();
+          }}
+        >
+          <div className="modal-header">
+            <Dialog.Title className="modal-title">Settings</Dialog.Title>
+            <Dialog.Close asChild>
+              <button className="modal-close" onClick={onClose} aria-label="Close settings dialog" disabled={saving}>
+                <X size={16} aria-hidden />
+              </button>
+            </Dialog.Close>
+          </div>
+          <div className="modal-body">
           {/* Tab Navigation */}
           <div className={styles.tabs}>
             <button
@@ -335,7 +347,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                       <span className={styles.checkboxText}>Show memory fit indicators</span>
                     </label>
                     <div className={styles.helperText}>
-                      <span>Display ✅⚠️❌ indicators in HuggingFace browser showing if models fit in your system memory</span>
+                      <span>Display fit status indicators in the HuggingFace browser showing if models fit in your system memory</span>
                     </div>
                   </div>
 
@@ -470,9 +482,30 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               )}
             </>
           )}
-        </div>
-      </div>
-    </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+      {showAddMcpModal && (
+        <AddMcpServerModal
+          isOpen={showAddMcpModal}
+          editingServer={editingMcpServer ?? undefined}
+          onClose={() => {
+            setShowAddMcpModal(false);
+            setEditingMcpServer(null);
+          }}
+          onSave={async (serverData) => {
+            if (editingMcpServer) {
+              // Update existing server with new data
+              await updateMcpServer(editingMcpServer.server.id, serverData);
+            } else {
+              await addMcpServer(serverData);
+            }
+            setShowAddMcpModal(false);
+            setEditingMcpServer(null);
+          }}
+        />
+      )}
+    </Dialog.Root>
   );
 };
 
