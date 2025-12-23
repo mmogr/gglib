@@ -149,6 +149,10 @@ GGLib is organized as a Cargo workspace with compile-time enforced boundaries. T
 - **React UI as artifact**: Static files in Axum, bundled assets in Tauri, unused in CLI
 - **Python hf_xet**: Internal subprocess within `gglib-download`, not an architectural boundary
 
+**Frontend Architecture:**
+
+- **Styling & UI Contracts**: See [src/styles/README.md](src/styles/README.md) for Tailwind-first architecture, design token system, platform parity requirements, and component migration roadmap
+
 <details>
 <summary><strong>Crate Metrics</strong></summary>
 
