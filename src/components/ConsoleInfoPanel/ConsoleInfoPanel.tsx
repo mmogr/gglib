@@ -1,7 +1,9 @@
 import { FC, useState, useEffect, useCallback, useRef } from 'react';
-import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/ChatPage';
+import { Copy, Loader2, StopCircle } from 'lucide-react';
+import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { useServerState } from '../../services/serverEvents';
+import { Icon } from '../ui/Icon';
 import './ConsoleInfoPanel.css';
 
 interface ConsoleInfoPanelProps {
@@ -194,7 +196,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
                     onClick={() => navigator.clipboard.writeText(`http://127.0.0.1:${serverPort}`)}
                     title="Copy server URL"
                   >
-                    📋
+                    <Icon icon={Copy} size={14} />
                   </button>
                 </span>
               </div>
@@ -285,7 +287,17 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
               onClick={handleStopServer}
               disabled={isStopping}
             >
-              {isStopping ? '⏳ Stopping...' : '⏹️ Stop Server'}
+              {isStopping ? (
+                <span className="inline-flex items-center gap-2">
+                  <Icon icon={Loader2} size={18} />
+                  Stopping...
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <Icon icon={StopCircle} size={18} />
+                  Stop Server
+                </span>
+              )}
             </button>
           </section>
         </div>

@@ -1,6 +1,8 @@
 import { FC, useRef, useEffect, useCallback } from 'react';
 import Anser from 'anser';
+import { ClipboardCopy, Pause, Play, Trash2, Monitor } from 'lucide-react';
 import { useServerLogs, ServerLogEntry } from '../../hooks/useServerLogs';
+import { Icon } from '../ui/Icon';
 import './ConsoleLogPanel.css';
 
 interface ConsoleLogPanelProps {
@@ -79,21 +81,30 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
               onClick={handleToggleAutoScroll}
               title={isAutoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
             >
-              {isAutoScroll ? '⬇️ Auto' : '⏸️ Paused'}
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={isAutoScroll ? Play : Pause} size={14} />
+                {isAutoScroll ? 'Auto' : 'Paused'}
+              </span>
             </button>
             <button
               className="btn btn-sm btn-secondary"
               onClick={copyAllLogs}
               title="Copy all logs to clipboard"
             >
-              📋 Copy
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={ClipboardCopy} size={14} />
+                Copy
+              </span>
             </button>
             <button
               className="btn btn-sm btn-secondary"
               onClick={clearLogs}
               title="Clear log display"
             >
-              🗑️ Clear
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={Trash2} size={14} />
+                Clear
+              </span>
             </button>
           </div>
         </div>
@@ -106,7 +117,9 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
       >
         {logs.length === 0 ? (
           <div className="console-log-empty">
-            <span className="console-log-empty-icon">📟</span>
+            <span className="console-log-empty-icon" aria-hidden>
+              <Icon icon={Monitor} size={28} />
+            </span>
             <p>Waiting for server output...</p>
             <p className="console-log-empty-hint">
               Logs will appear here as the server processes requests
