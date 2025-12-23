@@ -1,5 +1,6 @@
 import { FC, KeyboardEvent } from 'react';
 import { Button } from '../../ui/Button';
+import { Input } from '../../ui/Input';
 
 interface TagAddInputProps {
   value: string;
@@ -19,7 +20,7 @@ export const TagAddInput: FC<TagAddInputProps> = ({ value, onChange, onAdd }) =>
 
   return (
     <div className="tag-add-dropdown">
-      <input
+      <Input
         type="text"
         className="tag-select"
         placeholder="Add tag..."
