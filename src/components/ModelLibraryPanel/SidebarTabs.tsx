@@ -7,7 +7,7 @@ export type SidebarTabId = 'models' | 'add';
 export interface SidebarTab<T extends string = SidebarTabId> {
   id: T;
   label: string;
-  icon?: string;
+  icon?: ReactNode;
 }
 
 interface SidebarTabsProps<T extends string = SidebarTabId> {

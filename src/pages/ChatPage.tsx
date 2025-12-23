@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { type ChatPageTabId } from './chatTabs';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI, TimeToolUI } from '../components/ToolUI';
-import { SidebarTab } from '../components/ModelLibraryPanel/SidebarTabs';
 import { useGglibRuntime, TOOL_ENABLED_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
@@ -21,14 +21,6 @@ import {
 } from '../services/clients/chat';
 import type { ConversationSummary } from '../services/clients/chat';
 import './ChatPage.css';
-
-export type ChatPageTabId = 'chat' | 'console';
-
-/** Shared tab definitions for Chat/Console view switching */
-export const CHAT_PAGE_TABS: SidebarTab<ChatPageTabId>[] = [
-  { id: 'chat', label: 'Chat', icon: '💬' },
-  { id: 'console', label: 'Console', icon: '📟' },
-];
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 // Use tool-enabled prompt by default (most common for served models with jinja/agent tag)
