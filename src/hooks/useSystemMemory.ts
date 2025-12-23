@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SystemMemoryInfo, FitStatus } from "../types";
 import { getSystemMemory } from "../services/clients/system";
-import { useSettings } from "./useSettings";
+import { getSettings } from "../services/clients/settings";
 
 /**
  * Estimate the memory required to run a model.
@@ -86,10 +86,24 @@ export function useSystemMemory(): UseSystemMemoryReturn {
   const [memoryInfo, setMemoryInfo] = useState<SystemMemoryInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { settings } = useSettings();
+  const [contextLength, setContextLength] = useState<number>(4096);
 
-  // Context length from settings, default to 4096
-  const contextLength = settings?.default_context_size ?? 4096;
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const settings = await getSettings();
+        if (!cancelled) {
+          setContextLength(settings.default_context_size ?? 4096);
+        }
+      } catch {
+        // Ignore settings load failures; default context length remains.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadMemoryInfo = useCallback(async () => {
     try {
