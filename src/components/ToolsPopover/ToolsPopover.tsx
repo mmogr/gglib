@@ -134,7 +134,7 @@ export const ToolsPopover: React.FC = () => {
           <div className={styles.header}>
             <span className={styles.title}>
               <Icon icon={Wrench} size={14} />
-              <span style={{ marginLeft: 6 }}>Tools</span>
+              <span className="ml-1.5">Tools</span>
             </span>
             <span className={styles.count}>
               {enabledTools.size}/{tools.length} active

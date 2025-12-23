@@ -24,9 +24,8 @@ export function ServerHealthIndicator({ modelId, className, showLabel = false }:
 
   return (
     <span
-      className={className}
+      className={`inline-flex items-center gap-1.5 ${className || ''}`}
       title={title}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
       aria-label={`Server health: ${label}`}
     >
       <span aria-hidden="true">{dot}</span>

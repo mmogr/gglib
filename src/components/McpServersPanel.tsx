@@ -245,7 +245,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                     {!info.server.is_valid && (
                       <span className={styles.invalidBadge} title={info.server.last_error || "Invalid configuration"}>
                         <Icon icon={AlertTriangle} size={14} />
-                        <span style={{ marginLeft: 6 }}>Needs relink</span>
+                        <span className="ml-1.5">Needs relink</span>
                       </span>
                     )}
                     {info.server.server_type === "stdio" && info.server.config.command && (

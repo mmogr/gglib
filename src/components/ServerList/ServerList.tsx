@@ -4,6 +4,7 @@ import { ServerInfo } from '../../types';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { ServerHealthIndicator } from '../ServerHealthIndicator';
+import { Row } from '../primitives';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import './ServerList.css';
@@ -92,10 +93,10 @@ const ServerList: FC<ServerListProps> = ({
               onClick={() => handleServerClick(server.model_id)}
             >
               <div className="server-info">
-                <div className="server-name" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Row gap="sm" align="center" className="server-name">
                   {server.model_name}
                   <ServerHealthIndicator modelId={server.model_id} />
-                </div>
+                </Row>
                 <div className="server-details">
                   <span className="server-port">:{server.port}</span>
                   <span className="server-status">{server.status}</span>

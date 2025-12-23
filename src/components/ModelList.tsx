@@ -10,6 +10,8 @@ import { ServerHealthIndicator } from "./ServerHealthIndicator";
 import { useIsServerRunning } from "../services/serverRegistry";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
+import { Row } from "./primitives";
+import styles from "./ModelList.module.css";
 
 interface ModelListProps {
   models: GgufModel[];
@@ -43,15 +45,15 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove }) => 
   return (
     <div className="table-row">
       <div className="cell model-name">
-        <div className="name-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <Row gap="sm" align="center" className="name-primary">
           {model.name}
           {isRunning && <ServerHealthIndicator modelId={model.id ?? 0} />}
-        </div>
+        </Row>
         {model.hf_repo_id && (
-          <div className="name-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+          <Row gap="xs" align="center" className="name-secondary">
             <Icon icon={Package} size={14} className="shrink-0" />
             <span>{model.hf_repo_id}</span>
-          </div>
+          </Row>
         )}
       </div>
       <div className="cell">{formatParamCount(model.param_count_b)}</div>
@@ -249,21 +251,10 @@ const ModelList: FC<ModelListProps> = ({
               
               {/* Capability Badges */}
               {(hasTag(servingModel, 'reasoning') || hasTag(servingModel, 'agent')) && (
-                <div className="capability-badges" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                <Row gap="sm" className="capability-badges mb-4">
                   {hasTag(servingModel, 'reasoning') && (
                     <span 
-                      className="capability-badge reasoning" 
-                      style={{ 
-                        display: 'inline-flex', 
-                        alignItems: 'center', 
-                        gap: '0.25rem',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        backgroundColor: 'var(--color-purple-bg, #f3e8ff)',
-                        color: 'var(--color-purple-text, #7c3aed)',
-                        fontSize: '0.75rem',
-                        fontWeight: 500
-                      }}
+                      className={`${styles.capabilityBadge} ${styles.reasoning}`}
                       title="Model supports chain-of-thought reasoning with thinking tags"
                     >
                       <Icon icon={Brain} size={14} />
@@ -272,25 +263,14 @@ const ModelList: FC<ModelListProps> = ({
                   )}
                   {hasTag(servingModel, 'agent') && (
                     <span 
-                      className="capability-badge agent" 
-                      style={{ 
-                        display: 'inline-flex', 
-                        alignItems: 'center', 
-                        gap: '0.25rem',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        backgroundColor: 'var(--color-blue-bg, #dbeafe)',
-                        color: 'var(--color-blue-text, #2563eb)',
-                        fontSize: '0.75rem',
-                        fontWeight: 500
-                      }}
+                      className={`${styles.capabilityBadge} ${styles.agent}`}
                       title="Model supports tool/function calling for agentic workflows"
                     >
                       <Icon icon={Wrench} size={14} />
                       Agent
                     </span>
                   )}
-                </div>
+                </Row>
               )}
               
               <div className="form-group">
@@ -316,15 +296,10 @@ const ModelList: FC<ModelListProps> = ({
               </div>
 
               {/* Jinja Templates Toggle */}
-              <div className="form-group" style={{ marginTop: '1rem' }}>
+              <div className="form-group mt-4">
                 <label 
                   htmlFor="jinja-toggle" 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '0.5rem',
-                    cursor: isServing ? 'not-allowed' : 'pointer'
-                  }}
+                  className="flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <input
                     id="jinja-toggle"
@@ -332,22 +307,16 @@ const ModelList: FC<ModelListProps> = ({
                     checked={enableJinja || jinjaAutoEnabled}
                     onChange={(e) => setEnableJinja(e.target.checked)}
                     disabled={isServing || jinjaAutoEnabled}
-                    style={{ width: 'auto', margin: 0 }}
+                    className="w-auto m-0"
                   />
                   <span>Enable Jinja templates</span>
                   {jinjaAutoEnabled && (
-                    <span 
-                      style={{ 
-                        fontSize: '0.75rem', 
-                        color: 'var(--color-text-secondary, #6b7280)',
-                        fontStyle: 'italic'
-                      }}
-                    >
+                    <span className="text-xs text-[var(--color-text-secondary)] italic">
                       (auto-enabled for this model)
                     </span>
                   )}
                 </label>
-                <p className="input-help" style={{ marginTop: '0.25rem' }}>
+                <p className="input-help mt-1">
                   Required for tool calling and advanced chat templates. {jinjaAutoEnabled ? 'Automatically enabled for agent/reasoning models.' : 'Enable if using function calling.'}
                 </p>
               </div>
