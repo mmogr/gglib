@@ -1,6 +1,4 @@
 import { FC, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
 import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
@@ -9,6 +7,7 @@ import { DEFAULT_TITLE_GENERATION_PROMPT } from "../services/clients/chat";
 import type { McpServerInfo } from "../services/clients/mcp";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
+import { Modal } from "./ui/Modal";
 import styles from "./SettingsModal.module.css";
 
 type SettingsTab = "general" | "mcp";
@@ -161,351 +160,308 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     return sourceLabels[info.source] || info.source;
   }, [info]);
 
-  const handleRequestClose = useCallback(
-    (open: boolean) => {
-      if (!open && !saving) {
-        onClose();
-      }
-    },
-    [onClose, saving]
-  );
-
   return (
-    <Dialog.Root open={isOpen} onOpenChange={handleRequestClose}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="modal-overlay" />
-        <Dialog.Content
-          className="modal modal-md"
-          onPointerDownOutside={(event) => {
-            if (saving) event.preventDefault();
-          }}
-          onEscapeKeyDown={(event) => {
-            if (saving) event.preventDefault();
-          }}
-        >
-          <div className="modal-header">
-            <Dialog.Title className="modal-title">Settings</Dialog.Title>
-            <Dialog.Close asChild>
-              <button className="modal-close" onClick={onClose} aria-label="Close settings dialog" disabled={saving}>
-                <X size={16} aria-hidden />
-              </button>
-            </Dialog.Close>
-          </div>
-          <div className="modal-body">
-          {/* Tab Navigation */}
-          <div className={styles.tabs}>
-            <button
-              type="button"
-              className={`${styles.tab} ${activeTab === "general" ? styles.tabActive : ""}`}
-              onClick={() => setActiveTab("general")}
-            >
-              General
-            </button>
-            <button
-              type="button"
-              className={`${styles.tab} ${activeTab === "mcp" ? styles.tabActive : ""}`}
-              onClick={() => setActiveTab("mcp")}
-            >
-              MCP Servers
-            </button>
-          </div>
+    <>
+      <Modal
+        open={isOpen}
+        onClose={onClose}
+        title="Settings"
+        description="Configure download paths, ports, and MCP servers."
+        size="lg"
+        preventClose={saving}
+      >
+        {/* Tab Navigation */}
+        <div className={styles.tabs}>
+          <button
+            type="button"
+            className={`${styles.tab} ${activeTab === "general" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("general")}
+          >
+            General
+          </button>
+          <button
+            type="button"
+            className={`${styles.tab} ${activeTab === "mcp" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("mcp")}
+          >
+            MCP Servers
+          </button>
+        </div>
 
-          {/* General Settings Tab */}
-          {activeTab === "general" && (
-            <>
-              {loading && (
-                <div className="modal-loading">
-                  <div className="modal-spinner" aria-hidden />
-                  <p className="modal-loading-text">Loading current settings…</p>
-                </div>
-              )}
+        {/* General Settings Tab */}
+        {activeTab === "general" && (
+          <>
+            {loading && (
+              <div className="modal-loading">
+                <div className="modal-spinner" aria-hidden />
+                <p className="modal-loading-text">Loading current settings…</p>
+              </div>
+            )}
 
-              {!loading && (
-                <form className={styles.form} onSubmit={handleSubmit}>
-                  <label className={styles.label} htmlFor="models-dir-input">
-                    Default Download Path
-                  </label>
-                  <input
-                    id="models-dir-input"
-                    className={styles.input}
-                    value={pathInput}
-                    onChange={(event) => setPathInput(event.target.value)}
-                    placeholder="/path/to/models"
-                    disabled={saving}
-                  />
-                  <div className={styles.helperText}>
-                    {sourceDescription && <span>{sourceDescription}</span>}
-                    {info?.default_path && (
-                      <button type="button" className={styles.resetLink} onClick={handleReset}>
-                        Reset to defaults
-                      </button>
-                    )}
-                  </div>
-
-                  {info && (
-                    <div className={styles.statusChips} role="status" aria-live="polite">
-                      <span
-                        className={`${styles.chip} ${info.exists ? styles.chipOk : styles.chipWarn}`}
-                        aria-label={info.exists ? "Directory exists" : "Directory will be created (warning)"}
-                      >
-                        {info.exists ? "Directory exists" : "Directory will be created"}
-                      </span>
-                      <span
-                        className={`${styles.chip} ${info.writable ? styles.chipOk : styles.chipError}`}
-                        aria-label={info.writable ? "Writable" : "Not writable (error)"}
-                      >
-                        {info.writable ? "Writable" : "Not writable"}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className={styles.separator} />
-
-                  <label className={styles.label} htmlFor="context-size-input">
-                    Default Context Size
-                  </label>
-                  <input
-                    id="context-size-input"
-                    type="number"
-                    className={styles.input}
-                    value={contextSizeInput}
-                    onChange={(event) => setContextSizeInput(event.target.value)}
-                    placeholder="4096"
-                    min="512"
-                    max="1000000"
-                    disabled={saving}
-                  />
-                  <div className={styles.helperText}>
-                    <span>Default context size for models (e.g., 4096, 8192, 16384)</span>
-                  </div>
-
-                  <label className={styles.label} htmlFor="proxy-port-input">
-                    Proxy Server Port
-                  </label>
-                  <input
-                    id="proxy-port-input"
-                    type="number"
-                    className={styles.input}
-                    value={proxyPortInput}
-                    onChange={(event) => setProxyPortInput(event.target.value)}
-                    placeholder="8080"
-                    min="1024"
-                    max="65535"
-                    disabled={saving}
-                  />
-                  <div className={styles.helperText}>
-                    <span>Port for the OpenAI-compatible proxy server</span>
-                  </div>
-
-                  <label className={styles.label} htmlFor="server-port-input">
-                    Base Server Port
-                  </label>
-                  <input
-                    id="server-port-input"
-                    type="number"
-                    className={styles.input}
-                    value={serverPortInput}
-                    onChange={(event) => setServerPortInput(event.target.value)}
-                    placeholder="9000"
-                    min="1024"
-                    max="65535"
-                    disabled={saving}
-                  />
-                  <div className={styles.helperText}>
-                    <span>Starting port for llama-server instances</span>
-                  </div>
-
-                  <label className={styles.label} htmlFor="max-queue-size-input">
-                    Max Download Queue Size
-                  </label>
-                  <input
-                    id="max-queue-size-input"
-                    type="number"
-                    className={styles.input}
-                    value={maxQueueSizeInput}
-                    onChange={(event) => setMaxQueueSizeInput(event.target.value)}
-                    placeholder="10"
-                    min="1"
-                    max="50"
-                    disabled={saving}
-                  />
-                  <div className={styles.helperText}>
-                    <span>Maximum number of models that can be queued for download (1-50)</span>
-                  </div>
-
-                  <div className={styles.separator} />
-
-                  <div className={styles.checkboxGroup}>
-                    <label className={styles.checkboxLabel}>
-                      <input
-                        type="checkbox"
-                        className={styles.checkbox}
-                        checked={showFitIndicators}
-                        onChange={(e) => setShowFitIndicators(e.target.checked)}
-                        disabled={saving}
-                      />
-                      <span className={styles.checkboxText}>Show memory fit indicators</span>
-                    </label>
-                    <div className={styles.helperText}>
-                      <span>Display fit status indicators in the HuggingFace browser showing if models fit in your system memory</span>
-                    </div>
-                  </div>
-
-                  {/* Advanced Settings Section */}
-                  <div className={styles.separator} />
-                  <button
-                    type="button"
-                    className={styles.advancedToggle}
-                    onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
-                    aria-expanded={isAdvancedOpen}
-                  >
-                    <span className={styles.advancedToggleIcon}>{isAdvancedOpen ? '▼' : '▶'}</span>
-                    <span>Advanced Settings</span>
-                  </button>
-
-                  {isAdvancedOpen && (
-                    <div className={styles.advancedSection}>
-                      <label className={styles.label} htmlFor="max-tool-iterations-input">
-                        Max Tool Iterations
-                      </label>
-                      <input
-                        id="max-tool-iterations-input"
-                        type="number"
-                        className={styles.input}
-                        value={maxToolIterationsInput}
-                        onChange={(event) => setMaxToolIterationsInput(event.target.value)}
-                        placeholder="25"
-                        min="1"
-                        max="100"
-                        disabled={saving}
-                      />
-                      <div className={styles.helperText}>
-                        <span>Maximum iterations for tool calling in agentic loop (default: 25)</span>
-                      </div>
-
-                      <label className={styles.label} htmlFor="max-stagnation-steps-input">
-                        Max Stagnation Steps
-                      </label>
-                      <input
-                        id="max-stagnation-steps-input"
-                        type="number"
-                        className={styles.input}
-                        value={maxStagnationStepsInput}
-                        onChange={(event) => setMaxStagnationStepsInput(event.target.value)}
-                        placeholder="5"
-                        min="1"
-                        max="20"
-                        disabled={saving}
-                      />
-                      <div className={styles.helperText}>
-                        <span>Maximum repeated outputs before stopping (prevents infinite loops, default: 5)</span>
-                      </div>
-
-                      <label className={styles.label} htmlFor="title-prompt-input">
-                        Chat Title Generation Prompt
-                      </label>
-                      <textarea
-                        id="title-prompt-input"
-                        className={styles.textarea}
-                        value={titlePromptInput}
-                        onChange={(event) => setTitlePromptInput(event.target.value)}
-                        placeholder={DEFAULT_TITLE_GENERATION_PROMPT}
-                        rows={3}
-                        disabled={saving}
-                      />
-                      <div className={styles.helperText}>
-                        <span>Prompt used when AI generates chat titles. Leave empty to use the default.</span>
-                        <button
-                          type="button"
-                          className={styles.resetLink}
-                          onClick={() => setTitlePromptInput("")}
-                        >
-                          Reset to default
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {error && <p className={styles.error} role="alert">{error}</p>}
-                  {successMessage && <p className={styles.success} role="status" aria-live="polite">{successMessage}</p>}
-
-                  <div className="modal-footer modal-footer-between">
-                    <button type="button" className="btn btn-secondary" onClick={handleRefresh} disabled={loading || saving}>
-                      Refresh
+            {!loading && (
+              <form className={styles.form} onSubmit={handleSubmit}>
+                <label className={styles.label} htmlFor="models-dir-input">
+                  Default Download Path
+                </label>
+                <input
+                  id="models-dir-input"
+                  className={styles.input}
+                  value={pathInput}
+                  onChange={(event) => setPathInput(event.target.value)}
+                  placeholder="/path/to/models"
+                  disabled={saving}
+                />
+                <div className={styles.helperText}>
+                  {sourceDescription && <span>{sourceDescription}</span>}
+                  {info?.default_path && (
+                    <button type="button" className={styles.resetLink} onClick={handleReset}>
+                      Reset to defaults
                     </button>
-                    <div className={styles.footerActions}>
-                      <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
-                        Cancel
-                      </button>
-                      <button type="submit" className="btn btn-primary" disabled={saving}>
-                        {saving ? "Saving…" : "Save changes"}
+                  )}
+                </div>
+
+                {info && (
+                  <div className={styles.statusChips} role="status" aria-live="polite">
+                    <span
+                      className={`${styles.chip} ${info.exists ? styles.chipOk : styles.chipWarn}`}
+                      aria-label={info.exists ? "Directory exists" : "Directory will be created (warning)"}
+                    >
+                      {info.exists ? "Directory exists" : "Directory will be created"}
+                    </span>
+                    <span
+                      className={`${styles.chip} ${info.writable ? styles.chipOk : styles.chipError}`}
+                      aria-label={info.writable ? "Writable" : "Not writable (error)"}
+                    >
+                      {info.writable ? "Writable" : "Not writable"}
+                    </span>
+                  </div>
+                )}
+
+                <div className={styles.separator} />
+
+                <label className={styles.label} htmlFor="context-size-input">
+                  Default Context Size
+                </label>
+                <input
+                  id="context-size-input"
+                  type="number"
+                  className={styles.input}
+                  value={contextSizeInput}
+                  onChange={(event) => setContextSizeInput(event.target.value)}
+                  placeholder="4096"
+                  min="512"
+                  max="1000000"
+                  disabled={saving}
+                />
+                <div className={styles.helperText}>
+                  <span>Default context size for models (e.g., 4096, 8192, 16384)</span>
+                </div>
+
+                <label className={styles.label} htmlFor="proxy-port-input">
+                  Proxy Server Port
+                </label>
+                <input
+                  id="proxy-port-input"
+                  type="number"
+                  className={styles.input}
+                  value={proxyPortInput}
+                  onChange={(event) => setProxyPortInput(event.target.value)}
+                  placeholder="8080"
+                  min="1024"
+                  max="65535"
+                  disabled={saving}
+                />
+                <div className={styles.helperText}>
+                  <span>Port for the OpenAI-compatible proxy server</span>
+                </div>
+
+                <label className={styles.label} htmlFor="server-port-input">
+                  Base Server Port
+                </label>
+                <input
+                  id="server-port-input"
+                  type="number"
+                  className={styles.input}
+                  value={serverPortInput}
+                  onChange={(event) => setServerPortInput(event.target.value)}
+                  placeholder="9000"
+                  min="1024"
+                  max="65535"
+                  disabled={saving}
+                />
+                <div className={styles.helperText}>
+                  <span>Starting port for llama-server instances</span>
+                </div>
+
+                <label className={styles.label} htmlFor="max-queue-size-input">
+                  Max Download Queue Size
+                </label>
+                <input
+                  id="max-queue-size-input"
+                  type="number"
+                  className={styles.input}
+                  value={maxQueueSizeInput}
+                  onChange={(event) => setMaxQueueSizeInput(event.target.value)}
+                  placeholder="10"
+                  min="1"
+                  max="50"
+                  disabled={saving}
+                />
+                <div className={styles.helperText}>
+                  <span>Maximum number of models that can be queued for download (1-50)</span>
+                </div>
+
+                <div className={styles.separator} />
+
+                <div className={styles.checkboxGroup}>
+                  <label className={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      className={styles.checkbox}
+                      checked={showFitIndicators}
+                      onChange={(e) => setShowFitIndicators(e.target.checked)}
+                      disabled={saving}
+                    />
+                    <span className={styles.checkboxText}>Show memory fit indicators</span>
+                  </label>
+                  <div className={styles.helperText}>
+                    <span>Display fit status indicators in the HuggingFace browser showing if models fit in your system memory</span>
+                  </div>
+                </div>
+
+                {/* Advanced Settings Section */}
+                <div className={styles.separator} />
+                <button
+                  type="button"
+                  className={styles.advancedToggle}
+                  onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                  aria-expanded={isAdvancedOpen}
+                >
+                  <span className={styles.advancedToggleIcon}>{isAdvancedOpen ? '▼' : '▶'}</span>
+                  <span>Advanced Settings</span>
+                </button>
+
+                {isAdvancedOpen && (
+                  <div className={styles.advancedSection}>
+                    <label className={styles.label} htmlFor="max-tool-iterations-input">
+                      Max Tool Iterations
+                    </label>
+                    <input
+                      id="max-tool-iterations-input"
+                      type="number"
+                      className={styles.input}
+                      value={maxToolIterationsInput}
+                      onChange={(event) => setMaxToolIterationsInput(event.target.value)}
+                      placeholder="25"
+                      min="1"
+                      max="100"
+                      disabled={saving}
+                    />
+                    <div className={styles.helperText}>
+                      <span>Maximum iterations for tool calling in agentic loop (default: 25)</span>
+                    </div>
+
+                    <label className={styles.label} htmlFor="max-stagnation-steps-input">
+                      Max Stagnation Steps
+                    </label>
+                    <input
+                      id="max-stagnation-steps-input"
+                      type="number"
+                      className={styles.input}
+                      value={maxStagnationStepsInput}
+                      onChange={(event) => setMaxStagnationStepsInput(event.target.value)}
+                      placeholder="5"
+                      min="1"
+                      max="20"
+                      disabled={saving}
+                    />
+                    <div className={styles.helperText}>
+                      <span>Maximum repeated outputs before stopping (prevents infinite loops, default: 5)</span>
+                    </div>
+
+                    <label className={styles.label} htmlFor="title-prompt-input">
+                      Chat Title Generation Prompt
+                    </label>
+                    <textarea
+                      id="title-prompt-input"
+                      className={styles.textarea}
+                      value={titlePromptInput}
+                      onChange={(event) => setTitlePromptInput(event.target.value)}
+                      placeholder={DEFAULT_TITLE_GENERATION_PROMPT}
+                      rows={3}
+                      disabled={saving}
+                    />
+                    <div className={styles.helperText}>
+                      <span>Prompt used when AI generates chat titles. Leave empty to use the default.</span>
+                      <button
+                        type="button"
+                        className={styles.resetLink}
+                        onClick={() => setTitlePromptInput("")}
+                      >
+                        Reset to default
                       </button>
                     </div>
                   </div>
-                </form>
-              )}
-            </>
-          )}
+                )}
 
-          {/* MCP Servers Tab */}
-          {activeTab === "mcp" && (
-            <>
-              <McpServersPanel
-                onAddServer={() => {
+                {error && <p className={styles.error} role="alert">{error}</p>}
+                {successMessage && <p className={styles.success} role="status" aria-live="polite">{successMessage}</p>}
+
+                <div className="modal-footer modal-footer-between">
+                  <button type="button" className="btn btn-secondary" onClick={handleRefresh} disabled={loading || saving}>
+                    Refresh
+                  </button>
+                  <div className={styles.footerActions}>
+                    <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={saving}>
+                      {saving ? "Saving…" : "Save changes"}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </>
+        )}
+
+        {/* MCP Servers Tab */}
+        {activeTab === "mcp" && (
+          <>
+            <McpServersPanel
+              onAddServer={() => {
+                setEditingMcpServer(null);
+                setShowAddMcpModal(true);
+              }}
+              onEditServer={(server) => {
+                setEditingMcpServer(server);
+                setShowAddMcpModal(true);
+              }}
+            />
+            {showAddMcpModal && (
+              <AddMcpServerModal
+                isOpen={showAddMcpModal}
+                editingServer={editingMcpServer ?? undefined}
+                onClose={() => {
+                  setShowAddMcpModal(false);
                   setEditingMcpServer(null);
-                  setShowAddMcpModal(true);
                 }}
-                onEditServer={(server) => {
-                  setEditingMcpServer(server);
-                  setShowAddMcpModal(true);
+                onSave={async (serverData) => {
+                  if (editingMcpServer) {
+                    // Update existing server with new data
+                    await updateMcpServer(editingMcpServer.server.id, serverData);
+                  } else {
+                    await addMcpServer(serverData);
+                  }
+                  setShowAddMcpModal(false);
+                  setEditingMcpServer(null);
                 }}
               />
-              {showAddMcpModal && (
-                <AddMcpServerModal
-                  isOpen={showAddMcpModal}
-                  editingServer={editingMcpServer ?? undefined}
-                  onClose={() => {
-                    setShowAddMcpModal(false);
-                    setEditingMcpServer(null);
-                  }}
-                  onSave={async (serverData) => {
-                    if (editingMcpServer) {
-                      // Update existing server with new data
-                      await updateMcpServer(editingMcpServer.server.id, serverData);
-                    } else {
-                      await addMcpServer(serverData);
-                    }
-                    setShowAddMcpModal(false);
-                    setEditingMcpServer(null);
-                  }}
-                />
-              )}
-            </>
-          )}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-      {showAddMcpModal && (
-        <AddMcpServerModal
-          isOpen={showAddMcpModal}
-          editingServer={editingMcpServer ?? undefined}
-          onClose={() => {
-            setShowAddMcpModal(false);
-            setEditingMcpServer(null);
-          }}
-          onSave={async (serverData) => {
-            if (editingMcpServer) {
-              // Update existing server with new data
-              await updateMcpServer(editingMcpServer.server.id, serverData);
-            } else {
-              await addMcpServer(serverData);
-            }
-            setShowAddMcpModal(false);
-            setEditingMcpServer(null);
-          }}
-        />
-      )}
-    </Dialog.Root>
+            )}
+          </>
+        )}
+      </Modal>
+    </>
   );
 };
 

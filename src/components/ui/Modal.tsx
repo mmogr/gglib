@@ -1,4 +1,4 @@
-import { FC, ReactNode } from "react";
+import { FC, ReactNode, useId } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { Icon } from "./Icon";
@@ -28,6 +28,9 @@ export const Modal: FC<ModalProps> = ({
   size = "md",
   preventClose = false,
 }) => {
+  const descriptionId = useId();
+  const hasDescription = description !== undefined && description !== null;
+
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && preventClose) return;
     if (!nextOpen) onClose();
@@ -39,6 +42,7 @@ export const Modal: FC<ModalProps> = ({
         <DialogPrimitive.Overlay className="modal-overlay" />
         <DialogPrimitive.Content
           className={`modal ${sizeClassMap[size]}`}
+          aria-describedby={descriptionId}
           onPointerDownOutside={(event) => {
             if (preventClose) event.preventDefault();
           }}
@@ -59,7 +63,12 @@ export const Modal: FC<ModalProps> = ({
               </button>
             </DialogPrimitive.Close>
           </div>
-          {description ? <div className="modal-description">{description}</div> : null}
+          <DialogPrimitive.Description
+            id={descriptionId}
+            className={hasDescription ? "modal-description" : "sr-only"}
+          >
+            {hasDescription ? description : "Dialog content"}
+          </DialogPrimitive.Description>
           <div className="modal-body">{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>

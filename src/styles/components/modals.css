@@ -20,7 +20,10 @@
 
 /* Modal Container */
 .modal {
-  position: relative;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   background-color: var(--color-background-elevated);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2xl);
@@ -101,6 +104,15 @@
 .modal-close:hover {
   background-color: var(--color-background-hover);
   color: var(--color-text);
+}
+
+/* Modal Description */
+.modal-description {
+  padding: 0 var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal);
 }
 
 /* Modal Body */
@@ -212,6 +224,18 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   max-width: 400px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Scrollable Content */
