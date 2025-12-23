@@ -133,7 +133,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         </Button>
       )}
       <ProxyControl
-        buttonClassName="icon-btn icon-btn-sm proxy-sidebar-btn"
+        buttonClassName="proxy-sidebar-btn"
         buttonActiveClassName="proxy-sidebar-btn-active"
         statusDotClassName="proxy-status-dot"
         statusDotActiveClassName="proxy-status-dot-active"

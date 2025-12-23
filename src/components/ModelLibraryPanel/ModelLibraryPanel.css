@@ -2,8 +2,8 @@
   background: var(--color-surface);
 }
 
-/* Proxy button styling for sidebar - needs higher specificity to override icon-btn-sm */
-.icon-btn.icon-btn-sm.proxy-sidebar-btn {
+/* Proxy button styling for sidebar */
+.proxy-sidebar-btn {
   position: relative;
   font-size: var(--font-size-base);
   width: auto;
