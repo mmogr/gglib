@@ -10,6 +10,7 @@ import { ServerHealthIndicator } from "./ServerHealthIndicator";
 import { useIsServerRunning } from "../services/serverRegistry";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
 
 interface ModelListProps {
   models: GgufModel[];
@@ -298,7 +299,7 @@ const ModelList: FC<ModelListProps> = ({
                   Context Length
                   <span className="label-hint"> (optional)</span>
                 </label>
-                <input
+                <Input
                   id="context-input"
                   type="number"
                   className="context-input"

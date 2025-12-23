@@ -9,6 +9,8 @@ import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
+import { Textarea } from "./ui/Textarea";
 import styles from "./SettingsModal.module.css";
 
 type SettingsTab = "general" | "mcp";
@@ -204,9 +206,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <label className={styles.label} htmlFor="models-dir-input">
                   Default Download Path
                 </label>
-                <input
+                <Input
                   id="models-dir-input"
-                  className={styles.input}
                   value={pathInput}
                   onChange={(event) => setPathInput(event.target.value)}
                   placeholder="/path/to/models"
@@ -243,10 +244,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <label className={styles.label} htmlFor="context-size-input">
                   Default Context Size
                 </label>
-                <input
+                <Input
                   id="context-size-input"
                   type="number"
-                  className={styles.input}
                   value={contextSizeInput}
                   onChange={(event) => setContextSizeInput(event.target.value)}
                   placeholder="4096"
@@ -261,10 +261,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <label className={styles.label} htmlFor="proxy-port-input">
                   Proxy Server Port
                 </label>
-                <input
+                <Input
                   id="proxy-port-input"
                   type="number"
-                  className={styles.input}
                   value={proxyPortInput}
                   onChange={(event) => setProxyPortInput(event.target.value)}
                   placeholder="8080"
@@ -279,10 +278,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <label className={styles.label} htmlFor="server-port-input">
                   Base Server Port
                 </label>
-                <input
+                <Input
                   id="server-port-input"
                   type="number"
-                  className={styles.input}
                   value={serverPortInput}
                   onChange={(event) => setServerPortInput(event.target.value)}
                   placeholder="9000"
@@ -297,10 +295,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <label className={styles.label} htmlFor="max-queue-size-input">
                   Max Download Queue Size
                 </label>
-                <input
+                <Input
                   id="max-queue-size-input"
                   type="number"
-                  className={styles.input}
                   value={maxQueueSizeInput}
                   onChange={(event) => setMaxQueueSizeInput(event.target.value)}
                   placeholder="10"
@@ -347,10 +344,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     <label className={styles.label} htmlFor="max-tool-iterations-input">
                       Max Tool Iterations
                     </label>
-                    <input
+                    <Input
                       id="max-tool-iterations-input"
                       type="number"
-                      className={styles.input}
                       value={maxToolIterationsInput}
                       onChange={(event) => setMaxToolIterationsInput(event.target.value)}
                       placeholder="25"
@@ -365,10 +361,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     <label className={styles.label} htmlFor="max-stagnation-steps-input">
                       Max Stagnation Steps
                     </label>
-                    <input
+                    <Input
                       id="max-stagnation-steps-input"
                       type="number"
-                      className={styles.input}
                       value={maxStagnationStepsInput}
                       onChange={(event) => setMaxStagnationStepsInput(event.target.value)}
                       placeholder="5"
@@ -383,9 +378,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     <label className={styles.label} htmlFor="title-prompt-input">
                       Chat Title Generation Prompt
                     </label>
-                    <textarea
+                    <Textarea
                       id="title-prompt-input"
-                      className={styles.textarea}
                       value={titlePromptInput}
                       onChange={(event) => setTitlePromptInput(event.target.value)}
                       placeholder={DEFAULT_TITLE_GENERATION_PROMPT}

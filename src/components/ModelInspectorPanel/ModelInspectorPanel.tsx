@@ -23,6 +23,7 @@ import {
   DeleteModal,
   InspectorActions,
 } from './components';
+import { Input } from '../ui/Input';
 import './ModelInspectorPanel.css';
 
 interface ModelInspectorPanelProps {
@@ -184,7 +185,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     <div className="mcc-panel inspector-panel">
       <div className="mcc-panel-header">
         {editMode.isEditMode ? (
-          <input
+          <Input
             type="text"
             className="inspector-title-edit"
             value={editMode.editedName}

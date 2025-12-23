@@ -8,6 +8,7 @@ import type { McpServerType } from "../services/transport/types/mcp";
 import styles from "./AddMcpServerModal.module.css";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
 import { Icon } from "./ui/Icon";
 import { Plus, X } from "lucide-react";
 
@@ -238,10 +239,9 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
               <label className={styles.label} htmlFor="mcp-name">
                 Server Name *
               </label>
-              <input
+              <Input
                 id="mcp-name"
                 type="text"
-                className={styles.input}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My MCP Server"
@@ -283,10 +283,9 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                   <label className={styles.label} htmlFor="mcp-command">
                     Command *
                   </label>
-                  <input
+                  <Input
                     id="mcp-command"
                     type="text"
-                    className={styles.input}
                     value={command}
                     onChange={(e) => setCommand(e.target.value)}
                     placeholder="npx, python3, node"
@@ -301,10 +300,9 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                   <label className={styles.label} htmlFor="mcp-args">
                     Arguments
                   </label>
-                  <input
+                  <Input
                     id="mcp-args"
                     type="text"
-                    className={styles.input}
                     value={args}
                     onChange={(e) => setArgs(e.target.value)}
                     placeholder="-y @tavily/mcp-server"
@@ -317,10 +315,9 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                   <label className={styles.label} htmlFor="mcp-working-dir">
                     Working Directory
                   </label>
-                  <input
+                  <Input
                     id="mcp-working-dir"
                     type="text"
-                    className={styles.input}
                     value={workingDir}
                     onChange={(e) => setWorkingDir(e.target.value)}
                     placeholder="(optional) /absolute/path/to/directory"
@@ -333,10 +330,9 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                   <label className={styles.label} htmlFor="mcp-path-extra">
                     Additional PATH Entries
                   </label>
-                  <input
+                  <Input
                     id="mcp-path-extra"
                     type="text"
-                    className={styles.input}
                     value={pathExtra}
                     onChange={(e) => setPathExtra(e.target.value)}
                     placeholder="(optional) /custom/bin:/other/path"
@@ -353,10 +349,9 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 <label className={styles.label} htmlFor="mcp-url">
                   Server URL *
                 </label>
-                <input
+                <Input
                   id="mcp-url"
                   type="url"
-                  className={styles.input}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="http://localhost:3001/sse"
@@ -389,7 +384,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 <div className={styles.envVars}>
                   {envVars.map(([key, value], index) => (
                     <div key={index} className={styles.envRow}>
-                      <input
+                      <Input
                         type="text"
                         className={styles.envKey}
                         value={key}
@@ -397,7 +392,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                         placeholder="KEY"
                         disabled={saving}
                       />
-                      <input
+                      <Input
                         type="password"
                         className={styles.envValue}
                         value={value}
