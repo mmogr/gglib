@@ -3,6 +3,7 @@ import Anser from 'anser';
 import { ClipboardCopy, Pause, Play, Trash2, Monitor } from 'lucide-react';
 import { useServerLogs, ServerLogEntry } from '../../hooks/useServerLogs';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import './ConsoleLogPanel.css';
 
 interface ConsoleLogPanelProps {
@@ -76,36 +77,33 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
         <div className="console-log-header">
           <h3 className="console-log-title">Server Output</h3>
           <div className="console-log-controls">
-            <button
-              className={`btn btn-sm ${isAutoScroll ? 'btn-primary' : 'btn-secondary'}`}
+            <Button
+              variant={isAutoScroll ? 'primary' : 'secondary'}
+              size="sm"
               onClick={handleToggleAutoScroll}
               title={isAutoScroll ? 'Auto-scroll enabled' : 'Auto-scroll disabled'}
+              leftIcon={<Icon icon={isAutoScroll ? Play : Pause} size={14} />}
             >
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={isAutoScroll ? Play : Pause} size={14} />
-                {isAutoScroll ? 'Auto' : 'Paused'}
-              </span>
-            </button>
-            <button
-              className="btn btn-sm btn-secondary"
+              {isAutoScroll ? 'Auto' : 'Paused'}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={copyAllLogs}
               title="Copy all logs to clipboard"
+              leftIcon={<Icon icon={ClipboardCopy} size={14} />}
             >
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={ClipboardCopy} size={14} />
-                Copy
-              </span>
-            </button>
-            <button
-              className="btn btn-sm btn-secondary"
+              Copy
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={clearLogs}
               title="Clear log display"
+              leftIcon={<Icon icon={Trash2} size={14} />}
             >
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={Trash2} size={14} />
-                Clear
-              </span>
-            </button>
+              Clear
+            </Button>
           </div>
         </div>
       </div>
