@@ -1,4 +1,5 @@
 import { FC, useState, useRef } from "react";
+import { Library, Menu, Monitor, Settings, X } from "lucide-react";
 import { ServerInfo } from "../types";
 import { RunsPopover } from "./RunsPopover";
 import { useClickOutside } from "../hooks/useClickOutside";
@@ -46,8 +47,8 @@ const Header: FC<HeaderProps> = ({
       <div className={styles.headerContent}>
         <div className={styles.headerLeft}>
           <h1 className="app-title">
-            <span className="logo">🦀</span>
-            GGLib
+            <Library className={styles.logoIcon} aria-hidden />
+            <span>GGLib</span>
           </h1>
         </div>
         <div className={styles.headerRight} ref={menuRef}>
@@ -64,7 +65,7 @@ const Header: FC<HeaderProps> = ({
                 aria-label={hasRunningServers ? `${serverCount} server${serverCount !== 1 ? 's' : ''} running` : 'No servers running'}
                 title={hasRunningServers ? `${serverCount} server${serverCount !== 1 ? 's' : ''} running` : 'No servers running'}
               >
-                🖥️
+                <Monitor className={styles.icon} aria-hidden />
                 {hasRunningServers && (
                   <span className={styles.serverBadge}>{serverCount}</span>
                 )}
@@ -85,7 +86,7 @@ const Header: FC<HeaderProps> = ({
               aria-label="Open settings"
               title="Open settings"
             >
-              ⚙️
+                <Settings className={styles.icon} aria-hidden />
             </button>
           </div>
 
@@ -97,7 +98,11 @@ const Header: FC<HeaderProps> = ({
             aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isMobileMenuOpen}
           >
-            {isMobileMenuOpen ? '✕' : '☰'}
+            {isMobileMenuOpen ? (
+              <X className={styles.icon} aria-hidden />
+            ) : (
+              <Menu className={styles.icon} aria-hidden />
+            )}
           </button>
 
           {/* Mobile dropdown menu */}
@@ -108,14 +113,16 @@ const Header: FC<HeaderProps> = ({
               onClick={() => hasRunningServers && handleMobileMenuAction(() => setIsRunsPopoverOpen(true))}
               disabled={!hasRunningServers}
             >
-              🖥️ {hasRunningServers ? `${serverCount} Running` : 'No Servers'}
+              <Monitor className={styles.icon} aria-hidden />
+              {hasRunningServers ? `${serverCount} Running` : 'No Servers'}
             </button>
             <button
               type="button"
               className={styles.mobileMenuItem}
               onClick={() => handleMobileMenuAction(onOpenSettings)}
             >
-              ⚙️ Settings
+              <Settings className={styles.icon} aria-hidden />
+              Settings
             </button>
           </div>
         </div>

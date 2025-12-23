@@ -9,13 +9,25 @@
 
 .headerLeft {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .headerRight {
   display: flex;
   align-items: center;
   gap: var(--spacing-base);
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+}
+
+.logoIcon {
+  width: 20px;
+  height: 20px;
 }
 
 .headerButton {

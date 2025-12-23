@@ -1,4 +1,5 @@
 import { FC, useState } from 'react';
+import { BookOpenText, PlusCircle, RefreshCcw } from 'lucide-react';
 import { GgufModel, ServerInfo, HfModelSummary, ModelFilterOptions } from '../../types';
 import SidebarTabs, { SidebarTabId, SidebarTab } from './SidebarTabs';
 import ModelsListContent from './ModelsListContent';
@@ -41,8 +42,8 @@ interface ModelLibraryPanelProps {
 }
 
 const SIDEBAR_TABS: SidebarTab[] = [
-  { id: 'models', label: 'Your Models', icon: '📋' },
-  { id: 'add', label: 'Add Models', icon: '➕' },
+  { id: 'models', label: 'Your Models', icon: <BookOpenText size={18} /> },
+  { id: 'add', label: 'Add Models', icon: <PlusCircle size={18} /> },
 ];
 
 const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
@@ -125,7 +126,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
           disabled={loading}
           title="Refresh models"
         >
-          🔄
+          <RefreshCcw size={16} />
         </button>
       )}
       <ProxyControl

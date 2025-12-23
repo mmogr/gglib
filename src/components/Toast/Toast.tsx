@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { Icon } from '../ui/Icon';
 import './Toast.css';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -40,10 +42,10 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
   }, [toast.id, onDismiss]);
 
   const icon = {
-    success: '✓',
-    error: '✕',
-    info: 'ℹ',
-    warning: '⚠',
+    success: CheckCircle2,
+    error: XCircle,
+    info: Info,
+    warning: AlertTriangle,
   }[toast.type];
 
   return (
@@ -53,10 +55,19 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
       role="alert"
       aria-live="polite"
     >
-      <span className="toast-icon">{icon}</span>
+      <span className="toast-icon">
+        <Icon icon={icon} size={16} />
+      </span>
       <span className="toast-message">{toast.message}</span>
-      <button className="toast-close" aria-label="Dismiss notification">
-        ×
+      <button
+        className="toast-close"
+        aria-label="Dismiss notification"
+        onClick={(event) => {
+          event.stopPropagation();
+          handleClick();
+        }}
+      >
+        <Icon icon={X} size={14} />
       </button>
     </div>
   );
