@@ -1,12 +1,21 @@
 @import "tailwindcss";
 
+@import './base/variables.css';
+
+/*
+  Tailwind v4 content discovery.
+  Without @source (or a tailwind.config content list), Tailwind may generate
+  little-to-no utilities, which makes the UI look unstyled.
+*/
+
+@source "../../index.html";
+@source "../**/*.{ts,tsx}";
+
 /*
   Tailwind v4 theme tokens.
   IMPORTANT: reuse the existing design-system CSS variables from
   src/styles/base/variables.css so we don't introduce new hard-coded colors.
 */
-
-@import './base/variables.css';
 
 @theme {
   --color-background: var(--ds-color-background);

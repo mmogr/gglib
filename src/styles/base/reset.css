@@ -1,90 +1,98 @@
-/* ===========================
-   Reset & Base Styles
-   =========================== */
+/*
+  NOTE: Tailwind v4 emits many utilities with low specificity (e.g. via :where(...)).
+  If we ship unlayered reset styles after Tailwind, they can override utilities.
+  Keep our reset in @layer base so utilities always win.
+*/
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@layer base {
+  /* ===========================
+     Reset & Base Styles
+     =========================== */
 
-html,
-body {
-  height: 100%;
-  width: 100%;
-}
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-body {
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-normal);
-  color: var(--color-text);
-  background-color: var(--color-background);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  html,
+  body {
+    height: 100%;
+    width: 100%;
+  }
 
-#root {
-  height: 100%;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-}
+  body {
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    color: var(--color-text);
+    background-color: var(--color-background);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-/* Remove default button styles */
-button {
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: inherit;
-}
+  #root {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
 
-/* Remove default input styles */
-input,
-textarea,
-select {
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-  color: inherit;
-}
+  /* Remove default button styles */
+  button {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+  }
 
-/* Remove default link styles */
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  /* Remove default input styles */
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
 
-/* Remove list styles */
-ul,
-ol {
-  list-style: none;
-}
+  /* Remove default link styles */
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 
-/* Scrollbar Styles */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+  /* Remove list styles */
+  ul,
+  ol {
+    list-style: none;
+  }
 
-::-webkit-scrollbar-track {
-  background: var(--color-background);
-}
+  /* Scrollbar Styles */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
 
-::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: var(--radius-base);
-}
+  ::-webkit-scrollbar-track {
+    background: var(--color-background);
+  }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-hover);
-}
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-base);
+  }
 
-/* Selection */
-::selection {
-  background-color: var(--color-primary);
-  color: white;
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-hover);
+  }
+
+  /* Selection */
+  ::selection {
+    background-color: var(--color-primary);
+    color: white;
+  }
 }
