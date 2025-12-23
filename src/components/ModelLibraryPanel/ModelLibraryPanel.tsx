@@ -6,6 +6,7 @@ import ModelsListContent from './ModelsListContent';
 import AddDownloadContent, { AddDownloadSubTab } from './AddDownloadContent';
 import ProxyControl from '../ProxyControl';
 import { FilterPopover, FilterState } from '../FilterPopover';
+import { Button } from '../ui/Button';
 import './ModelLibraryPanel.css';
 
 interface ModelLibraryPanelProps {
@@ -120,14 +121,16 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   const headerActions = (
     <>
       {activeTab === 'models' && (
-        <button 
-          onClick={onRefresh} 
-          className="icon-btn icon-btn-sm" 
+        <Button 
+          onClick={onRefresh}
+          variant="ghost"
+          size="sm"
           disabled={loading}
           title="Refresh models"
+          iconOnly
         >
           <RefreshCcw size={16} />
-        </button>
+        </Button>
       )}
       <ProxyControl
         buttonClassName="icon-btn icon-btn-sm proxy-sidebar-btn"
@@ -162,14 +165,17 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
             </div>
 
             <div className="filter-button-container">
-              <button
-                className={`icon-btn icon-btn-sm filter-btn ${hasActiveFilters ? 'filter-btn-active' : ''}`}
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`filter-btn ${hasActiveFilters ? 'filter-btn-active' : ''}`}
                 onClick={() => setFilterPopoverOpen(!filterPopoverOpen)}
                 title="Filter models"
+                iconOnly
               >
                 🔽
                 {hasActiveFilters && <span className="filter-badge" />}
-              </button>
+              </Button>
               
               <FilterPopover
                 isOpen={filterPopoverOpen}

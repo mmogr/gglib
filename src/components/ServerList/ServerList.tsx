@@ -5,6 +5,7 @@ import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { ServerHealthIndicator } from '../ServerHealthIndicator';
 import { Icon } from '../ui/Icon';
+import { Button } from '../ui/Button';
 import './ServerList.css';
 
 interface ServerListProps {
@@ -67,13 +68,15 @@ const ServerList: FC<ServerListProps> = ({
             Active Servers ({servers.length})
           </span>
           {onRefresh && (
-            <button
-              className="icon-btn icon-btn-sm"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={onRefresh}
               title="Refresh servers"
+              iconOnly
             >
               <Icon icon={RotateCcw} size={14} />
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -98,16 +101,16 @@ const ServerList: FC<ServerListProps> = ({
                   <span className="server-status">{server.status}</span>
                 </div>
               </div>
-              <button
+              <Button
+                variant="danger"
+                size="sm"
                 className={`server-stop-btn ${compact ? 'compact' : ''}`}
                 onClick={(e) => handleStop(server.model_id, e)}
                 title="Stop server"
+                leftIcon={<Icon icon={Square} size={14} />}
               >
-                <span className="inline-flex items-center gap-2">
-                  <Icon icon={Square} size={14} />
-                  {!compact && 'Stop'}
-                </span>
-              </button>
+                {!compact && 'Stop'}
+              </Button>
             </div>
             {expandedServerId === server.model_id && onSelectModel && (
               <div className="server-item-tabs">

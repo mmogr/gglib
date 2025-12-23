@@ -7,6 +7,7 @@ import {
 } from '@assistant-ui/react';
 import { Bot, Copy, Pencil, Trash2, User as UserIcon } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
+import { Button } from '../../ui/Button';
 import { parseThinkingContent } from '../../../utils/thinkingParser';
 import ThinkingBlock from '../ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
@@ -117,14 +118,17 @@ export const UserMessageBubble: React.FC = () => {
         <ActionBarPrimitive.Edit className="chat-action-btn chat-edit-btn" title="Edit message" aria-label="Edit message">
           <Icon icon={Pencil} size={14} />
         </ActionBarPrimitive.Edit>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           className="chat-action-btn chat-delete-btn"
           onClick={handleDelete}
           title="Delete message"
           aria-label="Delete message"
+          iconOnly
         >
           <Icon icon={Trash2} size={14} />
-        </button>
+        </Button>
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
   );
