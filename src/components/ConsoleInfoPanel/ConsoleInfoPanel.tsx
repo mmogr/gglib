@@ -1,5 +1,5 @@
 import { FC, useState, useEffect, useCallback, useRef } from 'react';
-import { Copy, Loader2, StopCircle } from 'lucide-react';
+import { Copy, StopCircle } from 'lucide-react';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { useServerState } from '../../services/serverEvents';
