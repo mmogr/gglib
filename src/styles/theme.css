@@ -1,0 +1,17 @@
+/* Base resets that match the previous app behavior */
+
+@import './base/reset.css';
+
+/* Ensure the new UI fills the viewport */
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+}

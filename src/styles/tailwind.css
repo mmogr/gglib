@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/*
+  Tailwind v4 theme tokens.
+  IMPORTANT: reuse the existing design-system CSS variables from
+  src/styles/base/variables.css so we don't introduce new hard-coded colors.
+*/
+
+@import './base/variables.css';
+
+@theme {
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-text);
+
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-text);
+
+  --color-popover: var(--color-background-elevated);
+  --color-popover-foreground: var(--color-text);
+
+  --color-primary: var(--color-primary);
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: var(--color-surface-elevated);
+  --color-secondary-foreground: var(--color-text);
+
+  --color-muted: var(--color-background-hover);
+  --color-muted-foreground: var(--color-text-secondary);
+
+  --color-accent: var(--color-background-hover);
+  --color-accent-foreground: var(--color-text);
+
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: #ffffff;
+
+  --color-border: var(--color-border);
+  --color-input: var(--color-background-input);
+  --color-ring: var(--color-border-focus);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+}
