@@ -4,6 +4,7 @@ import { ModelCard } from "./components/ModelCard";
 import { useHuggingFaceSearch, SORT_OPTIONS } from "./hooks/useHuggingFaceSearch";
 import { Input } from "../ui/Input";
 import { Select } from "../ui/Select";
+import { Stack, Row, EmptyState } from "../primitives";
 import styles from "./HuggingFaceBrowser.module.css";
 
 interface HuggingFaceBrowserProps {
@@ -57,11 +58,11 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   } = useHuggingFaceSearch({ onSelectModel });
 
   return (
-    <div className={styles.container}>
+    <Stack gap="base" className={styles.container}>
       {/* Search Section */}
-      <div className={styles.searchSection}>
-        <div className={styles.searchRow}>
-          <div className={styles.searchInputWrapper}>
+      <Stack gap="sm" className={styles.searchSection}>
+        <Row gap="sm" className={styles.searchRow} align="end">
+          <Stack gap="xs" className={styles.searchInputWrapper}>
             <label className={styles.searchLabel}>Search Models</label>
             <Input
               type="text"
@@ -75,7 +76,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             {searchError && (
               <span className={styles.searchErrorText}>{searchError}</span>
             )}
-          </div>
+          </Stack>
           <button
             className={`${styles.searchBtn} ${buttonVariant === "accent" ? styles.searchBtnAccent : ""} ${buttonVariant === "primary" ? styles.searchBtnPrimary : ""}`}
             onClick={handleSearchAction}
@@ -84,10 +85,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
           >
             {buttonText}
           </button>
-        </div>
+        </Row>
 
-        <div className={styles.filterRow}>
-          <div className={styles.filterGroup}>
+        <Row gap="base" className={styles.filterRow} wrap>
+          <Stack gap="xs" className={styles.filterGroup}>
             <label className={styles.searchLabel}>Min Params (B)</label>
             <Input
               type="number"
@@ -98,8 +99,8 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
               min="0"
               step="0.1"
             />
-          </div>
-          <div className={styles.filterGroup}>
+          </Stack>
+          <Stack gap="xs" className={styles.filterGroup}>
             <label className={styles.searchLabel}>Max Params (B)</label>
             <Input
               type="number"
@@ -110,10 +111,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
               min="0"
               step="0.1"
             />
-          </div>
-          <div className={styles.filterGroup}>
+          </Stack>
+          <Stack gap="xs" className={styles.filterGroup}>
             <label className={styles.searchLabel}>Sort By</label>
-            <div className={styles.sortWrapper}>
+            <Row gap="xs" className={styles.sortWrapper}>
               <Select
                 className={styles.sortSelect}
                 value={sortBy}
@@ -132,19 +133,20 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
               >
                 {sortAscending ? "↑" : "↓"}
               </button>
-            </div>
-          </div>
-        </div>
-      </div>
+            </Row>
+          </Stack>
+        </Row>
+      </Stack>
 
       {/* Results Section */}
-      <div className={styles.resultsSection}>
+      <Stack gap="base" className={styles.resultsSection}>
         {/* Error State */}
         {error && (
-          <div className={styles.errorState}>
-            <h4 className={styles.errorTitle}>Error</h4>
-            <p className={styles.errorMessage}>{error}</p>
-          </div>
+          <EmptyState
+            icon={<span style={{ fontSize: '3rem' }}>⚠️</span>}
+            title="Error"
+            description={error}
+          />
         )}
 
         {/* Loading State */}
@@ -157,32 +159,32 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
         {/* Empty State */}
         {!loading && !error && models.length === 0 && (
-          <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>🔍</div>
-            <h3 className={styles.emptyTitle}>No models found</h3>
-            <p className={styles.emptyDescription}>
-              Try adjusting your search query or parameter filters.
-            </p>
-          </div>
+          <EmptyState
+            icon="🔍"
+            title="No models found"
+            description="Try adjusting your search query or parameter filters."
+          />
         )}
 
         {/* Results */}
         {!loading && models.length > 0 && (
-          <>
+          <Stack gap="base">
             <div className={styles.resultsHeader}>
               <span className={styles.resultsCount}>
                 Showing {models.length} model{models.length !== 1 ? "s" : ""}
               </span>
             </div>
 
-            {models.map((model) => (
-              <ModelCard
-                key={model.id}
-                model={model}
-                onSelect={() => onSelectModel?.(model)}
-                isSelected={selectedModelId === model.id}
-              />
-            ))}
+            <Stack gap="sm">
+              {models.map((model) => (
+                <ModelCard
+                  key={model.id}
+                  model={model}
+                  onSelect={() => onSelectModel?.(model)}
+                  isSelected={selectedModelId === model.id}
+                />
+              ))}
+            </Stack>
 
             {/* Load More Button */}
             {hasMore && (
@@ -196,10 +198,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
                 </button>
               </div>
             )}
-          </>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 };
 
