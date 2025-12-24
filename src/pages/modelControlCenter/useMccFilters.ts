@@ -1,29 +1,62 @@
-import { useMemo } from 'react';
-import type { ModelsInfo, ModelInfo } from '../../types/models';
-import type { FilterState } from './modelControlCenterInterfaces';
+import { useCallback, useMemo, useState } from 'react';
+import type { FilterState } from '../../components/FilterPopover';
+import type { AddDownloadSubTab } from '../../components/ModelLibraryPanel/AddDownloadContent';
+import type { GgufModel } from '../../types';
 
-/**
- * Custom hook to compute filtered models list based on applied filters.
- * Filters include:
- *   - Search query (name, architecture, repo_id)
- *   - Tags (AND logic: model must have all selected tags)
- *   - Parameter count range
- *   - Context length range
- *   - Quantizations
- * 
- * Returns the filtered models array.
- */
-export function useMccFilters(
-  allModels: ModelsInfo | null,
-  searchQuery: string,
-  filters: FilterState
-): ModelInfo[] {
-  return useMemo(() => {
-    if (!allModels) return [];
+type RefreshDeps = {
+  loadModels: () => Promise<void>;
+  refreshFilterOptions: () => Promise<void>;
+  loadTags: () => Promise<void>;
+};
 
-    const modelsList = Object.values(allModels);
+interface UseMccFiltersArgs extends RefreshDeps {
+  models: GgufModel[];
+  addModel: (filePath: string) => Promise<void>;
+}
 
-    return modelsList.filter((model) => {
+export interface UseMccFiltersResult {
+  searchQuery: string;
+  setSearchQuery: (value: string) => void;
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+  onClearFilters: () => void;
+  filteredModels: GgufModel[];
+  activeSubTab: AddDownloadSubTab;
+  setActiveSubTab: (tab: AddDownloadSubTab) => void;
+  handleModelAdded: (filePath?: string) => Promise<void>;
+}
+
+export function useMccFilters({
+  models,
+  addModel,
+  loadModels,
+  refreshFilterOptions,
+  loadTags,
+}: UseMccFiltersArgs): UseMccFiltersResult {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSubTab, setActiveSubTab] = useState<AddDownloadSubTab>('browse');
+  const [filters, setFilters] = useState<FilterState>({
+    paramRange: null,
+    contextRange: null,
+    selectedQuantizations: [],
+    selectedTags: [],
+  });
+
+  const onFiltersChange = useCallback((newFilters: FilterState) => {
+    setFilters(newFilters);
+  }, []);
+
+  const onClearFilters = useCallback(() => {
+    setFilters({
+      paramRange: null,
+      contextRange: null,
+      selectedQuantizations: [],
+      selectedTags: [],
+    });
+  }, []);
+
+  const filteredModels = useMemo(() => {
+    return models.filter((model) => {
       const matchesSearch =
         !searchQuery ||
         model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -40,17 +73,41 @@ export function useMccFilters(
 
       const matchesContext =
         filters.contextRange === null ||
-        (model.context_length >= filters.contextRange[0] &&
-          model.context_length <= filters.contextRange[1]);
+        model.context_length === undefined ||
+        model.context_length === null ||
+        (model.context_length >= filters.contextRange[0] && model.context_length <= filters.contextRange[1]);
 
-      const matchesQuants =
+      const matchesQuantization =
         filters.selectedQuantizations.length === 0 ||
-        (model.available_quantizations &&
-          filters.selectedQuantizations.some((q) =>
-            model.available_quantizations!.includes(q)
-          ));
+        (model.quantization && filters.selectedQuantizations.includes(model.quantization));
 
-      return matchesSearch && matchesTags && matchesParams && matchesContext && matchesQuants;
+      return matchesSearch && matchesTags && matchesParams && matchesContext && matchesQuantization;
     });
-  }, [allModels, searchQuery, filters]);
+  }, [models, searchQuery, filters]);
+
+  const refreshFilterDeps = useCallback(async () => {
+    await Promise.all([loadModels(), refreshFilterOptions(), loadTags()]);
+  }, [loadModels, refreshFilterOptions, loadTags]);
+
+  const handleModelAdded = useCallback(
+    async (filePath?: string) => {
+      if (filePath) {
+        await addModel(filePath);
+      }
+      await refreshFilterDeps();
+    },
+    [addModel, refreshFilterDeps]
+  );
+
+  return {
+    searchQuery,
+    setSearchQuery,
+    filters,
+    onFiltersChange,
+    onClearFilters,
+    filteredModels,
+    activeSubTab,
+    setActiveSubTab,
+    handleModelAdded,
+  };
 }
