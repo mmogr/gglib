@@ -223,10 +223,6 @@
   gap: var(--spacing-base);
 }
 
-.empty-actions .btn {
-  min-width: 120px;
-}
-
 .loading-state {
   display: flex;
   align-items: center;

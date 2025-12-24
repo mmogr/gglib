@@ -31,7 +31,6 @@ export const InspectorActions: FC<InspectorActionsProps> = ({
       <Button 
         variant={isRunning ? 'danger' : 'primary'}
         size="lg"
-        className="btn-large"
         onClick={onToggleServer}
         disabled={isEditMode}
         leftIcon={<Icon icon={isRunning ? Square : Rocket} size={16} />}
