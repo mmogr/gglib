@@ -413,3 +413,10 @@ pub struct McpToolCallResponse {
     pub data: Option<serde_json::Value>,
     pub error: Option<String>,
 }
+
+// ============================================================================
+// Server Log Types
+// ============================================================================
+
+// Re-export from gglib-runtime for cross-adapter use
+pub use gglib_runtime::ServerLogEntry;

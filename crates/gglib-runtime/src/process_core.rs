@@ -68,7 +68,9 @@ impl ProcessCore {
             // Non-fatal - continue anyway
         }
 
-        command::spawn_log_readers(&mut child, port, None);
+        // Wire log capture to the log manager for GUI streaming
+        use crate::process::LogManagerSink;
+        command::spawn_log_readers(&mut child, port, Some(std::sync::Arc::new(LogManagerSink)));
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

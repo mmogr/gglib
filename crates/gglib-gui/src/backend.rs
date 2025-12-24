@@ -166,6 +166,22 @@ impl GuiBackend {
         self.server_ops().list_servers().await
     }
 
+    /// Get logs for a specific server port.
+    pub fn get_server_logs(&self, port: u16) -> Vec<ServerLogEntry> {
+        self.server_ops().get_logs(port)
+    }
+
+    /// Subscribe to real-time server log events.
+    /// Returns a broadcast receiver that emits ServerLogEntry for all servers.
+    pub fn subscribe_server_logs(&self) -> tokio::sync::broadcast::Receiver<ServerLogEntry> {
+        self.server_ops().subscribe_logs()
+    }
+
+    /// Clear logs for a specific server port.
+    pub fn clear_server_logs(&self, port: u16) {
+        self.server_ops().clear_logs(port);
+    }
+
     /// Build a server snapshot for event emission.
     ///
     /// Queries all running servers and converts them to `ServerSummary` instances.

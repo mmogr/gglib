@@ -136,3 +136,23 @@ impl Default for ServerLogManager {
         Self::new()
     }
 }
+
+// ============================================================================
+// Log Sink Adapter
+// ============================================================================
+
+use gglib_core::ports::ServerLogSinkPort;
+
+/// Log sink that forwards process output to the global ServerLogManager.
+///
+/// This adapter bridges the process output capture (via spawn_log_readers)
+/// to the log broadcasting system. It's a zero-sized type since it just
+/// delegates to the global log manager singleton.
+#[derive(Debug, Clone, Default)]
+pub struct LogManagerSink;
+
+impl ServerLogSinkPort for LogManagerSink {
+    fn append(&self, port: u16, _stream_type: &str, line: String) {
+        get_log_manager().add_log(port, &line);
+    }
+}
