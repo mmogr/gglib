@@ -133,10 +133,8 @@
   transition: width 0.3s ease;
 }
 
-/* Color coding based on usage */
-.context-usage-fill[style*="width: 8"],
-.context-usage-fill[style*="width: 9"],
-.context-usage-fill[style*="width: 10"] {
+/* Color coding based on usage (80-100%) - using data attribute instead */
+.context-usage-fill.high-usage {
   background: linear-gradient(90deg, var(--color-warning) 0%, var(--color-warning-hover) 100%);
 }
 

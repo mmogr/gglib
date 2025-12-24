@@ -223,7 +223,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
               <div className="console-info-context-usage">
                 <div className="context-usage-bar">
                   <div 
-                    className="context-usage-fill"
+                    className={`context-usage-fill ${contextUsagePercent >= 80 ? 'high-usage' : ''}`}
                     style={{ width: `${Math.min(100, contextUsagePercent)}%` }}
                   />
                 </div>
