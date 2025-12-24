@@ -4,7 +4,12 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
-  plugins: [tailwindcss(), react()],
+  plugins: [
+    react(),
+    tailwindcss({
+      content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+    }),
+  ],
 
   // Build output to web_ui directory (served by gui-web command)
   build: {
