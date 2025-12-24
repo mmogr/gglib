@@ -1,0 +1,158 @@
+/* Button Component Styles */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+  cursor: pointer;
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-surface, transparent), 0 0 0 4px var(--color-primary);
+}
+
+.button:disabled {
+  pointer-events: none;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Variants */
+.primary {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.secondary {
+  background-color: var(--color-background-secondary);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.ghost {
+  background-color: transparent;
+  color: var(--color-text);
+}
+
+.ghost:hover:not(:disabled) {
+  background-color: var(--color-background-tertiary);
+}
+
+.outline {
+  background-color: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.outline:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.danger {
+  background-color: var(--color-danger);
+  color: white;
+}
+
+.danger:hover:not(:disabled) {
+  background-color: var(--color-danger-hover);
+}
+
+.success {
+  background-color: var(--color-success);
+  color: white;
+}
+
+.success:hover:not(:disabled) {
+  background-color: var(--color-success-hover);
+}
+
+.warning {
+  background-color: var(--color-warning);
+  color: white;
+}
+
+.warning:hover:not(:disabled) {
+  background-color: var(--color-warning-hover);
+}
+
+.link {
+  background-color: transparent;
+  color: var(--color-primary);
+  height: auto;
+  padding: 0;
+}
+
+.link:hover:not(:disabled) {
+  text-decoration: underline;
+  color: var(--color-primary-hover);
+}
+
+/* Sizes */
+.sm {
+  height: 2rem;
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+}
+
+.md {
+  height: 2.5rem;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+}
+
+.lg {
+  height: 2.75rem;
+  padding: 0 1.25rem;
+  font-size: 1rem;
+}
+
+/* Icon only variants */
+.iconOnly.sm {
+  height: 2rem;
+  width: 2rem;
+  padding: 0;
+}
+
+.iconOnly.md {
+  height: 2.5rem;
+  width: 2.5rem;
+  padding: 0;
+}
+
+.iconOnly.lg {
+  height: 2.75rem;
+  width: 2.75rem;
+  padding: 0;
+}
+
+/* Full width */
+.fullWidth {
+  width: 100%;
+}
+
+/* Icon containers */
+.iconContainer {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.childrenContainer {
+  display: inline-flex;
+  align-items: center;
+}
