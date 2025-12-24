@@ -87,9 +87,27 @@ uninstall:
 			echo "Preserving system data (config and database retained)"; \
 		fi; \
 		echo "Cleaning build artifacts..."; \
-		rm -rf target/ src-tauri/target/ src-tauri/gen/ web_ui/ .llama/ .gglib-runtime/ node_modules/ package-lock.json .conda/ .env pids/; \
+		cargo clean || true; \
+		if [ -d node_modules ]; then rm -rf node_modules || true; fi; \
+		if [ -d web_ui ]; then rm -rf web_ui || true; fi; \
+		if [ -d src-tauri/gen ]; then rm -rf src-tauri/gen || true; fi; \
+		if [ -d .llama ]; then rm -rf .llama || true; fi; \
+		if [ -d .gglib-runtime ]; then rm -rf .gglib-runtime || true; fi; \
+		if [ -d .conda ]; then rm -rf .conda || true; fi; \
+		if [ -d pids ]; then rm -rf pids || true; fi; \
+		if [ -f package-lock.json ]; then rm -f package-lock.json || true; fi; \
+		if [ -f .env ]; then rm -f .env || true; fi; \
 		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
-			rm -rf data/; \
+			rm -rf data/ || true; \
+		fi; \
+		if [ -d .git ]; then \
+			if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
+				git clean -xffd || true; \
+			else \
+				git clean -xffd -e data/ || true; \
+			fi; \
+		fi; \
+		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
 			echo "✓ Uninstall complete (including data/)"; \
 		else \
 			echo "✓ Uninstall complete (data/ preserved)"; \
