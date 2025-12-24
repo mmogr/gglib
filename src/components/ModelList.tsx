@@ -308,7 +308,7 @@ const ModelList: FC<ModelListProps> = ({
                     checked={enableJinja || jinjaAutoEnabled}
                     onChange={(e) => setEnableJinja(e.target.checked)}
                     disabled={isServing || jinjaAutoEnabled}
-                    className="w-auto m-0"
+                  className="w-auto"
                   />
                   <span>Enable Jinja templates</span>
                   {jinjaAutoEnabled && (
