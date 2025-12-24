@@ -86,8 +86,14 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/servers/stop", post(handlers::servers::stop_body))
         .route("/servers/:id/start", post(handlers::servers::start))
         .route("/servers/:id/stop", post(handlers::servers::stop))
-        .route("/servers/:port/logs", get(handlers::servers::get_logs).delete(handlers::servers::clear_logs))
-        .route("/servers/:port/logs/stream", get(handlers::servers::stream_logs))
+        .route(
+            "/servers/:port/logs",
+            get(handlers::servers::get_logs).delete(handlers::servers::clear_logs),
+        )
+        .route(
+            "/servers/:port/logs/stream",
+            get(handlers::servers::stream_logs),
+        )
         // Downloads API
         .route("/downloads", get(handlers::downloads::list))
         .route(

@@ -101,7 +101,7 @@ pub async fn stream_logs(
     Path(port): Path<u16>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     let receiver = state.gui.subscribe_server_logs();
-    
+
     let stream = BroadcastStream::new(receiver).filter_map(move |result| {
         match result {
             Ok(entry) => {
@@ -109,7 +109,7 @@ pub async fn stream_logs(
                 if entry.port != port {
                     return None;
                 }
-                
+
                 // Serialize log entry to JSON
                 match serde_json::to_string(&entry) {
                     Ok(json) => Some(Ok(Event::default().data(json))),
@@ -134,10 +134,7 @@ pub async fn stream_logs(
 }
 
 /// Clear logs for a specific server port (DELETE endpoint).
-pub async fn clear_logs(
-    State(state): State<AppState>,
-    Path(port): Path<u16>,
-) -> Json<String> {
+pub async fn clear_logs(State(state): State<AppState>, Path(port): Path<u16>) -> Json<String> {
     state.gui.clear_server_logs(port);
     Json(format!("Logs cleared for port {}", port))
 }
