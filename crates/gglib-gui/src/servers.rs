@@ -455,6 +455,22 @@ impl<'a> ServerOps<'a> {
             Err(_) => Vec::new(),
         }
     }
+
+    /// Get logs for a specific server port.
+    pub fn get_logs(&self, port: u16) -> Vec<crate::types::ServerLogEntry> {
+        gglib_runtime::get_log_manager().get_logs(port)
+    }
+
+    /// Subscribe to real-time log events.
+    /// Returns a broadcast receiver for ServerLogEntry events.
+    pub fn subscribe_logs(&self) -> tokio::sync::broadcast::Receiver<crate::types::ServerLogEntry> {
+        gglib_runtime::get_log_manager().subscribe()
+    }
+
+    /// Clear logs for a specific server port.
+    pub fn clear_logs(&self, port: u16) {
+        gglib_runtime::get_log_manager().clear_logs(port);
+    }
 }
 
 #[cfg(test)]
