@@ -73,3 +73,71 @@ pub async fn stop_body(
 ) -> Result<Json<String>, HttpError> {
     Ok(Json(state.gui.stop_server(body.model_id).await?))
 }
+
+// ============================================================================
+// Server log handlers
+// ============================================================================
+
+use axum::response::sse::{Event, Sse};
+use futures_util::stream::Stream;
+use std::convert::Infallible;
+use tokio_stream::StreamExt;
+use tokio_stream::wrappers::BroadcastStream;
+
+/// Get initial server logs for a specific port (REST endpoint).
+pub async fn get_logs(
+    State(state): State<AppState>,
+    Path(port): Path<u16>,
+) -> Json<Vec<gglib_gui::types::ServerLogEntry>> {
+    Json(state.gui.get_server_logs(port))
+}
+
+/// Stream server logs via SSE for a specific port.
+///
+/// Subscribes to the global log broadcast and filters by port.
+/// Includes keep-alive pings every 30 seconds to prevent proxy timeouts.
+pub async fn stream_logs(
+    State(state): State<AppState>,
+    Path(port): Path<u16>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
+    let receiver = state.gui.subscribe_server_logs();
+    
+    let stream = BroadcastStream::new(receiver).filter_map(move |result| {
+        match result {
+            Ok(entry) => {
+                // Only emit logs for the requested port
+                if entry.port != port {
+                    return None;
+                }
+                
+                // Serialize log entry to JSON
+                match serde_json::to_string(&entry) {
+                    Ok(json) => Some(Ok(Event::default().data(json))),
+                    Err(e) => {
+                        tracing::warn!("Failed to serialize log entry: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Log stream error: {}", e);
+                None
+            }
+        }
+    });
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(30))
+            .text("ping"),
+    )
+}
+
+/// Clear logs for a specific server port (DELETE endpoint).
+pub async fn clear_logs(
+    State(state): State<AppState>,
+    Path(port): Path<u16>,
+) -> Json<String> {
+    state.gui.clear_server_logs(port);
+    Json(format!("Logs cleared for port {}", port))
+}
