@@ -65,7 +65,7 @@ export function useMccFilters({
 
       const matchesTags =
         filters.selectedTags.length === 0 ||
-        (model.tags && filters.selectedTags.some((tag) => model.tags!.includes(tag)));
+        (model.tags && filters.selectedTags.every((tag) => model.tags!.includes(tag)));
 
       const matchesParams =
         filters.paramRange === null ||
