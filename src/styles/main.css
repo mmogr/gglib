@@ -11,10 +11,5 @@
 /* Components Layer - Reusable UI Components */
 @import './components/modals.css';
 
-/* Utilities Layer - Helper Classes */
-@import './utilities/spacing.css';
-@import './utilities/layout.css';
-@import './utilities/animations.css';
-
 /* Application Layer - App-specific Styles */
 @import './app.css';

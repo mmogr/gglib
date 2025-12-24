@@ -8,13 +8,13 @@ import {
 } from '@assistant-ui/react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { AlertTriangle, Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
+import { Button } from '../ui/Button';
 import { getMessages, deleteMessage } from '../../services/clients/chat';
 import type { ConversationSummary } from '../../services/clients/chat';
 import type { ToastType } from '../Toast';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ToolsPopover } from '../ToolsPopover';
 import { Icon } from '../ui/Icon';
-import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Textarea } from '../ui/Textarea';
 import {
@@ -458,9 +458,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
               Server not running — Chat is read-only
             </span>
             {onClose && (
-              <button type="button" className="btn btn-sm" onClick={onClose}>
+              <Button variant="secondary" size="sm" onClick={onClose}>
                 Close
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -501,20 +501,23 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     />
                     <div className="chat-composer-actions">
                       {isThreadRunning && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-danger"
+                        <Button
+                          variant="danger"
+                          size="sm"
                           onClick={() => threadRuntime?.cancelRun()}
                           title="Stop generation"
                         >
                           Stop
-                        </button>
+                        </Button>
                       )}
-                      <ComposerPrimitive.Send
-                        className="btn btn-sm btn-primary"
-                        disabled={!isServerConnected}
-                      >
-                        Send ↵
+                      <ComposerPrimitive.Send asChild>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={!isServerConnected}
+                        >
+                          Send ↵
+                        </Button>
                       </ComposerPrimitive.Send>
                     </div>
                   </ComposerPrimitive.Root>

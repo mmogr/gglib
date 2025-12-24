@@ -205,10 +205,6 @@
   flex-shrink: 0;
 }
 
-.chat-server-stopped-banner .btn {
-  flex-shrink: 0;
-}
-
 /* Messages surface */
 .chat-messages-surface {
   flex: 1;
