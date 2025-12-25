@@ -1,12 +1,12 @@
 //! Row mapping helpers for `SQLite` queries.
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use gglib_core::{Model, RepositoryError};
+use gglib_core::{Model, ModelCapabilities, RepositoryError};
 use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries.
-pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags";
+pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities";
 
 /// Helper to parse datetime strings that may have "UTC" suffix.
 pub fn parse_datetime(datetime_str: Option<String>) -> Option<DateTime<Utc>> {
@@ -80,6 +80,11 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
         download_date: parse_datetime(download_date_str),
         last_update_check: parse_datetime(last_update_check_str),
         tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+        capabilities: row
+            .try_get::<u32, _>("capabilities")
+            .ok()
+            .and_then(|bits| Some(ModelCapabilities::from_bits_truncate(bits)))
+            .unwrap_or_default(),
     })
 }
 

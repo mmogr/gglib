@@ -100,7 +100,8 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             last_update_check TEXT,
             tags TEXT DEFAULT '[]',
             model_key TEXT NOT NULL,
-            file_paths_json TEXT
+            file_paths_json TEXT,
+            capabilities INTEGER DEFAULT 1
         )
         "#,
     )
@@ -121,6 +122,15 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_models_name ON models(name)")
         .execute(pool)
         .await?;
+
+    // Migration: Add capabilities column if it doesn't exist
+    // Default value of 1 = SUPPORTS_SYSTEM_ROLE (safe for existing models)
+    let _ = sqlx::query(
+        r#"ALTER TABLE models ADD COLUMN capabilities INTEGER DEFAULT 1"#
+    )
+    .execute(pool)
+    .await;
+    // Ignore error if column already exists
 
     // Create settings table
     sqlx::query(
