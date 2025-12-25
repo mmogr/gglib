@@ -254,7 +254,7 @@ impl ModelService {
                 || model.capabilities == ModelCapabilities::default()
             {
                 let template = model.metadata.get("tokenizer.chat_template");
-                let inferred = infer_from_chat_template(template.map(|s| s.as_str()));
+                let inferred = infer_from_chat_template(template.map(String::as_str));
 
                 model.capabilities = inferred;
                 self.repo.update(&model).await.map_err(CoreError::from)?;

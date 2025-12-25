@@ -23,25 +23,25 @@ bitflags! {
         ///
         /// When set: system messages can be passed through unchanged.
         /// When unset: system messages must be converted to user messages.
-        const SUPPORTS_SYSTEM_ROLE    = 0b00000001;
+        const SUPPORTS_SYSTEM_ROLE    = 0b0000_0001;
 
         /// Model requires strict user/assistant alternation.
         ///
         /// When set: consecutive messages of same role must be merged.
         /// When unset: message order can be arbitrary (OpenAI-style).
-        const REQUIRES_STRICT_TURNS   = 0b00000010;
+        const REQUIRES_STRICT_TURNS   = 0b0000_0010;
 
         /// Model supports tool/function calling.
         ///
         /// When set: tool_calls and tool role messages are supported.
         /// When unset: tool functionality should not be used.
-        const SUPPORTS_TOOL_CALLS     = 0b00000100;
+        const SUPPORTS_TOOL_CALLS     = 0b0000_0100;
 
         /// Model has reasoning/thinking capability.
         ///
         /// When set: model may produce <think> tags or reasoning_content.
         /// When unset: model produces only standard responses.
-        const SUPPORTS_REASONING      = 0b00001000;
+        const SUPPORTS_REASONING      = 0b0000_1000;
     }
 }
 
@@ -76,22 +76,22 @@ impl<'de> Deserialize<'de> for ModelCapabilities {
 
 impl ModelCapabilities {
     /// Check if model supports system role.
-    pub fn supports_system_role(self) -> bool {
+    pub const fn supports_system_role(self) -> bool {
         self.contains(Self::SUPPORTS_SYSTEM_ROLE)
     }
 
-    /// Check if model requires strict turn alternation.
-    pub fn requires_strict_turns(self) -> bool {
+    /// Check if model requires strict user/assistant alternation.
+    pub const fn requires_strict_turns(self) -> bool {
         self.contains(Self::REQUIRES_STRICT_TURNS)
     }
 
-    /// Check if model supports tool calling.
-    pub fn supports_tool_calls(self) -> bool {
+    /// Check if model supports tool/function calls.
+    pub const fn supports_tool_calls(self) -> bool {
         self.contains(Self::SUPPORTS_TOOL_CALLS)
     }
 
-    /// Check if model supports reasoning.
-    pub fn supports_reasoning(self) -> bool {
+    /// Check if model supports reasoning phases.
+    pub const fn supports_reasoning(self) -> bool {
         self.contains(Self::SUPPORTS_REASONING)
     }
 }
