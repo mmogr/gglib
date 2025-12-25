@@ -138,7 +138,8 @@ impl TestDb {
                 last_update_check TEXT,
                 tags TEXT NOT NULL DEFAULT '[]',
                 model_key TEXT NOT NULL,
-                file_paths_json TEXT
+                file_paths_json TEXT,
+                capabilities INTEGER DEFAULT 1
             )
             "#,
         )
