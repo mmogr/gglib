@@ -228,6 +228,41 @@ impl ModelService {
             context_range,
         })
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Capability Bootstrap
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Backfill capabilities for models that don't have them set.
+    ///
+    /// This runs on startup to handle existing models from before capability
+    /// tracking was added. Only infers if capabilities are empty (unset).
+    ///
+    /// # INVARIANT
+    ///
+    /// Never overwrite explicitly-set capabilities. Only infer when unset.
+    pub async fn bootstrap_capabilities(&self) -> Result<(), CoreError> {
+        use crate::domain::infer_from_chat_template;
+        use crate::domain::ModelCapabilities;
+
+        let models = self.repo.list().await.map_err(CoreError::from)?;
+
+        for mut model in models {
+            // Infer capabilities if unset (empty) OR if still at default value
+            // This catches both freshly created models and models that got the DB default
+            if model.capabilities == ModelCapabilities::empty()
+                || model.capabilities == ModelCapabilities::default()
+            {
+                let template = model.metadata.get("tokenizer.chat_template");
+                let inferred = infer_from_chat_template(template.map(|s| s.as_str()));
+
+                model.capabilities = inferred;
+                self.repo.update(&model).await.map_err(CoreError::from)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
