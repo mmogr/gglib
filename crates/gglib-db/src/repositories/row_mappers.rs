@@ -83,7 +83,7 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
         capabilities: row
             .try_get::<u32, _>("capabilities")
             .ok()
-            .and_then(|bits| Some(ModelCapabilities::from_bits_truncate(bits)))
+            .map(ModelCapabilities::from_bits_truncate)
             .unwrap_or_default(),
     })
 }
