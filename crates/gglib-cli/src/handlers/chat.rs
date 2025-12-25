@@ -73,8 +73,7 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
 
     // Add chat-specific flags - skip --jinja for models with strict template constraints
     let should_enable_jinja = if jinja {
-        if !model.capabilities.supports_system_role() 
-            || model.capabilities.requires_strict_turns() 
+        if !model.capabilities.supports_system_role() || model.capabilities.requires_strict_turns()
         {
             println!("⚠️  Skipping --jinja flag due to strict template constraints.");
             false

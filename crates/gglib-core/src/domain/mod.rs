@@ -38,4 +38,4 @@ pub use gguf::{
 };
 
 // Re-export capability types at the domain level for convenience
-pub use capabilities::{infer_from_chat_template, ModelCapabilities};
+pub use capabilities::{ModelCapabilities, infer_from_chat_template};

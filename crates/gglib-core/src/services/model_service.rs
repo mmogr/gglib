@@ -242,8 +242,8 @@ impl ModelService {
     ///
     /// Never overwrite explicitly-set capabilities. Only infer when unset.
     pub async fn bootstrap_capabilities(&self) -> Result<(), CoreError> {
-        use crate::domain::infer_from_chat_template;
         use crate::domain::ModelCapabilities;
+        use crate::domain::infer_from_chat_template;
 
         let models = self.repo.list().await.map_err(CoreError::from)?;
 

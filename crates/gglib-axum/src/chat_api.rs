@@ -367,7 +367,7 @@ pub async fn proxy_chat(
     // Look up the model by port to determine capabilities
     let servers = state.gui.list_servers().await;
     let server = servers.iter().find(|s| s.port == request.port);
-    
+
     let capabilities = if let Some(server) = server {
         // Found the server, fetch the model to get its capabilities
         match state.core.models().get_by_id(server.model_id as i64).await {

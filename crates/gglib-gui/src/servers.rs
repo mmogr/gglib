@@ -175,8 +175,8 @@ impl<'a> ServerOps<'a> {
         // Skip --jinja for models with strict template constraints to avoid initialization issues
         let should_enable_jinja = if let Some(true) = request.jinja {
             // Check if model has strict template constraints
-            if !model.capabilities.supports_system_role() 
-                || model.capabilities.requires_strict_turns() 
+            if !model.capabilities.supports_system_role()
+                || model.capabilities.requires_strict_turns()
             {
                 warn!(
                     model = %model.name,
