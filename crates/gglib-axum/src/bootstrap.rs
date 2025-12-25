@@ -142,16 +142,21 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // 3. Assemble AppCore (as Arc for GuiDeps)
     let core = Arc::new(AppCore::new(repos.clone(), runner.clone()));
 
-    // 4. Create SSE broadcaster for real-time events
+    // 4. Bootstrap capabilities for existing models
+    if let Err(e) = core.models().bootstrap_capabilities().await {
+        tracing::warn!("Failed to bootstrap model capabilities: {}", e);
+    }
+
+    // 5. Create SSE broadcaster for real-time events
     let sse = Arc::new(SseBroadcaster::with_defaults());
 
-    // 5. Create MCP service with SSE emitter
+    // 6. Create MCP service with SSE emitter
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>,
     ));
 
-    // 6. Create download manager with SSE emitter
+    // 7. Create download manager with SSE emitter
     let download_config = DownloadManagerConfig::new(models_resolution.path);
 
     let model_registrar = Arc::new(ModelRegistrar::new(
