@@ -218,6 +218,7 @@ mod tests {
             download_date: None,
             last_update_check: None,
             tags: vec!["chat".to_string()],
+            capabilities: ModelCapabilities::default(),
         };
 
         let new_model = model.to_new_model();

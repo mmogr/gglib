@@ -293,6 +293,7 @@ mod tests {
             hf_commit_sha: None,
             hf_filename: None,
             download_date: None,
+            capabilities: gglib_core::ModelCapabilities::default(),
             last_update_check: None,
             tags: Vec::new(),
         }

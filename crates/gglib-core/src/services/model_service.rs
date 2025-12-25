@@ -333,6 +333,7 @@ mod tests {
                 download_date: model.download_date,
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),
+                capabilities: model.capabilities,
             };
             models.push(created.clone());
             Ok(created)

@@ -178,6 +178,7 @@ mod tests {
                 hf_repo_id: model.hf_repo_id.clone(),
                 hf_commit_sha: model.hf_commit_sha.clone(),
                 hf_filename: model.hf_filename.clone(),
+                capabilities: model.capabilities,
                 download_date: model.download_date,
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),
