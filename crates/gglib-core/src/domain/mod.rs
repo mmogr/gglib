@@ -9,7 +9,9 @@
 //! - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 //! - `chat` - Chat conversation and message types
 //! - `gguf` - GGUF metadata and capability types
+//! - `capabilities` - Model capability detection and inference
 
+pub mod capabilities;
 pub mod chat;
 pub mod gguf;
 pub mod mcp;
@@ -34,3 +36,6 @@ pub use gguf::{
     CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata, ReasoningDetection,
     ToolCallingDetection,
 };
+
+// Re-export capability types at the domain level for convenience
+pub use capabilities::{infer_from_chat_template, ModelCapabilities};

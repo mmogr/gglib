@@ -15,7 +15,7 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
-bitflags = "2.6"
+bitflags = { version = "2.6", features = ["serde"] }
 uuid = { version = "1.11", features = ["serde", "v4"] }
 
 [dev-dependencies]
