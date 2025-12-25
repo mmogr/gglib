@@ -364,10 +364,55 @@ pub async fn proxy_chat(
     // Validate the port
     validate_port(&state, request.port).await?;
 
+    // Look up the model by port to determine capabilities
+    let servers = state.gui.list_servers().await;
+    let server = servers.iter().find(|s| s.port == request.port);
+    
+    let capabilities = if let Some(server) = server {
+        // Found the server, fetch the model to get its capabilities
+        match state.core.models().get_by_id(server.model_id as i64).await {
+            Ok(Some(model)) => {
+                tracing::debug!(
+                    port = request.port,
+                    model_id = server.model_id,
+                    model_name = %model.name,
+                    capabilities = model.capabilities.bits(),
+                    supports_system = model.capabilities.contains(gglib_core::domain::ModelCapabilities::SUPPORTS_SYSTEM_ROLE),
+                    requires_strict_turns = model.capabilities.contains(gglib_core::domain::ModelCapabilities::REQUIRES_STRICT_TURNS),
+                    "Model capabilities loaded for chat request"
+                );
+                model.capabilities
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    port = request.port,
+                    model_id = server.model_id,
+                    "Model not found for capability detection; assuming default"
+                );
+                gglib_core::domain::ModelCapabilities::default()
+            }
+            Err(e) => {
+                tracing::warn!(
+                    port = request.port,
+                    model_id = server.model_id,
+                    error = %e,
+                    "Failed to fetch model for capability detection; assuming default"
+                );
+                gglib_core::domain::ModelCapabilities::default()
+            }
+        }
+    } else {
+        tracing::warn!(
+            port = request.port,
+            "No server found for port; assuming default capabilities"
+        );
+        gglib_core::domain::ModelCapabilities::default()
+    };
+
     // Filter out messages with empty or whitespace-only content
     // EXCEPT: tool role messages (they return results) and assistant messages with tool_calls
     // This prevents Jinja template errors in llama-server
-    let valid_messages: Vec<_> = request
+    let mut valid_messages: Vec<_> = request
         .messages
         .into_iter()
         .filter(|m| {
@@ -386,6 +431,64 @@ pub async fn proxy_chat(
         return Err(HttpError::BadRequest(
             "No valid messages to send. All messages have empty content.".into(),
         ));
+    }
+
+    // STEP 1: Transform system messages if the model doesn't support them
+    if !capabilities.contains(gglib_core::domain::ModelCapabilities::SUPPORTS_SYSTEM_ROLE) {
+        let system_msg_count = valid_messages.iter().filter(|m| m.role == "system").count();
+        if system_msg_count > 0 {
+            tracing::info!(
+                port = request.port,
+                system_messages = system_msg_count,
+                "Transforming system messages to user messages (model doesn't support system role)"
+            );
+        }
+        for msg in &mut valid_messages {
+            if msg.role == "system" {
+                msg.role = "user".to_string();
+                if let Some(content) = &mut msg.content {
+                    *content = format!("[System]: {}", content);
+                }
+            }
+        }
+    }
+
+    // STEP 2: Merge consecutive same-role messages if strict turns are required
+    if capabilities.contains(gglib_core::domain::ModelCapabilities::REQUIRES_STRICT_TURNS) {
+        let original_count = valid_messages.len();
+        let mut merged_messages = Vec::new();
+        for msg in valid_messages {
+            if let Some(last) = merged_messages.last_mut() {
+                let last_msg: &mut ChatMessage = last;
+                // Merge if same role and both have content
+                if last_msg.role == msg.role
+                    && last_msg.content.is_some()
+                    && msg.content.is_some()
+                    && last_msg.tool_calls.is_none()
+                    && msg.tool_calls.is_none()
+                {
+                    // Merge content
+                    if let (Some(last_content), Some(msg_content)) =
+                        (&mut last_msg.content, &msg.content)
+                    {
+                        last_content.push_str("\n\n");
+                        last_content.push_str(msg_content);
+                    }
+                    continue; // Skip adding this message separately
+                }
+            }
+            merged_messages.push(msg);
+        }
+        let merged_count = merged_messages.len();
+        if merged_count < original_count {
+            tracing::info!(
+                port = request.port,
+                original_messages = original_count,
+                merged_messages = merged_count,
+                "Merged consecutive same-role messages (model requires strict alternation)"
+            );
+        }
+        valid_messages = merged_messages;
     }
 
     // Build the llama-server URL
