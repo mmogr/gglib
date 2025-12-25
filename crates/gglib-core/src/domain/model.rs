@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use super::capabilities::ModelCapabilities;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Filter/Aggregate Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,6 +75,9 @@ pub struct Model {
     pub last_update_check: Option<DateTime<Utc>>,
     /// User-defined tags for organizing models.
     pub tags: Vec<String>,
+    /// Model capabilities inferred from chat template analysis.
+    #[serde(default)]
+    pub capabilities: ModelCapabilities,
 }
 
 /// A model to be inserted into the system (no ID yet).
@@ -111,6 +116,9 @@ pub struct NewModel {
     pub tags: Vec<String>,
     /// Ordered list of all file paths for sharded models (None for single-file models).
     pub file_paths: Option<Vec<PathBuf>>,
+    /// Model capabilities inferred from chat template analysis.
+    #[serde(default)]
+    pub capabilities: ModelCapabilities,
 }
 
 impl NewModel {
@@ -140,6 +148,7 @@ impl NewModel {
             last_update_check: None,
             tags: Vec::new(),
             file_paths: None,
+            capabilities: ModelCapabilities::default(),
         }
     }
 }
@@ -166,6 +175,7 @@ impl Model {
             last_update_check: self.last_update_check,
             tags: self.tags.clone(),
             file_paths: None, // Not preserved in conversion
+            capabilities: self.capabilities,
         }
     }
 }

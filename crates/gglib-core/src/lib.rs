@@ -14,7 +14,7 @@ pub mod utils;
 // Re-export commonly used types for convenience
 pub use domain::{
     Conversation, ConversationUpdate, McpEnvEntry, McpServer, McpServerConfig, McpServerStatus,
-    McpServerType, McpTool, McpToolResult, Message, MessageRole, Model, ModelFilterOptions,
+    McpServerType, McpTool, McpToolResult, Message, MessageRole, Model, ModelCapabilities, ModelFilterOptions,
     NewConversation, NewMcpServer, NewMessage, NewModel, RangeValues, UpdateMcpServer,
 };
 pub use download::{
