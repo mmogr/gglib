@@ -100,6 +100,7 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
         last_update_check: None,
         tags: auto_tags,
         file_paths: None,
+        capabilities: gglib_core::domain::ModelCapabilities::default(),
     };
 
     // Save to database via AppCore
