@@ -171,28 +171,7 @@ impl<'a> ServerOps<'a> {
 
         let mut extra_args = Vec::new();
 
-        // Conditionally enable --jinja based on model capabilities
-        // Skip --jinja for models with strict template constraints to avoid initialization issues
-        let should_enable_jinja = if let Some(true) = request.jinja {
-            // Check if model has strict template constraints
-            if !model.capabilities.supports_system_role()
-                || model.capabilities.requires_strict_turns()
-            {
-                warn!(
-                    model = %model.name,
-                    capabilities = ?model.capabilities,
-                    "Skipping --jinja flag due to strict template constraints. \
-                     Our chat proxy will handle message transformations instead."
-                );
-                false
-            } else {
-                true
-            }
-        } else {
-            false
-        };
-
-        if should_enable_jinja {
+        if let Some(true) = request.jinja {
             extra_args.push("--jinja".to_string());
         }
 

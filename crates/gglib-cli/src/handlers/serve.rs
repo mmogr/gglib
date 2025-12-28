@@ -58,20 +58,10 @@ pub async fn execute(
     log_context_info(&context_resolution);
     log_mlock_info(mlock);
 
-    // Handle Jinja flag - skip for models with strict template constraints
-    let should_enable_jinja = if jinja_flag {
-        if !model.capabilities.supports_system_role() || model.capabilities.requires_strict_turns()
-        {
-            println!("⚠️  Skipping --jinja flag due to strict template constraints.");
-            println!("   Chat proxy will handle message transformations instead.");
-            false
-        } else {
-            println!("Jinja templates: enabled");
-            true
-        }
-    } else {
-        false
-    };
+    // Handle Jinja flag
+    if jinja_flag {
+        println!("Jinja templates: enabled");
+    }
 
     println!("Server will be available on http://localhost:{}", port);
 
@@ -81,7 +71,7 @@ pub async fn execute(
         .mlock(mlock)
         .arg_with_value("--port", port.to_string());
 
-    if should_enable_jinja {
+    if jinja_flag {
         builder = builder.flag("--jinja");
     }
 
