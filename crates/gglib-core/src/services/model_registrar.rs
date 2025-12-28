@@ -87,6 +87,10 @@ impl ModelRegistrarPort for ModelRegistrar {
             model.tags = capabilities.to_tags();
         }
 
+        // Infer model capabilities from chat template
+        let template = model.metadata.get("tokenizer.chat_template");
+        model.capabilities = crate::domain::infer_from_chat_template(template.map(String::as_str));
+
         let registered = self.model_repo.insert(&model).await?;
 
         Ok(registered)
@@ -178,6 +182,7 @@ mod tests {
                 hf_repo_id: model.hf_repo_id.clone(),
                 hf_commit_sha: model.hf_commit_sha.clone(),
                 hf_filename: model.hf_filename.clone(),
+                capabilities: model.capabilities,
                 download_date: model.download_date,
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),

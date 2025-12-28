@@ -5,6 +5,7 @@
 use crate::app::AppState;
 use crate::menu::state_sync;
 use gglib_axum::EmbeddedApiInfo;
+use gglib_tauri::gui_backend::ServerLogEntry;
 use tauri::AppHandle;
 
 /// Get embedded API server info (port and auth token).
@@ -14,6 +15,15 @@ use tauri::AppHandle;
 #[tauri::command]
 pub fn get_embedded_api_info(state: tauri::State<'_, AppState>) -> EmbeddedApiInfo {
     state.embedded_api.clone()
+}
+
+/// Get buffered server logs for a specific port.
+///
+/// TRANSPORT_EXCEPTION: The GUI console needs a startup log snapshot on desktop.
+/// Web mode uses the HTTP API (`/api/servers/{port}/logs`).
+#[tauri::command]
+pub fn get_server_logs(port: u16, state: tauri::State<'_, AppState>) -> Vec<ServerLogEntry> {
+    state.gui.get_server_logs(port)
 }
 
 /// Open a URL in the system's default browser.

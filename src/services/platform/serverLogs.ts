@@ -12,6 +12,32 @@ export interface ServerLogEntry {
   port: number;
 }
 
+function normalizeServerLogSnapshot(payload: unknown): ServerLogEntry[] {
+  if (Array.isArray(payload)) {
+    return payload as ServerLogEntry[];
+  }
+
+  if (payload && typeof payload === 'object') {
+    const obj = payload as Record<string, unknown>;
+
+    // Preferred Axum shape: { logs: ServerLogEntry[] }
+    if (Array.isArray(obj.logs)) {
+      return obj.logs as ServerLogEntry[];
+    }
+
+    // Legacy/enveloped shape: { success: boolean, data?: { logs: ServerLogEntry[] } }
+    const data = obj.data;
+    if (data && typeof data === 'object') {
+      const dataObj = data as Record<string, unknown>;
+      if (Array.isArray(dataObj.logs)) {
+        return dataObj.logs as ServerLogEntry[];
+      }
+    }
+  }
+
+  return [];
+}
+
 /**
  * Get initial server logs for a specific port.
  */
@@ -25,8 +51,8 @@ export async function getServerLogs(port: number): Promise<ServerLogEntry[]> {
   const baseUrl = import.meta.env.DEV ? 'http://localhost:9887' : '';
   const response = await fetch(`${baseUrl}/api/servers/${port}/logs`);
   if (response.ok) {
-    const json = await response.json() as { success: boolean; data?: { logs: ServerLogEntry[] } };
-    return json.data?.logs ?? [];
+    const json = await response.json();
+    return normalizeServerLogSnapshot(json);
   }
   return [];
 }
@@ -54,6 +80,7 @@ export async function listenToServerLogs(
   eventSource.onmessage = (event) => {
     try {
       if (!event.data || event.data.trim() === '') return;
+      if (event.data === 'ping') return;
       const logEntry = JSON.parse(event.data) as ServerLogEntry;
       callback(logEntry);
     } catch (e) {

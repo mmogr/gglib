@@ -117,15 +117,16 @@ impl ModelRepository for SqliteModelRepository {
             r#"INSERT INTO models (
                 name, file_path, param_count_b, architecture, quantization, 
                 context_length, metadata, added_at, hf_repo_id, hf_commit_sha, 
-                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 file_paths_json = excluded.file_paths_json,
                 quantization = COALESCE(excluded.quantization, models.quantization),
                 download_date = excluded.download_date,
                 last_update_check = excluded.last_update_check,
-                tags = excluded.tags
+                tags = excluded.tags,
+                capabilities = excluded.capabilities
             "#,
         )
         .bind(&model.name)
@@ -144,6 +145,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&tags_json)
         .bind(&model_key)
         .bind(&file_paths_json)
+        .bind(model.capabilities.bits() as i64)
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -169,7 +171,7 @@ impl ModelRepository for SqliteModelRepository {
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
 
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ? WHERE id = ?"
         )
             .bind(&model.name)
             .bind(model.file_path.to_string_lossy().as_ref())
@@ -184,6 +186,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(model.download_date.as_ref().map(|dt| dt.to_string()))
             .bind(model.last_update_check.as_ref().map(|dt| dt.to_string()))
             .bind(&tags_json)
+            .bind(model.capabilities.bits() as i64)
             .bind(model.id)
             .execute(&self.pool)
             .await

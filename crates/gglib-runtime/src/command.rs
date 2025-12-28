@@ -4,10 +4,10 @@
 //! capturing stdout/stderr output.
 
 use crate::llama::{LlamaServerError, resolve_llama_server};
+use crate::process::spawn_stream_reader;
 use gglib_core::ports::{ServerConfig, ServerLogSinkPort};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tracing::{debug, warn};
 
@@ -152,33 +152,11 @@ pub fn spawn_log_readers(
     log_sink: Option<Arc<dyn ServerLogSinkPort>>,
 ) {
     if let Some(stdout) = child.stdout.take() {
-        let log_port = port;
-        let sink = log_sink.clone();
-        tokio::spawn(async move {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
-            while let Ok(Some(text)) = lines.next_line().await {
-                debug!(port = %log_port, "stdout: {}", text);
-                if let Some(ref s) = sink {
-                    s.append(log_port, "stdout", text);
-                }
-            }
-        });
+        spawn_stream_reader(stdout, port, "stdout", log_sink.clone());
     }
 
     if let Some(stderr) = child.stderr.take() {
-        let log_port = port;
-        let sink = log_sink;
-        tokio::spawn(async move {
-            let reader = BufReader::new(stderr);
-            let mut lines = reader.lines();
-            while let Ok(Some(text)) = lines.next_line().await {
-                debug!(port = %log_port, "stderr: {}", text);
-                if let Some(ref s) = sink {
-                    s.append(log_port, "stderr", text);
-                }
-            }
-        });
+        spawn_stream_reader(stderr, port, "stderr", log_sink);
     }
 }
 

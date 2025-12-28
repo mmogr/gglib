@@ -114,6 +114,8 @@ impl<'a> ModelOps<'a> {
             last_update_check: None,
             tags: Vec::new(),
             file_paths: None,
+            // Capabilities default to unknown (empty) - will be inferred at bootstrap
+            capabilities: gglib_core::domain::ModelCapabilities::default(),
         };
 
         let model = self

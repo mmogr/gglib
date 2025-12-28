@@ -364,6 +364,51 @@ pub async fn proxy_chat(
     // Validate the port
     validate_port(&state, request.port).await?;
 
+    // Look up the model by port to determine capabilities
+    let servers = state.gui.list_servers().await;
+    let server = servers.iter().find(|s| s.port == request.port);
+
+    let capabilities = if let Some(server) = server {
+        // Found the server, fetch the model to get its capabilities
+        match state.core.models().get_by_id(server.model_id as i64).await {
+            Ok(Some(model)) => {
+                tracing::debug!(
+                    port = request.port,
+                    model_id = server.model_id,
+                    model_name = %model.name,
+                    capabilities = model.capabilities.bits(),
+                    supports_system = model.capabilities.contains(gglib_core::domain::ModelCapabilities::SUPPORTS_SYSTEM_ROLE),
+                    requires_strict_turns = model.capabilities.contains(gglib_core::domain::ModelCapabilities::REQUIRES_STRICT_TURNS),
+                    "Model capabilities loaded for chat request"
+                );
+                model.capabilities
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    port = request.port,
+                    model_id = server.model_id,
+                    "Model not found for capability detection; assuming default"
+                );
+                gglib_core::domain::ModelCapabilities::default()
+            }
+            Err(e) => {
+                tracing::warn!(
+                    port = request.port,
+                    model_id = server.model_id,
+                    error = %e,
+                    "Failed to fetch model for capability detection; assuming default"
+                );
+                gglib_core::domain::ModelCapabilities::default()
+            }
+        }
+    } else {
+        tracing::warn!(
+            port = request.port,
+            "No server found for port; assuming default capabilities"
+        );
+        gglib_core::domain::ModelCapabilities::default()
+    };
+
     // Filter out messages with empty or whitespace-only content
     // EXCEPT: tool role messages (they return results) and assistant messages with tool_calls
     // This prevents Jinja template errors in llama-server
@@ -388,13 +433,42 @@ pub async fn proxy_chat(
         ));
     }
 
+    // Convert to ChatMessage format and apply capability-aware transformations
+    let core_messages: Vec<gglib_core::ChatMessage> = valid_messages
+        .into_iter()
+        .map(|m| gglib_core::ChatMessage {
+            role: m.role,
+            content: m.content,
+            tool_calls: m.tool_calls.map(|v| serde_json::Value::Array(v)),
+        })
+        .collect();
+
+    let transformed = gglib_core::transform_messages_for_capabilities(core_messages, capabilities);
+
+    // Convert back to ChatMessage
+    let final_messages: Vec<ChatMessage> = transformed
+        .into_iter()
+        .map(|m| ChatMessage {
+            role: m.role,
+            content: m.content,
+            tool_calls: m.tool_calls.and_then(|v| {
+                if let serde_json::Value::Array(arr) = v {
+                    Some(arr)
+                } else {
+                    None
+                }
+            }),
+            tool_call_id: None,
+        })
+        .collect();
+
     // Build the llama-server URL
     let server_url = format!("http://127.0.0.1:{}/v1/chat/completions", request.port);
 
     // Build the forwarded request body
     let mut forward_body = serde_json::json!({
         "model": request.model,
-        "messages": valid_messages,
+        "messages": final_messages,
         "stream": request.stream,
         "max_tokens": request.max_tokens,
         "temperature": request.temperature,

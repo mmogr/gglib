@@ -228,6 +228,37 @@ impl ModelService {
             context_range,
         })
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Capability Bootstrap
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Backfill capabilities for models that don't have them set.
+    ///
+    /// This runs on startup to handle models with unknown capabilities.
+    /// Only infers if capabilities are empty (0/unknown).
+    ///
+    /// # INVARIANT
+    ///
+    /// Never overwrite explicitly-set capabilities. Only infer when unknown.
+    pub async fn bootstrap_capabilities(&self) -> Result<(), CoreError> {
+        use crate::domain::infer_from_chat_template;
+
+        let models = self.repo.list().await.map_err(CoreError::from)?;
+
+        for mut model in models {
+            // Only infer if capabilities are unknown (empty)
+            if model.capabilities.is_empty() {
+                let template = model.metadata.get("tokenizer.chat_template");
+                let inferred = infer_from_chat_template(template.map(String::as_str));
+
+                model.capabilities = inferred;
+                self.repo.update(&model).await.map_err(CoreError::from)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -298,6 +329,7 @@ mod tests {
                 download_date: model.download_date,
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),
+                capabilities: model.capabilities,
             };
             models.push(created.clone());
             Ok(created)

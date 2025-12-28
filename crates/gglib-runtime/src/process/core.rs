@@ -6,7 +6,6 @@
 //! Note: This is distinct from the port-aligned `ProcessCore` in `process_core.rs`
 //! which implements the `ProcessRunner` port for CLI use cases.
 
-use super::logs::get_log_manager;
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
 use super::types::{RunningProcess, ServerInfo};
@@ -15,7 +14,6 @@ use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tracing::{debug, warn};
 
@@ -131,29 +129,23 @@ impl GuiProcessCore {
 
     fn spawn_log_readers(&self, child: &mut tokio::process::Child, port: u16) {
         if let Some(stdout) = child.stdout.take() {
-            let log_port = port;
-            tokio::spawn(async move {
-                let reader = BufReader::new(stdout);
-                let log_manager = get_log_manager();
-                let mut lines = reader.lines();
-                while let Ok(Some(text)) = lines.next_line().await {
-                    log_manager.add_log(log_port, &text);
-                }
-                debug!(port = %log_port, "stdout reader task exiting");
-            });
+            use crate::process::{LogManagerSink, spawn_stream_reader};
+            spawn_stream_reader(
+                stdout,
+                port,
+                "stdout",
+                Some(std::sync::Arc::new(LogManagerSink)),
+            );
         }
 
         if let Some(stderr) = child.stderr.take() {
-            let log_port = port;
-            tokio::spawn(async move {
-                let reader = BufReader::new(stderr);
-                let log_manager = get_log_manager();
-                let mut lines = reader.lines();
-                while let Ok(Some(text)) = lines.next_line().await {
-                    log_manager.add_log(log_port, &text);
-                }
-                debug!(port = %log_port, "stderr reader task exiting");
-            });
+            use crate::process::{LogManagerSink, spawn_stream_reader};
+            spawn_stream_reader(
+                stderr,
+                port,
+                "stderr",
+                Some(std::sync::Arc::new(LogManagerSink)),
+            );
         }
     }
 

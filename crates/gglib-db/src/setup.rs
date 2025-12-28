@@ -100,7 +100,8 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             last_update_check TEXT,
             tags TEXT DEFAULT '[]',
             model_key TEXT NOT NULL,
-            file_paths_json TEXT
+            file_paths_json TEXT,
+            capabilities INTEGER DEFAULT 0
         )
         "#,
     )
@@ -121,6 +122,19 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_models_name ON models(name)")
         .execute(pool)
         .await?;
+
+    // Migration: Add capabilities column if it doesn't exist
+    // Default value of 0 = UNKNOWN (models must be explicitly inferred)
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN capabilities INTEGER DEFAULT 0"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
+
+    // Migration: Reset ALL existing models to unknown (0) to force re-inference
+    // This ensures consistency with the new capability detection logic
+    let _ = sqlx::query(r#"UPDATE models SET capabilities = 0 WHERE capabilities IS NOT NULL"#)
+        .execute(pool)
+        .await;
 
     // Create settings table
     sqlx::query(
