@@ -58,8 +58,9 @@ Backend Operation (server start, download progress, etc.)
     │                     │
     │  Events:            │
     │  • download-progress│
-    │  • server:running   │
+    │  • server:started   │
     │  • server:stopped   │
+    │  • server:error     │
     │  • server:snapshot  │
     │  • menu:*           │
     └──────────┬──────────┘
@@ -76,7 +77,7 @@ Backend Operation (server start, download progress, etc.)
 | Category | Events |
 |----------|--------|
 | Downloads | `DOWNLOAD_PROGRESS` |
-| Server Lifecycle | `SERVER_RUNNING`, `SERVER_STOPPING`, `SERVER_STOPPED`, `SERVER_CRASHED`, `SERVER_SNAPSHOT` |
+| Server Lifecycle | `server:started`, `server:stopped`, `server:error`, `server:snapshot`, `server:health_changed` |
 | Menu Actions | `MENU_ADD_MODEL`, `MENU_REMOVE_MODEL`, `MENU_BROWSE_HUGGINGFACE`, `MENU_START_SERVER`, `MENU_STOP_SERVER`, `MENU_OPEN_CHAT`, `MENU_INSTALL_LLAMA` |
 
 <!-- module-docs:end -->

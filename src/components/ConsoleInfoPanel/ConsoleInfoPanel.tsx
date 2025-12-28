@@ -66,7 +66,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   const uptimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Get server state from registry - undefined means not running
-  // Polling resumes automatically when status changes to 'running' via server:running event
+  // Polling resumes automatically when status changes to 'running' via server:started event
   const serverState = useServerState(modelId);
   const isRunning = serverState?.status === 'running';
 
@@ -102,7 +102,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
   // Poll server metrics using setTimeout recursion + AbortController
   // Only polls when server status is 'running'
   // On fetch failure: stops local loop, clears metrics, does not affect global state
-  // Polling resumes automatically when status changes to 'running' via server:running event
+  // Polling resumes automatically when status changes to 'running' via server:started event
   useEffect(() => {
     // Don't poll if server is not running
     if (!isRunning) {

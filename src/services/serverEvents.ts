@@ -9,8 +9,13 @@
 
 import { isDesktop } from './platform';
 import { initTauriServerEvents, cleanupTauriServerEvents } from './serverEvents.tauri';
+import { subscribeToEvent } from './clients/events';
+import type { Unsubscribe } from './transport/types/common';
+import { ingestServerEvent } from './serverRegistry';
+import { normalizeServerEventFromAppEvent } from './serverEvents.normalize';
 
 let initialized = false;
+let webUnsubscribe: Unsubscribe | null = null;
 
 /**
  * Initialize server lifecycle event handling.
@@ -25,7 +30,16 @@ export async function initServerEvents(): Promise<void> {
   if (isDesktop()) {
     await initTauriServerEvents();
   }
-  // Web: Server events now handled by unified transport layer
+  // Web: Bridge canonical backend AppEvent server lifecycle events into serverRegistry.
+  // This enables UI (e.g. Chat composer) to reactively switch to read-only when servers stop.
+  else {
+    webUnsubscribe = subscribeToEvent('server', (payload) => {
+      const normalized = normalizeServerEventFromAppEvent(payload as unknown);
+      if (normalized) {
+        ingestServerEvent(normalized);
+      }
+    });
+  }
 
   initialized = true;
 }
@@ -38,7 +52,10 @@ export function cleanupServerEvents(): void {
   if (isDesktop()) {
     cleanupTauriServerEvents();
   }
-  // Web: No cleanup needed - handled by transport layer
+  if (webUnsubscribe) {
+    webUnsubscribe();
+    webUnsubscribe = null;
+  }
   initialized = false;
 }
 

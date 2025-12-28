@@ -68,7 +68,7 @@ When a model is served, the view transitions to a Chat layout with tab switching
 
 ### Console View
 When a model is served, users can switch between Chat and Console views:
-- **`ConsoleInfoPanel/`**: Left panel showing server info (port, uptime, context usage), live metrics from `/metrics` endpoint, and stop button. Uses `useServerState` hook to subscribe to backend lifecycle events - polling automatically stops when server stops and resumes when a new `server:running` event is received.
+- **`ConsoleInfoPanel/`**: Left panel showing server info (port, uptime, context usage), live metrics from `/metrics` endpoint, and stop button. Uses `useServerState` hook to subscribe to backend lifecycle events - polling automatically stops when server stops and resumes when a new `server:started` event is received.
 
 ### Server Management
 - **`ServerStatus.tsx`**: Display server health and status

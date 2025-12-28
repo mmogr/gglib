@@ -6,7 +6,7 @@
  */
 
 import type { Unsubscribe, EventHandler } from '../types/common';
-import type { AppEventType, AppEventMap, ServerEvent, DownloadEvent, LogEvent } from '../types/events';
+import type { AppEventType, AppEventMap } from '../types/events';
 import { decodeDownloadEvent } from '../../decoders/downloadEvent';
 import { createSSEStream, type SSEMessage } from '../../../utils/sse';
 import { getApiBaseUrl, getAuthHeaders, getClient } from '../api/client';
@@ -331,24 +331,6 @@ export function subscribeSseEvent<K extends AppEventType>(
 /**
  * Parse server event from SSE payload.
  */
-export function parseServerEvent(payload: unknown): ServerEvent {
-  return payload as ServerEvent;
-}
-
-/**
- * Parse download event from SSE payload.
- */
-export function parseDownloadEvent(payload: unknown): DownloadEvent {
-  return payload as DownloadEvent;
-}
-
-/**
- * Parse log event from SSE payload.
- */
-export function parseLogEvent(payload: unknown): LogEvent {
-  return payload as LogEvent;
-}
-
 /**
  * Create SSE-based event system.
  * Returns object with subscribe method matching EventsTransport interface.

@@ -15,11 +15,7 @@ pub mod names {
     // Download events
     pub const DOWNLOAD_PROGRESS: &str = "download-progress";
 
-    // Server lifecycle events
-    pub const SERVER_RUNNING: &str = "server:running";
-    pub const SERVER_STOPPING: &str = "server:stopping";
-    pub const SERVER_STOPPED: &str = "server:stopped";
-    pub const SERVER_SNAPSHOT: &str = "server:snapshot";
+    // Server log event stream (separate from AppEvent::* server lifecycle events)
     pub const SERVER_LOG: &str = "server-log";
 
     // Llama installation events
