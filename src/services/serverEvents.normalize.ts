@@ -80,7 +80,7 @@ function normalizeHealthChanged(data: Record<string, unknown>): ServerEvent | nu
 
   const updatedAt =
     typeof data.timestamp === 'number'
-      ? (coerceUnixTimeToMs(data.timestamp) ?? data.timestamp)
+      ? (coerceUnixTimeToMs(data.timestamp) ?? Date.now())
       : typeof data.updatedAt === 'number'
         ? data.updatedAt
         : typeof data.updated_at === 'number'
@@ -101,7 +101,7 @@ function normalizeLifecycle(
   data: Record<string, unknown>
 ): ServerEvent | null {
   const modelId = String(data.modelId ?? data.model_id ?? '');
-  if (!modelId) return kind === 'crashed' ? null : null;
+  if (!modelId) return null;
 
   const port = typeof data.port === 'number' ? data.port : undefined;
 
@@ -116,7 +116,7 @@ function normalizeLifecycle(
   if (kind === 'stopped') return { type: 'stopped', modelId, port, updatedAt };
 
   // server:error may omit modelId on the Rust side; ignore in that case.
-  return modelId ? { type: 'crashed', modelId, port, updatedAt } : null;
+  return { type: 'crashed', modelId, port, updatedAt };
 }
 
 /**

@@ -5,7 +5,7 @@
 
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { Unsubscribe, EventHandler } from '../types/common';
-import type { AppEventType, AppEventMap, ServerEvent, DownloadEvent, LogEvent } from '../types/events';
+import type { AppEventType, AppEventMap } from '../types/events';
 import {
   DOWNLOAD_EVENT_NAMES,
   SERVER_EVENT_NAMES,
@@ -91,26 +91,4 @@ export function createTauriEvents() {
   }
   
   return { subscribe };
-}
-
-/**
- * Parse server event from Tauri payload.
- */
-export function parseServerEvent(payload: unknown): ServerEvent {
-  // Tauri sends events directly as the correct shape
-  return payload as ServerEvent;
-}
-
-/**
- * Parse download event from Tauri payload.
- */
-export function parseDownloadEvent(payload: unknown): DownloadEvent {
-  return payload as DownloadEvent;
-}
-
-/**
- * Parse log event from Tauri payload.
- */
-export function parseLogEvent(payload: unknown): LogEvent {
-  return payload as LogEvent;
 }
