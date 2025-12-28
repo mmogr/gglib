@@ -33,7 +33,10 @@ interface RegisteredToolWithSource extends RegisteredTool {
  */
 export class ToolRegistry {
   private tools = new Map<string, RegisteredToolWithSource>();
-  private disabledTools = new Set<string>();
+  // Secure-by-default: tools are disabled unless explicitly enabled.
+  // We keep an allowlist instead of a denylist so registration cannot
+  // accidentally re-enable tools (e.g., during MCP resync).
+  private enabledTools = new Set<string>();
 
   /**
    * Register a tool with its definition and executor.
@@ -48,8 +51,9 @@ export class ToolRegistry {
       throw new Error(`Tool "${name}" is already registered`);
     }
     this.tools.set(name, { definition, execute, source });
-    // Newly registered tools are enabled by default
-    this.disabledTools.delete(name);
+    // Newly registered tools are disabled by default.
+    // Intentionally do not mutate enable-state here so that if a tool is
+    // re-registered after being enabled (e.g., MCP resync), it stays enabled.
   }
 
   /**
@@ -101,23 +105,23 @@ export class ToolRegistry {
    * Returns true if tool exists and is not disabled.
    */
   isEnabled(name: string): boolean {
-    return this.tools.has(name) && !this.disabledTools.has(name);
+    return this.tools.has(name) && this.enabledTools.has(name);
   }
 
   /**
    * Enable a tool by name.
    */
   enable(name: string): void {
-    this.disabledTools.delete(name);
+    if (this.tools.has(name)) {
+      this.enabledTools.add(name);
+    }
   }
 
   /**
    * Disable a tool by name.
    */
   disable(name: string): void {
-    if (this.tools.has(name)) {
-      this.disabledTools.add(name);
-    }
+    this.enabledTools.delete(name);
   }
 
   /**
@@ -134,7 +138,7 @@ export class ToolRegistry {
    */
   getEnabledDefinitions(): ToolDefinition[] {
     return Array.from(this.tools.entries())
-      .filter(([name]) => !this.disabledTools.has(name))
+      .filter(([name]) => this.enabledTools.has(name))
       .map(([, t]) => t.definition);
   }
 
@@ -209,7 +213,7 @@ export class ToolRegistry {
    */
   clear(): void {
     this.tools.clear();
-    this.disabledTools.clear();
+    this.enabledTools.clear();
   }
 
   /**
@@ -223,7 +227,6 @@ export class ToolRegistry {
     for (const [name, tool] of this.tools) {
       if (tool.source === source) {
         this.tools.delete(name);
-        this.disabledTools.delete(name);
         count++;
       }
     }
@@ -268,7 +271,7 @@ export class ToolRegistry {
   getEnabledDefinitionsBySource(): Map<ToolSource, ToolDefinition[]> {
     const grouped = new Map<ToolSource, ToolDefinition[]>();
     for (const [name, tool] of this.tools) {
-      if (!this.disabledTools.has(name)) {
+      if (this.enabledTools.has(name)) {
         const list = grouped.get(tool.source) || [];
         list.push(tool.definition);
         grouped.set(tool.source, list);

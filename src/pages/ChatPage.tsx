@@ -9,7 +9,7 @@ import { GenericToolUI, TimeToolUI } from '../components/ToolUI';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
-import { useGglibRuntime, TOOL_ENABLED_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
+import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT as RUNTIME_DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
 import { useToastContext } from '../contexts/ToastContext';
@@ -26,8 +26,9 @@ import type { ConversationSummary } from '../services/clients/chat';
 import './ChatPage.css';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
-// Use tool-enabled prompt by default (most common for served models with jinja/agent tag)
-const DEFAULT_SYSTEM_PROMPT = TOOL_ENABLED_SYSTEM_PROMPT;
+// Base prompt stored on the conversation by default.
+// Tool availability is handled dynamically at request-time.
+const DEFAULT_SYSTEM_PROMPT = RUNTIME_DEFAULT_SYSTEM_PROMPT;
 
 interface ChatPageProps {
   serverPort: number;
