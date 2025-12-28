@@ -83,6 +83,10 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
     let capabilities = ctx.gguf_parser().detect_capabilities(&gguf_metadata);
     let auto_tags = capabilities.to_tags();
 
+    // Infer model capabilities from chat template
+    let template = gguf_metadata.metadata.get("tokenizer.chat_template");
+    let model_capabilities = gglib_core::domain::infer_from_chat_template(template.map(String::as_str));
+
     // Create the new model instance using gglib_core types
     let new_model = gglib_core::NewModel {
         name,
@@ -100,7 +104,7 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
         last_update_check: None,
         tags: auto_tags,
         file_paths: None,
-        capabilities: gglib_core::domain::ModelCapabilities::default(),
+        capabilities: model_capabilities,
     };
 
     // Save to database via AppCore
