@@ -16,7 +16,7 @@ pub use domain::{
     Conversation, ConversationUpdate, McpEnvEntry, McpServer, McpServerConfig, McpServerStatus,
     McpServerType, McpTool, McpToolResult, Message, MessageRole, Model, ModelCapabilities,
     ModelFilterOptions, NewConversation, NewMcpServer, NewMessage, NewModel, RangeValues,
-    UpdateMcpServer,
+    UpdateMcpServer, ChatMessage, infer_from_chat_template, transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,

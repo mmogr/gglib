@@ -46,12 +46,12 @@ bitflags! {
 }
 
 impl Default for ModelCapabilities {
-    /// Default capabilities assume OpenAI-style chat models.
+    /// Default capabilities represent "unknown" state.
     ///
-    /// This is the safe default for models without explicit templates,
-    /// preserving standard instruction-following behavior.
+    /// Models start with empty capabilities and must be explicitly inferred.
+    /// This prevents incorrect assumptions about model constraints.
     fn default() -> Self {
-        Self::SUPPORTS_SYSTEM_ROLE
+        Self::empty()
     }
 }
 
@@ -154,7 +154,9 @@ mod tests {
     #[test]
     fn test_default_capabilities() {
         let caps = ModelCapabilities::default();
-        assert!(caps.supports_system_role());
+        // Default is "unknown" - no capabilities set
+        assert!(caps.is_empty());
+        assert!(!caps.supports_system_role());
         assert!(!caps.requires_strict_turns());
     }
 
@@ -188,6 +190,222 @@ mod tests {
     #[test]
     fn test_infer_missing_template() {
         let caps = infer_from_chat_template(None);
-        assert!(caps.supports_system_role()); // Safe default
+        // Missing template means unknown capabilities - no assumptions made
+        assert!(caps.is_empty());
+        assert!(!caps.supports_system_role());
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Message Transformation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A chat message for transformation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: Option<String>,
+    pub tool_calls: Option<serde_json::Value>,
+}
+
+/// Transform chat messages based on model capabilities.
+///
+/// This is a pure function that applies capability-aware transformations:
+/// - Converts system messages to user messages when model doesn't support system role
+/// - Merges consecutive same-role messages when model requires strict alternation
+///
+/// # Invariant
+///
+/// When capabilities are unknown (empty), messages are passed through unchanged.
+/// This prevents degrading standard models while allowing explicit constraints
+/// to be enforced when detected.
+///
+/// # Arguments
+///
+/// * `messages` - The input chat messages to transform
+/// * `capabilities` - The model's capability flags
+///
+/// # Returns
+///
+/// Transformed messages suitable for the model's constraints
+pub fn transform_messages_for_capabilities(
+    mut messages: Vec<ChatMessage>,
+    capabilities: ModelCapabilities,
+) -> Vec<ChatMessage> {
+    // Pass through if capabilities are unknown
+    if capabilities.is_empty() {
+        return messages;
+    }
+
+    // STEP 1: Transform system messages if the model doesn't support them
+    if !capabilities.contains(ModelCapabilities::SUPPORTS_SYSTEM_ROLE) {
+        for msg in &mut messages {
+            if msg.role == "system" {
+                msg.role = "user".to_string();
+                if let Some(content) = &mut msg.content {
+                    *content = format!("[System]: {content}");
+                }
+            }
+        }
+    }
+
+    // STEP 2: Merge consecutive same-role messages if strict turns are required
+    if capabilities.contains(ModelCapabilities::REQUIRES_STRICT_TURNS) {
+        let mut merged_messages = Vec::new();
+        for msg in messages {
+            if let Some(last) = merged_messages.last_mut() {
+                let last_msg: &mut ChatMessage = last;
+                // Only merge user/assistant messages to avoid tool-call ordering issues
+                let is_mergeable_role = msg.role == "user" || msg.role == "assistant";
+                if last_msg.role == msg.role
+                    && is_mergeable_role
+                    && last_msg.content.is_some()
+                    && msg.content.is_some()
+                    && last_msg.tool_calls.is_none()
+                    && msg.tool_calls.is_none()
+                {
+                    // Merge content
+                    if let (Some(last_content), Some(msg_content)) =
+                        (&mut last_msg.content, &msg.content)
+                    {
+                        last_content.push_str("\n\n");
+                        last_content.push_str(msg_content);
+                    }
+                    continue; // Skip adding this message separately
+                }
+            }
+            merged_messages.push(msg);
+        }
+        return merged_messages;
+    }
+
+    messages
+}
+
+#[cfg(test)]
+mod transform_tests {
+    use super::*;
+
+    #[test]
+    fn test_transform_unknown_passes_through() {
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("You are a helpful assistant".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("Hello".to_string()),
+                tool_calls: None,
+            },
+        ];
+        let original = messages.clone();
+        let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
+        assert_eq!(result, original);
+    }
+
+    #[test]
+    fn test_transform_system_to_user() {
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("You are helpful".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("Hello".to_string()),
+                tool_calls: None,
+            },
+        ];
+        // Use REQUIRES_STRICT_TURNS which doesn't support system but doesn't merge different roles
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+        // System becomes user, both messages remain separate (user + user but different content)
+        assert_eq!(result.len(), 1); // They get merged because both are now "user"
+        assert_eq!(result[0].role, "user");
+        assert!(result[0].content.as_ref().unwrap().contains("[System]: You are helpful"));
+        assert!(result[0].content.as_ref().unwrap().contains("Hello"));
+    }
+
+    #[test]
+    fn test_transform_preserves_system_when_supported() {
+        let messages = vec![ChatMessage {
+            role: "system".to_string(),
+            content: Some("You are helpful".to_string()),
+            tool_calls: None,
+        }];
+        let caps = ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
+        let result = transform_messages_for_capabilities(messages, caps);
+        assert_eq!(result[0].role, "system");
+        assert_eq!(result[0].content, Some("You are helpful".to_string()));
+    }
+
+    #[test]
+    fn test_transform_merges_consecutive_user_messages() {
+        let messages = vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("First".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("Second".to_string()),
+                tool_calls: None,
+            },
+        ];
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].content, Some("First\n\nSecond".to_string()));
+    }
+
+    #[test]
+    fn test_transform_does_not_merge_tool_messages() {
+        let messages = vec![
+            ChatMessage {
+                role: "tool".to_string(),
+                content: Some("Result 1".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "tool".to_string(),
+                content: Some("Result 2".to_string()),
+                tool_calls: None,
+            },
+        ];
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+        assert_eq!(result.len(), 2); // Should not merge tool messages
+    }
+
+    #[test]
+    fn test_transform_combined_system_and_merge() {
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("Be helpful".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("First".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("Second".to_string()),
+                tool_calls: None,
+            },
+        ];
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS; // No system support + strict turns
+        let result = transform_messages_for_capabilities(messages, caps);
+        assert_eq!(result.len(), 1); // System→user + merge
+        assert_eq!(result[0].role, "user");
+        assert!(result[0].content.as_ref().unwrap().contains("[System]: Be helpful"));
+        assert!(result[0].content.as_ref().unwrap().contains("First"));
+        assert!(result[0].content.as_ref().unwrap().contains("Second"));
     }
 }
