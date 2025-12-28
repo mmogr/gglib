@@ -48,7 +48,7 @@ pub struct MenuState {
     pub llama_installed: bool,
     pub proxy_running: bool,
     pub model_selected: bool,
-    pub selected_model_server_running: bool,
+    pub selected_model_server_active: bool,
 }
 
 impl AppMenu {
@@ -63,11 +63,11 @@ impl AppMenu {
         // Model menu items
         // Start Server: enabled if model selected AND not already running
         self.start_server
-            .set_enabled(state.model_selected && !state.selected_model_server_running)?;
+            .set_enabled(state.model_selected && !state.selected_model_server_active)?;
 
         // Stop Server: enabled if model selected AND currently running
         self.stop_server
-            .set_enabled(state.model_selected && state.selected_model_server_running)?;
+            .set_enabled(state.model_selected && state.selected_model_server_active)?;
 
         // Remove Model: enabled if model selected
         self.remove_model.set_enabled(state.model_selected)?;

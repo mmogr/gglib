@@ -37,7 +37,7 @@ pub async fn sync_menu_state_internal(
     let model_selected = selected_id.is_some();
 
     // Check if selected model has a running server
-    let selected_model_server_running = if let Some(id) = selected_id {
+    let selected_model_server_active = if let Some(id) = selected_id {
         let servers = state.gui.list_servers().await;
         servers.iter().any(|s| s.model_id == id)
     } else {
@@ -48,7 +48,7 @@ pub async fn sync_menu_state_internal(
         llama_installed,
         proxy_running,
         model_selected,
-        selected_model_server_running,
+        selected_model_server_active,
     };
 
     // Update menu items
