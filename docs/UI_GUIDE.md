@@ -90,6 +90,24 @@ GGLib runs in **both Tauri (desktop) and Axum WebUI (browser)**. Ensure your UI 
 - Platform-specific behavior goes in **adapter layers** (e.g., `src/services/transport/`)
 - Test in both modes: `npm run tauri:dev` and `npm run dev`
 
+## Canonical Event Names
+
+GGLib uses **canonical event names** (emitted by the Rust backend and listened to by the frontend) to keep desktop (Tauri) and web (SSE) behavior aligned.
+
+### Server Lifecycle Events
+
+**Strict contract (no legacy aliases):**
+
+| Event Name | Meaning |
+|-----------|---------|
+| `server:snapshot` | Snapshot of currently running servers |
+| `server:started` | A server started and is ready |
+| `server:stopped` | A server stopped cleanly |
+| `server:error` | A server encountered an error |
+| `server:health_changed` | A running server's health status changed |
+
+If you need to add/change event names, update **both** the Rust source of truth (`AppEvent::event_name()`) and the frontend subscription constants.
+
 ## File Structure Conventions
 
 ### Component Organization
