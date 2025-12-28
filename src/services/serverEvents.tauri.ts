@@ -5,11 +5,11 @@
  * then ingests them into the server registry.
  *
  * Events listened to:
- * - server:snapshot - Initial state of all running servers
- * - server:running - Server started and ready
- * - server:stopping - Server stop initiated
- * - server:stopped - Server stopped cleanly
- * - server:crashed - Server exited unexpectedly
+ * - server:snapshot - Snapshot of running servers
+ * - server:started  - Server started and ready
+ * - server:stopped  - Server stopped cleanly
+ * - server:error    - Server encountered an error
+ * - server:health_changed - Health status changed
  */
 
 import { ingestServerEvent, type ServerEvent } from './serverRegistry';
@@ -26,8 +26,7 @@ let initialized = false;
  * the tagged enum format. We need to extract the inner data.
  */
 function normalizeEvent(eventType: string, payload: unknown): ServerEvent | null {
-  // The Rust ServerEvent is serialized with serde's tagged enum format
-  // e.g., { type: "running", modelId: "1", port: 9000, updatedAt: 1234567890 }
+  // The Rust backend emits AppEvent payloads.
   
   if (typeof payload !== 'object' || payload === null) {
     console.warn('[serverEvents.tauri] Invalid payload:', payload);
@@ -36,48 +35,51 @@ function normalizeEvent(eventType: string, payload: unknown): ServerEvent | null
 
   const data = payload as Record<string, unknown>;
 
-  // Handle snapshot event
-  if (eventType === 'server:snapshot' && data.type === 'snapshot') {
+  // Handle snapshot event (canonical: AppEvent::ServerSnapshot)
+  if (eventType === 'server:snapshot') {
     const servers = data.servers;
     if (!Array.isArray(servers)) {
       console.warn('[serverEvents.tauri] Snapshot missing servers array');
       return null;
     }
+
     return {
       type: 'snapshot',
-      servers: servers.map((s: Record<string, unknown>) => ({
-        modelId: String(s.modelId ?? s.model_id ?? ''),
-        status: (s.status as 'running') ?? 'running',
-        port: typeof s.port === 'number' ? s.port : undefined,
-        updatedAt: typeof s.updatedAt === 'number' ? s.updatedAt : (typeof s.updated_at === 'number' ? s.updated_at : Date.now()),
-      })),
+      servers: servers.map((s: Record<string, unknown>) => {
+        const modelId = String(s.modelId ?? s.model_id ?? '');
+        const port = typeof s.port === 'number' ? s.port : undefined;
+
+        // Snapshot entries include startedAt (seconds) on the Rust side; convert to ms.
+        const startedAtSeconds =
+          typeof s.startedAt === 'number'
+            ? s.startedAt
+            : (typeof s.started_at === 'number' ? s.started_at : undefined);
+        const updatedAt = startedAtSeconds ? startedAtSeconds * 1000 : Date.now();
+
+        // Snapshot only lists running servers.
+        return { modelId, status: 'running' as const, port, updatedAt };
+      }),
     };
   }
 
-  // Handle individual lifecycle events
-  // The event payload contains the full ServerEvent including inner ServerStateInfo
-  const innerData = (data as { Running?: unknown; Stopping?: unknown; Stopped?: unknown; Crashed?: unknown });
-  const stateInfo = innerData.Running ?? innerData.Stopping ?? innerData.Stopped ?? innerData.Crashed ?? data;
-  
-  if (typeof stateInfo !== 'object' || stateInfo === null) {
-    console.warn('[serverEvents.tauri] Could not extract state info from:', data);
-    return null;
-  }
-
-  const info = stateInfo as Record<string, unknown>;
+  // Canonical AppEvent payloads are flat objects (modelId, port, etc).
+  const info = data;
   const modelId = String(info.modelId ?? info.model_id ?? '');
   const port = typeof info.port === 'number' ? info.port : undefined;
-  const updatedAt = typeof info.updatedAt === 'number' ? info.updatedAt : (typeof info.updated_at === 'number' ? info.updated_at : Date.now());
+  // New AppEvent server lifecycle events do not currently include a timestamp.
+  // Use local time for ordering; health_changed events include a backend timestamp.
+  const updatedAt = typeof info.updatedAt === 'number'
+    ? info.updatedAt
+    : (typeof info.updated_at === 'number' ? info.updated_at : Date.now());
 
   switch (eventType) {
-    case 'server:running':
+    // Canonical names (AppEvent::event_name)
+    case 'server:started':
       return { type: 'running', modelId, port, updatedAt };
-    case 'server:stopping':
-      return { type: 'stopping', modelId, port, updatedAt };
     case 'server:stopped':
       return { type: 'stopped', modelId, port, updatedAt };
-    case 'server:crashed':
-      return { type: 'crashed', modelId, port, updatedAt };
+    case 'server:error':
+      return modelId ? { type: 'crashed', modelId, port, updatedAt } : null;
     case 'server:health_changed': {
       // Health changed events have a nested status object
       const status = info.status as Record<string, unknown> | undefined;
@@ -114,10 +116,9 @@ export async function initTauriServerEvents(): Promise<void> {
 
     const eventTypes = [
       'server:snapshot',
-      'server:running',
-      'server:stopping',
+      'server:started',
       'server:stopped',
-      'server:crashed',
+      'server:error',
       'server:health_changed',
     ];
 
