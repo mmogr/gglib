@@ -98,6 +98,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             // API discovery
             commands::util::get_embedded_api_info,
+            // TRANSPORT_EXCEPTION: Desktop log snapshot (web uses HTTP)
+            commands::util::get_server_logs,
             // OS integration: shell
             commands::util::open_url,
             // OS integration: menu sync
