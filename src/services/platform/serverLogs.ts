@@ -80,6 +80,7 @@ export async function listenToServerLogs(
   eventSource.onmessage = (event) => {
     try {
       if (!event.data || event.data.trim() === '') return;
+      if (event.data === 'ping') return;
       const logEntry = JSON.parse(event.data) as ServerLogEntry;
       callback(logEntry);
     } catch (e) {
