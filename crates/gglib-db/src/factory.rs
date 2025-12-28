@@ -139,7 +139,7 @@ impl TestDb {
                 tags TEXT NOT NULL DEFAULT '[]',
                 model_key TEXT NOT NULL,
                 file_paths_json TEXT,
-                capabilities INTEGER DEFAULT 1
+                capabilities INTEGER DEFAULT 0
             )
             "#,
         )

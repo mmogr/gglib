@@ -101,7 +101,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             tags TEXT DEFAULT '[]',
             model_key TEXT NOT NULL,
             file_paths_json TEXT,
-            capabilities INTEGER DEFAULT 1
+            capabilities INTEGER DEFAULT 0
         )
         "#,
     )
@@ -124,11 +124,17 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         .await?;
 
     // Migration: Add capabilities column if it doesn't exist
-    // Default value of 1 = SUPPORTS_SYSTEM_ROLE (safe for existing models)
-    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN capabilities INTEGER DEFAULT 1"#)
+    // Default value of 0 = UNKNOWN (models must be explicitly inferred)
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN capabilities INTEGER DEFAULT 0"#)
         .execute(pool)
         .await;
     // Ignore error if column already exists
+
+    // Migration: Reset ALL existing models to unknown (0) to force re-inference
+    // This ensures consistency with the new capability detection logic
+    let _ = sqlx::query(r#"UPDATE models SET capabilities = 0 WHERE capabilities IS NOT NULL"#)
+        .execute(pool)
+        .await;
 
     // Create settings table
     sqlx::query(
