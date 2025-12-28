@@ -412,7 +412,7 @@ pub async fn proxy_chat(
     // Filter out messages with empty or whitespace-only content
     // EXCEPT: tool role messages (they return results) and assistant messages with tool_calls
     // This prevents Jinja template errors in llama-server
-    let mut valid_messages: Vec<_> = request
+    let valid_messages: Vec<_> = request
         .messages
         .into_iter()
         .filter(|m| {
@@ -433,63 +433,34 @@ pub async fn proxy_chat(
         ));
     }
 
-    // STEP 1: Transform system messages if the model doesn't support them
-    if !capabilities.contains(gglib_core::domain::ModelCapabilities::SUPPORTS_SYSTEM_ROLE) {
-        let system_msg_count = valid_messages.iter().filter(|m| m.role == "system").count();
-        if system_msg_count > 0 {
-            tracing::info!(
-                port = request.port,
-                system_messages = system_msg_count,
-                "Transforming system messages to user messages (model doesn't support system role)"
-            );
-        }
-        for msg in &mut valid_messages {
-            if msg.role == "system" {
-                msg.role = "user".to_string();
-                if let Some(content) = &mut msg.content {
-                    *content = format!("[System]: {}", content);
-                }
-            }
-        }
-    }
+    // Convert to ChatMessage format and apply capability-aware transformations
+    let core_messages: Vec<gglib_core::ChatMessage> = valid_messages
+        .into_iter()
+        .map(|m| gglib_core::ChatMessage {
+            role: m.role,
+            content: m.content,
+            tool_calls: m.tool_calls.map(|v| serde_json::Value::Array(v)),
+        })
+        .collect();
 
-    // STEP 2: Merge consecutive same-role messages if strict turns are required
-    if capabilities.contains(gglib_core::domain::ModelCapabilities::REQUIRES_STRICT_TURNS) {
-        let original_count = valid_messages.len();
-        let mut merged_messages = Vec::new();
-        for msg in valid_messages {
-            if let Some(last) = merged_messages.last_mut() {
-                let last_msg: &mut ChatMessage = last;
-                // Merge if same role and both have content
-                if last_msg.role == msg.role
-                    && last_msg.content.is_some()
-                    && msg.content.is_some()
-                    && last_msg.tool_calls.is_none()
-                    && msg.tool_calls.is_none()
-                {
-                    // Merge content
-                    if let (Some(last_content), Some(msg_content)) =
-                        (&mut last_msg.content, &msg.content)
-                    {
-                        last_content.push_str("\n\n");
-                        last_content.push_str(msg_content);
-                    }
-                    continue; // Skip adding this message separately
+    let transformed = gglib_core::transform_messages_for_capabilities(core_messages, capabilities);
+
+    // Convert back to ChatMessage
+    let final_messages: Vec<ChatMessage> = transformed
+        .into_iter()
+        .map(|m| ChatMessage {
+            role: m.role,
+            content: m.content,
+            tool_calls: m.tool_calls.and_then(|v| {
+                if let serde_json::Value::Array(arr) = v {
+                    Some(arr)
+                } else {
+                    None
                 }
-            }
-            merged_messages.push(msg);
-        }
-        let merged_count = merged_messages.len();
-        if merged_count < original_count {
-            tracing::info!(
-                port = request.port,
-                original_messages = original_count,
-                merged_messages = merged_count,
-                "Merged consecutive same-role messages (model requires strict alternation)"
-            );
-        }
-        valid_messages = merged_messages;
-    }
+            }),
+            tool_call_id: None,
+        })
+        .collect();
 
     // Build the llama-server URL
     let server_url = format!("http://127.0.0.1:{}/v1/chat/completions", request.port);
@@ -497,7 +468,7 @@ pub async fn proxy_chat(
     // Build the forwarded request body
     let mut forward_body = serde_json::json!({
         "model": request.model,
-        "messages": valid_messages,
+        "messages": final_messages,
         "stream": request.stream,
         "max_tokens": request.max_tokens,
         "temperature": request.temperature,
