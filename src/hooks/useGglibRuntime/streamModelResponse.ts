@@ -14,8 +14,25 @@ import { createToolCallAccumulator, type AccumulatedToolCall } from './accumulat
 import { createThinkingContentHandler } from './thinkingContentHandler';
 import { PartsAccumulator } from './partsAccumulator';
 import type { GglibContent } from '../../types/messages';
-import { withRetry } from './agentLoop';
+import { DEFAULT_SYSTEM_PROMPT, TOOL_ENABLED_SYSTEM_PROMPT, withRetry } from './agentLoop';
 import type { ReasoningTimingTracker } from './reasoningTiming';
+
+function hotSwapDefaultSystemPrompt(messages: any[], hasTools: boolean): any[] {
+  if (!hasTools) return messages;
+
+  // Only swap when the stored system prompt is *exactly* the default prompt.
+  // This preserves user customizations (even minor edits/whitespace changes).
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg?.role === 'system' && typeof msg.content === 'string' && msg.content === DEFAULT_SYSTEM_PROMPT) {
+      const cloned = messages.slice();
+      cloned[i] = { ...msg, content: TOOL_ENABLED_SYSTEM_PROMPT };
+      return cloned;
+    }
+  }
+
+  return messages;
+}
 
 export interface StreamModelResponseOptions {
   serverPort: number;
@@ -47,11 +64,12 @@ export async function streamModelResponse(
   const { serverPort, messages, toolDefinitions, abortSignal, onContentUpdate, messageId, timingTracker } = options;
 
   const hasTools = toolDefinitions.length > 0;
+  const effectiveMessages = hotSwapDefaultSystemPrompt(messages, hasTools);
 
   const requestBody = {
     port: serverPort,
     model: 'default',
-    messages,
+    messages: effectiveMessages,
     stream: true,
     ...(hasTools && { tools: toolDefinitions }),
   };
