@@ -74,7 +74,7 @@ Menu items are enabled/disabled based on application state. This keeps the nativ
                     │    proxy_running,     │
                     │    proxy_url,         │
                     │    model_selected,    │
-                    │    server_running,    │
+                    │    server_active,     │
                     │  }                    │
                     └───────────┬───────────┘
                                 │
@@ -91,8 +91,8 @@ Menu items are enabled/disabled based on application state. This keeps the nativ
 | Item | Enabled When | Checked When |
 |------|--------------|--------------|
 | Start Server | Model selected + llama installed + server not running | — |
-| Stop Server | Server running for selected model | — |
-| Restart Server | Server running for selected model | — |
+| Stop Server | Server active for selected model | — |
+| Restart Server | Server active for selected model | — |
 | Install llama.cpp | llama NOT installed | — |
 | Proxy Toggle | Always | Proxy running |
 | Copy Proxy URL | Proxy running | — |

@@ -191,7 +191,7 @@ export function isServerRunning(modelId: string | number): boolean {
  * Returns undefined for unknown models (UI should treat as not running).
  * Automatically re-renders when the server's state changes.
  * Polling resumes automatically when status changes to 'running' via a new
- * server:running event.
+ * server:started event.
  */
 export function useServerState(modelId: string | number): ServerState | undefined {
   const modelIdStr = String(modelId);

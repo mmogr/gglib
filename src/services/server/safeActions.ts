@@ -1,39 +1,39 @@
 /**
  * Safe Server Actions
  *
- * Centralized guard helpers for server operations. Wraps backend calls
- * with server-running checks to avoid 500s when the server is already stopped.
+ * Centralized helpers for server operations.
+ *
+ * Backend is the source of truth for lifecycle state; client-side state can be stale.
+ * Actions here are written to be idempotent and resilient to state desync.
  *
  * UI components should use these instead of calling stopServer directly.
  */
 
-import { isServerRunning } from '../serverRegistry';
 import { stopServer } from '../clients/servers';
+import { TransportError } from '../transport/errors';
 
 /**
  * Safely stop a server for a model.
  *
- * If the server is not running, this is a no-op (returns immediately).
- * If the server is running, calls stopServer and propagates any errors.
+ * Always attempts to stop via backend. "Already stopped" responses are treated
+ * as success (idempotent stop).
  *
  * @param modelId - The model ID to stop
- * @returns Promise that resolves when stop completes (or immediately if not running)
+ * @returns Promise that resolves when stop completes
  */
 export async function safeStopServer(modelId: number): Promise<void> {
-  if (!isServerRunning(modelId)) {
-    // Server already stopped — no-op
-    return;
-  }
-
   try {
     await stopServer(modelId);
   } catch (error) {
-    // If we get an error indicating the server is not running, treat as success
-    // This handles race conditions where server stopped between our check and the call
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('not running')) {
+    // Backend is the source of truth. If it reports the server is already stopped,
+    // treat that as success (idempotent stop).
+    if (TransportError.hasCode(error, 'NOT_FOUND') || TransportError.hasCode(error, 'CONFLICT')) {
       return;
     }
+
+    // Back-compat for older error strings.
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('not running')) return;
     throw error;
   }
 }

@@ -78,10 +78,10 @@ Events are the source of truth for server state. All events flow from the Rust b
 | Event | Description |
 |-------|-------------|
 | `server:snapshot` | Initial state of all running servers (emitted on app init) |
-| `server:running` | Server started and ready |
-| `server:stopping` | Server stop initiated |
+| `server:started` | Server started and ready |
 | `server:stopped` | Server stopped cleanly |
-| `server:crashed` | Server exited unexpectedly |
+| `server:error` | Server encountered an error |
+| `server:health_changed` | Server health status changed |
 
 ## Platform Utilities
 
