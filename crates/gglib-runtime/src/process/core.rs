@@ -130,12 +130,22 @@ impl GuiProcessCore {
     fn spawn_log_readers(&self, child: &mut tokio::process::Child, port: u16) {
         if let Some(stdout) = child.stdout.take() {
             use crate::process::{LogManagerSink, spawn_stream_reader};
-            spawn_stream_reader(stdout, port, "stdout", Some(std::sync::Arc::new(LogManagerSink)));
+            spawn_stream_reader(
+                stdout,
+                port,
+                "stdout",
+                Some(std::sync::Arc::new(LogManagerSink)),
+            );
         }
 
         if let Some(stderr) = child.stderr.take() {
             use crate::process::{LogManagerSink, spawn_stream_reader};
-            spawn_stream_reader(stderr, port, "stderr", Some(std::sync::Arc::new(LogManagerSink)));
+            spawn_stream_reader(
+                stderr,
+                port,
+                "stderr",
+                Some(std::sync::Arc::new(LogManagerSink)),
+            );
         }
     }
 
