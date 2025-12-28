@@ -1548,7 +1548,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "async-trait",
  "axum 0.7.9",
@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
@@ -1603,7 +1603,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1636,7 +1636,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1660,7 +1660,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -1669,7 +1669,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gui"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1689,7 +1689,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -1704,7 +1704,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "chrono",
  "gglib-core",
@@ -1717,7 +1717,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1736,7 +1736,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "anyhow",
  "gglib-core",
