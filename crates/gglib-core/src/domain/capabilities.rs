@@ -325,7 +325,13 @@ mod transform_tests {
         // System becomes user, both messages remain separate (user + user but different content)
         assert_eq!(result.len(), 1); // They get merged because both are now "user"
         assert_eq!(result[0].role, "user");
-        assert!(result[0].content.as_ref().unwrap().contains("[System]: You are helpful"));
+        assert!(
+            result[0]
+                .content
+                .as_ref()
+                .unwrap()
+                .contains("[System]: You are helpful")
+        );
         assert!(result[0].content.as_ref().unwrap().contains("Hello"));
     }
 
@@ -404,7 +410,13 @@ mod transform_tests {
         let result = transform_messages_for_capabilities(messages, caps);
         assert_eq!(result.len(), 1); // System→user + merge
         assert_eq!(result[0].role, "user");
-        assert!(result[0].content.as_ref().unwrap().contains("[System]: Be helpful"));
+        assert!(
+            result[0]
+                .content
+                .as_ref()
+                .unwrap()
+                .contains("[System]: Be helpful")
+        );
         assert!(result[0].content.as_ref().unwrap().contains("First"));
         assert!(result[0].content.as_ref().unwrap().contains("Second"));
     }
