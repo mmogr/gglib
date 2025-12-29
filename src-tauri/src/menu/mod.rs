@@ -11,11 +11,17 @@
 //! - `handlers` - Menu event handling
 //! - `state_sync` - Menu state synchronization with app state
 
+#[cfg(target_os = "macos")]
 mod build;
+
+#[cfg(target_os = "macos")]
 pub mod handlers;
+
+#[cfg(target_os = "macos")]
 pub mod ids;
 pub mod state_sync;
 
+#[cfg(target_os = "macos")]
 pub use build::build_app_menu;
 
 use tauri::{

@@ -7,6 +7,7 @@ use crate::app::AppState;
 use crate::menu::MenuState;
 use gglib_runtime::llama::check_llama_installed;
 use tauri::AppHandle;
+#[cfg(target_os = "macos")]
 use tracing::warn;
 
 /// Sync menu state based on current application state.
@@ -61,6 +62,7 @@ pub async fn sync_menu_state_internal(
 /// Sync menu state, logging any errors.
 ///
 /// Convenience wrapper for fire-and-forget sync from async contexts.
+#[cfg(target_os = "macos")]
 pub async fn sync_menu_state_logged(app: &AppHandle, state: &tauri::State<'_, AppState>) {
     if let Err(e) = sync_menu_state_internal(app, state).await {
         warn!("Failed to sync menu state: {}", e);
@@ -68,6 +70,7 @@ pub async fn sync_menu_state_logged(app: &AppHandle, state: &tauri::State<'_, Ap
 }
 
 /// Alias for sync_menu_state_logged (backward compatibility).
+#[cfg(target_os = "macos")]
 pub async fn sync_menu_state_or_log(app: &AppHandle, state: &tauri::State<'_, AppState>) {
     sync_menu_state_logged(app, state).await;
 }
