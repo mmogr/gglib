@@ -261,7 +261,13 @@ build-tauri:
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
 	@rm -f src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null || true
 	npm install
-	npm run tauri:build
+	# linuxdeploy's embedded strip can fail on some distros (e.g. Arch) due to RELR relocations.
+	# NO_STRIP=1 is a linuxdeploy-supported knob that avoids the failure by skipping stripping.
+	@if [ "$(UNAME_S)" = "Linux" ]; then \
+		NO_STRIP=1 npm run tauri:build; \
+	else \
+		npm run tauri:build; \
+	fi
 	@echo "✓ Tauri app built to src-tauri/target/release/gglib-gui"
 
 # Full setup from scratch
