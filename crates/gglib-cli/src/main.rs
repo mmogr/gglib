@@ -87,7 +87,9 @@ fn launch_gui_command(repo_root: &std::path::Path) -> anyhow::Result<()> {
             let appimage_dir = repo_root.join("src-tauri/target/release/bundle/appimage");
             println!(
                 "Desktop GUI not found at: {} (or any *.AppImage in {})",
-                repo_root.join("src-tauri/target/release/gglib-app").display(),
+                repo_root
+                    .join("src-tauri/target/release/gglib-app")
+                    .display(),
                 appimage_dir.display()
             );
             println!();
