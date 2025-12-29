@@ -537,7 +537,14 @@ main() {
         # Check curl development headers (required for llama.cpp on Linux)
         check_lib "libcurl-dev" "Required for llama.cpp HTTP/HTTPS support" "true" "libcurl"
         
-        check_dep "patchelf" "Required for Tauri AppImage bundling" "true" "patchelf"
+        check_dep "patchelf" "Required for Tauri AppImage bundling (linuxdeploy)" "true" "patchelf"
+
+        # On some rolling distros (notably Arch), linuxdeploy's bundled binutils can be too old
+        # to strip modern system libraries that use RELR relocations, causing AppImage bundling to fail.
+        # Workaround: build with NO_STRIP=1 (Makefile sets this automatically for Linux builds).
+        if [ "$(detect_linux_distro)" = "arch" ] && [ -z "${NO_STRIP:-}" ]; then
+            echo -e "${YELLOW}NOTE:${RESET} If AppImage bundling fails with 'unknown type [0x13] section .relr.dyn', run builds with ${BOLD}NO_STRIP=1${RESET}."
+        fi
         # Try webkit2gtk-4.1 first (Ubuntu 24.04+), fallback to 4.0
         if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null && pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
             check_lib "webkit2gtk-4.1" "Required for Tauri desktop app (WebView)" "true" "webkit2gtk-4.0"
