@@ -12,9 +12,12 @@ use dotenvy::dotenv;
 use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
 use gglib_runtime::process::get_log_manager;
 use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
+#[cfg(target_os = "macos")]
 use menu::state_sync::sync_menu_state_or_log;
 use std::sync::Arc;
+use tauri::menu::Menu;
 use tauri::Manager;
+use tauri::Wry;
 use tracing::{debug, error, info};
 
 fn main() {
@@ -30,7 +33,7 @@ fn main() {
         .try_init()
         .ok(); // Ignore error if already initialized
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             // Bootstrap inside setup() where we have AppHandle for real event emission
@@ -94,8 +97,12 @@ fn main() {
                 });
             }
         })
-        .on_menu_event(menu::handlers::handle_menu_event)
-        .invoke_handler(tauri::generate_handler![
+        ;
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.on_menu_event(menu::handlers::handle_menu_event);
+
+    builder.invoke_handler(tauri::generate_handler![
             // API discovery
             commands::util::get_embedded_api_info,
             // TRANSPORT_EXCEPTION: Desktop log snapshot (web uses HTTP)
@@ -148,33 +155,54 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Build and attach the application menu
-    match menu::build_app_menu(&handle) {
-        Ok((menu_obj, app_menu)) => {
-            if let Err(e) = app.set_menu(menu_obj) {
-                error!(error = %e, "Failed to set app menu");
-            } else {
-                info!("Application menu initialized");
+    #[cfg(target_os = "macos")]
+    {
+        // Build and attach the application menu (macOS only)
+        match menu::build_app_menu(&handle) {
+            Ok((menu_obj, app_menu)) => {
+                if let Err(e) = app.set_menu(menu_obj) {
+                    error!(error = %e, "Failed to set app menu");
+                } else {
+                    info!("Application menu initialized");
+                }
+
+                // Store menu references for state updates
+                let state: tauri::State<AppState> = app.state();
+                let menu_arc = state.menu.clone();
+
+                tauri::async_runtime::spawn(async move {
+                    *menu_arc.write().await = Some(app_menu);
+                });
+
+                // Perform initial menu state sync
+                let handle_clone = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    let state: tauri::State<AppState> = handle_clone.state();
+                    sync_menu_state_or_log(&handle_clone, &state).await;
+                });
             }
-
-            // Store menu references for state updates
-            let state: tauri::State<AppState> = app.state();
-            let menu_arc = state.menu.clone();
-
-            tauri::async_runtime::spawn(async move {
-                *menu_arc.write().await = Some(app_menu);
-            });
-
-            // Perform initial menu state sync
-            let handle_clone = handle.clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                let state: tauri::State<AppState> = handle_clone.state();
-                sync_menu_state_or_log(&handle_clone, &state).await;
-            });
+            Err(e) => {
+                error!(error = %e, "Failed to build app menu");
+            }
         }
-        Err(e) => {
-            error!(error = %e, "Failed to build app menu");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Explicitly attach an empty menu on non-macOS to prevent any default
+        // File/Edit/Window-style menu from being shown by the platform.
+        match Menu::<Wry>::with_items(&handle, &[]) {
+            Ok(empty_menu) => {
+                if let Err(e) = app.set_menu(empty_menu) {
+                    error!(error = %e, "Failed to set empty app menu");
+                } else {
+                    info!("Empty application menu attached (non-macOS)");
+                }
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to build empty app menu");
+            }
         }
     }
 
