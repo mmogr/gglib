@@ -207,8 +207,8 @@ impl ProcessCore {
     }
 }
 
-// Note: Drop is not async, so we can't use shutdown_child here.
-// Caller should explicitly call kill_all() before dropping if graceful shutdown is needed.
+// Note: Drop is not async, so we can't use graceful shutdown (shutdown_child) here.
+// Drop implementation uses synchronous kill -9 as best-effort cleanup.
 impl Drop for ProcessCore {
     fn drop(&mut self) {
         // Best effort: just kill the child handles

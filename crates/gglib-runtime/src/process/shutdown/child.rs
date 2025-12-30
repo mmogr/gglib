@@ -47,7 +47,14 @@ async fn shutdown_unix(child: &mut Child) -> io::Result<ExitStatus> {
         .id()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "child has no PID"))?;
 
-    // Phase 1: SIGTERM with 5-second grace period
+    // Phase 1: SIGTERM with platform-specific grace period
+    // Linux: 2 seconds (faster shutdown for better UX)
+    // Other Unix: 5 seconds (more conservative)
+    #[cfg(target_os = "linux")]
+    const SIGTERM_TIMEOUT_SECS: u64 = 2;
+    #[cfg(not(target_os = "linux"))]
+    const SIGTERM_TIMEOUT_SECS: u64 = 5;
+
     if let Err(e) = signal::kill(Pid::from_raw(pid as i32), Signal::SIGTERM) {
         // Process may have already exited
         if e == nix::errno::Errno::ESRCH {
@@ -56,8 +63,8 @@ async fn shutdown_unix(child: &mut Child) -> io::Result<ExitStatus> {
         return Err(io::Error::other(e));
     }
 
-    // Wait up to 5 seconds for graceful exit
-    match timeout(Duration::from_secs(5), child.wait()).await {
+    // Wait for graceful exit
+    match timeout(Duration::from_secs(SIGTERM_TIMEOUT_SECS), child.wait()).await {
         Ok(result) => return result,
         Err(_) => {
             // Timeout - escalate to SIGKILL
