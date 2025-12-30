@@ -12,14 +12,19 @@ fn main() {
     // Allow CI or packagers to provide a SHA without any git probing.
     println!("cargo:rerun-if-env-changed=GGLIB_BUILD_SHA_SHORT");
 
-    if let Some(override_sha) = env::var("GGLIB_BUILD_SHA_SHORT").ok().and_then(normalize_sha_short) {
+    if let Some(override_sha) = env::var("GGLIB_BUILD_SHA_SHORT")
+        .ok()
+        .and_then(normalize_sha_short)
+    {
         emit_vergen_fallbacks(Some(&override_sha));
         return;
     }
 
     // Best-effort git probing via vergen-gix, but NEVER fail the build.
     // If no repo is found, we emit explicit fallbacks so `env!()` never fails.
-    let Some(repo_root) = find_repo_root(Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap_or_default())) else {
+    let Some(repo_root) = find_repo_root(Path::new(
+        &env::var("CARGO_MANIFEST_DIR").unwrap_or_default(),
+    )) else {
         emit_vergen_fallbacks(None);
         return;
     };
@@ -38,7 +43,10 @@ fn main() {
         }
     };
 
-    if let Err(err) = Emitter::default().add_instructions(&git).and_then(|e| e.emit()) {
+    if let Err(err) = Emitter::default()
+        .add_instructions(&git)
+        .and_then(|e| e.emit())
+    {
         println!("cargo:warning=gglib-build-info: vergen-gix emit failed: {err}");
         emit_vergen_fallbacks(None);
     }

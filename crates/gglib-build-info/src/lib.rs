@@ -22,9 +22,14 @@ pub const HAS_GIT_SHA: bool = is_short_hex(GIT_SHA_SHORT);
 /// Examples:
 /// - `0.2.5 (a1b2c3d)`
 /// - `0.2.5` (when git data is unavailable)
-pub const LONG_VERSION_WITH_SHA: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("VERGEN_GIT_SHA"), ")");
+pub const LONG_VERSION_WITH_SHA: &str =
+    concat!(env!("CARGO_PKG_VERSION"), " (", env!("VERGEN_GIT_SHA"), ")");
 
-pub const LONG_VERSION: &str = if HAS_GIT_SHA { LONG_VERSION_WITH_SHA } else { SEMVER };
+pub const LONG_VERSION: &str = if HAS_GIT_SHA {
+    LONG_VERSION_WITH_SHA
+} else {
+    SEMVER
+};
 
 /// The short version string used in the Tauri/macOS About metadata.
 ///
@@ -32,39 +37,39 @@ pub const LONG_VERSION: &str = if HAS_GIT_SHA { LONG_VERSION_WITH_SHA } else { S
 pub const ABOUT_SHORT_VERSION: &str = if HAS_GIT_SHA { GIT_SHA_SHORT } else { SEMVER };
 
 const fn is_short_hex(value: &str) -> bool {
-	let bytes = value.as_bytes();
-	if bytes.len() != 7 {
-		return false;
-	}
+    let bytes = value.as_bytes();
+    if bytes.len() != 7 {
+        return false;
+    }
 
-	let mut i = 0;
-	while i < 7 {
-		let c = bytes[i];
-		let is_digit = c >= b'0' && c <= b'9';
-		let is_lower = c >= b'a' && c <= b'f';
-		let is_upper = c >= b'A' && c <= b'F';
-		if !(is_digit || is_lower || is_upper) {
-			return false;
-		}
-		i += 1;
-	}
-	true
+    let mut i = 0;
+    while i < 7 {
+        let c = bytes[i];
+        let is_digit = c >= b'0' && c <= b'9';
+        let is_lower = c >= b'a' && c <= b'f';
+        let is_upper = c >= b'A' && c <= b'F';
+        if !(is_digit || is_lower || is_upper) {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
 const fn str_eq(a: &str, b: &str) -> bool {
-	let a_bytes = a.as_bytes();
-	let b_bytes = b.as_bytes();
-	if a_bytes.len() != b_bytes.len() {
-		return false;
-	}
+    let a_bytes = a.as_bytes();
+    let b_bytes = b.as_bytes();
+    if a_bytes.len() != b_bytes.len() {
+        return false;
+    }
 
-	let mut i = 0;
-	while i < a_bytes.len() {
-		if a_bytes[i] != b_bytes[i] {
-			return false;
-		}
-		i += 1;
-	}
+    let mut i = 0;
+    while i < a_bytes.len() {
+        if a_bytes[i] != b_bytes[i] {
+            return false;
+        }
+        i += 1;
+    }
 
-	true
+    true
 }
