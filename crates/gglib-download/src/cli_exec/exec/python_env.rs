@@ -558,7 +558,7 @@ mod tests {
 
         // Create a command with a "dirty" environment simulating a conda/virtualenv shell
         let mut cmd = Command::new(python);
-        
+
         // Simulate polluted environment by setting variables on the Command
         cmd.env("PYTHONHOME", "/fake/python/home")
             .env("PYTHONPATH", "/fake/python/path")
