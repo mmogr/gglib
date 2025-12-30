@@ -538,4 +538,100 @@ mod tests {
         assert!(msg.contains("virtualenv"));
         assert!(msg.contains("permission denied"));
     }
+
+    /// Test that environment isolation properly removes polluted environment variables
+    /// and sets PYTHONNOUSERSITE=1 to prevent stdlib resolution issues.
+    ///
+    /// This test simulates a dirty environment by setting polluted variables directly
+    /// on the Command object, then verifies that `apply_python_subprocess_isolation`
+    /// removes them and sets PYTHONNOUSERSITE=1.
+    #[tokio::test]
+    async fn test_environment_isolation_removes_polluted_vars() {
+        // Find a working Python interpreter
+        let python = match which::which("python3").or_else(|_| which::which("python")) {
+            Ok(p) => p,
+            Err(_) => {
+                eprintln!("Python not available for test, skipping environment isolation test");
+                return;
+            }
+        };
+
+        // Create a command with a "dirty" environment simulating a conda/virtualenv shell
+        let mut cmd = Command::new(python);
+        
+        // Simulate polluted environment by setting variables on the Command
+        cmd.env("PYTHONHOME", "/fake/python/home")
+            .env("PYTHONPATH", "/fake/python/path")
+            .env("PYTHONUSERBASE", "/fake/user/base")
+            .env("VIRTUAL_ENV", "/fake/venv")
+            .env("CONDA_PREFIX", "/fake/conda")
+            .env("CONDA_DEFAULT_ENV", "fake_env")
+            .env("CONDA_PROMPT_MODIFIER", "(fake_env)")
+            .env("CONDA_SHLVL", "1");
+
+        // Apply our isolation function - this should remove the polluted vars
+        apply_python_subprocess_isolation(&mut cmd);
+
+        // Use Python to print its environment variables that we care about
+        cmd.arg("-c").arg(
+            "import os, sys; \
+             print('PYTHONHOME=' + os.getenv('PYTHONHOME', 'UNSET')); \
+             print('PYTHONPATH=' + os.getenv('PYTHONPATH', 'UNSET')); \
+             print('PYTHONUSERBASE=' + os.getenv('PYTHONUSERBASE', 'UNSET')); \
+             print('VIRTUAL_ENV=' + os.getenv('VIRTUAL_ENV', 'UNSET')); \
+             print('CONDA_PREFIX=' + os.getenv('CONDA_PREFIX', 'UNSET')); \
+             print('CONDA_DEFAULT_ENV=' + os.getenv('CONDA_DEFAULT_ENV', 'UNSET')); \
+             print('PYTHONNOUSERSITE=' + os.getenv('PYTHONNOUSERSITE', 'UNSET')); \
+             print('SUCCESS')",
+        );
+
+        let output = cmd.output().await.expect("Failed to run Python subprocess");
+
+        // Verify the Python subprocess ran successfully
+        assert!(
+            output.status.success(),
+            "Python subprocess failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Assert that all polluted variables were removed (should be UNSET)
+        assert!(
+            stdout.contains("PYTHONHOME=UNSET"),
+            "PYTHONHOME should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("PYTHONPATH=UNSET"),
+            "PYTHONPATH should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("PYTHONUSERBASE=UNSET"),
+            "PYTHONUSERBASE should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("VIRTUAL_ENV=UNSET"),
+            "VIRTUAL_ENV should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("CONDA_PREFIX=UNSET"),
+            "CONDA_PREFIX should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("CONDA_DEFAULT_ENV=UNSET"),
+            "CONDA_DEFAULT_ENV should be removed, got: {stdout}"
+        );
+
+        // Assert that PYTHONNOUSERSITE was explicitly set to '1'
+        assert!(
+            stdout.contains("PYTHONNOUSERSITE=1"),
+            "PYTHONNOUSERSITE should be set to '1', got: {stdout}"
+        );
+
+        // Verify Python ran successfully (can import encodings)
+        assert!(
+            stdout.contains("SUCCESS"),
+            "Python should successfully import stdlib and print SUCCESS"
+        );
+    }
 }
