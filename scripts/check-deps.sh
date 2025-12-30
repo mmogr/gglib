@@ -14,30 +14,65 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-# Detect shell and config file
-if [ -n "$ZSH_VERSION" ]; then
-    SHELL_RC="~/.zshrc"
-    SHELL_NAME="zsh"
-elif [ -n "$BASH_VERSION" ]; then
-    SHELL_RC="~/.bashrc"
-    SHELL_NAME="bash"
-else
-    # Fallback: check $SHELL environment variable
-    case "$SHELL" in
-        */zsh)
+# Detect USER's shell (not the script's execution shell)
+# Since this script runs with #!/usr/bin/env bash, we need to detect what shell the user is actually using
+detect_user_shell() {
+    local user_shell=""
+    
+    # Method 1: Check parent process (most reliable for interactive shells)
+    if command -v ps >/dev/null 2>&1; then
+        local parent_shell=$(ps -p $PPID -o comm= 2>/dev/null | sed 's/^-//')
+        case "$parent_shell" in
+            zsh|*zsh)
+                user_shell="zsh"
+                ;;
+            bash|*bash)
+                user_shell="bash"
+                ;;
+        esac
+    fi
+    
+    # Method 2: Check $SHELL environment variable if parent detection failed
+    if [ -z "$user_shell" ]; then
+        case "$SHELL" in
+            */zsh)
+                user_shell="zsh"
+                ;;
+            */bash)
+                user_shell="bash"
+                ;;
+        esac
+    fi
+    
+    # Method 3: Check which config file exists (last resort)
+    if [ -z "$user_shell" ]; then
+        if [ -f "$HOME/.zshrc" ] && [ ! -f "$HOME/.bashrc" ]; then
+            user_shell="zsh"
+        elif [ -f "$HOME/.bashrc" ]; then
+            user_shell="bash"
+        fi
+    fi
+    
+    # Set shell-specific variables
+    case "$user_shell" in
+        zsh)
             SHELL_RC="~/.zshrc"
             SHELL_NAME="zsh"
             ;;
-        */bash)
+        bash)
             SHELL_RC="~/.bashrc"
             SHELL_NAME="bash"
             ;;
         *)
+            # Default to bashrc for unknown shells
             SHELL_RC="~/.bashrc"
             SHELL_NAME="shell"
             ;;
     esac
-fi
+}
+
+# Detect the user's shell
+detect_user_shell
 
 # Track results
 MISSING_REQUIRED=()
