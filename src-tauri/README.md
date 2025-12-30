@@ -95,6 +95,13 @@ The output binary will be located in `src-tauri/target/release/bundle/`.
 - Works offline once models are downloaded
 - Better performance for local operations
 
+**Stability & Resource Management:**
+- **Hardened shutdown with watchdog**: 10-second timeout prevents hung closes
+- **Background task cleanup**: Embedded server and event emitters are explicitly aborted
+- **Parallel cleanup**: Servers and downloads stop concurrently (8s timeout)
+- **PID file audit**: Final safety net catches any orphaned llama-server processes
+- **No resource leaks**: Proper cleanup prevents thread exhaustion and zombie processes
+
 For more details on the architecture and how all interfaces work together, see:
 - [Interfaces & Modes](../README.md#interfaces--modes) in the main README
 - [Architecture Overview](../README.md#architecture-overview) for backend details
@@ -109,6 +116,7 @@ For more details on the architecture and how all interfaces work together, see:
 - `src-tauri/`: Backend source code (Rust)
   - `src/main.rs`: Tauri application entry point
   - `src/app/`: Application state and event infrastructure
+  - `src/lifecycle.rs`: Hardened shutdown orchestration with watchdog
   - `src/menu/`: Native menu bar with stateful items
   - `src/commands/`: Tauri command handlers (organized by domain)
   - `tauri.conf.json`: Tauri configuration
@@ -167,7 +175,8 @@ The Rust backend is organized into three main modules:
 
 | Module | Purpose | Key Components |
 |--------|---------|----------------|
-| **app/** | Central state & event infrastructure | `AppState` (managed state), `emit_or_log()` (event helper), event constants |
+| **app/** | Central state & event infrastructure | `AppState` (managed state), `BackgroundTasks` (task handles), `emit_or_log()` (event helper), event constants |
+| **lifecycle.rs** | Application startup & hardened shutdown | `perform_shutdown()` (10s watchdog), `parallel_cleanup()` (task abortion), `startup_cleanup()` (orphan removal) |
 | **menu/** | Native menu bar with state sync | `AppMenu` (item refs), `MenuState`, menu builder, event handlers, state synchronization |
 | **commands/** | 6 OS integration commands in 2 modules | `util.rs` (API discovery, shell, menu), `llama.rs` (binary management) |
 
@@ -210,5 +219,6 @@ The Rust backend is organized into three main modules:
 
 For detailed documentation on each module, see:
 - [app/README.md](src/app/README.md) — State and event infrastructure
+- [LIFECYCLE.md](LIFECYCLE.md) — Application startup and hardened shutdown architecture
 - [menu/README.md](src/menu/README.md) — Native menu implementation
 - [commands/README.md](src/commands/README.md) — Tauri command reference
