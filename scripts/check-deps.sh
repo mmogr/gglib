@@ -56,7 +56,10 @@ detect_user_shell() {
     # Set shell-specific variables
     case "$user_shell" in
         zsh)
-            SHELL_RC="~/.zshrc"
+            # NOTE: VS Code tasks typically invoke `zsh -c ...` (non-interactive),
+            # which does NOT source ~/.zshrc. ~/.zshenv is sourced for all zsh
+            # invocations, making it the most reliable place for PATH exports.
+            SHELL_RC="~/.zshenv"
             SHELL_NAME="zsh"
             ;;
         bash)
