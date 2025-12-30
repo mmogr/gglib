@@ -14,6 +14,31 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
+# Detect shell and config file
+if [ -n "$ZSH_VERSION" ]; then
+    SHELL_RC="~/.zshrc"
+    SHELL_NAME="zsh"
+elif [ -n "$BASH_VERSION" ]; then
+    SHELL_RC="~/.bashrc"
+    SHELL_NAME="bash"
+else
+    # Fallback: check $SHELL environment variable
+    case "$SHELL" in
+        */zsh)
+            SHELL_RC="~/.zshrc"
+            SHELL_NAME="zsh"
+            ;;
+        */bash)
+            SHELL_RC="~/.bashrc"
+            SHELL_NAME="bash"
+            ;;
+        *)
+            SHELL_RC="~/.bashrc"
+            SHELL_NAME="shell"
+            ;;
+    esac
+fi
+
 # Track results
 MISSING_REQUIRED=()
 PRESENT_REQUIRED=()
@@ -380,7 +405,7 @@ print_install_instructions() {
             echo -e "   ${YELLOW}# CUDA is installed but nvcc not in PATH${RESET}"
             
             if [ "$os" = "linux" ]; then
-                echo -e "   ${YELLOW}# Add to ~/.bashrc or ~/.zshrc:${RESET}"
+                echo -e "   ${YELLOW}# Add to $SHELL_RC:${RESET}"
                 if [ -d "/opt/cuda" ]; then
                     echo "   export PATH=\"/opt/cuda/bin:\$PATH\""
                     echo "   export LD_LIBRARY_PATH=\"/opt/cuda/lib64:\$LD_LIBRARY_PATH\""
@@ -390,7 +415,7 @@ print_install_instructions() {
                 fi
                 echo ""
                 echo -e "   ${YELLOW}# Then reload your shell:${RESET}"
-                echo "   source ~/.bashrc"
+                echo "   source $SHELL_RC"
             elif [ "$os" = "windows" ]; then
                 echo -e "   ${YELLOW}# Add CUDA to PATH in System Environment Variables${RESET}"
                 echo -e "   ${YELLOW}# Or run in PowerShell/CMD:${RESET}"
@@ -408,7 +433,7 @@ print_install_instructions() {
                             echo -e "   ${YELLOW}# Arch Linux:${RESET}"
                             echo "   yay -S cuda"
                             echo ""
-                            echo -e "   ${YELLOW}# Then add to ~/.bashrc:${RESET}"
+                            echo -e "   ${YELLOW}# Then add to $SHELL_RC:${RESET}"
                             echo "   export PATH=\"/opt/cuda/bin:\$PATH\""
                             echo "   export LD_LIBRARY_PATH=\"/opt/cuda/lib64:\$LD_LIBRARY_PATH\""
                             ;;
@@ -437,15 +462,15 @@ print_install_instructions() {
     # Special handling for CUDA PATH issue (Linux only)
     if [ "$cuda_not_in_path" = true ] && [ "$os" = "linux" ]; then
         echo ""
-        echo -e "  ${YELLOW}# CUDA installed but not in PATH - add to ~/.bashrc:${RESET}"
+        echo -e "  ${YELLOW}# CUDA installed but not in PATH - add to $SHELL_RC:${RESET}"
         if [ -d "/opt/cuda" ]; then
-            echo -e "  ${YELLOW}echo 'export PATH=\"/opt/cuda/bin:\$PATH\"' >> ~/.bashrc${RESET}"
-            echo -e "  ${YELLOW}echo 'export LD_LIBRARY_PATH=\"/opt/cuda/lib64:\$LD_LIBRARY_PATH\"' >> ~/.bashrc${RESET}"
+            echo -e "  ${YELLOW}echo 'export PATH=\"/opt/cuda/bin:\$PATH\"' >> $SHELL_RC${RESET}"
+            echo -e "  ${YELLOW}echo 'export LD_LIBRARY_PATH=\"/opt/cuda/lib64:\$LD_LIBRARY_PATH\"' >> $SHELL_RC${RESET}"
         elif [ -d "/usr/local/cuda" ]; then
-            echo -e "  ${YELLOW}echo 'export PATH=\"/usr/local/cuda/bin:\$PATH\"' >> ~/.bashrc${RESET}"
-            echo -e "  ${YELLOW}echo 'export LD_LIBRARY_PATH=\"/usr/local/cuda/lib64:\$LD_LIBRARY_PATH\"' >> ~/.bashrc${RESET}"
+            echo -e "  ${YELLOW}echo 'export PATH=\"/usr/local/cuda/bin:\$PATH\"' >> $SHELL_RC${RESET}"
+            echo -e "  ${YELLOW}echo 'export LD_LIBRARY_PATH=\"/usr/local/cuda/lib64:\$LD_LIBRARY_PATH\"' >> $SHELL_RC${RESET}"
         fi
-        echo -e "  ${YELLOW}source ~/.bashrc${RESET}"
+        echo -e "  ${YELLOW}source $SHELL_RC${RESET}"
         echo ""
     fi
     
