@@ -3,8 +3,8 @@
 use gglib_axum::EmbeddedApiInfo;
 use gglib_tauri::gui_backend::GuiBackend;
 use std::sync::Arc;
+use tauri::async_runtime::JoinHandle;
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
 
 use crate::menu::AppMenu;
 

@@ -79,7 +79,7 @@ fn main() {
             {
                 let tasks = app_state.background_tasks.clone();
                 tauri::async_runtime::block_on(async move {
-                    tasks.write().await.embedded_server = Some(server_handle);
+                    tasks.write().await.embedded_server = Some(tauri::async_runtime::JoinHandle::Tokio(server_handle));
                 });
             }
             
@@ -277,9 +277,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
     
     // Store the log task handle for cleanup
-    tauri::async_runtime::spawn(async move {
-        tasks.write().await.log_emitter = Some(log_task);
-    });
+    tasks.blocking_write().log_emitter = Some(log_task);
 
     // NOTE: Download events are now wired via AppEventBridge in bootstrap()
     // The TauriEventEmitter broadcasts DownloadEvent to the frontend automatically
