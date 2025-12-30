@@ -16,8 +16,8 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
     // =========================================================================
     let about_metadata = AboutMetadataBuilder::new()
         .name(Some("GGLib"))
-        .version(Some(env!("CARGO_PKG_VERSION")))
-        .short_version(Some(env!("GIT_COMMIT_HASH")))
+        .version(Some(gglib_build_info::SEMVER))
+        .short_version(Some(gglib_build_info::ABOUT_SHORT_VERSION))
         .authors(Some(vec!["mmogr".to_string()]))
         .license(Some("GPLv3"))
         .website(Some("https://github.com/mmogr/gglib"))

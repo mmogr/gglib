@@ -22,6 +22,7 @@ tauri-plugin-dialog = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 async-trait = "0.1"
+gglib-build-info = { path = "../crates/gglib-build-info" }
 gglib-core = { path = "../crates/gglib-core" }
 gglib-download = { path = "../crates/gglib-download" }
 gglib-mcp = { path = "../crates/gglib-mcp" }
