@@ -1,0 +1,18 @@
+[package]
+name = "gglib-build-info"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared build/version metadata for gglib"
+publish = false
+build = "build.rs"
+
+[dependencies]
+
+[build-dependencies]
+vergen-gix = { version = "1.0.9" }
+
+[lints]
+workspace = true
