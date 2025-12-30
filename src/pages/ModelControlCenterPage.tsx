@@ -5,6 +5,7 @@ import { useDownloadManager } from '../hooks/useDownloadManager';
 import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffects';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import { useToastContext } from '../contexts/ToastContext';
+import { useDownloadSystemStatus } from '../hooks/useDownloadSystemStatus';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
@@ -74,6 +75,10 @@ export default function ModelControlCenterPage({
   } = useDownloadManager({
     onCompleted,
   });
+
+  // Backend download system initialization (Python fast helper)
+  const downloadSystem = useDownloadSystemStatus();
+  const downloadSystemError = downloadSystem.status === 'error' ? downloadSystem.message : null;
   
   // Track whether user dismissed completion banner
   const [downloadDismissed] = useState(false);
@@ -250,6 +255,7 @@ export default function ModelControlCenterPage({
             onModelAdded={handleModelAdded}
             activeSubTab={activeSubTab}
             onSubTabChange={handleSubTabChange}
+            downloadSystemError={downloadSystemError}
             onSelectHfModel={handleSelectHfModel}
             selectedHfModelId={selectedHfModel?.id}
             activeTab={sidebarTab}
