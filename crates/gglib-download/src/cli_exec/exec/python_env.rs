@@ -374,7 +374,11 @@ async fn run_python_command(python: &Path, args: &[&str]) -> Result<(), EnvSetup
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let mut details = format!("{} {args:?} exited with {}", python.display(), output.status);
+        let mut details = format!(
+            "{} {args:?} exited with {}",
+            python.display(),
+            output.status
+        );
         if !stdout.is_empty() {
             details.push_str(&format!("\nstdout: {stdout}"));
         }
