@@ -84,6 +84,16 @@ pub async fn ensure_fast_helper_ready() -> Result<(), PythonBridgeError> {
     Ok(())
 }
 
+/// Preflight the fast download helper.
+///
+/// Validates that a usable Python interpreter exists and can import the
+/// standard library (including `encodings`). This does not create the venv.
+///
+/// Returns the resolved `sys.executable` string on success.
+pub async fn preflight_fast_helper() -> Result<String, PythonBridgeError> {
+    Ok(PythonEnvironment::preflight().await?)
+}
+
 /// Run the fast download using the embedded Python helper.
 pub async fn run_fast_download(request: &FastDownloadRequest<'_>) -> Result<(), PythonBridgeError> {
     if request.files.is_empty() {
@@ -116,7 +126,27 @@ async fn run_download_process(
         .arg(request.destination)
         .kill_on_drop(true)
         .env("PYTHONUNBUFFERED", "1")
+        .env("PYTHONNOUSERSITE", "1")
         .env("HF_HUB_DISABLE_TELEMETRY", "1");
+
+    // Denylist-based environment isolation.
+    // Prevent conda/venv pollution (PYTHONHOME/PYTHONPATH) from breaking stdlib imports.
+    for key in [
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONUSERBASE",
+        "VIRTUAL_ENV",
+        "CONDA_PREFIX",
+        "CONDA_DEFAULT_ENV",
+        "CONDA_PROMPT_MODIFIER",
+        "CONDA_SHLVL",
+        "CONDA_EXE",
+        "CONDA_PYTHON_EXE",
+        "_CE_CONDA",
+        "_CE_M",
+    ] {
+        cmd.env_remove(key);
+    }
 
     if let Some(token) = request.token {
         cmd.arg("--token").arg(token);
