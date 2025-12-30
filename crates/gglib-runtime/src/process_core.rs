@@ -120,6 +120,39 @@ impl ProcessCore {
         Ok(())
     }
 
+    /// Kill all running processes in parallel.
+    /// Errors are logged but do not abort the shutdown of other processes.
+    pub async fn kill_all(&mut self) {
+        let model_ids: Vec<i64> = self.processes.keys().copied().collect();
+        
+        // Remove all from HashMap and collect RunningProcess structs
+        let mut processes_to_kill = Vec::new();
+        for model_id in &model_ids {
+            if let Some(running) = self.processes.remove(model_id) {
+                processes_to_kill.push((*model_id, running));
+            }
+        }
+        
+        // Kill all in parallel
+        let kill_futures: Vec<_> = processes_to_kill.into_iter().map(|(model_id, running)| {
+            async move {
+                let pid = running.handle.pid.unwrap_or(0);
+                debug!(model_id = %model_id, pid = %pid, "Stopping process");
+                
+                // Use graceful shutdown with SIGTERM → SIGKILL
+                let _ = shutdown_child(running.child).await;
+                
+                // Remove PID file
+                if let Err(e) = delete_pidfile(model_id) {
+                    debug!("Failed to delete PID file: {}", e);
+                }
+            }
+        }).collect();
+        
+        // Execute all kills in parallel - cannot fail (errors are logged inside)
+        futures_util::future::join_all(kill_futures).await;
+    }
+
     /// Get context size for a running process.
     pub fn get_context_size(&self, model_id: i64) -> Option<u64> {
         self.processes.get(&model_id).and_then(|p| p.context_size)
