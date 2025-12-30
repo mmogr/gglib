@@ -1,6 +1,6 @@
 [package]
 name = "gglib-app"
-version = "0.2.5"
+version = "0.2.6"
 description = "Tauri GUI for GGLib - GGUF Model Manager"
 authors = ["mmogr"]
 license = "GPLv3"
