@@ -33,6 +33,8 @@ interface ModelLibraryPanelProps {
   onModelAdded: (filePath: string) => Promise<void>;
   activeSubTab?: AddDownloadSubTab;
   onSubTabChange?: (subtab: AddDownloadSubTab) => void;
+  /** Optional error message if the backend download system failed to initialize */
+  downloadSystemError?: string | null;
   
   // HuggingFace model selection (for preview in inspector)
   onSelectHfModel?: (model: HfModelSummary | null) => void;
@@ -66,6 +68,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   onModelAdded,
   activeSubTab,
   onSubTabChange,
+  downloadSystemError,
   onSelectHfModel,
   selectedHfModelId,
   activeTab: externalActiveTab,
@@ -208,6 +211,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
             onModelAdded={onModelAdded}
             activeSubTab={activeSubTab}
             onSubTabChange={onSubTabChange}
+            downloadSystemError={downloadSystemError}
             onSelectHfModel={onSelectHfModel}
             selectedHfModelId={selectedHfModelId}
           />

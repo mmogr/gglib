@@ -18,6 +18,8 @@ use std::os::unix::fs::PermissionsExt;
 // Constants
 // ============================================================================
 
+const PYTHON_OVERRIDE_ENV: &str = "GGLIB_PYTHON";
+
 const PY_HELPER_SOURCE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/scripts/hf_xet_downloader.py"
@@ -42,6 +44,12 @@ const PYTHON_CANDIDATES: &[&str] = &["python3", "python"];
 pub enum EnvSetupError {
     #[error("Python not found in PATH (tried: {0})")]
     PythonNotFound(String),
+
+    #[error("Python interpreter validation failed at {path}: {reason}")]
+    PythonInvalid { path: PathBuf, reason: String },
+
+    #[error("No working Python interpreter found (tried: {tried}). Last error: {last_error}")]
+    PythonValidationFailed { tried: String, last_error: String },
 
     #[error("Failed to create virtualenv at {path}: {reason}")]
     CreateEnvFailed { path: PathBuf, reason: String },
@@ -135,7 +143,22 @@ impl PythonEnvironment {
         env.write_script()?;
         env.ensure_env_ready().await?;
 
+        // Validate the interpreter we will actually run.
+        // This catches environment pollution (e.g., PYTHONHOME/PYTHONPATH) early.
+        validate_python_interpreter(&env.python_path()).await?;
+
         Ok(env)
+    }
+
+    /// Preflight check for fast downloads.
+    ///
+    /// This is intentionally lightweight: it validates that a bootstrap Python
+    /// interpreter can import the standard library (including `encodings`).
+    ///
+    /// Returns the resolved interpreter path string (as reported by Python).
+    pub async fn preflight() -> Result<String, EnvSetupError> {
+        let bootstrap = find_bootstrap_python_validated().await?;
+        validate_python_interpreter(&bootstrap).await
     }
 
     /// Get the path to the Python interpreter in this environment.
@@ -176,14 +199,16 @@ impl PythonEnvironment {
     }
 
     async fn create_env(&self) -> Result<(), EnvSetupError> {
-        let bootstrap = find_bootstrap_python()?;
+        let bootstrap = find_bootstrap_python_validated().await?;
 
         println!(
             "ℹ️  Creating Python environment for fast downloads at {}...",
             self.env_dir.display()
         );
 
-        let status = Command::new(&bootstrap)
+        let mut cmd = Command::new(&bootstrap);
+        apply_python_subprocess_isolation(&mut cmd);
+        let status = cmd
             .arg("-m")
             .arg("venv")
             .arg(&self.env_dir)
@@ -292,11 +317,43 @@ impl PythonEnvironment {
 // ============================================================================
 
 /// Find a Python interpreter suitable for bootstrapping the venv.
-fn find_bootstrap_python() -> Result<PathBuf, EnvSetupError> {
-    for candidate in PYTHON_CANDIDATES {
-        if let Ok(path) = which::which(candidate) {
-            return Ok(path);
+async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
+    // 1) Explicit override
+    if let Some(override_path) = env::var_os(PYTHON_OVERRIDE_ENV).map(PathBuf::from) {
+        if !override_path.exists() {
+            return Err(EnvSetupError::PythonInvalid {
+                path: override_path,
+                reason: "path does not exist".to_string(),
+            });
         }
+
+        validate_python_interpreter(&override_path).await?;
+        return Ok(override_path);
+    }
+
+    // 2) PATH discovery (prefer python3 on non-Windows)
+    let mut tried: Vec<String> = Vec::new();
+    let mut last_error: Option<String> = None;
+
+    for candidate in PYTHON_CANDIDATES {
+        tried.push((*candidate).to_string());
+        let Ok(path) = which::which(candidate) else {
+            continue;
+        };
+
+        match validate_python_interpreter(&path).await {
+            Ok(_) => return Ok(path),
+            Err(e) => {
+                last_error = Some(e.to_string());
+            }
+        }
+    }
+
+    if let Some(last_error) = last_error {
+        return Err(EnvSetupError::PythonValidationFailed {
+            tried: tried.join(", "),
+            last_error,
+        });
     }
 
     Err(EnvSetupError::PythonNotFound(PYTHON_CANDIDATES.join(", ")))
@@ -304,20 +361,107 @@ fn find_bootstrap_python() -> Result<PathBuf, EnvSetupError> {
 
 /// Run a Python command and check for success.
 async fn run_python_command(python: &Path, args: &[&str]) -> Result<(), EnvSetupError> {
-    let status = Command::new(python)
-        .args(args)
-        .status()
+    let mut cmd = Command::new(python);
+    apply_python_subprocess_isolation(&mut cmd);
+    cmd.args(args);
+
+    let output = cmd
+        .output()
         .await
         .map_err(|e| EnvSetupError::RequirementsFailed(e.to_string()))?;
 
-    if !status.success() {
-        return Err(EnvSetupError::RequirementsFailed(format!(
-            "{} {args:?} exited with {status}",
-            python.display()
-        )));
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let mut details = format!(
+            "{} {args:?} exited with {}",
+            python.display(),
+            output.status
+        );
+        if !stdout.is_empty() {
+            use std::fmt::Write;
+            let _ = write!(details, "\nstdout: {stdout}");
+        }
+        if !stderr.is_empty() {
+            use std::fmt::Write;
+            let _ = write!(details, "\nstderr: {stderr}");
+        }
+        return Err(EnvSetupError::RequirementsFailed(details));
     }
 
     Ok(())
+}
+
+/// Apply a denylist-based environment isolation for Python subprocesses.
+///
+/// This prevents a polluted parent shell (e.g., conda) from breaking the child
+/// interpreter with missing stdlib modules like `encodings`.
+fn apply_python_subprocess_isolation(cmd: &mut Command) {
+    // Explicitly remove common environment variables that can corrupt stdlib resolution.
+    for key in [
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONUSERBASE",
+        "VIRTUAL_ENV",
+        "CONDA_PREFIX",
+        "CONDA_DEFAULT_ENV",
+        "CONDA_PROMPT_MODIFIER",
+        "CONDA_SHLVL",
+        "CONDA_EXE",
+        "CONDA_PYTHON_EXE",
+        "_CE_CONDA",
+        "_CE_M",
+    ] {
+        cmd.env_remove(key);
+    }
+
+    // Prevent user-site packages from influencing imports.
+    cmd.env("PYTHONNOUSERSITE", "1");
+}
+
+/// Validate that the given Python interpreter can import the standard library.
+///
+/// Returns the resolved `sys.executable` string on success.
+async fn validate_python_interpreter(python: &Path) -> Result<String, EnvSetupError> {
+    let mut cmd = Command::new(python);
+    apply_python_subprocess_isolation(&mut cmd);
+    cmd.arg("-c")
+        .arg("import encodings, sys; print(sys.executable)");
+
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| EnvSetupError::PythonInvalid {
+            path: python.to_path_buf(),
+            reason: format!("failed to spawn: {e}"),
+        })?;
+
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+        let mut reason = format!("exited with {}", output.status);
+        if !stdout.is_empty() {
+            use std::fmt::Write;
+            let _ = write!(reason, "\nstdout: {stdout}");
+        }
+        if !stderr.is_empty() {
+            use std::fmt::Write;
+            let _ = write!(reason, "\nstderr: {stderr}");
+        }
+
+        return Err(EnvSetupError::PythonInvalid {
+            path: python.to_path_buf(),
+            reason,
+        });
+    }
+
+    let exe = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(if exe.is_empty() {
+        python.display().to_string()
+    } else {
+        exe
+    })
 }
 
 /// Get the directory for the Python environment.
@@ -393,5 +537,101 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("virtualenv"));
         assert!(msg.contains("permission denied"));
+    }
+
+    /// Test that environment isolation properly removes polluted environment variables
+    /// and sets PYTHONNOUSERSITE=1 to prevent stdlib resolution issues.
+    ///
+    /// This test simulates a dirty environment by setting polluted variables directly
+    /// on the Command object, then verifies that `apply_python_subprocess_isolation`
+    /// removes them and sets PYTHONNOUSERSITE=1.
+    #[tokio::test]
+    async fn test_environment_isolation_removes_polluted_vars() {
+        // Find a working Python interpreter
+        let python = match which::which("python3").or_else(|_| which::which("python")) {
+            Ok(p) => p,
+            Err(_) => {
+                eprintln!("Python not available for test, skipping environment isolation test");
+                return;
+            }
+        };
+
+        // Create a command with a "dirty" environment simulating a conda/virtualenv shell
+        let mut cmd = Command::new(python);
+
+        // Simulate polluted environment by setting variables on the Command
+        cmd.env("PYTHONHOME", "/fake/python/home")
+            .env("PYTHONPATH", "/fake/python/path")
+            .env("PYTHONUSERBASE", "/fake/user/base")
+            .env("VIRTUAL_ENV", "/fake/venv")
+            .env("CONDA_PREFIX", "/fake/conda")
+            .env("CONDA_DEFAULT_ENV", "fake_env")
+            .env("CONDA_PROMPT_MODIFIER", "(fake_env)")
+            .env("CONDA_SHLVL", "1");
+
+        // Apply our isolation function - this should remove the polluted vars
+        apply_python_subprocess_isolation(&mut cmd);
+
+        // Use Python to print its environment variables that we care about
+        cmd.arg("-c").arg(
+            "import os, sys; \
+             print('PYTHONHOME=' + os.getenv('PYTHONHOME', 'UNSET')); \
+             print('PYTHONPATH=' + os.getenv('PYTHONPATH', 'UNSET')); \
+             print('PYTHONUSERBASE=' + os.getenv('PYTHONUSERBASE', 'UNSET')); \
+             print('VIRTUAL_ENV=' + os.getenv('VIRTUAL_ENV', 'UNSET')); \
+             print('CONDA_PREFIX=' + os.getenv('CONDA_PREFIX', 'UNSET')); \
+             print('CONDA_DEFAULT_ENV=' + os.getenv('CONDA_DEFAULT_ENV', 'UNSET')); \
+             print('PYTHONNOUSERSITE=' + os.getenv('PYTHONNOUSERSITE', 'UNSET')); \
+             print('SUCCESS')",
+        );
+
+        let output = cmd.output().await.expect("Failed to run Python subprocess");
+
+        // Verify the Python subprocess ran successfully
+        assert!(
+            output.status.success(),
+            "Python subprocess failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Assert that all polluted variables were removed (should be UNSET)
+        assert!(
+            stdout.contains("PYTHONHOME=UNSET"),
+            "PYTHONHOME should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("PYTHONPATH=UNSET"),
+            "PYTHONPATH should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("PYTHONUSERBASE=UNSET"),
+            "PYTHONUSERBASE should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("VIRTUAL_ENV=UNSET"),
+            "VIRTUAL_ENV should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("CONDA_PREFIX=UNSET"),
+            "CONDA_PREFIX should be removed, got: {stdout}"
+        );
+        assert!(
+            stdout.contains("CONDA_DEFAULT_ENV=UNSET"),
+            "CONDA_DEFAULT_ENV should be removed, got: {stdout}"
+        );
+
+        // Assert that PYTHONNOUSERSITE was explicitly set to '1'
+        assert!(
+            stdout.contains("PYTHONNOUSERSITE=1"),
+            "PYTHONNOUSERSITE should be set to '1', got: {stdout}"
+        );
+
+        // Verify Python ran successfully (can import encodings)
+        assert!(
+            stdout.contains("SUCCESS"),
+            "Python should successfully import stdlib and print SUCCESS"
+        );
     }
 }

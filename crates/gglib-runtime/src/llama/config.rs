@@ -58,10 +58,13 @@ impl BuildConfig {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "cli")]
     use super::*;
+    #[cfg(feature = "cli")]
     use tempfile::tempdir;
 
     #[test]
+    #[cfg(feature = "cli")]
     fn test_build_config_roundtrip() {
         let dir = tempdir().unwrap();
         let config_path = dir.path().join("test-config.json");

@@ -10,6 +10,7 @@ use app::events::{emit_or_log, names};
 use app::AppState;
 use dotenvy::dotenv;
 use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
+use gglib_download::cli_exec::preflight_fast_helper;
 use gglib_runtime::process::get_log_manager;
 use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
 #[cfg(target_os = "macos")]
@@ -74,6 +75,33 @@ fn main() {
             // Create and manage app state
             let app_state = AppState::new(gui.clone(), embedded_api);
             app.manage(app_state);
+
+            // Download system init: preflight the Python fast downloader helper.
+            // This runs on startup so the frontend can render a clear error state
+            // instead of waiting indefinitely if Python is broken/missing.
+            {
+                let app_handle_for_init = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match preflight_fast_helper().await {
+                        Ok(python_exe) => {
+                            info!(python = %python_exe, "Fast download helper preflight OK");
+                            emit_or_log(&app_handle_for_init, names::DOWNLOAD_SYSTEM_READY, true);
+                        }
+                        Err(e) => {
+                            error!(error = %e, "Fast download helper preflight failed");
+                            let msg = format!(
+                                "Fast downloads are unavailable: {e}. Please install Python 3 (python3) or set {} to a working interpreter.",
+                                "GGLIB_PYTHON"
+                            );
+                            emit_or_log(
+                                &app_handle_for_init,
+                                names::DOWNLOAD_SYSTEM_ERROR,
+                                gglib_tauri::events::DownloadSystemErrorPayload { message: msg },
+                            );
+                        }
+                    }
+                });
+            }
 
             // Perform startup orphan cleanup
             tauri::async_runtime::block_on(lifecycle::startup_cleanup());

@@ -775,9 +775,11 @@ fn save_prebuilt_config(gglib_dir: &Path, version: &str, platform: &str) -> Resu
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "prebuilt")]
     use super::*;
 
     #[test]
+    #[cfg(feature = "prebuilt")]
     fn test_check_prebuilt_availability() {
         let availability = check_prebuilt_availability();
         // Just verify it doesn't panic and returns a valid variant

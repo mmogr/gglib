@@ -153,9 +153,11 @@ pub fn check_disk_space(_required_mb: u64) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "cli")]
     use super::*;
 
     #[test]
+    #[cfg(feature = "cli")]
     fn test_check_disk_space() {
         // Should not panic
         let result = check_disk_space(800);

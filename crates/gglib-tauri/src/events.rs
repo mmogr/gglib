@@ -15,6 +15,10 @@ pub mod names {
     // Download events
     pub const DOWNLOAD_PROGRESS: &str = "download-progress";
 
+    // Download system initialization events (fast Python helper availability)
+    pub const DOWNLOAD_SYSTEM_READY: &str = "download-system:ready";
+    pub const DOWNLOAD_SYSTEM_ERROR: &str = "download-system:error";
+
     // Server log event stream (separate from AppEvent::* server lifecycle events)
     pub const SERVER_LOG: &str = "server-log";
 
@@ -37,6 +41,12 @@ pub mod names {
     pub const MENU_INSTALL_LLAMA: &str = "menu:install-llama";
     pub const MENU_CHECK_LLAMA_STATUS: &str = "menu:check-llama-status";
     pub const MENU_OPEN_SETTINGS: &str = "menu:open-settings";
+}
+
+/// Payload emitted when the download subsystem fails to initialize.
+#[derive(Clone, Debug, Serialize)]
+pub struct DownloadSystemErrorPayload {
+    pub message: String,
 }
 
 /// Emit an event to the frontend, logging any errors.
