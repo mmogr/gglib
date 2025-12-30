@@ -7,6 +7,7 @@ members = [
     "crates/gglib-gguf",
     "crates/gglib-gui",
     "crates/gglib-hf",
+    "crates/gglib-build-info",
     "crates/gglib-mcp",
     "crates/gglib-proxy",
     "crates/gglib-runtime",

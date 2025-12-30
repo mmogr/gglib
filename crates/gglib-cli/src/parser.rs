@@ -13,7 +13,7 @@ use crate::commands::Commands;
 #[derive(Parser)]
 #[command(name = "gglib")]
 #[command(about = "Manage and run local GGUF models")]
-#[command(version)]
+#[command(version = gglib_build_info::LONG_VERSION)]
 pub struct Cli {
     /// Override the models directory for this invocation
     #[arg(long = "models-dir", global = true)]

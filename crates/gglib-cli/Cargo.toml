@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 gglib-axum = { path = "../gglib-axum" }
+gglib-build-info = { path = "../gglib-build-info" }
 gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
 gglib-download = { path = "../gglib-download" }
