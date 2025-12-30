@@ -336,7 +336,7 @@ async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
     let mut last_error: Option<String> = None;
 
     for candidate in PYTHON_CANDIDATES {
-        tried.push(candidate.to_string());
+        tried.push((*candidate).to_string());
         let Ok(path) = which::which(candidate) else {
             continue;
         };
@@ -345,7 +345,6 @@ async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
             Ok(_) => return Ok(path),
             Err(e) => {
                 last_error = Some(e.to_string());
-                continue;
             }
         }
     }
@@ -380,10 +379,12 @@ async fn run_python_command(python: &Path, args: &[&str]) -> Result<(), EnvSetup
             output.status
         );
         if !stdout.is_empty() {
-            details.push_str(&format!("\nstdout: {stdout}"));
+            use std::fmt::Write;
+            let _ = write!(details, "\nstdout: {stdout}");
         }
         if !stderr.is_empty() {
-            details.push_str(&format!("\nstderr: {stderr}"));
+            use std::fmt::Write;
+            let _ = write!(details, "\nstderr: {stderr}");
         }
         return Err(EnvSetupError::RequirementsFailed(details));
     }
@@ -441,10 +442,12 @@ async fn validate_python_interpreter(python: &Path) -> Result<String, EnvSetupEr
 
         let mut reason = format!("exited with {}", output.status);
         if !stdout.is_empty() {
-            reason.push_str(&format!("\nstdout: {stdout}"));
+            use std::fmt::Write;
+            let _ = write!(reason, "\nstdout: {stdout}");
         }
         if !stderr.is_empty() {
-            reason.push_str(&format!("\nstderr: {stderr}"));
+            use std::fmt::Write;
+            let _ = write!(reason, "\nstderr: {stderr}");
         }
 
         return Err(EnvSetupError::PythonInvalid {
