@@ -238,10 +238,10 @@ mod tests {
     #[test]
     fn test_gpu_detection() {
         let probe = DefaultSystemProbe::new();
-        let gpu = probe.detect_gpu_info();
+        let _gpu = probe.detect_gpu_info();
         // On macOS, should have Metal
         #[cfg(target_os = "macos")]
-        assert!(gpu.has_metal);
+        assert!(_gpu.has_metal);
     }
 
     #[test]
