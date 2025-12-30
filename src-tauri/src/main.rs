@@ -116,6 +116,9 @@ fn main() {
                 info!("Window close requested - performing graceful shutdown");
                 api.prevent_close();
                 
+                // Hide window immediately so user sees instant feedback
+                let _ = window.hide();
+                
                 let app_handle = window.app_handle().clone();
                 
                 tauri::async_runtime::spawn(async move {
@@ -152,6 +155,11 @@ fn main() {
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     info!("App exit requested (Cmd+Q) - performing graceful shutdown");
                     api.prevent_exit();
+                    
+                    // Hide all windows immediately
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
                     
                     let handle_for_exit = app_handle.clone();
                     
