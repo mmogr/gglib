@@ -4,6 +4,7 @@ use gglib_axum::EmbeddedApiInfo;
 use gglib_tauri::gui_backend::GuiBackend;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 
 use crate::menu::AppMenu;
 
@@ -24,6 +25,16 @@ pub struct AppState {
     pub proxy_enabled: Arc<RwLock<bool>>,
     /// Proxy server port (for copy URL)
     pub proxy_port: Arc<RwLock<Option<u16>>>,
+    /// Background task handles for proper cleanup
+    pub background_tasks: Arc<RwLock<BackgroundTasks>>,
+}
+
+/// Background task handles that need to be aborted on shutdown.
+pub struct BackgroundTasks {
+    /// Embedded API server task
+    pub embedded_server: Option<JoinHandle<()>>,
+    /// Server log event emitter task
+    pub log_emitter: Option<JoinHandle<()>>,
 }
 
 impl AppState {
@@ -39,6 +50,10 @@ impl AppState {
             selected_model_id: Arc::new(RwLock::new(None)),
             proxy_enabled: Arc::new(RwLock::new(false)),
             proxy_port: Arc::new(RwLock::new(None)),
+            background_tasks: Arc::new(RwLock::new(BackgroundTasks {
+                embedded_server: None,
+                log_emitter: None,
+            })),
         }
     }
 }

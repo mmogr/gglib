@@ -66,7 +66,7 @@ fn main() {
                 cors_origins: gglib_axum::embedded::default_embedded_cors_origins(),
             };
             
-            let (embedded_api, _server_handle) = tauri::async_runtime::block_on(async {
+            let (embedded_api, server_handle) = tauri::async_runtime::block_on(async {
                 start_embedded_server(axum_ctx, config)
                     .await
                     .expect("Failed to start embedded API server")
@@ -74,6 +74,15 @@ fn main() {
 
             // Create and manage app state
             let app_state = AppState::new(gui.clone(), embedded_api);
+            
+            // Store the embedded server handle for cleanup
+            {
+                let tasks = app_state.background_tasks.clone();
+                tauri::async_runtime::block_on(async move {
+                    tasks.write().await.embedded_server = Some(server_handle);
+                });
+            }
+            
             app.manage(app_state);
 
             // Download system init: preflight the Python fast downloader helper.
@@ -244,7 +253,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn server log event emitter
     let app_handle = app.handle().clone();
-    tauri::async_runtime::spawn(async move {
+    let state: tauri::State<AppState> = app.state();
+    let tasks = state.background_tasks.clone();
+    
+    let log_task = tauri::async_runtime::spawn(async move {
         let log_manager = get_log_manager();
         let mut receiver = log_manager.subscribe();
 
@@ -262,6 +274,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+    });
+    
+    // Store the log task handle for cleanup
+    tauri::async_runtime::spawn(async move {
+        tasks.write().await.log_emitter = Some(log_task);
     });
 
     // NOTE: Download events are now wired via AppEventBridge in bootstrap()
