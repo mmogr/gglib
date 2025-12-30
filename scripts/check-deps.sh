@@ -14,6 +14,69 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
+# Detect USER's shell (not the script's execution shell)
+# Since this script runs with #!/usr/bin/env bash, we need to detect what shell the user is actually using
+detect_user_shell() {
+    local user_shell=""
+    
+    # Method 1: Check parent process (most reliable for interactive shells)
+    if command -v ps >/dev/null 2>&1; then
+        local parent_shell=$(ps -p $PPID -o comm= 2>/dev/null | sed 's/^-//')
+        case "$parent_shell" in
+            zsh|*zsh)
+                user_shell="zsh"
+                ;;
+            bash|*bash)
+                user_shell="bash"
+                ;;
+        esac
+    fi
+    
+    # Method 2: Check $SHELL environment variable if parent detection failed
+    if [ -z "$user_shell" ]; then
+        case "$SHELL" in
+            */zsh)
+                user_shell="zsh"
+                ;;
+            */bash)
+                user_shell="bash"
+                ;;
+        esac
+    fi
+    
+    # Method 3: Check which config file exists (last resort)
+    if [ -z "$user_shell" ]; then
+        if [ -f "$HOME/.zshrc" ] && [ ! -f "$HOME/.bashrc" ]; then
+            user_shell="zsh"
+        elif [ -f "$HOME/.bashrc" ]; then
+            user_shell="bash"
+        fi
+    fi
+    
+    # Set shell-specific variables
+    case "$user_shell" in
+        zsh)
+            # NOTE: VS Code tasks typically invoke `zsh -c ...` (non-interactive),
+            # which does NOT source ~/.zshrc. ~/.zshenv is sourced for all zsh
+            # invocations, making it the most reliable place for PATH exports.
+            SHELL_RC="~/.zshenv"
+            SHELL_NAME="zsh"
+            ;;
+        bash)
+            SHELL_RC="~/.bashrc"
+            SHELL_NAME="bash"
+            ;;
+        *)
+            # Default to bashrc for unknown shells
+            SHELL_RC="~/.bashrc"
+            SHELL_NAME="shell"
+            ;;
+    esac
+}
+
+# Detect the user's shell
+detect_user_shell
+
 # Track results
 MISSING_REQUIRED=()
 PRESENT_REQUIRED=()
@@ -380,7 +443,7 @@ print_install_instructions() {
             echo -e "   ${YELLOW}# CUDA is installed but nvcc not in PATH${RESET}"
             
             if [ "$os" = "linux" ]; then
-                echo -e "   ${YELLOW}# Add to ~/.bashrc or ~/.zshrc:${RESET}"
+                echo -e "   ${YELLOW}# Add to $SHELL_RC:${RESET}"
                 if [ -d "/opt/cuda" ]; then
                     echo "   export PATH=\"/opt/cuda/bin:\$PATH\""
                     echo "   export LD_LIBRARY_PATH=\"/opt/cuda/lib64:\$LD_LIBRARY_PATH\""
@@ -390,7 +453,7 @@ print_install_instructions() {
                 fi
                 echo ""
                 echo -e "   ${YELLOW}# Then reload your shell:${RESET}"
-                echo "   source ~/.bashrc"
+                echo "   source $SHELL_RC"
             elif [ "$os" = "windows" ]; then
                 echo -e "   ${YELLOW}# Add CUDA to PATH in System Environment Variables${RESET}"
                 echo -e "   ${YELLOW}# Or run in PowerShell/CMD:${RESET}"
@@ -408,7 +471,7 @@ print_install_instructions() {
                             echo -e "   ${YELLOW}# Arch Linux:${RESET}"
                             echo "   yay -S cuda"
                             echo ""
-                            echo -e "   ${YELLOW}# Then add to ~/.bashrc:${RESET}"
+                            echo -e "   ${YELLOW}# Then add to $SHELL_RC:${RESET}"
                             echo "   export PATH=\"/opt/cuda/bin:\$PATH\""
                             echo "   export LD_LIBRARY_PATH=\"/opt/cuda/lib64:\$LD_LIBRARY_PATH\""
                             ;;
@@ -437,15 +500,15 @@ print_install_instructions() {
     # Special handling for CUDA PATH issue (Linux only)
     if [ "$cuda_not_in_path" = true ] && [ "$os" = "linux" ]; then
         echo ""
-        echo -e "  ${YELLOW}# CUDA installed but not in PATH - add to ~/.bashrc:${RESET}"
+        echo -e "  ${YELLOW}# CUDA installed but not in PATH - add to $SHELL_RC:${RESET}"
         if [ -d "/opt/cuda" ]; then
-            echo -e "  ${YELLOW}echo 'export PATH=\"/opt/cuda/bin:\$PATH\"' >> ~/.bashrc${RESET}"
-            echo -e "  ${YELLOW}echo 'export LD_LIBRARY_PATH=\"/opt/cuda/lib64:\$LD_LIBRARY_PATH\"' >> ~/.bashrc${RESET}"
+            echo -e "  ${YELLOW}echo 'export PATH=\"/opt/cuda/bin:\$PATH\"' >> $SHELL_RC${RESET}"
+            echo -e "  ${YELLOW}echo 'export LD_LIBRARY_PATH=\"/opt/cuda/lib64:\$LD_LIBRARY_PATH\"' >> $SHELL_RC${RESET}"
         elif [ -d "/usr/local/cuda" ]; then
-            echo -e "  ${YELLOW}echo 'export PATH=\"/usr/local/cuda/bin:\$PATH\"' >> ~/.bashrc${RESET}"
-            echo -e "  ${YELLOW}echo 'export LD_LIBRARY_PATH=\"/usr/local/cuda/lib64:\$LD_LIBRARY_PATH\"' >> ~/.bashrc${RESET}"
+            echo -e "  ${YELLOW}echo 'export PATH=\"/usr/local/cuda/bin:\$PATH\"' >> $SHELL_RC${RESET}"
+            echo -e "  ${YELLOW}echo 'export LD_LIBRARY_PATH=\"/usr/local/cuda/lib64:\$LD_LIBRARY_PATH\"' >> $SHELL_RC${RESET}"
         fi
-        echo -e "  ${YELLOW}source ~/.bashrc${RESET}"
+        echo -e "  ${YELLOW}source $SHELL_RC${RESET}"
         echo ""
     fi
     
