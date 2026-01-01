@@ -54,12 +54,12 @@
   top: calc(100% + var(--spacing-sm));
   right: 0;
   min-width: 350px;
-  background: white;
+  background: var(--color-background-overlay);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   padding: var(--spacing-base);
   z-index: var(--z-dropdown);
-  color: #333;
+  color: var(--color-text);
 }
 
 .dropdownHeader {
@@ -68,13 +68,13 @@
   align-items: center;
   margin-bottom: var(--spacing-base);
   padding-bottom: var(--spacing-md);
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .dropdownHeader h3 {
   margin: 0;
   font-size: var(--font-size-lg);
-  color: #333;
+  color: var(--color-text);
 }
 
 .statusBadge {
@@ -86,19 +86,16 @@
 }
 
 .statusBadge.running {
-  background: rgba(16, 185, 129, 0.15);
+  background: color-mix(in srgb, var(--color-success) 15%, transparent);
   color: var(--color-success);
 }
 
 .statusBadge.stopped {
-  background: rgba(239, 68, 68, 0.15);
+  background: color-mix(in srgb, var(--color-danger) 15%, transparent);
   color: var(--color-danger);
 }
 
 .proxyInfo {
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-md);
   margin-bottom: var(--spacing-base);
 }
 
@@ -116,7 +113,7 @@
 .infoRow label {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  color: #666;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
 }
 
@@ -128,11 +125,11 @@
 
 .urlDisplay code {
   flex: 1;
-  background: white;
+  background: var(--color-surface-elevated);
   padding: var(--spacing-sm);
   border-radius: var(--radius-base);
   font-size: var(--font-size-sm);
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   font-family: var(--font-family-mono);
 }
 
@@ -153,9 +150,6 @@
 }
 
 .settingsSection {
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-md);
   margin-bottom: var(--spacing-md);
 }
 
@@ -171,29 +165,21 @@
   display: block;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  color: #666;
+  color: var(--color-text-secondary);
   margin-bottom: var(--spacing-xs);
   text-transform: uppercase;
 }
 
-.formGroup input {
-  width: 100%;
-  padding: var(--spacing-sm);
-  border: 1px solid #ddd;
-  border-radius: var(--radius-base);
-  font-size: var(--font-size-sm);
-  font-family: var(--font-family-base);
-}
 
 .settingsToggle {
   width: 100%;
   padding: var(--spacing-sm);
   background: transparent;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-base);
   cursor: pointer;
   font-size: var(--font-size-sm);
-  color: #666;
+  color: var(--color-text-secondary);
   margin-bottom: var(--spacing-md);
   transition: var(--transition-all);
 }
@@ -239,11 +225,11 @@
 .helpText {
   margin-top: var(--spacing-md);
   padding-top: var(--spacing-md);
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--color-border);
 }
 
 .helpText small {
-  color: #666;
+  color: var(--color-text-muted);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-normal);
 }
