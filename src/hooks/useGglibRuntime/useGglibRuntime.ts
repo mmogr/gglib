@@ -183,6 +183,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         abortControllerRef.current = null;
       }
       setIsRunning(false);
+      setCurrentStreamingAssistantMessageId(null);
     },
   });
 
