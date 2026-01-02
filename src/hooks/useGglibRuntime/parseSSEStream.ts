@@ -93,7 +93,7 @@ export async function* parseSSEStream(
   try {
     while (true) {
       if (abortSignal?.aborted) {
-        break;
+        throw new DOMException('Aborted', 'AbortError');
       }
 
       const { done, value } = await reader.read();
