@@ -66,6 +66,13 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   
   // Track which assistant message is currently streaming (for live timer)
   const [currentStreamingAssistantMessageId, setCurrentStreamingAssistantMessageId] = useState<string | null>(null);
+  // Ref to access current streaming message ID without stale closure in onCancel
+  const currentStreamingAssistantMessageIdRef = useRef<string | null>(null);
+  
+  // Sync ref with state
+  useEffect(() => {
+    currentStreamingAssistantMessageIdRef.current = currentStreamingAssistantMessageId;
+  }, [currentStreamingAssistantMessageId]);
 
   // Timing tracker for reasoning duration (persists across renders)
   const timingTrackerRef = useRef(new ReasoningTimingTracker(performanceClock));
@@ -150,9 +157,13 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
           onError?.(error as Error);
         }
       } finally {
-        setIsRunning(false);
-        setCurrentStreamingAssistantMessageId(null);
-        abortControllerRef.current = null;
+        // Only clear state if we weren't explicitly cancelled via onCancel
+        // (onCancel sets abortControllerRef.current to null first)
+        if (abortControllerRef.current !== null) {
+          setIsRunning(false);
+          setCurrentStreamingAssistantMessageId(null);
+          abortControllerRef.current = null;
+        }
       }
     },
 
@@ -182,7 +193,44 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      
+      // Get current streaming message ID from ref (avoids stale closure)
+      const streamingId = currentStreamingAssistantMessageIdRef.current;
+      
+      // Atomic state update: mark message as stopped, clear streaming ID, set not running
+      // This ensures assistant-ui derives the correct status from the message
+      if (streamingId) {
+        setMessages(prev => 
+          prev.map(m => {
+            if (m.id !== streamingId) return m;
+            
+            // Mark this message as [Stopped]
+            const updatedContent = Array.isArray(m.content) 
+              ? [
+                  ...m.content,
+                  {
+                    type: 'text' as const,
+                    text: '\n\n[Stopped]',
+                  },
+                ]
+              : [{
+                  type: 'text' as const,
+                  text: '[Stopped]',
+                }];
+            
+            return {
+              ...m,
+              content: updatedContent as GglibContent,
+              // Explicit status tells assistant-ui the message is complete (not running)
+              // This is critical: assistant-ui derives isRunning from last message's status
+              status: { type: 'complete', reason: 'stop' },
+            };
+          })
+        );
+      }
+      
       setIsRunning(false);
+      setCurrentStreamingAssistantMessageId(null);
     },
   });
 
