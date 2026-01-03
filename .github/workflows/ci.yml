@@ -188,13 +188,19 @@ jobs:
         run: cargo fmt --all -- --check
 
   cli-cross-os:
-    name: CLI Check (${{ matrix.os }})
+    name: CLI Check (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     if: github.event_name == 'pull_request'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14, windows-2022]
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-14
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
