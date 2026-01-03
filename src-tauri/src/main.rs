@@ -16,8 +16,10 @@ use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
 #[cfg(target_os = "macos")]
 use menu::state_sync::sync_menu_state_or_log;
 use std::sync::Arc;
+#[cfg(not(target_os = "macos"))]
 use tauri::menu::Menu;
 use tauri::Manager;
+#[cfg(not(target_os = "macos"))]
 use tauri::Wry;
 use tracing::{debug, error, info};
 
