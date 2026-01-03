@@ -234,6 +234,9 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
                       text: '\n\n[Stopped]',
                     },
                   ] as GglibContent,
+                  // Explicit status tells assistant-ui the message is complete (not running)
+                  // This is critical: assistant-ui derives isRunning from last message's status
+                  status: { type: 'complete', reason: 'stop' },
                 }
               : m
           )

@@ -221,6 +221,9 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
             return {
               ...m,
               content: updatedContent as GglibContent,
+              // Explicit status tells assistant-ui the message is complete (not running)
+              // This is critical: assistant-ui derives isRunning from last message's status
+              status: { type: 'complete', reason: 'stop' },
             };
           })
         );
