@@ -281,7 +281,7 @@ build-tauri:
 # Full setup from scratch
 setup: check-deps build-gui build-tauri install
 	@echo "Configuring models directory (press Enter to accept the default)"
-	@cargo run -p gglib-cli -- config models-dir prompt
+	@$(CARGO) run -p gglib-cli -- config models-dir prompt
 	@echo "✓ Core setup complete!"
 	@$(MAKE) llama-install-auto || echo "⚠ llama.cpp installation failed (optional)"
 
