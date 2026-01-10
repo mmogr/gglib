@@ -1,6 +1,6 @@
 {
   "productName": "GGLib GUI",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "identifier": "com.gglib.gui",
   "build": {
     "beforeBuildCommand": "npm run build:tauri",
@@ -39,6 +39,9 @@
     ],
     "resources": [],
     "shortDescription": "",
-    "targets": ["deb", "rpm"]
+    "targets": [
+      "deb",
+      "rpm"
+    ]
   }
 }
