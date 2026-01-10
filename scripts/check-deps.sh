@@ -77,6 +77,11 @@ detect_user_shell() {
 # Detect the user's shell
 detect_user_shell
 
+# Source Rust environment if it exists (needed for non-interactive shells like VS Code tasks)
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
+
 # Track results
 MISSING_REQUIRED=()
 PRESENT_REQUIRED=()
