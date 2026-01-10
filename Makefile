@@ -258,7 +258,7 @@ run-gui:
 # Run web server
 run-web:
 	@echo "Starting web server..."
-	cargo run -p gglib-cli -- web $(if $(PORT),--port $(PORT),)
+	$(CARGO) run -p gglib-cli -- web $(if $(PORT),--port $(PORT),)
 
 # Build Tauri desktop app (production)
 build-tauri:
@@ -268,9 +268,12 @@ build-tauri:
 	npm install
 	# linuxdeploy's embedded strip can fail on some distros (e.g. Arch) due to RELR relocations.
 	# NO_STRIP=1 is a linuxdeploy-supported knob that avoids the failure by skipping stripping.
+	# Source Rust environment for npm subshell (needed for tauri to find cargo)
 	@if [ "$(UNAME_S)" = "Linux" ]; then \
+		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
 		NO_STRIP=1 npm run tauri:build; \
 	else \
+		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
 		npm run tauri:build; \
 	fi
 	@echo "✓ Tauri app built to src-tauri/target/release/gglib-gui"
