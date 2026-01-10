@@ -9,6 +9,11 @@ ifeq ($(UNAME_S),Linux)
     export LIBSQLITE3_SYS_USE_PKG_CONFIG := 1
 endif
 
+# Define cargo command that sources Rust environment if needed (for non-interactive shells like VS Code tasks)
+# This is a portable solution that works on Linux/macOS/Windows
+CARGO_ENV := $(shell if [ -f "$$HOME/.cargo/env" ]; then echo ". $$HOME/.cargo/env &&"; fi)
+CARGO := $(CARGO_ENV) cargo
+
 # Cargo Optimization Flags
 export CARGO_PROFILE_RELEASE_LTO := thin
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS := 16
@@ -35,7 +40,7 @@ check-rust:
 check-deps: check-deps-bootstrap
 	@echo ""
 	@echo "Running detailed dependency verification..."
-	@cargo run -p gglib-cli --quiet -- check-deps
+	@$(CARGO) run -p gglib-cli --quiet -- check-deps
 
 # Default target
 help:
@@ -62,7 +67,7 @@ help:
 # Build & Install
 install:
 	@echo "Installing gglib..."
-	cargo install --path crates/gglib-cli
+	$(CARGO) install --path crates/gglib-cli
 
 uninstall:
 	@echo "⚠️  WARNING: This will uninstall gglib and remove:"
@@ -78,7 +83,7 @@ uninstall:
 	read REPLY; \
 	if [ "$$REPLY" = "y" ] || [ "$$REPLY" = "Y" ]; then \
 		echo "Uninstalling binary..."; \
-		cargo uninstall gglib || true; \
+		$(CARGO) uninstall gglib || true; \
 		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
 			echo "Removing system data..."; \
 			rm -rf "$$HOME/Library/Application Support/gglib" 2>/dev/null || true; \
@@ -87,7 +92,7 @@ uninstall:
 			echo "Preserving system data (config and database retained)"; \
 		fi; \
 		echo "Cleaning build artifacts..."; \
-		cargo clean || true; \
+		$(CARGO) clean || true; \
 		if [ -d node_modules ]; then rm -rf node_modules || true; fi; \
 		if [ -d web_ui ]; then rm -rf web_ui || true; fi; \
 		if [ -d src-tauri/gen ]; then rm -rf src-tauri/gen || true; fi; \
@@ -118,11 +123,11 @@ uninstall:
 
 build:
 	@echo "Building release binary..."
-	cargo build --release
+	$(CARGO) build --release
 
 build-dev:
 	@echo "Building debug binary..."
-	cargo build
+	$(CARGO) build
 
 # Build web UI frontend
 build-gui:
@@ -139,32 +144,32 @@ build-all: build-gui build
 # Run all tests
 test:
 	@echo "Running all tests..."
-	cargo test
+	$(CARGO) test
 
 # Check code without building
 check:
 	@echo "Checking code..."
-	cargo check
+	$(CARGO) check
 
 # Format code
 fmt:
 	@echo "Formatting code..."
-	cargo fmt
+	$(CARGO) fmt
 
 # Run clippy
 lint:
 	@echo "Running clippy linter..."
-	cargo clippy -- -D warnings
+	$(CARGO) clippy -- -D warnings
 
 # Generate and open documentation
 doc:
 	@echo "Generating documentation..."
-	cargo doc --open
+	$(CARGO) doc --open
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
-	cargo clean
+	$(CARGO) clean
 	@echo "✓ Removed target/ directory"
 
 # Clean web UI build
@@ -216,7 +221,7 @@ llama-install:
 	@echo "Installing llama.cpp (manual)..."
 	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib llama install; \
 	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib llama install; \
-	else cargo run -p gglib-cli -- llama install; fi
+	else $(CARGO) run -p gglib-cli -- llama install; fi
 
 llama-install-auto:
 	@echo "Installing llama.cpp with auto-detected GPU support..."
@@ -226,12 +231,12 @@ llama-update:
 	@echo "Updating llama.cpp..."
 	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib llama update; \
 	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib llama update; \
-	else cargo run -p gglib-cli -- llama update; fi
+	else $(CARGO) run -p gglib-cli -- llama update; fi
 
 llama-status:
 	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib llama status; \
 	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib llama status; \
-	else cargo run -p gglib-cli -- llama status; fi
+	else $(CARGO) run -p gglib-cli -- llama status; fi
 
 llama-rebuild: clean-llama llama-install-auto
 	@echo "✓ llama.cpp rebuilt"
@@ -239,16 +244,16 @@ llama-rebuild: clean-llama llama-install-auto
 # Quick run targets
 run-serve:
 	@echo "Running gglib serve (release mode)..."
-	cargo run -p gglib-cli --release -- serve $(if $(ID),$(ID),1)
+	$(CARGO) run -p gglib-cli --release -- serve $(if $(ID),$(ID),1)
 
 run-proxy:
 	@echo "Starting gglib proxy (release mode)..."
-	cargo run -p gglib-cli --release -- proxy
+	$(CARGO) run -p gglib-cli --release -- proxy
 
 # Run desktop GUI
 run-gui:
 	@echo "Starting desktop GUI..."
-	cargo run -p gglib-cli -- gui
+	$(CARGO) run -p gglib-cli -- gui
 
 # Run web server
 run-web:
