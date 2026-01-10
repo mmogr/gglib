@@ -39,6 +39,6 @@
     ],
     "resources": [],
     "shortDescription": "",
-    "targets": "all"
+    "targets": ["deb", "rpm"]
   }
 }

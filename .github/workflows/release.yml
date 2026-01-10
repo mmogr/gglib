@@ -454,6 +454,8 @@ jobs:
           echo "Building Tauri app for ${{ matrix.target }}"
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
             npm run tauri:build -- --target ${{ matrix.target }} --bundles nsis
+          elif [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            npm run tauri:build -- --target ${{ matrix.target }} --bundles appimage,deb,rpm
           else
             npm run tauri:build -- --target ${{ matrix.target }}
           fi
