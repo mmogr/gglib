@@ -19,6 +19,7 @@ use gglib_runtime::llama::{
     handle_update,
 };
 
+#[cfg(target_os = "linux")]
 fn find_linux_gui_artifact(repo_root: &std::path::Path) -> std::path::PathBuf {
     let appimage_dir = repo_root.join("src-tauri/target/release/bundle/appimage");
     if let Ok(read_dir) = std::fs::read_dir(&appimage_dir) {
@@ -106,7 +107,7 @@ fn launch_gui_command(repo_root: &std::path::Path) -> anyhow::Result<()> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 

@@ -10,9 +10,26 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
   boundaries:
     name: Check Boundaries
     runs-on: ubuntu-latest
+    needs: [fmt]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,6 +47,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    needs: [clippy]
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -126,6 +144,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    needs: [boundaries]
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -171,9 +190,21 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-  fmt:
-    name: Format
-    runs-on: ubuntu-latest
+  cli-cross-os:
+    name: CLI Check (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'pull_request'
+    needs: [clippy]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-14
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -182,16 +213,26 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.91.0
-          components: rustfmt
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Cache Cargo registry and target directory
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check gglib-cli compilation
+        run: cargo test -p gglib-cli --no-run
 
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
     if: always()
-    needs: [boundaries, test, clippy, fmt]
+    needs: [boundaries, test, clippy, fmt, cli-cross-os]
     steps:
       - name: Check all jobs succeeded
         run: |
