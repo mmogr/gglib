@@ -235,7 +235,10 @@ async fn main() -> anyhow::Result<()> {
             quiet,
         } => {
             // Ask a question with optional piped/file context
-            handlers::question::execute(&ctx, question, model, file, ctx_size, mlock, verbose, quiet).await?;
+            handlers::question::execute(
+                &ctx, question, model, file, ctx_size, mlock, verbose, quiet,
+            )
+            .await?;
         }
         Commands::Download {
             model_id,
