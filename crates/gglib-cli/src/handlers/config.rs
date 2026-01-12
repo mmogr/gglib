@@ -71,16 +71,14 @@ async fn handle_default_model(
             // Show current default
             let settings = ctx.app().settings().get().await?;
             match settings.default_model_id {
-                Some(model_id) => {
-                    match ctx.app().models().get_by_id(model_id).await? {
-                        Some(model) => {
-                            println!("Default model: {} (ID: {})", model.name, model.id);
-                        }
-                        None => {
-                            println!("Default model ID: {} (warning: model not found)", model_id);
-                        }
+                Some(model_id) => match ctx.app().models().get_by_id(model_id).await? {
+                    Some(model) => {
+                        println!("Default model: {} (ID: {})", model.name, model.id);
                     }
-                }
+                    None => {
+                        println!("Default model ID: {} (warning: model not found)", model_id);
+                    }
+                },
                 None => {
                     println!("No default model set.");
                     println!("Use 'gglib config default <id-or-name>' to set one.");

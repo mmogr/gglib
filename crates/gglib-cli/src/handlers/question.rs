@@ -114,27 +114,24 @@ async fn resolve_model(
             .context("Failed to load settings")?;
 
         match settings.default_model_id {
-            Some(model_id) => {
-                ctx.app()
-                    .models()
-                    .get_by_id(model_id)
-                    .await
-                    .context("Failed to load default model")?
-                    .ok_or_else(|| {
-                        anyhow!(
-                            "Default model (ID: {}) not found. \
+            Some(model_id) => ctx
+                .app()
+                .models()
+                .get_by_id(model_id)
+                .await
+                .context("Failed to load default model")?
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Default model (ID: {}) not found. \
                              Update default with: gglib config default <id-or-name>",
-                            model_id
-                        )
-                    })
-            }
-            None => {
-                Err(anyhow!(
-                    "No model specified and no default model set.\n\
+                        model_id
+                    )
+                }),
+            None => Err(anyhow!(
+                "No model specified and no default model set.\n\
                      Use --model <id-or-name> or set a default:\n  \
                      gglib config default <id-or-name>"
-                ))
-            }
+            )),
         }
     }
 }
