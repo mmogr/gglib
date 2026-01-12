@@ -115,6 +115,7 @@ impl<'a> SettingsOps<'a> {
             show_memory_fit_indicators: request.show_memory_fit_indicators,
             max_tool_iterations: request.max_tool_iterations,
             max_stagnation_steps: request.max_stagnation_steps,
+            default_model_id: None, // Not exposed in GUI settings yet
         };
 
         let settings = self
