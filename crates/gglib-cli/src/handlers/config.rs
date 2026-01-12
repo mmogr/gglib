@@ -271,41 +271,6 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
             println!("✓ All settings have been reset to defaults.");
             Ok(())
         }
-        SettingsCommand::SetDefaultModel { identifier } => {
-            // Resolve the model first to ensure it exists
-            let model = ctx.app().models().find_by_identifier(&identifier).await?;
-
-            // Update settings with the model ID
-            let update = SettingsUpdate {
-                default_model_id: Some(Some(model.id)),
-                ..Default::default()
-            };
-
-            ctx.app().settings().update(update).await?;
-            println!("✓ Default model set to: {} (ID: {})", model.name, model.id);
-            Ok(())
-        }
-        SettingsCommand::GetDefaultModel => {
-            let settings = ctx.app().settings().get().await?;
-            match settings.default_model_id {
-                Some(model_id) => {
-                    // Try to fetch the model to show its name
-                    match ctx.app().models().get_by_id(model_id).await? {
-                        Some(model) => {
-                            println!("Default model: {} (ID: {})", model.name, model.id);
-                        }
-                        None => {
-                            println!("Default model ID: {} (warning: model not found)", model_id);
-                        }
-                    }
-                }
-                None => {
-                    println!("No default model set.");
-                    println!("Use 'gglib config default <id-or-name>' to set one.");
-                }
-            }
-            Ok(())
-        }
     }
 }
 

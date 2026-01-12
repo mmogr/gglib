@@ -111,7 +111,6 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
 | `config default <id>` | Set/show/clear the default model |
-| `config settings set-default-model <id>` | Set the default model (alias) |
 
 ### Question Command
 
