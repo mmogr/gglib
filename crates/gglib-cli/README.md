@@ -105,12 +105,40 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 | `remove <id>` | Remove a model from the library |
 | `serve <id>` | Start llama-server for a model |
 | `chat <id>` | Start interactive llama-cli chat |
+| `question <text>` | Ask a question (with optional piped context) |
 | `proxy` | Start the OpenAI-compatible proxy |
-| `hf search <query>` | Search HuggingFace Hub for models |
-| `hf download <repo>` | Download a model from HuggingFace |
-| `mcp list` | List configured MCP servers |
-| `mcp start <id>` | Start an MCP server |
-| `config show` | Show current configuration |
+| `download <repo>` | Download a model from HuggingFace |
+| `search <query>` | Search HuggingFace Hub for models |
+| `config settings show` | Show current configuration |
+| `config settings set-default-model <id>` | Set the default model for commands |
+| `config settings get-default-model` | Show the current default model |
+
+### Question Command
+
+The `question` command supports piped input for context-aware queries:
+
+```bash
+# Simple question (uses default model)
+gglib question "What is the capital of France?"
+
+# With explicit model
+gglib question --model 1 "Explain quantum computing"
+
+# Pipe context into the question
+cat README.md | gglib question "Summarize this file"
+
+# Use {} placeholder for inline substitution
+echo "Paris, London, Tokyo" | gglib question "List these cities: {}"
+
+# Pipe command output
+git diff | gglib question "Explain these changes"
+```
+
+**Set a default model** to avoid using `--model` every time:
+
+```bash
+gglib config settings set-default-model 1
+```
 
 ## Usage
 
