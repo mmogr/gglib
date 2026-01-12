@@ -225,6 +225,21 @@ async fn main() -> anyhow::Result<()> {
             };
             handlers::chat::execute(&ctx, args).await?;
         }
+        Commands::Question {
+            question,
+            model,
+            file,
+            ctx_size,
+            mlock,
+            verbose,
+            quiet,
+        } => {
+            // Ask a question with optional piped/file context
+            handlers::question::execute(
+                &ctx, question, model, file, ctx_size, mlock, verbose, quiet,
+            )
+            .await?;
+        }
         Commands::Download {
             model_id,
             quantization,

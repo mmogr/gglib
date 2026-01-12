@@ -105,12 +105,45 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 | `remove <id>` | Remove a model from the library |
 | `serve <id>` | Start llama-server for a model |
 | `chat <id>` | Start interactive llama-cli chat |
+| `question <text>` | Ask a question (with optional piped context) |
 | `proxy` | Start the OpenAI-compatible proxy |
-| `hf search <query>` | Search HuggingFace Hub for models |
-| `hf download <repo>` | Download a model from HuggingFace |
-| `mcp list` | List configured MCP servers |
-| `mcp start <id>` | Start an MCP server |
-| `config show` | Show current configuration |
+| `download <repo>` | Download a model from HuggingFace |
+| `search <query>` | Search HuggingFace Hub for models |
+| `config settings show` | Show current configuration |
+| `config default <id>` | Set/show/clear the default model |
+
+### Question Command
+
+The `question` command (alias: `q`) supports piped input or file context:
+
+```bash
+# Simple question (uses default model)
+gglib q "What is the capital of France?"
+
+# Read context from a file
+gglib q --file README.md "Summarize this project"
+
+# Pipe context into the question
+cat README.md | gglib q "Summarize this file"
+
+# Use {} placeholder for inline substitution
+echo "Paris, London, Tokyo" | gglib q "List these cities: {}"
+
+# Pipe command output
+git diff | gglib q "Explain these changes"
+
+# Debug: see the constructed prompt
+gglib q --verbose --file CODE.rs "Explain this"
+
+# Cleaner output for scripting (no prompt echo, no timings)
+gglib q -Q "What is 2+2?"
+```
+
+**Set a default model** to avoid using `--model` every time:
+
+```bash
+gglib config default 1
+```
 
 ## Usage
 

@@ -23,6 +23,7 @@ pub mod config;
 pub mod download;
 pub mod list;
 pub mod paths;
+pub mod question;
 pub mod remove;
 pub mod serve;
 pub mod update;

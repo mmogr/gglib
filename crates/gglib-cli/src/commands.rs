@@ -190,6 +190,34 @@ pub enum Commands {
         simple_io: bool,
     },
 
+    /// Ask a question with optional context from stdin or file
+    #[command(
+        alias = "q",
+        after_help = "EXAMPLES:\n    gglib q \"What is Rust?\"\n    cat file.txt | gglib q \"Summarize this\"\n    gglib q --file README.md \"Explain this project\"\n    echo \"Paris, Tokyo\" | gglib q \"List these cities: {}\""
+    )]
+    Question {
+        /// Question to ask (use {} as placeholder for piped/file input)
+        question: String,
+        /// Model ID or name (uses default model if not specified)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Read context from file instead of stdin
+        #[arg(short, long)]
+        file: Option<String>,
+        /// Context size (use 'max' to auto-detect from model metadata)
+        #[arg(short, long)]
+        ctx_size: Option<String>,
+        /// Enable memory lock
+        #[arg(long)]
+        mlock: bool,
+        /// Show the constructed prompt before sending
+        #[arg(long)]
+        verbose: bool,
+        /// Cleaner output for scripting (no prompt echo, no timings)
+        #[arg(long, short = 'Q')]
+        quiet: bool,
+    },
+
     /// Launch the Tauri desktop GUI
     Gui {
         /// Run in development mode with hot-reload (requires Node.js and npm)

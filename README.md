@@ -22,6 +22,7 @@ gglib provides a simple interface to catalog, organize, and serve GGUF models lo
 - **Remove models**: Clean removal of models from your database
 - **Serve models**: Start llama-server with automatic context size detection
 - **Chat via CLI**: Launch llama-cli directly for quick terminal chat sessions
+- **Question command**: Ask one-shot questions with optional piped context (`cat file | gglib question "summarize"`)
 - **OpenAI-compatible Proxy**: Automatic model swapping with OpenAI API compatibility
 - **HuggingFace Hub Integration**: Download models directly from HuggingFace Hub
 - **Fast-path Downloads**: Managed Python helper (hf_xet) via Miniconda for multi-gigabyte transfers

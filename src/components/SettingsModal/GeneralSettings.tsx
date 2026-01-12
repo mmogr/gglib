@@ -2,8 +2,9 @@ import { FC, FormEvent } from "react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Textarea } from "../ui/Textarea";
+import { Select } from "../ui/Select";
 import { DEFAULT_TITLE_GENERATION_PROMPT } from "../../services/clients/chat";
-import type { ModelsDirectoryInfo } from "../../types";
+import type { ModelsDirectoryInfo, GgufModel } from "../../types";
 import styles from "../SettingsModal.module.css";
 
 interface GeneralSettingsProps {
@@ -24,6 +25,12 @@ interface GeneralSettingsProps {
   setMaxQueueSizeInput: (value: string) => void;
   showFitIndicators: boolean;
   setShowFitIndicators: (value: boolean) => void;
+  
+  // Default model state
+  defaultModelInput: string;
+  setDefaultModelInput: (value: string) => void;
+  models: GgufModel[];
+  loadingModels: boolean;
   
   // Advanced settings
   isAdvancedOpen: boolean;
@@ -63,6 +70,10 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setMaxQueueSizeInput,
   showFitIndicators,
   setShowFitIndicators,
+  defaultModelInput,
+  setDefaultModelInput,
+  models,
+  loadingModels,
   isAdvancedOpen,
   setIsAdvancedOpen,
   maxToolIterationsInput,
@@ -144,6 +155,26 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
       />
       <div className={styles.helperText}>
         <span>Default context size for models (e.g., 4096, 8192, 16384)</span>
+      </div>
+
+      <label className={styles.label} htmlFor="default-model-select">
+        Default Model
+      </label>
+      <Select
+        id="default-model-select"
+        value={defaultModelInput}
+        onChange={(event) => setDefaultModelInput(event.target.value)}
+        disabled={saving || loadingModels}
+      >
+        <option value="">No default model</option>
+        {models.map((model) => (
+          <option key={model.id} value={model.id?.toString() ?? ""}>
+            {model.name}{model.quantization ? ` (${model.quantization})` : ""}
+          </option>
+        ))}
+      </Select>
+      <div className={styles.helperText}>
+        <span>Model to use for quick commands like <code>gglib question</code></span>
       </div>
 
       <label className={styles.label} htmlFor="proxy-port-input">

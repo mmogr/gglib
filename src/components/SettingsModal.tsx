@@ -2,6 +2,7 @@ import { FC, FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
+import { useModels } from "../hooks/useModels";
 import { UpdateSettingsRequest } from "../types";
 import type { McpServerInfo } from "../services/clients/mcp";
 import { McpServersPanel } from "./McpServersPanel";
@@ -26,6 +27,7 @@ const sourceLabels: Record<string, string> = {
 export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { info, loading: loadingDir, saving: savingDir, error: dirError, refresh: refreshDir, save: saveDir } = useModelsDirectory();
   const { settings, loading: loadingSettings, saving: savingSettings, error: settingsError, refresh: refreshSettings, save: saveSettings } = useSettings();
+  const { models, loading: loadingModels } = useModels();
   
   const [pathInput, setPathInput] = useState("");
   const [contextSizeInput, setContextSizeInput] = useState("");
@@ -36,6 +38,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [maxToolIterationsInput, setMaxToolIterationsInput] = useState("");
   const [maxStagnationStepsInput, setMaxStagnationStepsInput] = useState("");
   const [showFitIndicators, setShowFitIndicators] = useState(true);
+  const [defaultModelInput, setDefaultModelInput] = useState("");
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -65,6 +68,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setMaxToolIterationsInput(settings.max_tool_iterations?.toString() || "");
       setMaxStagnationStepsInput(settings.max_stagnation_steps?.toString() || "");
       setShowFitIndicators(settings.show_memory_fit_indicators !== false);
+      setDefaultModelInput(settings.default_model_id?.toString() || "");
     }
   }, [settings]);
 
@@ -96,6 +100,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           max_tool_iterations: parseNumericInput(maxToolIterationsInput),
           max_stagnation_steps: parseNumericInput(maxStagnationStepsInput),
           show_memory_fit_indicators: showFitIndicators,
+          default_model_id: parseNumericInput(defaultModelInput),
         };
 
         // Check if any updates were made
@@ -107,7 +112,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.title_generation_prompt !== undefined ||
           updates.max_tool_iterations !== undefined ||
           updates.max_stagnation_steps !== undefined ||
-          updates.show_memory_fit_indicators !== undefined;
+          updates.show_memory_fit_indicators !== undefined ||
+          updates.default_model_id !== undefined;
 
         if (hasUpdates) {
           await saveSettings(updates);
@@ -128,6 +134,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       maxToolIterationsInput,
       maxStagnationStepsInput,
       showFitIndicators,
+      defaultModelInput,
       info,
       saveDir,
       saveSettings,
@@ -205,6 +212,10 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setMaxQueueSizeInput={setMaxQueueSizeInput}
             showFitIndicators={showFitIndicators}
             setShowFitIndicators={setShowFitIndicators}
+            defaultModelInput={defaultModelInput}
+            setDefaultModelInput={setDefaultModelInput}
+            models={models}
+            loadingModels={loadingModels}
             isAdvancedOpen={isAdvancedOpen}
             setIsAdvancedOpen={setIsAdvancedOpen}
             maxToolIterationsInput={maxToolIterationsInput}

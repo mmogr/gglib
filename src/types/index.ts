@@ -54,6 +54,8 @@ export interface AppSettings {
   max_tool_iterations?: number | null;
   /** Maximum stagnation steps before stopping agent loop (default: 5) */
   max_stagnation_steps?: number | null;
+  /** Default model ID for quick commands (e.g., `gglib question`) */
+  default_model_id?: number | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -68,6 +70,8 @@ export interface UpdateSettingsRequest {
   max_tool_iterations?: number | null | undefined;
   /** Maximum stagnation steps before stopping agent loop (default: 5) */
   max_stagnation_steps?: number | null | undefined;
+  /** Default model ID for quick commands (e.g., `gglib question`) */
+  default_model_id?: number | null | undefined;
 }
 
 // ============================================================================

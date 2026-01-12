@@ -8,6 +8,14 @@ use clap::Subcommand;
 /// Configuration management commands.
 #[derive(Subcommand)]
 pub enum ConfigCommand {
+    /// View or set the default model (shorthand for settings get/set-default-model)
+    Default {
+        /// Model ID or name to set as default (omit to show current)
+        identifier: Option<String>,
+        /// Clear the current default model
+        #[arg(long)]
+        clear: bool,
+    },
     /// View or change the models directory preference
     ModelsDir {
         #[command(subcommand)]

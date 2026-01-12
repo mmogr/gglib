@@ -273,6 +273,8 @@ pub struct AppSettings {
     pub show_memory_fit_indicators: Option<bool>,
     pub max_tool_iterations: Option<u32>,
     pub max_stagnation_steps: Option<u32>,
+    /// Default model ID for quick commands (e.g., `gglib question`).
+    pub default_model_id: Option<i64>,
 }
 
 /// Request body for updating application settings.
@@ -286,6 +288,8 @@ pub struct UpdateSettingsRequest {
     pub show_memory_fit_indicators: Option<Option<bool>>,
     pub max_tool_iterations: Option<Option<u32>>,
     pub max_stagnation_steps: Option<Option<u32>>,
+    /// Default model ID for quick commands (e.g., `gglib question`).
+    pub default_model_id: Option<Option<i64>>,
 }
 
 // ============================================================================
