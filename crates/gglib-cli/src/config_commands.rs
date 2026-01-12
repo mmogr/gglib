@@ -66,4 +66,11 @@ pub enum SettingsCommand {
         #[arg(short, long)]
         force: bool,
     },
+    /// Set the default model for commands that support it
+    SetDefaultModel {
+        /// Model ID or name to set as default
+        identifier: String,
+    },
+    /// Show the current default model
+    GetDefaultModel,
 }
