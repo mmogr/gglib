@@ -190,6 +190,26 @@ pub enum Commands {
         simple_io: bool,
     },
 
+    /// Ask a question (with optional piped context)
+    ///
+    /// Usage: 
+    ///   gglib question "What is Rust?"
+    ///   cat file.txt | gglib question "Summarize this"
+    ///   git --help | gglib question "How do I rebase?"
+    Question {
+        /// Question to ask (use {} as placeholder for piped input)
+        question: String,
+        /// Model ID or name (uses default model if not specified)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Context size (use 'max' to auto-detect from model metadata)
+        #[arg(short, long)]
+        ctx_size: Option<String>,
+        /// Enable memory lock
+        #[arg(long)]
+        mlock: bool,
+    },
+
     /// Launch the Tauri desktop GUI
     Gui {
         /// Run in development mode with hot-reload (requires Node.js and npm)
