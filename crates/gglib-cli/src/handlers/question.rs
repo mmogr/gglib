@@ -236,17 +236,61 @@ mod tests {
 
     #[test]
     fn test_calculate_context_size_auto() {
-        // Small prompt should use minimum 4096
+        // When model_max_context is provided but no ctx_size_arg, it early-returns
+        // to resolve_context_size which returns None
         let result = calculate_context_size("test", None, Some(16384)).unwrap();
-        assert_eq!(result.value, Some(4096));
+        assert_eq!(result.value, None);
     }
 
     #[test]
     fn test_calculate_context_size_large_prompt() {
-        // Create a large prompt (10000 chars ~= 2500 tokens + 2048 response = 4548 tokens needed)
+        // When BOTH are None, it does the estimation
         let large_prompt = "x".repeat(10000);
-        let result = calculate_context_size(&large_prompt, None, Some(16384)).unwrap();
+        let result = calculate_context_size(&large_prompt, None, None).unwrap();
         // Should use estimated size (2500 + 2048 = 4548, rounded up to meet minimum)
         assert!(result.value.unwrap() >= 4548);
+    }
+
+    #[test]
+    fn test_calculate_context_size_no_model_max() {
+        // When no model max is known and no explicit ctx, should estimate
+        let result = calculate_context_size("test prompt", None, None).unwrap();
+        // Minimum is 4096
+        assert_eq!(result.value, Some(4096));
+    }
+
+    #[test]
+    fn test_calculate_context_size_explicit_max_keyword() {
+        // User can specify "max" to use model's maximum
+        let result = calculate_context_size("test", Some("max"), Some(32768)).unwrap();
+        assert_eq!(result.value, Some(32768));
+    }
+
+    #[test]
+    fn test_build_prompt_multiple_placeholders() {
+        // .replace() replaces ALL occurrences
+        let question = "Compare {} with {}";
+        let input = "Hello";
+        let prompt = build_prompt(question, Some(input)).unwrap();
+        assert_eq!(prompt, "Compare Hello with Hello");
+    }
+
+    #[test]
+    fn test_build_prompt_context_format() {
+        // Verify exact format when no placeholder
+        let question = "What is this?";
+        let input = "Some code here";
+        let prompt = build_prompt(question, Some(input)).unwrap();
+        assert_eq!(prompt, "Context:\nSome code here\n\nQuestion: What is this?\n\nAnswer:");
+    }
+
+    #[test]
+    fn test_build_prompt_whitespace_input() {
+        // Whitespace-only input is NOT treated as empty (is_empty() returns false)
+        // It goes through the context path with trimmed content
+        let question = "What is Rust?";
+        let prompt = build_prompt(question, Some("   \n\t  ")).unwrap();
+        // After trimming the whitespace in the format, we get empty context
+        assert_eq!(prompt, "Context:\n\n\nQuestion: What is Rust?\n\nAnswer:");
     }
 }
