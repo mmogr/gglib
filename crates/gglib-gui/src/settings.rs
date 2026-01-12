@@ -101,6 +101,7 @@ impl<'a> SettingsOps<'a> {
             show_memory_fit_indicators: settings.show_memory_fit_indicators,
             max_tool_iterations: settings.max_tool_iterations,
             max_stagnation_steps: settings.max_stagnation_steps,
+            default_model_id: settings.default_model_id,
         })
     }
 
@@ -115,7 +116,7 @@ impl<'a> SettingsOps<'a> {
             show_memory_fit_indicators: request.show_memory_fit_indicators,
             max_tool_iterations: request.max_tool_iterations,
             max_stagnation_steps: request.max_stagnation_steps,
-            default_model_id: None, // Not exposed in GUI settings yet
+            default_model_id: request.default_model_id,
         };
 
         let settings = self
@@ -138,6 +139,7 @@ impl<'a> SettingsOps<'a> {
             show_memory_fit_indicators: settings.show_memory_fit_indicators,
             max_tool_iterations: settings.max_tool_iterations,
             max_stagnation_steps: settings.max_stagnation_steps,
+            default_model_id: settings.default_model_id,
         })
     }
 
