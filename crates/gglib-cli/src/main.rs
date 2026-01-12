@@ -225,6 +225,15 @@ async fn main() -> anyhow::Result<()> {
             };
             handlers::chat::execute(&ctx, args).await?;
         }
+        Commands::Question {
+            question,
+            model,
+            ctx_size,
+            mlock,
+        } => {
+            // NEW: Ask a question with optional piped context
+            handlers::question::execute(&ctx, question, model, ctx_size, mlock).await?;
+        }
         Commands::Download {
             model_id,
             quantization,
