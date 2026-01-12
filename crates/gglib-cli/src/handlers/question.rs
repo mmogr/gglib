@@ -1,8 +1,9 @@
 //! Question command handler.
 //!
-//! Handles asking a question with optional piped stdin context.
+//! Handles asking a question with optional piped stdin or file context.
 
 use anyhow::{Context, Result, anyhow};
+use std::fs;
 use std::io::{self, IsTerminal, Read};
 use std::process::Stdio;
 
@@ -12,18 +13,21 @@ use gglib_runtime::llama::{ContextResolution, LlamaCommandBuilder, resolve_conte
 
 /// Execute the question command.
 ///
-/// This command allows asking a question with or without piped context.
-/// If stdin is piped, it will be used as context. The `{}` placeholder
-/// in the question will be replaced with the piped input, or if no
-/// placeholder exists, the input will be prepended to the question.
+/// This command allows asking a question with or without context from stdin or file.
+/// If stdin is piped or --file is provided, it will be used as context.
+/// The `{}` placeholder in the question will be replaced with the input,
+/// or if no placeholder exists, the input will be prepended to the question.
 ///
 /// # Arguments
 ///
 /// * `ctx` - The CLI context providing access to AppCore
 /// * `question` - The question to ask
 /// * `model` - Optional model identifier (ID or name)
+/// * `file` - Optional file path to read context from
 /// * `ctx_size` - Optional context size override
 /// * `mlock` - Whether to enable memory lock
+/// * `verbose` - Whether to print the constructed prompt
+/// * `quiet` - Whether to suppress llama-cli banner
 ///
 /// # Returns
 ///
@@ -32,30 +36,47 @@ pub async fn execute(
     ctx: &CliContext,
     question: String,
     model: Option<String>,
+    file: Option<String>,
     ctx_size: Option<String>,
     mlock: bool,
+    verbose: bool,
+    quiet: bool,
 ) -> Result<()> {
-    // Check if stdin is piped
-    let stdin = io::stdin();
-    let is_piped = !stdin.is_terminal();
-
-    // Read piped input if available
-    let piped_input = if is_piped {
-        let mut buffer = String::new();
-        stdin
-            .lock()
-            .read_to_string(&mut buffer)
-            .context("Failed to read from stdin")?;
-        Some(buffer)
+    // Get context from file or piped stdin
+    let context_input = if let Some(file_path) = &file {
+        // Read from file
+        let content = fs::read_to_string(file_path)
+            .with_context(|| format!("Failed to read file: {}", file_path))?;
+        Some(content)
     } else {
-        None
+        // Check if stdin is piped
+        let stdin = io::stdin();
+        let is_piped = !stdin.is_terminal();
+
+        if is_piped {
+            let mut buffer = String::new();
+            stdin
+                .lock()
+                .read_to_string(&mut buffer)
+                .context("Failed to read from stdin")?;
+            Some(buffer)
+        } else {
+            None
+        }
     };
 
     // Resolve the model: --model flag -> settings default -> error
     let model = resolve_model(ctx, model.as_deref()).await?;
 
-    // Build the prompt based on whether we have piped input
-    let prompt = build_prompt(&question, piped_input.as_deref())?;
+    // Build the prompt based on whether we have context input
+    let prompt = build_prompt(&question, context_input.as_deref())?;
+
+    // Print prompt if verbose mode
+    if verbose {
+        eprintln!("─── Constructed Prompt ───");
+        eprintln!("{}", prompt);
+        eprintln!("─── End Prompt ───\n");
+    }
 
     // Calculate intelligent context size
     let context_resolution =
@@ -65,14 +86,21 @@ pub async fn execute(
     let llama_cli_path = llama_cli_path().context("Failed to resolve llama-cli path")?;
 
     // Build and execute the command
-    // Use simple -p flag which works with chat-tuned models
     let mut cmd = LlamaCommandBuilder::new(&llama_cli_path, &model.file_path)
         .context_resolution(context_resolution)
         .mlock(mlock)
         .build();
 
     // Add prompt with single-turn mode (exit after response)
-    cmd.arg("-p").arg(&prompt).arg("--single-turn"); // exit after one response
+    cmd.arg("-p").arg(&prompt).arg("--single-turn");
+
+    // Add quiet mode flags (cleaner output for scripting)
+    if quiet {
+        cmd.arg("--no-display-prompt")
+            .arg("--log-disable")
+            .arg("--no-show-timings")
+            .arg("--simple-io");
+    }
 
     cmd.stdin(Stdio::inherit())
         .stdout(Stdio::inherit())

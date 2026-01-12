@@ -114,23 +114,29 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 
 ### Question Command
 
-The `question` command supports piped input for context-aware queries:
+The `question` command (alias: `q`) supports piped input or file context:
 
 ```bash
 # Simple question (uses default model)
-gglib question "What is the capital of France?"
+gglib q "What is the capital of France?"
 
-# With explicit model
-gglib question --model 1 "Explain quantum computing"
+# Read context from a file
+gglib q --file README.md "Summarize this project"
 
 # Pipe context into the question
-cat README.md | gglib question "Summarize this file"
+cat README.md | gglib q "Summarize this file"
 
 # Use {} placeholder for inline substitution
-echo "Paris, London, Tokyo" | gglib question "List these cities: {}"
+echo "Paris, London, Tokyo" | gglib q "List these cities: {}"
 
 # Pipe command output
-git diff | gglib question "Explain these changes"
+git diff | gglib q "Explain these changes"
+
+# Debug: see the constructed prompt
+gglib q --verbose --file CODE.rs "Explain this"
+
+# Cleaner output for scripting (no prompt echo, no timings)
+gglib q -Q "What is 2+2?"
 ```
 
 **Set a default model** to avoid using `--model` every time:
