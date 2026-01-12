@@ -123,7 +123,7 @@ async fn resolve_model(
                     .ok_or_else(|| {
                         anyhow!(
                             "Default model (ID: {}) not found. \
-                             Update default with: gglib config settings set-default-model <id-or-name>",
+                             Update default with: gglib config default <id-or-name>",
                             model_id
                         )
                     })
@@ -132,7 +132,7 @@ async fn resolve_model(
                 Err(anyhow!(
                     "No model specified and no default model set.\n\
                      Use --model <id-or-name> or set a default:\n  \
-                     gglib config settings set-default-model <id-or-name>"
+                     gglib config default <id-or-name>"
                 ))
             }
         }

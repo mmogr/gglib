@@ -110,8 +110,8 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
-| `config settings set-default-model <id>` | Set the default model for commands |
-| `config settings get-default-model` | Show the current default model |
+| `config default <id>` | Set/show/clear the default model |
+| `config settings set-default-model <id>` | Set the default model (alias) |
 
 ### Question Command
 
@@ -137,7 +137,7 @@ git diff | gglib question "Explain these changes"
 **Set a default model** to avoid using `--model` every time:
 
 ```bash
-gglib config settings set-default-model 1
+gglib config default 1
 ```
 
 ## Usage

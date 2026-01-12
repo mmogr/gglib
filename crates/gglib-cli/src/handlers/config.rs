@@ -27,9 +27,68 @@ use gglib_core::{Settings, SettingsUpdate, validate_settings};
 /// Returns `Result<()>` indicating the success or failure of the operation.
 pub async fn execute(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
     match command {
+        ConfigCommand::Default { identifier, clear } => {
+            handle_default_model(ctx, identifier, clear).await
+        }
         ConfigCommand::ModelsDir { command } => handle_models_dir(command),
         ConfigCommand::Settings { command } => handle_settings(ctx, command).await,
     }
+}
+
+/// Handle the `config default` command for managing the default model.
+///
+/// - No args: show current default
+/// - With identifier: set as default
+/// - With --clear: remove default
+async fn handle_default_model(
+    ctx: &CliContext,
+    identifier: Option<String>,
+    clear: bool,
+) -> Result<()> {
+    if clear {
+        // Clear the default model
+        let update = SettingsUpdate {
+            default_model_id: Some(None),
+            ..Default::default()
+        };
+        ctx.app().settings().update(update).await?;
+        println!("✓ Default model cleared.");
+        return Ok(());
+    }
+
+    match identifier {
+        Some(id) => {
+            // Set the default model
+            let model = ctx.app().models().find_by_identifier(&id).await?;
+            let update = SettingsUpdate {
+                default_model_id: Some(Some(model.id)),
+                ..Default::default()
+            };
+            ctx.app().settings().update(update).await?;
+            println!("✓ Default model set to: {} (ID: {})", model.name, model.id);
+        }
+        None => {
+            // Show current default
+            let settings = ctx.app().settings().get().await?;
+            match settings.default_model_id {
+                Some(model_id) => {
+                    match ctx.app().models().get_by_id(model_id).await? {
+                        Some(model) => {
+                            println!("Default model: {} (ID: {})", model.name, model.id);
+                        }
+                        None => {
+                            println!("Default model ID: {} (warning: model not found)", model_id);
+                        }
+                    }
+                }
+                None => {
+                    println!("No default model set.");
+                    println!("Use 'gglib config default <id-or-name>' to set one.");
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
@@ -242,9 +301,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
                 }
                 None => {
                     println!("No default model set.");
-                    println!(
-                        "Use 'gglib config settings set-default-model <id-or-name>' to set one."
-                    );
+                    println!("Use 'gglib config default <id-or-name>' to set one.");
                 }
             }
             Ok(())
