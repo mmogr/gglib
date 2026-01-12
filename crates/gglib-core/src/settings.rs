@@ -41,6 +41,9 @@ pub struct Settings {
 
     /// Maximum stagnation steps before stopping agent loop.
     pub max_stagnation_steps: Option<u32>,
+
+    /// Default model ID for commands that support a default model.
+    pub default_model_id: Option<i64>,
 }
 
 impl Settings {
@@ -56,6 +59,7 @@ impl Settings {
             show_memory_fit_indicators: Some(true),
             max_tool_iterations: Some(25),
             max_stagnation_steps: Some(5),
+            default_model_id: None,
         }
     }
 
@@ -103,6 +107,9 @@ impl Settings {
         if let Some(ref steps) = other.max_stagnation_steps {
             self.max_stagnation_steps = *steps;
         }
+        if let Some(ref model_id) = other.default_model_id {
+            self.default_model_id = *model_id;
+        }
     }
 }
 
@@ -122,6 +129,7 @@ pub struct SettingsUpdate {
     pub show_memory_fit_indicators: Option<Option<bool>>,
     pub max_tool_iterations: Option<Option<u32>>,
     pub max_stagnation_steps: Option<Option<u32>>,
+    pub default_model_id: Option<Option<i64>>,
 }
 
 /// Settings validation error.
