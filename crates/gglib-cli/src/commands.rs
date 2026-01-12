@@ -192,7 +192,7 @@ pub enum Commands {
 
     /// Ask a question (with optional piped context)
     ///
-    /// Usage: 
+    /// Usage:
     ///   gglib question "What is Rust?"
     ///   cat file.txt | gglib question "Summarize this"
     ///   git --help | gglib question "How do I rebase?"

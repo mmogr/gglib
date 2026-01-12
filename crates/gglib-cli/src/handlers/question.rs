@@ -3,7 +3,7 @@
 //! Handles asking a question with optional piped stdin context.
 
 use anyhow::{Context, Result, anyhow};
-use std::io::{self, Read, IsTerminal};
+use std::io::{self, IsTerminal, Read};
 use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
@@ -42,7 +42,9 @@ pub async fn execute(
     // Read piped input if available
     let piped_input = if is_piped {
         let mut buffer = String::new();
-        stdin.lock().read_to_string(&mut buffer)
+        stdin
+            .lock()
+            .read_to_string(&mut buffer)
             .context("Failed to read from stdin")?;
         Some(buffer)
     } else {
@@ -56,15 +58,11 @@ pub async fn execute(
     let prompt = build_prompt(&question, piped_input.as_deref())?;
 
     // Calculate intelligent context size
-    let context_resolution = calculate_context_size(
-        &prompt,
-        ctx_size.as_deref(),
-        model.context_length,
-    )?;
+    let context_resolution =
+        calculate_context_size(&prompt, ctx_size.as_deref(), model.context_length)?;
 
     // Get llama-cli path
-    let llama_cli_path = llama_cli_path()
-        .context("Failed to resolve llama-cli path")?;
+    let llama_cli_path = llama_cli_path().context("Failed to resolve llama-cli path")?;
 
     // Build and execute the command
     // Use simple -p flag which works with chat-tuned models
@@ -74,15 +72,13 @@ pub async fn execute(
         .build();
 
     // Add prompt with single-turn mode (exit after response)
-    cmd.arg("-p").arg(&prompt)
-        .arg("--single-turn"); // exit after one response
+    cmd.arg("-p").arg(&prompt).arg("--single-turn"); // exit after one response
 
     cmd.stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    let status = cmd.status()
-        .context("Failed to execute llama-cli")?;
+    let status = cmd.status().context("Failed to execute llama-cli")?;
 
     if !status.success() {
         return Err(anyhow!("llama-cli exited with error"));
@@ -110,7 +106,11 @@ async fn resolve_model(
             .context(format!("Failed to find model: {}", identifier))
     } else {
         // Try to use default model from settings
-        let settings = ctx.app().settings().get().await
+        let settings = ctx
+            .app()
+            .settings()
+            .get()
+            .await
             .context("Failed to load settings")?;
 
         match settings.default_model_id {
@@ -281,7 +281,10 @@ mod tests {
         let question = "What is this?";
         let input = "Some code here";
         let prompt = build_prompt(question, Some(input)).unwrap();
-        assert_eq!(prompt, "Context:\nSome code here\n\nQuestion: What is this?\n\nAnswer:");
+        assert_eq!(
+            prompt,
+            "Context:\nSome code here\n\nQuestion: What is this?\n\nAnswer:"
+        );
     }
 
     #[test]

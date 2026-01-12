@@ -10,14 +10,11 @@ mod common;
 use common::database::setup_test_pool;
 use std::sync::Arc;
 
-use gglib_core::{
-    ModelRepository, NewModel, Settings, SettingsUpdate,
-    services::SettingsService,
-};
-use gglib_db::{SqliteModelRepository, SqliteSettingsRepository};
 use chrono::Utc;
-use tempfile::tempdir;
+use gglib_core::{ModelRepository, NewModel, Settings, SettingsUpdate, services::SettingsService};
+use gglib_db::{SqliteModelRepository, SqliteSettingsRepository};
 use std::fs;
+use tempfile::tempdir;
 
 /// Create a test GGUF file with minimal valid header
 fn create_test_gguf_file(temp_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
@@ -150,12 +147,7 @@ async fn test_find_model_by_id() {
     let file_path = create_test_gguf_file(temp_dir.path(), "test_model");
 
     // Add a model
-    let new_model = NewModel::new(
-        "Test Model".to_string(),
-        file_path.clone(),
-        7.0,
-        Utc::now(),
-    );
+    let new_model = NewModel::new("Test Model".to_string(), file_path.clone(), 7.0, Utc::now());
     let inserted = model_repo.insert(&new_model).await.unwrap();
     let id = inserted.id;
 
