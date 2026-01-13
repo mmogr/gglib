@@ -128,10 +128,10 @@ pub struct ChatUsage {
 ///
 /// This router provides:
 /// - `/api/conversations` - List/create conversations
-/// - `/api/conversations/:id` - Get/update/delete conversation
-/// - `/api/conversations/:id/messages` - Get messages for conversation
+/// - `/api/conversations/{id}` - Get/update/delete conversation
+/// - `/api/conversations/{id}/messages` - Get messages for conversation
 /// - `/api/messages` - Save new message
-/// - `/api/messages/:id` - Update/delete message
+/// - `/api/messages/{id}` - Update/delete message
 /// - `/api/chat` - Proxy chat completions to llama-server (streaming supported)
 ///
 /// # Arguments
@@ -162,15 +162,15 @@ pub(crate) fn chat_routes_no_prefix() -> Router<AppState> {
             get(list_conversations).post(create_conversation),
         )
         .route(
-            "/conversations/:id",
+            "/conversations/{id}",
             get(get_conversation)
                 .put(update_conversation)
                 .delete(delete_conversation),
         )
         // Message endpoints
-        .route("/conversations/:id/messages", get(get_messages))
+        .route("/conversations/{id}/messages", get(get_messages))
         .route("/messages", post(save_message))
-        .route("/messages/:id", put(update_message).delete(delete_message))
+        .route("/messages/{id}", put(update_message).delete(delete_message))
         // Chat completion proxy (forwards to llama-server)
         .route("/chat", post(proxy_chat))
 }
