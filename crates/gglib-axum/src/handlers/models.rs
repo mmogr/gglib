@@ -69,7 +69,7 @@ pub async fn add_tag(
     Ok(())
 }
 
-/// Request body for adding a tag via POST to /api/models/:id/tags
+/// Request body for adding a tag via POST to /api/models/{id}/tags
 #[derive(serde::Deserialize)]
 pub struct AddTagRequest {
     pub tag: String,
