@@ -689,8 +689,8 @@ async fn model_get_by_id_returns_json_not_html() {
 
     assert!(
         !content_type.contains("text/html"),
-        "Model GET /:id was intercepted by SPA fallback (returned HTML). \
-         Check route param syntax (':id' for Axum 0.7, not '{{id}}')"
+        "Model GET /{{id}} was intercepted by SPA fallback (returned HTML). \
+         Check route param syntax ('{{{{id}}}}' for Axum 0.8)"
     );
 }
 
@@ -730,8 +730,8 @@ async fn model_tags_by_id_returns_json_not_html() {
 
     assert!(
         !content_type.contains("text/html"),
-        "Model tags /:id/tags was intercepted by SPA fallback (returned HTML). \
-         Check route param syntax (':id' for Axum 0.7, not '{{id}}')"
+        "Model tags /{{id}}/tags was intercepted by SPA fallback (returned HTML). \
+         Check route param syntax ('{{{{id}}}}' for Axum 0.8)"
     );
 }
 
@@ -771,8 +771,8 @@ async fn mcp_server_tools_by_id_returns_json_not_html() {
 
     assert!(
         !content_type.contains("text/html"),
-        "MCP tools /:id/tools was intercepted by SPA fallback (returned HTML). \
-         Check route param syntax (':id' for Axum 0.7, not '{{id}}')"
+        "MCP tools /{{id}}/tools was intercepted by SPA fallback (returned HTML). \
+         Check route param syntax ('{{{{id}}}}' for Axum 0.8)"
     );
 }
 
@@ -789,7 +789,7 @@ async fn model_tags_accepts_post_with_body() {
 
     let app = create_router(ctx, &CorsConfig::AllowAll);
 
-    // Frontend POSTs to /api/models/:id/tags with { tag: "..." } in body
+    // Frontend POSTs to /api/models/{id}/tags with { tag: "..." } in body
     let response = app
         .oneshot(
             Request::builder()
@@ -806,6 +806,6 @@ async fn model_tags_accepts_post_with_body() {
     assert_ne!(
         response.status(),
         StatusCode::METHOD_NOT_ALLOWED,
-        "POST /api/models/:id/tags should be allowed (frontend sends tag in body)"
+        "POST /api/models/{{id}}/tags should be allowed (frontend sends tag in body)"
     );
 }
