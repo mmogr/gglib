@@ -143,6 +143,6 @@ anyhow.workspace = true
 tokio.workspace = true
 gglib-gguf.workspace = true
 gglib-hf.workspace = true
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "sqlite"] }
 urlencoding = "2.1"
 
