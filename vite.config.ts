@@ -20,9 +20,6 @@ export default defineConfig(async () => ({
         manualChunks: {
           'chat-runtime': [
             '@assistant-ui/react',
-            '@assistant-ui/react-ai-sdk',
-            '@ai-sdk/openai',
-            'ai',
           ],
           markdown: [
             'react-markdown',

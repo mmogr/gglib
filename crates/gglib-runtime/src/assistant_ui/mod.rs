@@ -53,9 +53,6 @@ pub fn handle_update() -> Result<(), String> {
     let update_result = Command::new("npm")
         .arg("update")
         .arg("@assistant-ui/react")
-        .arg("@assistant-ui/react-ai-sdk")
-        .arg("ai")
-        .arg("@ai-sdk/openai")
         .arg("react-markdown")
         .arg("remark-gfm")
         .arg("rehype-highlight")
@@ -105,9 +102,6 @@ pub fn handle_status() -> Result<(), String> {
     // Check each required package
     let packages = vec![
         "@assistant-ui/react",
-        "@assistant-ui/react-ai-sdk",
-        "ai",
-        "@ai-sdk/openai",
         "react-markdown",
         "remark-gfm",
         "rehype-highlight",
