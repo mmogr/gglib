@@ -70,7 +70,7 @@ pub async fn create_conversation(
 }
 
 /// Get a single conversation by ID.
-/// GET /api/conversations/:id
+/// GET /api/conversations/{id}
 pub async fn get_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -85,7 +85,7 @@ pub async fn get_conversation(
 }
 
 /// Update a conversation.
-/// PUT /api/conversations/:id
+/// PUT /api/conversations/{id}
 pub async fn update_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -100,7 +100,7 @@ pub async fn update_conversation(
 }
 
 /// Delete a conversation and all its messages.
-/// DELETE /api/conversations/:id
+/// DELETE /api/conversations/{id}
 pub async fn delete_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -114,7 +114,7 @@ pub async fn delete_conversation(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Get all messages for a conversation.
-/// GET /api/conversations/:id/messages
+/// GET /api/conversations/{id}/messages
 pub async fn get_messages(
     State(state): State<AppState>,
     Path(conversation_id): Path<i64>,
@@ -149,7 +149,7 @@ pub async fn save_message(
 }
 
 /// Update a message's content.
-/// PUT /api/messages/:id
+/// PUT /api/messages/{id}
 pub async fn update_message(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -164,7 +164,7 @@ pub async fn update_message(
 }
 
 /// Delete a message and all subsequent messages in the conversation.
-/// DELETE /api/messages/:id
+/// DELETE /api/messages/{id}
 pub async fn delete_message(
     State(state): State<AppState>,
     Path(id): Path<i64>,

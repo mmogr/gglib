@@ -47,17 +47,17 @@ pub(crate) fn api_routes() -> Router<AppState> {
             get(handlers::models::list).post(handlers::models::add),
         )
         .route(
-            "/models/:id",
+            "/models/{id}",
             get(handlers::models::get)
                 .put(handlers::models::update)
                 .delete(handlers::models::remove),
         )
         .route(
-            "/models/:id/tags",
+            "/models/{id}/tags",
             get(handlers::models::get_model_tags).post(handlers::models::add_tag_body),
         )
         .route(
-            "/models/:id/tags/:tag",
+            "/models/{id}/tags/{tag}",
             post(handlers::models::add_tag).delete(handlers::models::remove_tag),
         )
         .route(
@@ -66,7 +66,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
         )
         // Tags API
         .route("/tags", get(handlers::models::list_tags))
-        .route("/tags/:tag/models", get(handlers::models::get_by_tag))
+        .route("/tags/{tag}/models", get(handlers::models::get_by_tag))
         // Settings API
         .route(
             "/settings",
@@ -84,14 +84,14 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/servers", get(handlers::servers::list))
         .route("/servers/start", post(handlers::servers::start_body))
         .route("/servers/stop", post(handlers::servers::stop_body))
-        .route("/servers/:id/start", post(handlers::servers::start))
-        .route("/servers/:id/stop", post(handlers::servers::stop))
+        .route("/servers/{id}/start", post(handlers::servers::start))
+        .route("/servers/{id}/stop", post(handlers::servers::stop))
         .route(
-            "/servers/:port/logs",
+            "/servers/{port}/logs",
             get(handlers::servers::get_logs).delete(handlers::servers::clear_logs),
         )
         .route(
-            "/servers/:port/logs/stream",
+            "/servers/{port}/logs/stream",
             get(handlers::servers::stream_logs),
         )
         // Downloads API
@@ -100,15 +100,15 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/downloads/queue",
             get(handlers::downloads::list).post(handlers::downloads::queue),
         )
-        .route("/downloads/:id", delete(handlers::downloads::remove))
-        .route("/downloads/:id/cancel", post(handlers::downloads::cancel))
+        .route("/downloads/{id}", delete(handlers::downloads::remove))
+        .route("/downloads/{id}/cancel", post(handlers::downloads::cancel))
         .route("/downloads/reorder", post(handlers::downloads::reorder))
         .route(
             "/downloads/reorder-full",
             post(handlers::downloads::reorder_full),
         )
         .route(
-            "/downloads/shard-group/:id/cancel",
+            "/downloads/shard-group/{id}/cancel",
             post(handlers::downloads::cancel_shard_group),
         )
         .route(
@@ -121,16 +121,16 @@ pub(crate) fn api_routes() -> Router<AppState> {
             get(handlers::mcp::list).post(handlers::mcp::add),
         )
         .route(
-            "/mcp/servers/:id",
+            "/mcp/servers/{id}",
             put(handlers::mcp::update).delete(handlers::mcp::remove),
         )
-        .route("/mcp/servers/:id/start", post(handlers::mcp::start))
-        .route("/mcp/servers/:id/stop", post(handlers::mcp::stop))
+        .route("/mcp/servers/{id}/start", post(handlers::mcp::start))
+        .route("/mcp/servers/{id}/stop", post(handlers::mcp::stop))
         .route(
-            "/mcp/servers/:id/resolve",
+            "/mcp/servers/{id}/resolve",
             post(handlers::mcp::resolve_path),
         )
-        .route("/mcp/servers/:id/tools", get(handlers::mcp::list_tools))
+        .route("/mcp/servers/{id}/tools", get(handlers::mcp::list_tools))
         .route("/mcp/tools/call", post(handlers::mcp::call_tool))
         // Proxy API
         .route("/proxy/status", get(handlers::proxy::status))
@@ -139,11 +139,11 @@ pub(crate) fn api_routes() -> Router<AppState> {
         // Hugging Face API (strip /api prefix since we're nested under /api)
         .route("/hf/search", post(handlers::hf::search))
         .route(
-            "/hf/quantizations/:model_id",
+            "/hf/quantizations/{model_id}",
             get(handlers::hf::quantizations),
         )
         .route(
-            "/hf/tool-support/:model_id",
+            "/hf/tool-support/{model_id}",
             get(handlers::hf::tool_support),
         )
         // Events (SSE)
@@ -159,8 +159,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
 /// static file serving with SPA fallback.
 ///
 /// # Path Parameter Syntax
-/// Axum 0.7 uses colon syntax for path parameters: `:id`, `:tag`
-/// (Axum 0.8+ uses brace syntax: `{id}`, `{tag}`)
+/// Axum 0.8 uses brace syntax for path parameters: `{id}`, `{tag}`
 pub fn create_router(ctx: AxumContext, cors_config: &CorsConfig) -> Router {
     let state: AppState = Arc::new(ctx);
     let cors = build_cors_layer(cors_config);

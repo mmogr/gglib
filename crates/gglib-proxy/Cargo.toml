@@ -14,7 +14,7 @@ default = []
 gglib-core = { path = "../gglib-core" }
 
 # HTTP server
-axum = "0.8"
+axum = { workspace = true }
 tokio = { version = "1.0", features = ["full"] }
 
 # HTTP client for forwarding
