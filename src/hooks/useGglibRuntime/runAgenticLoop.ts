@@ -153,6 +153,11 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
 
   // AGENTIC LOOP - one iteration = one assistant message
   while (iteration < maxToolIterations) {
+    // Explicit abort check at iteration start (crucial for immediate loop termination)
+    if (abortSignal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
     iteration++;
     agentState.iter = iteration;
 
@@ -184,8 +189,10 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     // Mark this message as currently streaming (for live timer)
     setCurrentStreamingAssistantMessageId?.(assistantMessageId);
 
-    // Stream LLM response INTO this specific message
-    const streamResult = await streamModelResponse({
+    let streamResult;
+    try {
+      // Stream LLM response INTO this specific message
+      streamResult = await streamModelResponse({
       serverPort: selectedServerPort,
       messages: apiMessages,
       toolDefinitions,
@@ -207,8 +214,38 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
       timingTracker,
     });
 
-    // Clear streaming state (stream completed for this message)
-    setCurrentStreamingAssistantMessageId?.(null);
+      // Clear streaming state (stream completed for this message)
+      setCurrentStreamingAssistantMessageId?.(null);
+    } catch (error) {
+      // Clear streaming state on error
+      setCurrentStreamingAssistantMessageId?.(null);
+
+      // If AbortError, mark message as [Stopped] and rethrow to exit loop
+      if (error instanceof Error && error.name === 'AbortError') {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantMessageId
+              ? {
+                  ...m,
+                  content: [
+                    ...(Array.isArray(m.content) ? m.content : []),
+                    {
+                      type: 'text',
+                      text: '\n\n[Stopped]',
+                    },
+                  ] as GglibContent,
+                  // Explicit status tells assistant-ui the message is complete (not running)
+                  // This is critical: assistant-ui derives isRunning from last message's status
+                  status: { type: 'complete', reason: 'stop' },
+                }
+              : m
+          )
+        );
+        throw error; // Re-throw to exit loop immediately
+      }
+      // Other errors: re-throw
+      throw error;
+    }
 
     // Mark timing as finalized to trigger final persist with durations
     // This ensures the transcript is regenerated with duration attributes
@@ -350,6 +387,11 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
         success: false as const,
         error: String((e as { message?: string })?.message ?? e ?? 'Unknown error'),
       }));
+
+      // Explicit abort check after tool execution (tools don't natively support abort)
+      if (abortSignal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
 
       console.log(`   ${toolCall.function.name}:`, result);
 
