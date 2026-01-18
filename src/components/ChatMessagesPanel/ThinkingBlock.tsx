@@ -133,14 +133,15 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
       
       <div className={cx('thinking-content', isExpanded && 'thinking-content-expanded')}>
         <div className="thinking-content-inner">
-          <ReactMarkdown
-            className="thinking-markdown"
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
-            components={components}
-          >
-            {thinking || ''}
-          </ReactMarkdown>
+          <div className="thinking-markdown">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={components}
+            >
+              {thinking || ''}
+            </ReactMarkdown>
+          </div>
         </div>
       </div>
     </div>
