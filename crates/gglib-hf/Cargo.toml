@@ -26,7 +26,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 # HTTP client (rustls to avoid OpenSSL headaches)
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 
 # URL handling
 url = "2.5"

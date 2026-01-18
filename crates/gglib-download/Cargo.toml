@@ -44,10 +44,10 @@ hf-hub.workspace = true
 reqwest = { workspace = true }
 
 # Progress display (for CLI)
-indicatif = "0.17"
+indicatif = "0.18"
 
 # System utilities (for python env)
-which = "7"
+which = "8"
 
 # Temp files
 tempfile.workspace = true
