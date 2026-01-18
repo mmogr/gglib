@@ -12,7 +12,7 @@ build = "build.rs"
 [dependencies]
 
 [build-dependencies]
-vergen-gix = { version = "9" }
+vergen-gix = { version = "9.1" }
 
 [lints]
 workspace = true
