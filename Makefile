@@ -266,12 +266,14 @@ build-tauri:
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
 	@rm -f src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null || true
 	npm install
-	# linuxdeploy's embedded strip can fail on some distros (e.g. Arch) due to RELR relocations.
+	# On Linux: use --bundles deb,rpm to avoid AppImage issues on Arch.
+	# linuxdeploy's embedded strip fails on Arch due to RELR relocations (linuxdeploy#272).
 	# NO_STRIP=1 is a linuxdeploy-supported knob that avoids the failure by skipping stripping.
+	# On macOS: use defaults to produce .app bundle.
 	# Source Rust environment for npm subshell (needed for tauri to find cargo)
 	@if [ "$(UNAME_S)" = "Linux" ]; then \
 		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
-		NO_STRIP=1 npm run tauri:build; \
+		NO_STRIP=1 npm run tauri:build -- --bundles deb,rpm; \
 	else \
 		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
 		npm run tauri:build; \
