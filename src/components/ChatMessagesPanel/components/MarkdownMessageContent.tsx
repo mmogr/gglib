@@ -52,14 +52,15 @@ const MarkdownMessageContent: React.FC<MarkdownMessageContentProps> = ({ text: p
   };
 
   return (
-    <ReactMarkdown
-      className="chat-markdown-body"
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
-      components={components}
-    >
-      {text || ''}
-    </ReactMarkdown>
+    <div className="chat-markdown-body">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
+        components={components}
+      >
+        {text || ''}
+      </ReactMarkdown>
+    </div>
   );
 };
 
