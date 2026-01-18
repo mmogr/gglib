@@ -38,10 +38,6 @@
       "icons/icon.png"
     ],
     "resources": [],
-    "shortDescription": "",
-    "targets": [
-      "deb",
-      "rpm"
-    ]
+    "shortDescription": ""
   }
 }
