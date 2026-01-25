@@ -316,6 +316,11 @@ impl GuiBackend {
         self.download_ops().get_model_quantizations(model_id).await
     }
 
+    /// Get model summary by exact repo ID (direct API lookup).
+    pub async fn get_model_summary(&self, model_id: &str) -> Result<HfModelSummary, GuiError> {
+        self.download_ops().get_model_summary(model_id).await
+    }
+
     /// Check if a model supports tool calling.
     pub async fn get_hf_tool_support(
         &self,
