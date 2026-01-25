@@ -101,10 +101,6 @@ struct CompletionAggregate {
     cancelled_count: u32,
     /// Result of the last attempt.
     last_result: CompletionKind,
-    /// Timestamp of first attempt (milliseconds since epoch).
-    /// Kept for potential future use (e.g., sorting by first vs last).
-    #[allow(dead_code)]
-    first_attempt_ms: u64,
     /// Timestamp of last attempt (milliseconds since epoch).
     last_attempt_ms: u64,
 }
@@ -131,7 +127,6 @@ impl CompletionAggregate {
             failure_count,
             cancelled_count,
             last_result: kind,
-            first_attempt_ms: timestamp_ms,
             last_attempt_ms: timestamp_ms,
         }
     }
