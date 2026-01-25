@@ -241,7 +241,7 @@ fn merge_consecutive_system_messages(messages: Vec<ChatMessage>) -> Vec<ChatMess
                 } else if new_content.is_empty() {
                     last_content
                 } else {
-                    format!("{}\n\n{}", last_content, new_content)
+                    format!("{last_content}\n\n{new_content}")
                 });
 
                 continue; // Don't push, we merged into last
