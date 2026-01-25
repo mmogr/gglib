@@ -356,10 +356,10 @@ async function handlePlanningPhase(
   state: ResearchState,
   llmResponse: LLMResponse
 ): Promise<ResearchState> {
-  console.log('[runResearchLoop] Planning phase - LLM response:', llmResponse.content?.slice(0, 500));
+  console.debug('[runResearchLoop] Planning phase, response length:', llmResponse.content?.length);
   
   const parsed = tryParseStructuredResponse(llmResponse.content);
-  console.log('[runResearchLoop] Planning phase - parsed:', parsed);
+  console.debug('[runResearchLoop] Parsed plan:', parsed?.type, parsed && 'questions' in parsed ? parsed.questions?.length : 0);
   
   if (!parsed || parsed.type !== 'plan') {
     // Model didn't follow protocol - try to extract anything useful

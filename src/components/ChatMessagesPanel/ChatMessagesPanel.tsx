@@ -202,11 +202,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
   // Toggle deep research mode
   const toggleDeepResearch = useCallback(() => {
-    console.log('[DeepResearch] Toggle clicked! Current state:', isDeepResearchEnabled);
-    setIsDeepResearchEnabled((prev) => {
-      console.log('[DeepResearch] State changing from', prev, 'to', !prev);
-      return !prev;
-    });
+    console.debug('[DeepResearch] Toggle clicked, current state:', isDeepResearchEnabled);
+    setIsDeepResearchEnabled((prev) => !prev);
   }, [isDeepResearchEnabled]);
 
   // Stop deep research
@@ -217,10 +214,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
   // Handle deep research submission
   const handleDeepResearchSubmit = useCallback(async (query: string) => {
-    console.log('[DeepResearch] handleDeepResearchSubmit called', { query, activeConversationId, hasThreadRuntime: !!threadRuntime });
+    console.debug('[DeepResearch] Starting submission:', { query: query.slice(0, 50), conversationId: activeConversationId });
     
     if (!activeConversationId || !threadRuntime) {
-      console.error('[DeepResearch] Missing activeConversationId or threadRuntime');
+      console.warn('[DeepResearch] Missing activeConversationId or threadRuntime');
       showToast('No active conversation', 'error');
       return;
     }
@@ -685,8 +682,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       disabled={!isServerConnected || deepResearch.isRunning}
                     />
                     <div className="chat-composer-actions">
-                      {/* Debug: log at render time */}
-                      {console.log('[DeepResearch] Render - isDeepResearchEnabled:', isDeepResearchEnabled)}
                       <DeepResearchToggle
                         isEnabled={isDeepResearchEnabled}
                         onToggle={toggleDeepResearch}
@@ -717,18 +712,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                           size="sm"
                           disabled={!isServerConnected || deepResearch.isRunning}
                           onClick={() => {
-                            console.log('[DeepResearch] Research button clicked!', { isDeepResearchEnabled, isServerConnected, isRunning: deepResearch.isRunning });
                             const composer = composerRuntime;
-                            if (!composer) {
-                              console.error('[DeepResearch] No composer runtime!');
-                              return;
-                            }
+                            if (!composer) return;
                             const text = composer.getState().text.trim();
-                            console.log('[DeepResearch] Query text:', text);
-                            if (!text) {
-                              console.warn('[DeepResearch] Empty text, aborting');
-                              return;
-                            }
+                            if (!text) return;
                             composer.setText('');
                             handleDeepResearchSubmit(text);
                           }}

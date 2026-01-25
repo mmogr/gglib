@@ -111,45 +111,57 @@ function createLLMCaller(): (
       body.tool_choice = 'auto';
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: abortSignal,
-    });
+    console.debug('[LLMCaller] Request:', { url, messages: messages.length, tools: tools?.length ?? 0 });
 
-    if (!response.ok) {
-      throw new Error(`LLM request failed: ${response.status} ${response.statusText}`);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: abortSignal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[LLMCaller] Error response:', response.status, errorText);
+        throw new Error(`LLM request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      const choice = data.choices?.[0];
+
+      if (!choice) {
+        throw new Error('No choices in LLM response');
+      }
+
+      const content = choice.message?.content || '';
+      const toolCalls = choice.message?.tool_calls || [];
+      const finishReason = choice.finish_reason || 'stop';
+      
+      console.debug('[LLMCaller] Response:', { contentLen: content.length, toolCalls: toolCalls.length, finishReason });
+
+      return {
+        content,
+        toolCalls: toolCalls.map((tc: Record<string, unknown>) => ({
+          id: tc.id,
+          type: 'function',
+          function: {
+            name: (tc.function as Record<string, unknown>)?.name,
+            arguments: (tc.function as Record<string, unknown>)?.arguments,
+          },
+        })),
+        finishReason:
+          finishReason === 'tool_calls'
+            ? 'tool_calls'
+            : finishReason === 'length'
+            ? 'length'
+            : 'stop',
+      };
+    } catch (error) {
+      console.error('[LLMCaller] Fetch error:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    const choice = data.choices?.[0];
-
-    if (!choice) {
-      throw new Error('No choices in LLM response');
-    }
-
-    const content = choice.message?.content || '';
-    const toolCalls = choice.message?.tool_calls || [];
-    const finishReason = choice.finish_reason || 'stop';
-
-    return {
-      content,
-      toolCalls: toolCalls.map((tc: Record<string, unknown>) => ({
-        id: tc.id,
-        type: 'function',
-        function: {
-          name: (tc.function as Record<string, unknown>)?.name,
-          arguments: (tc.function as Record<string, unknown>)?.arguments,
-        },
-      })),
-      finishReason:
-        finishReason === 'tool_calls'
-          ? 'tool_calls'
-          : finishReason === 'length'
-          ? 'length'
-          : 'stop',
-    };
   };
 }
 
@@ -317,8 +329,10 @@ export function useDeepResearch(
   // Start research
   const startResearch = useCallback(
     async (query: string, messageId: string) => {
+      console.debug('[useDeepResearch] Starting:', { query: query.slice(0, 50), messageId, serverPort });
+      
       if (isRunning) {
-        console.warn('[useDeepResearch] Already running, ignoring start request');
+        console.debug('[useDeepResearch] Already running, ignoring');
         return;
       }
 
@@ -334,6 +348,8 @@ export function useDeepResearch(
 
       // Get tools
       const tools = getResearchTools();
+      console.debug('[useDeepResearch] Found tools:', tools.map(t => t.function.name));
+      
       if (tools.length === 0) {
         onError?.(
           new Error(
