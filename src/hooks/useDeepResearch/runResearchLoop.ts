@@ -356,11 +356,14 @@ async function handlePlanningPhase(
   state: ResearchState,
   llmResponse: LLMResponse
 ): Promise<ResearchState> {
+  console.log('[runResearchLoop] Planning phase - LLM response:', llmResponse.content?.slice(0, 500));
+  
   const parsed = tryParseStructuredResponse(llmResponse.content);
+  console.log('[runResearchLoop] Planning phase - parsed:', parsed);
   
   if (!parsed || parsed.type !== 'plan') {
     // Model didn't follow protocol - try to extract anything useful
-    console.warn('[runResearchLoop] Planning phase: invalid response format');
+    console.warn('[runResearchLoop] Planning phase: invalid response format, creating default plan');
     
     // Create a default question from the original query
     const defaultQuestion = createQuestion(
@@ -444,11 +447,17 @@ async function handleGatheringPhase(
       newState.currentHypothesis = parsed.updatedHypothesis;
     }
     
-    // Add new gaps if provided
+    // Add new gaps if provided (deduplicate by normalizing and comparing)
     if (parsed.newGaps && parsed.newGaps.length > 0) {
+      const existingGapsLower = new Set(
+        newState.knowledgeGaps.map((g) => g.toLowerCase().trim())
+      );
+      const uniqueNewGaps = parsed.newGaps.filter(
+        (gap) => !existingGapsLower.has(gap.toLowerCase().trim())
+      );
       newState.knowledgeGaps = [
         ...newState.knowledgeGaps,
-        ...parsed.newGaps,
+        ...uniqueNewGaps,
       ].slice(0, 10); // Keep max 10 gaps
     }
     
@@ -608,6 +617,9 @@ export async function runResearchLoop(
       console.log(
         `[runResearchLoop] Step ${state.currentStep}/${state.maxSteps} - Phase: ${state.phase}`
       );
+      
+      // Notify UI of step start
+      onStateUpdate?.(state);
 
       // === BUILD MESSAGES ===
       const turnMessages = buildTurnMessagesWithBudget(
