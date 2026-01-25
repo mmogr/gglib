@@ -264,25 +264,28 @@ run-web:
 	$(CARGO) run -p gglib-cli -- web $(if $(PORT),--port $(PORT),)
 
 # Build Tauri desktop app (production)
-# Also builds gglib-cli to share compilation of common dependencies
+# Uses "Manual Build + Bundle" strategy to avoid double compilation:
+# 1. Build frontend (vite)
+# 2. Build both CLI and Tauri app in a single cargo invocation (shared deps compile once)
+# 3. Bundle the already-built binary into platform installers
 build-tauri:
 	@echo "Building Tauri desktop app..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
 	@rm -f target/release/bundle/dmg/*.dmg 2>/dev/null || true
 	npm install
-	# Build CLI first to share dependency compilation with Tauri
-	$(CARGO) build --release -p gglib-cli
+	# Step A: Build frontend
+	npm run build:tauri
+	# Step B: Unified cargo build - both CLI and Tauri app share dependency compilation
+	$(CARGO) build --release -p gglib-cli -p gglib-app
+	# Step C: Bundle the already-built binary into platform installers
 	# On Linux: use --bundles deb,rpm to avoid AppImage issues on Arch.
 	# linuxdeploy's embedded strip fails on Arch due to RELR relocations (linuxdeploy#272).
 	# NO_STRIP=1 is a linuxdeploy-supported knob that avoids the failure by skipping stripping.
 	# On macOS: use defaults to produce .app bundle.
-	# Source Rust environment for npm subshell (needed for tauri to find cargo)
 	@if [ "$(UNAME_S)" = "Linux" ]; then \
-		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
-		NO_STRIP=1 npm run tauri:build -- --bundles deb,rpm; \
+		NO_STRIP=1 npm run tauri:bundle -- --bundles deb,rpm; \
 	else \
-		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
-		npm run tauri:build; \
+		npm run tauri:bundle; \
 	fi
 	@echo "✓ Tauri app built to target/release/gglib-app"
 

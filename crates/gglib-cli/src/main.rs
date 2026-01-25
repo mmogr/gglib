@@ -21,7 +21,7 @@ use gglib_runtime::llama::{
 
 #[cfg(target_os = "linux")]
 fn find_linux_gui_artifact(repo_root: &std::path::Path) -> std::path::PathBuf {
-    let appimage_dir = repo_root.join("src-tauri/target/release/bundle/appimage");
+    let appimage_dir = repo_root.join("target/release/bundle/appimage");
     if let Ok(read_dir) = std::fs::read_dir(&appimage_dir) {
         let mut candidates: Vec<std::path::PathBuf> = read_dir
             .filter_map(|entry| entry.ok())
@@ -41,13 +41,13 @@ fn find_linux_gui_artifact(repo_root: &std::path::Path) -> std::path::PathBuf {
         }
     }
 
-    repo_root.join("src-tauri/target/release/gglib-app")
+    repo_root.join("target/release/gglib-app")
 }
 
 fn launch_gui_command(repo_root: &std::path::Path) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     {
-        let app_bundle = repo_root.join("src-tauri/target/release/bundle/macos/GGLib GUI.app");
+        let app_bundle = repo_root.join("target/release/bundle/macos/GGLib GUI.app");
         if app_bundle.exists() {
             println!("Launching GGLib GUI...");
             let status = std::process::Command::new("open").arg(&app_bundle).status();
@@ -85,11 +85,11 @@ fn launch_gui_command(repo_root: &std::path::Path) -> anyhow::Result<()> {
                 }
             }
         } else {
-            let appimage_dir = repo_root.join("src-tauri/target/release/bundle/appimage");
+            let appimage_dir = repo_root.join("target/release/bundle/appimage");
             println!(
                 "Desktop GUI not found at: {} (or any *.AppImage in {})",
                 repo_root
-                    .join("src-tauri/target/release/gglib-app")
+                    .join("target/release/gglib-app")
                     .display(),
                 appimage_dir.display()
             );
@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn linux_gui_artifact_prefers_any_appimage() {
         let root = make_temp_dir("gglib_cli_gui");
-        let appimage_dir = root.join("src-tauri/target/release/bundle/appimage");
+        let appimage_dir = root.join("target/release/bundle/appimage");
         std::fs::create_dir_all(&appimage_dir).unwrap();
 
         let appimage = appimage_dir.join("GGLib GUI_0.2.4_amd64.AppImage");
@@ -143,7 +143,7 @@ mod tests {
     fn linux_gui_artifact_falls_back_to_binary_when_no_appimage() {
         let root = make_temp_dir("gglib_cli_gui");
         let chosen = find_linux_gui_artifact(&root);
-        assert_eq!(chosen, root.join("src-tauri/target/release/gglib-app"));
+        assert_eq!(chosen, root.join("target/release/gglib-app"));
     }
 }
 
