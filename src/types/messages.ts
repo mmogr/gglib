@@ -6,6 +6,7 @@
  */
 
 import type { ThreadMessageLike } from '@assistant-ui/react';
+import type { ResearchState } from '../hooks/useDeepResearch/types';
 
 /**
  * Gglib message type - directly uses ThreadMessageLike
@@ -41,6 +42,10 @@ export type GglibMessageCustom = {
   dbId?: number;
   turnId?: string;
   iteration?: number;
+  /** Deep research state - if present, this message is a research artifact */
+  researchState?: ResearchState;
+  /** Marker that this message represents a deep research session */
+  isDeepResearch?: boolean;
 };
 
 /**
