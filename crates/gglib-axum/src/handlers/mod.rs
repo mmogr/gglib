@@ -4,7 +4,6 @@
 //! Handlers are thin wrappers that delegate to `GuiBackend`.
 
 pub mod chat;
-pub mod chat_proxy;
 pub mod downloads;
 pub mod events;
 pub mod hf;
