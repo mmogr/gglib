@@ -242,4 +242,48 @@ impl<'a> DownloadOps<'a> {
 
         Ok(HfToolSupportResponse::from(detection))
     }
+
+    /// Get model summary by exact repo ID (direct API lookup).
+    ///
+    /// Unlike search, this fetches model info directly from the HuggingFace API
+    /// using the exact repo ID (e.g., `unsloth/medgemma-4b-it-GGUF`).
+    ///
+    /// Returns an error if the model doesn't exist or has no GGUF files.
+    pub async fn get_model_summary(&self, model_id: &str) -> Result<HfModelSummary, GuiError> {
+        // Fetch model info directly by ID
+        let info =
+            self.hf_client
+                .get_model_info(model_id)
+                .await
+                .map_err(|e| GuiError::NotFound {
+                    entity: "model",
+                    id: format!("{model_id}: {e}"),
+                })?;
+
+        // Check if the model has GGUF files by checking quantizations
+        let quants = self
+            .hf_client
+            .list_quantizations(model_id)
+            .await
+            .map_err(|e| GuiError::Internal(format!("Failed to check quantizations: {e}")))?;
+
+        if quants.is_empty() {
+            return Err(GuiError::ValidationFailed(format!(
+                "Model '{model_id}' exists but contains no GGUF files"
+            )));
+        }
+
+        // Map HfRepoInfo to HfModelSummary
+        Ok(HfModelSummary {
+            id: info.model_id,
+            name: info.name,
+            author: info.author,
+            downloads: info.downloads,
+            likes: info.likes,
+            last_modified: info.last_modified,
+            parameters_b: info.parameters_b,
+            description: info.description,
+            tags: info.tags,
+        })
+    }
 }

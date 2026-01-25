@@ -10,6 +10,7 @@
 import { getTransport } from '../transport';
 import type { HfModelId } from '../transport/types/ids';
 import type {
+  HfModelSummary,
   HfSearchRequest,
   HfSearchResponse,
   HfQuantizationsResponse,
@@ -21,6 +22,16 @@ import type {
  */
 export async function browseHfModels(params: HfSearchRequest): Promise<HfSearchResponse> {
   return getTransport().browseHfModels(params);
+}
+
+/**
+ * Get model summary by exact repo ID (direct API lookup).
+ *
+ * Unlike browseHfModels (search), this fetches model info directly
+ * using the exact repo ID (e.g., "unsloth/medgemma-4b-it-GGUF").
+ */
+export async function getHfModelSummary(modelId: HfModelId): Promise<HfModelSummary> {
+  return getTransport().getHfModelSummary(modelId);
 }
 
 /**

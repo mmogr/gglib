@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { browseHfModels } from "../../../services/clients/huggingface";
+import { browseHfModels, getHfModelSummary } from "../../../services/clients/huggingface";
 import {
   HfModelSummary,
   HfSearchRequest,
@@ -207,36 +207,32 @@ export function useHuggingFaceSearch(
     [showToast]
   );
 
-  // Handle view model for exact repo pattern - fetch and select
+  // Handle view model for exact repo pattern - fetch directly by ID
   const handleViewRepo = useCallback(
     async (repo: string) => {
       try {
         setLoading(true);
-        // Search for the exact repo to get model summary
-        const request: HfSearchRequest = {
-          query: repo,
-          min_params_b: null,
-          max_params_b: null,
-          page: 0,
-          limit: 10,
-          sort_by: "downloads",
-          sort_ascending: false,
-        };
-        const response = await browseHfModels(request);
-        // Find exact match
-        const exactMatch = response.models.find((m) => m.id === repo);
-        if (exactMatch) {
-          onSelectModel?.(exactMatch);
-          setSearchQuery(""); // Clear search after selecting
-        } else {
-          setSearchError(`Model "${repo}" not found on HuggingFace`);
-          showToast(`Model "${repo}" not found`, "error");
-        }
+        // Fetch model directly by repo ID (not search)
+        const model = await getHfModelSummary(repo);
+        onSelectModel?.(model);
+        setSearchQuery(""); // Clear search after selecting
       } catch (err) {
-        const message =
+        // Extract user-friendly error message
+        const rawMessage =
           err instanceof Error ? err.message : "Failed to fetch model";
-        setSearchError(message);
-        showToast(message, "error");
+        
+        // Check for specific error cases
+        let userMessage: string;
+        if (rawMessage.includes("no GGUF files")) {
+          userMessage = `Model "${repo}" exists but contains no GGUF files`;
+        } else if (rawMessage.includes("not found") || rawMessage.includes("404")) {
+          userMessage = `Model "${repo}" not found on HuggingFace`;
+        } else {
+          userMessage = `Failed to load model: ${rawMessage}`;
+        }
+        
+        setSearchError(userMessage);
+        showToast(userMessage, "error");
       } finally {
         setLoading(false);
       }
