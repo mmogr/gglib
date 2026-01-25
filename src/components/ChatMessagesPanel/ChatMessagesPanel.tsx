@@ -202,8 +202,12 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
   // Toggle deep research mode
   const toggleDeepResearch = useCallback(() => {
-    setIsDeepResearchEnabled((prev) => !prev);
-  }, []);
+    console.log('[DeepResearch] Toggle clicked! Current state:', isDeepResearchEnabled);
+    setIsDeepResearchEnabled((prev) => {
+      console.log('[DeepResearch] State changing from', prev, 'to', !prev);
+      return !prev;
+    });
+  }, [isDeepResearchEnabled]);
 
   // Stop deep research
   const stopDeepResearch = useCallback(() => {
@@ -213,7 +217,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
   // Handle deep research submission
   const handleDeepResearchSubmit = useCallback(async (query: string) => {
+    console.log('[DeepResearch] handleDeepResearchSubmit called', { query, activeConversationId, hasThreadRuntime: !!threadRuntime });
+    
     if (!activeConversationId || !threadRuntime) {
+      console.error('[DeepResearch] Missing activeConversationId or threadRuntime');
       showToast('No active conversation', 'error');
       return;
     }
@@ -297,7 +304,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     setIsDeepResearchEnabled(false);
     deepResearch.resetState();
     researchMessageIdRef.current = null;
-  }, [activeConversationId, deepResearch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId]); // Only reset when conversation changes, not on every deepResearch change
 
   const [savingSystemPrompt, setSavingSystemPrompt] = useState(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -677,6 +685,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       disabled={!isServerConnected || deepResearch.isRunning}
                     />
                     <div className="chat-composer-actions">
+                      {/* Debug: log at render time */}
+                      {console.log('[DeepResearch] Render - isDeepResearchEnabled:', isDeepResearchEnabled)}
                       <DeepResearchToggle
                         isEnabled={isDeepResearchEnabled}
                         onToggle={toggleDeepResearch}
@@ -707,10 +717,18 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                           size="sm"
                           disabled={!isServerConnected || deepResearch.isRunning}
                           onClick={() => {
+                            console.log('[DeepResearch] Research button clicked!', { isDeepResearchEnabled, isServerConnected, isRunning: deepResearch.isRunning });
                             const composer = composerRuntime;
-                            if (!composer) return;
+                            if (!composer) {
+                              console.error('[DeepResearch] No composer runtime!');
+                              return;
+                            }
                             const text = composer.getState().text.trim();
-                            if (!text) return;
+                            console.log('[DeepResearch] Query text:', text);
+                            if (!text) {
+                              console.warn('[DeepResearch] Empty text, aborting');
+                              return;
+                            }
                             composer.setText('');
                             handleDeepResearchSubmit(text);
                           }}
