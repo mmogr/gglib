@@ -113,7 +113,8 @@ impl<'a> ExecutableSearcher<'a> {
     }
 
     #[cfg(not(target_os = "macos"))]
-    pub fn search_in_etc_paths(&self, _command: &str) -> Vec<Attempt> {
+    pub const fn search_in_etc_paths(&self, _command: &str) -> Vec<Attempt> {
+        let _ = self; // Silence unused self warning - needed for API consistency with macOS impl
         Vec::new() // No-op on non-macOS
     }
 
@@ -216,7 +217,7 @@ impl<'a> ExecutableSearcher<'a> {
                 // Fall back to scanning for latest version
                 if let Ok(versions_dir) = std::fs::read_dir(nvm_dir.join("versions/node")) {
                     let mut versions: Vec<String> = versions_dir
-                        .filter_map(|e| e.ok())
+                        .filter_map(std::result::Result::ok)
                         .filter_map(|e| e.file_name().into_string().ok())
                         .collect();
                     versions.sort();
@@ -339,12 +340,12 @@ impl<'a> ExecutableSearcher<'a> {
 
     /// Get platform-specific PATH separator.
     #[cfg(unix)]
-    fn path_separator() -> char {
+    const fn path_separator() -> char {
         ':'
     }
 
     #[cfg(windows)]
-    fn path_separator() -> char {
+    const fn path_separator() -> char {
         ';'
     }
 }

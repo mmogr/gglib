@@ -79,7 +79,7 @@ To build the application for your platform:
 npm run tauri:build
 ```
 
-The output binary will be located in `src-tauri/target/release/bundle/`.
+The output binary will be located in `target/release/bundle/`.
 
 ## Key Features
 

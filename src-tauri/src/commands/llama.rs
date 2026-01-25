@@ -3,8 +3,8 @@
 use crate::app::events::{emit_or_log, names};
 use gglib_download::ProgressThrottle;
 use gglib_runtime::llama::{
-    check_llama_installed, check_prebuilt_availability, download_prebuilt_binaries_with_boxed_callback,
-    PrebuiltAvailability,
+    PrebuiltAvailability, check_llama_installed, check_prebuilt_availability,
+    download_prebuilt_binaries_with_boxed_callback,
 };
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
@@ -69,9 +69,10 @@ pub async fn install_llama(app: AppHandle) -> Result<String, String> {
                 Box::new(move |downloaded: u64, total: u64| {
                     // Rate-limit progress updates
                     if let Ok(mut t) = throttle.lock()
-                        && !t.should_emit() {
-                            return;
-                        }
+                        && !t.should_emit()
+                    {
+                        return;
+                    }
                     let elapsed = start_time.elapsed().as_secs_f64();
                     let percentage = if total > 0 {
                         (downloaded as f64 / total as f64) * 100.0

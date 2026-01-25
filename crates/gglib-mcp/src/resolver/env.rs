@@ -19,6 +19,7 @@ impl EnvProvider for SystemEnv {
 
 /// Test/mock environment provider with predefined variables.
 #[cfg(test)]
+#[derive(Default)]
 pub struct MockEnv {
     vars: std::collections::HashMap<String, OsString>,
 }
@@ -26,11 +27,10 @@ pub struct MockEnv {
 #[cfg(test)]
 impl MockEnv {
     pub fn new() -> Self {
-        Self {
-            vars: std::collections::HashMap::new(),
-        }
+        Self::default()
     }
 
+    #[must_use]
     pub fn with_var(mut self, key: impl Into<String>, value: impl Into<OsString>) -> Self {
         self.vars.insert(key.into(), value.into());
         self

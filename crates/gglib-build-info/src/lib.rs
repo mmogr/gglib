@@ -2,7 +2,7 @@
 //!
 //! All values are compile-time constants, populated by this crate's `build.rs`.
 
-/// The SemVer version of the build (from Cargo).
+/// The `SemVer` version of the build (from Cargo).
 pub const SEMVER: &str = env!("CARGO_PKG_VERSION");
 
 /// The git SHA emitted by the build script.
@@ -33,7 +33,7 @@ pub const LONG_VERSION: &str = if HAS_GIT_SHA {
 
 /// The short version string used in the Tauri/macOS About metadata.
 ///
-/// Historically this is the commit hash; when unavailable it falls back to SemVer.
+/// Historically this is the commit hash; when unavailable it falls back to `SemVer`.
 pub const ABOUT_SHORT_VERSION: &str = if HAS_GIT_SHA { GIT_SHA_SHORT } else { SEMVER };
 
 const fn is_short_hex(value: &str) -> bool {

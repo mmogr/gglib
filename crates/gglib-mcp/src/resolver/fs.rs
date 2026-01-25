@@ -51,6 +51,7 @@ impl FsProvider for SystemFs {
 
 /// Test/mock filesystem provider with predefined responses.
 #[cfg(test)]
+#[derive(Default)]
 pub struct MockFs {
     executables: std::collections::HashSet<std::path::PathBuf>,
     non_executables: std::collections::HashSet<std::path::PathBuf>,
@@ -59,17 +60,16 @@ pub struct MockFs {
 #[cfg(test)]
 impl MockFs {
     pub fn new() -> Self {
-        Self {
-            executables: std::collections::HashSet::new(),
-            non_executables: std::collections::HashSet::new(),
-        }
+        Self::default()
     }
 
+    #[must_use]
     pub fn with_executable(mut self, path: impl Into<std::path::PathBuf>) -> Self {
         self.executables.insert(path.into());
         self
     }
 
+    #[must_use]
     pub fn with_non_executable(mut self, path: impl Into<std::path::PathBuf>) -> Self {
         self.non_executables.insert(path.into());
         self

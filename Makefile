@@ -65,9 +65,12 @@ help:
 	@echo "  make run-web              - Run web server"
 
 # Build & Install
+# Uses pre-built binary from target/release/ (built by build-tauri or cargo build)
 install:
 	@echo "Installing gglib..."
-	$(CARGO) install --path crates/gglib-cli
+	@mkdir -p "$$HOME/.cargo/bin"
+	@cp target/release/gglib "$$HOME/.cargo/bin/gglib"
+	@echo "✓ Installed gglib to ~/.cargo/bin/gglib"
 
 uninstall:
 	@echo "⚠️  WARNING: This will uninstall gglib and remove:"
@@ -261,26 +264,33 @@ run-web:
 	$(CARGO) run -p gglib-cli -- web $(if $(PORT),--port $(PORT),)
 
 # Build Tauri desktop app (production)
+# Uses "Manual Build + Bundle" strategy to avoid double compilation:
+# 1. Build frontend (vite)
+# 2. Build both CLI and Tauri app in a single cargo invocation (shared deps compile once)
+# 3. Bundle the already-built binary into platform installers
 build-tauri:
 	@echo "Building Tauri desktop app..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
-	@rm -f src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null || true
+	@rm -f target/release/bundle/dmg/*.dmg 2>/dev/null || true
 	npm install
+	# Step A: Build frontend
+	npm run build:tauri
+	# Step B: Unified cargo build - both CLI and Tauri app share dependency compilation
+	$(CARGO) build --release -p gglib-cli -p gglib-app
+	# Step C: Bundle the already-built binary into platform installers
 	# On Linux: use --bundles deb,rpm to avoid AppImage issues on Arch.
 	# linuxdeploy's embedded strip fails on Arch due to RELR relocations (linuxdeploy#272).
 	# NO_STRIP=1 is a linuxdeploy-supported knob that avoids the failure by skipping stripping.
 	# On macOS: use defaults to produce .app bundle.
-	# Source Rust environment for npm subshell (needed for tauri to find cargo)
 	@if [ "$(UNAME_S)" = "Linux" ]; then \
-		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
-		NO_STRIP=1 npm run tauri:build -- --bundles deb,rpm; \
+		NO_STRIP=1 npm run tauri:bundle -- --bundles deb,rpm; \
 	else \
-		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
-		npm run tauri:build; \
+		npm run tauri:bundle; \
 	fi
-	@echo "✓ Tauri app built to src-tauri/target/release/gglib-gui"
+	@echo "✓ Tauri app built to target/release/gglib-app"
 
 # Full setup from scratch
+# Note: build-tauri builds both gglib-app and gglib-cli, install just copies the binary
 setup: check-deps build-gui build-tauri install
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@$(CARGO) run -p gglib-cli -- config models-dir prompt

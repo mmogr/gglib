@@ -39,10 +39,7 @@ pub struct BackgroundTasks {
 
 impl AppState {
     /// Create a new application state.
-    pub fn new(
-        gui: Arc<GuiBackend>,
-        embedded_api: EmbeddedApiInfo,
-    ) -> Self {
+    pub fn new(gui: Arc<GuiBackend>, embedded_api: EmbeddedApiInfo) -> Self {
         Self {
             gui,
             embedded_api,

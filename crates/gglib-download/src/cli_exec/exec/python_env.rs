@@ -548,12 +548,9 @@ mod tests {
     #[tokio::test]
     async fn test_environment_isolation_removes_polluted_vars() {
         // Find a working Python interpreter
-        let python = match which::which("python3").or_else(|_| which::which("python")) {
-            Ok(p) => p,
-            Err(_) => {
-                eprintln!("Python not available for test, skipping environment isolation test");
-                return;
-            }
+        let Ok(python) = which::which("python3").or_else(|_| which::which("python")) else {
+            eprintln!("Python not available for test, skipping environment isolation test");
+            return;
         };
 
         // Create a command with a "dirty" environment simulating a conda/virtualenv shell

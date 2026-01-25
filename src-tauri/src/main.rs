@@ -6,8 +6,8 @@ mod commands;
 mod lifecycle;
 mod menu;
 
-use app::events::{emit_or_log, names};
 use app::AppState;
+use app::events::{emit_or_log, names};
 use dotenvy::dotenv;
 use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
 use gglib_download::cli_exec::preflight_fast_helper;
@@ -16,11 +16,11 @@ use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
 #[cfg(target_os = "macos")]
 use menu::state_sync::sync_menu_state_or_log;
 use std::sync::Arc;
-#[cfg(not(target_os = "macos"))]
-use tauri::menu::Menu;
 use tauri::Manager;
 #[cfg(not(target_os = "macos"))]
 use tauri::Wry;
+#[cfg(not(target_os = "macos"))]
+use tauri::menu::Menu;
 use tracing::{debug, error, info};
 
 fn main() {
@@ -42,7 +42,7 @@ fn main() {
             // Bootstrap inside setup() where we have AppHandle for real event emission
             let config = TauriConfig::with_defaults()
                 .expect("Failed to create Tauri config");
-            
+
             let app_handle = app.handle().clone();
             let ctx = tauri::async_runtime::block_on(async {
                 bootstrap(config, app_handle).await
@@ -67,7 +67,7 @@ fn main() {
             let config = EmbeddedServerConfig {
                 cors_origins: gglib_axum::embedded::default_embedded_cors_origins(),
             };
-            
+
             let (embedded_api, server_handle) = tauri::async_runtime::block_on(async {
                 start_embedded_server(axum_ctx, config)
                     .await
@@ -76,7 +76,7 @@ fn main() {
 
             // Create and manage app state
             let app_state = AppState::new(gui.clone(), embedded_api);
-            
+
             // Store the embedded server handle for cleanup
             {
                 let tasks = app_state.background_tasks.clone();
@@ -84,7 +84,7 @@ fn main() {
                     tasks.write().await.embedded_server = Some(tauri::async_runtime::JoinHandle::Tokio(server_handle));
                 });
             }
-            
+
             app.manage(app_state);
 
             // Download system init: preflight the Python fast downloader helper.
@@ -126,12 +126,12 @@ fn main() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 info!("Window close requested - performing graceful shutdown");
                 api.prevent_close();
-                
+
                 // Hide window immediately so user sees instant feedback
                 let _ = window.hide();
-                
+
                 let app_handle = window.app_handle().clone();
-                
+
                 tauri::async_runtime::spawn(async move {
                     let state: tauri::State<AppState> = app_handle.state();
                     lifecycle::perform_shutdown(&state).await;
@@ -144,7 +144,8 @@ fn main() {
     #[cfg(target_os = "macos")]
     let builder = builder.on_menu_event(menu::handlers::handle_menu_event);
 
-    builder.invoke_handler(tauri::generate_handler![
+    builder
+        .invoke_handler(tauri::generate_handler![
             // API discovery
             commands::util::get_embedded_api_info,
             // TRANSPORT_EXCEPTION: Desktop log snapshot (web uses HTTP)
@@ -166,14 +167,14 @@ fn main() {
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     info!("App exit requested (Cmd+Q) - performing graceful shutdown");
                     api.prevent_exit();
-                    
+
                     // Hide all windows immediately
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.hide();
                     }
-                    
+
                     let handle_for_exit = app_handle.clone();
-                    
+
                     tauri::async_runtime::spawn(async move {
                         let state: tauri::State<AppState> = handle_for_exit.state();
                         lifecycle::perform_shutdown(&state).await;
@@ -257,7 +258,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle().clone();
     let state: tauri::State<AppState> = app.state();
     let tasks = state.background_tasks.clone();
-    
+
     let log_task = tauri::async_runtime::spawn(async move {
         let log_manager = get_log_manager();
         let mut receiver = log_manager.subscribe();
@@ -277,7 +278,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     });
-    
+
     // Store the log task handle for cleanup
     tasks.blocking_write().log_emitter = Some(log_task);
 
@@ -296,5 +297,3 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-

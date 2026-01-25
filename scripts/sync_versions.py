@@ -3,11 +3,11 @@
 Sync version from workspace Cargo.toml to package files that don't use workspace inheritance.
 
 The workspace Cargo.toml [workspace.package] version is the source of truth.
-Workspace crates now use `version.workspace = true`, so this script only syncs to:
+Workspace crates (including src-tauri) use `version.workspace = true`, so this script only syncs to:
 - package.json (npm/frontend)
 - src-tauri/tauri.conf.json (Tauri app metadata)
 
-Note: src-tauri/Cargo.toml now uses workspace inheritance too, so it's skipped.
+All Cargo.toml files are checked but skipped if they use workspace inheritance.
 """
 
 import re
@@ -94,14 +94,10 @@ def main():
     print(f"Syncing version {version} to package files...")
     
     # Check workspace crates (should all use workspace inheritance now)
-    crate_tomls = glob.glob('crates/*/Cargo.toml')
+    crate_tomls = glob.glob('crates/*/Cargo.toml') + ['src-tauri/Cargo.toml']
     print("\nWorkspace crates:")
     for toml in sorted(crate_tomls):
         update_cargo_toml(toml, version)
-    
-    # Check src-tauri (excluded from workspace, needs manual sync)
-    print("\nTauri crate (excluded from workspace):")
-    update_cargo_toml('src-tauri/Cargo.toml', version)
     
     # Sync JSON files (these don't support workspace inheritance)
     print("\nJSON files:")
