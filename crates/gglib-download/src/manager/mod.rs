@@ -101,10 +101,6 @@ struct CompletionAggregate {
     cancelled_count: u32,
     /// Result of the last attempt.
     last_result: CompletionKind,
-    /// Timestamp of first attempt (milliseconds since epoch).
-    /// Kept for potential future use (e.g., sorting by first vs last).
-    #[allow(dead_code)]
-    first_attempt_ms: u64,
     /// Timestamp of last attempt (milliseconds since epoch).
     last_attempt_ms: u64,
 }
@@ -131,7 +127,6 @@ impl CompletionAggregate {
             failure_count,
             cancelled_count,
             last_result: kind,
-            first_attempt_ms: timestamp_ms,
             last_attempt_ms: timestamp_ms,
         }
     }
@@ -867,13 +862,21 @@ impl DownloadManagerImpl {
     }
 
     /// Emit a queue snapshot event.
-    #[allow(clippy::cognitive_complexity)]
     async fn emit_queue_snapshot(&self) {
         let Ok(snapshot) = self.get_queue_snapshot().await else {
             return;
         };
 
-        // Detect queue drain transitions
+        // Handle queue drain state transitions
+        let is_drained = self.check_queue_drained(&snapshot).await;
+        self.handle_drain_transitions(is_drained).await;
+
+        // Emit snapshot event
+        self.emit_snapshot_event(&snapshot);
+    }
+
+    /// Check if the queue is fully drained (no pending, no active, no open shard groups).
+    async fn check_queue_drained(&self, snapshot: &QueueSnapshot) -> bool {
         let has_open_groups = self.shard_tracker.lock().await.has_open_groups();
         let is_drained =
             snapshot.pending_count == 0 && snapshot.active_count == 0 && !has_open_groups;
@@ -887,7 +890,11 @@ impl DownloadManagerImpl {
             "Queue drain check"
         );
 
-        // Check for transitions
+        is_drained
+    }
+
+    /// Handle state transitions between drained and busy queue states.
+    async fn handle_drain_transitions(&self, is_drained: bool) {
         let mut prev = self.prev_is_drained.lock().await;
 
         if *prev && !is_drained {
@@ -909,10 +916,11 @@ impl DownloadManagerImpl {
             }
         }
 
-        // Update prev_is_drained for next check
         *prev = is_drained;
-        drop(prev); // Explicit drop before any other async operations
+    }
 
+    /// Emit the `QueueSnapshot` event to subscribers.
+    fn emit_snapshot_event(&self, snapshot: &QueueSnapshot) {
         let items: Vec<DownloadSummary> = snapshot
             .items
             .iter()

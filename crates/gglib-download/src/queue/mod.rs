@@ -15,9 +15,6 @@
 //! - Position 2+ = waiting in queue
 //! - Failed items have position 0 (not in active queue)
 
-// Queue positions are always well under u32::MAX in practice
-#![allow(clippy::cast_possible_truncation)]
-
 mod shard_group;
 mod types;
 
@@ -114,6 +111,7 @@ impl DownloadQueue {
     /// Queue a sharded download (multiple files with shared `group_id`).
     ///
     /// Returns the 1-based queue position of the first shard.
+    #[allow(clippy::cast_possible_truncation)] // Queue positions won't exceed u32::MAX in practice
     pub fn queue_sharded(
         &mut self,
         id: &DownloadId,
@@ -174,6 +172,7 @@ impl DownloadQueue {
     /// Reorder a queued item (or shard group) to a new position.
     ///
     /// Returns the actual 1-based position where the item(s) were placed.
+    #[allow(clippy::cast_possible_truncation)] // Queue positions won't exceed u32::MAX in practice
     pub fn reorder(
         &mut self,
         id: &DownloadId,
@@ -248,6 +247,7 @@ impl DownloadQueue {
     /// Get a snapshot of the current queue state for API responses.
     ///
     /// The `current_item` is the download currently being processed (if any).
+    #[allow(clippy::cast_possible_truncation)] // Queue item counts won't exceed u32::MAX in practice
     pub fn snapshot(
         &self,
         current_item: Option<gglib_core::download::QueuedDownload>,
@@ -294,6 +294,7 @@ impl DownloadQueue {
     /// Retry a failed download by moving it back to the pending queue.
     ///
     /// Returns the 1-based position in the queue on success.
+    #[allow(clippy::cast_possible_truncation)] // Queue positions won't exceed u32::MAX in practice
     pub fn retry_failed(
         &mut self,
         id: &DownloadId,
@@ -371,7 +372,7 @@ impl DownloadQueue {
         self.failed.retain(|item| &item.item.id != id);
     }
 
-    #[allow(clippy::unused_self)]
+    #[allow(clippy::unused_self, clippy::cast_possible_truncation)] // Shard counts won't exceed u32::MAX
     fn create_shard_items(
         &self,
         id: &DownloadId,

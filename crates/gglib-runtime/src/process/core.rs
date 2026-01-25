@@ -8,7 +8,7 @@
 
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
-use super::types::{RunningProcess, ServerInfo};
+use super::types::{RunningProcess, ServerInfo, SpawnConfig};
 use crate::pidfile::{delete_pidfile, write_pidfile};
 use anyhow::{Result, anyhow};
 use std::collections::HashMap;
@@ -46,34 +46,32 @@ impl GuiProcessCore {
     /// Spawn a new llama-server process
     ///
     /// Returns the port number for the spawned process.
-    #[allow(clippy::too_many_arguments)]
-    pub async fn spawn(
-        &mut self,
-        model_id: u32,
-        model_name: String,
-        model_path: &Path,
-        context_size: Option<u64>,
-        port: Option<u16>,
-        jinja: bool,
-        reasoning_format: Option<String>,
-    ) -> Result<u16> {
-        if self.processes.contains_key(&model_id) {
-            return Err(anyhow!("Model {} is already running", model_id));
+    pub async fn spawn(&mut self, config: SpawnConfig) -> Result<u16> {
+        if self.processes.contains_key(&config.model_id) {
+            return Err(anyhow!("Model {} is already running", config.model_id));
         }
 
-        if !model_path.exists() {
-            return Err(anyhow!("Model file not found: {}", model_path.display()));
+        if !config.model_path.exists() {
+            return Err(anyhow!(
+                "Model file not found: {}",
+                config.model_path.display()
+            ));
         }
 
-        let port = self.resolve_port(port)?;
-        let mut child =
-            self.build_and_spawn_command(model_path, port, context_size, jinja, reasoning_format)?;
+        let port = self.resolve_port(config.port)?;
+        let mut child = self.build_and_spawn_command(
+            &config.model_path,
+            port,
+            config.context_size,
+            config.jinja,
+            config.reasoning_format,
+        )?;
         let pid = child
             .id()
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;
 
         // Write PID file (u32 model_id cast to i64 for pidfile compatibility)
-        if let Err(e) = write_pidfile(model_id as i64, pid, port) {
+        if let Err(e) = write_pidfile(config.model_id as i64, pid, port) {
             debug!("Failed to write PID file: {}", e);
         }
 
@@ -84,9 +82,16 @@ impl GuiProcessCore {
             .unwrap()
             .as_secs();
 
-        let info = ServerInfo::new(model_id, model_name, pid, port, now, context_size);
+        let info = ServerInfo::new(
+            config.model_id,
+            config.model_name,
+            pid,
+            port,
+            now,
+            config.context_size,
+        );
         let running = RunningProcess::new(info, child);
-        self.processes.insert(model_id, running);
+        self.processes.insert(config.model_id, running);
 
         Ok(port)
     }
