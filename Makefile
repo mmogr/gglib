@@ -65,9 +65,12 @@ help:
 	@echo "  make run-web              - Run web server"
 
 # Build & Install
+# Uses pre-built binary from target/release/ (built by build-tauri or cargo build)
 install:
 	@echo "Installing gglib..."
-	$(CARGO) install --path crates/gglib-cli --target-dir target --locked --force
+	@mkdir -p "$$HOME/.cargo/bin"
+	@cp target/release/gglib "$$HOME/.cargo/bin/gglib"
+	@echo "✓ Installed gglib to ~/.cargo/bin/gglib"
 
 uninstall:
 	@echo "⚠️  WARNING: This will uninstall gglib and remove:"
@@ -261,11 +264,14 @@ run-web:
 	$(CARGO) run -p gglib-cli -- web $(if $(PORT),--port $(PORT),)
 
 # Build Tauri desktop app (production)
+# Also builds gglib-cli to share compilation of common dependencies
 build-tauri:
 	@echo "Building Tauri desktop app..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
 	@rm -f target/release/bundle/dmg/*.dmg 2>/dev/null || true
 	npm install
+	# Build CLI first to share dependency compilation with Tauri
+	$(CARGO) build --release -p gglib-cli
 	# On Linux: use --bundles deb,rpm to avoid AppImage issues on Arch.
 	# linuxdeploy's embedded strip fails on Arch due to RELR relocations (linuxdeploy#272).
 	# NO_STRIP=1 is a linuxdeploy-supported knob that avoids the failure by skipping stripping.
@@ -281,6 +287,7 @@ build-tauri:
 	@echo "✓ Tauri app built to target/release/gglib-app"
 
 # Full setup from scratch
+# Note: build-tauri builds both gglib-app and gglib-cli, install just copies the binary
 setup: check-deps build-gui build-tauri install
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@$(CARGO) run -p gglib-cli -- config models-dir prompt
