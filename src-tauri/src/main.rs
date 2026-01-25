@@ -42,7 +42,7 @@ fn main() {
             // Bootstrap inside setup() where we have AppHandle for real event emission
             let config = TauriConfig::with_defaults()
                 .expect("Failed to create Tauri config");
-            
+
             let app_handle = app.handle().clone();
             let ctx = tauri::async_runtime::block_on(async {
                 bootstrap(config, app_handle).await
@@ -67,7 +67,7 @@ fn main() {
             let config = EmbeddedServerConfig {
                 cors_origins: gglib_axum::embedded::default_embedded_cors_origins(),
             };
-            
+
             let (embedded_api, server_handle) = tauri::async_runtime::block_on(async {
                 start_embedded_server(axum_ctx, config)
                     .await
@@ -76,7 +76,7 @@ fn main() {
 
             // Create and manage app state
             let app_state = AppState::new(gui.clone(), embedded_api);
-            
+
             // Store the embedded server handle for cleanup
             {
                 let tasks = app_state.background_tasks.clone();
@@ -84,7 +84,7 @@ fn main() {
                     tasks.write().await.embedded_server = Some(tauri::async_runtime::JoinHandle::Tokio(server_handle));
                 });
             }
-            
+
             app.manage(app_state);
 
             // Download system init: preflight the Python fast downloader helper.
@@ -126,12 +126,12 @@ fn main() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 info!("Window close requested - performing graceful shutdown");
                 api.prevent_close();
-                
+
                 // Hide window immediately so user sees instant feedback
                 let _ = window.hide();
-                
+
                 let app_handle = window.app_handle().clone();
-                
+
                 tauri::async_runtime::spawn(async move {
                     let state: tauri::State<AppState> = app_handle.state();
                     lifecycle::perform_shutdown(&state).await;

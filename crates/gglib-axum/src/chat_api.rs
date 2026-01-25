@@ -370,7 +370,7 @@ pub async fn proxy_chat(
 
     let capabilities = if let Some(server) = server {
         // Found the server, fetch the model to get its capabilities
-        match state.core.models().get_by_id(server.model_id as i64).await {
+        match state.core.models().get_by_id(server.model_id).await {
             Ok(Some(model)) => {
                 tracing::debug!(
                     port = request.port,
@@ -439,7 +439,7 @@ pub async fn proxy_chat(
         .map(|m| gglib_core::ChatMessage {
             role: m.role,
             content: m.content,
-            tool_calls: m.tool_calls.map(|v| serde_json::Value::Array(v)),
+            tool_calls: m.tool_calls.map(serde_json::Value::Array),
         })
         .collect();
 

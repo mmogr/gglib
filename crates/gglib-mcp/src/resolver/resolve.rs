@@ -56,8 +56,7 @@ pub fn resolve_executable_with_deps(
         // Absolute path failed - try falling back to basename
         if let Some(basename) = command_path.file_name().and_then(|n| n.to_str()) {
             warnings.push(format!(
-                "Absolute path '{}' failed ({}), falling back to basename '{}'",
-                command, outcome, basename
+                "Absolute path '{command}' failed ({outcome}), falling back to basename '{basename}'"
             ));
             return resolve_relative_command(
                 basename,

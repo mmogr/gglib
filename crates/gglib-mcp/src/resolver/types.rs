@@ -42,12 +42,12 @@ pub enum AttemptOutcome {
 impl std::fmt::Display for AttemptOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AttemptOutcome::Ok => write!(f, "OK"),
-            AttemptOutcome::NotFound => write!(f, "not found"),
-            AttemptOutcome::NotAFile => write!(f, "not a file"),
-            AttemptOutcome::NotExecutable => write!(f, "not executable"),
-            AttemptOutcome::PermissionDenied => write!(f, "permission denied"),
-            AttemptOutcome::IoError(msg) => write!(f, "I/O error: {msg}"),
+            Self::Ok => write!(f, "OK"),
+            Self::NotFound => write!(f, "not found"),
+            Self::NotAFile => write!(f, "not a file"),
+            Self::NotExecutable => write!(f, "not executable"),
+            Self::PermissionDenied => write!(f, "permission denied"),
+            Self::IoError(msg) => write!(f, "I/O error: {msg}"),
         }
     }
 }
@@ -63,7 +63,7 @@ pub enum ResolveError {
 }
 
 impl ResolveError {
-    /// Create a NotResolved error with formatted attempt details.
+    /// Create a `NotResolved` error with formatted attempt details.
     pub fn not_resolved(command: impl Into<String>, attempts: &[Attempt]) -> Self {
         let command = command.into();
         let attempts_str = attempts

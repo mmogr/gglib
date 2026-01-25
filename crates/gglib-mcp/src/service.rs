@@ -159,8 +159,9 @@ impl McpService {
     /// - On success: updates `resolved_path_cache` in the database
     /// - On failure: preserves old cache, updates `is_valid`/`last_error`
     ///
-    /// Returns a ResolutionStatus with success flag and diagnostic information.
+    /// Returns a `ResolutionStatus` with success flag and diagnostic information.
     /// Resolution failure is not an error - it returns Ok(ResolutionStatus { success: false, ... })
+    #[allow(clippy::too_many_lines)]
     pub async fn ensure_resolved(
         &self,
         server_id: i64,
@@ -301,7 +302,7 @@ impl McpService {
                             let parts: Vec<&str> =
                                 line.trim().trim_start_matches("✗").splitn(2, ':').collect();
                             ResolutionAttempt {
-                                candidate: parts.get(0).unwrap_or(&"").trim().to_string(),
+                                candidate: parts.first().unwrap_or(&"").trim().to_string(),
                                 outcome: parts.get(1).unwrap_or(&"unknown").trim().to_string(),
                             }
                         })
@@ -311,9 +312,9 @@ impl McpService {
                 };
 
                 let suggested_fix = if cfg!(windows) {
-                    Some(format!("where {}", command))
+                    Some(format!("where {command}"))
                 } else {
-                    Some(format!("command -v {}", command))
+                    Some(format!("command -v {command}"))
                 };
 
                 Ok(ResolutionStatus {

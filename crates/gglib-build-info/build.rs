@@ -14,7 +14,7 @@ fn main() {
 
     if let Some(override_sha) = env::var("GGLIB_BUILD_SHA_SHORT")
         .ok()
-        .and_then(normalize_sha_short)
+        .and_then(|s| normalize_sha_short(&s))
     {
         emit_vergen_fallbacks(Some(&override_sha));
         return;
@@ -60,7 +60,7 @@ fn emit_vergen_fallbacks(sha_short: Option<&str>) {
     println!("cargo:rustc-env=VERGEN_GIT_DIRTY=false");
 }
 
-fn normalize_sha_short(raw: String) -> Option<String> {
+fn normalize_sha_short(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return None;

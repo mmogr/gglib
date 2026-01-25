@@ -162,11 +162,11 @@ mod tests {
 
     #[test]
     fn test_infer_openai_style() {
-        let template = r#"
+        let template = r"
             {% for message in messages %}
                 {{ message.role }}: {{ message.content }}
             {% endfor %}
-        "#;
+        ";
         let caps = infer_from_chat_template(Some(template));
         assert!(caps.supports_system_role());
         assert!(!caps.requires_strict_turns());
@@ -174,14 +174,14 @@ mod tests {
 
     #[test]
     fn test_infer_mistral_style() {
-        let template = r#"
+        let template = r"
             {% if message.role == 'system' %}
                 {{ raise_exception('Only user, assistant and tool roles are supported, got system.') }}
             {% endif %}
             {% if (message['role'] == 'user') != (ns.index % 2 == 0) %}
                 {{ raise_exception('conversation roles must alternate user and assistant') }}
             {% endif %}
-        "#;
+        ";
         let caps = infer_from_chat_template(Some(template));
         assert!(!caps.supports_system_role());
         assert!(caps.requires_strict_turns());

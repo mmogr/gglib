@@ -32,6 +32,7 @@ use gglib_runtime::llama::{ContextResolution, LlamaCommandBuilder, resolve_conte
 /// # Returns
 ///
 /// Returns `Result<()>` indicating success or failure.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     ctx: &CliContext,
     question: String,
