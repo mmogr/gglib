@@ -67,7 +67,7 @@ help:
 # Build & Install
 install:
 	@echo "Installing gglib..."
-	$(CARGO) install --path crates/gglib-cli
+	$(CARGO) install --path crates/gglib-cli --target-dir target --force
 
 uninstall:
 	@echo "⚠️  WARNING: This will uninstall gglib and remove:"
