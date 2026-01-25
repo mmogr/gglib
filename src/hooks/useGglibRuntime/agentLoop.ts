@@ -327,7 +327,7 @@ export const FORMAT_REMINDER = `You must respond in ONE of these ways:
 {"type":"final","result":"...","checks":["..."]}`;
 
 /** System prompt for tool-enabled models (agent/reasoning with Jinja) */
-export const TOOL_ENABLED_SYSTEM_PROMPT = `You are a coding assistant with tools.
+export const TOOL_ENABLED_SYSTEM_PROMPT = `You are an assistant with tools.
 
 Rules:
 - If you need information or actions, use tool_calls. Do not guess.
@@ -338,7 +338,7 @@ Rules:
 Do not output chain-of-thought.`;
 
 /** System prompt for non-tool models (plain chat) */
-export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful coding assistant.';
+export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful assistant.';
 
 /**
  * Get appropriate system prompt based on tool availability.
