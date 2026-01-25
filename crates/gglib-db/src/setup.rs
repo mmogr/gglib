@@ -174,6 +174,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             conversation_id INTEGER NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant')),
             content TEXT NOT NULL,
+            metadata TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
         )
@@ -188,6 +189,12 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // Migration: Add metadata column for deep research state, tool usage, etc.
+    let _ = sqlx::query(r#"ALTER TABLE chat_messages ADD COLUMN metadata TEXT"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
 
     // Create MCP servers table
     sqlx::query(

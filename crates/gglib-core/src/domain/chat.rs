@@ -24,6 +24,9 @@ pub struct Message {
     pub role: MessageRole,
     pub content: String,
     pub created_at: String,
+    /// Optional JSON metadata for deep research state, tool usage, etc.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// The role of a message sender.
@@ -78,6 +81,8 @@ pub struct NewMessage {
     pub conversation_id: i64,
     pub role: MessageRole,
     pub content: String,
+    /// Optional JSON metadata for deep research state, tool usage, etc.
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Data for updating an existing conversation.
