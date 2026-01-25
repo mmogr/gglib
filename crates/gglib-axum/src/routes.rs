@@ -138,7 +138,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/stop", post(handlers::proxy::stop))
         // Hugging Face API (strip /api prefix since we're nested under /api)
         .route("/hf/search", post(handlers::hf::search))
-        .route("/hf/model/*model_id", get(handlers::hf::model_summary))
+        .route("/hf/model/{*model_id}", get(handlers::hf::model_summary))
         .route(
             "/hf/quantizations/{model_id}",
             get(handlers::hf::quantizations),
