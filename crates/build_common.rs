@@ -19,9 +19,8 @@ fn process_readme_for_rustdoc(crate_dir: &str) {
     println!("cargo:rerun-if-changed=../../Cargo.toml");
 
     let readme_path = Path::new(crate_dir).join("README.md");
-    let content = match fs::read_to_string(&readme_path) {
-        Ok(c) => c,
-        Err(_) => return, // No README, nothing to process
+    let Ok(content) = fs::read_to_string(&readme_path) else {
+        return; // No README, nothing to process
     };
 
     // Get repository URL from workspace Cargo.toml for cross-doc links
@@ -34,7 +33,7 @@ fn process_readme_for_rustdoc(crate_dir: &str) {
 
     // Transform ../../README.md links to repo URL (agnostic - reads from Cargo.toml)
     if let Some(url) = &repo_url {
-        rustdoc_content = rustdoc_content.replace("](../../README.md", &format!("]({}", url));
+        rustdoc_content = rustdoc_content.replace("](../../README.md", &format!("]({url}"));
     }
 
     // Write to OUT_DIR
@@ -56,14 +55,13 @@ fn get_workspace_repo_url(crate_dir: &str) -> Option<String> {
     // Simple extraction: find repository = "..." line
     for line in content.lines() {
         let line = line.trim();
-        if line.starts_with("repository") && line.contains('=') {
-            if let Some(start) = line.find('"') {
-                if let Some(end) = line.rfind('"') {
-                    if start < end {
-                        return Some(line[start + 1..end].to_string());
-                    }
-                }
-            }
+        if line.starts_with("repository")
+            && line.contains('=')
+            && let Some(start) = line.find('"')
+            && let Some(end) = line.rfind('"')
+            && start < end
+        {
+            return Some(line[start + 1..end].to_string());
         }
     }
     None
