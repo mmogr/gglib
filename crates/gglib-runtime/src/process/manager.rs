@@ -6,7 +6,7 @@
 
 use super::core::GuiProcessCore;
 use super::health::wait_for_http_health;
-use super::types::ServerInfo;
+use super::types::{ServerInfo, SpawnConfig};
 use anyhow::{Result, anyhow};
 use gglib_core::ports::{CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget};
 use std::path::PathBuf;
@@ -113,17 +113,7 @@ impl ProcessManager {
     }
 
     /// Start a llama-server instance for a model (Concurrent strategy only)
-    #[allow(clippy::too_many_arguments)]
-    pub async fn start_server(
-        &self,
-        model_id: u32,
-        model_name: String,
-        model_path: &str,
-        context_length: Option<u64>,
-        port: Option<u16>,
-        jinja: bool,
-        reasoning_format: Option<String>,
-    ) -> Result<u16> {
+    pub async fn start_server(&self, config: SpawnConfig) -> Result<u16> {
         let max_concurrent = match &self.strategy {
             ProcessStrategy::Concurrent { max_concurrent } => *max_concurrent,
             ProcessStrategy::SingleSwap { .. } => {
@@ -136,8 +126,8 @@ impl ProcessManager {
         let mut core = self.core.write().await;
 
         // Check if already running
-        if core.is_running(model_id) {
-            return Err(anyhow!("Model {} is already being served", model_id));
+        if core.is_running(config.model_id) {
+            return Err(anyhow!("Model {} is already being served", config.model_id));
         }
 
         // Check concurrent limit
@@ -149,18 +139,7 @@ impl ProcessManager {
         }
 
         // Spawn the process
-        let path = std::path::Path::new(model_path);
-        let allocated_port = core
-            .spawn(
-                model_id,
-                model_name,
-                path,
-                context_length,
-                port,
-                jinja,
-                reasoning_format,
-            )
-            .await?;
+        let allocated_port = core.spawn(config).await?;
 
         // Release the lock before waiting
         drop(core);
@@ -287,19 +266,19 @@ impl ProcessManager {
             "Starting model"
         );
 
+        let config = SpawnConfig::new(
+            launch_spec.id,
+            launch_spec.name.clone(),
+            model_path.to_path_buf(),
+        )
+        .with_context_size(effective_ctx)
+        .with_jinja(); // Enable jinja by default for proxy
+
         let port = {
             let mut core = self.core.write().await;
-            core.spawn(
-                launch_spec.id,
-                launch_spec.name.clone(),
-                model_path,
-                Some(effective_ctx),
-                None, // Auto-allocate port
-                true, // Enable jinja by default for proxy
-                None, // No reasoning format override
-            )
-            .await
-            .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?
+            core.spawn(config)
+                .await
+                .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?
         };
 
         // 6. Wait for health check

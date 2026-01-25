@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gglib_core::download::Quantization;
 
@@ -173,27 +173,18 @@ impl ShardGroupTracker {
     /// the pending queue is empty AND `has_open_groups()` returns `false`.
     ///
     /// INVARIANT: This relies on terminal paths removing groups from `self.groups`.
-    #[allow(dead_code)] // TODO: Use in step 7 for drained↔busy transition detection
     pub fn has_open_groups(&self) -> bool {
         !self.groups.is_empty()
     }
 
-    /// Get the number of in-progress shard groups.
-    ///
-    /// Useful for metrics and logging.
-    #[allow(dead_code)] // TODO: Use this for metrics/logging in drain detection
-    pub fn open_group_count(&self) -> usize {
+    /// Get the number of active shard groups.
+    #[cfg(test)]
+    pub fn active_count(&self) -> usize {
         self.groups.len()
     }
 
-    /// Remove expired shard groups that haven't been updated recently.
-    ///
-    /// Returns the number of groups removed.
-    ///
-    /// # Arguments
-    ///
-    /// * `ttl` - Time-to-live for shard groups
-    #[allow(dead_code)]
+    /// Remove expired shard groups (for testing).
+    #[cfg(test)]
     pub fn gc_expired(&mut self, ttl: Duration) -> usize {
         let now = Instant::now();
         let before_count = self.groups.len();
@@ -203,17 +194,12 @@ impl ShardGroupTracker {
 
         before_count - self.groups.len()
     }
-
-    /// Get the number of active shard groups.
-    #[cfg(test)]
-    pub fn active_count(&self) -> usize {
-        self.groups.len()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     fn test_metadata() -> GroupMetadata {
         GroupMetadata {
@@ -382,7 +368,7 @@ mod tests {
             tracker.has_open_groups(),
             "Group should be open after first shard"
         );
-        assert_eq!(tracker.open_group_count(), 1);
+        assert_eq!(tracker.active_count(), 1);
 
         // Complete the group
         let result = tracker.on_shard_done(&group_id, 1, PathBuf::from("/s1"), 2, &metadata);
@@ -393,7 +379,7 @@ mod tests {
             !tracker.has_open_groups(),
             "Completion must remove group from tracker"
         );
-        assert_eq!(tracker.open_group_count(), 0);
+        assert_eq!(tracker.active_count(), 0);
     }
 
     #[test]
@@ -405,7 +391,7 @@ mod tests {
         // Start tracking a group
         tracker.on_shard_done(&group_id, 0, PathBuf::from("/s0"), 3, &metadata);
         assert!(tracker.has_open_groups(), "Group should be open");
-        assert_eq!(tracker.open_group_count(), 1);
+        assert_eq!(tracker.active_count(), 1);
 
         // Mark group as failed
         tracker.on_group_failed(&group_id);
@@ -415,7 +401,7 @@ mod tests {
             !tracker.has_open_groups(),
             "Failure must remove group from tracker"
         );
-        assert_eq!(tracker.open_group_count(), 0);
+        assert_eq!(tracker.active_count(), 0);
     }
 
     #[test]
@@ -428,16 +414,16 @@ mod tests {
         // Start two groups
         tracker.on_shard_done(&group_a, 0, PathBuf::from("/a0"), 2, &metadata);
         tracker.on_shard_done(&group_b, 0, PathBuf::from("/b0"), 2, &metadata);
-        assert_eq!(tracker.open_group_count(), 2);
+        assert_eq!(tracker.active_count(), 2);
 
         // Complete group A
         tracker.on_shard_done(&group_a, 1, PathBuf::from("/a1"), 2, &metadata);
-        assert_eq!(tracker.open_group_count(), 1, "Group A should be removed");
+        assert_eq!(tracker.active_count(), 1, "Group A should be removed");
         assert!(tracker.has_open_groups(), "Group B still in progress");
 
         // Fail group B
         tracker.on_group_failed(&group_b);
-        assert_eq!(tracker.open_group_count(), 0, "Group B should be removed");
+        assert_eq!(tracker.active_count(), 0, "Group B should be removed");
         assert!(!tracker.has_open_groups(), "No groups should remain");
     }
 
@@ -448,6 +434,6 @@ mod tests {
             !tracker.has_open_groups(),
             "Empty tracker has no open groups"
         );
-        assert_eq!(tracker.open_group_count(), 0);
+        assert_eq!(tracker.active_count(), 0);
     }
 }
