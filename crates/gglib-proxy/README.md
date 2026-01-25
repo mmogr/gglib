@@ -12,26 +12,30 @@
 This crate is in the **Infrastructure Layer** — it provides external API compatibility by bridging OpenAI clients to internal llama-server instances.
 
 ```text
-                              ┌──────────────────┐
-                              │   gglib-proxy    │
-                              │  OpenAI-compat   │
-                              │   proxy server   │
-                              └────────┬─────────┘
-                                       │
-         ┌─────────────┬───────────────┼───────────────┬─────────────┐
-         ▼             ▼               ▼               ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│  gglib-db   │ │  gglib-hf   │ │gglib-runtime│ │gglib-download│ │  gglib-mcp  │
-│   SQLite    │ │  HF client  │ │   Servers   │ │  Downloads  │ │ MCP servers │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
-         │             │               │               │             │
-         └─────────────┴───────────────┴───────────────┴─────────────┘
-                                       │
-                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            Infrastructure Layer                             │
+│                                                                             │
+│                              ┌──────────────────┐                           │
+│                              │   gglib-proxy    │                           │
+│                              │  OpenAI-compat   │                           │
+│                              │   proxy server   │                           │
+│                              └────────┬─────────┘                           │
+│                                       │                                     │
+│                                       │ (ports only, no infra deps)         │
+│                                       │                                     │
+└───────────────────────────────────────┼─────────────────────────────────────┘
+                                        │
+                                        ▼
                               ┌──────────────────┐
                               │    gglib-core    │
-                              │   (all ports)    │
+                              │   (port traits)  │
                               └──────────────────┘
+
+At runtime, adapters inject concrete implementations:
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│gglib-runtime│     │  gglib-db   │     │  gglib-hf   │
+│  (servers)  │     │   (models)  │     │  (search)   │
+└─────────────┘     └─────────────┘     └─────────────┘
 ```
 
 See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
@@ -44,7 +48,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 2. **Routes to llama-server** instances managed by gglib-runtime
 3. **Streams responses** back to clients with proper SSE formatting
 
-## Architecture
+## Internal Structure
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────────┐
@@ -81,9 +85,9 @@ This crate provides an OpenAI-compatible HTTP server that:
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
-| [`forward.rs`](src/forward) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-coverage.json) |
-| [`models.rs`](src/models) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
-| [`server.rs`](src/server) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
+| [`forward.rs`](src/forward.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-coverage.json) |
+| [`models.rs`](src/models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
+| [`server.rs`](src/server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
 <!-- module-table:end -->
 
 </details>

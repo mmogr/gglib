@@ -2,6 +2,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+include!("../build_common.rs");
+
 fn main() {
     // Get the repo root directory at build time.
     // CARGO_MANIFEST_DIR for gglib-core is crates/gglib-core, so we go up two levels.
@@ -31,29 +33,8 @@ fn main() {
         }
     }
 
-    // Process README for rustdoc
+    // Process README for rustdoc (uses shared build_common.rs)
     process_readme_for_rustdoc(&manifest_dir);
 
     println!("cargo:rerun-if-changed=build.rs");
-}
-
-fn process_readme_for_rustdoc(crate_dir: &str) {
-    println!("cargo:rerun-if-changed=README.md");
-
-    let readme_path = Path::new(crate_dir).join("README.md");
-    let content = if readme_path.exists() {
-        fs::read_to_string(readme_path).unwrap()
-    } else {
-        return; // No README, nothing to process
-    };
-
-    // Transform for rustdoc:
-    // 1. Strip 'src/' prefix from links so rustdoc can resolve modules
-    // 2. Strip '.rs' extension so links go to modules, not files
-    let rustdoc_content = content.replace("](src/", "](").replace(".rs)", ")");
-
-    // Write to OUT_DIR (cargo's build artifact directory)
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let dest_path = Path::new(&out_dir).join("README_GENERATED.md");
-    fs::write(dest_path, rustdoc_content).unwrap();
 }

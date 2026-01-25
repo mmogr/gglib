@@ -5,6 +5,7 @@ edition.workspace = true
 description = "OpenAI-compatible proxy server for gglib"
 license.workspace = true
 publish = false
+build = "build.rs"
 
 [features]
 default = []

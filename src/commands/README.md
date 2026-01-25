@@ -2,6 +2,9 @@
 
 # GGLib Command Reference
 
+![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-commands-loc.json)
+![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-commands-complexity.json)
+
 This document provides a detailed reference for all available CLI commands.
 
 For an overview of all interfaces (CLI, Desktop GUI, Web UI), see the main [README](../README.md#interfaces--modes).

@@ -2,6 +2,9 @@
 
 # Utilities Module
 
+![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-utils-loc.json)
+![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-utils-complexity.json)
+
 This module contains low-level helper functions and shared utilities used across the application.
 
 ## Architecture

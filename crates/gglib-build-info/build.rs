@@ -1,13 +1,19 @@
 use std::{
-    env,
+    env, fs,
     path::{Path, PathBuf},
 };
 
 use vergen_gix::{Emitter, GixBuilder};
 
+include!("../build_common.rs");
+
 fn main() {
     // Always rerun when this build script changes.
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Process README for rustdoc (uses shared build_common.rs)
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    process_readme_for_rustdoc(&manifest_dir);
 
     // Allow CI or packagers to provide a SHA without any git probing.
     println!("cargo:rerun-if-env-changed=GGLIB_BUILD_SHA_SHORT");

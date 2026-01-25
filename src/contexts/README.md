@@ -2,6 +2,9 @@
 
 # Contexts Module
 
+![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-contexts-loc.json)
+![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-contexts-complexity.json)
+
 React Context providers for shared application state across the gglib GUI.
 
 ## Architecture
