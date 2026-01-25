@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gglib_core::download::Quantization;
 
@@ -199,6 +199,7 @@ impl ShardGroupTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     fn test_metadata() -> GroupMetadata {
         GroupMetadata {
