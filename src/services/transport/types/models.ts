@@ -83,6 +83,7 @@ export interface ModelsTransport {
 
   // HuggingFace browsing
   browseHfModels(params: HfSearchRequest): Promise<HfSearchResponse>;
+  getHfModelSummary(modelId: HfModelId): Promise<HfModelSummary>;
   getHfQuantizations(modelId: HfModelId): Promise<HfQuantizationsResponse>;
   getHfToolSupport(modelId: HfModelId): Promise<HfToolSupportResponse>;
 
