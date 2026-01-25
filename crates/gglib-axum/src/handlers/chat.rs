@@ -143,6 +143,7 @@ pub async fn save_message(
             conversation_id: req.conversation_id,
             role,
             content: req.content,
+            metadata: None,
         })
         .await?;
     Ok(Json(id))
