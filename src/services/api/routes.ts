@@ -8,5 +8,6 @@
 
 // Hugging Face routes
 export const HF_SEARCH_PATH = '/api/hf/search';
+export const HF_MODEL_PATH = '/api/hf/model';
 export const HF_QUANTIZATIONS_PATH = '/api/hf/quantizations';
 export const HF_TOOL_SUPPORT_PATH = '/api/hf/tool-support';
