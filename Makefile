@@ -264,7 +264,7 @@ run-web:
 build-tauri:
 	@echo "Building Tauri desktop app..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
-	@rm -f src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null || true
+	@rm -f target/release/bundle/dmg/*.dmg 2>/dev/null || true
 	npm install
 	# On Linux: use --bundles deb,rpm to avoid AppImage issues on Arch.
 	# linuxdeploy's embedded strip fails on Arch due to RELR relocations (linuxdeploy#272).
@@ -278,7 +278,7 @@ build-tauri:
 		if [ -f "$$HOME/.cargo/env" ]; then . "$$HOME/.cargo/env"; fi; \
 		npm run tauri:build; \
 	fi
-	@echo "✓ Tauri app built to src-tauri/target/release/gglib-gui"
+	@echo "✓ Tauri app built to target/release/gglib-app"
 
 # Full setup from scratch
 setup: check-deps build-gui build-tauri install
