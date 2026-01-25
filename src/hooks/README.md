@@ -2,6 +2,9 @@
 
 # Hooks Module
 
+![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-hooks-loc.json)
+![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-hooks-complexity.json)
+
 Custom React hooks for gglib GUI functionality.
 
 ## Architecture

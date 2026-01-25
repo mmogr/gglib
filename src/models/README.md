@@ -2,6 +2,9 @@
 
 # Models Module
 
+![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-models-loc.json)
+![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-models-complexity.json)
+
 This module defines the core data structures, database entities, and Data Transfer Objects (DTOs) used throughout the application.
 
 ## Architecture

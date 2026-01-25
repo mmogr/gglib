@@ -79,7 +79,7 @@ jobs:
           fi
           
           # --- Per-crate Rust tests ---
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri; do
+          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info; do
             FILE="$(find artifacts -name "rust-test-$CRATE.txt" -type f 2>/dev/null | head -1)"
             if [ -n "$FILE" ] && [ -f "$FILE" ]; then
               echo "Parsing $CRATE test results"
@@ -401,7 +401,7 @@ jobs:
           fi
           
           # --- Per-crate Rust coverage ---
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri; do
+          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info; do
             CRATE_LCOV="$(find artifacts -name "$CRATE-lcov.info" -type f 2>/dev/null | head -1)"
             if [ -n "$CRATE_LCOV" ] && [ -f "$CRATE_LCOV" ]; then
               echo "Parsing $CRATE coverage"
@@ -596,7 +596,7 @@ jobs:
           echo "Generating file-level coverage badges (dynamic discovery)..."
           
           # Dynamically discover and generate file-level coverage for each crate
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri; do
+          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info; do
             LCOV_FILE="$(find artifacts -name "$CRATE-lcov.info" -type f 2>/dev/null | head -1)"
             if [ -n "$LCOV_FILE" ] && [ -f "$LCOV_FILE" ]; then
               echo "  Processing $CRATE file-level coverage..."
@@ -623,7 +623,7 @@ jobs:
           # Also generate 0% coverage badges for files that exist but aren't in lcov
           # This ensures all files shown in READMEs have coverage badges
           echo "Generating missing coverage badges (0% for untested files)..."
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri; do
+          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info; do
             # Check out main to scan filesystem (we're on badges branch)
             git fetch origin main --depth=1 2>/dev/null || true
             
@@ -729,7 +729,7 @@ jobs:
           }
           
           # Generate per-crate LOC and complexity badges
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri; do
+          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info; do
             if [ -d "crates/$CRATE" ]; then
               SCC_DATA=$(scc "crates/$CRATE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
               LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
@@ -906,7 +906,7 @@ jobs:
           }
           
           # Dynamically discover and generate file-level LOC/Complexity for each crate
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri; do
+          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info; do
             if [ -d "crates/$CRATE/src" ]; then
               echo "  Processing $CRATE file-level metrics..."
               
@@ -962,7 +962,7 @@ jobs:
           # =============================================================================
           # TypeScript module badges
           # =============================================================================
-          for MODULE in components hooks contexts services utils commands; do
+          for MODULE in components hooks contexts services utils commands types pages models; do
             if [ -d "src/$MODULE" ]; then
               TS_DATA=$(scc "src/$MODULE" --include-ext ts,tsx --format json 2>/dev/null)
               TS_LOC=$(echo "$TS_DATA" | jq '[.[] | select(.Name == "TypeScript" or .Name == "TypeScript JSX")] | map(.Code) | add // 0')

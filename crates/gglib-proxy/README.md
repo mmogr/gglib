@@ -44,7 +44,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 2. **Routes to llama-server** instances managed by gglib-runtime
 3. **Streams responses** back to clients with proper SSE formatting
 
-## Architecture
+## Internal Structure
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────────┐

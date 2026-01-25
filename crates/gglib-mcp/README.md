@@ -20,7 +20,7 @@ This crate provides MCP server lifecycle management, including:
 - **Server lifecycle management** (start, stop, status tracking)
 - **Tool discovery and invocation** via the MCP protocol
 
-## Architecture
+## Internal Structure
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐

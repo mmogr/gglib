@@ -28,7 +28,7 @@ gglib-core (ports)          gglib-runtime                   External
 
 See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
 
-## Architecture
+## Internal Structure
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐

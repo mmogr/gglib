@@ -36,7 +36,7 @@ This crate is a **Shared Facade** — sitting between adapters and infrastructur
 
 See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
 
-## Architecture
+## Internal Structure
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐

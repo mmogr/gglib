@@ -2,6 +2,9 @@
 
 # Types Module
 
+![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-types-loc.json)
+![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-types-complexity.json)
+
 TypeScript type definitions shared across the gglib GUI.
 
 ## Architecture

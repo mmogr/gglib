@@ -27,7 +27,7 @@ gglib-core (port)           gglib-gguf (adapter)          Adapters
 
 See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
 
-## Architecture
+## Internal Structure
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐

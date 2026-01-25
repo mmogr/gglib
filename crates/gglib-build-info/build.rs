@@ -1,5 +1,6 @@
 use std::{
     env,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -8,6 +9,10 @@ use vergen_gix::{Emitter, GixBuilder};
 fn main() {
     // Always rerun when this build script changes.
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Process README for rustdoc
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    process_readme_for_rustdoc(&manifest_dir);
 
     // Allow CI or packagers to provide a SHA without any git probing.
     println!("cargo:rerun-if-env-changed=GGLIB_BUILD_SHA_SHORT");
@@ -88,4 +93,25 @@ fn find_repo_root(start: &Path) -> Option<PathBuf> {
         current = dir.parent();
     }
     None
+}
+
+fn process_readme_for_rustdoc(crate_dir: &str) {
+    println!("cargo:rerun-if-changed=README.md");
+
+    let readme_path = Path::new(crate_dir).join("README.md");
+    let content = if readme_path.exists() {
+        fs::read_to_string(readme_path).unwrap()
+    } else {
+        return; // No README, nothing to process
+    };
+
+    // Transform for rustdoc:
+    // 1. Strip 'src/' prefix from links so rustdoc can resolve modules
+    // 2. Strip '.rs' extension so links go to modules, not files
+    let rustdoc_content = content.replace("](src/", "](").replace(".rs)", ")");
+
+    // Write to OUT_DIR (cargo's build artifact directory)
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join("README_GENERATED.md");
+    fs::write(dest_path, rustdoc_content).unwrap();
 }

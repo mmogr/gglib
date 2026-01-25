@@ -90,6 +90,12 @@ Infrastructure Layer
 | **[gglib-gui](gglib-gui/)** | Shared business logic for GUI applications (used by Tauri). | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-loc.json) |
 | **[gglib-tauri](gglib-tauri/)** | Tauri backend for desktop application. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) |
 
+### Utility Crates
+
+| Crate | Purpose | Lines of Code |
+|-------|---------|---------------|
+| **[gglib-build-info](gglib-build-info/)** | Compile-time version and git metadata for CLI/GUI version strings. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) |
+
 ## Crate Responsibilities
 
 ### Core Layer: gglib-core

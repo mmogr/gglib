@@ -35,7 +35,7 @@ This crate is in the **Adapter Layer** — it exposes gglib functionality via HT
 
 See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
 
-## Architecture
+## Internal Structure
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐

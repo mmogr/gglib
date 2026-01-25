@@ -204,9 +204,9 @@ process_readme() {
 
 # Find all READMEs with module-table markers
 echo "Scanning for READMEs with module-table markers..."
-find "$CRATES_DIR" -name "README.md" -type f | while read -r README; do
+while IFS= read -r README; do
     process_readme "$README"
-done
+done < <(find "$CRATES_DIR" -name "README.md" -type f)
 
 if [[ "$MODE" == "check" && "$CHANGED" -eq 1 ]]; then
     echo ""

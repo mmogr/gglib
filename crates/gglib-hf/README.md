@@ -17,7 +17,7 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 
 This crate provides a complete `HuggingFace` Hub API client for searching, browsing, and downloading GGUF models. It implements the `HfClientPort` trait from `gglib-core`, following the Hexagonal Architecture pattern.
 
-## Architecture
+## Internal Structure
 
 ```text
 gglib-core (port definition)        gglib-hf (adapter implementation)

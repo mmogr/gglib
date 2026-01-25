@@ -1,6 +1,5 @@
 //! Build/version metadata shared across gglib frontends.
-//!
-//! All values are compile-time constants, populated by this crate's `build.rs`.
+#![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 
 /// The `SemVer` version of the build (from Cargo).
 pub const SEMVER: &str = env!("CARGO_PKG_VERSION");

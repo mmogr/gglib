@@ -1,27 +1,4 @@
-//! Shared GUI backend facade for gglib adapters.
-//!
-//! This crate provides `GuiBackend`, a platform-agnostic orchestration layer
-//! that both Tauri and Axum adapters delegate to. It ensures feature parity
-//! and prevents drift between desktop and web UIs.
-//!
-//! # Architecture
-//!
-//! ```text
-//! Adapters:     gglib-tauri       gglib-axum
-//!                    ↓                 ↓
-//! Facade:            └── gglib-gui ────┘
-//!                        GuiBackend
-//!                            ↓
-//! Core:                 gglib-core
-//! ```
-//!
-//! # Rules
-//!
-//! 1. **No adapter dependencies** - Must not depend on tauri, axum, tower, etc.
-//! 2. **Pure orchestration** - All deps injected via `GuiDeps`
-//! 3. **Trait-based injection** - Uses port traits, not concrete impls
-//! 4. **Semantic errors** - Returns `GuiError`, adapters map to their error types
-
+#![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
 
