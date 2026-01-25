@@ -94,9 +94,8 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 - **`proxy/`** — Proxy supervisor and routing logic
 - **`process/`** — Generic process lifecycle (start, stop, signal)
 - **`system/`** — System probes (GPU detection, memory info)
-- **`assistant_ui/`** — Terminal-based interactive chat UI
+- **`assistant_ui/`** — Terminal-based interactive chat UI for llama-cli
 - **`ports_impl/`** — Port trait implementations for runtime
-- **`assistant_ui/`** — Terminal-based chat UI for llama-cli
 - **`command.rs`** — Command-line argument builder for llama binaries
 
 ## Features

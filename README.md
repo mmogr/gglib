@@ -185,6 +185,11 @@ GGLib is organized as a Cargo workspace with compile-time enforced boundaries. T
 | [gglib-axum](crates/gglib-axum) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-complexity.json) |
 | [gglib-tauri](crates/gglib-tauri) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-tests.json) | ![N/A](https://img.shields.io/badge/coverage-N%2FA-lightgrey) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-complexity.json) |
 
+#### Utility Crates
+| Crate | Tests | Coverage | LOC | Complexity |
+|-------|-------|----------|-----|------------|
+| [gglib-build-info](crates/gglib-build-info) | ![N/A](https://img.shields.io/badge/tests-N%2FA-lightgrey) | ![N/A](https://img.shields.io/badge/coverage-N%2FA-lightgrey) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-complexity.json) |
+
 </details>
 
 ### Module Reference
@@ -220,6 +225,7 @@ Each crate has its own README with architecture diagrams, module breakdowns, and
 | **Adapter** | [gglib-cli](crates/gglib-cli/README.md) | CLI interface |
 | **Adapter** | [gglib-axum](crates/gglib-axum/README.md) | HTTP API server |
 | **Adapter** | [gglib-tauri](crates/gglib-tauri/README.md) | Desktop GUI (Tauri + React) |
+| **Utility** | [gglib-build-info](crates/gglib-build-info/README.md) | Compile-time version & git metadata |
 
 <!-- crate-docs:end -->
 

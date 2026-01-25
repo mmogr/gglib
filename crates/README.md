@@ -8,18 +8,24 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                          PRESENTATION LAYER                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  gglib-cli   │  │ gglib-axum   │  │ gglib-tauri  │  │  gglib-gui   │  │
-│  │  CLI tool    │  │  REST API    │  │Tauri backend │  │Shared UI core│  │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
-│         │                  │                  │                  │          │
-└─────────┼──────────────────┼──────────────────┼──────────────────┼──────────┘
-          │                  │                  │                  │
-          └────────────────────────┬────────────────────────────────┘
-                                   │
+│                            ADAPTER LAYER                                   │
+│       ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                 │
+│       │  gglib-cli   │  │ gglib-axum   │  │ gglib-tauri  │                 │
+│       │  CLI tool    │  │  REST API    │  │Tauri backend │                 │
+│       └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                 │
+└──────────────┼─────────────────┼─────────────────┼─────────────────────────┘
+               └─────────────────┼─────────────────┘
+                                 │
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                          APPLICATION LAYER                                 │
+│                            FACADE LAYER                                    │
+│                        ┌──────────────┐                                    │
+│                        │  gglib-gui   │                                    │
+│                        │Shared UI core│                                    │
+│                        └──────┬───────┘                                    │
+└───────────────────────────────┼────────────────────────────────────────────┘
+                                │
+┌────────────────────────────────────────────────────────────────────────────┐
+│                             CORE LAYER                                     │
 │  ┌─────────────────────────────────────────────────────────────────────┐  │
 │  │                        gglib-core                                    │  │
 │  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐   │  │
@@ -52,9 +58,11 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 ## Dependency Flow
 
 ```text
-Presentation Layer
+Adapter Layer
     ↓
-Application Layer (gglib-core)
+Facade Layer (gglib-gui)
+    ↓
+Core Layer (gglib-core)
     ↓
 Infrastructure Layer
 ```
@@ -81,13 +89,18 @@ Infrastructure Layer
 | **[gglib-download](gglib-download/)** | Multi-file download manager with queue, progress tracking, and resume capability. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) |
 | **[gglib-proxy](gglib-proxy/)** | OpenAI-compatible proxy with automatic model routing and swapping. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) |
 
-### Presentation Layer
+### Facade Layer
+
+| Crate | Purpose | Lines of Code |
+|-------|---------|---------------|
+| **[gglib-gui](gglib-gui/)** | Shared business logic for GUI applications (ensures feature parity). | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-loc.json) |
+
+### Adapter Layer
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
 | **[gglib-cli](gglib-cli/)** | Command-line interface for all gglib operations. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) |
 | **[gglib-axum](gglib-axum/)** | REST API server built with Axum for web/GUI clients. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) |
-| **[gglib-gui](gglib-gui/)** | Shared business logic for GUI applications (used by Tauri). | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-loc.json) |
 | **[gglib-tauri](gglib-tauri/)** | Tauri backend for desktop application. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) |
 
 ### Utility Crates
