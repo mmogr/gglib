@@ -14,11 +14,11 @@ members = [
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
+    # Tauri desktop app (gglib-app binary)
+    "src-tauri",
     # Legacy monolith - re-enabled for gradual migration, will be removed after extraction complete
     ".",
 ]
-# Tauri app is excluded because it builds separately with its own workspace context
-exclude = ["src-tauri"]
 
 # Shared package metadata for all workspace crates
 [workspace.package]
@@ -67,6 +67,13 @@ axum = "0.8"
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 uuid = { version = "1.10", features = ["v4"] }
 
+# Tauri
+tauri = { version = "2.8.5", features = ["devtools"] }
+tauri-build = { version = "2.4.1", features = [] }
+tauri-plugin-dialog = "2.6"
+dotenvy = "0.15"
+open = "5"
+
 # System info
 sysinfo = "0.37"
 
@@ -82,6 +89,10 @@ gglib-gguf = { path = "crates/gglib-gguf" }
 gglib-hf = { path = "crates/gglib-hf" }
 gglib-mcp = { path = "crates/gglib-mcp" }
 gglib-runtime = { path = "crates/gglib-runtime" }
+gglib-axum = { path = "crates/gglib-axum" }
+gglib-gui = { path = "crates/gglib-gui" }
+gglib-tauri = { path = "crates/gglib-tauri" }
+gglib-build-info = { path = "crates/gglib-build-info" }
 
 # Workspace-wide lints for consistency
 [workspace.lints.rust]

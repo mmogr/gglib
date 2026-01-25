@@ -1,43 +1,38 @@
 [package]
 name = "gglib-app"
-version = "0.2.9"
+version.workspace = true
 description = "Tauri GUI for GGLib - GGUF Model Manager"
-authors = ["mmogr"]
-license = "GPLv3"
-repository = "https://github.com/mmogr/gglib"
-edition = "2024"
-
-# Prevent this package from being part of the parent workspace
-# Tauri builds separately with its own workspace context
-[workspace]
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "2.4.1", features = [] }
+tauri-build.workspace = true
 
 [dependencies]
-tauri = { version = "2.8.5", features = ["devtools"] }
-tauri-plugin-dialog = "2.6"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-async-trait = "0.1"
-gglib-build-info = { path = "../crates/gglib-build-info" }
-gglib-core = { path = "../crates/gglib-core" }
-gglib-download = { path = "../crates/gglib-download" }
-gglib-mcp = { path = "../crates/gglib-mcp" }
-gglib-db = { path = "../crates/gglib-db" }
-gglib-runtime = { path = "../crates/gglib-runtime", features = ["prebuilt"] }
-gglib-tauri = { path = "../crates/gglib-tauri" }
-gglib-axum = { path = "../crates/gglib-axum" }
-gglib-gui = { path = "../crates/gglib-gui" }
-tokio = { version = "1.48.0", features = ["sync", "rt-multi-thread"] }
-axum = "0.7"
-tower-http = { version = "0.6", features = ["cors"] }
-dotenvy = "0.15"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-open = "5"
+tauri.workspace = true
+tauri-plugin-dialog.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+gglib-build-info.workspace = true
+gglib-core.workspace = true
+gglib-download.workspace = true
+gglib-mcp.workspace = true
+gglib-db.workspace = true
+gglib-runtime = { workspace = true, features = ["prebuilt"] }
+gglib-tauri.workspace = true
+gglib-axum.workspace = true
+gglib-gui.workspace = true
+tokio.workspace = true
+# Note: axum and tower-http are used via gglib-axum re-exports, no direct dependency needed
+dotenvy.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+open.workspace = true
 
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem
