@@ -54,10 +54,9 @@ generate_row() {
     local BADGE_PREFIX="$2"     # e.g., "gglib-core-domain"
     local LINK_PATH="$3"        # e.g., "src/domain.rs" or "src/handlers/"
     
-    # Strip .rs extension from link target for rustdoc compatibility
-    # Keep the extension in the display name for clarity
-    # This makes rustdoc generate module links (add/index.html) instead of file links (add.rs)
-    local LINK_TARGET="${LINK_PATH%.rs}"
+    # Keep .rs extension in link for GitHub rendering
+    # The build.rs will strip it when generating README_GENERATED.md for rustdoc
+    local LINK_TARGET="$LINK_PATH"
     
     # Display name with link
     local DISPLAY="[\`$MODULE_NAME\`]($LINK_TARGET)"
