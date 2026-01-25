@@ -67,6 +67,8 @@ export const AssistantMessageBubble: React.FC = () => {
 
   // For deep research messages, render ResearchArtifact
   if (isResearch && researchState) {
+    // Research is "running" if it's not complete and not in error state
+    // Note: We don't rely on isStreaming here because deep research manages its own state
     const isResearchRunning = researchState.phase !== 'complete' && researchState.phase !== 'error';
     
     return (
@@ -83,7 +85,7 @@ export const AssistantMessageBubble: React.FC = () => {
         <div className="chat-message-content">
           <ResearchArtifact
             state={researchState}
-            isRunning={isResearchRunning && isStreaming}
+            isRunning={isResearchRunning}
             defaultExpanded={true}
           />
         </div>
