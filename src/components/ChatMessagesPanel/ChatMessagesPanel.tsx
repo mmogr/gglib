@@ -5,11 +5,12 @@ import {
   ComposerPrimitive,
   useThreadRuntime,
   useThread,
+  useComposerRuntime,
 } from '@assistant-ui/react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { AlertTriangle, Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { getMessages, deleteMessage } from '../../services/clients/chat';
+import { getMessages, deleteMessage, saveMessage, updateMessage } from '../../services/clients/chat';
 import type { ConversationSummary } from '../../services/clients/chat';
 import type { ToastType } from '../Toast';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -30,6 +31,9 @@ import { useChatPersistence, useTitleGeneration } from './hooks';
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
+import { DeepResearchToggle } from '../DeepResearch';
+import { useDeepResearch } from '../../hooks/useDeepResearch';
+import type { ResearchState } from '../../hooks/useDeepResearch/types';
 import './ChatMessagesPanel.css';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
 
@@ -79,6 +83,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   currentStreamingAssistantMessageId,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
+  const composerRuntime = useComposerRuntime({ optional: true });
   const threadState = useThread({ optional: true });
   const isThreadRunning = threadState?.isRunning ?? false;
 
@@ -127,6 +132,173 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // ─────────────────────────────────────────────────────────────────────────────
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [systemPromptDraft, setSystemPromptDraft] = useState(DEFAULT_SYSTEM_PROMPT);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Deep Research mode state and hook
+  // ─────────────────────────────────────────────────────────────────────────────
+  const [isDeepResearchEnabled, setIsDeepResearchEnabled] = useState(false);
+  
+  // Track the assistant message ID that contains the research state
+  const researchMessageIdRef = useRef<string | null>(null);
+
+  // Deep research hook - handles the research loop and persistence
+  const deepResearch = useDeepResearch({
+    serverPort,
+    conversationId: activeConversationId ?? undefined,
+    systemPrompt: activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
+    onStateChange: (newState: ResearchState) => {
+      // Update the assistant message with new research state
+      if (researchMessageIdRef.current && threadRuntime) {
+        const state = threadRuntime.getState();
+        const updatedMessages = state.messages.map((msg) => {
+          if (msg.id === researchMessageIdRef.current) {
+            // Update the message's metadata with the new research state
+            return {
+              ...msg,
+              metadata: {
+                ...msg.metadata,
+                custom: {
+                  ...(msg.metadata?.custom || {}),
+                  researchState: newState,
+                  isDeepResearch: true,
+                },
+              },
+            } as ThreadMessageLike;
+          }
+          return msg;
+        });
+        // Force re-render by resetting messages
+        threadRuntime.reset(updatedMessages);
+      }
+    },
+    onPersist: async (stateToSave: ResearchState) => {
+      // Persist the research state to database
+      // This will be saved as JSON in the message metadata
+      if (!activeConversationId) return;
+      
+      try {
+        // Serialize the state and update the message
+        const content = stateToSave.finalReport || `[Deep Research: ${stateToSave.phase}]`;
+        const metadata = JSON.stringify({ researchState: stateToSave });
+        
+        // Use the updateMessage API if we have a DB ID, otherwise save new
+        const customMeta = researchMessageIdRef.current
+          ? (threadRuntime?.getState().messages.find(m => m.id === researchMessageIdRef.current)?.metadata?.custom as any)
+          : null;
+        
+        if (customMeta?.dbId) {
+          // Update existing message with new content (includes metadata as JSON)
+          await updateMessage(customMeta.dbId, `${content}\n\n<!-- metadata:${metadata} -->`);
+        }
+      } catch (error) {
+        console.error('Failed to persist research state:', error);
+      }
+    },
+    onError: (error: Error) => {
+      setChatError(`Research error: ${error.message}`);
+      showToast('Research failed', 'error');
+    },
+  });
+
+  // Toggle deep research mode
+  const toggleDeepResearch = useCallback(() => {
+    setIsDeepResearchEnabled((prev) => !prev);
+  }, []);
+
+  // Stop deep research
+  const stopDeepResearch = useCallback(() => {
+    deepResearch.stopResearch();
+    showToast('Deep research stopped', 'info');
+  }, [deepResearch, showToast]);
+
+  // Handle deep research submission
+  const handleDeepResearchSubmit = useCallback(async (query: string) => {
+    if (!activeConversationId || !threadRuntime) {
+      showToast('No active conversation', 'error');
+      return;
+    }
+
+    // 1. Create user message
+    const userMessageId = `user-${crypto.randomUUID()}`;
+    const userMessage: ThreadMessageLike = {
+      id: userMessageId,
+      role: 'user',
+      content: [{ type: 'text', text: query }],
+      createdAt: new Date(),
+      metadata: {
+        custom: {
+          conversationId: activeConversationId,
+        },
+      },
+    };
+
+    // 2. Create placeholder assistant message for research artifact
+    const assistantMessageId = `research-${crypto.randomUUID()}`;
+    const initialResearchState: ResearchState = {
+      originalQuery: query,
+      messageId: assistantMessageId,
+      conversationId: activeConversationId,
+      startedAt: Date.now(),
+      currentHypothesis: null,
+      researchPlan: [],
+      gatheredFacts: [],
+      currentStep: 0,
+      maxSteps: 30,
+      phase: 'planning',
+      knowledgeGaps: [],
+      contradictions: [],
+      lastReasoning: null,
+      pendingObservations: [],
+      finalReport: null,
+      citations: [],
+    };
+
+    const assistantMessage: ThreadMessageLike = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: [{ type: 'text', text: '' }],
+      createdAt: new Date(),
+      metadata: {
+        custom: {
+          conversationId: activeConversationId,
+          isDeepResearch: true,
+          researchState: initialResearchState,
+        },
+      },
+    };
+
+    // 3. Add messages to thread
+    const currentMessages = threadRuntime.getState().messages;
+    threadRuntime.reset([...currentMessages, userMessage, assistantMessage]);
+    researchMessageIdRef.current = assistantMessageId;
+
+    // 4. Persist user message to database
+    try {
+      await saveMessage(
+        activeConversationId,
+        'user',
+        query
+      );
+    } catch (error) {
+      console.error('Failed to save user message:', error);
+    }
+
+    // 5. Start the research loop
+    try {
+      await deepResearch.startResearch(query, assistantMessageId);
+    } catch (error) {
+      console.error('Research failed:', error);
+      setChatError(error instanceof Error ? error.message : 'Research failed');
+    }
+  }, [activeConversationId, threadRuntime, deepResearch, showToast, setChatError]);
+
+  // Reset deep research state when conversation changes
+  useEffect(() => {
+    setIsDeepResearchEnabled(false);
+    deepResearch.resetState();
+    researchMessageIdRef.current = null;
+  }, [activeConversationId, deepResearch]);
+
   const [savingSystemPrompt, setSavingSystemPrompt] = useState(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -486,21 +658,40 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 </ThreadPrimitive.Viewport>
 
                 <div className="chat-composer-shell">
-                  {isThreadRunning && (
+                  {isThreadRunning && !deepResearch.isRunning && (
                     <div className="chat-typing-indicator">Assistant is thinking…</div>
+                  )}
+                  {deepResearch.isRunning && (
+                    <div className="chat-typing-indicator chat-research-indicator">Researching… This may take a few minutes.</div>
                   )}
                   <ComposerPrimitive.Root className="chat-composer-root">
                     <ComposerPrimitive.Input
                       className="chat-composer-input"
                       placeholder={
                         isServerConnected
-                          ? 'Type your message. Shift + Enter for newline'
+                          ? isDeepResearchEnabled
+                            ? 'Ask a research question (Deep Research mode)'
+                            : 'Type your message. Shift + Enter for newline'
                           : 'Server not connected'
                       }
-                      disabled={!isServerConnected}
+                      disabled={!isServerConnected || deepResearch.isRunning}
                     />
                     <div className="chat-composer-actions">
-                      {isThreadRunning && (
+                      <DeepResearchToggle
+                        isEnabled={isDeepResearchEnabled}
+                        onToggle={toggleDeepResearch}
+                        isRunning={deepResearch.isRunning}
+                        onStop={stopDeepResearch}
+                        disabled={!isServerConnected || isThreadRunning}
+                        disabledReason={
+                          !isServerConnected
+                            ? 'Server not connected'
+                            : isThreadRunning
+                            ? 'Wait for current response'
+                            : undefined
+                        }
+                      />
+                      {isThreadRunning && !deepResearch.isRunning && (
                         <Button
                           variant="danger"
                           size="sm"
@@ -510,15 +701,33 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                           Stop
                         </Button>
                       )}
-                      <ComposerPrimitive.Send asChild>
+                      {isDeepResearchEnabled ? (
                         <Button
                           variant="primary"
                           size="sm"
-                          disabled={!isServerConnected}
+                          disabled={!isServerConnected || deepResearch.isRunning}
+                          onClick={() => {
+                            const composer = composerRuntime;
+                            if (!composer) return;
+                            const text = composer.getState().text.trim();
+                            if (!text) return;
+                            composer.setText('');
+                            handleDeepResearchSubmit(text);
+                          }}
                         >
-                          Send ↵
+                          Research ↵
                         </Button>
-                      </ComposerPrimitive.Send>
+                      ) : (
+                        <ComposerPrimitive.Send asChild>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={!isServerConnected}
+                          >
+                            Send ↵
+                          </Button>
+                        </ComposerPrimitive.Send>
+                      )}
                     </div>
                   </ComposerPrimitive.Root>
                 </div>
