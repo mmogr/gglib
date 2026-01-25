@@ -151,6 +151,7 @@ async fn test_save_user_message() {
             conversation_id: conv_id,
             role: MessageRole::User,
             content: "Hello!".to_string(),
+            metadata: None,
         })
         .await
         .unwrap();
@@ -183,6 +184,7 @@ async fn test_save_assistant_message() {
             conversation_id: conv_id,
             role: MessageRole::Assistant,
             content: "Hi there!".to_string(),
+            metadata: None,
         })
         .await
         .unwrap();
@@ -213,6 +215,7 @@ async fn test_save_system_message() {
             conversation_id: conv_id,
             role: MessageRole::System,
             content: "You are helpful.".to_string(),
+            metadata: None,
         })
         .await
         .unwrap();
@@ -239,6 +242,7 @@ async fn test_get_messages_ordering() {
         conversation_id: conv_id,
         role: MessageRole::User,
         content: "First".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -247,6 +251,7 @@ async fn test_get_messages_ordering() {
         conversation_id: conv_id,
         role: MessageRole::Assistant,
         content: "Second".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -255,6 +260,7 @@ async fn test_get_messages_ordering() {
         conversation_id: conv_id,
         role: MessageRole::User,
         content: "Third".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -414,6 +420,7 @@ async fn test_delete_conversation_cascades_messages() {
         conversation_id: id,
         role: MessageRole::User,
         content: "Hello".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -475,6 +482,7 @@ async fn test_message_count() {
         conversation_id: conv_id,
         role: MessageRole::User,
         content: "Hello".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -485,6 +493,7 @@ async fn test_message_count() {
         conversation_id: conv_id,
         role: MessageRole::Assistant,
         content: "Hi".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -512,6 +521,7 @@ async fn test_update_message_content() {
             conversation_id: conv_id,
             role: MessageRole::User,
             content: "Original".to_string(),
+            metadata: None,
         })
         .await
         .unwrap();
@@ -543,6 +553,7 @@ async fn test_delete_message_and_subsequent() {
         conversation_id: conv_id,
         role: MessageRole::User,
         content: "First".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -552,6 +563,7 @@ async fn test_delete_message_and_subsequent() {
             conversation_id: conv_id,
             role: MessageRole::Assistant,
             content: "Second".to_string(),
+            metadata: None,
         })
         .await
         .unwrap();
@@ -560,6 +572,7 @@ async fn test_delete_message_and_subsequent() {
         conversation_id: conv_id,
         role: MessageRole::User,
         content: "Third".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -601,6 +614,7 @@ async fn test_multiple_conversations_isolation() {
         conversation_id: conv1,
         role: MessageRole::User,
         content: "In conv 1".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -609,6 +623,7 @@ async fn test_multiple_conversations_isolation() {
         conversation_id: conv2,
         role: MessageRole::User,
         content: "In conv 2".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();
@@ -617,6 +632,7 @@ async fn test_multiple_conversations_isolation() {
         conversation_id: conv2,
         role: MessageRole::Assistant,
         content: "Also in conv 2".to_string(),
+        metadata: None,
     })
     .await
     .unwrap();

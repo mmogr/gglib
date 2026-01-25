@@ -71,6 +71,7 @@ async fn test_save_and_list_messages() {
             conversation_id: conv_id,
             role: MessageRole::User,
             content: "Hello, how are you?".to_string(),
+            metadata: None,
         })
         .await
         .expect("Failed to save user message");
@@ -81,6 +82,7 @@ async fn test_save_and_list_messages() {
             conversation_id: conv_id,
             role: MessageRole::Assistant,
             content: "I'm doing well, thank you!".to_string(),
+            metadata: None,
         })
         .await
         .expect("Failed to save assistant message");
@@ -171,6 +173,7 @@ async fn test_delete_conversation_cascades() {
         conversation_id: conv_id,
         role: MessageRole::User,
         content: "Test message".to_string(),
+        metadata: None,
     })
     .await
     .expect("Failed to save message");

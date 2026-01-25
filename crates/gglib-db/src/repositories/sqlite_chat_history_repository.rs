@@ -143,7 +143,7 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
 
     async fn get_messages(&self, conversation_id: i64) -> Result<Vec<Message>, ChatHistoryError> {
         let rows = sqlx::query(
-            "SELECT id, conversation_id, role, content, created_at 
+            "SELECT id, conversation_id, role, content, metadata, created_at 
              FROM chat_messages 
              WHERE conversation_id = ? 
              ORDER BY created_at ASC",
@@ -158,12 +158,15 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
             .map(|row| {
                 let role_str: String = row.get("role");
                 let role = MessageRole::parse(&role_str).unwrap_or(MessageRole::User);
+                let metadata_str: Option<String> = row.get("metadata");
+                let metadata = metadata_str.and_then(|s| serde_json::from_str(&s).ok());
                 Message {
                     id: row.get("id"),
                     conversation_id: row.get("conversation_id"),
                     role,
                     content: row.get("content"),
                     created_at: row.get("created_at"),
+                    metadata,
                 }
             })
             .collect();
@@ -172,13 +175,20 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
     }
 
     async fn save_message(&self, msg: NewMessage) -> Result<i64, ChatHistoryError> {
+        // Serialize metadata to JSON string if present
+        let metadata_str = msg
+            .metadata
+            .as_ref()
+            .map(|m| serde_json::to_string(m).unwrap_or_default());
+
         // Insert message
         let result = sqlx::query(
-            "INSERT INTO chat_messages (conversation_id, role, content) VALUES (?, ?, ?)",
+            "INSERT INTO chat_messages (conversation_id, role, content, metadata) VALUES (?, ?, ?, ?)",
         )
         .bind(msg.conversation_id)
         .bind(msg.role.as_str())
         .bind(&msg.content)
+        .bind(&metadata_str)
         .execute(&self.pool)
         .await
         .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
