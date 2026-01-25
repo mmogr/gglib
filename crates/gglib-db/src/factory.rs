@@ -189,6 +189,7 @@ impl TestDb {
                 conversation_id INTEGER NOT NULL,
                 role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant')),
                 content TEXT NOT NULL,
+                metadata TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
             )
