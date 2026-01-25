@@ -415,7 +415,6 @@ jobs:
         with:
           shared-key: "gui-${{ matrix.target }}"
           cache-on-failure: true
-          workspaces: src-tauri
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -465,27 +464,27 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           Write-Output "=== BUILD - Checking output structure ==="
-          Write-Output "Contents of src-tauri/target:"
-          if (Test-Path src-tauri/target/) {
-            Get-ChildItem -Force src-tauri/target/
+          Write-Output "Contents of target:"
+          if (Test-Path target/) {
+            Get-ChildItem -Force target/
           } else {
             Write-Output "No target directory found"
           }
-          Write-Output "Contents of src-tauri/target/release:"
-          if (Test-Path src-tauri/target/release/) {
-            Get-ChildItem -Force src-tauri/target/release/
+          Write-Output "Contents of target/release:"
+          if (Test-Path target/release/) {
+            Get-ChildItem -Force target/release/
           } else {
             Write-Output "No release directory found"
           }
-          Write-Output "Contents of src-tauri/target/release/bundle:"
-          if (Test-Path src-tauri/target/release/bundle/) {
-            Get-ChildItem -Force src-tauri/target/release/bundle/
+          Write-Output "Contents of target/release/bundle:"
+          if (Test-Path target/release/bundle/) {
+            Get-ChildItem -Force target/release/bundle/
           } else {
             Write-Output "No bundle directory found"
           }
           Write-Output "Searching for all executables:"
-          if (Test-Path src-tauri/target/) {
-            Get-ChildItem -Recurse -Name "gglib-app*" src-tauri/target/
+          if (Test-Path target/) {
+            Get-ChildItem -Recurse -Name "gglib-app*" target/
           } else {
             Write-Output "No gglib-app executables found"
           }
@@ -495,34 +494,34 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           echo "=== BUILD - Checking output structure ==="
-          echo "Contents of src-tauri/target:"
-          if [ -d "src-tauri/target/" ]; then
-            ls -la src-tauri/target/
+          echo "Contents of target:"
+          if [ -d "target/" ]; then
+            ls -la target/
           else
             echo "No target directory found"
           fi
-          echo "Contents of src-tauri/target/release:"
-          if [ -d "src-tauri/target/release/" ]; then
-            ls -la src-tauri/target/release/
+          echo "Contents of target/release:"
+          if [ -d "target/release/" ]; then
+            ls -la target/release/
           else
             echo "No release directory found"
           fi
-          echo "Contents of src-tauri/target/release/bundle:"
-          if [ -d "src-tauri/target/release/bundle/" ]; then
-            ls -la src-tauri/target/release/bundle/
+          echo "Contents of target/release/bundle:"
+          if [ -d "target/release/bundle/" ]; then
+            ls -la target/release/bundle/
           else
             echo "No bundle directory found"
           fi
           echo "Searching for all .app bundles:"
-          find src-tauri/target -name "*.app" -type d 2>/dev/null || echo "No .app bundles found"
+          find target -name "*.app" -type d 2>/dev/null || echo "No .app bundles found"
           echo "Searching for all executables:"
-          find src-tauri/target -name "gglib-app*" -type f 2>/dev/null || echo "No gglib-app executables found"
+          find target -name "gglib-app*" -type f 2>/dev/null || echo "No gglib-app executables found"
 
       - name: Prepare GUI binary for packaging (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p gui-release
-          cp src-tauri/target/${{ matrix.target }}/release/gglib-app gui-release/
+          cp target/${{ matrix.target }}/release/gglib-app gui-release/
           chmod +x gui-release/gglib-app
 
       - name: Prepare GUI binary for packaging (macOS)
@@ -531,27 +530,27 @@ jobs:
           mkdir -p gui-release
           
           echo "Checking build output structure..."
-          echo "Contents of src-tauri/target/${{ matrix.target }}/release:"
-          if [ -d "src-tauri/target/${{ matrix.target }}/release/" ]; then
-            ls -la "src-tauri/target/${{ matrix.target }}/release/"
+          echo "Contents of target/${{ matrix.target }}/release:"
+          if [ -d "target/${{ matrix.target }}/release/" ]; then
+            ls -la "target/${{ matrix.target }}/release/"
           else
             echo "No target-specific release directory found"
           fi
           
           # First check for the bare binary (always created)
-          if [ -f "src-tauri/target/${{ matrix.target }}/release/gglib-app" ]; then
+          if [ -f "target/${{ matrix.target }}/release/gglib-app" ]; then
             echo "Found bare binary in target-specific directory, copying..."
-            cp "src-tauri/target/${{ matrix.target }}/release/gglib-app" gui-release/
+            cp "target/${{ matrix.target }}/release/gglib-app" gui-release/
             chmod +x gui-release/gglib-app
           else
-            echo "ERROR: Bare binary not found! src-tauri/target/${{ matrix.target }}/release/gglib-app does not exist."
+            echo "ERROR: Bare binary not found! target/${{ matrix.target }}/release/gglib-app does not exist."
             exit 1
           fi
           
           # Try to copy the .app bundle if it exists (only created for native builds, not cross-compilation)
-          if [ -d "src-tauri/target/${{ matrix.target }}/release/bundle/macos/GGLib GUI.app" ]; then
+          if [ -d "target/${{ matrix.target }}/release/bundle/macos/GGLib GUI.app" ]; then
             echo "Found .app bundle in target-specific directory, copying..."
-            cp -r "src-tauri/target/${{ matrix.target }}/release/bundle/macos/GGLib GUI.app" gui-release/
+            cp -r "target/${{ matrix.target }}/release/bundle/macos/GGLib GUI.app" gui-release/
             
             # Copy the install script and README for macOS users
             echo "Copying macOS install script and README..."
@@ -566,10 +565,10 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           mkdir gui-release
-          copy src-tauri\target\${{ matrix.target }}\release\gglib-app.exe gui-release\
+          copy target\${{ matrix.target }}\release\gglib-app.exe gui-release\
           # Also copy the MSI installer if it was built
-          if (Test-Path "src-tauri\target\${{ matrix.target }}\release\bundle\msi\*.msi") {
-            copy src-tauri\target\${{ matrix.target }}\release\bundle\msi\*.msi gui-release\
+          if (Test-Path "target\${{ matrix.target }}\release\bundle\msi\*.msi") {
+            copy target\${{ matrix.target }}\release\bundle\msi\*.msi gui-release\
           }
 
       - name: Package GUI binary (Unix)
