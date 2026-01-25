@@ -34,10 +34,8 @@ pub async fn perform_shutdown(state: &AppState) {
     });
 
     // Wrap cleanup in 8-second timeout (leaves 2s buffer before watchdog)
-    let cleanup_result = tokio::time::timeout(
-        Duration::from_secs(8),
-        parallel_cleanup(state)
-    ).await;
+    let cleanup_result =
+        tokio::time::timeout(Duration::from_secs(8), parallel_cleanup(state)).await;
 
     match cleanup_result {
         Ok(Ok(())) => info!("Cleanup completed successfully"),
@@ -60,28 +58,28 @@ pub async fn perform_shutdown(state: &AppState) {
 /// Perform parallel cleanup of servers and downloads.
 async fn parallel_cleanup(state: &AppState) -> Result<(), String> {
     info!("Stopping all llama-server processes");
-    
+
     // Abort background tasks first to prevent new events
     {
         let mut tasks = state.background_tasks.write().await;
-        
+
         if let Some(server_task) = tasks.embedded_server.take() {
             info!("Aborting embedded API server task");
             server_task.abort();
         }
-        
+
         if let Some(log_task) = tasks.log_emitter.take() {
             info!("Aborting server log emitter task");
             log_task.abort();
         }
     }
-    
+
     // Run server stop and download cancel in parallel
     let (servers_result, _) = tokio::join!(
         state.gui.stop_all_servers(),
         state.gui.cancel_all_downloads()
     );
-    
+
     // Map server errors to string
     servers_result.map_err(|e| format!("Failed to stop servers: {}", e))
 }

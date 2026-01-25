@@ -1,9 +1,9 @@
 //! Menu construction.
 
-use super::{ids, AppMenu};
+use super::{AppMenu, ids};
 use tauri::{
-    menu::{AboutMetadataBuilder, Menu, MenuItem, PredefinedMenuItem, Submenu},
     AppHandle, Wry,
+    menu::{AboutMetadataBuilder, Menu, MenuItem, PredefinedMenuItem, Submenu},
 };
 
 /// Build the complete application menu.

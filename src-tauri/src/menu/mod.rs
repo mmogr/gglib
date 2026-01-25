@@ -24,10 +24,7 @@ pub mod state_sync;
 #[cfg(target_os = "macos")]
 pub use build::build_app_menu;
 
-use tauri::{
-    menu::MenuItem,
-    Wry,
-};
+use tauri::{Wry, menu::MenuItem};
 
 /// Holds references to menu items that need dynamic state updates.
 ///

@@ -1,7 +1,7 @@
 //! Menu event handling.
 
-use crate::app::events::{emit_or_log, names};
 use crate::app::AppState;
+use crate::app::events::{emit_or_log, names};
 use crate::menu::ids;
 use tauri::{AppHandle, Manager};
 use tracing::debug;
@@ -83,7 +83,7 @@ fn handle_copy_proxy_url(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let state: tauri::State<AppState> = app_clone.state();
         let proxy_port = *state.proxy_port.read().await;
-        
+
         // Build URL from stored proxy port (or default)
         let port = proxy_port.unwrap_or(8080);
         let url = format!("http://127.0.0.1:{}/v1", port);
