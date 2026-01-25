@@ -208,17 +208,65 @@ pub struct ChatMessage {
     pub tool_calls: Option<serde_json::Value>,
 }
 
+/// Merge consecutive system messages into a single message.
+///
+/// This is universally safe because:
+/// - No model template requires multiple system messages
+/// - Merging preserves all content with clear separation
+/// - It prevents errors in strict-turn templates (e.g., gemma3/medgemma)
+///
+/// # Arguments
+///
+/// * `messages` - The input chat messages
+///
+/// # Returns
+///
+/// Messages with consecutive system messages merged
+fn merge_consecutive_system_messages(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    if messages.is_empty() {
+        return messages;
+    }
+
+    let mut result: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+
+    for msg in messages {
+        if let Some(last) = result.last_mut() {
+            if last.role == "system" && msg.role == "system" {
+                // Merge: append content with separator
+                let last_content = last.content.take().unwrap_or_default();
+                let new_content = msg.content.unwrap_or_default();
+
+                last.content = Some(if last_content.is_empty() {
+                    new_content
+                } else if new_content.is_empty() {
+                    last_content
+                } else {
+                    format!("{}\n\n{}", last_content, new_content)
+                });
+
+                continue; // Don't push, we merged into last
+            }
+        }
+        result.push(msg);
+    }
+
+    result
+}
+
 /// Transform chat messages based on model capabilities.
 ///
 /// This is a pure function that applies capability-aware transformations:
+/// - Merges consecutive system messages (always, for all models)
 /// - Converts system messages to user messages when model doesn't support system role
 /// - Merges consecutive same-role messages when model requires strict alternation
 ///
 /// # Invariant
 ///
-/// When capabilities are unknown (empty), messages are passed through unchanged.
-/// This prevents degrading standard models while allowing explicit constraints
-/// to be enforced when detected.
+/// Consecutive system messages are ALWAYS merged, regardless of capabilities.
+/// This prevents Jinja template errors in models with strict role alternation.
+///
+/// When capabilities are unknown (empty), only system message merging is applied.
+/// This prevents degrading standard models while ensuring universal compatibility.
 ///
 /// # Arguments
 ///
@@ -232,6 +280,12 @@ pub fn transform_messages_for_capabilities(
     mut messages: Vec<ChatMessage>,
     capabilities: ModelCapabilities,
 ) -> Vec<ChatMessage> {
+    // STEP 0 (ALWAYS): Merge consecutive system messages.
+    // This is safe for ALL models and prevents Jinja template errors
+    // in models with strict role alternation (e.g., gemma3/medgemma).
+    // Must run BEFORE the capabilities check to protect unknown models.
+    messages = merge_consecutive_system_messages(messages);
+
     // Pass through if capabilities are unknown
     if capabilities.is_empty() {
         return messages;
@@ -287,11 +341,37 @@ mod transform_tests {
     use super::*;
 
     #[test]
-    fn test_transform_unknown_passes_through() {
+    fn test_transform_unknown_passes_through_non_system() {
+        // Non-system messages pass through unchanged with empty capabilities
+        let messages = vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("Hello".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some("Hi there".to_string()),
+                tool_calls: None,
+            },
+        ];
+        let original = messages.clone();
+        let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
+        assert_eq!(result, original);
+    }
+
+    #[test]
+    fn test_merges_consecutive_system_messages_always() {
+        // Even with empty capabilities, consecutive system messages should merge
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("You are a helpful assistant".to_string()),
+                content: Some("You are a helpful assistant.".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("WORKING_MEMORY:\n- task1 (ok): done".to_string()),
                 tool_calls: None,
             },
             ChatMessage {
@@ -300,9 +380,63 @@ mod transform_tests {
                 tool_calls: None,
             },
         ];
-        let original = messages.clone();
         let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
-        assert_eq!(result, original);
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].role, "system");
+        assert_eq!(
+            result[0].content.as_deref(),
+            Some("You are a helpful assistant.\n\nWORKING_MEMORY:\n- task1 (ok): done")
+        );
+        assert_eq!(result[1].role, "user");
+    }
+
+    #[test]
+    fn test_merges_three_consecutive_system_messages() {
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("First.".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("Second.".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("Third.".to_string()),
+                tool_calls: None,
+            },
+        ];
+        let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0].content.as_deref(),
+            Some("First.\n\nSecond.\n\nThird.")
+        );
+    }
+
+    #[test]
+    fn test_handles_empty_system_content() {
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some("Actual content".to_string()),
+                tool_calls: None,
+            },
+        ];
+        let result = transform_messages_for_capabilities(messages, ModelCapabilities::empty());
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].content.as_deref(), Some("Actual content"));
     }
 
     #[test]
