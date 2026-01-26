@@ -970,7 +970,6 @@ export async function runResearchLoop(
           }))
         );
       }
-      }
 
       // === PROCESS RESPONSE BY PHASE ===
       switch (state.phase) {
