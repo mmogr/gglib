@@ -39,6 +39,12 @@ import {
   XCircle,
   History,
   Layers,
+  Plus,
+  Wand2,
+  Maximize2,
+  ArrowDownToLine,
+  User,
+  Bot,
 } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import type {
@@ -68,6 +74,16 @@ export interface ResearchArtifactProps {
   className?: string;
   /** Callback to skip a question (mark as blocked) */
   onSkipQuestion?: (questionId: string) => void;
+  /** Callback to skip all pending questions */
+  onSkipAllPending?: () => void;
+  /** Callback to add a user question */
+  onAddQuestion?: (question: string) => void;
+  /** Callback to generate more questions via AI */
+  onGenerateMoreQuestions?: () => void;
+  /** Callback to expand a specific question via AI */
+  onExpandQuestion?: (questionId: string) => void;
+  /** Callback to go deeper via AI */
+  onGoDeeper?: () => void;
 }
 
 // =============================================================================
@@ -272,15 +288,40 @@ const ThinkingBlock: React.FC<{ reasoning: string | null }> = ({ reasoning }) =>
 
 /**
  * Research plan section showing questions and their status.
+ * Enhanced with user controls for adding questions and AI-directed actions.
  */
 const ResearchPlanSection: React.FC<{
   questions: ResearchQuestion[];
   onSkipQuestion?: (questionId: string) => void;
+  onSkipAllPending?: () => void;
+  onAddQuestion?: (question: string) => void;
+  onGenerateMoreQuestions?: () => void;
+  onExpandQuestion?: (questionId: string) => void;
+  onGoDeeper?: () => void;
   isRunning: boolean;
   isCompleted?: boolean;
-}> = ({ questions, onSkipQuestion, isRunning, isCompleted = false }) => {
+}> = ({
+  questions,
+  onSkipQuestion,
+  onSkipAllPending,
+  onAddQuestion,
+  onGenerateMoreQuestions,
+  onExpandQuestion,
+  onGoDeeper,
+  isRunning,
+  isCompleted = false,
+}) => {
   // Track which questions have skip pending (optimistic UI)
   const [pendingSkips, setPendingSkips] = useState<Set<string>>(new Set());
+  // Track which questions have expand pending
+  const [pendingExpands, setPendingExpands] = useState<Set<string>>(new Set());
+  // Track if generating more questions is pending
+  const [isGenerating, setIsGenerating] = useState(false);
+  // Track if going deeper is pending
+  const [isGoingDeeper, setIsGoingDeeper] = useState(false);
+  // State for add question input
+  const [newQuestionText, setNewQuestionText] = useState('');
+  const [showAddInput, setShowAddInput] = useState(false);
   
   const handleSkip = (questionId: string) => {
     if (onSkipQuestion) {
@@ -289,6 +330,61 @@ const ResearchPlanSection: React.FC<{
       onSkipQuestion(questionId);
     }
   };
+  
+  const handleSkipAll = () => {
+    if (onSkipAllPending) {
+      onSkipAllPending();
+    }
+  };
+  
+  const handleAddQuestion = () => {
+    if (onAddQuestion && newQuestionText.trim()) {
+      onAddQuestion(newQuestionText.trim());
+      setNewQuestionText('');
+      setShowAddInput(false);
+    }
+  };
+  
+  const handleGenerateMore = () => {
+    if (onGenerateMoreQuestions) {
+      setIsGenerating(true);
+      onGenerateMoreQuestions();
+      // Reset after a short delay (the actual state will update from the hook)
+      setTimeout(() => setIsGenerating(false), 3000);
+    }
+  };
+  
+  const handleExpand = (questionId: string) => {
+    if (onExpandQuestion) {
+      setPendingExpands(prev => new Set(prev).add(questionId));
+      onExpandQuestion(questionId);
+      // Reset after a short delay
+      setTimeout(() => {
+        setPendingExpands(prev => {
+          const next = new Set(prev);
+          next.delete(questionId);
+          return next;
+        });
+      }, 3000);
+    }
+  };
+  
+  const handleGoDeeper = () => {
+    if (onGoDeeper) {
+      setIsGoingDeeper(true);
+      onGoDeeper();
+      // Reset after a short delay
+      setTimeout(() => setIsGoingDeeper(false), 3000);
+    }
+  };
+  
+  // Count pending questions
+  const pendingCount = questions.filter(
+    q => q.status === 'pending' || q.status === 'in-progress'
+  ).length;
+  
+  // Check if actions are available (only during gathering phase when running)
+  const actionsAvailable = !isCompleted && isRunning;
   
   if (questions.length === 0) {
     return (
@@ -333,15 +429,128 @@ const ResearchPlanSection: React.FC<{
           {questions.filter(q => q.status === 'answered').length}/{questions.length} answered
         </span>
       </div>
+      
+      {/* Action buttons row - only show when research is running */}
+      {actionsAvailable && (
+        <div className={styles.questionActions}>
+          {/* Add question button/input */}
+          {showAddInput ? (
+            <div className={styles.addQuestionInput}>
+              <input
+                type="text"
+                value={newQuestionText}
+                onChange={(e) => setNewQuestionText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newQuestionText.trim()) {
+                    handleAddQuestion();
+                  } else if (e.key === 'Escape') {
+                    setShowAddInput(false);
+                    setNewQuestionText('');
+                  }
+                }}
+                placeholder="Type your question..."
+                className={styles.addQuestionField}
+                autoFocus
+              />
+              <button
+                className={styles.addQuestionSubmit}
+                onClick={handleAddQuestion}
+                disabled={!newQuestionText.trim()}
+                title="Add question"
+                type="button"
+              >
+                <Icon icon={Plus} size={14} />
+              </button>
+              <button
+                className={styles.addQuestionCancel}
+                onClick={() => {
+                  setShowAddInput(false);
+                  setNewQuestionText('');
+                }}
+                title="Cancel"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+          ) : (
+            <button
+              className={styles.actionButton}
+              onClick={() => setShowAddInput(true)}
+              title="Add your own research question"
+              type="button"
+            >
+              <Icon icon={Plus} size={12} />
+              Add Question
+            </button>
+          )}
+          
+          {/* AI action buttons */}
+          <button
+            className={styles.actionButton}
+            onClick={handleGenerateMore}
+            disabled={isGenerating}
+            title="Ask AI to generate more research questions"
+            type="button"
+          >
+            {isGenerating ? (
+              <Icon icon={Loader2} size={12} className={styles.spinIcon} />
+            ) : (
+              <Icon icon={Wand2} size={12} />
+            )}
+            More Questions
+          </button>
+          
+          <button
+            className={styles.actionButton}
+            onClick={handleGoDeeper}
+            disabled={isGoingDeeper}
+            title="Ask AI to explore deeper based on current findings"
+            type="button"
+          >
+            {isGoingDeeper ? (
+              <Icon icon={Loader2} size={12} className={styles.spinIcon} />
+            ) : (
+              <Icon icon={ArrowDownToLine} size={12} />
+            )}
+            Go Deeper
+          </button>
+          
+          {/* Skip all pending - only show if there are multiple pending questions */}
+          {pendingCount > 1 && onSkipAllPending && (
+            <button
+              className={`${styles.actionButton} ${styles.actionButtonDanger}`}
+              onClick={handleSkipAll}
+              title="Skip all remaining questions"
+              type="button"
+            >
+              <Icon icon={SkipForward} size={12} />
+              Skip All ({pendingCount})
+            </button>
+          )}
+        </div>
+      )}
+      
       <div className={styles.questionList}>
         {sortedQuestions.map(question => {
-          const canSkip = !isCompleted && isRunning && 
+          const canSkip = actionsAvailable && 
             onSkipQuestion && 
             (question.status === 'in-progress' || question.status === 'pending') &&
             !pendingSkips.has(question.id);
           
+          const canExpand = actionsAvailable &&
+            onExpandQuestion &&
+            question.status === 'pending' &&
+            !pendingExpands.has(question.id);
+          
           const isBlocked = question.status === 'blocked';
           const showSkipButton = canSkip || (isCompleted && (question.status === 'in-progress' || question.status === 'pending'));
+          
+          // Determine question source indicator
+          const sourceIcon = question.source === 'user-added' ? User :
+                           question.source === 'ai-expanded' ? Maximize2 :
+                           question.source === 'ai-generated' ? Bot :
+                           null;
           
           return (
             <div 
@@ -352,27 +561,52 @@ const ResearchPlanSection: React.FC<{
                 <QuestionStatusIcon status={question.status} />
               </div>
               <div className={styles.questionContent}>
-                <div className={styles.questionText}>{question.question}</div>
+                <div className={styles.questionText}>
+                  {sourceIcon && (
+                    <span className={styles.questionSourceIcon} title={`Source: ${question.source}`}>
+                      <Icon icon={sourceIcon} size={10} />
+                    </span>
+                  )}
+                  {question.question}
+                </div>
                 {question.answerSummary && (
                   <div className={styles.questionAnswer}>{question.answerSummary}</div>
                 )}
               </div>
-              {showSkipButton && (
-                <button
-                  className={styles.skipButton}
-                  onClick={() => handleSkip(question.id)}
-                  title={isCompleted ? "Question was skipped" : "Skip this question"}
-                  type="button"
-                  disabled={isCompleted}
-                >
-                  <Icon icon={SkipForward} size={12} />
-                </button>
-              )}
-              {pendingSkips.has(question.id) && (
-                <div className={styles.skipPending}>
-                  <Icon icon={Loader2} size={12} className={styles.skipSpinner} />
-                </div>
-              )}
+              <div className={styles.questionButtons}>
+                {/* Expand button */}
+                {canExpand && (
+                  <button
+                    className={styles.expandButton}
+                    onClick={() => handleExpand(question.id)}
+                    title="Ask AI to break this into sub-questions"
+                    type="button"
+                  >
+                    {pendingExpands.has(question.id) ? (
+                      <Icon icon={Loader2} size={12} className={styles.spinIcon} />
+                    ) : (
+                      <Icon icon={Maximize2} size={12} />
+                    )}
+                  </button>
+                )}
+                {/* Skip button */}
+                {showSkipButton && (
+                  <button
+                    className={styles.skipButton}
+                    onClick={() => handleSkip(question.id)}
+                    title={isCompleted ? "Question was skipped" : "Skip this question"}
+                    type="button"
+                    disabled={isCompleted}
+                  >
+                    <Icon icon={SkipForward} size={12} />
+                  </button>
+                )}
+                {pendingSkips.has(question.id) && (
+                  <div className={styles.skipPending}>
+                    <Icon icon={Loader2} size={12} className={styles.skipSpinner} />
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
@@ -710,6 +944,11 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
   defaultExpanded = true,
   className,
   onSkipQuestion,
+  onSkipAllPending,
+  onAddQuestion,
+  onGenerateMoreQuestions,
+  onExpandQuestion,
+  onGoDeeper,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
@@ -927,6 +1166,11 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
               <ResearchPlanSection
                 questions={effectiveState.researchPlan}
                 onSkipQuestion={onSkipQuestion}
+                onSkipAllPending={onSkipAllPending}
+                onAddQuestion={onAddQuestion}
+                onGenerateMoreQuestions={onGenerateMoreQuestions}
+                onExpandQuestion={onExpandQuestion}
+                onGoDeeper={onGoDeeper}
                 isRunning={isRunning}
               />
 
