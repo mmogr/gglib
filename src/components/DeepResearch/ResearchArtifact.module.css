@@ -163,6 +163,32 @@
   color: var(--text-muted, #666);
 }
 
+/* === Activity Log (Velocity Stream) === */
+.activityLog {
+  padding: 8px 14px;
+  background: var(--bg-tertiary, #252525);
+  border-top: 1px solid var(--border-color, #333);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activityEntry {
+  font-size: 11px;
+  color: var(--text-secondary, #a0a0a0);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.2s ease;
+}
+
+.activityEntry::before {
+  content: '›';
+  margin-right: 6px;
+  color: var(--text-muted, #666);
+}
+
 /* === Expanded Content === */
 .expandedContent {
   border-top: 1px solid var(--border-color, #333);
@@ -288,6 +314,17 @@
   font-size: 13px;
   color: var(--text-primary, #e0e0e0);
   line-height: 1.4;
+}
+
+/* Blocked questions are visually deprioritized */
+.questionBlocked {
+  opacity: 0.5;
+  background: transparent;
+}
+
+.questionBlocked .questionText {
+  text-decoration: line-through;
+  color: var(--text-muted, #666);
 }
 
 .questionAnswer {

@@ -81,7 +81,30 @@ function getLiveActivity(state: ResearchState, isRunning: boolean): string {
     return 'Research paused';
   }
 
-  // Check for pending observations (tools in flight - those without rawResult yet)
+  // Check for LLM generating state (highest priority when thinking)
+  if (state.isLLMGenerating) {
+    return 'Thinking...';
+  }
+
+  // Check for active tool calls with search queries (new verbose tracking)
+  if (state.activeToolCalls && state.activeToolCalls.length > 0) {
+    const firstTool = state.activeToolCalls[0];
+    const elapsed = Math.round((Date.now() - firstTool.startedAt) / 1000);
+    
+    if (firstTool.searchQuery) {
+      const truncated = firstTool.searchQuery.length > 40
+        ? firstTool.searchQuery.slice(0, 37) + '...'
+        : firstTool.searchQuery;
+      return `Searching: "${truncated}" (${elapsed}s)`;
+    }
+    
+    if (state.activeToolCalls.length === 1) {
+      return `Running ${firstTool.toolName}... (${elapsed}s)`;
+    }
+    return `Running ${state.activeToolCalls.length} tools... (${elapsed}s)`;
+  }
+
+  // Fallback: Check for pending observations (legacy, for compatibility)
   const pendingTools = state.pendingObservations.filter(o => !o.rawResult);
   if (pendingTools.length > 0) {
     const toolNames = pendingTools.map(o => o.toolName).join(', ');
@@ -265,12 +288,21 @@ const ResearchPlanSection: React.FC<{
     );
   }
 
-  // Sort by priority, then status (in-progress first)
+  // Sort: in-progress first, then pending by priority, then answered, blocked last
   const sortedQuestions = [...questions].sort((a, b) => {
-    // In-progress always first
-    if (a.status === 'in-progress' && b.status !== 'in-progress') return -1;
-    if (b.status === 'in-progress' && a.status !== 'in-progress') return 1;
-    // Then by priority
+    // Define status priority (lower = higher priority)
+    const statusOrder: Record<QuestionStatus, number> = {
+      'in-progress': 0,
+      'pending': 1,
+      'answered': 2,
+      'blocked': 3,
+    };
+    
+    // First sort by status
+    const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+    if (statusDiff !== 0) return statusDiff;
+    
+    // Within same status, sort by priority
     return a.priority - b.priority;
   });
 
@@ -292,8 +324,13 @@ const ResearchPlanSection: React.FC<{
             (question.status === 'in-progress' || question.status === 'pending') &&
             !pendingSkips.has(question.id);
           
+          const isBlocked = question.status === 'blocked';
+          
           return (
-            <div key={question.id} className={styles.questionItem}>
+            <div 
+              key={question.id} 
+              className={`${styles.questionItem} ${isBlocked ? styles.questionBlocked : ''}`}
+            >
               <div className={styles.questionStatus}>
                 <QuestionStatusIcon status={question.status} />
               </div>
@@ -660,6 +697,21 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
             <span>Step {effectiveState.currentStep}/{effectiveState.maxSteps}</span>
             <span>{progress}%</span>
           </div>
+        </div>
+      )}
+
+      {/* Activity log (trailing events for velocity visibility) */}
+      {isRunning && effectiveState.activityLog && effectiveState.activityLog.length > 0 && (
+        <div className={styles.activityLog}>
+          {effectiveState.activityLog.map((entry, idx) => (
+            <div
+              key={idx}
+              className={styles.activityEntry}
+              style={{ opacity: 0.5 + (idx / effectiveState.activityLog.length) * 0.5 }}
+            >
+              {entry}
+            </div>
+          ))}
         </div>
       )}
 
