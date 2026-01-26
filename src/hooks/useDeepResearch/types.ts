@@ -436,6 +436,15 @@ export const MAX_ACTIVITY_LOG_ENTRIES = 5;
  * 2. Token-efficient (no raw search results)
  * 3. Resumable (can reload and continue)
  */
+
+/**
+ * Classification of query complexity - determines research strategy.
+ * - 'simple': Straightforward factual question, single perspective sufficient
+ * - 'multi-faceted': Complex topic with multiple valid angles to explore
+ * - 'controversial': Topic with competing viewpoints that need balanced coverage
+ */
+export type ResearchComplexity = 'simple' | 'multi-faceted' | 'controversial';
+
 export interface ResearchState {
   // === Identity & Persistence ===
   /** Original user query that initiated this research */
@@ -470,6 +479,14 @@ export interface ResearchState {
   maxRounds: number;
   /** Summaries from completed rounds (for token-efficient context) */
   roundSummaries: RoundSummary[];
+
+  // === Complexity & Perspective (Adaptive Planner) ===
+  /** Classified complexity of the query (determines research strategy) */
+  complexity: ResearchComplexity;
+  /** Generated perspectives for multi-faceted/controversial topics */
+  perspectives: string[];
+  /** Active perspective for current round (undefined = neutral/simple) */
+  currentPerspective: string | undefined;
 
   // === Execution Tracking ===
   /** Current step number (1-indexed) */
@@ -566,6 +583,11 @@ export function createInitialState(
     currentRound: 1,
     maxRounds: options.maxRounds ?? 3,
     roundSummaries: [],
+
+    // Complexity & Perspective (set by planner, defaults to simple)
+    complexity: 'simple',
+    perspectives: [],
+    currentPerspective: undefined,
 
     // Execution
     currentStep: 0,

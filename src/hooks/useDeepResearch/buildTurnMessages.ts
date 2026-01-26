@@ -80,14 +80,28 @@ export const PHASE_INSTRUCTIONS: Record<ResearchPhase, string> = {
 
 You are decomposing the user's research query into actionable sub-questions.
 
-INSTRUCTIONS:
-1. Analyze the query to identify 3-7 distinct sub-questions that need answering
-2. Form an initial hypothesis based on your existing knowledge
+STEP 1 - CLASSIFY COMPLEXITY:
+Analyze the query and classify it as one of:
+- "simple": Straightforward factual question (e.g., "What year was X founded?")
+- "multi-faceted": Complex topic with multiple valid angles (e.g., "What are the pros and cons of X?")
+- "controversial": Topic with competing viewpoints (e.g., "Is X better than Y?" or politically/ethically debated topics)
+
+STEP 2 - GENERATE PERSPECTIVES (if not simple):
+For "multi-faceted" or "controversial" queries, generate 2-3 distinct research perspectives:
+- Each perspective represents a different lens to examine the topic
+- For controversial topics: include opposing viewpoints (e.g., "Proponent view", "Critic view", "Neutral analyst")
+- For multi-faceted topics: cover different angles (e.g., "Technical perspective", "Business perspective", "User perspective")
+
+STEP 3 - CREATE RESEARCH PLAN:
+1. Form an initial hypothesis based on your existing knowledge
+2. Identify 3-7 distinct sub-questions that need answering
 3. Identify what you DON'T know (knowledge gaps)
 
 RESPOND WITH JSON:
 {
   "type": "plan",
+  "complexity": "simple" | "multi-faceted" | "controversial",
+  "perspectives": ["Perspective 1", "Perspective 2"],
   "hypothesis": "Your initial working hypothesis...",
   "questions": [
     {"question": "Sub-question 1?", "priority": 1},
@@ -95,6 +109,11 @@ RESPOND WITH JSON:
   ],
   "gaps": ["What we don't know yet..."]
 }
+
+NOTES:
+- For "simple" queries, "perspectives" should be an empty array []
+- For "multi-faceted"/"controversial", provide 2-3 meaningful perspectives
+- Each round of research will explore one perspective in depth
 
 Do NOT use tools in planning phase. Output ONLY the JSON.`,
 

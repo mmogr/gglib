@@ -205,6 +205,10 @@ interface PlanResponse {
   hypothesis: string;
   questions: Array<{ question: string; priority: number }>;
   gaps?: string[];
+  /** Query complexity classification (adaptive planner) */
+  complexity?: 'simple' | 'multi-faceted' | 'controversial';
+  /** Research perspectives for multi-faceted/controversial queries */
+  perspectives?: string[];
 }
 
 /**
@@ -679,15 +683,39 @@ async function handlePlanningPhase(
     createQuestion(q.question, q.priority ?? idx + 1)
   );
   
+  // Parse complexity classification (default to 'simple' if not provided)
+  const validComplexities = ['simple', 'multi-faceted', 'controversial'] as const;
+  const complexity = parsed.complexity && validComplexities.includes(parsed.complexity as typeof validComplexities[number])
+    ? (parsed.complexity as 'simple' | 'multi-faceted' | 'controversial')
+    : 'simple';
+  
+  // Parse perspectives (only meaningful for non-simple queries)
+  const perspectives: string[] = Array.isArray(parsed.perspectives)
+    ? parsed.perspectives.filter((p: unknown) => typeof p === 'string' && p.trim().length > 0)
+    : [];
+  
+  // Set initial perspective (first one if available, undefined for simple queries)
+  const currentPerspective = complexity !== 'simple' && perspectives.length > 0
+    ? perspectives[0]
+    : undefined;
+  
   // Log planning completion for user visibility
   let newState: ResearchState = {
     ...state,
     researchPlan: questions,
     currentHypothesis: parsed.hypothesis,
     knowledgeGaps: parsed.gaps ?? [],
+    complexity,
+    perspectives,
+    currentPerspective,
     phase: 'gathering',
   };
-  newState = pushActivityLog(newState, `Created research plan with ${questions.length} questions`);
+  
+  // Build activity log message
+  const complexityNote = complexity !== 'simple' && perspectives.length > 0
+    ? ` (${complexity}: ${perspectives.length} perspectives)`
+    : '';
+  newState = pushActivityLog(newState, `Created research plan with ${questions.length} questions${complexityNote}`);
   
   return newState;
 }
