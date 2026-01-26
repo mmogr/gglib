@@ -68,6 +68,12 @@ export function createDefaultRouting(port: number): ModelRouting {
 export type QuestionStatus = 'pending' | 'in-progress' | 'answered' | 'blocked';
 
 /**
+ * Source of a research question.
+ * Used to distinguish how the question was added to the research plan.
+ */
+export type QuestionSource = 'ai-planned' | 'ai-expanded' | 'ai-generated' | 'user-added';
+
+/**
  * A sub-question in the research plan.
  * Generated during PLANNING phase, answered during GATHERING phase.
  */
@@ -88,6 +94,8 @@ export interface ResearchQuestion {
   parentQuestionId?: string;
   /** Step number when this question was marked in-progress (for timeout detection) */
   inProgressSince?: number;
+  /** Source of this question (how it was added) */
+  source?: QuestionSource;
 }
 
 /**
@@ -96,7 +104,8 @@ export interface ResearchQuestion {
 export function createQuestion(
   question: string,
   priority: number = 0,
-  parentId?: string
+  parentId?: string,
+  source: QuestionSource = 'ai-planned'
 ): ResearchQuestion {
   return {
     id: crypto.randomUUID(),
@@ -105,6 +114,7 @@ export function createQuestion(
     supportingFactIds: [],
     priority,
     parentQuestionId: parentId,
+    source,
   };
 }
 
@@ -389,10 +399,24 @@ export type ResearchPhase =
 /**
  * Intervention signal for human-in-the-loop control.
  * Written to a MutableRefObject by UI, read by research loop.
+ *
+ * Supported interventions:
+ * - 'wrap-up': Force synthesis with current facts
+ * - 'skip-question': Mark a specific question as blocked
+ * - 'skip-all-pending': Skip all pending questions at once
+ * - 'add-question': User manually adds a new research question
+ * - 'generate-more-questions': Ask AI to generate additional questions
+ * - 'expand-question': Ask AI to break a question into deeper sub-questions
+ * - 'go-deeper': Ask AI to expand research based on current findings
  */
 export type ResearchIntervention =
   | { type: 'wrap-up' }
-  | { type: 'skip-question'; questionId: string };
+  | { type: 'skip-question'; questionId: string }
+  | { type: 'skip-all-pending' }
+  | { type: 'add-question'; question: string }
+  | { type: 'generate-more-questions' }
+  | { type: 'expand-question'; questionId: string }
+  | { type: 'go-deeper' };
 
 /**
  * Type for the intervention ref passed to the research loop.
