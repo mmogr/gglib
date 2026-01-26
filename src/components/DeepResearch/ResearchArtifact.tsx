@@ -548,6 +548,11 @@ const PreviousRoundsSection: React.FC<{
                 <span className={styles.roundNumber}>
                   <Icon icon={Layers} size={12} />
                   Round {round.round}
+                  {round.perspective && (
+                    <span className={styles.roundPerspective}>
+                      ({round.perspective})
+                    </span>
+                  )}
                 </span>
                 <span className={styles.roundMeta}>
                   {round.factCountAtEnd} facts · {round.questionsAnsweredThisRound.length} questions
@@ -754,6 +759,11 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
             {effectiveState.maxRounds > 1 && (
               <span className={styles.roundBadge}>
                 Round {effectiveState.currentRound}/{effectiveState.maxRounds}
+              </span>
+            )}
+            {effectiveState.currentPerspective && (
+              <span className={styles.perspectiveBadge}>
+                🎭 {effectiveState.currentPerspective}
               </span>
             )}
           </div>

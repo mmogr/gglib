@@ -253,6 +253,8 @@ export interface RoundSummary {
   timestamp: number;
   /** Questions that were answered during this round */
   questionsAnsweredThisRound: string[];
+  /** The perspective/angle this round was researching (for multi-perspective queries) */
+  perspective?: string;
 }
 
 // =============================================================================
@@ -436,6 +438,15 @@ export const MAX_ACTIVITY_LOG_ENTRIES = 5;
  * 2. Token-efficient (no raw search results)
  * 3. Resumable (can reload and continue)
  */
+
+/**
+ * Classification of query complexity - determines research strategy.
+ * - 'simple': Straightforward factual question, single perspective sufficient
+ * - 'multi-faceted': Complex topic with multiple valid angles to explore
+ * - 'controversial': Topic with competing viewpoints that need balanced coverage
+ */
+export type ResearchComplexity = 'simple' | 'multi-faceted' | 'controversial';
+
 export interface ResearchState {
   // === Identity & Persistence ===
   /** Original user query that initiated this research */
@@ -470,6 +481,14 @@ export interface ResearchState {
   maxRounds: number;
   /** Summaries from completed rounds (for token-efficient context) */
   roundSummaries: RoundSummary[];
+
+  // === Complexity & Perspective (Adaptive Planner) ===
+  /** Classified complexity of the query (determines research strategy) */
+  complexity: ResearchComplexity;
+  /** Generated perspectives for multi-faceted/controversial topics */
+  perspectives: string[];
+  /** Active perspective for current round (undefined = neutral/simple) */
+  currentPerspective: string | undefined;
 
   // === Execution Tracking ===
   /** Current step number (1-indexed) */
@@ -566,6 +585,11 @@ export function createInitialState(
     currentRound: 1,
     maxRounds: options.maxRounds ?? 3,
     roundSummaries: [],
+
+    // Complexity & Perspective (set by planner, defaults to simple)
+    complexity: 'simple',
+    perspectives: [],
+    currentPerspective: undefined,
 
     // Execution
     currentStep: 0,
@@ -836,8 +860,9 @@ export function serializeForPrompt(
   const previousRoundSummaries: string[] = [];
   if (!isSynthesisPhase && state.currentRound > 1 && state.roundSummaries.length > 0) {
     for (const rs of state.roundSummaries) {
+      const perspectiveLabel = rs.perspective ? `Perspective: ${rs.perspective}` : 'General';
       previousRoundSummaries.push(
-        `**Round ${rs.round}** (${rs.questionsAnsweredThisRound.length} questions answered, ` +
+        `**Round ${rs.round}** [${perspectiveLabel}] (${rs.questionsAnsweredThisRound.length} questions answered, ` +
         `${rs.factCountAtEnd} facts total):\n${rs.summary}`
       );
     }
@@ -1327,7 +1352,8 @@ export function linkSearchToFacts(
  */
 export function createRoundSummary(
   state: ResearchState,
-  summary: string
+  summary: string,
+  perspective?: string
 ): ResearchState {
   // Track which questions were answered this round
   const questionsAnsweredThisRound = state.researchPlan
@@ -1343,6 +1369,7 @@ export function createRoundSummary(
       : state.roundSummaries[state.roundSummaries.length - 1]?.factIdsAtRoundStart ?? [],
     timestamp: Date.now(),
     questionsAnsweredThisRound,
+    perspective, // Store which angle this round explored
   };
 
   // Update factIdsAtRoundStart for the NEXT round
@@ -1361,11 +1388,18 @@ export function createRoundSummary(
 /**
  * Advance to the next research round.
  * Called after COMPRESSING phase completes.
+ * Also shifts to the next perspective if available (Round N uses Perspective N-1).
  */
 export function advanceRound(state: ResearchState): ResearchState {
+  const newRound = state.currentRound + 1;
+  // Round 1 → perspectives[0], Round 2 → perspectives[1], etc.
+  // Falls back to undefined if we've exhausted perspectives (general research)
+  const newPerspective = state.perspectives[newRound - 1] ?? undefined;
+  
   return {
     ...state,
-    currentRound: state.currentRound + 1,
+    currentRound: newRound,
+    currentPerspective: newPerspective,
   };
 }
 

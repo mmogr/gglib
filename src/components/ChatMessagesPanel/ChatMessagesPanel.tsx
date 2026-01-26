@@ -265,6 +265,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       currentRound: 1,
       maxRounds: 3,
       roundSummaries: [],
+      // Multi-perspective research fields
+      complexity: 'simple',
+      perspectives: [],
+      currentPerspective: undefined,
     };
 
     const assistantMessage: ThreadMessageLike = {

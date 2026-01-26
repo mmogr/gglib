@@ -80,14 +80,28 @@ export const PHASE_INSTRUCTIONS: Record<ResearchPhase, string> = {
 
 You are decomposing the user's research query into actionable sub-questions.
 
-INSTRUCTIONS:
-1. Analyze the query to identify 3-7 distinct sub-questions that need answering
-2. Form an initial hypothesis based on your existing knowledge
+STEP 1 - CLASSIFY COMPLEXITY:
+Analyze the query and classify it as one of:
+- "simple": Straightforward factual question (e.g., "What year was X founded?")
+- "multi-faceted": Complex topic with multiple valid angles (e.g., "What are the pros and cons of X?")
+- "controversial": Topic with competing viewpoints (e.g., "Is X better than Y?" or politically/ethically debated topics)
+
+STEP 2 - GENERATE PERSPECTIVES (if not simple):
+For "multi-faceted" or "controversial" queries, generate 2-3 distinct research perspectives:
+- Each perspective represents a different lens to examine the topic
+- For controversial topics: include opposing viewpoints (e.g., "Proponent view", "Critic view", "Neutral analyst")
+- For multi-faceted topics: cover different angles (e.g., "Technical perspective", "Business perspective", "User perspective")
+
+STEP 3 - CREATE RESEARCH PLAN:
+1. Form an initial hypothesis based on your existing knowledge
+2. Identify 3-7 distinct sub-questions that need answering
 3. Identify what you DON'T know (knowledge gaps)
 
 RESPOND WITH JSON:
 {
   "type": "plan",
+  "complexity": "simple" | "multi-faceted" | "controversial",
+  "perspectives": ["Perspective 1", "Perspective 2"],
   "hypothesis": "Your initial working hypothesis...",
   "questions": [
     {"question": "Sub-question 1?", "priority": 1},
@@ -95,6 +109,11 @@ RESPOND WITH JSON:
   ],
   "gaps": ["What we don't know yet..."]
 }
+
+NOTES:
+- For "simple" queries, "perspectives" should be an empty array []
+- For "multi-faceted"/"controversial", provide 2-3 meaningful perspectives
+- Each round of research will explore one perspective in depth
 
 Do NOT use tools in planning phase. Output ONLY the JSON.`,
 
@@ -355,6 +374,68 @@ export function buildTurnMessages(options: BuildTurnMessagesOptions): TurnMessag
 
   // 5. Get phase instruction (use override or default)
   let instruction = phaseInstruction ?? PHASE_INSTRUCTIONS[state.phase];
+  
+  // 5a. Inject perspective-specific instruction for gathering phase
+  if (state.phase === 'gathering' && state.currentPerspective) {
+    const perspectiveInstruction = `## 🎭 CURRENT PERSPECTIVE: "${state.currentPerspective}"
+
+You are researching this topic from a specific angle: **${state.currentPerspective}**
+
+Focus purely on finding evidence that supports or illuminates THIS perspective.
+Do not worry about balancing viewpoints yet — other research rounds will cover other angles.
+Seek sources and arguments that a researcher with this perspective would prioritize.
+
+---
+
+`;
+    instruction = perspectiveInstruction + instruction;
+  }
+  
+  // 5b. Inject perspective-aware evaluation rubric
+  if (state.phase === 'evaluating' && state.currentPerspective) {
+    const perspectiveEvaluation = `## 🎭 PERSPECTIVE-SPECIFIC EVALUATION
+
+You are evaluating coverage for a SPECIFIC perspective: **${state.currentPerspective}**
+
+Do NOT evaluate if the WHOLE query is answered yet.
+Instead, evaluate: Have you adequately explored "${state.currentPerspective}"?
+
+If this angle is well-covered with supporting evidence, score HIGH (7+).
+Other research rounds will cover other perspectives.
+
+---
+
+`;
+    instruction = perspectiveEvaluation + instruction;
+  }
+  
+  // 5c. Inject multi-perspective synthesis instructions
+  if (state.phase === 'synthesizing' && state.perspectives.length > 0) {
+    const perspectivesList = state.perspectives.map((p, i) => `${i + 1}. ${p}`).join('\n');
+    const roundPerspectives = state.roundSummaries
+      .filter(rs => rs.perspective)
+      .map(rs => `- Round ${rs.round}: "${rs.perspective}"`)
+      .join('\n');
+    
+    const synthesisPerspectives = `## 🎭 MULTI-PERSPECTIVE SYNTHESIS
+
+This research explored multiple distinct perspectives:
+${perspectivesList}
+
+Research rounds covered:
+${roundPerspectives || '(No perspective-tagged rounds)'}
+
+**CRITICAL INSTRUCTION**: Your final report MUST be structured to highlight these different viewpoints:
+1. Create a section for each perspective explored, summarizing what evidence supports that angle
+2. Note where perspectives agree and where they conflict
+3. End with a "Synthesis" section that weighs the conflicting evidence and presents a balanced conclusion
+4. Do NOT blend all facts together into one narrative — preserve the distinct viewpoints
+
+---
+
+`;
+    instruction = synthesisPerspectives + instruction;
+  }
   
   // 6. Append manual termination note if user requested early wrap-up
   if (state.isManualTermination && state.phase === 'synthesizing') {
