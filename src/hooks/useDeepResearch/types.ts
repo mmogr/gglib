@@ -229,6 +229,23 @@ export type ResearchPhase =
   | 'error';
 
 // =============================================================================
+// Human-in-the-Loop Intervention
+// =============================================================================
+
+/**
+ * Intervention signal for human-in-the-loop control.
+ * Written to a MutableRefObject by UI, read by research loop.
+ */
+export type ResearchIntervention =
+  | { type: 'wrap-up' }
+  | { type: 'skip-question'; questionId: string };
+
+/**
+ * Type for the intervention ref passed to the research loop.
+ */
+export type InterventionRef = React.MutableRefObject<ResearchIntervention | null>;
+
+// =============================================================================
 // Core Research State (The Scratchpad)
 // =============================================================================
 
@@ -302,6 +319,10 @@ export interface ResearchState {
     factId: string;
     footnoteNumber: number;
   }>;
+
+  // === Human-in-the-Loop Flags ===
+  /** True if user manually triggered early termination via "Wrap Up" */
+  isManualTermination?: boolean;
 
   // === Error Handling ===
   /** Error message if phase='error' */

@@ -25,6 +25,9 @@ export type {
   // Core state
   ResearchPhase,
   ResearchState,
+  // Human-in-the-loop
+  ResearchIntervention,
+  InterventionRef,
   // Serialization
   ResearchContextInjection,
   SerializedResearchState,
