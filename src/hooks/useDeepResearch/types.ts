@@ -209,6 +209,154 @@ export interface PendingObservation {
 }
 
 // =============================================================================
+// Search History Tracking (Query Deduplication)
+// =============================================================================
+
+/**
+ * A record of a search query executed during research.
+ * Used for query deduplication across rounds to prevent redundant searches.
+ */
+export interface SearchRecord {
+  /** The search query string */
+  query: string;
+  /** Tool used for the search */
+  toolName: string;
+  /** When the search was executed (Unix timestamp ms) */
+  timestamp: number;
+  /** Which question this search was for (if applicable) */
+  forQuestionId?: string;
+  /** IDs of facts that were extracted from this search result */
+  factIdsProduced: string[];
+  /** Which research round this search occurred in */
+  round: number;
+}
+
+// =============================================================================
+// Round Summaries (Multi-Round Context Compression)
+// =============================================================================
+
+/**
+ * Summary of a completed research round.
+ * Used for token-efficient context in subsequent rounds while
+ * preserving full facts in global state for final synthesis.
+ */
+export interface RoundSummary {
+  /** Which round this summary is for (1-indexed) */
+  round: number;
+  /** Compressed summary of facts gathered in this round (~500 chars) */
+  summary: string;
+  /** Number of facts in gatheredFacts at end of this round */
+  factCountAtEnd: number;
+  /** Fact IDs that existed at the start of this round (for filtering "new" facts) */
+  factIdsAtRoundStart: string[];
+  /** When this summary was generated (Unix timestamp ms) */
+  timestamp: number;
+  /** Questions that were answered during this round */
+  questionsAnsweredThisRound: string[];
+}
+
+// =============================================================================
+// Internal Research Tools (Agentic Self-Assessment)
+// =============================================================================
+
+/**
+ * Minimum facts required before synthesis can be requested.
+ * Prevents premature exit with insufficient evidence.
+ */
+export const MIN_FACTS_FOR_SYNTHESIS = 4;
+
+/**
+ * Internal tool: assess_progress
+ * Called by the agent to reflect on research quality and pivot strategy.
+ * This is a "free" tool - doesn't consume external API calls.
+ */
+export interface AssessProgressArgs {
+  /** Claims from the original query that now have supporting evidence */
+  claimsCovered: string[];
+  /** Gaps or aspects still needing investigation */
+  remainingGaps: string[];
+  /** Strategy update or pivot (e.g., "Pivot to searching for X instead") */
+  strategyUpdate: string;
+}
+
+/**
+ * Internal tool: request_synthesis
+ * Called by the agent when it believes research is complete.
+ * Has a guardrail: rejected if factCount < MIN_FACTS_FOR_SYNTHESIS.
+ */
+export interface RequestSynthesisArgs {
+  /** Justification for why research is complete */
+  reason: string;
+}
+
+/**
+ * Tool definition for assess_progress (OpenAI function calling format).
+ */
+export const ASSESS_PROGRESS_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'assess_progress',
+    description: 'Reflect on research progress. Call this every 3-4 steps to evaluate coverage and adjust strategy. This is a free action that helps you pivot if searches are not yielding results.',
+    parameters: {
+      type: 'object',
+      properties: {
+        claimsCovered: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of claims/aspects from the original query that now have supporting facts',
+        },
+        remainingGaps: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Gaps or aspects still needing investigation',
+        },
+        strategyUpdate: {
+          type: 'string',
+          description: 'Your updated research strategy or pivot (e.g., "Previous searches too broad, narrowing to specific X")',
+        },
+      },
+      required: ['claimsCovered', 'remainingGaps', 'strategyUpdate'],
+    },
+  },
+};
+
+/**
+ * Tool definition for request_synthesis (OpenAI function calling format).
+ */
+export const REQUEST_SYNTHESIS_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'request_synthesis',
+    description: `Request to end research and synthesize findings into final report. IMPORTANT: Requires minimum ${MIN_FACTS_FOR_SYNTHESIS} facts gathered. Will be rejected if insufficient evidence.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          description: 'Justification for why research is complete (e.g., "All key claims have 2+ supporting facts from diverse sources")',
+        },
+      },
+      required: ['reason'],
+    },
+  },
+};
+
+/**
+ * All internal research tools that get added to the tool list during GATHERING.
+ */
+export const INTERNAL_RESEARCH_TOOLS = [
+  ASSESS_PROGRESS_TOOL,
+  REQUEST_SYNTHESIS_TOOL,
+];
+
+/**
+ * Check if a tool name is an internal research tool.
+ */
+export function isInternalResearchTool(toolName: string): boolean {
+  return toolName === 'assess_progress' || toolName === 'request_synthesis';
+}
+
+// =============================================================================
 // Research Phases
 // =============================================================================
 
@@ -217,6 +365,8 @@ export interface PendingObservation {
  *
  * PLANNING:     Decompose query into sub-questions, form initial hypothesis
  * GATHERING:    Execute searches, extract facts, update hypothesis
+ * EVALUATING:   Assess if gathered facts adequately answer the original query
+ * COMPRESSING:  Generate round summary before starting another gathering round
  * SYNTHESIZING: Merge facts, resolve contradictions, generate final report
  * COMPLETE:     Research finished, final report available
  * ERROR:        Research failed (error stored in errorMessage)
@@ -224,6 +374,8 @@ export interface PendingObservation {
 export type ResearchPhase =
   | 'planning'
   | 'gathering'
+  | 'evaluating'
+  | 'compressing'
   | 'synthesizing'
   | 'complete'
   | 'error';
@@ -307,6 +459,18 @@ export interface ResearchState {
   /** Gathered facts from searches (max ~50, LRU pruned) */
   gatheredFacts: GatheredFact[];
 
+  // === Search History (Query Deduplication) ===
+  /** History of all search queries executed (for deduplication across rounds) */
+  searchHistory: SearchRecord[];
+
+  // === Multi-Round Support ===
+  /** Current research round (1-indexed, starts at 1) */
+  currentRound: number;
+  /** Maximum rounds allowed before forcing synthesis */
+  maxRounds: number;
+  /** Summaries from completed rounds (for token-efficient context) */
+  roundSummaries: RoundSummary[];
+
   // === Execution Tracking ===
   /** Current step number (1-indexed) */
   currentStep: number;
@@ -378,6 +542,7 @@ export function createInitialState(
   options: {
     conversationId?: number;
     maxSteps?: number;
+    maxRounds?: number;
   } = {}
 ): ResearchState {
   return {
@@ -393,6 +558,14 @@ export function createInitialState(
 
     // Knowledge
     gatheredFacts: [],
+
+    // Search History
+    searchHistory: [],
+
+    // Multi-Round
+    currentRound: 1,
+    maxRounds: options.maxRounds ?? 3,
+    roundSummaries: [],
 
     // Execution
     currentStep: 0,
@@ -484,6 +657,15 @@ export interface ResearchContextInjection {
     questionsTotal: number;
     factsGathered: number;
   };
+  /** Multi-round context */
+  round: {
+    current: number;
+    max: number;
+  };
+  /** Summaries from previous rounds (for token-efficient context in Round 2+) */
+  previousRoundSummaries: string[];
+  /** Whether we're in synthesis phase (triggers full fact access) */
+  isSynthesisPhase: boolean;
 }
 
 /**
@@ -557,11 +739,22 @@ function renderObservations(
  *
  * This is the core function that renders the scratchpad into text that
  * can be injected into the system prompt, staying within token limits.
+ *
+ * DUAL-LAYER CONTEXT LOGIC:
+ * - Round 1: Include all gatheredFacts (within budget)
+ * - Round 2+: Include previousRoundSummaries + only current round's facts
+ * - Synthesis phase: Include ALL gatheredFacts (full access for citations)
+ *
+ * Key invariant: gatheredFacts in global state is append-only. Compression
+ * produces a VIEW for prompts, not a mutation of state. Synthesis always
+ * sees the full fact corpus.
  */
 export function serializeForPrompt(
   state: ResearchState,
   budget: SerializationBudget = DEFAULT_BUDGET
 ): ResearchContextInjection {
+  const isSynthesisPhase = state.phase === 'synthesizing';
+
   // === Hypothesis ===
   const hypothesis = state.currentHypothesis
     ? state.currentHypothesis.slice(0, budget.hypothesisChars)
@@ -595,8 +788,29 @@ export function serializeForPrompt(
     planSummary = truncatedLines.join('\n');
   }
 
-  // === Facts Summary (prioritize recent + referenced) ===
-  const scoredFacts = state.gatheredFacts.map((f) => ({
+  // === Facts Summary (DUAL-LAYER LOGIC) ===
+  let factsToRender: GatheredFact[];
+
+  if (isSynthesisPhase) {
+    // SYNTHESIS: Full access to ALL facts for accurate citations
+    factsToRender = state.gatheredFacts;
+  } else if (state.currentRound === 1 || state.roundSummaries.length === 0) {
+    // ROUND 1: Include all facts (no previous round summaries exist)
+    factsToRender = state.gatheredFacts;
+  } else {
+    // ROUND 2+: Only include facts gathered AFTER the last round summary
+    // Previous rounds' facts are represented by their compressed summaries
+    const lastRoundSummary = state.roundSummaries[state.roundSummaries.length - 1];
+    const previousRoundFactIds = new Set(lastRoundSummary.factIdsAtRoundStart);
+
+    // Filter to only facts that didn't exist at the start of the last summarized round
+    factsToRender = state.gatheredFacts.filter(
+      (f) => !previousRoundFactIds.has(f.id)
+    );
+  }
+
+  // Score and sort facts for rendering
+  const scoredFacts = factsToRender.map((f) => ({
     fact: f,
     score:
       (state.currentStep - f.gatheredAtStep) * -1 + // Recency (newer = higher)
@@ -617,6 +831,17 @@ export function serializeForPrompt(
     factChars += line.length + 1;
   }
   const factsSummary = factLines.join('\n') || '(No facts gathered yet)';
+
+  // === Previous Round Summaries (for Round 2+, non-synthesis) ===
+  const previousRoundSummaries: string[] = [];
+  if (!isSynthesisPhase && state.currentRound > 1 && state.roundSummaries.length > 0) {
+    for (const rs of state.roundSummaries) {
+      previousRoundSummaries.push(
+        `**Round ${rs.round}** (${rs.questionsAnsweredThisRound.length} questions answered, ` +
+        `${rs.factCountAtEnd} facts total):\n${rs.summary}`
+      );
+    }
+  }
 
   // === Observations ===
   const observations = renderObservations(
@@ -661,6 +886,12 @@ export function serializeForPrompt(
       questionsTotal: state.researchPlan.length,
       factsGathered: state.gatheredFacts.length,
     },
+    round: {
+      current: state.currentRound,
+      max: state.maxRounds,
+    },
+    previousRoundSummaries,
+    isSynthesisPhase,
   };
 }
 
@@ -672,10 +903,11 @@ export function renderContextForSystemPrompt(
 ): string {
   const sections: string[] = [];
 
-  // Progress header
-  const { progress } = injection;
+  // Progress header (now includes round info)
+  const { progress, round } = injection;
+  const roundInfo = round.max > 1 ? ` [Round ${round.current}/${round.max}]` : '';
   sections.push(
-    `## Research Progress [Step ${progress.step}/${progress.maxSteps}] — Phase: ${injection.phase.toUpperCase()}`
+    `## Research Progress [Step ${progress.step}/${progress.maxSteps}]${roundInfo} — Phase: ${injection.phase.toUpperCase()}`
   );
   sections.push(
     `Questions: ${progress.questionsAnswered}/${progress.questionsTotal} answered | Facts: ${progress.factsGathered} gathered`
@@ -717,8 +949,26 @@ export function renderContextForSystemPrompt(
     sections.push('');
   }
 
+  // Previous round summaries (Round 2+ only, not during synthesis)
+  if (injection.previousRoundSummaries.length > 0) {
+    sections.push('## Previous Research Rounds');
+    sections.push('*Compressed summaries from earlier research rounds:*');
+    sections.push('');
+    for (const summary of injection.previousRoundSummaries) {
+      sections.push(summary);
+      sections.push('');
+    }
+  }
+
   // Gathered facts
-  sections.push('## Gathered Facts');
+  if (injection.isSynthesisPhase) {
+    sections.push('## All Gathered Facts (Full Access for Synthesis)');
+  } else if (injection.previousRoundSummaries.length > 0) {
+    sections.push('## Current Round Facts');
+    sections.push('*Facts gathered in this round (previous rounds summarized above):*');
+  } else {
+    sections.push('## Gathered Facts');
+  }
   sections.push(injection.factsSummary);
   sections.push('');
 
@@ -997,6 +1247,195 @@ export function setError(state: ResearchState, message: string): ResearchState {
   return { ...state, phase: 'error', errorMessage: message };
 }
 
+// =============================================================================
+// Search History & Deduplication Helpers
+// =============================================================================
+
+/** Similarity threshold for search query deduplication (0-1, higher = stricter) */
+const SEARCH_DEDUP_THRESHOLD = 0.8;
+
+/**
+ * Check if a search query is similar to one already executed.
+ * Uses Jaccard similarity on tokenized queries.
+ *
+ * @returns Object with isDuplicate flag and matching record if found
+ */
+export function isSearchDuplicate(
+  query: string,
+  searchHistory: SearchRecord[]
+): { isDuplicate: boolean; existingRecord?: SearchRecord } {
+  const queryTokens = tokenize(query);
+
+  for (const record of searchHistory) {
+    const recordTokens = tokenize(record.query);
+    const similarity = jaccardSimilarity(queryTokens, recordTokens);
+
+    if (similarity >= SEARCH_DEDUP_THRESHOLD) {
+      return { isDuplicate: true, existingRecord: record };
+    }
+  }
+
+  return { isDuplicate: false };
+}
+
+/**
+ * Add a search record to the history.
+ */
+export function addSearchRecord(
+  state: ResearchState,
+  record: Omit<SearchRecord, 'timestamp' | 'round'>
+): ResearchState {
+  const newRecord: SearchRecord = {
+    ...record,
+    timestamp: Date.now(),
+    round: state.currentRound,
+  };
+
+  return {
+    ...state,
+    searchHistory: [...state.searchHistory, newRecord],
+  };
+}
+
+/**
+ * Update a search record with the fact IDs it produced.
+ * Called after fact extraction to link searches to their results.
+ */
+export function linkSearchToFacts(
+  state: ResearchState,
+  toolCallId: string,
+  factIds: string[]
+): ResearchState {
+  return {
+    ...state,
+    searchHistory: state.searchHistory.map((record) =>
+      record.toolName === toolCallId || 
+      state.searchHistory.find(r => r.query && r.factIdsProduced.length === 0)?.query === record.query
+        ? { ...record, factIdsProduced: [...record.factIdsProduced, ...factIds] }
+        : record
+    ),
+  };
+}
+
+// =============================================================================
+// Round Management Helpers
+// =============================================================================
+
+/**
+ * Create a round summary and prepare for next round.
+ * Called during COMPRESSING phase.
+ */
+export function createRoundSummary(
+  state: ResearchState,
+  summary: string
+): ResearchState {
+  // Track which questions were answered this round
+  const questionsAnsweredThisRound = state.researchPlan
+    .filter((q) => q.status === 'answered')
+    .map((q) => q.id);
+
+  const roundSummary: RoundSummary = {
+    round: state.currentRound,
+    summary: summary.slice(0, 500), // Enforce max length
+    factCountAtEnd: state.gatheredFacts.length,
+    factIdsAtRoundStart: state.currentRound === 1
+      ? [] // Round 1 starts with no facts
+      : state.roundSummaries[state.roundSummaries.length - 1]?.factIdsAtRoundStart ?? [],
+    timestamp: Date.now(),
+    questionsAnsweredThisRound,
+  };
+
+  // Update factIdsAtRoundStart for the NEXT round
+  // (all facts that exist now will be "previous round" facts for Round N+1)
+  const updatedSummary: RoundSummary = {
+    ...roundSummary,
+    factIdsAtRoundStart: state.gatheredFacts.map((f) => f.id),
+  };
+
+  return {
+    ...state,
+    roundSummaries: [...state.roundSummaries, updatedSummary],
+  };
+}
+
+/**
+ * Advance to the next research round.
+ * Called after COMPRESSING phase completes.
+ */
+export function advanceRound(state: ResearchState): ResearchState {
+  return {
+    ...state,
+    currentRound: state.currentRound + 1,
+  };
+}
+
+/**
+ * Check if more research rounds are allowed.
+ */
+export function canContinueResearch(state: ResearchState): boolean {
+  return state.currentRound < state.maxRounds;
+}
+
+/**
+ * Calculate the step budget for the current round.
+ * Uses 60/30/10 split across 3 rounds.
+ */
+export function getRoundStepBudget(state: ResearchState): {
+  roundBudget: number;
+  stepsUsedThisRound: number;
+  stepsRemainingThisRound: number;
+} {
+  const { currentRound, maxRounds, maxSteps, currentStep } = state;
+
+  // Calculate step budget per round (60/30/10 split for 3 rounds)
+  let roundBudgets: number[];
+  if (maxRounds === 1) {
+    roundBudgets = [maxSteps];
+  } else if (maxRounds === 2) {
+    roundBudgets = [Math.floor(maxSteps * 0.7), Math.floor(maxSteps * 0.3)];
+  } else {
+    // 60/30/10 split for 3+ rounds
+    roundBudgets = [
+      Math.floor(maxSteps * 0.6),
+      Math.floor(maxSteps * 0.3),
+      Math.floor(maxSteps * 0.1),
+    ];
+    // Distribute remaining budget equally to additional rounds
+    if (maxRounds > 3) {
+      const remaining = maxSteps - roundBudgets.reduce((a, b) => a + b, 0);
+      const extraRounds = maxRounds - 3;
+      const perExtraRound = Math.floor(remaining / extraRounds);
+      for (let i = 0; i < extraRounds; i++) {
+        roundBudgets.push(perExtraRound);
+      }
+    }
+  }
+
+  // Calculate steps used before this round
+  let stepsBeforeThisRound = 0;
+  for (let r = 0; r < currentRound - 1 && r < roundBudgets.length; r++) {
+    stepsBeforeThisRound += roundBudgets[r];
+  }
+
+  const roundBudget = roundBudgets[Math.min(currentRound - 1, roundBudgets.length - 1)];
+  const stepsUsedThisRound = Math.max(0, currentStep - stepsBeforeThisRound);
+  const stepsRemainingThisRound = Math.max(0, roundBudget - stepsUsedThisRound);
+
+  return {
+    roundBudget,
+    stepsUsedThisRound,
+    stepsRemainingThisRound,
+  };
+}
+
+/**
+ * Check if the current round should trigger soft landing (80% of round budget).
+ */
+export function shouldTriggerRoundSoftLanding(state: ResearchState): boolean {
+  const { roundBudget, stepsUsedThisRound } = getRoundStepBudget(state);
+  return stepsUsedThisRound >= roundBudget * 0.8;
+}
+
 /**
  * Complete research with final report.
  */
@@ -1193,6 +1632,8 @@ export function getArtifactProgress(state: ResearchState): ResearchArtifactProgr
   const phaseLabels: Record<ResearchPhase, string> = {
     planning: 'Planning research...',
     gathering: 'Gathering information...',
+    evaluating: 'Evaluating research quality...',
+    compressing: 'Compressing findings...',
     synthesizing: 'Synthesizing findings...',
     complete: 'Research complete',
     error: 'Research failed',

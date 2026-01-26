@@ -260,6 +260,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       activityLog: [],
       activeToolCalls: [],
       isLLMGenerating: false,
+      // Multi-round research fields
+      searchHistory: [],
+      currentRound: 1,
+      maxRounds: 3,
+      roundSummaries: [],
     };
 
     const assistantMessage: ThreadMessageLike = {

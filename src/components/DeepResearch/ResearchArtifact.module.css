@@ -136,6 +136,30 @@
   color: #f87171;
 }
 
+.phaseEvaluating {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fb923c;
+}
+
+.phaseCompressing {
+  background: rgba(147, 51, 234, 0.2);
+  color: #a78bfa;
+}
+
+/* === Round Badge === */
+.roundBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  margin-left: 6px;
+}
+
 /* === Progress Bar === */
 .progressContainer {
   padding: 0 14px 12px;
@@ -187,6 +211,17 @@
   content: '›';
   margin-right: 6px;
   color: var(--text-muted, #666);
+}
+
+/* Skipped/duplicate query styling */
+.activitySkipped {
+  color: var(--text-muted, #666);
+  font-style: italic;
+}
+
+.activitySkipped::before {
+  content: '⊘';
+  color: rgba(251, 146, 60, 0.6);
 }
 
 /* === Expanded Content === */
@@ -811,4 +846,61 @@
 .skipButton:disabled:hover {
   background: transparent;
   color: var(--text-muted, #666);
+}
+/* === Previous Rounds Section === */
+.previousRoundsContent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.roundSummaryCard {
+  padding: 12px;
+  background: var(--bg-tertiary, #252525);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  border-left: 3px solid #a78bfa;
+}
+
+.roundSummaryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.roundNumber {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a78bfa;
+}
+
+.roundMeta {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+}
+
+.roundSummaryText {
+  font-size: 12px;
+  color: var(--text-secondary, #a0a0a0);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.roundInsights {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.roundInsight {
+  font-size: 11px;
+  color: var(--text-muted, #666);
+  line-height: 1.4;
 }

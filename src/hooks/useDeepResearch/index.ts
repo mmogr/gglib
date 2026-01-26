@@ -22,6 +22,13 @@ export type {
   Contradiction,
   // Observations
   PendingObservation,
+  // Search history (multi-round deduplication)
+  SearchRecord,
+  // Round summaries (multi-round context compression)
+  RoundSummary,
+  // Internal tool args
+  AssessProgressArgs,
+  RequestSynthesisArgs,
   // Core state
   ResearchPhase,
   ResearchState,
@@ -56,6 +63,22 @@ export {
   setPhase,
   setError,
   completeResearch,
+  // Search history helpers
+  isSearchDuplicate,
+  addSearchRecord,
+  linkSearchToFacts,
+  // Round management helpers
+  createRoundSummary,
+  advanceRound,
+  canContinueResearch,
+  getRoundStepBudget,
+  shouldTriggerRoundSoftLanding,
+  // Internal research tools
+  ASSESS_PROGRESS_TOOL,
+  REQUEST_SYNTHESIS_TOOL,
+  INTERNAL_RESEARCH_TOOLS,
+  isInternalResearchTool,
+  MIN_FACTS_FOR_SYNTHESIS,
   // Validation
   validateState,
   // UI helpers
@@ -77,6 +100,7 @@ export {
   isWithinBudget,
   shouldIncludeTools,
   filterResearchTools,
+  getResearchToolsWithInternals,
   summarizeTurnMessages,
 } from './buildTurnMessages';
 

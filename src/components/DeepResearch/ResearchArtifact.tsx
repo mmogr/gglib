@@ -37,6 +37,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  History,
+  Layers,
 } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import type {
@@ -45,6 +47,7 @@ import type {
   ResearchQuestion,
   GatheredFact,
   QuestionStatus,
+  RoundSummary,
 } from '../../hooks/useDeepResearch/types';
 import styles from './ResearchArtifact.module.css';
 
@@ -116,6 +119,7 @@ function getLiveActivity(state: ResearchState, isRunning: boolean): string {
   }
 
   // Phase-based activity
+  const roundSuffix = state.currentRound > 1 ? ` (Round ${state.currentRound})` : '';
   switch (state.phase) {
     case 'planning':
       if (state.researchPlan.length === 0) {
@@ -126,12 +130,18 @@ function getLiveActivity(state: ResearchState, isRunning: boolean): string {
     case 'gathering': {
       const inProgress = state.researchPlan.filter(q => q.status === 'in-progress');
       if (inProgress.length > 0) {
-        return `Researching: "${inProgress[0].question.substring(0, 50)}${inProgress[0].question.length > 50 ? '...' : ''}"`;
+        return `Researching${roundSuffix}: "${inProgress[0].question.substring(0, 50)}${inProgress[0].question.length > 50 ? '...' : ''}"`;
       }
       const answered = state.researchPlan.filter(q => q.status === 'answered').length;
       const total = state.researchPlan.length;
-      return `Gathering information (${answered}/${total} questions answered)...`;
+      return `Gathering information${roundSuffix} (${answered}/${total} questions answered)...`;
     }
+
+    case 'evaluating':
+      return `Evaluating research quality${roundSuffix}...`;
+
+    case 'compressing':
+      return `Compressing round ${state.currentRound} findings...`;
 
     case 'synthesizing':
       return 'Synthesizing findings into final report...';
@@ -150,6 +160,10 @@ function getPhaseConfig(phase: ResearchPhase): { label: string; className: strin
       return { label: 'Planning', className: styles.phasePlanning };
     case 'gathering':
       return { label: 'Gathering', className: styles.phaseGathering };
+    case 'evaluating':
+      return { label: 'Evaluating', className: styles.phaseEvaluating };
+    case 'compressing':
+      return { label: 'Compressing', className: styles.phaseCompressing };
     case 'synthesizing':
       return { label: 'Synthesizing', className: styles.phaseSynthesizing };
     case 'complete':
@@ -488,6 +502,69 @@ const KnowledgeGapsSection: React.FC<{ gaps: string[] }> = ({ gaps }) => {
 };
 
 /**
+ * Previous rounds section - shows compressed summaries from prior research rounds.
+ * Only visible when there are completed rounds (currentRound > 1).
+ */
+const PreviousRoundsSection: React.FC<{
+  roundSummaries: RoundSummary[];
+}> = ({ roundSummaries }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  if (roundSummaries.length === 0) return null;
+
+  return (
+    <div className={styles.section}>
+      <div
+        className={styles.sectionHeader}
+        onClick={() => setExpanded(!expanded)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded(!expanded);
+          }
+        }}
+        style={{ cursor: 'pointer' }}
+      >
+        <span className={styles.sectionTitle}>
+          <Icon icon={History} size={14} />
+          Previous Rounds
+        </span>
+        <span className={styles.sectionCount}>
+          {roundSummaries.length} round{roundSummaries.length !== 1 ? 's' : ''}
+          <Icon
+            icon={expanded ? ChevronDown : ChevronRight}
+            size={14}
+            style={{ marginLeft: 4 }}
+          />
+        </span>
+      </div>
+      {expanded && (
+        <div className={styles.previousRoundsContent}>
+          {roundSummaries.map((round) => (
+            <div key={round.round} className={styles.roundSummaryCard}>
+              <div className={styles.roundSummaryHeader}>
+                <span className={styles.roundNumber}>
+                  <Icon icon={Layers} size={12} />
+                  Round {round.round}
+                </span>
+                <span className={styles.roundMeta}>
+                  {round.factCountAtEnd} facts · {round.questionsAnsweredThisRound.length} questions
+                </span>
+              </div>
+              <div className={styles.roundSummaryText}>
+                {round.summary}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
  * Final report section (when complete).
  * Renders citations [1], [2], etc. as hoverable cards showing fact details.
  */
@@ -674,6 +751,11 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
             <span className={`${styles.phaseBadge} ${phaseConfig.className}`}>
               {phaseConfig.label}
             </span>
+            {effectiveState.maxRounds > 1 && (
+              <span className={styles.roundBadge}>
+                Round {effectiveState.currentRound}/{effectiveState.maxRounds}
+              </span>
+            )}
           </div>
 
           <div className={styles.liveActivity}>
@@ -708,15 +790,18 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
       {/* Activity log (trailing events for velocity visibility) */}
       {isRunning && effectiveState.activityLog && effectiveState.activityLog.length > 0 && (
         <div className={styles.activityLog}>
-          {effectiveState.activityLog.map((entry, idx) => (
-            <div
-              key={idx}
-              className={styles.activityEntry}
-              style={{ opacity: 0.5 + (idx / effectiveState.activityLog.length) * 0.5 }}
-            >
-              {entry}
-            </div>
-          ))}
+          {effectiveState.activityLog.map((entry, idx) => {
+            const isSkipped = entry.startsWith('Search skipped:') || entry.includes('(duplicate)');
+            return (
+              <div
+                key={idx}
+                className={`${styles.activityEntry} ${isSkipped ? styles.activitySkipped : ''}`}
+                style={{ opacity: 0.5 + (idx / effectiveState.activityLog.length) * 0.5 }}
+              >
+                {entry}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -815,6 +900,11 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
                     {/* Working hypothesis */}
                     <HypothesisBlock hypothesis={effectiveState.currentHypothesis} />
 
+                    {/* Previous rounds (if multi-round research) */}
+                    <PreviousRoundsSection
+                      roundSummaries={effectiveState.roundSummaries}
+                    />
+
                     {/* Knowledge gaps */}
                     <KnowledgeGapsSection gaps={effectiveState.knowledgeGaps} />
                   </div>
@@ -835,6 +925,11 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
               {/* Working hypothesis */}
               <HypothesisBlock hypothesis={effectiveState.currentHypothesis} />
+
+              {/* Previous rounds (if multi-round research) */}
+              <PreviousRoundsSection
+                roundSummaries={effectiveState.roundSummaries}
+              />
 
               {/* Knowledge gaps */}
               <KnowledgeGapsSection gaps={effectiveState.knowledgeGaps} />

@@ -21,6 +21,7 @@ import {
   serializeForPrompt,
   renderContextForSystemPrompt,
   DEFAULT_BUDGET,
+  INTERNAL_RESEARCH_TOOLS,
   type SerializationBudget,
 } from './types';
 
@@ -99,18 +100,26 @@ Do NOT use tools in planning phase. Output ONLY the JSON.`,
 
   gathering: `## Current Task: GATHERING
 
-You are searching for information to answer the research questions.
+You are an ACTIVE researcher, not a passive executor. Search intelligently, reflect on progress, and pivot when needed.
 
-INSTRUCTIONS:
-1. Check the "🎯 Current Focus" section to see which question you are working on
-2. Use the search tool to find relevant information for that question
-3. When you have enough information, provide an AnswerResponse
+CORE LOOP:
+1. Search for information relevant to the current focus question
+2. Every 3-4 tool calls, use \`assess_progress\` to reflect on coverage
+3. If searches aren't yielding results, PIVOT your strategy
+4. When you have sufficient evidence (minimum 4 facts), call \`request_synthesis\`
 
-IF YOU NEED TO SEARCH:
-Call the appropriate search tool (e.g., tavily_search) with a well-crafted query.
+AVAILABLE ACTIONS:
 
-IF YOU CAN ANSWER THE CURRENT FOCUS QUESTION:
-Respond with JSON:
+1. SEARCH: Call tavily_search (or similar) with a specific, targeted query
+   - Avoid broad queries - be specific
+   - If a search returns nothing useful, try different keywords
+
+2. ASSESS PROGRESS: Call \`assess_progress\` to reflect (do this often!)
+   - What claims from the original query have evidence?
+   - What gaps remain?
+   - Should you pivot your search strategy?
+
+3. ANSWER A QUESTION: When you have facts for the current focus, respond with JSON:
 {
   "type": "answer",
   "questionIndex": 1,
@@ -127,10 +136,67 @@ Respond with JSON:
   "newGaps": ["Newly discovered unknowns..."]
 }
 
+4. REQUEST SYNTHESIS: Call \`request_synthesis\` when research is complete
+   - Requires minimum 4 facts gathered
+   - Will be REJECTED if you haven't gathered enough evidence
+   - Provide justification for why research is sufficient
+
 IMPORTANT:
 - "questionIndex" is the Q number from the Research Plan (Q1, Q2, etc.)
-- Check the "🎯 Current Focus" section for the exact questionIndex to use
-- Choose ONE action: either call a tool OR output JSON. Not both.`,
+- Check the "🎯 Current Focus" section for the exact questionIndex
+- Be an ACTIVE thinker: if something isn't working, change approach
+- Don't repeat failed searches - pivot to different angles`,
+
+  evaluating: `## Current Task: EVALUATING
+
+You are assessing whether the gathered research adequately answers the original query.
+
+INSTRUCTIONS:
+1. Review the original query and all gathered facts
+2. Assess how completely the research addresses the query (1-10 scale)
+3. Identify specific aspects that are still missing or underexplored
+4. Suggest targeted follow-up questions if more research would help
+
+RESPOND WITH JSON:
+{
+  "type": "evaluation",
+  "adequacyScore": 7,
+  "assessment": "Brief explanation of the score...",
+  "missingAspects": ["Aspect 1 not covered", "Aspect 2 needs more depth"],
+  "suggestedFollowups": [
+    {"question": "Follow-up question 1?", "priority": 1, "rationale": "Why this matters..."},
+    {"question": "Follow-up question 2?", "priority": 2, "rationale": "Why this matters..."}
+  ],
+  "shouldContinue": true
+}
+
+SCORING GUIDELINES:
+- 1-3: Critical gaps, key aspects unanswered
+- 4-6: Partial coverage, significant gaps remain  
+- 7-8: Good coverage, minor gaps acceptable
+- 9-10: Comprehensive, ready for synthesis
+
+Set "shouldContinue": false if score >= 7 OR if follow-ups would be redundant.
+Do NOT use tools in evaluation phase. Output ONLY the JSON.`,
+
+  compressing: `## Current Task: COMPRESSING
+
+You are summarizing the current round's findings before starting a new research round.
+
+INSTRUCTIONS:
+1. Review all facts gathered in this round
+2. Create a concise summary capturing the key findings (~500 chars max)
+3. Focus on information most relevant to the original query
+
+RESPOND WITH JSON:
+{
+  "type": "roundSummary",
+  "summary": "Concise summary of this round's key findings...",
+  "keyInsights": ["Most important insight 1", "Most important insight 2"]
+}
+
+Keep the summary factual and dense - it will be used as context for the next research round.
+Do NOT use tools in compression phase. Output ONLY the JSON.`,
 
   synthesizing: `## Current Task: SYNTHESIZING
 
@@ -427,6 +493,23 @@ export function filterResearchTools<T extends { function: { name: string } }>(
       (prefix) => name.includes(prefix.toLowerCase())
     );
   });
+}
+
+/**
+ * Get the complete set of research tools including internal agentic tools.
+ * Appends assess_progress and request_synthesis to the filtered external tools.
+ */
+export function getResearchToolsWithInternals<T extends { type: string; function: { name: string } }>(
+  allTools: T[],
+  allowedPrefixes: string[] = ['tavily', 'search', 'web', 'extract', 'fetch']
+): T[] {
+  const externalTools = filterResearchTools(allTools, allowedPrefixes);
+  // Cast internal tools to match the generic type (they're structurally compatible)
+  return [
+    ...externalTools,
+    INTERNAL_RESEARCH_TOOLS[0] as unknown as T,
+    INTERNAL_RESEARCH_TOOLS[1] as unknown as T,
+  ];
 }
 
 // =============================================================================
