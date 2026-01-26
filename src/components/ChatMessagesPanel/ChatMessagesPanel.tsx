@@ -30,6 +30,7 @@ import type { MessageActionsContextValue } from './components';
 import { useChatPersistence, useTitleGeneration } from './hooks';
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
+import { DeepResearchProvider } from './context/DeepResearchContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
 import { DeepResearchToggle } from '../DeepResearch';
 import { useDeepResearch } from '../../hooks/useDeepResearch';
@@ -648,6 +649,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             <div className="chat-empty-state">Loading messages…</div>
           ) : (
             <MessageActionsContext.Provider value={messageActionsValue}>
+              <DeepResearchProvider isRunning={deepResearch.isRunning} skipQuestion={deepResearch.skipQuestion}>
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
                 <ThreadPrimitive.Root
                   key={activeConversationId ?? 'thread-root'}
@@ -687,6 +689,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                         onToggle={toggleDeepResearch}
                         isRunning={deepResearch.isRunning}
                         onStop={stopDeepResearch}
+                        onWrapUp={deepResearch.requestWrapUp}
+                        researchPhase={deepResearch.state?.phase}
                         disabled={!isServerConnected || isThreadRunning}
                         disabledReason={
                           !isServerConnected
@@ -738,6 +742,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 </div>
               </ThreadPrimitive.Root>
               </ThinkingTimingProvider>
+              </DeepResearchProvider>
             </MessageActionsContext.Provider>
           )}
         </div>

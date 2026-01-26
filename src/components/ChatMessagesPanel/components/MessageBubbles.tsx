@@ -15,6 +15,7 @@ import { threadMessageToTranscriptMarkdown } from '../../../utils/messages';
 import { MessageActionsContext } from './MessageActionsContext';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
+import { useDeepResearchContext } from '../context/DeepResearchContext';
 import { ResearchArtifact } from '../../DeepResearch';
 import type { GglibMessageCustom } from '../../../types/messages';
 import type { ResearchState } from '../../../hooks/useDeepResearch/types';
@@ -46,6 +47,7 @@ function isDeepResearchMessage(message: ReturnType<typeof useMessage>): boolean 
 export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
   const timing = useThinkingTiming();
+  const deepResearchCtx = useDeepResearchContext();
   const timestamp = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
@@ -86,6 +88,7 @@ export const AssistantMessageBubble: React.FC = () => {
           <ResearchArtifact
             state={researchState}
             isRunning={isResearchRunning}
+            onSkipQuestion={deepResearchCtx?.skipQuestion}
             defaultExpanded={true}
           />
         </div>

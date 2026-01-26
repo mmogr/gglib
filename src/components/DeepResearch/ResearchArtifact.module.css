@@ -297,6 +297,47 @@
   line-height: 1.4;
 }
 
+/* Skip button for research questions */
+.skipButton {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted, #666);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.questionItem:hover .skipButton {
+  opacity: 1;
+}
+
+.skipButton:hover {
+  background: rgba(251, 146, 60, 0.15);
+  color: #fb923c;
+}
+
+.skipButton:active {
+  background: rgba(251, 146, 60, 0.25);
+}
+
+.skipButton.skipPending {
+  opacity: 1;
+  cursor: default;
+  background: transparent;
+  color: #fb923c;
+}
+
+.skipSpinner {
+  animation: spin 1s linear infinite;
+}
+
 /* === Gathered Facts === */
 .factList {
   display: flex;
