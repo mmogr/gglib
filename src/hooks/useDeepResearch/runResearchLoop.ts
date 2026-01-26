@@ -305,6 +305,230 @@ function tryParseStructuredResponse(content: string): StructuredResponse | null 
 }
 
 // =============================================================================
+// Intelligent Synthesis Decision Logic
+// =============================================================================
+
+/**
+ * Result from the synthesis readiness calculation.
+ * Contains all factors used to make the decision + reasoning.
+ */
+interface SynthesisDecision {
+  shouldSynthesize: boolean;
+  reason: string;
+  /** Raw evaluation score from LLM */
+  rawScore: number;
+  /** Score adjusted for perspective coverage gaps */
+  adjustedScore: number;
+  /** Threshold required for synthesis (varies by complexity) */
+  threshold: number;
+  /** Fraction of declared perspectives that have been researched */
+  perspectiveCoverage: number;
+  /** Diversity score based on fact distribution across perspectives */
+  factDiversity: number;
+}
+
+/**
+ * Calculate whether research is ready for synthesis.
+ * 
+ * This implements adaptive, intelligent decision-making based on:
+ * 1. Query complexity (simple vs multi-faceted vs controversial)
+ * 2. Perspective coverage (have we explored all declared angles?)
+ * 3. Fact diversity (are facts distributed across perspectives?)
+ * 4. Research depth (facts per perspective)
+ * 
+ * For simple queries: Standard threshold of 7 applies
+ * For multi-faceted: Requires exploring majority of perspectives
+ * For controversial: Requires balanced coverage of opposing viewpoints
+ * 
+ * The score is adjusted downward if perspective coverage is insufficient,
+ * effectively requiring more rounds before synthesis can occur.
+ */
+function calculateSynthesisReadiness(
+  state: ResearchState,
+  rawScore: number,
+  modelShouldContinue: boolean
+): SynthesisDecision {
+  const { complexity, perspectives, roundSummaries, gatheredFacts, currentRound, maxRounds } = state;
+  const canContinue = canContinueResearch(state);
+  
+  // === Calculate perspective coverage ===
+  // Which perspectives have we actually researched (based on round summaries)?
+  const exploredPerspectives = new Set<string>();
+  for (const summary of roundSummaries) {
+    if (summary.perspective) {
+      exploredPerspectives.add(summary.perspective.toLowerCase().trim());
+    }
+  }
+  // Also count current perspective if we're in round 1+ and have gathered facts
+  if (state.currentPerspective && gatheredFacts.length > 0) {
+    exploredPerspectives.add(state.currentPerspective.toLowerCase().trim());
+  }
+  
+  const totalPerspectives = perspectives.length || 1;
+  const perspectiveCoverage = totalPerspectives > 0 
+    ? exploredPerspectives.size / totalPerspectives 
+    : 1.0;
+  
+  // === Calculate fact diversity ===
+  // For multi-perspective topics, we want facts from different angles
+  // Heuristic: count facts per perspective based on round they were gathered
+  const factsPerRound: Map<number, number> = new Map();
+  for (const fact of gatheredFacts) {
+    // Approximate which round this fact is from based on step
+    const roundBoundaries = calculateRoundBoundaries(maxRounds, state.maxSteps);
+    const factRound = roundBoundaries.findIndex((end, idx) => 
+      fact.gatheredAtStep <= end && (idx === 0 || fact.gatheredAtStep > roundBoundaries[idx - 1])
+    ) + 1 || 1;
+    
+    factsPerRound.set(factRound, (factsPerRound.get(factRound) || 0) + 1);
+  }
+  
+  // Diversity score: entropy-based measure of fact distribution
+  // Higher when facts are spread across rounds (perspectives)
+  const totalFacts = gatheredFacts.length || 1;
+  let entropy = 0;
+  for (const count of factsPerRound.values()) {
+    const p = count / totalFacts;
+    if (p > 0) entropy -= p * Math.log2(p);
+  }
+  // Normalize to 0-1 scale (max entropy for N rounds is log2(N))
+  const maxEntropy = totalPerspectives > 1 ? Math.log2(totalPerspectives) : 1;
+  const factDiversity = maxEntropy > 0 ? Math.min(1, entropy / maxEntropy) : 1.0;
+  
+  // === Determine thresholds based on complexity ===
+  let baseThreshold: number;
+  let minPerspectiveCoverage: number;
+  
+  switch (complexity) {
+    case 'controversial':
+      // Controversial topics need balanced coverage of opposing views
+      baseThreshold = 8; // Higher bar
+      minPerspectiveCoverage = 0.67; // Need at least 2/3 of perspectives
+      break;
+    case 'multi-faceted':
+      // Multi-faceted topics need good breadth
+      baseThreshold = 7;
+      minPerspectiveCoverage = 0.5; // Need at least half of perspectives
+      break;
+    case 'simple':
+    default:
+      // Simple topics can synthesize more readily
+      baseThreshold = 7;
+      minPerspectiveCoverage = 0; // No perspective requirement
+      break;
+  }
+  
+  // === Calculate adjusted score ===
+  // Penalize the score if perspective coverage is insufficient
+  let adjustedScore = rawScore;
+  let coverageDeficit = '';
+  
+  if (complexity !== 'simple' && perspectiveCoverage < minPerspectiveCoverage && canContinue) {
+    // Apply progressive penalty based on coverage gap
+    const coverageGap = minPerspectiveCoverage - perspectiveCoverage;
+    const penalty = Math.min(3, coverageGap * 5); // Up to 3-point penalty
+    adjustedScore = Math.max(1, rawScore - penalty);
+    
+    const explored = exploredPerspectives.size;
+    const needed = Math.ceil(totalPerspectives * minPerspectiveCoverage);
+    coverageDeficit = `(explored ${explored}/${totalPerspectives} perspectives, need ${needed})`;
+  }
+  
+  // Also penalize if fact diversity is very low for complex topics
+  if (complexity !== 'simple' && factDiversity < 0.3 && currentRound === 1 && canContinue && totalPerspectives > 1) {
+    // Low diversity on first round - nudge toward more research
+    adjustedScore = Math.max(1, adjustedScore - 1);
+  }
+  
+  // === Make the decision ===
+  // Hard stops that bypass score-based logic
+  if (!canContinue) {
+    return {
+      shouldSynthesize: true,
+      reason: `Maximum rounds (${maxRounds}) reached`,
+      rawScore,
+      adjustedScore: rawScore,
+      threshold: baseThreshold,
+      perspectiveCoverage,
+      factDiversity,
+    };
+  }
+  
+  // Check if model explicitly says to stop (unless we have coverage issues)
+  if (!modelShouldContinue && perspectiveCoverage >= minPerspectiveCoverage) {
+    return {
+      shouldSynthesize: true,
+      reason: 'Model indicates research complete',
+      rawScore,
+      adjustedScore,
+      threshold: baseThreshold,
+      perspectiveCoverage,
+      factDiversity,
+    };
+  }
+  
+  // Score-based decision with adjusted score
+  if (adjustedScore >= baseThreshold) {
+    // Check for minimum perspective coverage override
+    if (complexity !== 'simple' && perspectiveCoverage < minPerspectiveCoverage) {
+      return {
+        shouldSynthesize: false,
+        reason: `Score ${rawScore}/10 but insufficient perspective coverage ${coverageDeficit}`,
+        rawScore,
+        adjustedScore,
+        threshold: baseThreshold,
+        perspectiveCoverage,
+        factDiversity,
+      };
+    }
+    
+    return {
+      shouldSynthesize: true,
+      reason: `Research quality sufficient (${adjustedScore}/10)`,
+      rawScore,
+      adjustedScore,
+      threshold: baseThreshold,
+      perspectiveCoverage,
+      factDiversity,
+    };
+  }
+  
+  // Score below threshold - continue researching
+  return {
+    shouldSynthesize: false,
+    reason: `Score ${adjustedScore}/10 < ${baseThreshold} threshold`,
+    rawScore,
+    adjustedScore,
+    threshold: baseThreshold,
+    perspectiveCoverage,
+    factDiversity,
+  };
+}
+
+/**
+ * Calculate step boundaries for each round based on 60/30/10 split.
+ * Returns cumulative end steps for each round.
+ */
+function calculateRoundBoundaries(maxRounds: number, maxSteps: number): number[] {
+  if (maxRounds === 1) return [maxSteps];
+  if (maxRounds === 2) return [Math.floor(maxSteps * 0.7), maxSteps];
+  
+  // 60/30/10 split for 3 rounds
+  const r1End = Math.floor(maxSteps * 0.6);
+  const r2End = r1End + Math.floor(maxSteps * 0.3);
+  const r3End = maxSteps;
+  
+  const boundaries = [r1End, r2End, r3End];
+  
+  // Add extra rounds if needed
+  for (let i = 3; i < maxRounds; i++) {
+    boundaries.push(maxSteps);
+  }
+  
+  return boundaries;
+}
+
+// =============================================================================
 // Tool Execution with Resilience
 // =============================================================================
 
@@ -659,6 +883,16 @@ async function handlePlanningPhase(
   const parsed = tryParseStructuredResponse(llmResponse.content);
   console.debug('[runResearchLoop] Parsed plan:', parsed?.type, parsed && 'questions' in parsed ? parsed.questions?.length : 0);
   
+  // Log complexity/perspectives if present
+  if (parsed && parsed.type === 'plan') {
+    console.log('[runResearchLoop] Planning parsed:', {
+      complexity: parsed.complexity ?? 'not specified',
+      perspectives: parsed.perspectives ?? [],
+      questions: parsed.questions?.length ?? 0,
+      hypothesis: parsed.hypothesis?.slice(0, 80) + '...',
+    });
+  }
+  
   if (!parsed || parsed.type !== 'plan') {
     // Model didn't follow protocol - try to extract anything useful
     console.warn('[runResearchLoop] Planning phase: invalid response format, creating default plan');
@@ -786,8 +1020,9 @@ async function handleGatheringPhase(
     
     const targetQuestionId = targetQuestion?.id ?? 'unknown';
     
-    // Extract facts
-    const newFacts: GatheredFact[] = parsed.facts.map((f) =>
+    // Extract facts (with defensive handling for missing facts array)
+    const factsArray = Array.isArray(parsed.facts) ? parsed.facts : [];
+    const newFacts: GatheredFact[] = factsArray.map((f) =>
       createFact(
         f.claim,
         f.sourceUrl,
@@ -933,31 +1168,32 @@ async function handleEvaluatingPhase(
   // We'll store them in a temporary field that gets cleared after use
   (newState as ResearchState & { _pendingFollowups?: EvaluationResponse['suggestedFollowups'] })._pendingFollowups = suggestedFollowups;
   
-  // Decision logic
-  const scoreThreshold = 7;
-  const shouldProceedToSynthesis = 
-    adequacyScore >= scoreThreshold || 
-    !shouldContinue || 
-    !canContinueResearch(newState);
+  // === Intelligent Synthesis Decision Logic ===
+  // Adapts based on complexity, perspective coverage, and fact diversity
+  const synthesisDecision = calculateSynthesisReadiness(newState, adequacyScore, shouldContinue);
   
-  if (shouldProceedToSynthesis) {
-    const reason = adequacyScore >= scoreThreshold
-      ? 'Research quality sufficient'
-      : !canContinueResearch(newState)
-        ? `Maximum rounds (${newState.maxRounds}) reached`
-        : 'Model indicates no further research needed';
-    
-    console.log(`[runResearchLoop] Evaluation → Synthesis: ${reason}`);
-    newState = pushActivityLog(newState, `${reason}, synthesizing...`);
+  console.log('[runResearchLoop] Synthesis decision:', {
+    rawScore: adequacyScore,
+    adjustedScore: synthesisDecision.adjustedScore,
+    threshold: synthesisDecision.threshold,
+    perspectiveCoverage: synthesisDecision.perspectiveCoverage,
+    factDiversity: synthesisDecision.factDiversity,
+    shouldSynthesize: synthesisDecision.shouldSynthesize,
+    reason: synthesisDecision.reason,
+  });
+  
+  if (synthesisDecision.shouldSynthesize) {
+    console.log(`[runResearchLoop] Evaluation → Synthesis: ${synthesisDecision.reason}`);
+    newState = pushActivityLog(newState, `${synthesisDecision.reason}, synthesizing...`);
     newState = setPhase(newState, 'synthesizing');
   } else {
     console.log(
-      `[runResearchLoop] Evaluation → Compressing: score ${adequacyScore} < ${scoreThreshold}, ` +
+      `[runResearchLoop] Evaluation → Compressing: ${synthesisDecision.reason}, ` +
       `round ${newState.currentRound}/${newState.maxRounds}`
     );
     newState = pushActivityLog(
       newState,
-      `Score ${adequacyScore}/10, starting round ${newState.currentRound + 1}...`
+      `${synthesisDecision.reason}, starting round ${newState.currentRound + 1}...`
     );
     newState = setPhase(newState, 'compressing');
   }
@@ -1030,11 +1266,19 @@ async function handleCompressingPhase(
   
   // Advance to next round
   newState = advanceRound(newState);
-  console.log(`[runResearchLoop] Advanced to round ${newState.currentRound}/${newState.maxRounds}`);
+  console.log(`[runResearchLoop] Advanced to round ${newState.currentRound}/${newState.maxRounds}`, {
+    perspective: newState.currentPerspective ?? 'none',
+    complexity: newState.complexity ?? 'simple',
+  });
   
   // Transition back to gathering
   newState = setPhase(newState, 'gathering');
-  newState = pushActivityLog(newState, `Starting round ${newState.currentRound}...`);
+  
+  // Build descriptive activity log message
+  const perspectiveNote = newState.currentPerspective
+    ? ` (Perspective: ${newState.currentPerspective})`
+    : '';
+  newState = pushActivityLog(newState, `Starting round ${newState.currentRound}${perspectiveNote}...`);
   
   return newState;
 }
