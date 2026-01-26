@@ -15,6 +15,7 @@ export type {
   SerializationBudget,
   // Research plan
   QuestionStatus,
+  QuestionSource,
   ResearchQuestion,
   // Knowledge base
   FactConfidence,

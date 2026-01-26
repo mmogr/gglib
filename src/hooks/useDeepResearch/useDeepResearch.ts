@@ -66,6 +66,16 @@ export interface UseDeepResearchReturn {
   requestWrapUp: () => void;
   /** Skip a specific question (mark as blocked) */
   skipQuestion: (questionId: string) => void;
+  /** Skip all pending questions at once */
+  skipAllPending: () => void;
+  /** Add a user-specified question to the research plan */
+  addQuestion: (question: string) => void;
+  /** Ask AI to generate more research questions */
+  generateMoreQuestions: () => void;
+  /** Ask AI to expand a specific question into sub-questions */
+  expandQuestion: (questionId: string) => void;
+  /** Ask AI to go deeper based on current findings */
+  goDeeper: () => void;
   /** Reset state (for cleanup) */
   resetState: () => void;
 }
@@ -461,6 +471,46 @@ export function useDeepResearch(
     }
   }, [isRunning, state?.phase]);
 
+  // Skip all pending questions at once
+  const skipAllPending = useCallback(() => {
+    if (isRunning && state?.phase === 'gathering') {
+      console.log('[useDeepResearch] User requested skip all pending');
+      interventionRef.current = { type: 'skip-all-pending' };
+    }
+  }, [isRunning, state?.phase]);
+
+  // Add a user-specified question to the research plan
+  const addQuestion = useCallback((question: string) => {
+    if (isRunning && state?.phase === 'gathering') {
+      console.log('[useDeepResearch] User adding question:', question.slice(0, 50));
+      interventionRef.current = { type: 'add-question', question };
+    }
+  }, [isRunning, state?.phase]);
+
+  // Ask AI to generate more research questions
+  const generateMoreQuestions = useCallback(() => {
+    if (isRunning && state?.phase === 'gathering') {
+      console.log('[useDeepResearch] User requested generate more questions');
+      interventionRef.current = { type: 'generate-more-questions' };
+    }
+  }, [isRunning, state?.phase]);
+
+  // Ask AI to expand a specific question into sub-questions
+  const expandQuestion = useCallback((questionId: string) => {
+    if (isRunning && state?.phase === 'gathering') {
+      console.log('[useDeepResearch] User requested expand question:', questionId);
+      interventionRef.current = { type: 'expand-question', questionId };
+    }
+  }, [isRunning, state?.phase]);
+
+  // Ask AI to go deeper based on current findings
+  const goDeeper = useCallback(() => {
+    if (isRunning && state?.phase === 'gathering') {
+      console.log('[useDeepResearch] User requested go deeper');
+      interventionRef.current = { type: 'go-deeper' };
+    }
+  }, [isRunning, state?.phase]);
+
   // Reset state
   const resetState = useCallback(() => {
     setState(null);
@@ -476,6 +526,11 @@ export function useDeepResearch(
     stopResearch,
     requestWrapUp,
     skipQuestion,
+    skipAllPending,
+    addQuestion,
+    generateMoreQuestions,
+    expandQuestion,
+    goDeeper,
     resetState,
   };
 }
