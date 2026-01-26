@@ -375,6 +375,68 @@ export function buildTurnMessages(options: BuildTurnMessagesOptions): TurnMessag
   // 5. Get phase instruction (use override or default)
   let instruction = phaseInstruction ?? PHASE_INSTRUCTIONS[state.phase];
   
+  // 5a. Inject perspective-specific instruction for gathering phase
+  if (state.phase === 'gathering' && state.currentPerspective) {
+    const perspectiveInstruction = `## 🎭 CURRENT PERSPECTIVE: "${state.currentPerspective}"
+
+You are researching this topic from a specific angle: **${state.currentPerspective}**
+
+Focus purely on finding evidence that supports or illuminates THIS perspective.
+Do not worry about balancing viewpoints yet — other research rounds will cover other angles.
+Seek sources and arguments that a researcher with this perspective would prioritize.
+
+---
+
+`;
+    instruction = perspectiveInstruction + instruction;
+  }
+  
+  // 5b. Inject perspective-aware evaluation rubric
+  if (state.phase === 'evaluating' && state.currentPerspective) {
+    const perspectiveEvaluation = `## 🎭 PERSPECTIVE-SPECIFIC EVALUATION
+
+You are evaluating coverage for a SPECIFIC perspective: **${state.currentPerspective}**
+
+Do NOT evaluate if the WHOLE query is answered yet.
+Instead, evaluate: Have you adequately explored "${state.currentPerspective}"?
+
+If this angle is well-covered with supporting evidence, score HIGH (7+).
+Other research rounds will cover other perspectives.
+
+---
+
+`;
+    instruction = perspectiveEvaluation + instruction;
+  }
+  
+  // 5c. Inject multi-perspective synthesis instructions
+  if (state.phase === 'synthesizing' && state.perspectives.length > 0) {
+    const perspectivesList = state.perspectives.map((p, i) => `${i + 1}. ${p}`).join('\n');
+    const roundPerspectives = state.roundSummaries
+      .filter(rs => rs.perspective)
+      .map(rs => `- Round ${rs.round}: "${rs.perspective}"`)
+      .join('\n');
+    
+    const synthesisPerspectives = `## 🎭 MULTI-PERSPECTIVE SYNTHESIS
+
+This research explored multiple distinct perspectives:
+${perspectivesList}
+
+Research rounds covered:
+${roundPerspectives || '(No perspective-tagged rounds)'}
+
+**CRITICAL INSTRUCTION**: Your final report MUST be structured to highlight these different viewpoints:
+1. Create a section for each perspective explored, summarizing what evidence supports that angle
+2. Note where perspectives agree and where they conflict
+3. End with a "Synthesis" section that weighs the conflicting evidence and presents a balanced conclusion
+4. Do NOT blend all facts together into one narrative — preserve the distinct viewpoints
+
+---
+
+`;
+    instruction = synthesisPerspectives + instruction;
+  }
+  
   // 6. Append manual termination note if user requested early wrap-up
   if (state.isManualTermination && state.phase === 'synthesizing') {
     instruction += `

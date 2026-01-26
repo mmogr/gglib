@@ -253,6 +253,8 @@ export interface RoundSummary {
   timestamp: number;
   /** Questions that were answered during this round */
   questionsAnsweredThisRound: string[];
+  /** The perspective/angle this round was researching (for multi-perspective queries) */
+  perspective?: string;
 }
 
 // =============================================================================
@@ -858,8 +860,9 @@ export function serializeForPrompt(
   const previousRoundSummaries: string[] = [];
   if (!isSynthesisPhase && state.currentRound > 1 && state.roundSummaries.length > 0) {
     for (const rs of state.roundSummaries) {
+      const perspectiveLabel = rs.perspective ? `Perspective: ${rs.perspective}` : 'General';
       previousRoundSummaries.push(
-        `**Round ${rs.round}** (${rs.questionsAnsweredThisRound.length} questions answered, ` +
+        `**Round ${rs.round}** [${perspectiveLabel}] (${rs.questionsAnsweredThisRound.length} questions answered, ` +
         `${rs.factCountAtEnd} facts total):\n${rs.summary}`
       );
     }
@@ -1349,7 +1352,8 @@ export function linkSearchToFacts(
  */
 export function createRoundSummary(
   state: ResearchState,
-  summary: string
+  summary: string,
+  perspective?: string
 ): ResearchState {
   // Track which questions were answered this round
   const questionsAnsweredThisRound = state.researchPlan
@@ -1365,6 +1369,7 @@ export function createRoundSummary(
       : state.roundSummaries[state.roundSummaries.length - 1]?.factIdsAtRoundStart ?? [],
     timestamp: Date.now(),
     questionsAnsweredThisRound,
+    perspective, // Store which angle this round explored
   };
 
   // Update factIdsAtRoundStart for the NEXT round
@@ -1383,11 +1388,18 @@ export function createRoundSummary(
 /**
  * Advance to the next research round.
  * Called after COMPRESSING phase completes.
+ * Also shifts to the next perspective if available (Round N uses Perspective N-1).
  */
 export function advanceRound(state: ResearchState): ResearchState {
+  const newRound = state.currentRound + 1;
+  // Round 1 → perspectives[0], Round 2 → perspectives[1], etc.
+  // Falls back to undefined if we've exhausted perspectives (general research)
+  const newPerspective = state.perspectives[newRound - 1] ?? undefined;
+  
   return {
     ...state,
-    currentRound: state.currentRound + 1,
+    currentRound: newRound,
+    currentPerspective: newPerspective,
   };
 }
 

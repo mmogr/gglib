@@ -699,6 +699,12 @@ async function handlePlanningPhase(
     ? perspectives[0]
     : undefined;
   
+  // Adjust maxRounds to cover all perspectives (minimum 3 rounds)
+  // This ensures each perspective gets at least one round of focused research
+  const adjustedMaxRounds = perspectives.length > 0
+    ? Math.max(perspectives.length, state.maxRounds)
+    : state.maxRounds;
+  
   // Log planning completion for user visibility
   let newState: ResearchState = {
     ...state,
@@ -708,6 +714,7 @@ async function handlePlanningPhase(
     complexity,
     perspectives,
     currentPerspective,
+    maxRounds: adjustedMaxRounds,
     phase: 'gathering',
   };
   
@@ -986,7 +993,8 @@ async function handleCompressingPhase(
   }
   
   // Create the round summary (this captures current fact IDs for dual-layer context)
-  let newState = createRoundSummary(state, summary);
+  // Also record the perspective this round was researching
+  let newState = createRoundSummary(state, summary, state.currentPerspective);
   newState = pushActivityLog(newState, `Round ${newState.currentRound} compressed`);
   
   // Convert pending follow-ups into new research questions
