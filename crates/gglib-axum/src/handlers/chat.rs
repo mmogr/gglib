@@ -33,12 +33,14 @@ pub struct SaveMessageRequest {
     pub conversation_id: i64,
     pub role: String,
     pub content: String,
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Request body for updating a message.
 #[derive(Debug, Deserialize)]
 pub struct UpdateMessageRequest {
     pub content: String,
+    pub metadata: Option<serde_json::Value>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,7 +145,7 @@ pub async fn save_message(
             conversation_id: req.conversation_id,
             role,
             content: req.content,
-            metadata: None,
+            metadata: req.metadata,
         })
         .await?;
     Ok(Json(id))
@@ -159,7 +161,7 @@ pub async fn update_message(
     state
         .core
         .chat_history()
-        .update_message(id, req.content)
+        .update_message(id, req.content, req.metadata)
         .await?;
     Ok(())
 }
