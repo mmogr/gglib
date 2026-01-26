@@ -22,6 +22,10 @@ export type {
   Contradiction,
   // Observations
   PendingObservation,
+  // Search history (multi-round deduplication)
+  SearchRecord,
+  // Round summaries (multi-round context compression)
+  RoundSummary,
   // Core state
   ResearchPhase,
   ResearchState,
@@ -56,6 +60,16 @@ export {
   setPhase,
   setError,
   completeResearch,
+  // Search history helpers
+  isSearchDuplicate,
+  addSearchRecord,
+  linkSearchToFacts,
+  // Round management helpers
+  createRoundSummary,
+  advanceRound,
+  canContinueResearch,
+  getRoundStepBudget,
+  shouldTriggerRoundSoftLanding,
   // Validation
   validateState,
   // UI helpers

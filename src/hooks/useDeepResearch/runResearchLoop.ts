@@ -36,6 +36,14 @@ import {
   setActiveToolCalls,
   clearActiveToolCalls,
   setLLMGenerating,
+  // Multi-round helpers
+  isSearchDuplicate,
+  addSearchRecord,
+  createRoundSummary,
+  advanceRound,
+  canContinueResearch,
+  shouldTriggerRoundSoftLanding,
+  getRoundStepBudget,
 } from './types';
 import {
   buildTurnMessagesWithBudget,
@@ -228,7 +236,32 @@ interface ReportResponse {
   limitations?: string[];
 }
 
-type StructuredResponse = PlanResponse | AnswerResponse | ReportResponse;
+/**
+ * Evaluation phase response (multi-round support).
+ */
+interface EvaluationResponse {
+  type: 'evaluation';
+  adequacyScore: number; // 1-10 scale
+  assessment: string;
+  missingAspects: string[];
+  suggestedFollowups: Array<{
+    question: string;
+    priority: number;
+    rationale: string;
+  }>;
+  shouldContinue: boolean;
+}
+
+/**
+ * Compression phase response (round summary).
+ */
+interface RoundSummaryResponse {
+  type: 'roundSummary';
+  summary: string;
+  keyInsights: string[];
+}
+
+type StructuredResponse = PlanResponse | AnswerResponse | ReportResponse | EvaluationResponse | RoundSummaryResponse;
 
 /**
  * Try to parse structured JSON from LLM content.
@@ -253,7 +286,7 @@ function tryParseStructuredResponse(content: string): StructuredResponse | null 
       return null;
     }
     
-    const validTypes = ['plan', 'answer', 'report'];
+    const validTypes = ['plan', 'answer', 'report', 'evaluation', 'roundSummary'];
     if (!validTypes.includes(parsed.type)) {
       return null;
     }
@@ -333,17 +366,27 @@ async function executeToolSafely(
 }
 
 /**
- * Execute multiple tool calls in parallel with batching.
+ * Execute multiple tool calls in parallel with batching and deduplication.
  * All results become observations - failures don't crash the loop.
+ * 
+ * Deduplication: Search queries are checked against searchHistory using
+ * Jaccard similarity. Duplicates return a mock "skip" result instead of
+ * executing, preventing redundant API calls across rounds.
+ * 
+ * Tracking: After execution, successful searches are recorded in searchHistory
+ * for future deduplication checks.
  */
 async function executeToolsBatch(
   toolCalls: ToolCall[],
   executeTool: ToolExecutor,
+  state: ResearchState,
   forQuestionId?: string
-): Promise<PendingObservation[]> {
+): Promise<{ observations: PendingObservation[]; updatedState: ResearchState }> {
   if (toolCalls.length === 0) {
-    return [];
+    return { observations: [], updatedState: state };
   }
+  
+  let updatedState = state;
   
   // Batch to prevent overwhelming the system
   const batches: ToolCall[][] = [];
@@ -354,15 +397,101 @@ async function executeToolsBatch(
   const allObservations: PendingObservation[] = [];
   
   for (const batch of batches) {
-    // Execute batch in parallel
-    const observations = await Promise.all(
-      batch.map((tc) => executeToolSafely(tc, executeTool, forQuestionId))
-    );
+    // Pre-filter: check for duplicate searches
+    const toolsToExecute: ToolCall[] = [];
+    const skippedObservations: PendingObservation[] = [];
     
-    allObservations.push(...observations);
+    for (const tc of batch) {
+      // Extract search query from arguments
+      let searchQuery: string | undefined;
+      try {
+        const args = JSON.parse(tc.function.arguments || '{}');
+        searchQuery = args.query || args.q || args.search_query || args.search;
+      } catch {
+        // Ignore parse errors - non-search tools won't have query
+      }
+      
+      // Check for duplicate if this is a search tool with a query
+      if (searchQuery) {
+        const { isDuplicate, existingRecord } = isSearchDuplicate(
+          searchQuery,
+          updatedState.searchHistory
+        );
+        
+        if (isDuplicate) {
+          console.log(
+            `[executeToolsBatch] Skipping duplicate search: "${searchQuery.slice(0, 50)}..." ` +
+            `(similar to round ${existingRecord?.round} query)`
+          );
+          
+          // Return a mock observation explaining the skip
+          skippedObservations.push({
+            toolName: tc.function.name,
+            toolCallId: tc.id,
+            rawResult: {
+              skipped: true,
+              reason: 'Search skipped: Query similar to previous search in history. Try a different angle or rephrase your query.',
+              similarTo: existingRecord?.query?.slice(0, 100),
+              previousRound: existingRecord?.round,
+            },
+            timestamp: Date.now(),
+            forQuestionId,
+          });
+          
+          // Add to knowledge gaps so LLM knows to try different approach
+          updatedState = {
+            ...updatedState,
+            knowledgeGaps: [
+              ...updatedState.knowledgeGaps,
+              `Search already attempted: "${searchQuery.slice(0, 50)}..." - try different keywords`,
+            ].slice(0, 10),
+          };
+          
+          continue;
+        }
+      }
+      
+      toolsToExecute.push(tc);
+    }
+    
+    // Add skipped observations
+    allObservations.push(...skippedObservations);
+    
+    // Execute non-duplicate tools in parallel
+    if (toolsToExecute.length > 0) {
+      const observations = await Promise.all(
+        toolsToExecute.map((tc) => executeToolSafely(tc, executeTool, forQuestionId))
+      );
+      
+      // Track successful searches in history
+      for (let i = 0; i < toolsToExecute.length; i++) {
+        const tc = toolsToExecute[i];
+        
+        // Extract search query
+        let searchQuery: string | undefined;
+        try {
+          const args = JSON.parse(tc.function.arguments || '{}');
+          searchQuery = args.query || args.q || args.search_query || args.search;
+        } catch {
+          // Ignore
+        }
+        
+        // Record search if it has a query (regardless of success - we tried it)
+        if (searchQuery) {
+          updatedState = addSearchRecord(updatedState, {
+            query: searchQuery,
+            toolName: tc.function.name,
+            forQuestionId,
+            factIdsProduced: [], // Will be linked later after fact extraction
+          });
+        }
+      }
+      
+      allObservations.push(...observations);
+    }
   }
   
-  return allObservations;
+  return { observations: allObservations, updatedState };
 }
 
 // =============================================================================
@@ -535,15 +664,8 @@ async function handleGatheringPhase(
     // Clear observations after processing
     newState = clearObservations(newState);
     
-    // Check if all questions answered - move to synthesis
-    const unanswered = newState.researchPlan.filter(
-      (q) => q.status !== 'answered'
-    );
-    
-    if (unanswered.length === 0) {
-      newState.phase = 'synthesizing';
-      newState = pushActivityLog(newState, 'All questions answered, synthesizing...');
-    }
+    // Note: Transition to evaluating phase is now handled in the main loop
+    // after this function returns, to ensure proper round-aware evaluation
   }
   
   return newState;
@@ -576,16 +698,195 @@ async function handleSynthesisPhase(
   return completeResearch(state, parsed.report, validCitations);
 }
 
+/**
+ * Handle the evaluation phase - assess research quality and decide next steps.
+ * 
+ * This is the key phase for iterative research:
+ * - If adequacyScore >= 7 OR no more rounds allowed: transition to SYNTHESIZING
+ * - If adequacyScore < 7 AND more rounds allowed: transition to COMPRESSING
+ * 
+ * The suggestedFollowups are stored in state for the COMPRESSING phase to use.
+ */
+async function handleEvaluatingPhase(
+  state: ResearchState,
+  llmResponse: LLMResponse
+): Promise<ResearchState> {
+  console.debug('[runResearchLoop] Evaluation phase, response length:', llmResponse.content?.length);
+  
+  const parsed = tryParseStructuredResponse(llmResponse.content);
+  
+  if (!parsed || parsed.type !== 'evaluation') {
+    // Model didn't follow protocol - default to synthesis (conservative)
+    console.warn('[runResearchLoop] Evaluation phase: invalid response format, defaulting to synthesis');
+    
+    let newState = pushActivityLog(state, 'Evaluation unclear, proceeding to synthesis...');
+    newState = setPhase(newState, 'synthesizing');
+    return newState;
+  }
+  
+  const { adequacyScore, missingAspects, suggestedFollowups, shouldContinue } = parsed;
+  
+  console.log(
+    `[runResearchLoop] Evaluation: score=${adequacyScore}/10, shouldContinue=${shouldContinue}, ` +
+    `followups=${suggestedFollowups?.length ?? 0}, canContinue=${canContinueResearch(state)}`
+  );
+  
+  // Log evaluation for user visibility
+  let newState = pushActivityLog(
+    state,
+    `Research quality: ${adequacyScore}/10${missingAspects?.length ? ` (${missingAspects.length} gaps)` : ''}`
+  );
+  
+  // Store missing aspects as knowledge gaps
+  if (missingAspects && missingAspects.length > 0) {
+    const existingGapsLower = new Set(newState.knowledgeGaps.map(g => g.toLowerCase().trim()));
+    const uniqueNewGaps = missingAspects.filter(
+      gap => !existingGapsLower.has(gap.toLowerCase().trim())
+    );
+    newState = {
+      ...newState,
+      knowledgeGaps: [...newState.knowledgeGaps, ...uniqueNewGaps].slice(0, 15),
+    };
+  }
+  
+  // Store follow-ups for COMPRESSING phase to convert into questions
+  // We'll store them in a temporary field that gets cleared after use
+  (newState as ResearchState & { _pendingFollowups?: EvaluationResponse['suggestedFollowups'] })._pendingFollowups = suggestedFollowups;
+  
+  // Decision logic
+  const scoreThreshold = 7;
+  const shouldProceedToSynthesis = 
+    adequacyScore >= scoreThreshold || 
+    !shouldContinue || 
+    !canContinueResearch(newState);
+  
+  if (shouldProceedToSynthesis) {
+    const reason = adequacyScore >= scoreThreshold
+      ? 'Research quality sufficient'
+      : !canContinueResearch(newState)
+        ? `Maximum rounds (${newState.maxRounds}) reached`
+        : 'Model indicates no further research needed';
+    
+    console.log(`[runResearchLoop] Evaluation → Synthesis: ${reason}`);
+    newState = pushActivityLog(newState, `${reason}, synthesizing...`);
+    newState = setPhase(newState, 'synthesizing');
+  } else {
+    console.log(
+      `[runResearchLoop] Evaluation → Compressing: score ${adequacyScore} < ${scoreThreshold}, ` +
+      `round ${newState.currentRound}/${newState.maxRounds}`
+    );
+    newState = pushActivityLog(
+      newState,
+      `Score ${adequacyScore}/10, starting round ${newState.currentRound + 1}...`
+    );
+    newState = setPhase(newState, 'compressing');
+  }
+  
+  return newState;
+}
+
+/**
+ * Handle the compression phase - summarize current round and prepare for next.
+ * 
+ * This phase:
+ * 1. Generates a compressed summary of the current round's findings
+ * 2. Converts suggested follow-ups into new ResearchQuestion entries
+ * 3. Advances to the next round
+ * 4. Transitions back to GATHERING
+ */
+async function handleCompressingPhase(
+  state: ResearchState,
+  llmResponse: LLMResponse
+): Promise<ResearchState> {
+  console.debug('[runResearchLoop] Compression phase, response length:', llmResponse.content?.length);
+  
+  const parsed = tryParseStructuredResponse(llmResponse.content);
+  
+  let summary: string;
+  if (parsed && parsed.type === 'roundSummary') {
+    summary = parsed.summary;
+    console.log(`[runResearchLoop] Round summary generated: ${summary.length} chars, ${parsed.keyInsights?.length ?? 0} insights`);
+  } else {
+    // Fallback: use raw content as summary
+    console.warn('[runResearchLoop] Compression phase: invalid response format, using raw content');
+    summary = llmResponse.content?.slice(0, 500) || `Round ${state.currentRound} findings summarized.`;
+  }
+  
+  // Create the round summary (this captures current fact IDs for dual-layer context)
+  let newState = createRoundSummary(state, summary);
+  newState = pushActivityLog(newState, `Round ${newState.currentRound} compressed`);
+  
+  // Convert pending follow-ups into new research questions
+  const pendingFollowups = (state as ResearchState & { _pendingFollowups?: EvaluationResponse['suggestedFollowups'] })._pendingFollowups;
+  
+  if (pendingFollowups && pendingFollowups.length > 0) {
+    // Filter to avoid duplicate questions
+    const existingQuestions = new Set(
+      newState.researchPlan.map(q => q.question.toLowerCase().trim())
+    );
+    
+    const newQuestions: ResearchQuestion[] = [];
+    for (const followup of pendingFollowups) {
+      const normalizedQuestion = followup.question.toLowerCase().trim();
+      if (!existingQuestions.has(normalizedQuestion)) {
+        newQuestions.push(createQuestion(followup.question, followup.priority));
+        existingQuestions.add(normalizedQuestion);
+      }
+    }
+    
+    if (newQuestions.length > 0) {
+      console.log(`[runResearchLoop] Adding ${newQuestions.length} follow-up questions for round ${newState.currentRound + 1}`);
+      newState = {
+        ...newState,
+        researchPlan: [...newState.researchPlan, ...newQuestions],
+      };
+      newState = pushActivityLog(newState, `Added ${newQuestions.length} follow-up questions`);
+    }
+  }
+  
+  // Clear the temporary follow-ups storage
+  delete (newState as ResearchState & { _pendingFollowups?: unknown })._pendingFollowups;
+  
+  // Advance to next round
+  newState = advanceRound(newState);
+  console.log(`[runResearchLoop] Advanced to round ${newState.currentRound}/${newState.maxRounds}`);
+  
+  // Transition back to gathering
+  newState = setPhase(newState, 'gathering');
+  newState = pushActivityLog(newState, `Starting round ${newState.currentRound}...`);
+  
+  return newState;
+}
+
 // =============================================================================
-// Soft Landing Logic
+// Soft Landing Logic (Round-Aware)
 // =============================================================================
 
 /**
- * Check if we should force synthesis (soft landing guardrail).
+ * Check if we should force a phase transition (soft landing guardrail).
+ * 
+ * Now uses round-based budgets (60/30/10 split) instead of global step count.
+ * When round budget is exhausted:
+ * - If gathering: transition to EVALUATING (not directly to synthesis)
+ * - If already evaluating/compressing: let those phases complete naturally
  */
-function shouldForceSynthesis(state: ResearchState): boolean {
+function shouldForceEvaluation(state: ResearchState): boolean {
+  // Only applies during gathering phase
+  if (state.phase !== 'gathering') {
+    return false;
+  }
+  
+  return shouldTriggerRoundSoftLanding(state);
+}
+
+/**
+ * Check if we've hit the hard global limit and should force immediate synthesis.
+ * This is a fallback when round-based soft landing isn't enough.
+ */
+function shouldForceImmediateSynthesis(state: ResearchState): boolean {
   const threshold = Math.floor(state.maxSteps * SOFT_LANDING_THRESHOLD);
-  return state.currentStep >= threshold && state.phase === 'gathering';
+  return state.currentStep >= threshold && 
+    (state.phase === 'gathering' || state.phase === 'evaluating' || state.phase === 'compressing');
 }
 
 /**
@@ -593,12 +894,24 @@ function shouldForceSynthesis(state: ResearchState): boolean {
  */
 function getSoftLandingInstruction(state: ResearchState): string {
   const remaining = state.maxSteps - state.currentStep;
+  const { stepsRemainingThisRound } = getRoundStepBudget(state);
   
   return `
-⚠️ TIME CONSTRAINT: Only ${remaining} steps remaining before hard limit.
+⚠️ TIME CONSTRAINT: Only ${remaining} steps remaining (${stepsRemainingThisRound} in current round).
 INSTRUCTION: Stop searching immediately. You must synthesize your findings NOW.
 Use the facts and partial answers you have gathered. Do not request more searches.
 Output a final report with what you know, noting any gaps as limitations.`;
+}
+
+/**
+ * Get evaluation urgency instruction when round budget is low.
+ */
+function getRoundBudgetWarning(state: ResearchState): string {
+  const { stepsRemainingThisRound, roundBudget } = getRoundStepBudget(state);
+  
+  return `
+📊 ROUND BUDGET: ${stepsRemainingThisRound}/${roundBudget} steps remaining in round ${state.currentRound}.
+Consider wrapping up current questions before the round budget expires.`;
 }
 
 // =============================================================================
@@ -692,13 +1005,20 @@ function handleIntervention(
 /**
  * Run the deep research loop.
  *
- * Implements the Plan-and-Execute state machine:
- * PLANNING → GATHERING → SYNTHESIZING → COMPLETE
+ * Implements the Plan-and-Execute state machine with multi-round support:
+ * PLANNING → GATHERING → EVALUATING → [COMPRESSING → GATHERING]* → SYNTHESIZING → COMPLETE
+ *
+ * Multi-round iteration:
+ * - After gathering completes, EVALUATING phase assesses research quality (1-10 score)
+ * - If score < 7 and rounds remain: COMPRESSING summarizes, adds follow-up questions, loops back
+ * - If score >= 7 or max rounds reached: proceeds to SYNTHESIZING
  *
  * With stability patterns:
- * 1. Soft landing at 80% steps
- * 2. Parallel batch tool execution
- * 3. Tool failure resilience
+ * 1. Round-based soft landing (60/30/10 budget split)
+ * 2. Query deduplication across rounds
+ * 3. Parallel batch tool execution
+ * 4. Tool failure resilience
+ * 5. Dual-layer context (compressed summaries for prompts, full facts for synthesis)
  */
 export async function runResearchLoop(
   options: RunResearchLoopOptions
@@ -856,15 +1176,64 @@ export async function runResearchLoop(
         }
       }
 
-      // === SOFT LANDING GUARDRAIL ===
+      // === SOFT LANDING GUARDRAILS (Round-Aware) ===
       let phaseInstruction: string | undefined;
       
-      if (shouldForceSynthesis(state)) {
-        console.log('[runResearchLoop] Soft landing triggered - forcing synthesis');
+      // Check for global hard limit approaching - force immediate synthesis
+      if (shouldForceImmediateSynthesis(state)) {
+        console.log('[runResearchLoop] Global soft landing triggered - forcing immediate synthesis');
         state = setPhase(state, 'synthesizing');
-        state = pushActivityLog(state, 'Synthesizing final report...');
+        state = pushActivityLog(state, 'Time limit approaching, synthesizing...');
         phaseInstruction =
           PHASE_INSTRUCTIONS.synthesizing + getSoftLandingInstruction(state);
+      }
+      // Check for round budget exhaustion - trigger evaluation (not direct synthesis)
+      else if (shouldForceEvaluation(state)) {
+        const { stepsUsedThisRound, roundBudget } = getRoundStepBudget(state);
+        console.log(
+          `[runResearchLoop] Round soft landing triggered - round ${state.currentRound} budget ` +
+          `(${stepsUsedThisRound}/${roundBudget}) at 80%, moving to evaluation`
+        );
+        
+        // Check if all questions are answered - if so, go to evaluation
+        const unanswered = state.researchPlan.filter(
+          (q) => q.status !== 'answered' && q.status !== 'blocked'
+        );
+        
+        if (unanswered.length === 0) {
+          // All questions answered, go to evaluation
+          state = setPhase(state, 'evaluating');
+          state = pushActivityLog(state, 'Round complete, evaluating research quality...');
+        } else {
+          // Still have unanswered questions but budget is low
+          // Mark remaining as blocked and move to evaluation
+          console.log(`[runResearchLoop] ${unanswered.length} questions remaining, marking as blocked due to budget`);
+          
+          for (const q of unanswered) {
+            const questionIndex = state.researchPlan.indexOf(q) + 1;
+            state = {
+              ...state,
+              researchPlan: state.researchPlan.map((rq) =>
+                rq.id === q.id ? { ...rq, status: 'blocked' as const } : rq
+              ),
+              knowledgeGaps: [
+                ...state.knowledgeGaps,
+                `Round ${state.currentRound} budget exhausted: Q${questionIndex}: "${q.question}"`,
+              ],
+            };
+          }
+          
+          state = setPhase(state, 'evaluating');
+          state = pushActivityLog(state, `Round ${state.currentRound} budget exhausted, evaluating...`);
+        }
+      }
+      
+      // Add round budget warning to gathering phase instruction if getting low
+      if (state.phase === 'gathering' && !phaseInstruction) {
+        const { stepsRemainingThisRound, roundBudget } = getRoundStepBudget(state);
+        if (stepsRemainingThisRound <= roundBudget * 0.3 && stepsRemainingThisRound > 0) {
+          phaseInstruction = PHASE_INSTRUCTIONS.gathering + getRoundBudgetWarning(state);
+        }
       }
 
       // Log phase/step
@@ -886,10 +1255,19 @@ export async function runResearchLoop(
       );
 
       // Determine which model to use
-      const endpoint =
-        state.phase === 'gathering' && state.pendingObservations.length > 0
-          ? modelRouting.extractionModel // Use cheap model for fact extraction
-          : modelRouting.reasoningModel; // Use capable model for reasoning
+      // - Extraction model (cheap/fast): for fact extraction during gathering, and for compression
+      // - Reasoning model (capable): for planning, evaluation, and synthesis
+      let endpoint: ModelEndpoint;
+      if (state.phase === 'gathering' && state.pendingObservations.length > 0) {
+        // Fact extraction from observations
+        endpoint = modelRouting.extractionModel;
+      } else if (state.phase === 'compressing') {
+        // Round summary generation (use extraction or summarization model)
+        endpoint = modelRouting.summarizationModel ?? modelRouting.extractionModel;
+      } else {
+        // Planning, evaluation, synthesis need reasoning
+        endpoint = modelRouting.reasoningModel;
+      }
 
       // Determine if tools should be available
       const includeTools = shouldIncludeTools(state.phase);
@@ -952,12 +1330,16 @@ export async function runResearchLoop(
         state = setActiveToolCalls(state, activeToolCalls);
         onStateUpdate?.(state);
 
-        // Execute tools with resilience pattern
-        observations = await executeToolsBatch(
+        // Execute tools with deduplication and tracking
+        const toolResult = await executeToolsBatch(
           llmResponse.toolCalls,
           executeTool,
+          state,
           currentQuestion?.id
         );
+        
+        observations = toolResult.observations;
+        state = toolResult.updatedState;
 
         // Clear active tools after completion
         state = clearActiveToolCalls(state);
@@ -967,6 +1349,7 @@ export async function runResearchLoop(
           observations.map((o) => ({
             tool: o.toolName,
             hasError: 'error' in (o.rawResult as Record<string, unknown>),
+            skipped: (o.rawResult as Record<string, unknown>)?.skipped === true,
           }))
         );
       }
@@ -979,6 +1362,27 @@ export async function runResearchLoop(
 
         case 'gathering':
           state = await handleGatheringPhase(state, llmResponse, observations);
+          
+          // Check if all questions answered - transition to evaluating (not directly to synthesis)
+          if (state.phase === 'gathering') {
+            const unanswered = state.researchPlan.filter(
+              (q) => q.status !== 'answered' && q.status !== 'blocked'
+            );
+            
+            if (unanswered.length === 0) {
+              console.log('[runResearchLoop] All questions answered, moving to evaluation');
+              state = setPhase(state, 'evaluating');
+              state = pushActivityLog(state, 'All questions answered, evaluating research quality...');
+            }
+          }
+          break;
+
+        case 'evaluating':
+          state = await handleEvaluatingPhase(state, llmResponse);
+          break;
+
+        case 'compressing':
+          state = await handleCompressingPhase(state, llmResponse);
           break;
 
         case 'synthesizing':
@@ -1026,8 +1430,11 @@ export async function runResearchLoop(
   console.log('[runResearchLoop] Research complete:', {
     phase: state.phase,
     steps: state.currentStep,
+    rounds: state.currentRound,
+    roundSummaries: state.roundSummaries.length,
     facts: state.gatheredFacts.length,
     questions: state.researchPlan.length,
+    searchesExecuted: state.searchHistory.length,
     hasReport: !!state.finalReport,
   });
 

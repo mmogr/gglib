@@ -132,6 +132,57 @@ IMPORTANT:
 - Check the "🎯 Current Focus" section for the exact questionIndex to use
 - Choose ONE action: either call a tool OR output JSON. Not both.`,
 
+  evaluating: `## Current Task: EVALUATING
+
+You are assessing whether the gathered research adequately answers the original query.
+
+INSTRUCTIONS:
+1. Review the original query and all gathered facts
+2. Assess how completely the research addresses the query (1-10 scale)
+3. Identify specific aspects that are still missing or underexplored
+4. Suggest targeted follow-up questions if more research would help
+
+RESPOND WITH JSON:
+{
+  "type": "evaluation",
+  "adequacyScore": 7,
+  "assessment": "Brief explanation of the score...",
+  "missingAspects": ["Aspect 1 not covered", "Aspect 2 needs more depth"],
+  "suggestedFollowups": [
+    {"question": "Follow-up question 1?", "priority": 1, "rationale": "Why this matters..."},
+    {"question": "Follow-up question 2?", "priority": 2, "rationale": "Why this matters..."}
+  ],
+  "shouldContinue": true
+}
+
+SCORING GUIDELINES:
+- 1-3: Critical gaps, key aspects unanswered
+- 4-6: Partial coverage, significant gaps remain  
+- 7-8: Good coverage, minor gaps acceptable
+- 9-10: Comprehensive, ready for synthesis
+
+Set "shouldContinue": false if score >= 7 OR if follow-ups would be redundant.
+Do NOT use tools in evaluation phase. Output ONLY the JSON.`,
+
+  compressing: `## Current Task: COMPRESSING
+
+You are summarizing the current round's findings before starting a new research round.
+
+INSTRUCTIONS:
+1. Review all facts gathered in this round
+2. Create a concise summary capturing the key findings (~500 chars max)
+3. Focus on information most relevant to the original query
+
+RESPOND WITH JSON:
+{
+  "type": "roundSummary",
+  "summary": "Concise summary of this round's key findings...",
+  "keyInsights": ["Most important insight 1", "Most important insight 2"]
+}
+
+Keep the summary factual and dense - it will be used as context for the next research round.
+Do NOT use tools in compression phase. Output ONLY the JSON.`,
+
   synthesizing: `## Current Task: SYNTHESIZING
 
 You are producing the final research report from gathered facts.
