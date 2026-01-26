@@ -61,8 +61,13 @@ pub trait ChatHistoryRepository: Send + Sync {
     /// Save a new message and update conversation timestamp.
     async fn save_message(&self, msg: NewMessage) -> Result<i64, ChatHistoryError>;
 
-    /// Update a message's content.
-    async fn update_message(&self, id: i64, content: String) -> Result<(), ChatHistoryError>;
+    /// Update a message's content and optionally its metadata.
+    async fn update_message(
+        &self,
+        id: i64,
+        content: String,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<(), ChatHistoryError>;
 
     /// Delete a message and all subsequent messages in the same conversation.
     /// Returns the number of messages deleted.
