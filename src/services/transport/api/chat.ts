@@ -12,6 +12,7 @@ import type {
   ChatMessage,
   CreateConversationParams,
   SaveMessageParams,
+  UpdateMessageParams,
   DeleteMessageResult,
   GenerateTitleParams,
 } from '../types/chat';
@@ -90,16 +91,20 @@ export async function saveMessage(params: SaveMessageParams): Promise<MessageId>
       conversation_id: params.conversationId,
       role: params.role,
       content: params.content,
+      metadata: params.metadata ?? null,
     }
   );
   return response.id;
 }
 
 /**
- * Update a message's content.
+ * Update a message's content and/or metadata.
  */
-export async function updateMessage(id: MessageId, content: string): Promise<void> {
-  await put<void>(`/api/messages/${id}`, { content });
+export async function updateMessage(id: MessageId, params: UpdateMessageParams): Promise<void> {
+  await put<void>(`/api/messages/${id}`, { 
+    content: params.content,
+    metadata: params.metadata ?? null,
+  });
 }
 
 /**
