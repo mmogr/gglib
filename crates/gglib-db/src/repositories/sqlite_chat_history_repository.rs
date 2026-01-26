@@ -205,9 +205,20 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         Ok(message_id)
     }
 
-    async fn update_message(&self, id: i64, content: String) -> Result<(), ChatHistoryError> {
-        let result = sqlx::query("UPDATE chat_messages SET content = ? WHERE id = ?")
+    async fn update_message(
+        &self,
+        id: i64,
+        content: String,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<(), ChatHistoryError> {
+        // Serialize metadata to JSON string if present
+        let metadata_str = metadata
+            .as_ref()
+            .map(|m| serde_json::to_string(m).unwrap_or_default());
+
+        let result = sqlx::query("UPDATE chat_messages SET content = ?, metadata = ? WHERE id = ?")
             .bind(&content)
+            .bind(&metadata_str)
             .bind(id)
             .execute(&self.pool)
             .await
