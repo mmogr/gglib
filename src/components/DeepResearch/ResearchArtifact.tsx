@@ -22,6 +22,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Brain,
   ChevronDown,
+  ChevronRight,
   Circle,
   CircleCheck,
   CircleX,
@@ -262,7 +263,8 @@ const ResearchPlanSection: React.FC<{
   questions: ResearchQuestion[];
   onSkipQuestion?: (questionId: string) => void;
   isRunning: boolean;
-}> = ({ questions, onSkipQuestion, isRunning }) => {
+  isCompleted?: boolean;
+}> = ({ questions, onSkipQuestion, isRunning, isCompleted = false }) => {
   // Track which questions have skip pending (optimistic UI)
   const [pendingSkips, setPendingSkips] = useState<Set<string>>(new Set());
   
@@ -319,12 +321,13 @@ const ResearchPlanSection: React.FC<{
       </div>
       <div className={styles.questionList}>
         {sortedQuestions.map(question => {
-          const canSkip = isRunning && 
+          const canSkip = !isCompleted && isRunning && 
             onSkipQuestion && 
             (question.status === 'in-progress' || question.status === 'pending') &&
             !pendingSkips.has(question.id);
           
           const isBlocked = question.status === 'blocked';
+          const showSkipButton = canSkip || (isCompleted && (question.status === 'in-progress' || question.status === 'pending'));
           
           return (
             <div 
@@ -340,12 +343,13 @@ const ResearchPlanSection: React.FC<{
                   <div className={styles.questionAnswer}>{question.answerSummary}</div>
                 )}
               </div>
-              {canSkip && (
+              {showSkipButton && (
                 <button
                   className={styles.skipButton}
                   onClick={() => handleSkip(question.id)}
-                  title="Skip this question"
+                  title={isCompleted ? "Question was skipped" : "Skip this question"}
                   type="button"
+                  disabled={isCompleted}
                 >
                   <Icon icon={SkipForward} size={12} />
                 </button>
@@ -626,6 +630,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
   onSkipQuestion,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   // Use initialState for re-hydration if state is empty
   const effectiveState = useMemo(() => {
@@ -742,11 +747,80 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
           {/* Show final report if complete */}
           {effectiveState.phase === 'complete' && effectiveState.finalReport ? (
-            <FinalReportSection
-              report={effectiveState.finalReport}
-              facts={effectiveState.gatheredFacts}
-              citations={effectiveState.citations}
-            />
+            <>
+              <FinalReportSection
+                report={effectiveState.finalReport}
+                facts={effectiveState.gatheredFacts}
+                citations={effectiveState.citations}
+              />
+
+              {/* Collapsible Research Details Section */}
+              <div className={styles.researchDetailsContainer}>
+                <div
+                  className={styles.researchDetailsHeader}
+                  onClick={() => setDetailsExpanded(!detailsExpanded)}
+                >
+                  <div className={styles.researchDetailsTitle}>
+                    <Icon icon={FileSearch} size={14} />
+                    Research Details
+                  </div>
+                  <div className={styles.researchDetailsToggle}>
+                    <Icon
+                      icon={detailsExpanded ? ChevronDown : ChevronRight}
+                      size={16}
+                    />
+                  </div>
+                </div>
+
+                {detailsExpanded && (
+                  <div className={styles.researchDetailsContent}>
+                    {/* Activity Log Snapshot */}
+                    {effectiveState.completionSnapshot?.activityLog &&
+                      effectiveState.completionSnapshot.activityLog.length > 0 && (
+                        <div className={styles.section}>
+                          <div className={styles.sectionHeader}>
+                            <span className={styles.sectionTitle}>
+                              <Icon icon={ListTodo} size={14} />
+                              Activity Timeline
+                            </span>
+                            <span className={styles.sectionCount}>
+                              {effectiveState.completionSnapshot.stepsTaken} steps
+                              {effectiveState.completionSnapshot.elapsedTime &&
+                                ` · ${Math.round(effectiveState.completionSnapshot.elapsedTime / 1000)}s`}
+                            </span>
+                          </div>
+                          <div className={styles.activityLogSnapshot}>
+                            {effectiveState.completionSnapshot.activityLog.map(
+                              (event, i) => (
+                                <div key={i} className={styles.activityItem}>
+                                  {event}
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Research plan */}
+                    <ResearchPlanSection
+                      questions={effectiveState.researchPlan}
+                      onSkipQuestion={onSkipQuestion}
+                      isRunning={false}
+                      isCompleted={true}
+                    />
+
+                    {/* Gathered facts */}
+                    <GatheredFactsSection facts={effectiveState.gatheredFacts} />
+
+                    {/* Working hypothesis */}
+                    <HypothesisBlock hypothesis={effectiveState.currentHypothesis} />
+
+                    {/* Knowledge gaps */}
+                    <KnowledgeGapsSection gaps={effectiveState.knowledgeGaps} />
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
             <>
               {/* Research plan */}
