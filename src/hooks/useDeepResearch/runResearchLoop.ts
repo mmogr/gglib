@@ -16,6 +16,8 @@ import type {
   PendingObservation,
   ModelRouting,
   ModelEndpoint,
+  InterventionRef,
+  ResearchIntervention,
 } from './types';
 import {
   createInitialState,
@@ -155,6 +157,12 @@ export interface RunResearchLoopOptions {
   abortSignal?: AbortSignal;
   /** Token budget for context (default: 8000) */
   maxContextTokens?: number;
+  /** 
+   * Ref for human-in-the-loop intervention signals.
+   * UI writes to this ref, loop reads at start of each step.
+   * Supports 'wrap-up' (force synthesis) and 'skip-question' (mark blocked).
+   */
+  interventionRef?: InterventionRef;
 }
 
 /**
@@ -572,6 +580,90 @@ Output a final report with what you know, noting any gaps as limitations.`;
 }
 
 // =============================================================================
+// Human-in-the-Loop Intervention
+// =============================================================================
+
+/**
+ * Handle a user intervention signal.
+ * 
+ * Supports two intervention types:
+ * - 'wrap-up': Force immediate synthesis with what we have
+ * - 'skip-question': Mark a question as blocked and move on
+ * 
+ * Skip behavior differs based on whether the target is the current focus:
+ * - Current focus: Use timeout logic (mark blocked, log gap, transition to next)
+ * - Pending question: Simply flip status to blocked (no disruption to current flow)
+ */
+function handleIntervention(
+  state: ResearchState,
+  intervention: ResearchIntervention
+): ResearchState {
+  switch (intervention.type) {
+    case 'wrap-up': {
+      console.log('[runResearchLoop] User requested wrap-up, forcing synthesis');
+      
+      // Set manual termination flag and transition to synthesizing
+      return {
+        ...state,
+        phase: 'synthesizing',
+        isManualTermination: true,
+      };
+    }
+    
+    case 'skip-question': {
+      const { questionId } = intervention;
+      const targetQuestion = state.researchPlan.find(q => q.id === questionId);
+      
+      if (!targetQuestion) {
+        console.warn(`[runResearchLoop] Skip intervention: question ${questionId} not found`);
+        return state;
+      }
+      
+      // Already answered or blocked? No-op
+      if (targetQuestion.status === 'answered' || targetQuestion.status === 'blocked') {
+        console.log(`[runResearchLoop] Skip intervention: question already ${targetQuestion.status}`);
+        return state;
+      }
+      
+      const questionIndex = state.researchPlan.indexOf(targetQuestion) + 1;
+      const isCurrentFocus = targetQuestion.status === 'in-progress';
+      
+      console.log(
+        `[runResearchLoop] User skipped Q${questionIndex}${isCurrentFocus ? ' (current focus)' : ' (pending)'}`
+      );
+      
+      // Mark the question as blocked
+      let newState = {
+        ...state,
+        researchPlan: state.researchPlan.map(q =>
+          q.id === questionId
+            ? { ...q, status: 'blocked' as const }
+            : q
+        ),
+      };
+      
+      // If it was the current focus, also add to knowledge gaps
+      // (mirrors the timeout logic from Focus Timeout feature)
+      if (isCurrentFocus) {
+        newState = {
+          ...newState,
+          knowledgeGaps: [
+            ...newState.knowledgeGaps,
+            `Skipped by user: Q${questionIndex}: "${targetQuestion.question}"`,
+          ],
+        };
+      }
+      
+      return newState;
+    }
+    
+    default:
+      console.warn('[runResearchLoop] Unknown intervention type:', intervention);
+      return state;
+  }
+}
+
+// =============================================================================
 // Main Loop
 // =============================================================================
 
@@ -603,6 +695,7 @@ export async function runResearchLoop(
     onStatePersist,
     abortSignal,
     maxContextTokens = 8000,
+    interventionRef,
   } = options;
 
   // Initialize state
@@ -630,6 +723,28 @@ export async function runResearchLoop(
       if (abortSignal?.aborted) {
         state = setError(state, 'Research cancelled by user');
         break;
+      }
+
+      // === HUMAN-IN-THE-LOOP INTERVENTION CHECK ===
+      // Read intervention signal from ref (written by UI)
+      const intervention = interventionRef?.current;
+      if (intervention) {
+        // Clear the intervention to prevent re-processing
+        interventionRef.current = null;
+        
+        state = handleIntervention(state, intervention);
+        
+        // If wrap-up was triggered, we'll continue the loop but the phase
+        // is now 'synthesizing' and the isManualTermination flag is set.
+        // The loop condition will naturally proceed to synthesis.
+        
+        // Notify UI of intervention-caused state change
+        onStateUpdate?.(state);
+        
+        // If phase changed to synthesizing, continue to process it
+        if (state.phase === 'synthesizing') {
+          console.log('[runResearchLoop] User intervention triggered synthesis');
+        }
       }
 
       // Advance step counter
