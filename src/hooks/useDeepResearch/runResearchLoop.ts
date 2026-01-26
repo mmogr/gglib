@@ -57,6 +57,9 @@ export const TOOL_TIMEOUT_MS = 30000;
 /** Maximum retries for transient errors */
 export const MAX_TOOL_RETRIES = 2;
 
+/** Maximum steps a question can be in-progress before being marked blocked */
+export const QUESTION_FOCUS_TIMEOUT_STEPS = 5;
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -182,10 +185,14 @@ interface PlanResponse {
 
 /**
  * Gathering phase response (when answering, not tool calling).
+ * Now supports questionIndex (preferred) or questionId (legacy).
  */
 interface AnswerResponse {
   type: 'answer';
-  questionId: string;
+  /** Preferred: 1-based index matching Q1, Q2, etc. from Research Plan */
+  questionIndex?: number;
+  /** Legacy: UUID of question (kept for backwards compatibility) */
+  questionId?: string;
   answer: string;
   facts: Array<{
     claim: string;
@@ -420,6 +427,39 @@ async function handleGatheringPhase(
   const parsed = tryParseStructuredResponse(llmResponse.content);
   
   if (parsed && parsed.type === 'answer') {
+    // Resolve the question being answered using multiple fallback strategies
+    let targetQuestion: ResearchQuestion | undefined;
+    
+    // Strategy 1: Use questionIndex (preferred, 1-based)
+    if (parsed.questionIndex !== undefined && parsed.questionIndex > 0) {
+      targetQuestion = newState.researchPlan[parsed.questionIndex - 1];
+    }
+    
+    // Strategy 2: Fall back to questionId (legacy UUID)
+    if (!targetQuestion && parsed.questionId) {
+      targetQuestion = newState.researchPlan.find(q => q.id === parsed.questionId);
+    }
+    
+    // Strategy 3: Fall back to current in-progress question
+    if (!targetQuestion) {
+      targetQuestion = newState.researchPlan.find(q => q.status === 'in-progress');
+      if (targetQuestion) {
+        console.log(
+          `[handleGatheringPhase] Using in-progress question fallback: Q${newState.researchPlan.indexOf(targetQuestion) + 1}`
+        );
+      }
+    }
+    
+    // If still no match, log warning but continue (facts still get extracted)
+    if (!targetQuestion) {
+      console.warn(
+        '[handleGatheringPhase] Could not resolve target question for answer. ' +
+        `questionIndex=${parsed.questionIndex}, questionId=${parsed.questionId}`
+      );
+    }
+    
+    const targetQuestionId = targetQuestion?.id ?? 'unknown';
+    
     // Extract facts
     const newFacts: GatheredFact[] = parsed.facts.map((f) =>
       createFact(
@@ -428,19 +468,21 @@ async function handleGatheringPhase(
         f.sourceTitle,
         f.confidence,
         state.currentStep,
-        [parsed.questionId]
+        [targetQuestionId]
       )
     );
     
     // Add facts with pruning
     newState = addFacts(newState, newFacts);
     
-    // Update question status
-    newState = updateQuestion(newState, parsed.questionId, {
-      status: 'answered',
-      answerSummary: parsed.answer.slice(0, 500),
-      supportingFactIds: newFacts.map((f) => f.id),
-    });
+    // Update question status if we found a target
+    if (targetQuestion) {
+      newState = updateQuestion(newState, targetQuestion.id, {
+        status: 'answered',
+        answerSummary: parsed.answer.slice(0, 500),
+        supportingFactIds: newFacts.map((f) => f.id),
+      });
+    }
     
     // Update hypothesis if provided
     if (parsed.updatedHypothesis) {
@@ -601,6 +643,68 @@ export async function runResearchLoop(
           `Maximum steps (${state.maxSteps}) reached without completing research.`
         );
         break;
+      }
+
+      // === FOCUS TIMEOUT CHECK ===
+      // Check if any question has been in-progress too long and should be marked blocked
+      if (state.phase === 'gathering') {
+        const timedOutQuestion = state.researchPlan.find(
+          (q) =>
+            q.status === 'in-progress' &&
+            q.inProgressSince !== undefined &&
+            state.currentStep - q.inProgressSince >= QUESTION_FOCUS_TIMEOUT_STEPS
+        );
+
+        if (timedOutQuestion) {
+          const questionIndex = state.researchPlan.indexOf(timedOutQuestion) + 1;
+          console.log(
+            `[runResearchLoop] Question Q${questionIndex} timed out after ${QUESTION_FOCUS_TIMEOUT_STEPS} steps, marking as blocked`
+          );
+
+          // Mark as blocked and record knowledge gap
+          state = {
+            ...state,
+            researchPlan: state.researchPlan.map((q) =>
+              q.id === timedOutQuestion.id
+                ? { ...q, status: 'blocked' as const }
+                : q
+            ),
+            knowledgeGaps: [
+              ...state.knowledgeGaps,
+              `Unable to find definitive data for Q${questionIndex}: "${timedOutQuestion.question}" after ${QUESTION_FOCUS_TIMEOUT_STEPS} attempts`,
+            ],
+          };
+        }
+      }
+
+      // === ENSURE IN-PROGRESS QUESTION ===
+      // If in gathering phase and no question is in-progress, mark the next pending one
+      if (state.phase === 'gathering') {
+        const hasInProgress = state.researchPlan.some(
+          (q) => q.status === 'in-progress'
+        );
+
+        if (!hasInProgress) {
+          const nextPending = state.researchPlan.find(
+            (q) => q.status === 'pending'
+          );
+
+          if (nextPending) {
+            const questionIndex = state.researchPlan.indexOf(nextPending) + 1;
+            console.log(
+              `[runResearchLoop] Setting Q${questionIndex} as current focus`
+            );
+
+            state = {
+              ...state,
+              researchPlan: state.researchPlan.map((q) =>
+                q.id === nextPending.id
+                  ? { ...q, status: 'in-progress' as const, inProgressSince: state.currentStep }
+                  : q
+              ),
+            };
+          }
+        }
       }
 
       // === SOFT LANDING GUARDRAIL ===

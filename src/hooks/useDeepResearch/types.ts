@@ -86,6 +86,8 @@ export interface ResearchQuestion {
   priority: number;
   /** Parent question ID if this is a follow-up */
   parentQuestionId?: string;
+  /** Step number when this question was marked in-progress (for timeout detection) */
+  inProgressSince?: number;
 }
 
 /**
@@ -403,6 +405,11 @@ export interface ResearchContextInjection {
   previousReasoning: string;
   /** Current phase */
   phase: ResearchPhase;
+  /** Current focus question (in-progress) for explicit LLM guidance */
+  currentFocus: {
+    questionIndex: number;
+    questionText: string;
+  } | null;
   /** Progress indicator */
   progress: {
     step: number;
@@ -415,6 +422,7 @@ export interface ResearchContextInjection {
 
 /**
  * Render a research question for prompt injection.
+ * Includes Q{index} identifier that the LLM can reference when answering.
  */
 function renderQuestion(q: ResearchQuestion, index: number): string {
   const statusIcon =
@@ -426,7 +434,8 @@ function renderQuestion(q: ResearchQuestion, index: number): string {
           ? '✗'
           : '○';
   const answer = q.answerSummary ? ` — ${q.answerSummary}` : '';
-  return `${index + 1}. [${statusIcon}] ${q.question}${answer}`;
+  // Include Q{N} identifier for LLM to reference in AnswerResponse
+  return `Q${index + 1}. [${statusIcon}] ${q.question}${answer}`;
 }
 
 /**
@@ -559,6 +568,17 @@ export function serializeForPrompt(
     (q) => q.status === 'answered'
   ).length;
 
+  // === Current Focus (in-progress question) ===
+  const inProgressQuestion = state.researchPlan.find(
+    (q) => q.status === 'in-progress'
+  );
+  const currentFocus = inProgressQuestion
+    ? {
+        questionIndex: state.researchPlan.indexOf(inProgressQuestion) + 1,
+        questionText: inProgressQuestion.question,
+      }
+    : null;
+
   return {
     hypothesis,
     planSummary,
@@ -567,6 +587,7 @@ export function serializeForPrompt(
     observations,
     previousReasoning,
     phase: state.phase,
+    currentFocus,
     progress: {
       step: state.currentStep,
       maxSteps: state.maxSteps,
@@ -594,6 +615,15 @@ export function renderContextForSystemPrompt(
     `Questions: ${progress.questionsAnswered}/${progress.questionsTotal} answered | Facts: ${progress.factsGathered} gathered`
   );
   sections.push('');
+
+  // Current Focus (in-progress question) - critical for LLM context
+  if (injection.currentFocus) {
+    sections.push('## 🎯 Current Focus');
+    sections.push(`You are currently working on **Q${injection.currentFocus.questionIndex}**: "${injection.currentFocus.questionText}"`);
+    sections.push('');
+    sections.push('When you have gathered enough information to answer this question, provide an AnswerResponse with `questionIndex: ' + injection.currentFocus.questionIndex + '`.');
+    sections.push('');
+  }
 
   // Previous reasoning (agent memory)
   if (injection.previousReasoning) {
@@ -635,18 +665,174 @@ export function renderContextForSystemPrompt(
 }
 
 // =============================================================================
+// Deduplication Helpers
+// =============================================================================
+
+/** Similarity threshold for deduplication (0-1, higher = stricter) */
+const DEDUP_SIMILARITY_THRESHOLD = 0.55;
+
+/**
+ * Normalize text for comparison.
+ */
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Tokenize text into words/ngrams for comparison.
+ */
+function tokenize(text: string): Set<string> {
+  const normalized = normalizeText(text);
+  const words = normalized.split(' ').filter((w) => w.length > 2);
+  
+  const tokens = new Set(words);
+  for (let i = 0; i < words.length - 1; i++) {
+    tokens.add(`${words[i]} ${words[i + 1]}`);
+  }
+  
+  return tokens;
+}
+
+/**
+ * Calculate Jaccard similarity between two token sets.
+ */
+function jaccardSimilarity(setA: Set<string>, setB: Set<string>): number {
+  if (setA.size === 0 && setB.size === 0) return 1;
+  if (setA.size === 0 || setB.size === 0) return 0;
+  
+  let intersection = 0;
+  for (const token of setA) {
+    if (setB.has(token)) intersection++;
+  }
+  
+  const union = setA.size + setB.size - intersection;
+  return intersection / union;
+}
+
+/**
+ * Extract numeric values from text for comparison.
+ */
+function extractNumbers(text: string): string[] {
+  const numbers: string[] = [];
+  
+  // Match percentages (including formatted like "1,153%")
+  const percentRegex = /([0-9,]+(?:\.[0-9]+)?)\s*%/g;
+  let match;
+  while ((match = percentRegex.exec(text)) !== null) {
+    numbers.push(match[1].replace(/,/g, ''));
+  }
+  
+  // Match money values with multipliers
+  const moneyRegex = /\$\s*([0-9,]+(?:\.[0-9]+)?)\s*(billion|million|thousand)?/gi;
+  while ((match = moneyRegex.exec(text)) !== null) {
+    let num = parseFloat(match[1].replace(/,/g, ''));
+    const multiplier = (match[2] || '').toLowerCase();
+    if (multiplier === 'billion') num *= 1e9;
+    else if (multiplier === 'million') num *= 1e6;
+    else if (multiplier === 'thousand') num *= 1e3;
+    numbers.push(num.toString());
+  }
+  
+  // Match multipliers (3.5x, 2x)
+  const multiplierRegex = /([0-9]+(?:\.[0-9]+)?)\s*x\b/gi;
+  while ((match = multiplierRegex.exec(text)) !== null) {
+    numbers.push(match[1]);
+  }
+  
+  return numbers;
+}
+
+/**
+ * Check if two texts have conflicting numeric values.
+ */
+function hasNumericDivergence(textA: string, textB: string): boolean {
+  const numsA = extractNumbers(textA);
+  const numsB = extractNumbers(textB);
+  
+  if (numsA.length === 0 || numsB.length === 0) return false;
+  
+  const numericMatch = numsA.some(a => {
+    const parsedA = parseFloat(a);
+    return numsB.some(b => {
+      const parsedB = parseFloat(b);
+      const ratio = Math.abs(parsedA - parsedB) / Math.max(parsedA, parsedB, 1);
+      return ratio < 0.1;
+    });
+  });
+  
+  return !numericMatch;
+}
+
+/**
+ * Check if a fact claim is similar to an existing claim.
+ */
+function isSimilarClaim(claimA: string, claimB: string): boolean {
+  const tokensA = tokenize(claimA);
+  const tokensB = tokenize(claimB);
+  const similarity = jaccardSimilarity(tokensA, tokensB);
+  
+  if (similarity >= DEDUP_SIMILARITY_THRESHOLD) {
+    // Check for numeric divergence before marking as duplicate
+    return !hasNumericDivergence(claimA, claimB);
+  }
+  return false;
+}
+
+// =============================================================================
 // State Mutation Helpers
 // =============================================================================
 
 /**
- * Add facts to state with automatic pruning.
+ * Add facts to state with automatic deduplication and pruning.
+ * 
+ * Deduplication uses Jaccard similarity (threshold 0.55) with numeric-aware
+ * comparison to prevent merging facts with different numbers (e.g., "40%" vs "1,153%").
  */
 export function addFacts(
   state: ResearchState,
   newFacts: GatheredFact[],
   maxFacts: number = 50
 ): ResearchState {
-  const combined = [...state.gatheredFacts, ...newFacts];
+  // Deduplicate new facts against existing facts
+  const dedupedNewFacts: GatheredFact[] = [];
+  let duplicateCount = 0;
+  
+  for (const newFact of newFacts) {
+    const isDuplicate = state.gatheredFacts.some(
+      (existing) => isSimilarClaim(newFact.claim, existing.claim)
+    );
+    
+    if (isDuplicate) {
+      console.log(
+        `[addFacts] Discarding duplicate: "${newFact.claim.slice(0, 50)}..."`
+      );
+      duplicateCount++;
+    } else {
+      // Also check against facts we're adding in this batch
+      const isBatchDuplicate = dedupedNewFacts.some(
+        (added) => isSimilarClaim(newFact.claim, added.claim)
+      );
+      
+      if (isBatchDuplicate) {
+        console.log(
+          `[addFacts] Discarding batch duplicate: "${newFact.claim.slice(0, 50)}..."`
+        );
+        duplicateCount++;
+      } else {
+        dedupedNewFacts.push(newFact);
+      }
+    }
+  }
+  
+  if (duplicateCount > 0) {
+    console.log(`[addFacts] Deduplication removed ${duplicateCount} duplicate facts`);
+  }
+  
+  const combined = [...state.gatheredFacts, ...dedupedNewFacts];
 
   if (combined.length <= maxFacts) {
     return { ...state, gatheredFacts: combined };

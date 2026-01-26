@@ -102,18 +102,18 @@ Do NOT use tools in planning phase. Output ONLY the JSON.`,
 You are searching for information to answer the research questions.
 
 INSTRUCTIONS:
-1. Look at the Research Plan - find the highest-priority PENDING question
-2. Use the search tool to find relevant information
-3. If you have enough information to answer a question, report it
+1. Check the "🎯 Current Focus" section to see which question you are working on
+2. Use the search tool to find relevant information for that question
+3. When you have enough information, provide an AnswerResponse
 
 IF YOU NEED TO SEARCH:
 Call the appropriate search tool (e.g., tavily_search) with a well-crafted query.
 
-IF YOU CAN ANSWER A QUESTION:
+IF YOU CAN ANSWER THE CURRENT FOCUS QUESTION:
 Respond with JSON:
 {
   "type": "answer",
-  "questionId": "id-of-question-answered",
+  "questionIndex": 1,
   "answer": "Brief answer summary (max 500 chars)",
   "facts": [
     {
@@ -127,7 +127,10 @@ Respond with JSON:
   "newGaps": ["Newly discovered unknowns..."]
 }
 
-Choose ONE action: either call a tool OR output JSON. Not both.`,
+IMPORTANT:
+- "questionIndex" is the Q number from the Research Plan (Q1, Q2, etc.)
+- Check the "🎯 Current Focus" section for the exact questionIndex to use
+- Choose ONE action: either call a tool OR output JSON. Not both.`,
 
   synthesizing: `## Current Task: SYNTHESIZING
 

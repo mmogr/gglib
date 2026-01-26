@@ -149,32 +149,60 @@ function QuestionStatusIcon({ status }: { status: QuestionStatus }) {
 }
 
 /**
- * Calculate progress percentage.
+ * Calculate progress percentage using diminishing returns for facts.
+ * 
+ * Progress formula:
+ * - Facts contribute 40% via exponential saturation: 0.4 * (1 - e^(-facts/15))
+ * - This gives diminishing returns (first 10 facts matter more than next 10)
+ * - Maximum 50% from facts alone until questions start getting answered
+ * - Questions contribute the remaining 50%: 0.5 * (answered / total)
+ * - Cap at 90% until synthesis phase, 100% on complete
+ * 
+ * This prevents getting "stuck at 10%" when facts are being gathered but
+ * questions aren't being answered yet.
  */
 function calculateProgress(state: ResearchState): number {
   if (state.phase === 'complete') return 100;
   if (state.phase === 'error') return 0;
 
-  // Weight phases: planning=10%, gathering=70%, synthesizing=20%
+  const factCount = state.gatheredFacts.length;
+  const totalQuestions = state.researchPlan.length || 1;
+  const answeredQuestions = state.researchPlan.filter(q => q.status === 'answered').length;
+
+  // Diminishing returns for fact gathering: 0.4 * (1 - e^(-facts/15))
+  // At 15 facts: ~25%, at 30 facts: ~35%, asymptotes at 40%
+  const factProgress = 0.4 * (1 - Math.exp(-factCount / 15));
+
+  // Question progress: 0.5 * (answered / total)
+  const questionProgress = 0.5 * (answeredQuestions / totalQuestions);
+
+  // Combined progress
   let progress = 0;
 
   if (state.phase === 'planning') {
-    // Within planning phase
+    // Planning phase: 0-10%
     if (state.researchPlan.length > 0) {
-      progress = 0.1; // 10% once plan exists
+      progress = 0.1; // Plan exists
     } else {
       progress = state.currentStep / Math.max(1, state.maxSteps) * 0.1;
     }
   } else if (state.phase === 'gathering') {
-    progress = 0.1; // Planning complete
-    // Add gathering progress based on answered questions
-    const total = state.researchPlan.length || 1;
-    const answered = state.researchPlan.filter(q => q.status === 'answered').length;
-    progress += (answered / total) * 0.7;
+    // Gathering phase: 10-80%
+    // Start with 10% for having a plan
+    progress = 0.1;
+    
+    // Add fact progress (capped at 50% until questions are answered)
+    const cappedFactProgress = Math.min(factProgress, 0.4);
+    progress += cappedFactProgress;
+    
+    // Add question progress
+    progress += questionProgress;
+    
+    // Cap at 80% in gathering phase
+    progress = Math.min(progress, 0.8);
   } else if (state.phase === 'synthesizing') {
-    progress = 0.8; // Planning + Gathering complete
-    // Synthesis is typically one step
-    progress += 0.1; // Halfway through synthesis
+    // Synthesis phase: 80-100%
+    progress = 0.9; // Almost done
   }
 
   return Math.min(100, Math.round(progress * 100));
