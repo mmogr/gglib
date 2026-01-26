@@ -256,6 +256,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       pendingObservations: [],
       finalReport: null,
       citations: [],
+      // Verbose tracking fields
+      activityLog: [],
+      activeToolCalls: [],
+      isLLMGenerating: false,
     };
 
     const assistantMessage: ThreadMessageLike = {
