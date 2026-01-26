@@ -30,7 +30,10 @@ import type { TurnMessage } from './buildTurnMessages';
 // =============================================================================
 
 /** Similarity threshold for deduplication (0-1, higher = stricter) */
-export const DEDUP_SIMILARITY_THRESHOLD = 0.8;
+export const DEDUP_SIMILARITY_THRESHOLD = 0.55;
+
+/** Numeric match threshold - facts with different numbers should never be duplicates */
+export const NUMERIC_DIVERGENCE_THRESHOLD = 0.3;
 
 /** Maximum facts to retain after pruning */
 export const MAX_FACTS_RETAINED = 50;
@@ -309,6 +312,88 @@ function tokenize(text: string): Set<string> {
 }
 
 /**
+ * Extract numeric values from text, including percentages and formatted numbers.
+ * Returns normalized numeric strings for comparison.
+ * 
+ * Examples:
+ * - "1,153%" -> ["1153"]
+ * - "40%" -> ["40"]
+ * - "$1.2 million" -> ["1200000"]
+ * - "3.5x increase" -> ["3.5"]
+ */
+function extractNumbers(text: string): string[] {
+  const numbers: string[] = [];
+  
+  // Match percentages (including formatted like "1,153%")
+  const percentRegex = /([0-9,]+(?:\.[0-9]+)?)\s*%/g;
+  let match;
+  while ((match = percentRegex.exec(text)) !== null) {
+    const num = match[1].replace(/,/g, '');
+    numbers.push(num);
+  }
+  
+  // Match money values with multipliers
+  const moneyRegex = /\$\s*([0-9,]+(?:\.[0-9]+)?)\s*(billion|million|thousand)?/gi;
+  while ((match = moneyRegex.exec(text)) !== null) {
+    let num = parseFloat(match[1].replace(/,/g, ''));
+    const multiplier = (match[2] || '').toLowerCase();
+    if (multiplier === 'billion') num *= 1e9;
+    else if (multiplier === 'million') num *= 1e6;
+    else if (multiplier === 'thousand') num *= 1e3;
+    numbers.push(num.toString());
+  }
+  
+  // Match multipliers (3.5x, 2x)
+  const multiplierRegex = /([0-9]+(?:\.[0-9]+)?)\s*x\b/gi;
+  while ((match = multiplierRegex.exec(text)) !== null) {
+    numbers.push(match[1]);
+  }
+  
+  // Match plain numbers (last resort, only significant ones)
+  const plainNumRegex = /\b([0-9,]+(?:\.[0-9]+)?)\b/g;
+  while ((match = plainNumRegex.exec(text)) !== null) {
+    const num = match[1].replace(/,/g, '');
+    // Only include if it's a significant number (not years, not tiny)
+    const parsed = parseFloat(num);
+    if (parsed > 0 && (parsed < 1900 || parsed > 2100) && !numbers.includes(num)) {
+      numbers.push(num);
+    }
+  }
+  
+  return numbers;
+}
+
+/**
+ * Check if two facts have conflicting numeric values.
+ * Facts with different specific numbers should never be considered duplicates.
+ */
+function hasNumericDivergence(textA: string, textB: string): boolean {
+  const numsA = extractNumbers(textA);
+  const numsB = extractNumbers(textB);
+  
+  // If neither has numbers, no divergence
+  if (numsA.length === 0 && numsB.length === 0) return false;
+  
+  // If one has numbers and the other doesn't, that's fine (one is more specific)
+  if (numsA.length === 0 || numsB.length === 0) return false;
+  
+  // If both have numbers, check if they're significantly different
+  // Any number in A should match at least one number in B (or vice versa)
+  const numericMatch = numsA.some(a => {
+    const parsedA = parseFloat(a);
+    return numsB.some(b => {
+      const parsedB = parseFloat(b);
+      // Numbers are considered matching if within 10% of each other
+      const ratio = Math.abs(parsedA - parsedB) / Math.max(parsedA, parsedB, 1);
+      return ratio < 0.1;
+    });
+  });
+  
+  // If no numbers match, there's numeric divergence
+  return !numericMatch;
+}
+
+/**
  * Calculate Jaccard similarity between two token sets.
  */
 function jaccardSimilarity(setA: Set<string>, setB: Set<string>): number {
@@ -326,6 +411,8 @@ function jaccardSimilarity(setA: Set<string>, setB: Set<string>): number {
 
 /**
  * Check if a fact is a duplicate of any existing fact.
+ * Uses both Jaccard similarity AND numeric divergence checking.
+ * Facts with different specific numbers are never considered duplicates.
  */
 function isDuplicate(
   newClaim: string,
@@ -339,6 +426,14 @@ function isDuplicate(
     const similarity = jaccardSimilarity(newTokens, existingTokens);
     
     if (similarity >= threshold) {
+      // Before marking as duplicate, check for numeric divergence
+      // "ICE arrests increased 40%" vs "ICE arrests increased 1,153%" should NOT be duplicates
+      if (hasNumericDivergence(newClaim, existing.claim)) {
+        console.log(
+          `[factExtractor] Numeric divergence prevents dedup: "${newClaim.slice(0, 40)}..." vs "${existing.claim.slice(0, 40)}..."`
+        );
+        continue; // Not a duplicate due to different numbers
+      }
       return { isDup: true, existingFact: existing };
     }
   }
@@ -395,7 +490,12 @@ function deduplicateFacts(
     const batchDup = addedClaims.some((claim) => {
       const tokens1 = tokenize(fact.claim);
       const tokens2 = tokenize(claim);
-      return jaccardSimilarity(tokens1, tokens2) >= threshold;
+      const similarity = jaccardSimilarity(tokens1, tokens2);
+      // Also check numeric divergence for batch
+      if (similarity >= threshold) {
+        return !hasNumericDivergence(fact.claim, claim);
+      }
+      return false;
     });
     
     if (batchDup) {
