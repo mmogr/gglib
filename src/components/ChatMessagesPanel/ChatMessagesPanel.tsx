@@ -178,18 +178,19 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       if (!activeConversationId) return;
       
       try {
-        // Serialize the state and update the message
-        const content = stateToSave.finalReport || `[Deep Research: ${stateToSave.phase}]`;
-        const metadata = JSON.stringify({ researchState: stateToSave });
-        
-        // Use the updateMessage API if we have a DB ID, otherwise save new
+        // Get the dbId from the message's custom metadata
         const customMeta = researchMessageIdRef.current
-          ? (threadRuntime?.getState().messages.find(m => m.id === researchMessageIdRef.current)?.metadata?.custom as any)
+          ? (threadRuntime?.getState().messages.find(m => m.id === researchMessageIdRef.current)?.metadata?.custom as { dbId?: number })
           : null;
         
         if (customMeta?.dbId) {
-          // Update existing message with new content (includes metadata as JSON)
-          await updateMessage(customMeta.dbId, `${content}\n\n<!-- metadata:${metadata} -->`);
+          // Update existing message with new content and metadata
+          const content = stateToSave.finalReport || `[Deep Research: ${stateToSave.phase}]`;
+          await updateMessage(
+            customMeta.dbId,
+            content,
+            { isDeepResearch: true, researchState: stateToSave }
+          );
         }
       } catch (error) {
         console.error('Failed to persist research state:', error);
@@ -301,7 +302,38 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       console.error('Failed to save user message:', error);
     }
 
-    // 5. Start the research loop
+    // 5. Persist assistant message to database with research metadata
+    let assistantDbId: number | undefined;
+    try {
+      assistantDbId = await saveMessage(
+        activeConversationId,
+        'assistant',
+        '[Deep Research in progress...]',
+        { isDeepResearch: true, researchState: initialResearchState }
+      );
+      
+      // Update the runtime message with the dbId for future updates
+      const messagesWithDbId = threadRuntime.getState().messages.map((msg) => {
+        if (msg.id === assistantMessageId) {
+          return {
+            ...msg,
+            metadata: {
+              ...msg.metadata,
+              custom: {
+                ...(msg.metadata?.custom || {}),
+                dbId: assistantDbId,
+              },
+            },
+          } as ThreadMessageLike;
+        }
+        return msg;
+      });
+      threadRuntime.reset(messagesWithDbId);
+    } catch (error) {
+      console.error('Failed to save assistant message:', error);
+    }
+
+    // 6. Start the research loop
     try {
       await deepResearch.startResearch(query, assistantMessageId);
     } catch (error) {

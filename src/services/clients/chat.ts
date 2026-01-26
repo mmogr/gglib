@@ -12,6 +12,7 @@ import type { ConversationId, MessageId, ModelId } from '../transport/types/ids'
 import type {
   ConversationSummary,
   ChatMessage,
+  ChatMessageMetadata,
   CreateConversationParams,
   SaveMessageParams,
   DeleteMessageResult,
@@ -22,6 +23,7 @@ import type {
 export type {
   ConversationSummary,
   ChatMessage,
+  ChatMessageMetadata,
   CreateConversationParams,
   SaveMessageParams,
   DeleteMessageResult,
@@ -105,23 +107,26 @@ export async function getMessages(
 export async function saveMessage(
   conversationId: ConversationId,
   role: 'user' | 'assistant' | 'system',
-  content: string
+  content: string,
+  metadata?: ChatMessageMetadata | null
 ): Promise<MessageId> {
   return getTransport().saveMessage({
     conversationId,
     role,
     content,
+    metadata,
   });
 }
 
 /**
- * Update a message's content.
+ * Update a message's content and/or metadata.
  */
 export async function updateMessage(
   id: MessageId,
-  content: string
+  content: string,
+  metadata?: ChatMessageMetadata | null
 ): Promise<void> {
-  return getTransport().updateMessage(id, content);
+  return getTransport().updateMessage(id, { content, metadata });
 }
 
 /**

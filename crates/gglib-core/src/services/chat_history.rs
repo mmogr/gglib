@@ -93,9 +93,14 @@ impl ChatHistoryService {
         self.repo.save_message(msg).await
     }
 
-    /// Update a message's content.
-    pub async fn update_message(&self, id: i64, content: String) -> Result<(), ChatHistoryError> {
-        self.repo.update_message(id, content).await
+    /// Update a message's content and optionally its metadata.
+    pub async fn update_message(
+        &self,
+        id: i64,
+        content: String,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<(), ChatHistoryError> {
+        self.repo.update_message(id, content, metadata).await
     }
 
     /// Delete a message and all subsequent messages.

@@ -526,7 +526,7 @@ async fn test_update_message_content() {
         .await
         .unwrap();
 
-    repo.update_message(msg_id, "Updated".to_string())
+    repo.update_message(msg_id, "Updated".to_string(), None)
         .await
         .unwrap();
 
