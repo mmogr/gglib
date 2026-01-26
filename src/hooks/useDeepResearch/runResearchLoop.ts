@@ -18,6 +18,7 @@ import type {
   ModelEndpoint,
   InterventionRef,
   ResearchIntervention,
+  ActiveToolCall,
 } from './types';
 import {
   createInitialState,
@@ -31,6 +32,10 @@ import {
   setPhase,
   setError,
   completeResearch,
+  pushActivityLog,
+  setActiveToolCalls,
+  clearActiveToolCalls,
+  setLLMGenerating,
 } from './types';
 import {
   buildTurnMessagesWithBudget,
@@ -400,13 +405,17 @@ async function handlePlanningPhase(
     createQuestion(q.question, q.priority ?? idx + 1)
   );
   
-  return {
+  // Log planning completion for user visibility
+  let newState: ResearchState = {
     ...state,
     researchPlan: questions,
     currentHypothesis: parsed.hypothesis,
     knowledgeGaps: parsed.gaps ?? [],
     phase: 'gathering',
   };
+  newState = pushActivityLog(newState, `Created research plan with ${questions.length} questions`);
+  
+  return newState;
 }
 
 /**
@@ -483,13 +492,25 @@ async function handleGatheringPhase(
     // Add facts with pruning
     newState = addFacts(newState, newFacts);
     
+    // Log fact extraction for user visibility
+    if (newFacts.length > 0) {
+      newState = pushActivityLog(newState, `Found ${newFacts.length} new fact${newFacts.length === 1 ? '' : 's'}`);
+    }
+    
     // Update question status if we found a target
     if (targetQuestion) {
+      const questionIndex = newState.researchPlan.indexOf(targetQuestion) + 1;
       newState = updateQuestion(newState, targetQuestion.id, {
         status: 'answered',
         answerSummary: parsed.answer.slice(0, 500),
         supportingFactIds: newFacts.map((f) => f.id),
       });
+      
+      // Log question completion
+      const truncatedQuestion = targetQuestion.question.length > 40
+        ? targetQuestion.question.slice(0, 37) + '...'
+        : targetQuestion.question;
+      newState = pushActivityLog(newState, `Answered Q${questionIndex}: "${truncatedQuestion}"`);
     }
     
     // Update hypothesis if provided
@@ -521,6 +542,7 @@ async function handleGatheringPhase(
     
     if (unanswered.length === 0) {
       newState.phase = 'synthesizing';
+      newState = pushActivityLog(newState, 'All questions answered, synthesizing...');
     }
   }
   
@@ -732,19 +754,22 @@ export async function runResearchLoop(
         // Clear the intervention to prevent re-processing
         interventionRef.current = null;
         
+        // Log the intervention for user visibility
+        const logMessage = intervention.type === 'wrap-up'
+          ? 'User intervention: Wrapping up...'
+          : 'User intervention: Skipping question...';
+        state = pushActivityLog(state, logMessage);
+        
         state = handleIntervention(state, intervention);
         
-        // If wrap-up was triggered, we'll continue the loop but the phase
-        // is now 'synthesizing' and the isManualTermination flag is set.
-        // The loop condition will naturally proceed to synthesis.
+        console.log('[runResearchLoop] Processed intervention:', intervention.type, 'new phase:', state.phase);
         
         // Notify UI of intervention-caused state change
         onStateUpdate?.(state);
         
-        // If phase changed to synthesizing, continue to process it
-        if (state.phase === 'synthesizing') {
-          console.log('[runResearchLoop] User intervention triggered synthesis');
-        }
+        // Re-evaluate loop with new state immediately - don't proceed with current iteration
+        // This ensures wrap-up triggers synthesis and skip properly transitions to next question
+        continue;
       }
 
       // Advance step counter
@@ -789,6 +814,9 @@ export async function runResearchLoop(
               `Unable to find definitive data for Q${questionIndex}: "${timedOutQuestion.question}" after ${QUESTION_FOCUS_TIMEOUT_STEPS} attempts`,
             ],
           };
+          
+          // Log the timeout for user visibility
+          state = pushActivityLog(state, `Q${questionIndex} timed out, moving on...`);
         }
       }
 
@@ -809,6 +837,12 @@ export async function runResearchLoop(
             console.log(
               `[runResearchLoop] Setting Q${questionIndex} as current focus`
             );
+            
+            // Log question transition for user visibility
+            const truncatedQuestion = nextPending.question.length > 40
+              ? nextPending.question.slice(0, 37) + '...'
+              : nextPending.question;
+            state = pushActivityLog(state, `Moving to Q${questionIndex}: "${truncatedQuestion}"`);
 
             state = {
               ...state,
@@ -828,6 +862,7 @@ export async function runResearchLoop(
       if (shouldForceSynthesis(state)) {
         console.log('[runResearchLoop] Soft landing triggered - forcing synthesis');
         state = setPhase(state, 'synthesizing');
+        state = pushActivityLog(state, 'Synthesizing final report...');
         phaseInstruction =
           PHASE_INSTRUCTIONS.synthesizing + getSoftLandingInstruction(state);
       }
@@ -860,6 +895,10 @@ export async function runResearchLoop(
       const includeTools = shouldIncludeTools(state.phase);
 
       // === CALL LLM ===
+      // Mark LLM as generating for UI feedback
+      state = setLLMGenerating(state, true, 'Thinking...');
+      onStateUpdate?.(state);
+      
       let llmResponse: LLMResponse;
       try {
         llmResponse = await callLLM(turnMessages.messages, {
@@ -870,9 +909,13 @@ export async function runResearchLoop(
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error('[runResearchLoop] LLM call failed:', errorMsg);
+        state = setLLMGenerating(state, false);
         state = setError(state, `LLM call failed: ${errorMsg}`);
         break;
       }
+      
+      // Clear LLM generating state
+      state = setLLMGenerating(state, false);
 
       // === EXECUTE TOOLS (if any) ===
       let observations: PendingObservation[] = [];
@@ -887,12 +930,37 @@ export async function runResearchLoop(
           (q) => q.status === 'in-progress'
         );
 
+        // Parse tool calls into ActiveToolCall format for UI visibility
+        const activeToolCalls: ActiveToolCall[] = llmResponse.toolCalls.map(tc => {
+          let searchQuery: string | undefined;
+          try {
+            const args = JSON.parse(tc.function.arguments || '{}');
+            // Common search query argument names
+            searchQuery = args.query || args.q || args.search_query || args.search;
+          } catch {
+            // Ignore parse errors
+          }
+          return {
+            toolName: tc.function.name,
+            toolCallId: tc.id,
+            searchQuery,
+            startedAt: Date.now(),
+          };
+        });
+        
+        // Update state with active tools (also logs search queries)
+        state = setActiveToolCalls(state, activeToolCalls);
+        onStateUpdate?.(state);
+
         // Execute tools with resilience pattern
         observations = await executeToolsBatch(
           llmResponse.toolCalls,
           executeTool,
           currentQuestion?.id
         );
+
+        // Clear active tools after completion
+        state = clearActiveToolCalls(state);
 
         console.log(
           `[runResearchLoop] Tools completed:`,
@@ -901,6 +969,7 @@ export async function runResearchLoop(
             hasError: 'error' in (o.rawResult as Record<string, unknown>),
           }))
         );
+      }
       }
 
       // === PROCESS RESPONSE BY PHASE ===
