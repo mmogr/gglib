@@ -671,7 +671,7 @@ export async function runResearchLoop(
             ),
             knowledgeGaps: [
               ...state.knowledgeGaps,
-              `Unable to find definitive data for Q${questionIndex}: "${timedOutQuestion.text}" after ${QUESTION_FOCUS_TIMEOUT_STEPS} attempts`,
+              `Unable to find definitive data for Q${questionIndex}: "${timedOutQuestion.question}" after ${QUESTION_FOCUS_TIMEOUT_STEPS} attempts`,
             ],
           };
         }
