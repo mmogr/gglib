@@ -22,6 +22,16 @@ export interface ConversationSummary {
 }
 
 /**
+ * Metadata attached to a chat message.
+ * Used for deep research state, custom flags, etc.
+ */
+export interface ChatMessageMetadata {
+  isDeepResearch?: boolean;
+  researchState?: unknown;
+  [key: string]: unknown;
+}
+
+/**
  * A single chat message.
  */
 export interface ChatMessage {
@@ -30,6 +40,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   created_at: string;
+  metadata?: ChatMessageMetadata | null;
 }
 
 /**
@@ -48,6 +59,15 @@ export interface SaveMessageParams {
   conversationId: ConversationId;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  metadata?: ChatMessageMetadata | null;
+}
+
+/**
+ * Parameters for updating a message.
+ */
+export interface UpdateMessageParams {
+  content: string;
+  metadata?: ChatMessageMetadata | null;
 }
 
 /**
@@ -110,8 +130,8 @@ export interface ChatTransport {
   /** Save a new message. Returns the new message ID. */
   saveMessage(params: SaveMessageParams): Promise<MessageId>;
 
-  /** Update a message's content. */
-  updateMessage(id: MessageId, content: string): Promise<void>;
+  /** Update a message's content and/or metadata. */
+  updateMessage(id: MessageId, params: UpdateMessageParams): Promise<void>;
 
   /** Delete a message and all subsequent messages. */
   deleteMessage(id: MessageId): Promise<DeleteMessageResult>;
