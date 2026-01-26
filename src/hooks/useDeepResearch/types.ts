@@ -256,6 +256,107 @@ export interface RoundSummary {
 }
 
 // =============================================================================
+// Internal Research Tools (Agentic Self-Assessment)
+// =============================================================================
+
+/**
+ * Minimum facts required before synthesis can be requested.
+ * Prevents premature exit with insufficient evidence.
+ */
+export const MIN_FACTS_FOR_SYNTHESIS = 4;
+
+/**
+ * Internal tool: assess_progress
+ * Called by the agent to reflect on research quality and pivot strategy.
+ * This is a "free" tool - doesn't consume external API calls.
+ */
+export interface AssessProgressArgs {
+  /** Claims from the original query that now have supporting evidence */
+  claimsCovered: string[];
+  /** Gaps or aspects still needing investigation */
+  remainingGaps: string[];
+  /** Strategy update or pivot (e.g., "Pivot to searching for X instead") */
+  strategyUpdate: string;
+}
+
+/**
+ * Internal tool: request_synthesis
+ * Called by the agent when it believes research is complete.
+ * Has a guardrail: rejected if factCount < MIN_FACTS_FOR_SYNTHESIS.
+ */
+export interface RequestSynthesisArgs {
+  /** Justification for why research is complete */
+  reason: string;
+}
+
+/**
+ * Tool definition for assess_progress (OpenAI function calling format).
+ */
+export const ASSESS_PROGRESS_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'assess_progress',
+    description: 'Reflect on research progress. Call this every 3-4 steps to evaluate coverage and adjust strategy. This is a free action that helps you pivot if searches are not yielding results.',
+    parameters: {
+      type: 'object',
+      properties: {
+        claimsCovered: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of claims/aspects from the original query that now have supporting facts',
+        },
+        remainingGaps: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Gaps or aspects still needing investigation',
+        },
+        strategyUpdate: {
+          type: 'string',
+          description: 'Your updated research strategy or pivot (e.g., "Previous searches too broad, narrowing to specific X")',
+        },
+      },
+      required: ['claimsCovered', 'remainingGaps', 'strategyUpdate'],
+    },
+  },
+};
+
+/**
+ * Tool definition for request_synthesis (OpenAI function calling format).
+ */
+export const REQUEST_SYNTHESIS_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'request_synthesis',
+    description: `Request to end research and synthesize findings into final report. IMPORTANT: Requires minimum ${MIN_FACTS_FOR_SYNTHESIS} facts gathered. Will be rejected if insufficient evidence.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          description: 'Justification for why research is complete (e.g., "All key claims have 2+ supporting facts from diverse sources")',
+        },
+      },
+      required: ['reason'],
+    },
+  },
+};
+
+/**
+ * All internal research tools that get added to the tool list during GATHERING.
+ */
+export const INTERNAL_RESEARCH_TOOLS = [
+  ASSESS_PROGRESS_TOOL,
+  REQUEST_SYNTHESIS_TOOL,
+];
+
+/**
+ * Check if a tool name is an internal research tool.
+ */
+export function isInternalResearchTool(toolName: string): boolean {
+  return toolName === 'assess_progress' || toolName === 'request_synthesis';
+}
+
+// =============================================================================
 // Research Phases
 // =============================================================================
 

@@ -44,11 +44,14 @@ import {
   canContinueResearch,
   shouldTriggerRoundSoftLanding,
   getRoundStepBudget,
+  // Internal tool helpers
+  isInternalResearchTool,
+  MIN_FACTS_FOR_SYNTHESIS,
 } from './types';
 import {
   buildTurnMessagesWithBudget,
   shouldIncludeTools,
-  filterResearchTools,
+  getResearchToolsWithInternals,
   PHASE_INSTRUCTIONS,
   type TurnMessage,
 } from './buildTurnMessages';
@@ -366,6 +369,126 @@ async function executeToolSafely(
 }
 
 /**
+ * Handle internal research tools (assess_progress, request_synthesis).
+ * These are "virtual" tools that don't call external APIs but affect state.
+ * 
+ * - assess_progress: Logs the agent's strategy update to activity feed
+ * - request_synthesis: Validates fact count and triggers phase transition
+ */
+function handleInternalTool(
+  toolCall: ToolCall,
+  state: ResearchState
+): { observation: PendingObservation; updatedState: ResearchState; shouldTransition?: 'synthesizing' } {
+  const toolName = toolCall.function.name;
+  let args: Record<string, unknown> = {};
+  
+  try {
+    args = JSON.parse(toolCall.function.arguments || '{}');
+  } catch {
+    // Use empty args if parse fails
+  }
+  
+  let updatedState = state;
+  let rawResult: unknown;
+  let shouldTransition: 'synthesizing' | undefined;
+  
+  if (toolName === 'assess_progress') {
+    // === ASSESS_PROGRESS: Log strategy and continue ===
+    const claimsCovered = (args.claimsCovered as string[]) || [];
+    const remainingGaps = (args.remainingGaps as string[]) || [];
+    const strategyUpdate = (args.strategyUpdate as string) || 'Continuing research...';
+    
+    console.log('[handleInternalTool] assess_progress:', {
+      claimsCovered: claimsCovered.length,
+      remainingGaps: remainingGaps.length,
+      strategyUpdate: strategyUpdate.slice(0, 100),
+    });
+    
+    // Log to activity feed for UI visibility
+    updatedState = pushActivityLog(updatedState, `📊 Progress: ${claimsCovered.length} claims covered, ${remainingGaps.length} gaps remaining`);
+    if (strategyUpdate && strategyUpdate.length > 0) {
+      updatedState = pushActivityLog(updatedState, `🔄 Strategy: ${strategyUpdate.slice(0, 100)}`);
+    }
+    
+    // Update knowledge gaps with remaining gaps (deduplicated)
+    if (remainingGaps.length > 0) {
+      const existingGapsLower = new Set(updatedState.knowledgeGaps.map(g => g.toLowerCase().trim()));
+      const newGaps = remainingGaps.filter(g => !existingGapsLower.has(g.toLowerCase().trim()));
+      if (newGaps.length > 0) {
+        updatedState = {
+          ...updatedState,
+          knowledgeGaps: [...updatedState.knowledgeGaps, ...newGaps].slice(0, 10),
+        };
+      }
+    }
+    
+    rawResult = {
+      success: true,
+      message: `Progress assessment recorded. ${claimsCovered.length} claims covered, ${remainingGaps.length} gaps identified. Continue researching to fill gaps.`,
+    };
+    
+  } else if (toolName === 'request_synthesis') {
+    // === REQUEST_SYNTHESIS: Validate and potentially transition ===
+    const reason = (args.reason as string) || 'No reason provided';
+    const factCount = updatedState.gatheredFacts.length;
+    
+    console.log('[handleInternalTool] request_synthesis:', {
+      factCount,
+      minRequired: MIN_FACTS_FOR_SYNTHESIS,
+      reason: reason.slice(0, 100),
+    });
+    
+    if (factCount < MIN_FACTS_FOR_SYNTHESIS) {
+      // === REJECT: Insufficient evidence ===
+      updatedState = pushActivityLog(
+        updatedState,
+        `❌ Synthesis REJECTED: Only ${factCount} facts (need ${MIN_FACTS_FOR_SYNTHESIS}+). Keep researching!`
+      );
+      
+      rawResult = {
+        success: false,
+        rejected: true,
+        error: `REJECTED: You have only ${factCount} facts. Minimum ${MIN_FACTS_FOR_SYNTHESIS} facts required for synthesis. Review your searchHistory and try different queries to gather more evidence.`,
+        currentFactCount: factCount,
+        requiredFactCount: MIN_FACTS_FOR_SYNTHESIS,
+        suggestion: 'Try more specific searches, use different keywords, or explore related aspects of the query.',
+      };
+      
+    } else {
+      // === ACCEPT: Proceed to synthesis ===
+      updatedState = pushActivityLog(
+        updatedState,
+        `✅ Synthesis approved (${factCount} facts): ${reason.slice(0, 80)}`
+      );
+      
+      // Signal that we should transition to evaluating/synthesizing
+      shouldTransition = 'synthesizing';
+      
+      rawResult = {
+        success: true,
+        approved: true,
+        message: `Synthesis request approved with ${factCount} facts. Transitioning to synthesis phase.`,
+        factCount,
+        reason,
+      };
+    }
+    
+  } else {
+    // Unknown internal tool
+    rawResult = { error: `Unknown internal tool: ${toolName}` };
+  }
+  
+  const observation: PendingObservation = {
+    toolName,
+    toolCallId: toolCall.id,
+    rawResult,
+    timestamp: Date.now(),
+  };
+  
+  return { observation, updatedState, shouldTransition };
+}
+
+/**
  * Execute multiple tool calls in parallel with batching and deduplication.
  * All results become observations - failures don't crash the loop.
  * 
@@ -375,18 +498,22 @@ async function executeToolSafely(
  * 
  * Tracking: After execution, successful searches are recorded in searchHistory
  * for future deduplication checks.
+ * 
+ * Internal Tools: assess_progress and request_synthesis are handled locally
+ * without external API calls. request_synthesis can trigger phase transition.
  */
 async function executeToolsBatch(
   toolCalls: ToolCall[],
   executeTool: ToolExecutor,
   state: ResearchState,
   forQuestionId?: string
-): Promise<{ observations: PendingObservation[]; updatedState: ResearchState }> {
+): Promise<{ observations: PendingObservation[]; updatedState: ResearchState; shouldTransition?: 'synthesizing' }> {
   if (toolCalls.length === 0) {
     return { observations: [], updatedState: state };
   }
   
   let updatedState = state;
+  let shouldTransition: 'synthesizing' | undefined;
   
   // Batch to prevent overwhelming the system
   const batches: ToolCall[][] = [];
@@ -397,11 +524,26 @@ async function executeToolsBatch(
   const allObservations: PendingObservation[] = [];
   
   for (const batch of batches) {
-    // Pre-filter: check for duplicate searches
+    // Pre-filter: handle internal tools and check for duplicate searches
     const toolsToExecute: ToolCall[] = [];
     const skippedObservations: PendingObservation[] = [];
+    const internalToolResults: PendingObservation[] = [];
     
     for (const tc of batch) {
+      const toolName = tc.function.name;
+      
+      // === HANDLE INTERNAL RESEARCH TOOLS ===
+      if (isInternalResearchTool(toolName)) {
+        const result = handleInternalTool(tc, updatedState);
+        internalToolResults.push(result.observation);
+        updatedState = result.updatedState;
+        // Capture transition signal from request_synthesis
+        if (result.shouldTransition) {
+          shouldTransition = result.shouldTransition;
+        }
+        continue;
+      }
+      
       // Extract search query from arguments
       let searchQuery: string | undefined;
       try {
@@ -454,6 +596,9 @@ async function executeToolsBatch(
       toolsToExecute.push(tc);
     }
     
+    // Add internal tool results first (they're processed synchronously)
+    allObservations.push(...internalToolResults);
+    
     // Add skipped observations
     allObservations.push(...skippedObservations);
     
@@ -491,7 +636,7 @@ async function executeToolsBatch(
     }
   }
   
-  return { observations: allObservations, updatedState };
+  return { observations: allObservations, updatedState, shouldTransition };
 }
 
 // =============================================================================
@@ -1055,8 +1200,9 @@ export async function runResearchLoop(
     tools: tools.length,
   });
 
-  // Filter to research-relevant tools
-  const researchTools = filterResearchTools(tools);
+  // Get research tools including internal agentic tools (assess_progress, request_synthesis)
+  const researchTools = getResearchToolsWithInternals(tools);
+  console.log('[runResearchLoop] Research tools:', researchTools.map(t => t.function.name));
 
   try {
     // === MAIN LOOP ===
@@ -1340,6 +1486,12 @@ export async function runResearchLoop(
         
         observations = toolResult.observations;
         state = toolResult.updatedState;
+        
+        // Check if agent requested synthesis (via request_synthesis tool)
+        if (toolResult.shouldTransition === 'synthesizing') {
+          console.log('[runResearchLoop] Agent requested synthesis, transitioning...');
+          state = setPhase(state, 'synthesizing');
+        }
 
         // Clear active tools after completion
         state = clearActiveToolCalls(state);
