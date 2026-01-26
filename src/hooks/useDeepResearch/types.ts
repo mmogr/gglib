@@ -86,6 +86,8 @@ export interface ResearchQuestion {
   priority: number;
   /** Parent question ID if this is a follow-up */
   parentQuestionId?: string;
+  /** Step number when this question was marked in-progress (for timeout detection) */
+  inProgressSince?: number;
 }
 
 /**
@@ -403,6 +405,11 @@ export interface ResearchContextInjection {
   previousReasoning: string;
   /** Current phase */
   phase: ResearchPhase;
+  /** Current focus question (in-progress) for explicit LLM guidance */
+  currentFocus: {
+    questionIndex: number;
+    questionText: string;
+  } | null;
   /** Progress indicator */
   progress: {
     step: number;
@@ -415,6 +422,7 @@ export interface ResearchContextInjection {
 
 /**
  * Render a research question for prompt injection.
+ * Includes Q{index} identifier that the LLM can reference when answering.
  */
 function renderQuestion(q: ResearchQuestion, index: number): string {
   const statusIcon =
@@ -426,7 +434,8 @@ function renderQuestion(q: ResearchQuestion, index: number): string {
           ? '✗'
           : '○';
   const answer = q.answerSummary ? ` — ${q.answerSummary}` : '';
-  return `${index + 1}. [${statusIcon}] ${q.question}${answer}`;
+  // Include Q{N} identifier for LLM to reference in AnswerResponse
+  return `Q${index + 1}. [${statusIcon}] ${q.question}${answer}`;
 }
 
 /**
@@ -559,6 +568,17 @@ export function serializeForPrompt(
     (q) => q.status === 'answered'
   ).length;
 
+  // === Current Focus (in-progress question) ===
+  const inProgressQuestion = state.researchPlan.find(
+    (q) => q.status === 'in-progress'
+  );
+  const currentFocus = inProgressQuestion
+    ? {
+        questionIndex: state.researchPlan.indexOf(inProgressQuestion) + 1,
+        questionText: inProgressQuestion.question,
+      }
+    : null;
+
   return {
     hypothesis,
     planSummary,
@@ -567,6 +587,7 @@ export function serializeForPrompt(
     observations,
     previousReasoning,
     phase: state.phase,
+    currentFocus,
     progress: {
       step: state.currentStep,
       maxSteps: state.maxSteps,
@@ -594,6 +615,15 @@ export function renderContextForSystemPrompt(
     `Questions: ${progress.questionsAnswered}/${progress.questionsTotal} answered | Facts: ${progress.factsGathered} gathered`
   );
   sections.push('');
+
+  // Current Focus (in-progress question) - critical for LLM context
+  if (injection.currentFocus) {
+    sections.push('## 🎯 Current Focus');
+    sections.push(`You are currently working on **Q${injection.currentFocus.questionIndex}**: "${injection.currentFocus.questionText}"`);
+    sections.push('');
+    sections.push('When you have gathered enough information to answer this question, provide an AnswerResponse with `questionIndex: ' + injection.currentFocus.questionIndex + '`.');
+    sections.push('');
+  }
 
   // Previous reasoning (agent memory)
   if (injection.previousReasoning) {
