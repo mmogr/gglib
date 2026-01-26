@@ -868,6 +868,224 @@ async function executeToolsBatch(
 }
 
 // =============================================================================
+// AI-Directed Intervention Handlers
+// =============================================================================
+
+/**
+ * Prompt template for generating additional research questions.
+ */
+const GENERATE_MORE_QUESTIONS_PROMPT = `Based on the current research state, generate 3-5 additional research questions that would help answer the original query more comprehensively.
+
+Consider:
+- What aspects haven't been explored yet?
+- What angles or perspectives are missing?
+- What follow-up questions arise from the current findings?
+
+RESPOND WITH JSON:
+{
+  "type": "additional_questions",
+  "questions": [
+    {"question": "New question 1?", "priority": 1, "rationale": "Why this matters..."},
+    {"question": "New question 2?", "priority": 2, "rationale": "Why this matters..."}
+  ]
+}
+
+NOTES:
+- Questions should be specific and actionable
+- Avoid duplicating existing questions in the research plan
+- Priority 1 = most important, higher numbers = less urgent`;
+
+/**
+ * Prompt template for expanding a specific question into deeper sub-questions.
+ */
+const EXPAND_QUESTION_PROMPT = `The user wants to dive deeper into this specific research question:
+"QUESTION_TEXT"
+
+Break this question down into 2-4 more specific sub-questions that would help thoroughly answer it.
+
+RESPOND WITH JSON:
+{
+  "type": "expanded_questions",
+  "originalQuestion": "QUESTION_TEXT",
+  "subQuestions": [
+    {"question": "More specific sub-question 1?", "priority": 1},
+    {"question": "More specific sub-question 2?", "priority": 2}
+  ]
+}
+
+NOTES:
+- Sub-questions should be more focused than the original
+- Each sub-question should address a specific aspect
+- Together they should comprehensively cover the original question`;
+
+/**
+ * Prompt template for going deeper based on current findings.
+ */
+const GO_DEEPER_PROMPT = `Based on the facts gathered so far, identify areas that would benefit from deeper investigation.
+
+Review the current findings and suggest 2-4 questions that would:
+- Clarify ambiguous findings
+- Explore interesting tangents that emerged
+- Fill gaps in the current understanding
+- Provide more depth on promising leads
+
+RESPOND WITH JSON:
+{
+  "type": "deeper_questions",
+  "questions": [
+    {"question": "Deeper investigation question 1?", "priority": 1, "rationale": "Based on finding X, we should explore..."},
+    {"question": "Deeper investigation question 2?", "priority": 2, "rationale": "The current evidence suggests..."}
+  ]
+}`;
+
+/**
+ * Handle AI-directed intervention that requires an LLM call.
+ * This generates new questions based on the intervention type.
+ */
+async function handleAIDirectedIntervention(
+  state: ResearchState,
+  intervention: ResearchIntervention,
+  callLLM: LLMCaller,
+  modelRouting: ModelRouting,
+  abortSignal?: AbortSignal
+): Promise<ResearchState> {
+  let prompt: string;
+  let questionSource: 'ai-generated' | 'ai-expanded';
+  
+  switch (intervention.type) {
+    case 'generate-more-questions':
+      prompt = GENERATE_MORE_QUESTIONS_PROMPT;
+      questionSource = 'ai-generated';
+      break;
+      
+    case 'expand-question': {
+      const targetQuestion = state.researchPlan.find(q => q.id === intervention.questionId);
+      if (!targetQuestion) {
+        console.warn('[runResearchLoop] Expand intervention: question not found');
+        return state;
+      }
+      prompt = EXPAND_QUESTION_PROMPT.replace(/QUESTION_TEXT/g, targetQuestion.question);
+      questionSource = 'ai-expanded';
+      break;
+    }
+      
+    case 'go-deeper':
+      prompt = GO_DEEPER_PROMPT;
+      questionSource = 'ai-generated';
+      break;
+      
+    default:
+      return state;
+  }
+  
+  // Build context about current research state
+  const contextSummary = `
+## Current Research State
+
+**Original Query:** ${state.originalQuery}
+
+**Research Plan (${state.researchPlan.length} questions):**
+${state.researchPlan.map((q, i) => `Q${i + 1}. [${q.status}] ${q.question}`).join('\n')}
+
+**Gathered Facts (${state.gatheredFacts.length}):**
+${state.gatheredFacts.slice(-10).map(f => `- ${f.claim}`).join('\n')}
+
+**Knowledge Gaps:**
+${state.knowledgeGaps.slice(-5).join('\n- ') || 'None identified yet'}
+`;
+  
+  const messages: TurnMessage[] = [
+    {
+      role: 'system',
+      content: `You are a research assistant helping to expand and deepen a research investigation.
+
+${contextSummary}
+
+${prompt}`,
+    },
+    {
+      role: 'user',
+      content: intervention.type === 'expand-question'
+        ? 'Please break down this question into more specific sub-questions.'
+        : intervention.type === 'go-deeper'
+        ? 'Based on what we\'ve found so far, what should we investigate more deeply?'
+        : 'Please suggest additional research questions we should explore.',
+    },
+  ];
+  
+  try {
+    console.log(`[runResearchLoop] Calling LLM for AI intervention: ${intervention.type}`);
+    
+    const response = await callLLM(messages, {
+      endpoint: modelRouting.reasoningModel,
+      abortSignal,
+    });
+    
+    // Parse the response
+    const parsed = tryParseStructuredResponse(response.content);
+    
+    if (!parsed) {
+      console.warn('[runResearchLoop] AI intervention: failed to parse LLM response');
+      return pushActivityLog(state, 'Failed to generate additional questions');
+    }
+    
+    // Extract questions from various response formats
+    let newQuestions: Array<{ question: string; priority: number }> = [];
+    
+    if ('questions' in parsed && Array.isArray(parsed.questions)) {
+      newQuestions = parsed.questions;
+    } else if ('subQuestions' in parsed && Array.isArray(parsed.subQuestions)) {
+      newQuestions = parsed.subQuestions;
+    }
+    
+    if (newQuestions.length === 0) {
+      console.log('[runResearchLoop] AI intervention: no new questions generated');
+      return pushActivityLog(state, 'No additional questions needed');
+    }
+    
+    // Deduplicate against existing questions
+    const existingNormalized = new Set(
+      state.researchPlan.map(q => q.question.trim().toLowerCase())
+    );
+    
+    const uniqueNewQuestions = newQuestions.filter(
+      nq => !existingNormalized.has(nq.question.trim().toLowerCase())
+    );
+    
+    if (uniqueNewQuestions.length === 0) {
+      console.log('[runResearchLoop] AI intervention: all suggested questions already exist');
+      return pushActivityLog(state, 'Suggested questions already in plan');
+    }
+    
+    // Create ResearchQuestion objects
+    // For expand-question, link to parent
+    const parentId = intervention.type === 'expand-question' ? intervention.questionId : undefined;
+    const createdQuestions = uniqueNewQuestions.map(nq =>
+      createQuestion(nq.question, nq.priority, parentId, questionSource)
+    );
+    
+    // Add to research plan
+    let newState = {
+      ...state,
+      researchPlan: [...state.researchPlan, ...createdQuestions],
+    };
+    
+    // Log activity
+    const actionVerb = intervention.type === 'expand-question' ? 'Expanded into' :
+                       intervention.type === 'go-deeper' ? 'Added deeper investigation:' :
+                       'Generated';
+    newState = pushActivityLog(newState, `${actionVerb} ${createdQuestions.length} new question(s)`);
+    
+    console.log(`[runResearchLoop] AI intervention: added ${createdQuestions.length} questions`);
+    
+    return newState;
+  } catch (error) {
+    console.error('[runResearchLoop] AI intervention error:', error);
+    return pushActivityLog(state, `Failed to generate questions: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// =============================================================================
 // Phase Handlers
 // =============================================================================
 
@@ -1346,9 +1564,14 @@ Consider wrapping up current questions before the round budget expires.`;
 /**
  * Handle a user intervention signal.
  * 
- * Supports two intervention types:
+ * Supports intervention types:
  * - 'wrap-up': Force immediate synthesis with what we have
- * - 'skip-question': Mark a question as blocked and move on
+ * - 'skip-question': Mark a specific question as blocked and move on
+ * - 'skip-all-pending': Mark all pending questions as blocked
+ * - 'add-question': Add a user-specified question to the research plan
+ * - 'generate-more-questions': Signal AI to generate additional questions (handled async)
+ * - 'expand-question': Signal AI to expand a specific question (handled async)
+ * - 'go-deeper': Signal AI to expand research based on current findings (handled async)
  * 
  * Skip behavior differs based on whether the target is the current focus:
  * - Current focus: Use timeout logic (mark blocked, log gap, transition to next)
@@ -1415,6 +1638,79 @@ function handleIntervention(
       }
       
       return newState;
+    }
+    
+    case 'skip-all-pending': {
+      const pendingQuestions = state.researchPlan.filter(
+        q => q.status === 'pending' || q.status === 'in-progress'
+      );
+      
+      if (pendingQuestions.length === 0) {
+        console.log('[runResearchLoop] Skip-all: no pending questions to skip');
+        return state;
+      }
+      
+      console.log(`[runResearchLoop] User skipped all ${pendingQuestions.length} pending questions`);
+      
+      // Mark all pending/in-progress questions as blocked
+      const newState = {
+        ...state,
+        researchPlan: state.researchPlan.map(q =>
+          q.status === 'pending' || q.status === 'in-progress'
+            ? { ...q, status: 'blocked' as const }
+            : q
+        ),
+        knowledgeGaps: [
+          ...state.knowledgeGaps,
+          `User skipped ${pendingQuestions.length} remaining question(s)`,
+        ],
+      };
+      
+      return newState;
+    }
+    
+    case 'add-question': {
+      const { question } = intervention;
+      
+      if (!question || question.trim().length === 0) {
+        console.warn('[runResearchLoop] Add-question intervention: empty question text');
+        return state;
+      }
+      
+      // Check for duplicate questions (case-insensitive, trimmed)
+      const normalizedNew = question.trim().toLowerCase();
+      const isDuplicate = state.researchPlan.some(
+        q => q.question.trim().toLowerCase() === normalizedNew
+      );
+      
+      if (isDuplicate) {
+        console.log('[runResearchLoop] Add-question: duplicate question, ignoring');
+        return state;
+      }
+      
+      // Create the new question with user-added source
+      // Priority is set to 0 (highest) so user questions are researched first
+      const newQuestion = createQuestion(question.trim(), 0, undefined, 'user-added');
+      
+      console.log(`[runResearchLoop] User added question: "${question.slice(0, 50)}..."`);
+      
+      return {
+        ...state,
+        researchPlan: [newQuestion, ...state.researchPlan],
+      };
+    }
+    
+    // AI-directed interventions - these set flags that trigger async processing
+    case 'generate-more-questions':
+    case 'expand-question':
+    case 'go-deeper': {
+      // These are handled asynchronously in the main loop
+      // We just mark that the intervention was received
+      console.log(`[runResearchLoop] AI intervention queued: ${intervention.type}`);
+      
+      // Return state unchanged - the main loop will handle the async work
+      // We need to keep the intervention in the ref so it persists
+      return state;
     }
     
     default:
@@ -1500,9 +1796,36 @@ export async function runResearchLoop(
         // Clear the intervention to prevent re-processing
         interventionRef.current = null;
         
+        // Check if this is an AI-directed intervention that needs async handling
+        const isAIDirected = intervention.type === 'generate-more-questions' ||
+                            intervention.type === 'expand-question' ||
+                            intervention.type === 'go-deeper';
+        
+        if (isAIDirected) {
+          // Handle AI-directed intervention asynchronously
+          console.log(`[runResearchLoop] Processing AI intervention: ${intervention.type}`);
+          state = pushActivityLog(state, `AI expanding research: ${intervention.type.replace(/-/g, ' ')}...`);
+          onStateUpdate?.(state);
+          
+          state = await handleAIDirectedIntervention(
+            state,
+            intervention,
+            callLLM,
+            modelRouting,
+            abortSignal
+          );
+          
+          onStateUpdate?.(state);
+          continue;
+        }
+        
         // Log the intervention for user visibility
         const logMessage = intervention.type === 'wrap-up'
           ? 'User intervention: Wrapping up...'
+          : intervention.type === 'skip-all-pending'
+          ? 'User intervention: Skipping all pending...'
+          : intervention.type === 'add-question'
+          ? 'User intervention: Adding question...'
           : 'User intervention: Skipping question...';
         state = pushActivityLog(state, logMessage);
         
