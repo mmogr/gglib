@@ -356,6 +356,14 @@ export interface ResearchState {
   /** Whether LLM is currently generating (for "Thinking..." indicator) */
   isLLMGenerating: boolean;
 
+  // === Completion Snapshot (Post-Research) ===
+  /** Snapshot of activity log and metrics when research completed (for UI display) */
+  completionSnapshot?: {
+    activityLog: string[];
+    stepsTaken: number;
+    elapsedTime?: number;
+  };
+
   // === Error Handling ===
   /** Error message if phase='error' */
   errorMessage?: string;
@@ -997,12 +1005,20 @@ export function completeResearch(
   report: string,
   citations: ResearchState['citations']
 ): ResearchState {
+  const completedAt = Date.now();
+  const elapsedTime = state.startedAt ? completedAt - state.startedAt : undefined;
+  
   return {
     ...state,
     phase: 'complete',
-    completedAt: Date.now(),
+    completedAt,
     finalReport: report,
     citations,
+    completionSnapshot: {
+      activityLog: [...state.activityLog],
+      stepsTaken: state.currentStep,
+      elapsedTime,
+    },
   };
 }
 
