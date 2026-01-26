@@ -88,12 +88,34 @@ export function useChatPersistence({
 
         const initialMessages: ThreadMessageLike[] = [
           ...systemPromptMessage,
-          ...messages.map<ThreadMessageLike>((message) => ({
-            id: `db-${message.id}`,
-            role: message.role,
-            content: message.content,
-            createdAt: new Date(message.created_at),
-          })),
+          ...messages.map<ThreadMessageLike>((message) => {
+            // Restore metadata including research state for deep research messages
+            const metadata = message.metadata;
+            const isDeepResearch = metadata?.isDeepResearch === true;
+            
+            return {
+              id: `db-${message.id}`,
+              role: message.role,
+              content: message.content,
+              createdAt: new Date(message.created_at),
+              // Include metadata with dbId for future updates and research state for rendering
+              metadata: isDeepResearch
+                ? {
+                    custom: {
+                      dbId: message.id,
+                      conversationId: message.conversation_id,
+                      isDeepResearch: true,
+                      researchState: metadata.researchState,
+                    },
+                  }
+                : {
+                    custom: {
+                      dbId: message.id,
+                      conversationId: message.conversation_id,
+                    },
+                  },
+            };
+          }),
         ];
 
         // Build position -> DB ID mapping for edit detection and delete counting
