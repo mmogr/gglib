@@ -31,6 +31,7 @@ import {
   Loader2,
   ListTodo,
   Search,
+  SkipForward,
   Sparkles,
   AlertTriangle,
   CheckCircle2,
@@ -61,6 +62,8 @@ export interface ResearchArtifactProps {
   defaultExpanded?: boolean;
   /** Optional className for container */
   className?: string;
+  /** Callback to skip a question (mark as blocked) */
+  onSkipQuestion?: (questionId: string) => void;
 }
 
 // =============================================================================
@@ -78,7 +81,30 @@ function getLiveActivity(state: ResearchState, isRunning: boolean): string {
     return 'Research paused';
   }
 
-  // Check for pending observations (tools in flight - those without rawResult yet)
+  // Check for LLM generating state (highest priority when thinking)
+  if (state.isLLMGenerating) {
+    return 'Thinking...';
+  }
+
+  // Check for active tool calls with search queries (new verbose tracking)
+  if (state.activeToolCalls && state.activeToolCalls.length > 0) {
+    const firstTool = state.activeToolCalls[0];
+    const elapsed = Math.round((Date.now() - firstTool.startedAt) / 1000);
+    
+    if (firstTool.searchQuery) {
+      const truncated = firstTool.searchQuery.length > 40
+        ? firstTool.searchQuery.slice(0, 37) + '...'
+        : firstTool.searchQuery;
+      return `Searching: "${truncated}" (${elapsed}s)`;
+    }
+    
+    if (state.activeToolCalls.length === 1) {
+      return `Running ${firstTool.toolName}... (${elapsed}s)`;
+    }
+    return `Running ${state.activeToolCalls.length} tools... (${elapsed}s)`;
+  }
+
+  // Fallback: Check for pending observations (legacy, for compatibility)
   const pendingTools = state.pendingObservations.filter(o => !o.rawResult);
   if (pendingTools.length > 0) {
     const toolNames = pendingTools.map(o => o.toolName).join(', ');
@@ -232,7 +258,22 @@ const ThinkingBlock: React.FC<{ reasoning: string | null }> = ({ reasoning }) =>
 /**
  * Research plan section showing questions and their status.
  */
-const ResearchPlanSection: React.FC<{ questions: ResearchQuestion[] }> = ({ questions }) => {
+const ResearchPlanSection: React.FC<{
+  questions: ResearchQuestion[];
+  onSkipQuestion?: (questionId: string) => void;
+  isRunning: boolean;
+}> = ({ questions, onSkipQuestion, isRunning }) => {
+  // Track which questions have skip pending (optimistic UI)
+  const [pendingSkips, setPendingSkips] = useState<Set<string>>(new Set());
+  
+  const handleSkip = (questionId: string) => {
+    if (onSkipQuestion) {
+      // Optimistic UI - disable button immediately
+      setPendingSkips(prev => new Set(prev).add(questionId));
+      onSkipQuestion(questionId);
+    }
+  };
+  
   if (questions.length === 0) {
     return (
       <div className={styles.section}>
@@ -247,12 +288,21 @@ const ResearchPlanSection: React.FC<{ questions: ResearchQuestion[] }> = ({ ques
     );
   }
 
-  // Sort by priority, then status (in-progress first)
+  // Sort: in-progress first, then pending by priority, then answered, blocked last
   const sortedQuestions = [...questions].sort((a, b) => {
-    // In-progress always first
-    if (a.status === 'in-progress' && b.status !== 'in-progress') return -1;
-    if (b.status === 'in-progress' && a.status !== 'in-progress') return 1;
-    // Then by priority
+    // Define status priority (lower = higher priority)
+    const statusOrder: Record<QuestionStatus, number> = {
+      'in-progress': 0,
+      'pending': 1,
+      'answered': 2,
+      'blocked': 3,
+    };
+    
+    // First sort by status
+    const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+    if (statusDiff !== 0) return statusDiff;
+    
+    // Within same status, sort by priority
     return a.priority - b.priority;
   });
 
@@ -268,19 +318,46 @@ const ResearchPlanSection: React.FC<{ questions: ResearchQuestion[] }> = ({ ques
         </span>
       </div>
       <div className={styles.questionList}>
-        {sortedQuestions.map(question => (
-          <div key={question.id} className={styles.questionItem}>
-            <div className={styles.questionStatus}>
-              <QuestionStatusIcon status={question.status} />
-            </div>
-            <div className={styles.questionContent}>
-              <div className={styles.questionText}>{question.question}</div>
-              {question.answerSummary && (
-                <div className={styles.questionAnswer}>{question.answerSummary}</div>
+        {sortedQuestions.map(question => {
+          const canSkip = isRunning && 
+            onSkipQuestion && 
+            (question.status === 'in-progress' || question.status === 'pending') &&
+            !pendingSkips.has(question.id);
+          
+          const isBlocked = question.status === 'blocked';
+          
+          return (
+            <div 
+              key={question.id} 
+              className={`${styles.questionItem} ${isBlocked ? styles.questionBlocked : ''}`}
+            >
+              <div className={styles.questionStatus}>
+                <QuestionStatusIcon status={question.status} />
+              </div>
+              <div className={styles.questionContent}>
+                <div className={styles.questionText}>{question.question}</div>
+                {question.answerSummary && (
+                  <div className={styles.questionAnswer}>{question.answerSummary}</div>
+                )}
+              </div>
+              {canSkip && (
+                <button
+                  className={styles.skipButton}
+                  onClick={() => handleSkip(question.id)}
+                  title="Skip this question"
+                  type="button"
+                >
+                  <Icon icon={SkipForward} size={12} />
+                </button>
+              )}
+              {pendingSkips.has(question.id) && (
+                <div className={styles.skipPending}>
+                  <Icon icon={Loader2} size={12} className={styles.skipSpinner} />
+                </div>
               )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -546,6 +623,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
   isRunning,
   defaultExpanded = true,
   className,
+  onSkipQuestion,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
@@ -622,6 +700,21 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
         </div>
       )}
 
+      {/* Activity log (trailing events for velocity visibility) */}
+      {isRunning && effectiveState.activityLog && effectiveState.activityLog.length > 0 && (
+        <div className={styles.activityLog}>
+          {effectiveState.activityLog.map((entry, idx) => (
+            <div
+              key={idx}
+              className={styles.activityEntry}
+              style={{ opacity: 0.5 + (idx / effectiveState.activityLog.length) * 0.5 }}
+            >
+              {entry}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Collapsed summary stats */}
       {!expanded && (
         <div className={styles.collapsedSummary}>
@@ -657,7 +750,11 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
           ) : (
             <>
               {/* Research plan */}
-              <ResearchPlanSection questions={effectiveState.researchPlan} />
+              <ResearchPlanSection
+                questions={effectiveState.researchPlan}
+                onSkipQuestion={onSkipQuestion}
+                isRunning={isRunning}
+              />
 
               {/* Gathered facts */}
               <GatheredFactsSection facts={effectiveState.gatheredFacts} />

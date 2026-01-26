@@ -11,7 +11,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { ResearchState, ModelRouting } from './types';
+import type { ResearchState, ModelRouting, ResearchIntervention } from './types';
 import { createInitialState, createDefaultRouting } from './types';
 import {
   runResearchLoop,
@@ -62,6 +62,10 @@ export interface UseDeepResearchReturn {
   startResearch: (query: string, messageId: string) => Promise<void>;
   /** Stop the current research session (graceful) */
   stopResearch: () => void;
+  /** Request early wrap-up (synthesize with current facts) */
+  requestWrapUp: () => void;
+  /** Skip a specific question (mark as blocked) */
+  skipQuestion: (questionId: string) => void;
   /** Reset state (for cleanup) */
   resetState: () => void;
 }
@@ -265,6 +269,8 @@ export function useDeepResearch(
   const debouncedPersistRef = useRef<ReturnType<typeof createDebouncedPersist> | null>(
     null
   );
+  // Ref for human-in-the-loop interventions (written by UI, read by loop)
+  const interventionRef = useRef<ResearchIntervention | null>(null);
 
   // Create/update debounced persist when onPersist changes
   useEffect(() => {
@@ -367,6 +373,9 @@ export function useDeepResearch(
 
       setState(initialState);
       setIsRunning(true);
+      
+      // Clear any stale intervention
+      interventionRef.current = null;
 
       // Model routing - use same server for now (can be extended later)
       const modelRouting: ModelRouting = createDefaultRouting(serverPort);
@@ -388,6 +397,7 @@ export function useDeepResearch(
             await onPersist?.(stateToSave);
           },
           abortSignal: abortController.signal,
+          interventionRef,
         });
 
         // Final state update
@@ -435,11 +445,28 @@ export function useDeepResearch(
     }
   }, []);
 
+  // Request early wrap-up (synthesize with current facts)
+  const requestWrapUp = useCallback(() => {
+    if (isRunning && state?.phase === 'gathering') {
+      console.log('[useDeepResearch] User requested wrap-up');
+      interventionRef.current = { type: 'wrap-up' };
+    }
+  }, [isRunning, state?.phase]);
+
+  // Skip a specific question (mark as blocked)
+  const skipQuestion = useCallback((questionId: string) => {
+    if (isRunning && state?.phase === 'gathering') {
+      console.log('[useDeepResearch] User requested skip for question:', questionId);
+      interventionRef.current = { type: 'skip-question', questionId };
+    }
+  }, [isRunning, state?.phase]);
+
   // Reset state
   const resetState = useCallback(() => {
     setState(null);
     setIsRunning(false);
     debouncedPersistRef.current?.cancel();
+    interventionRef.current = null;
   }, []);
 
   return {
@@ -447,6 +474,8 @@ export function useDeepResearch(
     isRunning,
     startResearch,
     stopResearch,
+    requestWrapUp,
+    skipQuestion,
     resetState,
   };
 }

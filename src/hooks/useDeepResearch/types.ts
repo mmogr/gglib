@@ -229,6 +229,47 @@ export type ResearchPhase =
   | 'error';
 
 // =============================================================================
+// Human-in-the-Loop Intervention
+// =============================================================================
+
+/**
+ * Intervention signal for human-in-the-loop control.
+ * Written to a MutableRefObject by UI, read by research loop.
+ */
+export type ResearchIntervention =
+  | { type: 'wrap-up' }
+  | { type: 'skip-question'; questionId: string };
+
+/**
+ * Type for the intervention ref passed to the research loop.
+ */
+export type InterventionRef = React.MutableRefObject<ResearchIntervention | null>;
+
+// =============================================================================
+// Verbose Execution Tracking (Activity Visibility)
+// =============================================================================
+
+/**
+ * An active tool call being executed.
+ * Used to show the user what searches/tools are running.
+ */
+export interface ActiveToolCall {
+  /** Tool name (e.g., 'tavily_search', 'web_extract') */
+  toolName: string;
+  /** Tool call ID from the LLM response */
+  toolCallId: string;
+  /** Extracted search query if this is a search tool */
+  searchQuery?: string;
+  /** When this tool call started (Unix timestamp ms) */
+  startedAt: number;
+}
+
+/**
+ * Maximum number of entries in the activity log.
+ */
+export const MAX_ACTIVITY_LOG_ENTRIES = 5;
+
+// =============================================================================
 // Core Research State (The Scratchpad)
 // =============================================================================
 
@@ -303,6 +344,18 @@ export interface ResearchState {
     footnoteNumber: number;
   }>;
 
+  // === Human-in-the-Loop Flags ===
+  /** True if user manually triggered early termination via "Wrap Up" */
+  isManualTermination?: boolean;
+
+  // === Verbose Execution Tracking ===
+  /** Activity log showing recent events (max 5, FIFO) */
+  activityLog: string[];
+  /** Currently executing tool calls with details */
+  activeToolCalls: ActiveToolCall[];
+  /** Whether LLM is currently generating (for "Thinking..." indicator) */
+  isLLMGenerating: boolean;
+
   // === Error Handling ===
   /** Error message if phase='error' */
   errorMessage?: string;
@@ -349,6 +402,11 @@ export function createInitialState(
     // Output
     finalReport: null,
     citations: [],
+
+    // Verbose tracking
+    activityLog: [],
+    activeToolCalls: [],
+    isLLMGenerating: false,
   };
 }
 
@@ -946,6 +1004,75 @@ export function completeResearch(
     finalReport: report,
     citations,
   };
+}
+
+// =============================================================================
+// Activity Log Helpers
+// =============================================================================
+
+/**
+ * Push an entry to the activity log (FIFO, max 5 entries).
+ * Returns new state with updated log.
+ */
+export function pushActivityLog(
+  state: ResearchState,
+  message: string
+): ResearchState {
+  const newLog = [...state.activityLog, message];
+  // Keep only the last N entries
+  while (newLog.length > MAX_ACTIVITY_LOG_ENTRIES) {
+    newLog.shift();
+  }
+  return { ...state, activityLog: newLog };
+}
+
+/**
+ * Set active tool calls and optionally log the start.
+ */
+export function setActiveToolCalls(
+  state: ResearchState,
+  activeToolCalls: ActiveToolCall[],
+  logSearchQueries: boolean = true
+): ResearchState {
+  let newState = { ...state, activeToolCalls };
+  
+  // Log search queries for visibility
+  if (logSearchQueries) {
+    for (const tc of activeToolCalls) {
+      if (tc.searchQuery) {
+        const truncated = tc.searchQuery.length > 50
+          ? tc.searchQuery.slice(0, 47) + '...'
+          : tc.searchQuery;
+        newState = pushActivityLog(newState, `Searching: "${truncated}"`);
+      } else {
+        newState = pushActivityLog(newState, `Running ${tc.toolName}...`);
+      }
+    }
+  }
+  
+  return newState;
+}
+
+/**
+ * Clear active tool calls (after completion).
+ */
+export function clearActiveToolCalls(state: ResearchState): ResearchState {
+  return { ...state, activeToolCalls: [] };
+}
+
+/**
+ * Set LLM generating state.
+ */
+export function setLLMGenerating(
+  state: ResearchState,
+  isGenerating: boolean,
+  logMessage?: string
+): ResearchState {
+  let newState = { ...state, isLLMGenerating: isGenerating };
+  if (logMessage) {
+    newState = pushActivityLog(newState, logMessage);
+  }
+  return newState;
 }
 
 // =============================================================================

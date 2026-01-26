@@ -288,9 +288,21 @@ export function buildTurnMessages(options: BuildTurnMessagesOptions): TurnMessag
     : contextString;
 
   // 5. Get phase instruction (use override or default)
-  const instruction = phaseInstruction ?? PHASE_INSTRUCTIONS[state.phase];
+  let instruction = phaseInstruction ?? PHASE_INSTRUCTIONS[state.phase];
+  
+  // 6. Append manual termination note if user requested early wrap-up
+  if (state.isManualTermination && state.phase === 'synthesizing') {
+    instruction += `
 
-  // 6. Build complete system prompt
+📋 USER EARLY TERMINATION REQUEST
+The user has requested early termination of this research session.
+Synthesize the facts gathered so far into a coherent report.
+Do NOT apologize for incomplete research or make excuses.
+Focus on what WAS found and present it confidently.
+Note any unanswered questions briefly as "Areas for further research" at the end.`;
+  }
+
+  // 7. Build complete system prompt
   const systemContent = buildSystemPrompt(
     baseSystemPrompt,
     fullContext,
