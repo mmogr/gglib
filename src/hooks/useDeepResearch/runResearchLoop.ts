@@ -75,7 +75,20 @@ export const TOOL_TIMEOUT_MS = 30000;
 /** Maximum retries for transient errors */
 export const MAX_TOOL_RETRIES = 2;
 
-/** Maximum steps a question can be in-progress before being marked blocked */
+/**
+ * Maximum consecutive unproductive steps before a question is marked blocked.
+ * A step is "unproductive" if no new facts were gathered.
+ * This replaces the old fixed-step timeout for more intelligent course correction.
+ */
+export const CONSECUTIVE_UNPRODUCTIVE_LIMIT = 5;
+
+/**
+ * Hard maximum steps regardless of productivity.
+ * Safety net to prevent infinite loops if agent keeps finding 1 fact at a time.
+ */
+export const HARD_MAX_STEPS = 50;
+
+/** @deprecated Use CONSECUTIVE_UNPRODUCTIVE_LIMIT instead */
 export const QUESTION_FOCUS_TIMEOUT_STEPS = 5;
 
 // =============================================================================
@@ -729,19 +742,32 @@ function handleInternalTool(
  * 
  * Internal Tools: assess_progress and request_synthesis are handled locally
  * without external API calls. request_synthesis can trigger phase transition.
+ * 
+ * Returns: Observations, updated state, transition signal, and execution stats
+ * for determining if this was a productive step (toolsExecuted > 0).
  */
 async function executeToolsBatch(
   toolCalls: ToolCall[],
   executeTool: ToolExecutor,
   state: ResearchState,
   forQuestionId?: string
-): Promise<{ observations: PendingObservation[]; updatedState: ResearchState; shouldTransition?: 'synthesizing' }> {
+): Promise<{
+  observations: PendingObservation[];
+  updatedState: ResearchState;
+  shouldTransition?: 'synthesizing';
+  /** Number of tools actually executed (not skipped) */
+  toolsExecuted: number;
+  /** Number of tools skipped (duplicates) */
+  toolsSkipped: number;
+}> {
   if (toolCalls.length === 0) {
-    return { observations: [], updatedState: state };
+    return { observations: [], updatedState: state, toolsExecuted: 0, toolsSkipped: 0 };
   }
   
   let updatedState = state;
   let shouldTransition: 'synthesizing' | undefined;
+  let totalExecuted = 0;
+  let totalSkipped = 0;
   
   // Batch to prevent overwhelming the system
   const batches: ToolCall[][] = [];
@@ -794,15 +820,25 @@ async function executeToolsBatch(
             `(similar to round ${existingRecord?.round} query)`
           );
           
-          // Return a mock observation explaining the skip
+          // Return a clear system error message that the LLM will see as direct consequence
+          // This format (Action -> Error -> Correction) enables intelligent self-correction
+          const previousQuery = existingRecord?.query?.slice(0, 80) || 'unknown';
+          const errorMessage = 
+            `[SYSTEM ERROR]: Search FAILED - Your query "${searchQuery.slice(0, 60)}" ` +
+            `is too similar to a previous search: "${previousQuery}". ` +
+            `You MUST reformulate using DIFFERENT keywords, a different angle, or more specific terms. ` +
+            `Do NOT repeat similar queries.`;
+          
           skippedObservations.push({
             toolName: tc.function.name,
             toolCallId: tc.id,
             rawResult: {
+              error: true,
               skipped: true,
-              reason: 'Search skipped: Query similar to previous search in history. Try a different angle or rephrase your query.',
-              similarTo: existingRecord?.query?.slice(0, 100),
+              message: errorMessage,
+              similarTo: previousQuery,
               previousRound: existingRecord?.round,
+              suggestion: 'Try: different terminology, narrower scope, specific entities, or alternative data sources',
             },
             timestamp: Date.now(),
             forQuestionId,
@@ -813,7 +849,7 @@ async function executeToolsBatch(
             ...updatedState,
             knowledgeGaps: [
               ...updatedState.knowledgeGaps,
-              `Search already attempted: "${searchQuery.slice(0, 50)}..." - try different keywords`,
+              `Search failed (duplicate): "${searchQuery.slice(0, 50)}..." - must use different keywords`,
             ].slice(0, 10),
           };
           
@@ -827,14 +863,18 @@ async function executeToolsBatch(
     // Add internal tool results first (they're processed synchronously)
     allObservations.push(...internalToolResults);
     
-    // Add skipped observations
+    // Add skipped observations and track count
     allObservations.push(...skippedObservations);
+    totalSkipped += skippedObservations.length;
     
     // Execute non-duplicate tools in parallel
     if (toolsToExecute.length > 0) {
       const observations = await Promise.all(
         toolsToExecute.map((tc) => executeToolSafely(tc, executeTool, forQuestionId))
       );
+      
+      // Track count of actually executed tools
+      totalExecuted += toolsToExecute.length;
       
       // Track successful searches in history
       for (let i = 0; i < toolsToExecute.length; i++) {
@@ -864,7 +904,13 @@ async function executeToolsBatch(
     }
   }
   
-  return { observations: allObservations, updatedState, shouldTransition };
+  return {
+    observations: allObservations,
+    updatedState,
+    shouldTransition,
+    toolsExecuted: totalExecuted,
+    toolsSkipped: totalSkipped,
+  };
 }
 
 // =============================================================================
@@ -1841,51 +1887,46 @@ export async function runResearchLoop(
         continue;
       }
 
-      // Advance step counter
-      state = advanceStep(state);
-
-      // Hard limit check
-      if (state.currentStep > state.maxSteps) {
-        console.warn('[runResearchLoop] Hard step limit reached');
+      // === HARD LIMIT CHECK (Safety net) ===
+      // This fires regardless of productivity - absolute protection against infinite loops
+      if (state.currentStep >= HARD_MAX_STEPS) {
+        console.warn(`[runResearchLoop] HARD step limit (${HARD_MAX_STEPS}) reached - emergency stop`);
         state = setError(
           state,
-          `Maximum steps (${state.maxSteps}) reached without completing research.`
+          `Maximum steps (${HARD_MAX_STEPS}) reached. The research loop has been stopped as a safety measure.`
         );
         break;
       }
 
-      // === FOCUS TIMEOUT CHECK ===
-      // Check if any question has been in-progress too long and should be marked blocked
+      // === CONSECUTIVE UNPRODUCTIVE STEPS CHECK ===
+      // Check if the current in-progress question has stalled (no new facts despite attempts)
       if (state.phase === 'gathering') {
-        const timedOutQuestion = state.researchPlan.find(
-          (q) =>
-            q.status === 'in-progress' &&
-            q.inProgressSince !== undefined &&
-            state.currentStep - q.inProgressSince >= QUESTION_FOCUS_TIMEOUT_STEPS
-        );
-
-        if (timedOutQuestion) {
-          const questionIndex = state.researchPlan.indexOf(timedOutQuestion) + 1;
+        const currentQuestion = state.researchPlan.find(q => q.status === 'in-progress');
+        
+        if (currentQuestion && state.consecutiveUnproductiveSteps >= CONSECUTIVE_UNPRODUCTIVE_LIMIT) {
+          const questionIndex = state.researchPlan.indexOf(currentQuestion) + 1;
           console.log(
-            `[runResearchLoop] Question Q${questionIndex} timed out after ${QUESTION_FOCUS_TIMEOUT_STEPS} steps, marking as blocked`
+            `[runResearchLoop] Question Q${questionIndex} stalled after ${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive steps, marking as blocked`
           );
 
           // Mark as blocked and record knowledge gap
           state = {
             ...state,
             researchPlan: state.researchPlan.map((q) =>
-              q.id === timedOutQuestion.id
+              q.id === currentQuestion.id
                 ? { ...q, status: 'blocked' as const }
                 : q
             ),
             knowledgeGaps: [
               ...state.knowledgeGaps,
-              `Unable to find definitive data for Q${questionIndex}: "${timedOutQuestion.question}" after ${QUESTION_FOCUS_TIMEOUT_STEPS} attempts`,
+              `Unable to find definitive data for Q${questionIndex}: "${currentQuestion.question}" after ${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive attempts (no new facts gathered)`,
             ],
+            // Reset counter for next question
+            consecutiveUnproductiveSteps: 0,
           };
           
           // Log the timeout for user visibility
-          state = pushActivityLog(state, `Q${questionIndex} timed out, moving on...`);
+          state = pushActivityLog(state, `⚠️ Q${questionIndex} stalled (no new facts after ${CONSECUTIVE_UNPRODUCTIVE_LIMIT} attempts), moving on...`);
         }
       }
 
@@ -2046,6 +2087,12 @@ export async function runResearchLoop(
 
       // === EXECUTE TOOLS (if any) ===
       let observations: PendingObservation[] = [];
+      // Track tool execution stats for productive step detection
+      let toolsExecuted = 0;
+      let toolsSkipped = 0;
+      
+      // Track facts before gathering phase to detect productivity
+      const factsBeforePhase = state.gatheredFacts.length;
 
       if (llmResponse.toolCalls.length > 0) {
         console.log(
@@ -2089,6 +2136,8 @@ export async function runResearchLoop(
         
         observations = toolResult.observations;
         state = toolResult.updatedState;
+        toolsExecuted = toolResult.toolsExecuted;
+        toolsSkipped = toolResult.toolsSkipped;
         
         // Check if agent requested synthesis (via request_synthesis tool)
         if (toolResult.shouldTransition === 'synthesizing') {
@@ -2100,7 +2149,7 @@ export async function runResearchLoop(
         state = clearActiveToolCalls(state);
 
         console.log(
-          `[runResearchLoop] Tools completed:`,
+          `[runResearchLoop] Tools completed: ${toolsExecuted} executed, ${toolsSkipped} skipped (duplicate)`,
           observations.map((o) => ({
             tool: o.toolName,
             hasError: 'error' in (o.rawResult as Record<string, unknown>),
@@ -2146,6 +2195,57 @@ export async function runResearchLoop(
 
         default:
           console.warn(`[runResearchLoop] Unexpected phase: ${state.phase}`);
+      }
+
+      // === PRODUCTIVE STEP TRACKING ===
+      // Track whether this step produced meaningful results
+      // Only count steps where actual work was done (tools executed, not all skipped)
+      if (state.phase === 'gathering' || state.phase === 'evaluating') {
+        const factsAfterPhase = state.gatheredFacts.length;
+        const newFactsGathered = factsAfterPhase - factsBeforePhase;
+        const stepWasProductive = newFactsGathered > 0;
+        const toolsWereExecuted = toolsExecuted > 0;
+        
+        // Debug stats for monitoring productive step behavior
+        console.log(`[runResearchLoop] 📊 STATS: Facts=${factsAfterPhase - factsBeforePhase} | Tools: Exec=${toolsExecuted}/Skip=${toolsSkipped} | Unproductive=${state.consecutiveUnproductiveSteps}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT}`);
+        
+        // Only count as a step if tools were actually executed (not all duplicates)
+        if (toolsWereExecuted) {
+        if (toolsWereExecuted) {
+          state = advanceStep(state);
+          
+          if (stepWasProductive) {
+            // Reset unproductive counter - we found something!
+            if (state.consecutiveUnproductiveSteps > 0) {
+              console.log(`[runResearchLoop] Productive step! Found ${newFactsGathered} new fact(s), resetting unproductive counter`);
+            }
+            state = {
+              ...state,
+              consecutiveUnproductiveSteps: 0,
+            };
+          } else {
+            // Tools ran but no new facts - increment unproductive counter
+            const newUnproductiveCount = state.consecutiveUnproductiveSteps + 1;
+            console.log(`[runResearchLoop] Unproductive step: ${newUnproductiveCount}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT} (no new facts from ${toolsExecuted} tool call(s))`);
+            state = {
+              ...state,
+              consecutiveUnproductiveSteps: newUnproductiveCount,
+            };
+            
+            // Log warning to activity feed so user can see progress
+            state = pushActivityLog(
+              state, 
+              `⚠️ No new facts found (${newUnproductiveCount}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive steps)`
+            );
+          }
+        } else if (toolsSkipped > 0 && toolsExecuted === 0) {
+          // All tools were skipped as duplicates - don't count as a step
+          // The error messages already went to the LLM to trigger course correction
+          console.log(`[runResearchLoop] All ${toolsSkipped} tool(s) skipped as duplicates - not counting as a step`);
+        }
+      } else {
+        // Non-gathering phases (planning, compressing, synthesizing) always advance
+        state = advanceStep(state);
       }
 
       // === NOTIFY UI ===

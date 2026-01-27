@@ -92,7 +92,11 @@ export interface ResearchQuestion {
   priority: number;
   /** Parent question ID if this is a follow-up */
   parentQuestionId?: string;
-  /** Step number when this question was marked in-progress (for timeout detection) */
+  /** 
+   * @deprecated No longer used for timeout detection. 
+   * Timeout is now based on consecutiveUnproductiveSteps in ResearchState.
+   * Kept for backwards compatibility with persisted state.
+   */
   inProgressSince?: number;
   /** Source of this question (how it was added) */
   source?: QuestionSource;
@@ -563,6 +567,14 @@ export interface ResearchState {
   /** Whether LLM is currently generating (for "Thinking..." indicator) */
   isLLMGenerating: boolean;
 
+  // === Productive Step Tracking (Resilience) ===
+  /**
+   * Counter for consecutive steps that didn't produce new facts.
+   * Reset to 0 when facts are gathered. Question times out when this reaches threshold.
+   * This replaces the old fixed-step timeout (inProgressSince) with progress-based logic.
+   */
+  consecutiveUnproductiveSteps: number;
+
   // === Completion Snapshot (Post-Research) ===
   /** Snapshot of activity log and metrics when research completed (for UI display) */
   completionSnapshot?: {
@@ -636,6 +648,9 @@ export function createInitialState(
     activityLog: [],
     activeToolCalls: [],
     isLLMGenerating: false,
+
+    // Productive step tracking
+    consecutiveUnproductiveSteps: 0,
   };
 }
 
