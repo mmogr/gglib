@@ -694,7 +694,15 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             <div className="chat-empty-state">Loading messages…</div>
           ) : (
             <MessageActionsContext.Provider value={messageActionsValue}>
-              <DeepResearchProvider isRunning={deepResearch.isRunning} skipQuestion={deepResearch.skipQuestion}>
+              <DeepResearchProvider
+                isRunning={deepResearch.isRunning}
+                skipQuestion={deepResearch.skipQuestion}
+                skipAllPending={deepResearch.skipAllPending}
+                addQuestion={deepResearch.addQuestion}
+                generateMoreQuestions={deepResearch.generateMoreQuestions}
+                expandQuestion={deepResearch.expandQuestion}
+                goDeeper={deepResearch.goDeeper}
+              >
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
                 <ThreadPrimitive.Root
                   key={activeConversationId ?? 'thread-root'}
