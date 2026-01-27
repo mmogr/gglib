@@ -20,6 +20,7 @@ import type {
   ResearchIntervention,
   ActiveToolCall,
 } from './types';
+import { extractFacts, type ExtractionLLMCaller } from './factExtractor';
 import {
   createInitialState,
   createQuestion,
@@ -1227,11 +1228,22 @@ async function handlePlanningPhase(
 
 /**
  * Handle the gathering phase - process search results or answers.
+ * 
+ * Two pathways:
+ * 1. Observations present (tool call results): Store observations, then extract facts via LLM
+ * 2. No observations (structured answer): Parse answer and extract facts inline
  */
 async function handleGatheringPhase(
   state: ResearchState,
   llmResponse: LLMResponse,
-  observations: PendingObservation[]
+  observations: PendingObservation[],
+  // Dependencies for fact extraction
+  extractionDeps?: {
+    callLLM: LLMCaller;
+    modelRouting: ModelRouting;
+    onStateUpdate?: (state: ResearchState) => void;
+    abortSignal?: AbortSignal;
+  }
 ): Promise<ResearchState> {
   let newState = { ...state };
   
@@ -1244,6 +1256,66 @@ async function handleGatheringPhase(
     if (llmResponse.content) {
       newState.lastReasoning = llmResponse.content.slice(0, 1500);
     }
+    
+    // === FACT EXTRACTION from observations ===
+    // This is the key integration point: extract structured facts from raw search results
+    if (extractionDeps && newState.pendingObservations.length > 0) {
+      const { callLLM, modelRouting, onStateUpdate, abortSignal } = extractionDeps;
+      
+      // UI feedback before extraction
+      newState = setLLMGenerating(newState, true, 'Analyzing search results and extracting facts...');
+      onStateUpdate?.(newState);
+      
+      console.log(
+        `[handleGatheringPhase] Extracting facts from ${newState.pendingObservations.length} observation(s)`
+      );
+      
+      // Wrap the LLMCaller to match ExtractionLLMCaller signature
+      // (ExtractionLLMCaller returns string, LLMCaller returns LLMResponse)
+      const extractionLLM: ExtractionLLMCaller = async (messages, endpoint, signal) => {
+        const response = await callLLM(messages, {
+          tools: undefined, // Extraction doesn't need tools
+          endpoint,
+          abortSignal: signal,
+        });
+        return response.content || '';
+      };
+      
+      try {
+        const extractionResult = await extractFacts({
+          state: newState,
+          extractionEndpoint: modelRouting.extractionModel,
+          callLLM: extractionLLM,
+          abortSignal,
+        });
+        
+        // Use the updated state from extraction (includes new facts)
+        newState = extractionResult.updatedState;
+        
+        // Log extraction results for visibility
+        if (extractionResult.newFacts.length > 0) {
+          newState = pushActivityLog(
+            newState,
+            `📚 Extracted ${extractionResult.newFacts.length} fact(s) from search results`
+          );
+          console.log(
+            `[handleGatheringPhase] Extraction complete: ${extractionResult.newFacts.length} new facts, ` +
+            `${extractionResult.discardedInvalidUrl} invalid URLs, ${extractionResult.discardedDuplicates} duplicates`
+          );
+        } else {
+          console.log('[handleGatheringPhase] Extraction complete: no new facts found');
+        }
+      } catch (error) {
+        console.error('[handleGatheringPhase] Fact extraction failed:', error);
+        // Don't fail the whole loop on extraction errors - continue with raw observations
+        newState = pushActivityLog(newState, '⚠️ Failed to extract facts from search results');
+      }
+      
+      // Clear generating state
+      newState = setLLMGenerating(newState, false);
+      onStateUpdate?.(newState);
+    }
+    
     return newState;
   }
   
@@ -2165,7 +2237,12 @@ export async function runResearchLoop(
           break;
 
         case 'gathering':
-          state = await handleGatheringPhase(state, llmResponse, observations);
+          state = await handleGatheringPhase(state, llmResponse, observations, {
+            callLLM,
+            modelRouting,
+            onStateUpdate,
+            abortSignal,
+          });
           
           // Check if all questions answered - transition to evaluating (not directly to synthesis)
           if (state.phase === 'gathering') {
