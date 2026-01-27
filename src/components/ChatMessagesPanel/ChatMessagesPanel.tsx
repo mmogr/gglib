@@ -270,6 +270,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       complexity: 'simple',
       perspectives: [],
       currentPerspective: undefined,
+      // Productive step tracking
+      consecutiveUnproductiveSteps: 0,
     };
 
     const assistantMessage: ThreadMessageLike = {
