@@ -1020,6 +1020,18 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
           </div>
         </div>
 
+        {/* Download logs button - always visible in header */}
+        <button
+          className={styles.headerDownloadButton}
+          onClick={(e) => {
+            e.stopPropagation();
+            downloadAsJSON();
+          }}
+          title="Download research logs (JSON)"
+        >
+          <Icon icon={Download} size={14} />
+        </button>
+
         <div className={styles.expandToggle} data-expanded={expanded}>
           <Icon icon={ChevronDown} size={18} />
         </div>
