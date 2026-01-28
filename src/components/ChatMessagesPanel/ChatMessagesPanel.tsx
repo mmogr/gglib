@@ -272,6 +272,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       currentPerspective: undefined,
       // Productive step tracking
       consecutiveUnproductiveSteps: 0,
+      consecutiveTextOnlySteps: 0,
+      loopIterations: 0,
     };
 
     const assistantMessage: ThreadMessageLike = {
