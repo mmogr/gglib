@@ -575,6 +575,21 @@ export interface ResearchState {
    */
   consecutiveUnproductiveSteps: number;
 
+  /**
+   * Counter for consecutive LLM responses that didn't call any tools.
+   * When the LLM outputs text without tool calls, this increments.
+   * After MAX_TEXT_ONLY_STEPS, it's treated as an unproductive step.
+   * Reset to 0 when tools are executed or a valid JSON answer is provided.
+   */
+  consecutiveTextOnlySteps: number;
+
+  /**
+   * Total loop iterations counter (safety backstop).
+   * Increments every main loop cycle regardless of phase or tool execution.
+   * Triggers emergency stop at MAX_LOOP_ITERATIONS to prevent infinite loops.
+   */
+  loopIterations: number;
+
   // === Completion Snapshot (Post-Research) ===
   /** Snapshot of activity log and metrics when research completed (for UI display) */
   completionSnapshot?: {
@@ -651,6 +666,8 @@ export function createInitialState(
 
     // Productive step tracking
     consecutiveUnproductiveSteps: 0,
+    consecutiveTextOnlySteps: 0,
+    loopIterations: 0,
   };
 }
 
