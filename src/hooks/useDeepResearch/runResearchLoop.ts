@@ -89,6 +89,20 @@ export const CONSECUTIVE_UNPRODUCTIVE_LIMIT = 5;
  */
 export const HARD_MAX_STEPS = 50;
 
+/**
+ * Maximum consecutive LLM responses without tool calls before penalizing.
+ * When the LLM outputs text-only reasoning without calling tools, we track it.
+ * After this many consecutive text-only responses, treat as unproductive step.
+ */
+export const MAX_TEXT_ONLY_STEPS = 3;
+
+/**
+ * Absolute maximum loop iterations (safety backstop).
+ * This fires regardless of any other logic - prevents infinite loops
+ * even if all other safeguards fail.
+ */
+export const MAX_LOOP_ITERATIONS = 100;
+
 /** @deprecated Use CONSECUTIVE_UNPRODUCTIVE_LIMIT instead */
 export const QUESTION_FOCUS_TIMEOUT_STEPS = 5;
 
@@ -1901,6 +1915,27 @@ export async function runResearchLoop(
   try {
     // === MAIN LOOP ===
     while (state.phase !== 'complete' && state.phase !== 'error') {
+      // === LOOP ITERATION COUNTER (Absolute Safety Backstop) ===
+      // Increments every cycle regardless of phase or tool execution
+      state = {
+        ...state,
+        loopIterations: state.loopIterations + 1,
+      };
+      
+      if (state.loopIterations >= MAX_LOOP_ITERATIONS) {
+        console.error(
+          `[runResearchLoop] EMERGENCY STOP: Max loop iterations (${MAX_LOOP_ITERATIONS}) reached. ` +
+          `This indicates a bug in the loop logic. Phase: ${state.phase}, Step: ${state.currentStep}`
+        );
+        state = setError(
+          state,
+          `Research stopped: Maximum iterations (${MAX_LOOP_ITERATIONS}) reached. ` +
+          `The system detected a potential infinite loop and stopped as a safety measure.`
+        );
+        state = pushActivityLog(state, `🛑 Emergency stop: loop iteration limit reached`);
+        break;
+      }
+
       // Check for cancellation
       if (abortSignal?.aborted) {
         state = setError(state, 'Research cancelled by user');
@@ -2284,11 +2319,20 @@ export async function runResearchLoop(
         const toolsWereExecuted = toolsExecuted > 0;
         
         // Debug stats for monitoring productive step behavior
-        console.log(`[runResearchLoop] 📊 STATS: Facts=${factsAfterPhase - factsBeforePhase} | Tools: Exec=${toolsExecuted}/Skip=${toolsSkipped} | Unproductive=${state.consecutiveUnproductiveSteps}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT}`);
+        console.log(
+          `[runResearchLoop] 📊 STATS: Facts=${newFactsGathered} | Tools: Exec=${toolsExecuted}/Skip=${toolsSkipped} | ` +
+          `TextOnly=${state.consecutiveTextOnlySteps}/${MAX_TEXT_ONLY_STEPS} | Unproductive=${state.consecutiveUnproductiveSteps}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT}`
+        );
         
         // Only count as a step if tools were actually executed (not all duplicates)
         if (toolsWereExecuted) {
           state = advanceStep(state);
+          
+          // Reset text-only counter since tools were executed
+          state = {
+            ...state,
+            consecutiveTextOnlySteps: 0,
+          };
           
           if (stepWasProductive) {
             // Reset unproductive counter - we found something!
@@ -2318,10 +2362,54 @@ export async function runResearchLoop(
           // All tools were skipped as duplicates - don't count as a step
           // The error messages already went to the LLM to trigger course correction
           console.log(`[runResearchLoop] All ${toolsSkipped} tool(s) skipped as duplicates - not counting as a step`);
+          // Reset text-only counter since tools were attempted (even if skipped)
+          state = {
+            ...state,
+            consecutiveTextOnlySteps: 0,
+          };
+        } else {
+          // === TEXT-ONLY RESPONSE HANDLING ===
+          // LLM output text without calling any tools - potential infinite loop risk
+          const newTextOnlyCount = state.consecutiveTextOnlySteps + 1;
+          
+          console.warn(
+            `[runResearchLoop] ⚠️ TEXT-ONLY response (no tools called): ${newTextOnlyCount}/${MAX_TEXT_ONLY_STEPS}`
+          );
+          
+          state = {
+            ...state,
+            consecutiveTextOnlySteps: newTextOnlyCount,
+          };
+          
+          // After threshold, treat accumulated text-only steps as one unproductive step
+          if (newTextOnlyCount >= MAX_TEXT_ONLY_STEPS) {
+            console.warn(
+              `[runResearchLoop] Text-only threshold reached (${MAX_TEXT_ONLY_STEPS}), treating as unproductive step`
+            );
+            
+            state = advanceStep(state);
+            const newUnproductiveCount = state.consecutiveUnproductiveSteps + 1;
+            
+            state = {
+              ...state,
+              consecutiveUnproductiveSteps: newUnproductiveCount,
+              consecutiveTextOnlySteps: 0, // Reset text-only counter
+            };
+            
+            state = pushActivityLog(
+              state,
+              `⚠️ No tools called for ${MAX_TEXT_ONLY_STEPS} turns (${newUnproductiveCount}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive)`
+            );
+          }
         }
       } else {
         // Non-gathering phases (planning, compressing, synthesizing) always advance
         state = advanceStep(state);
+        // Reset text-only counter for phase transitions
+        state = {
+          ...state,
+          consecutiveTextOnlySteps: 0,
+        };
       }
 
       // === NOTIFY UI ===
