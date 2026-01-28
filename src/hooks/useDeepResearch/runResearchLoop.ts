@@ -56,6 +56,7 @@ import {
   PHASE_INSTRUCTIONS,
   type TurnMessage,
 } from './buildTurnMessages';
+import { researchLogger } from '../../services/platform';
 
 // =============================================================================
 // Configuration
@@ -1902,6 +1903,15 @@ export async function runResearchLoop(
   // Notify UI of initial state
   onStateUpdate?.(state);
 
+  // Start research logging session (non-blocking)
+  researchLogger.startSession(messageId, query);
+  researchLogger.info(messageId, 'runResearchLoop', 'Starting research', {
+    query: query.slice(0, 200),
+    maxSteps,
+    toolCount: tools.length,
+    conversationId,
+  });
+
   console.log('[runResearchLoop] Starting research:', {
     query: query.slice(0, 100),
     maxSteps,
@@ -1927,6 +1937,14 @@ export async function runResearchLoop(
           `[runResearchLoop] EMERGENCY STOP: Max loop iterations (${MAX_LOOP_ITERATIONS}) reached. ` +
           `This indicates a bug in the loop logic. Phase: ${state.phase}, Step: ${state.currentStep}`
         );
+        
+        researchLogger.error(messageId, 'runResearchLoop', 'EMERGENCY STOP: Max loop iterations', {
+          loopIterations: state.loopIterations,
+          maxLoopIterations: MAX_LOOP_ITERATIONS,
+          phase: state.phase,
+          step: state.currentStep,
+        });
+        
         state = setError(
           state,
           `Research stopped: Maximum iterations (${MAX_LOOP_ITERATIONS}) reached. ` +
@@ -2138,6 +2156,16 @@ export async function runResearchLoop(
         `[runResearchLoop] Step ${state.currentStep}/${state.maxSteps} - Phase: ${state.phase}`
       );
       
+      // Log step to research logger
+      researchLogger.debug(messageId, 'runResearchLoop', `Step ${state.currentStep}`, {
+        phase: state.phase,
+        loopIteration: state.loopIterations,
+        round: state.currentRound,
+        facts: state.gatheredFacts.length,
+        consecutiveUnproductiveSteps: state.consecutiveUnproductiveSteps,
+        consecutiveTextOnlySteps: state.consecutiveTextOnlySteps,
+      });
+      
       // Notify UI of step start
       onStateUpdate?.(state);
 
@@ -2263,6 +2291,16 @@ export async function runResearchLoop(
             skipped: (o.rawResult as Record<string, unknown>)?.skipped === true,
           }))
         );
+        
+        // Log tool execution to research logger
+        researchLogger.info(messageId, 'toolExecution', 'Tools completed', {
+          executed: toolsExecuted,
+          skipped: toolsSkipped,
+          tools: observations.map((o) => ({
+            name: o.toolName,
+            hasError: 'error' in (o.rawResult as Record<string, unknown>),
+          })),
+        });
       }
 
       // === PROCESS RESPONSE BY PHASE ===
@@ -2324,6 +2362,16 @@ export async function runResearchLoop(
           `TextOnly=${state.consecutiveTextOnlySteps}/${MAX_TEXT_ONLY_STEPS} | Unproductive=${state.consecutiveUnproductiveSteps}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT}`
         );
         
+        // Log stats to research logger for file persistence
+        researchLogger.info(messageId, 'productiveStep', 'Step stats', {
+          newFacts: newFactsGathered,
+          toolsExecuted,
+          toolsSkipped,
+          consecutiveTextOnlySteps: state.consecutiveTextOnlySteps,
+          consecutiveUnproductiveSteps: state.consecutiveUnproductiveSteps,
+          totalFacts: state.gatheredFacts.length,
+        });
+        
         // Only count as a step if tools were actually executed (not all duplicates)
         if (toolsWereExecuted) {
           state = advanceStep(state);
@@ -2347,6 +2395,13 @@ export async function runResearchLoop(
             // Tools ran but no new facts - increment unproductive counter
             const newUnproductiveCount = state.consecutiveUnproductiveSteps + 1;
             console.log(`[runResearchLoop] Unproductive step: ${newUnproductiveCount}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT} (no new facts from ${toolsExecuted} tool call(s))`);
+            
+            researchLogger.warn(messageId, 'productiveStep', 'Unproductive step', {
+              unproductiveCount: newUnproductiveCount,
+              limit: CONSECUTIVE_UNPRODUCTIVE_LIMIT,
+              toolsExecuted,
+            });
+            
             state = {
               ...state,
               consecutiveUnproductiveSteps: newUnproductiveCount,
@@ -2376,6 +2431,12 @@ export async function runResearchLoop(
             `[runResearchLoop] ⚠️ TEXT-ONLY response (no tools called): ${newTextOnlyCount}/${MAX_TEXT_ONLY_STEPS}`
           );
           
+          researchLogger.warn(messageId, 'productiveStep', 'Text-only response', {
+            textOnlyCount: newTextOnlyCount,
+            limit: MAX_TEXT_ONLY_STEPS,
+            llmContentLength: llmResponse.content?.length,
+          });
+          
           state = {
             ...state,
             consecutiveTextOnlySteps: newTextOnlyCount,
@@ -2386,6 +2447,11 @@ export async function runResearchLoop(
             console.warn(
               `[runResearchLoop] Text-only threshold reached (${MAX_TEXT_ONLY_STEPS}), treating as unproductive step`
             );
+            
+            researchLogger.warn(messageId, 'productiveStep', 'Text-only threshold reached', {
+              threshold: MAX_TEXT_ONLY_STEPS,
+              treatAsUnproductive: true,
+            });
             
             state = advanceStep(state);
             const newUnproductiveCount = state.consecutiveUnproductiveSteps + 1;
@@ -2445,6 +2511,23 @@ export async function runResearchLoop(
       console.error('[runResearchLoop] Final persistence failed:', error);
     }
   }
+
+  // Log session completion
+  const completionData = {
+    phase: state.phase,
+    steps: state.currentStep,
+    loopIterations: state.loopIterations,
+    rounds: state.currentRound,
+    roundSummaries: state.roundSummaries.length,
+    facts: state.gatheredFacts.length,
+    questions: state.researchPlan.length,
+    searchesExecuted: state.searchHistory.length,
+    hasReport: !!state.finalReport,
+    error: state.errorMessage,
+  };
+  
+  researchLogger.info(messageId, 'runResearchLoop', 'Research complete', completionData);
+  researchLogger.endSession(messageId);
 
   console.log('[runResearchLoop] Research complete:', {
     phase: state.phase,

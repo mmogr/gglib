@@ -24,3 +24,12 @@ export type { LlamaStatus, LlamaInstallProgress } from './llamaInstall';
 // Server logs
 export { getServerLogs, listenToServerLogs } from './serverLogs';
 export type { ServerLogEntry } from './serverLogs';
+
+// Research logs (deep research session logging)
+export {
+  researchLogger,
+  initResearchLogger,
+  truncateString,
+  truncatePayload,
+} from './researchLogger';
+export type { ResearchLogEntry, LogLevel } from './researchLogger';

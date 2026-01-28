@@ -45,6 +45,7 @@ import {
   ArrowDownToLine,
   User,
   Bot,
+  Download,
 } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import type {
@@ -55,6 +56,7 @@ import type {
   QuestionStatus,
   RoundSummary,
 } from '../../hooks/useDeepResearch/types';
+import { useResearchLogExport } from '../../hooks/useResearchLogs';
 import styles from './ResearchArtifact.module.css';
 
 // =============================================================================
@@ -952,6 +954,9 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
+  
+  // Log export functionality
+  const { downloadAsJSON } = useResearchLogExport(state.messageId);
 
   // Use initialState for re-hydration if state is empty
   const effectiveState = useMemo(() => {
@@ -1098,11 +1103,24 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
                     <Icon icon={FileSearch} size={14} />
                     Research Details
                   </div>
-                  <div className={styles.researchDetailsToggle}>
-                    <Icon
-                      icon={detailsExpanded ? ChevronDown : ChevronRight}
-                      size={16}
-                    />
+                  <div className={styles.researchDetailsActions}>
+                    <button
+                      className={styles.downloadLogsButton}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadAsJSON();
+                      }}
+                      title="Download research logs"
+                    >
+                      <Icon icon={Download} size={14} />
+                      Logs
+                    </button>
+                    <div className={styles.researchDetailsToggle}>
+                      <Icon
+                        icon={detailsExpanded ? ChevronDown : ChevronRight}
+                        size={16}
+                      />
+                    </div>
                   </div>
                 </div>
 
