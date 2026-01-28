@@ -267,6 +267,69 @@ Do NOT use tools in synthesis phase. Output ONLY the JSON.`,
 // System Prompt Construction
 // =============================================================================
 
+// =============================================================================
+// Dynamic Self-Correction Injection
+// =============================================================================
+
+/**
+ * Get escalating warning message for consecutive text-only responses.
+ * 
+ * When the LLM outputs text without calling tools, we inject increasingly
+ * urgent system messages to force course-correction:
+ * - Step 1: Gentle observation
+ * - Step 2: Warning  
+ * - Step 3: Critical alert (imminent timeout)
+ * 
+ * Returns null if no warning needed (consecutiveTextOnlySteps === 0).
+ */
+function getTextOnlyWarning(consecutiveTextOnlySteps: number): string | null {
+  if (consecutiveTextOnlySteps <= 0) {
+    return null;
+  }
+
+  switch (consecutiveTextOnlySteps) {
+    case 1:
+      return `[SYSTEM OBSERVATION]: You did not execute a tool in your previous response.
+
+To make progress on the research, you MUST either:
+1. Call a search tool (e.g., tavily_search) to gather information, OR
+2. Provide a structured JSON answer if you have sufficient facts
+
+Text-only reasoning does not advance the research. Please take action.`;
+
+    case 2:
+      return `[SYSTEM WARNING]: You have now gone 2 consecutive turns without executing a tool.
+
+⚠️ This pattern indicates the research is STALLING.
+
+You MUST take concrete action NOW:
+- If you need information: Call a search tool with a DIFFERENT query angle
+- If you have enough facts: Provide a JSON answer for the current question
+- If you're stuck: Call \`assess_progress\` to reflect on what's blocking you
+
+Do NOT output more reasoning without action. The next text-only response will trigger a timeout penalty.`;
+
+    default:
+      // 3 or more
+      return `[CRITICAL ALERT]: You have gone ${consecutiveTextOnlySteps} consecutive turns without executing a tool.
+
+🚨 IMMINENT TIMEOUT: One more text-only response will count as an unproductive step.
+After ${5} unproductive steps, the current question will be BLOCKED and skipped.
+
+REQUIRED ACTION - Choose ONE:
+1. Call tavily_search with a COMPLETELY DIFFERENT query (new keywords, new angle)
+2. Call \`assess_progress\` to diagnose why you're stuck
+3. Call \`request_synthesis\` if you believe research is complete
+4. Output a JSON answer with {"type": "answer", ...} if you can answer the current question
+
+You CANNOT proceed with text-only output. The system will not accept it.`;
+  }
+}
+
+// =============================================================================
+// System Prompt Construction
+// =============================================================================
+
 /**
  * Build the complete system prompt with research context injected.
  *
@@ -482,7 +545,18 @@ Note any unanswered questions briefly as "Areas for further research" at the end
     { role: 'user', content: state.originalQuery },
   ];
 
-  // 8. Calculate total chars for budget monitoring
+  // 8. Inject dynamic text-only warning if needed (escalating urgency)
+  // This forces the agent to acknowledge and course-correct
+  const textOnlyWarning = getTextOnlyWarning(state.consecutiveTextOnlySteps);
+  if (textOnlyWarning && state.phase === 'gathering') {
+    // Append as the LAST message for maximum salience
+    messages.push({
+      role: 'system',
+      content: textOnlyWarning,
+    });
+  }
+
+  // 9. Calculate total chars for budget monitoring
   const totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
 
   return {
