@@ -616,6 +616,20 @@
   background: rgba(96, 165, 250, 0.25);
 }
 
+/* === Synthesize/Force-Answer Button === */
+.synthesizeButton {
+  /* Golden/amber color to indicate "synthesize now" action */
+}
+
+.synthesizeButton:hover {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.synthesizeButton:active {
+  background: rgba(251, 191, 36, 0.25);
+}
+
 /* === Question Source Icon === */
 .questionSourceIcon {
   display: inline-flex;

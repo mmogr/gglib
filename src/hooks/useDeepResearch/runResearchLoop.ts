@@ -1147,6 +1147,165 @@ ${prompt}`,
   }
 }
 
+/**
+ * Prompt template for force-answer intervention.
+ * Asks the LLM to synthesize an answer from available facts.
+ */
+const FORCE_ANSWER_PROMPT = `You are a research assistant. The user has requested an immediate answer to a research question.
+
+Based on the facts gathered so far, provide a concise answer to this question.
+
+**IMPORTANT:** 
+- Use ONLY the facts provided below - do not make up information
+- If the facts are insufficient, clearly state what is known and what remains uncertain
+- Be honest about confidence level based on evidence quality
+
+**Question to Answer:**
+QUESTION_TEXT
+
+**Available Facts:**
+FACTS_LIST
+
+**Response Format:**
+Respond with a JSON object:
+{
+  "type": "forced-answer",
+  "answer": "Your synthesized answer here (max 500 characters). Be concise but complete.",
+  "confidence": "high" | "medium" | "low",
+  "usedFactIds": ["fact-id-1", "fact-id-2"]
+}`;
+
+/**
+ * Handle force-answer intervention - generate answer for a question using current facts.
+ * This allows users to force synthesis when they judge enough facts have been gathered.
+ */
+async function handleForceAnswerIntervention(
+  state: ResearchState,
+  questionId: string,
+  callLLM: LLMCaller,
+  modelRouting: ModelRouting,
+  abortSignal?: AbortSignal
+): Promise<ResearchState> {
+  const targetQuestion = state.researchPlan.find(q => q.id === questionId);
+  
+  if (!targetQuestion) {
+    console.warn('[runResearchLoop] Force-answer intervention: question not found');
+    return pushActivityLog(state, 'Force-answer failed: question not found');
+  }
+  
+  // Already answered? No-op
+  if (targetQuestion.status === 'answered') {
+    console.log('[runResearchLoop] Force-answer: question already answered');
+    return state;
+  }
+  
+  const questionIndex = state.researchPlan.indexOf(targetQuestion) + 1;
+  
+  // Find facts relevant to this question
+  const relevantFacts = state.gatheredFacts.filter(
+    f => f.relevantQuestionIds.includes(questionId)
+  );
+  
+  // Also include recent facts that might be relevant but not explicitly tagged
+  const recentFacts = state.gatheredFacts
+    .filter(f => !relevantFacts.includes(f))
+    .slice(-5); // Last 5 untagged facts
+  
+  const allFacts = [...relevantFacts, ...recentFacts];
+  
+  if (allFacts.length === 0) {
+    console.warn('[runResearchLoop] Force-answer: no facts available');
+    
+    // Mark as blocked instead of answered if no facts
+    return {
+      ...pushActivityLog(state, `Cannot force-answer Q${questionIndex}: no facts gathered yet`),
+      researchPlan: state.researchPlan.map(q =>
+        q.id === questionId
+          ? { ...q, status: 'blocked' as const }
+          : q
+      ),
+      knowledgeGaps: [
+        ...state.knowledgeGaps,
+        `Force-skipped (no facts): Q${questionIndex}: "${targetQuestion.question}"`,
+      ],
+    };
+  }
+  
+  // Build the prompt with question and facts
+  const factsListText = allFacts.map((f, i) => 
+    `[${f.id.slice(0, 8)}] ${f.claim} (${f.confidence} confidence, from: ${f.sourceTitle})`
+  ).join('\n');
+  
+  const prompt = FORCE_ANSWER_PROMPT
+    .replace('QUESTION_TEXT', targetQuestion.question)
+    .replace('FACTS_LIST', factsListText);
+  
+  const messages: TurnMessage[] = [
+    {
+      role: 'system',
+      content: prompt,
+    },
+    {
+      role: 'user',
+      content: `Please synthesize an answer to the question using the ${allFacts.length} fact(s) provided. This is a user-requested forced synthesis.`,
+    },
+  ];
+  
+  try {
+    console.log(`[runResearchLoop] Force-answer: generating answer for Q${questionIndex} with ${allFacts.length} facts`);
+    
+    const response = await callLLM(messages, {
+      endpoint: modelRouting.reasoningModel,
+      abortSignal,
+    });
+    
+    const parsed = tryParseStructuredResponse(response.content);
+    
+    if (!parsed || parsed.type !== 'forced-answer') {
+      // Try to extract answer from free-form text
+      const answerText = response.content?.slice(0, 500) || 'Answer could not be generated';
+      
+      let newState = updateQuestion(state, questionId, {
+        status: 'answered',
+        answerSummary: `[Forced] ${answerText}`,
+        supportingFactIds: allFacts.map(f => f.id),
+      });
+      
+      newState = pushActivityLog(newState, `Force-answered Q${questionIndex} (free-form)`);
+      return newState;
+    }
+    
+    // Use parsed structured response
+    const usedFactIds = parsed.usedFactIds && Array.isArray(parsed.usedFactIds) 
+      ? parsed.usedFactIds 
+      : allFacts.map(f => f.id);
+    
+    let newState = updateQuestion(state, questionId, {
+      status: 'answered',
+      answerSummary: `[Forced] ${parsed.answer.slice(0, 490)}`,
+      supportingFactIds: usedFactIds,
+    });
+    
+    const truncatedQuestion = targetQuestion.question.length > 40
+      ? targetQuestion.question.slice(0, 37) + '...'
+      : targetQuestion.question;
+    newState = pushActivityLog(
+      newState, 
+      `Force-answered Q${questionIndex}: "${truncatedQuestion}" (${parsed.confidence} confidence)`
+    );
+    
+    console.log(`[runResearchLoop] Force-answer: successfully answered Q${questionIndex}`);
+    
+    return newState;
+  } catch (error) {
+    console.error('[runResearchLoop] Force-answer error:', error);
+    return pushActivityLog(
+      state, 
+      `Force-answer failed for Q${questionIndex}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
 // =============================================================================
 // Phase Handlers
 // =============================================================================
@@ -1836,7 +1995,8 @@ function handleIntervention(
     // AI-directed interventions - these set flags that trigger async processing
     case 'generate-more-questions':
     case 'expand-question':
-    case 'go-deeper': {
+    case 'go-deeper':
+    case 'force-answer': {
       // These are handled asynchronously in the main loop
       // We just mark that the intervention was received
       console.log(`[runResearchLoop] AI intervention queued: ${intervention.type}`);
@@ -1966,6 +2126,24 @@ export async function runResearchLoop(
       if (intervention) {
         // Clear the intervention to prevent re-processing
         interventionRef.current = null;
+        
+        // Check if this is a force-answer intervention (special handling)
+        if (intervention.type === 'force-answer') {
+          console.log(`[runResearchLoop] Processing force-answer for question: ${intervention.questionId}`);
+          state = pushActivityLog(state, `User requested immediate answer...`);
+          onStateUpdate?.(state);
+          
+          state = await handleForceAnswerIntervention(
+            state,
+            intervention.questionId,
+            callLLM,
+            modelRouting,
+            abortSignal
+          );
+          
+          onStateUpdate?.(state);
+          continue;
+        }
         
         // Check if this is an AI-directed intervention that needs async handling
         const isAIDirected = intervention.type === 'generate-more-questions' ||

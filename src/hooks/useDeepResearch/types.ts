@@ -412,6 +412,7 @@ export type ResearchPhase =
  * - 'generate-more-questions': Ask AI to generate additional questions
  * - 'expand-question': Ask AI to break a question into deeper sub-questions
  * - 'go-deeper': Ask AI to expand research based on current findings
+ * - 'force-answer': Force answer generation for a question using current facts
  */
 export type ResearchIntervention =
   | { type: 'wrap-up' }
@@ -420,7 +421,8 @@ export type ResearchIntervention =
   | { type: 'add-question'; question: string }
   | { type: 'generate-more-questions' }
   | { type: 'expand-question'; questionId: string }
-  | { type: 'go-deeper' };
+  | { type: 'go-deeper' }
+  | { type: 'force-answer'; questionId: string };
 
 /**
  * Type for the intervention ref passed to the research loop.

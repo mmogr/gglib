@@ -706,6 +706,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 generateMoreQuestions={deepResearch.generateMoreQuestions}
                 expandQuestion={deepResearch.expandQuestion}
                 goDeeper={deepResearch.goDeeper}
+                forceAnswer={deepResearch.forceAnswer}
               >
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
                 <ThreadPrimitive.Root

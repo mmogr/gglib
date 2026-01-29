@@ -46,6 +46,7 @@ import {
   User,
   Bot,
   Download,
+  Zap,
 } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import type {
@@ -86,6 +87,8 @@ export interface ResearchArtifactProps {
   onExpandQuestion?: (questionId: string) => void;
   /** Callback to go deeper via AI */
   onGoDeeper?: () => void;
+  /** Callback to force answer generation for a question */
+  onForceAnswer?: (questionId: string) => void;
 }
 
 // =============================================================================
@@ -294,22 +297,26 @@ const ThinkingBlock: React.FC<{ reasoning: string | null }> = ({ reasoning }) =>
  */
 const ResearchPlanSection: React.FC<{
   questions: ResearchQuestion[];
+  facts: GatheredFact[];
   onSkipQuestion?: (questionId: string) => void;
   onSkipAllPending?: () => void;
   onAddQuestion?: (question: string) => void;
   onGenerateMoreQuestions?: () => void;
   onExpandQuestion?: (questionId: string) => void;
   onGoDeeper?: () => void;
+  onForceAnswer?: (questionId: string) => void;
   isRunning: boolean;
   isCompleted?: boolean;
 }> = ({
   questions,
+  facts,
   onSkipQuestion,
   onSkipAllPending,
   onAddQuestion,
   onGenerateMoreQuestions,
   onExpandQuestion,
   onGoDeeper,
+  onForceAnswer,
   isRunning,
   isCompleted = false,
 }) => {
@@ -321,6 +328,8 @@ const ResearchPlanSection: React.FC<{
   const [isGenerating, setIsGenerating] = useState(false);
   // Track if going deeper is pending
   const [isGoingDeeper, setIsGoingDeeper] = useState(false);
+  // Track which questions have force-answer pending
+  const [pendingForceAnswers, setPendingForceAnswers] = useState<Set<string>>(new Set());
   // State for add question input
   const [newQuestionText, setNewQuestionText] = useState('');
   const [showAddInput, setShowAddInput] = useState(false);
@@ -377,6 +386,21 @@ const ResearchPlanSection: React.FC<{
       onGoDeeper();
       // Reset after a short delay
       setTimeout(() => setIsGoingDeeper(false), 3000);
+    }
+  };
+
+  const handleForceAnswer = (questionId: string) => {
+    if (onForceAnswer) {
+      setPendingForceAnswers(prev => new Set(prev).add(questionId));
+      onForceAnswer(questionId);
+      // Reset after a longer delay (LLM generation takes time)
+      setTimeout(() => {
+        setPendingForceAnswers(prev => {
+          const next = new Set(prev);
+          next.delete(questionId);
+          return next;
+        });
+      }, 15000);
     }
   };
   
@@ -545,6 +569,16 @@ const ResearchPlanSection: React.FC<{
             question.status === 'pending' &&
             !pendingExpands.has(question.id);
           
+          // Force-answer: available for in-progress questions with facts
+          const relevantFactCount = facts.filter(f => 
+            f.relevantQuestionIds.includes(question.id)
+          ).length;
+          const canForceAnswer = actionsAvailable &&
+            onForceAnswer &&
+            question.status === 'in-progress' &&
+            !pendingForceAnswers.has(question.id) &&
+            facts.length > 0; // Need at least some facts
+          
           const isBlocked = question.status === 'blocked';
           const showSkipButton = canSkip || (isCompleted && (question.status === 'in-progress' || question.status === 'pending'));
           
@@ -588,6 +622,21 @@ const ResearchPlanSection: React.FC<{
                       <Icon icon={Loader2} size={12} className={styles.spinIcon} />
                     ) : (
                       <Icon icon={Maximize2} size={12} />
+                    )}
+                  </button>
+                )}
+                {/* Force-answer / Synthesize button - for in-progress questions */}
+                {canForceAnswer && (
+                  <button
+                    className={`${styles.expandButton} ${styles.synthesizeButton}`}
+                    onClick={() => handleForceAnswer(question.id)}
+                    title={`Generate answer now with ${relevantFactCount > 0 ? relevantFactCount : facts.length} facts`}
+                    type="button"
+                  >
+                    {pendingForceAnswers.has(question.id) ? (
+                      <Icon icon={Loader2} size={12} className={styles.spinIcon} />
+                    ) : (
+                      <Icon icon={Zap} size={12} />
                     )}
                   </button>
                 )}
@@ -951,6 +1000,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
   onGenerateMoreQuestions,
   onExpandQuestion,
   onGoDeeper,
+  onForceAnswer,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
@@ -1168,6 +1218,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
                     {/* Research plan */}
                     <ResearchPlanSection
                       questions={effectiveState.researchPlan}
+                      facts={effectiveState.gatheredFacts}
                       onSkipQuestion={onSkipQuestion}
                       isRunning={false}
                       isCompleted={true}
@@ -1195,12 +1246,14 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
               {/* Research plan */}
               <ResearchPlanSection
                 questions={effectiveState.researchPlan}
+                facts={effectiveState.gatheredFacts}
                 onSkipQuestion={onSkipQuestion}
                 onSkipAllPending={onSkipAllPending}
                 onAddQuestion={onAddQuestion}
                 onGenerateMoreQuestions={onGenerateMoreQuestions}
                 onExpandQuestion={onExpandQuestion}
                 onGoDeeper={onGoDeeper}
+                onForceAnswer={onForceAnswer}
                 isRunning={isRunning}
               />
 
