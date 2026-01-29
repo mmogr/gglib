@@ -92,7 +92,11 @@ export interface ResearchQuestion {
   priority: number;
   /** Parent question ID if this is a follow-up */
   parentQuestionId?: string;
-  /** Step number when this question was marked in-progress (for timeout detection) */
+  /** 
+   * @deprecated No longer used for timeout detection. 
+   * Timeout is now based on consecutiveUnproductiveSteps in ResearchState.
+   * Kept for backwards compatibility with persisted state.
+   */
   inProgressSince?: number;
   /** Source of this question (how it was added) */
   source?: QuestionSource;
@@ -408,6 +412,7 @@ export type ResearchPhase =
  * - 'generate-more-questions': Ask AI to generate additional questions
  * - 'expand-question': Ask AI to break a question into deeper sub-questions
  * - 'go-deeper': Ask AI to expand research based on current findings
+ * - 'force-answer': Force answer generation for a question using current facts
  */
 export type ResearchIntervention =
   | { type: 'wrap-up' }
@@ -416,7 +421,8 @@ export type ResearchIntervention =
   | { type: 'add-question'; question: string }
   | { type: 'generate-more-questions' }
   | { type: 'expand-question'; questionId: string }
-  | { type: 'go-deeper' };
+  | { type: 'go-deeper' }
+  | { type: 'force-answer'; questionId: string };
 
 /**
  * Type for the intervention ref passed to the research loop.
@@ -563,6 +569,43 @@ export interface ResearchState {
   /** Whether LLM is currently generating (for "Thinking..." indicator) */
   isLLMGenerating: boolean;
 
+  // === Productive Step Tracking (Resilience) ===
+  /**
+   * Counter for consecutive steps that didn't produce new facts.
+   * Reset to 0 when facts are gathered. Question times out when this reaches threshold.
+   * This replaces the old fixed-step timeout (inProgressSince) with progress-based logic.
+   */
+  consecutiveUnproductiveSteps: number;
+
+  /**
+   * Counter for consecutive LLM responses that didn't call any tools.
+   * When the LLM outputs text without tool calls, this increments.
+   * After MAX_TEXT_ONLY_STEPS, it's treated as an unproductive step.
+   * Reset to 0 when tools are executed or a valid JSON answer is provided.
+   */
+  consecutiveTextOnlySteps: number;
+
+  /**
+   * Counter for steps spent on the current in-progress question.
+   * Reset to 0 when the focus question changes (answered, blocked, or new focus).
+   * When this exceeds STEPS_PER_QUESTION_LIMIT, the system will strongly
+   * encourage answering or auto-trigger force-answer intervention.
+   */
+  stepsOnCurrentFocus: number;
+
+  /**
+   * ID of the current in-progress question (for detecting focus changes).
+   * Used to reset stepsOnCurrentFocus when the focus changes.
+   */
+  currentFocusQuestionId: string | null;
+
+  /**
+   * Total loop iterations counter (safety backstop).
+   * Increments every main loop cycle regardless of phase or tool execution.
+   * Triggers emergency stop at MAX_LOOP_ITERATIONS to prevent infinite loops.
+   */
+  loopIterations: number;
+
   // === Completion Snapshot (Post-Research) ===
   /** Snapshot of activity log and metrics when research completed (for UI display) */
   completionSnapshot?: {
@@ -636,6 +679,13 @@ export function createInitialState(
     activityLog: [],
     activeToolCalls: [],
     isLLMGenerating: false,
+
+    // Productive step tracking
+    consecutiveUnproductiveSteps: 0,
+    consecutiveTextOnlySteps: 0,
+    loopIterations: 0,
+    stepsOnCurrentFocus: 0,
+    currentFocusQuestionId: null,
   };
 }
 
@@ -696,6 +746,8 @@ export interface ResearchContextInjection {
   currentFocus: {
     questionIndex: number;
     questionText: string;
+    stepsOnQuestion: number;
+    factsForQuestion: number;
   } | null;
   /** Progress indicator */
   progress: {
@@ -916,6 +968,10 @@ export function serializeForPrompt(
     ? {
         questionIndex: state.researchPlan.indexOf(inProgressQuestion) + 1,
         questionText: inProgressQuestion.question,
+        stepsOnQuestion: state.stepsOnCurrentFocus ?? 0,
+        factsForQuestion: state.gatheredFacts.filter(
+          f => f.relevantQuestionIds.includes(inProgressQuestion.id)
+        ).length,
       }
     : null;
 
@@ -967,7 +1023,15 @@ export function renderContextForSystemPrompt(
   if (injection.currentFocus) {
     sections.push('## 🎯 Current Focus');
     sections.push(`You are currently working on **Q${injection.currentFocus.questionIndex}**: "${injection.currentFocus.questionText}"`);
+    sections.push(`Progress: ${injection.currentFocus.stepsOnQuestion} research steps, ${injection.currentFocus.factsForQuestion} facts gathered for this question`);
     sections.push('');
+    
+    // Add urgency if question has been researched extensively
+    if (injection.currentFocus.stepsOnQuestion >= 3) {
+      sections.push('⚠️ **IMPORTANT**: You have gathered substantial information for this question. You should now synthesize what you have learned and provide an answer. Do NOT continue searching unless you truly lack critical information.');
+      sections.push('');
+    }
+    
     sections.push('When you have gathered enough information to answer this question, provide an AnswerResponse with `questionIndex: ' + injection.currentFocus.questionIndex + '`.');
     sections.push('');
   }

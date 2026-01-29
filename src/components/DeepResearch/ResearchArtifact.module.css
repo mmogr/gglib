@@ -98,6 +98,32 @@
   transform: rotate(180deg);
 }
 
+/* Header Download Button */
+.headerDownloadButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #333);
+  background: var(--bg-secondary, #1e1e1e);
+  color: var(--text-muted, #666);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.headerDownloadButton:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-hover, #2a2a2a);
+  border-color: var(--border-hover, #444);
+}
+
+.headerDownloadButton:active {
+  transform: scale(0.95);
+}
+
 /* === Phase Badge === */
 .phaseBadge {
   display: inline-flex;
@@ -590,6 +616,20 @@
   background: rgba(96, 165, 250, 0.25);
 }
 
+/* === Synthesize/Force-Answer Button === */
+.synthesizeButton {
+  /* Golden/amber color to indicate "synthesize now" action */
+}
+
+.synthesizeButton:hover {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.synthesizeButton:active {
+  background: rgba(251, 191, 36, 0.25);
+}
+
 /* === Question Source Icon === */
 .questionSourceIcon {
   display: inline-flex;
@@ -1001,6 +1041,37 @@
   justify-content: center;
   color: var(--text-muted, #666);
   transition: transform 0.2s ease;
+}
+
+.researchDetailsActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.downloadLogsButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary, #a0a0a0);
+  background: var(--bg-secondary, #1e1e1e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.downloadLogsButton:hover {
+  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-hover, #2a2a2a);
+  border-color: var(--border-hover, #444);
+}
+
+.downloadLogsButton:active {
+  transform: scale(0.97);
 }
 
 .researchDetailsContent {

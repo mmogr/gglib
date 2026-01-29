@@ -76,6 +76,8 @@ export interface UseDeepResearchReturn {
   expandQuestion: (questionId: string) => void;
   /** Ask AI to go deeper based on current findings */
   goDeeper: () => void;
+  /** Force answer generation for a specific question using current facts */
+  forceAnswer: (questionId: string) => void;
   /** Reset state (for cleanup) */
   resetState: () => void;
 }
@@ -511,6 +513,14 @@ export function useDeepResearch(
     }
   }, [isRunning, state?.phase]);
 
+  // Force answer generation for a specific question
+  const forceAnswer = useCallback((questionId: string) => {
+    if (isRunning && state?.phase === 'gathering') {
+      console.log('[useDeepResearch] User requested force answer for question:', questionId);
+      interventionRef.current = { type: 'force-answer', questionId };
+    }
+  }, [isRunning, state?.phase]);
+
   // Reset state
   const resetState = useCallback(() => {
     setState(null);
@@ -531,6 +541,7 @@ export function useDeepResearch(
     generateMoreQuestions,
     expandQuestion,
     goDeeper,
+    forceAnswer,
     resetState,
   };
 }
