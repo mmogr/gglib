@@ -104,6 +104,14 @@ export const MAX_TEXT_ONLY_STEPS = 3;
  */
 export const MAX_LOOP_ITERATIONS = 100;
 
+/**
+ * Maximum steps to spend on a single question before escalating.
+ * After this many productive steps on the same question, the system will
+ * strongly encourage answering or auto-trigger force-answer.
+ * This prevents over-researching simple questions with redundant facts.
+ */
+export const STEPS_PER_QUESTION_LIMIT = 3;
+
 /** @deprecated Use CONSECUTIVE_UNPRODUCTIVE_LIMIT instead */
 export const QUESTION_FOCUS_TIMEOUT_STEPS = 5;
 
@@ -2264,6 +2272,9 @@ export async function runResearchLoop(
                   ? { ...q, status: 'in-progress' as const, inProgressSince: state.currentStep }
                   : q
               ),
+              // Reset per-question step counter when focus changes
+              stepsOnCurrentFocus: 0,
+              currentFocusQuestionId: nextPending.id,
             };
           }
         }
@@ -2342,6 +2353,8 @@ export async function runResearchLoop(
         facts: state.gatheredFacts.length,
         consecutiveUnproductiveSteps: state.consecutiveUnproductiveSteps,
         consecutiveTextOnlySteps: state.consecutiveTextOnlySteps,
+        stepsOnCurrentFocus: state.stepsOnCurrentFocus,
+        currentFocusQuestionId: state.currentFocusQuestionId,
       });
       
       // Notify UI of step start
@@ -2565,10 +2578,43 @@ export async function runResearchLoop(
             if (state.consecutiveUnproductiveSteps > 0) {
               console.log(`[runResearchLoop] Productive step! Found ${newFactsGathered} new fact(s), resetting unproductive counter`);
             }
+            
+            // Track steps on current focus (for per-question time limits)
+            const newStepsOnFocus = state.stepsOnCurrentFocus + 1;
+            
             state = {
               ...state,
               consecutiveUnproductiveSteps: 0,
+              stepsOnCurrentFocus: newStepsOnFocus,
             };
+            
+            // Check if this question has been researched long enough
+            if (newStepsOnFocus >= STEPS_PER_QUESTION_LIMIT) {
+              const currentQuestion = state.researchPlan.find(q => q.status === 'in-progress');
+              if (currentQuestion) {
+                const questionIndex = state.researchPlan.indexOf(currentQuestion) + 1;
+                const questionFactCount = state.gatheredFacts.filter(
+                  f => f.relevantQuestionIds.includes(currentQuestion.id)
+                ).length;
+                
+                console.log(
+                  `[runResearchLoop] Q${questionIndex} has been researched for ${newStepsOnFocus} steps with ${questionFactCount} facts - encouraging answer`
+                );
+                
+                researchLogger.info(messageId, 'perQuestionLimit', 'Question step limit reached', {
+                  questionIndex,
+                  questionId: currentQuestion.id,
+                  stepsOnQuestion: newStepsOnFocus,
+                  factsForQuestion: questionFactCount,
+                  totalFacts: state.gatheredFacts.length,
+                });
+                
+                state = pushActivityLog(
+                  state,
+                  `💡 Q${questionIndex} well-researched (${newStepsOnFocus} steps, ${questionFactCount} facts) - answer expected soon`
+                );
+              }
+            }
           } else {
             // Tools ran but no new facts - increment unproductive counter
             const newUnproductiveCount = state.consecutiveUnproductiveSteps + 1;

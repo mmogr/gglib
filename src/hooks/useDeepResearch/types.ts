@@ -586,6 +586,20 @@ export interface ResearchState {
   consecutiveTextOnlySteps: number;
 
   /**
+   * Counter for steps spent on the current in-progress question.
+   * Reset to 0 when the focus question changes (answered, blocked, or new focus).
+   * When this exceeds STEPS_PER_QUESTION_LIMIT, the system will strongly
+   * encourage answering or auto-trigger force-answer intervention.
+   */
+  stepsOnCurrentFocus: number;
+
+  /**
+   * ID of the current in-progress question (for detecting focus changes).
+   * Used to reset stepsOnCurrentFocus when the focus changes.
+   */
+  currentFocusQuestionId: string | null;
+
+  /**
    * Total loop iterations counter (safety backstop).
    * Increments every main loop cycle regardless of phase or tool execution.
    * Triggers emergency stop at MAX_LOOP_ITERATIONS to prevent infinite loops.
@@ -670,6 +684,8 @@ export function createInitialState(
     consecutiveUnproductiveSteps: 0,
     consecutiveTextOnlySteps: 0,
     loopIterations: 0,
+    stepsOnCurrentFocus: 0,
+    currentFocusQuestionId: null,
   };
 }
 
@@ -730,6 +746,8 @@ export interface ResearchContextInjection {
   currentFocus: {
     questionIndex: number;
     questionText: string;
+    stepsOnQuestion: number;
+    factsForQuestion: number;
   } | null;
   /** Progress indicator */
   progress: {
@@ -950,6 +968,10 @@ export function serializeForPrompt(
     ? {
         questionIndex: state.researchPlan.indexOf(inProgressQuestion) + 1,
         questionText: inProgressQuestion.question,
+        stepsOnQuestion: state.stepsOnCurrentFocus ?? 0,
+        factsForQuestion: state.gatheredFacts.filter(
+          f => f.relevantQuestionIds.includes(inProgressQuestion.id)
+        ).length,
       }
     : null;
 
@@ -1001,7 +1023,15 @@ export function renderContextForSystemPrompt(
   if (injection.currentFocus) {
     sections.push('## 🎯 Current Focus');
     sections.push(`You are currently working on **Q${injection.currentFocus.questionIndex}**: "${injection.currentFocus.questionText}"`);
+    sections.push(`Progress: ${injection.currentFocus.stepsOnQuestion} research steps, ${injection.currentFocus.factsForQuestion} facts gathered for this question`);
     sections.push('');
+    
+    // Add urgency if question has been researched extensively
+    if (injection.currentFocus.stepsOnQuestion >= 3) {
+      sections.push('⚠️ **IMPORTANT**: You have gathered substantial information for this question. You should now synthesize what you have learned and provide an answer. Do NOT continue searching unless you truly lack critical information.');
+      sections.push('');
+    }
+    
     sections.push('When you have gathered enough information to answer this question, provide an AnswerResponse with `questionIndex: ' + injection.currentFocus.questionIndex + '`.');
     sections.push('');
   }
