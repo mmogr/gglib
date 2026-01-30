@@ -273,6 +273,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       // Productive step tracking
       consecutiveUnproductiveSteps: 0,
       consecutiveTextOnlySteps: 0,
+      stepsOnCurrentFocus: 0,
+      currentFocusQuestionId: null,
       loopIterations: 0,
     };
 

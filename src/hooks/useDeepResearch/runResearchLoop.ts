@@ -305,7 +305,17 @@ interface RoundSummaryResponse {
   keyInsights: string[];
 }
 
-type StructuredResponse = PlanResponse | AnswerResponse | ReportResponse | EvaluationResponse | RoundSummaryResponse;
+/**
+ * Force-answer response (for intervention-based answer synthesis).
+ */
+interface ForcedAnswerResponse {
+  type: 'forced-answer';
+  answer: string;
+  confidence: 'high' | 'medium' | 'low';
+  usedFactIds?: string[];
+}
+
+type StructuredResponse = PlanResponse | AnswerResponse | ReportResponse | EvaluationResponse | RoundSummaryResponse | ForcedAnswerResponse;
 
 /**
  * Try to parse structured JSON from LLM content.
@@ -1240,7 +1250,7 @@ async function handleForceAnswerIntervention(
   }
   
   // Build the prompt with question and facts
-  const factsListText = allFacts.map((f, i) => 
+  const factsListText = allFacts.map((f) => 
     `[${f.id.slice(0, 8)}] ${f.claim} (${f.confidence} confidence, from: ${f.sourceTitle})`
   ).join('\n');
   
@@ -1283,14 +1293,17 @@ async function handleForceAnswerIntervention(
       return newState;
     }
     
+    // TypeScript now knows parsed is ForcedAnswerResponse
+    const forcedAnswer = parsed;
+    
     // Use parsed structured response
-    const usedFactIds = parsed.usedFactIds && Array.isArray(parsed.usedFactIds) 
-      ? parsed.usedFactIds 
+    const usedFactIds = forcedAnswer.usedFactIds && Array.isArray(forcedAnswer.usedFactIds) 
+      ? forcedAnswer.usedFactIds 
       : allFacts.map(f => f.id);
     
     let newState = updateQuestion(state, questionId, {
       status: 'answered',
-      answerSummary: `[Forced] ${parsed.answer.slice(0, 490)}`,
+      answerSummary: `[Forced] ${forcedAnswer.answer.slice(0, 490)}`,
       supportingFactIds: usedFactIds,
     });
     
@@ -1299,7 +1312,7 @@ async function handleForceAnswerIntervention(
       : targetQuestion.question;
     newState = pushActivityLog(
       newState, 
-      `Force-answered Q${questionIndex}: "${truncatedQuestion}" (${parsed.confidence} confidence)`
+      `Force-answered Q${questionIndex}: "${truncatedQuestion}" (${forcedAnswer.confidence} confidence)`
     );
     
     console.log(`[runResearchLoop] Force-answer: successfully answered Q${questionIndex}`);
