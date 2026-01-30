@@ -20,6 +20,7 @@ import type {
   ResearchIntervention,
   ActiveToolCall,
 } from './types';
+import { extractFacts, type ExtractionLLMCaller } from './factExtractor';
 import {
   createInitialState,
   createQuestion,
@@ -55,6 +56,7 @@ import {
   PHASE_INSTRUCTIONS,
   type TurnMessage,
 } from './buildTurnMessages';
+import { researchLogger } from '../../services/platform';
 
 // =============================================================================
 // Configuration
@@ -75,7 +77,42 @@ export const TOOL_TIMEOUT_MS = 30000;
 /** Maximum retries for transient errors */
 export const MAX_TOOL_RETRIES = 2;
 
-/** Maximum steps a question can be in-progress before being marked blocked */
+/**
+ * Maximum consecutive unproductive steps before a question is marked blocked.
+ * A step is "unproductive" if no new facts were gathered.
+ * This replaces the old fixed-step timeout for more intelligent course correction.
+ */
+export const CONSECUTIVE_UNPRODUCTIVE_LIMIT = 5;
+
+/**
+ * Hard maximum steps regardless of productivity.
+ * Safety net to prevent infinite loops if agent keeps finding 1 fact at a time.
+ */
+export const HARD_MAX_STEPS = 50;
+
+/**
+ * Maximum consecutive LLM responses without tool calls before penalizing.
+ * When the LLM outputs text-only reasoning without calling tools, we track it.
+ * After this many consecutive text-only responses, treat as unproductive step.
+ */
+export const MAX_TEXT_ONLY_STEPS = 3;
+
+/**
+ * Absolute maximum loop iterations (safety backstop).
+ * This fires regardless of any other logic - prevents infinite loops
+ * even if all other safeguards fail.
+ */
+export const MAX_LOOP_ITERATIONS = 100;
+
+/**
+ * Maximum steps to spend on a single question before escalating.
+ * After this many productive steps on the same question, the system will
+ * strongly encourage answering or auto-trigger force-answer.
+ * This prevents over-researching simple questions with redundant facts.
+ */
+export const STEPS_PER_QUESTION_LIMIT = 3;
+
+/** @deprecated Use CONSECUTIVE_UNPRODUCTIVE_LIMIT instead */
 export const QUESTION_FOCUS_TIMEOUT_STEPS = 5;
 
 // =============================================================================
@@ -268,7 +305,17 @@ interface RoundSummaryResponse {
   keyInsights: string[];
 }
 
-type StructuredResponse = PlanResponse | AnswerResponse | ReportResponse | EvaluationResponse | RoundSummaryResponse;
+/**
+ * Force-answer response (for intervention-based answer synthesis).
+ */
+interface ForcedAnswerResponse {
+  type: 'forced-answer';
+  answer: string;
+  confidence: 'high' | 'medium' | 'low';
+  usedFactIds?: string[];
+}
+
+type StructuredResponse = PlanResponse | AnswerResponse | ReportResponse | EvaluationResponse | RoundSummaryResponse | ForcedAnswerResponse;
 
 /**
  * Try to parse structured JSON from LLM content.
@@ -729,19 +776,32 @@ function handleInternalTool(
  * 
  * Internal Tools: assess_progress and request_synthesis are handled locally
  * without external API calls. request_synthesis can trigger phase transition.
+ * 
+ * Returns: Observations, updated state, transition signal, and execution stats
+ * for determining if this was a productive step (toolsExecuted > 0).
  */
 async function executeToolsBatch(
   toolCalls: ToolCall[],
   executeTool: ToolExecutor,
   state: ResearchState,
   forQuestionId?: string
-): Promise<{ observations: PendingObservation[]; updatedState: ResearchState; shouldTransition?: 'synthesizing' }> {
+): Promise<{
+  observations: PendingObservation[];
+  updatedState: ResearchState;
+  shouldTransition?: 'synthesizing';
+  /** Number of tools actually executed (not skipped) */
+  toolsExecuted: number;
+  /** Number of tools skipped (duplicates) */
+  toolsSkipped: number;
+}> {
   if (toolCalls.length === 0) {
-    return { observations: [], updatedState: state };
+    return { observations: [], updatedState: state, toolsExecuted: 0, toolsSkipped: 0 };
   }
   
   let updatedState = state;
   let shouldTransition: 'synthesizing' | undefined;
+  let totalExecuted = 0;
+  let totalSkipped = 0;
   
   // Batch to prevent overwhelming the system
   const batches: ToolCall[][] = [];
@@ -794,15 +854,25 @@ async function executeToolsBatch(
             `(similar to round ${existingRecord?.round} query)`
           );
           
-          // Return a mock observation explaining the skip
+          // Return a clear system error message that the LLM will see as direct consequence
+          // This format (Action -> Error -> Correction) enables intelligent self-correction
+          const previousQuery = existingRecord?.query?.slice(0, 80) || 'unknown';
+          const errorMessage = 
+            `[SYSTEM ERROR]: Search FAILED - Your query "${searchQuery.slice(0, 60)}" ` +
+            `is too similar to a previous search: "${previousQuery}". ` +
+            `You MUST reformulate using DIFFERENT keywords, a different angle, or more specific terms. ` +
+            `Do NOT repeat similar queries.`;
+          
           skippedObservations.push({
             toolName: tc.function.name,
             toolCallId: tc.id,
             rawResult: {
+              error: true,
               skipped: true,
-              reason: 'Search skipped: Query similar to previous search in history. Try a different angle or rephrase your query.',
-              similarTo: existingRecord?.query?.slice(0, 100),
+              message: errorMessage,
+              similarTo: previousQuery,
               previousRound: existingRecord?.round,
+              suggestion: 'Try: different terminology, narrower scope, specific entities, or alternative data sources',
             },
             timestamp: Date.now(),
             forQuestionId,
@@ -813,7 +883,7 @@ async function executeToolsBatch(
             ...updatedState,
             knowledgeGaps: [
               ...updatedState.knowledgeGaps,
-              `Search already attempted: "${searchQuery.slice(0, 50)}..." - try different keywords`,
+              `Search failed (duplicate): "${searchQuery.slice(0, 50)}..." - must use different keywords`,
             ].slice(0, 10),
           };
           
@@ -827,14 +897,18 @@ async function executeToolsBatch(
     // Add internal tool results first (they're processed synchronously)
     allObservations.push(...internalToolResults);
     
-    // Add skipped observations
+    // Add skipped observations and track count
     allObservations.push(...skippedObservations);
+    totalSkipped += skippedObservations.length;
     
     // Execute non-duplicate tools in parallel
     if (toolsToExecute.length > 0) {
       const observations = await Promise.all(
         toolsToExecute.map((tc) => executeToolSafely(tc, executeTool, forQuestionId))
       );
+      
+      // Track count of actually executed tools
+      totalExecuted += toolsToExecute.length;
       
       // Track successful searches in history
       for (let i = 0; i < toolsToExecute.length; i++) {
@@ -864,7 +938,13 @@ async function executeToolsBatch(
     }
   }
   
-  return { observations: allObservations, updatedState, shouldTransition };
+  return {
+    observations: allObservations,
+    updatedState,
+    shouldTransition,
+    toolsExecuted: totalExecuted,
+    toolsSkipped: totalSkipped,
+  };
 }
 
 // =============================================================================
@@ -1085,6 +1165,168 @@ ${prompt}`,
   }
 }
 
+/**
+ * Prompt template for force-answer intervention.
+ * Asks the LLM to synthesize an answer from available facts.
+ */
+const FORCE_ANSWER_PROMPT = `You are a research assistant. The user has requested an immediate answer to a research question.
+
+Based on the facts gathered so far, provide a concise answer to this question.
+
+**IMPORTANT:** 
+- Use ONLY the facts provided below - do not make up information
+- If the facts are insufficient, clearly state what is known and what remains uncertain
+- Be honest about confidence level based on evidence quality
+
+**Question to Answer:**
+QUESTION_TEXT
+
+**Available Facts:**
+FACTS_LIST
+
+**Response Format:**
+Respond with a JSON object:
+{
+  "type": "forced-answer",
+  "answer": "Your synthesized answer here (max 500 characters). Be concise but complete.",
+  "confidence": "high" | "medium" | "low",
+  "usedFactIds": ["fact-id-1", "fact-id-2"]
+}`;
+
+/**
+ * Handle force-answer intervention - generate answer for a question using current facts.
+ * This allows users to force synthesis when they judge enough facts have been gathered.
+ */
+async function handleForceAnswerIntervention(
+  state: ResearchState,
+  questionId: string,
+  callLLM: LLMCaller,
+  modelRouting: ModelRouting,
+  abortSignal?: AbortSignal
+): Promise<ResearchState> {
+  const targetQuestion = state.researchPlan.find(q => q.id === questionId);
+  
+  if (!targetQuestion) {
+    console.warn('[runResearchLoop] Force-answer intervention: question not found');
+    return pushActivityLog(state, 'Force-answer failed: question not found');
+  }
+  
+  // Already answered? No-op
+  if (targetQuestion.status === 'answered') {
+    console.log('[runResearchLoop] Force-answer: question already answered');
+    return state;
+  }
+  
+  const questionIndex = state.researchPlan.indexOf(targetQuestion) + 1;
+  
+  // Find facts relevant to this question
+  const relevantFacts = state.gatheredFacts.filter(
+    f => f.relevantQuestionIds.includes(questionId)
+  );
+  
+  // Also include recent facts that might be relevant but not explicitly tagged
+  const recentFacts = state.gatheredFacts
+    .filter(f => !relevantFacts.includes(f))
+    .slice(-5); // Last 5 untagged facts
+  
+  const allFacts = [...relevantFacts, ...recentFacts];
+  
+  if (allFacts.length === 0) {
+    console.warn('[runResearchLoop] Force-answer: no facts available');
+    
+    // Mark as blocked instead of answered if no facts
+    return {
+      ...pushActivityLog(state, `Cannot force-answer Q${questionIndex}: no facts gathered yet`),
+      researchPlan: state.researchPlan.map(q =>
+        q.id === questionId
+          ? { ...q, status: 'blocked' as const }
+          : q
+      ),
+      knowledgeGaps: [
+        ...state.knowledgeGaps,
+        `Force-skipped (no facts): Q${questionIndex}: "${targetQuestion.question}"`,
+      ],
+    };
+  }
+  
+  // Build the prompt with question and facts
+  const factsListText = allFacts.map((f) => 
+    `[${f.id.slice(0, 8)}] ${f.claim} (${f.confidence} confidence, from: ${f.sourceTitle})`
+  ).join('\n');
+  
+  const prompt = FORCE_ANSWER_PROMPT
+    .replace('QUESTION_TEXT', targetQuestion.question)
+    .replace('FACTS_LIST', factsListText);
+  
+  const messages: TurnMessage[] = [
+    {
+      role: 'system',
+      content: prompt,
+    },
+    {
+      role: 'user',
+      content: `Please synthesize an answer to the question using the ${allFacts.length} fact(s) provided. This is a user-requested forced synthesis.`,
+    },
+  ];
+  
+  try {
+    console.log(`[runResearchLoop] Force-answer: generating answer for Q${questionIndex} with ${allFacts.length} facts`);
+    
+    const response = await callLLM(messages, {
+      endpoint: modelRouting.reasoningModel,
+      abortSignal,
+    });
+    
+    const parsed = tryParseStructuredResponse(response.content);
+    
+    if (!parsed || parsed.type !== 'forced-answer') {
+      // Try to extract answer from free-form text
+      const answerText = response.content?.slice(0, 500) || 'Answer could not be generated';
+      
+      let newState = updateQuestion(state, questionId, {
+        status: 'answered',
+        answerSummary: `[Forced] ${answerText}`,
+        supportingFactIds: allFacts.map(f => f.id),
+      });
+      
+      newState = pushActivityLog(newState, `Force-answered Q${questionIndex} (free-form)`);
+      return newState;
+    }
+    
+    // TypeScript now knows parsed is ForcedAnswerResponse
+    const forcedAnswer = parsed;
+    
+    // Use parsed structured response
+    const usedFactIds = forcedAnswer.usedFactIds && Array.isArray(forcedAnswer.usedFactIds) 
+      ? forcedAnswer.usedFactIds 
+      : allFacts.map(f => f.id);
+    
+    let newState = updateQuestion(state, questionId, {
+      status: 'answered',
+      answerSummary: `[Forced] ${forcedAnswer.answer.slice(0, 490)}`,
+      supportingFactIds: usedFactIds,
+    });
+    
+    const truncatedQuestion = targetQuestion.question.length > 40
+      ? targetQuestion.question.slice(0, 37) + '...'
+      : targetQuestion.question;
+    newState = pushActivityLog(
+      newState, 
+      `Force-answered Q${questionIndex}: "${truncatedQuestion}" (${forcedAnswer.confidence} confidence)`
+    );
+    
+    console.log(`[runResearchLoop] Force-answer: successfully answered Q${questionIndex}`);
+    
+    return newState;
+  } catch (error) {
+    console.error('[runResearchLoop] Force-answer error:', error);
+    return pushActivityLog(
+      state, 
+      `Force-answer failed for Q${questionIndex}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
 // =============================================================================
 // Phase Handlers
 // =============================================================================
@@ -1181,11 +1423,22 @@ async function handlePlanningPhase(
 
 /**
  * Handle the gathering phase - process search results or answers.
+ * 
+ * Two pathways:
+ * 1. Observations present (tool call results): Store observations, then extract facts via LLM
+ * 2. No observations (structured answer): Parse answer and extract facts inline
  */
 async function handleGatheringPhase(
   state: ResearchState,
   llmResponse: LLMResponse,
-  observations: PendingObservation[]
+  observations: PendingObservation[],
+  // Dependencies for fact extraction
+  extractionDeps?: {
+    callLLM: LLMCaller;
+    modelRouting: ModelRouting;
+    onStateUpdate?: (state: ResearchState) => void;
+    abortSignal?: AbortSignal;
+  }
 ): Promise<ResearchState> {
   let newState = { ...state };
   
@@ -1198,6 +1451,66 @@ async function handleGatheringPhase(
     if (llmResponse.content) {
       newState.lastReasoning = llmResponse.content.slice(0, 1500);
     }
+    
+    // === FACT EXTRACTION from observations ===
+    // This is the key integration point: extract structured facts from raw search results
+    if (extractionDeps && newState.pendingObservations.length > 0) {
+      const { callLLM, modelRouting, onStateUpdate, abortSignal } = extractionDeps;
+      
+      // UI feedback before extraction
+      newState = setLLMGenerating(newState, true, 'Analyzing search results and extracting facts...');
+      onStateUpdate?.(newState);
+      
+      console.log(
+        `[handleGatheringPhase] Extracting facts from ${newState.pendingObservations.length} observation(s)`
+      );
+      
+      // Wrap the LLMCaller to match ExtractionLLMCaller signature
+      // (ExtractionLLMCaller returns string, LLMCaller returns LLMResponse)
+      const extractionLLM: ExtractionLLMCaller = async (messages, endpoint, signal) => {
+        const response = await callLLM(messages, {
+          tools: undefined, // Extraction doesn't need tools
+          endpoint,
+          abortSignal: signal,
+        });
+        return response.content || '';
+      };
+      
+      try {
+        const extractionResult = await extractFacts({
+          state: newState,
+          extractionEndpoint: modelRouting.extractionModel,
+          callLLM: extractionLLM,
+          abortSignal,
+        });
+        
+        // Use the updated state from extraction (includes new facts)
+        newState = extractionResult.updatedState;
+        
+        // Log extraction results for visibility
+        if (extractionResult.newFacts.length > 0) {
+          newState = pushActivityLog(
+            newState,
+            `📚 Extracted ${extractionResult.newFacts.length} fact(s) from search results`
+          );
+          console.log(
+            `[handleGatheringPhase] Extraction complete: ${extractionResult.newFacts.length} new facts, ` +
+            `${extractionResult.discardedInvalidUrl} invalid URLs, ${extractionResult.discardedDuplicates} duplicates`
+          );
+        } else {
+          console.log('[handleGatheringPhase] Extraction complete: no new facts found');
+        }
+      } catch (error) {
+        console.error('[handleGatheringPhase] Fact extraction failed:', error);
+        // Don't fail the whole loop on extraction errors - continue with raw observations
+        newState = pushActivityLog(newState, '⚠️ Failed to extract facts from search results');
+      }
+      
+      // Clear generating state
+      newState = setLLMGenerating(newState, false);
+      onStateUpdate?.(newState);
+    }
+    
     return newState;
   }
   
@@ -1703,7 +2016,8 @@ function handleIntervention(
     // AI-directed interventions - these set flags that trigger async processing
     case 'generate-more-questions':
     case 'expand-question':
-    case 'go-deeper': {
+    case 'go-deeper':
+    case 'force-answer': {
       // These are handled asynchronously in the main loop
       // We just mark that the intervention was received
       console.log(`[runResearchLoop] AI intervention queued: ${intervention.type}`);
@@ -1770,6 +2084,15 @@ export async function runResearchLoop(
   // Notify UI of initial state
   onStateUpdate?.(state);
 
+  // Start research logging session (non-blocking)
+  researchLogger.startSession(messageId, query);
+  researchLogger.info(messageId, 'runResearchLoop', 'Starting research', {
+    query: query.slice(0, 200),
+    maxSteps,
+    toolCount: tools.length,
+    conversationId,
+  });
+
   console.log('[runResearchLoop] Starting research:', {
     query: query.slice(0, 100),
     maxSteps,
@@ -1783,6 +2106,35 @@ export async function runResearchLoop(
   try {
     // === MAIN LOOP ===
     while (state.phase !== 'complete' && state.phase !== 'error') {
+      // === LOOP ITERATION COUNTER (Absolute Safety Backstop) ===
+      // Increments every cycle regardless of phase or tool execution
+      state = {
+        ...state,
+        loopIterations: state.loopIterations + 1,
+      };
+      
+      if (state.loopIterations >= MAX_LOOP_ITERATIONS) {
+        console.error(
+          `[runResearchLoop] EMERGENCY STOP: Max loop iterations (${MAX_LOOP_ITERATIONS}) reached. ` +
+          `This indicates a bug in the loop logic. Phase: ${state.phase}, Step: ${state.currentStep}`
+        );
+        
+        researchLogger.error(messageId, 'runResearchLoop', 'EMERGENCY STOP: Max loop iterations', {
+          loopIterations: state.loopIterations,
+          maxLoopIterations: MAX_LOOP_ITERATIONS,
+          phase: state.phase,
+          step: state.currentStep,
+        });
+        
+        state = setError(
+          state,
+          `Research stopped: Maximum iterations (${MAX_LOOP_ITERATIONS}) reached. ` +
+          `The system detected a potential infinite loop and stopped as a safety measure.`
+        );
+        state = pushActivityLog(state, `🛑 Emergency stop: loop iteration limit reached`);
+        break;
+      }
+
       // Check for cancellation
       if (abortSignal?.aborted) {
         state = setError(state, 'Research cancelled by user');
@@ -1795,6 +2147,24 @@ export async function runResearchLoop(
       if (intervention) {
         // Clear the intervention to prevent re-processing
         interventionRef.current = null;
+        
+        // Check if this is a force-answer intervention (special handling)
+        if (intervention.type === 'force-answer') {
+          console.log(`[runResearchLoop] Processing force-answer for question: ${intervention.questionId}`);
+          state = pushActivityLog(state, `User requested immediate answer...`);
+          onStateUpdate?.(state);
+          
+          state = await handleForceAnswerIntervention(
+            state,
+            intervention.questionId,
+            callLLM,
+            modelRouting,
+            abortSignal
+          );
+          
+          onStateUpdate?.(state);
+          continue;
+        }
         
         // Check if this is an AI-directed intervention that needs async handling
         const isAIDirected = intervention.type === 'generate-more-questions' ||
@@ -1841,51 +2211,46 @@ export async function runResearchLoop(
         continue;
       }
 
-      // Advance step counter
-      state = advanceStep(state);
-
-      // Hard limit check
-      if (state.currentStep > state.maxSteps) {
-        console.warn('[runResearchLoop] Hard step limit reached');
+      // === HARD LIMIT CHECK (Safety net) ===
+      // This fires regardless of productivity - absolute protection against infinite loops
+      if (state.currentStep >= HARD_MAX_STEPS) {
+        console.warn(`[runResearchLoop] HARD step limit (${HARD_MAX_STEPS}) reached - emergency stop`);
         state = setError(
           state,
-          `Maximum steps (${state.maxSteps}) reached without completing research.`
+          `Maximum steps (${HARD_MAX_STEPS}) reached. The research loop has been stopped as a safety measure.`
         );
         break;
       }
 
-      // === FOCUS TIMEOUT CHECK ===
-      // Check if any question has been in-progress too long and should be marked blocked
+      // === CONSECUTIVE UNPRODUCTIVE STEPS CHECK ===
+      // Check if the current in-progress question has stalled (no new facts despite attempts)
       if (state.phase === 'gathering') {
-        const timedOutQuestion = state.researchPlan.find(
-          (q) =>
-            q.status === 'in-progress' &&
-            q.inProgressSince !== undefined &&
-            state.currentStep - q.inProgressSince >= QUESTION_FOCUS_TIMEOUT_STEPS
-        );
-
-        if (timedOutQuestion) {
-          const questionIndex = state.researchPlan.indexOf(timedOutQuestion) + 1;
+        const currentQuestion = state.researchPlan.find(q => q.status === 'in-progress');
+        
+        if (currentQuestion && state.consecutiveUnproductiveSteps >= CONSECUTIVE_UNPRODUCTIVE_LIMIT) {
+          const questionIndex = state.researchPlan.indexOf(currentQuestion) + 1;
           console.log(
-            `[runResearchLoop] Question Q${questionIndex} timed out after ${QUESTION_FOCUS_TIMEOUT_STEPS} steps, marking as blocked`
+            `[runResearchLoop] Question Q${questionIndex} stalled after ${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive steps, marking as blocked`
           );
 
           // Mark as blocked and record knowledge gap
           state = {
             ...state,
             researchPlan: state.researchPlan.map((q) =>
-              q.id === timedOutQuestion.id
+              q.id === currentQuestion.id
                 ? { ...q, status: 'blocked' as const }
                 : q
             ),
             knowledgeGaps: [
               ...state.knowledgeGaps,
-              `Unable to find definitive data for Q${questionIndex}: "${timedOutQuestion.question}" after ${QUESTION_FOCUS_TIMEOUT_STEPS} attempts`,
+              `Unable to find definitive data for Q${questionIndex}: "${currentQuestion.question}" after ${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive attempts (no new facts gathered)`,
             ],
+            // Reset counter for next question
+            consecutiveUnproductiveSteps: 0,
           };
           
           // Log the timeout for user visibility
-          state = pushActivityLog(state, `Q${questionIndex} timed out, moving on...`);
+          state = pushActivityLog(state, `⚠️ Q${questionIndex} stalled (no new facts after ${CONSECUTIVE_UNPRODUCTIVE_LIMIT} attempts), moving on...`);
         }
       }
 
@@ -1920,6 +2285,9 @@ export async function runResearchLoop(
                   ? { ...q, status: 'in-progress' as const, inProgressSince: state.currentStep }
                   : q
               ),
+              // Reset per-question step counter when focus changes
+              stepsOnCurrentFocus: 0,
+              currentFocusQuestionId: nextPending.id,
             };
           }
         }
@@ -1990,6 +2358,18 @@ export async function runResearchLoop(
         `[runResearchLoop] Step ${state.currentStep}/${state.maxSteps} - Phase: ${state.phase}`
       );
       
+      // Log step to research logger
+      researchLogger.debug(messageId, 'runResearchLoop', `Step ${state.currentStep}`, {
+        phase: state.phase,
+        loopIteration: state.loopIterations,
+        round: state.currentRound,
+        facts: state.gatheredFacts.length,
+        consecutiveUnproductiveSteps: state.consecutiveUnproductiveSteps,
+        consecutiveTextOnlySteps: state.consecutiveTextOnlySteps,
+        stepsOnCurrentFocus: state.stepsOnCurrentFocus,
+        currentFocusQuestionId: state.currentFocusQuestionId,
+      });
+      
       // Notify UI of step start
       onStateUpdate?.(state);
 
@@ -2046,6 +2426,12 @@ export async function runResearchLoop(
 
       // === EXECUTE TOOLS (if any) ===
       let observations: PendingObservation[] = [];
+      // Track tool execution stats for productive step detection
+      let toolsExecuted = 0;
+      let toolsSkipped = 0;
+      
+      // Track facts before gathering phase to detect productivity
+      const factsBeforePhase = state.gatheredFacts.length;
 
       if (llmResponse.toolCalls.length > 0) {
         console.log(
@@ -2089,6 +2475,8 @@ export async function runResearchLoop(
         
         observations = toolResult.observations;
         state = toolResult.updatedState;
+        toolsExecuted = toolResult.toolsExecuted;
+        toolsSkipped = toolResult.toolsSkipped;
         
         // Check if agent requested synthesis (via request_synthesis tool)
         if (toolResult.shouldTransition === 'synthesizing') {
@@ -2100,13 +2488,23 @@ export async function runResearchLoop(
         state = clearActiveToolCalls(state);
 
         console.log(
-          `[runResearchLoop] Tools completed:`,
+          `[runResearchLoop] Tools completed: ${toolsExecuted} executed, ${toolsSkipped} skipped (duplicate)`,
           observations.map((o) => ({
             tool: o.toolName,
             hasError: 'error' in (o.rawResult as Record<string, unknown>),
             skipped: (o.rawResult as Record<string, unknown>)?.skipped === true,
           }))
         );
+        
+        // Log tool execution to research logger
+        researchLogger.info(messageId, 'toolExecution', 'Tools completed', {
+          executed: toolsExecuted,
+          skipped: toolsSkipped,
+          tools: observations.map((o) => ({
+            name: o.toolName,
+            hasError: 'error' in (o.rawResult as Record<string, unknown>),
+          })),
+        });
       }
 
       // === PROCESS RESPONSE BY PHASE ===
@@ -2116,7 +2514,12 @@ export async function runResearchLoop(
           break;
 
         case 'gathering':
-          state = await handleGatheringPhase(state, llmResponse, observations);
+          state = await handleGatheringPhase(state, llmResponse, observations, {
+            callLLM,
+            modelRouting,
+            onStateUpdate,
+            abortSignal,
+          });
           
           // Check if all questions answered - transition to evaluating (not directly to synthesis)
           if (state.phase === 'gathering') {
@@ -2146,6 +2549,170 @@ export async function runResearchLoop(
 
         default:
           console.warn(`[runResearchLoop] Unexpected phase: ${state.phase}`);
+      }
+
+      // === PRODUCTIVE STEP TRACKING ===
+      // Track whether this step produced meaningful results
+      // Only count steps where actual work was done (tools executed, not all skipped)
+      if (state.phase === 'gathering' || state.phase === 'evaluating') {
+        const factsAfterPhase = state.gatheredFacts.length;
+        const newFactsGathered = factsAfterPhase - factsBeforePhase;
+        const stepWasProductive = newFactsGathered > 0;
+        const toolsWereExecuted = toolsExecuted > 0;
+        
+        // Debug stats for monitoring productive step behavior
+        console.log(
+          `[runResearchLoop] 📊 STATS: Facts=${newFactsGathered} | Tools: Exec=${toolsExecuted}/Skip=${toolsSkipped} | ` +
+          `TextOnly=${state.consecutiveTextOnlySteps}/${MAX_TEXT_ONLY_STEPS} | Unproductive=${state.consecutiveUnproductiveSteps}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT}`
+        );
+        
+        // Log stats to research logger for file persistence
+        researchLogger.info(messageId, 'productiveStep', 'Step stats', {
+          newFacts: newFactsGathered,
+          toolsExecuted,
+          toolsSkipped,
+          consecutiveTextOnlySteps: state.consecutiveTextOnlySteps,
+          consecutiveUnproductiveSteps: state.consecutiveUnproductiveSteps,
+          totalFacts: state.gatheredFacts.length,
+        });
+        
+        // Only count as a step if tools were actually executed (not all duplicates)
+        if (toolsWereExecuted) {
+          state = advanceStep(state);
+          
+          // Reset text-only counter since tools were executed
+          state = {
+            ...state,
+            consecutiveTextOnlySteps: 0,
+          };
+          
+          if (stepWasProductive) {
+            // Reset unproductive counter - we found something!
+            if (state.consecutiveUnproductiveSteps > 0) {
+              console.log(`[runResearchLoop] Productive step! Found ${newFactsGathered} new fact(s), resetting unproductive counter`);
+            }
+            
+            // Track steps on current focus (for per-question time limits)
+            const newStepsOnFocus = state.stepsOnCurrentFocus + 1;
+            
+            state = {
+              ...state,
+              consecutiveUnproductiveSteps: 0,
+              stepsOnCurrentFocus: newStepsOnFocus,
+            };
+            
+            // Check if this question has been researched long enough
+            if (newStepsOnFocus >= STEPS_PER_QUESTION_LIMIT) {
+              const currentQuestion = state.researchPlan.find(q => q.status === 'in-progress');
+              if (currentQuestion) {
+                const questionIndex = state.researchPlan.indexOf(currentQuestion) + 1;
+                const questionFactCount = state.gatheredFacts.filter(
+                  f => f.relevantQuestionIds.includes(currentQuestion.id)
+                ).length;
+                
+                console.log(
+                  `[runResearchLoop] Q${questionIndex} has been researched for ${newStepsOnFocus} steps with ${questionFactCount} facts - encouraging answer`
+                );
+                
+                researchLogger.info(messageId, 'perQuestionLimit', 'Question step limit reached', {
+                  questionIndex,
+                  questionId: currentQuestion.id,
+                  stepsOnQuestion: newStepsOnFocus,
+                  factsForQuestion: questionFactCount,
+                  totalFacts: state.gatheredFacts.length,
+                });
+                
+                state = pushActivityLog(
+                  state,
+                  `💡 Q${questionIndex} well-researched (${newStepsOnFocus} steps, ${questionFactCount} facts) - answer expected soon`
+                );
+              }
+            }
+          } else {
+            // Tools ran but no new facts - increment unproductive counter
+            const newUnproductiveCount = state.consecutiveUnproductiveSteps + 1;
+            console.log(`[runResearchLoop] Unproductive step: ${newUnproductiveCount}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT} (no new facts from ${toolsExecuted} tool call(s))`);
+            
+            researchLogger.warn(messageId, 'productiveStep', 'Unproductive step', {
+              unproductiveCount: newUnproductiveCount,
+              limit: CONSECUTIVE_UNPRODUCTIVE_LIMIT,
+              toolsExecuted,
+            });
+            
+            state = {
+              ...state,
+              consecutiveUnproductiveSteps: newUnproductiveCount,
+            };
+            
+            // Log warning to activity feed so user can see progress
+            state = pushActivityLog(
+              state, 
+              `⚠️ No new facts found (${newUnproductiveCount}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive steps)`
+            );
+          }
+        } else if (toolsSkipped > 0 && toolsExecuted === 0) {
+          // All tools were skipped as duplicates - don't count as a step
+          // The error messages already went to the LLM to trigger course correction
+          console.log(`[runResearchLoop] All ${toolsSkipped} tool(s) skipped as duplicates - not counting as a step`);
+          // Reset text-only counter since tools were attempted (even if skipped)
+          state = {
+            ...state,
+            consecutiveTextOnlySteps: 0,
+          };
+        } else {
+          // === TEXT-ONLY RESPONSE HANDLING ===
+          // LLM output text without calling any tools - potential infinite loop risk
+          const newTextOnlyCount = state.consecutiveTextOnlySteps + 1;
+          
+          console.warn(
+            `[runResearchLoop] ⚠️ TEXT-ONLY response (no tools called): ${newTextOnlyCount}/${MAX_TEXT_ONLY_STEPS}`
+          );
+          
+          researchLogger.warn(messageId, 'productiveStep', 'Text-only response', {
+            textOnlyCount: newTextOnlyCount,
+            limit: MAX_TEXT_ONLY_STEPS,
+            llmContentLength: llmResponse.content?.length,
+          });
+          
+          state = {
+            ...state,
+            consecutiveTextOnlySteps: newTextOnlyCount,
+          };
+          
+          // After threshold, treat accumulated text-only steps as one unproductive step
+          if (newTextOnlyCount >= MAX_TEXT_ONLY_STEPS) {
+            console.warn(
+              `[runResearchLoop] Text-only threshold reached (${MAX_TEXT_ONLY_STEPS}), treating as unproductive step`
+            );
+            
+            researchLogger.warn(messageId, 'productiveStep', 'Text-only threshold reached', {
+              threshold: MAX_TEXT_ONLY_STEPS,
+              treatAsUnproductive: true,
+            });
+            
+            state = advanceStep(state);
+            const newUnproductiveCount = state.consecutiveUnproductiveSteps + 1;
+            
+            state = {
+              ...state,
+              consecutiveUnproductiveSteps: newUnproductiveCount,
+              consecutiveTextOnlySteps: 0, // Reset text-only counter
+            };
+            
+            state = pushActivityLog(
+              state,
+              `⚠️ No tools called for ${MAX_TEXT_ONLY_STEPS} turns (${newUnproductiveCount}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive)`
+            );
+          }
+        }
+      } else {
+        // Non-gathering phases (planning, compressing, synthesizing) always advance
+        state = advanceStep(state);
+        // Reset text-only counter for phase transitions
+        state = {
+          ...state,
+          consecutiveTextOnlySteps: 0,
+        };
       }
 
       // === NOTIFY UI ===
@@ -2181,6 +2748,23 @@ export async function runResearchLoop(
       console.error('[runResearchLoop] Final persistence failed:', error);
     }
   }
+
+  // Log session completion
+  const completionData = {
+    phase: state.phase,
+    steps: state.currentStep,
+    loopIterations: state.loopIterations,
+    rounds: state.currentRound,
+    roundSummaries: state.roundSummaries.length,
+    facts: state.gatheredFacts.length,
+    questions: state.researchPlan.length,
+    searchesExecuted: state.searchHistory.length,
+    hasReport: !!state.finalReport,
+    error: state.errorMessage,
+  };
+  
+  researchLogger.info(messageId, 'runResearchLoop', 'Research complete', completionData);
+  researchLogger.endSession(messageId);
 
   console.log('[runResearchLoop] Research complete:', {
     phase: state.phase,

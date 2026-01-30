@@ -89,6 +89,12 @@ export const AssistantMessageBubble: React.FC = () => {
             state={researchState}
             isRunning={isResearchRunning}
             onSkipQuestion={deepResearchCtx?.skipQuestion}
+            onSkipAllPending={deepResearchCtx?.skipAllPending}
+            onAddQuestion={deepResearchCtx?.addQuestion}
+            onGenerateMoreQuestions={deepResearchCtx?.generateMoreQuestions}
+            onExpandQuestion={deepResearchCtx?.expandQuestion}
+            onGoDeeper={deepResearchCtx?.goDeeper}
+            onForceAnswer={deepResearchCtx?.forceAnswer}
             defaultExpanded={true}
           />
         </div>

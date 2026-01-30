@@ -270,6 +270,12 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       complexity: 'simple',
       perspectives: [],
       currentPerspective: undefined,
+      // Productive step tracking
+      consecutiveUnproductiveSteps: 0,
+      consecutiveTextOnlySteps: 0,
+      stepsOnCurrentFocus: 0,
+      currentFocusQuestionId: null,
+      loopIterations: 0,
     };
 
     const assistantMessage: ThreadMessageLike = {
@@ -702,6 +708,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 generateMoreQuestions={deepResearch.generateMoreQuestions}
                 expandQuestion={deepResearch.expandQuestion}
                 goDeeper={deepResearch.goDeeper}
+                forceAnswer={deepResearch.forceAnswer}
               >
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
                 <ThreadPrimitive.Root

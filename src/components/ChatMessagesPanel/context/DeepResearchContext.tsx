@@ -23,6 +23,8 @@ export interface DeepResearchContextValue {
   expandQuestion?: (questionId: string) => void;
   /** Ask AI to go deeper based on current findings */
   goDeeper?: () => void;
+  /** Force answer generation for a specific question using current facts */
+  forceAnswer?: (questionId: string) => void;
 }
 
 const DeepResearchContext = createContext<DeepResearchContextValue | null>(null);
@@ -36,6 +38,7 @@ export interface DeepResearchProviderProps {
   generateMoreQuestions?: () => void;
   expandQuestion?: (questionId: string) => void;
   goDeeper?: () => void;
+  forceAnswer?: (questionId: string) => void;
 }
 
 /**
@@ -50,6 +53,7 @@ export const DeepResearchProvider: React.FC<DeepResearchProviderProps> = ({
   generateMoreQuestions,
   expandQuestion,
   goDeeper,
+  forceAnswer,
 }) => {
   return (
     <DeepResearchContext.Provider value={{
@@ -60,6 +64,7 @@ export const DeepResearchProvider: React.FC<DeepResearchProviderProps> = ({
       generateMoreQuestions,
       expandQuestion,
       goDeeper,
+      forceAnswer,
     }}>
       {children}
     </DeepResearchContext.Provider>
