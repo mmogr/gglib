@@ -103,8 +103,8 @@ pub fn list_research_logs() -> Result<Vec<String>, String> {
         return Ok(Vec::new());
     }
 
-    let entries = fs::read_dir(&log_dir)
-        .map_err(|e| format!("Failed to read log directory: {}", e))?;
+    let entries =
+        fs::read_dir(&log_dir).map_err(|e| format!("Failed to read log directory: {}", e))?;
 
     let mut files = Vec::new();
     for entry in entries.flatten() {
