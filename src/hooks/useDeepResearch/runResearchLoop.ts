@@ -63,6 +63,20 @@ import { researchLogger } from '../../services/platform';
 // =============================================================================
 
 // Research loop configuration is now centralized in src/config/research.ts
+import {
+  DEFAULT_MAX_STEPS,
+  SOFT_LANDING_THRESHOLD,
+  MAX_PARALLEL_TOOLS,
+  TOOL_TIMEOUT_MS,
+  MAX_TOOL_RETRIES,
+  CONSECUTIVE_UNPRODUCTIVE_LIMIT,
+  HARD_MAX_STEPS,
+  MAX_TEXT_ONLY_STEPS,
+  MAX_LOOP_ITERATIONS,
+  STEPS_PER_QUESTION_LIMIT,
+  QUESTION_FOCUS_TIMEOUT_STEPS,
+} from '../../config/research';
+
 // Re-export for backward compatibility with existing consumers
 export {
   DEFAULT_MAX_STEPS,
@@ -76,7 +90,7 @@ export {
   MAX_LOOP_ITERATIONS,
   STEPS_PER_QUESTION_LIMIT,
   QUESTION_FOCUS_TIMEOUT_STEPS,
-} from '../../config/research';
+};
 
 // =============================================================================
 // Types
