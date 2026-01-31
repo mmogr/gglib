@@ -108,10 +108,10 @@ pub fn list_research_logs() -> Result<Vec<String>, String> {
 
     let mut files = Vec::new();
     for entry in entries.flatten() {
-        if let Some(name) = entry.file_name().to_str() {
-            if name.ends_with(".ndjson") {
-                files.push(name.to_string());
-            }
+        if let Some(name) = entry.file_name().to_str()
+            && name.ends_with(".ndjson")
+        {
+            files.push(name.to_string());
         }
     }
 
