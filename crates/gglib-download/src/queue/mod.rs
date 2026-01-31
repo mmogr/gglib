@@ -261,7 +261,12 @@ impl DownloadQueue {
             .pending
             .iter()
             .enumerate()
-            .map(|(idx, item)| item.to_dto(base_position + usize_to_u32_saturating(idx), DownloadStatus::Queued))
+            .map(|(idx, item)| {
+                item.to_dto(
+                    base_position + usize_to_u32_saturating(idx),
+                    DownloadStatus::Queued,
+                )
+            })
             .collect();
 
         let failed: Vec<_> = self.failed.iter().map(types::FailedItem::to_dto).collect();
@@ -390,7 +395,12 @@ impl DownloadQueue {
             .enumerate()
             .map(|(idx, (filename, size))| {
                 let shard_info = match size {
-                    Some(s) => ShardInfo::with_size(usize_to_u32_saturating(idx), total_shards, filename, s),
+                    Some(s) => ShardInfo::with_size(
+                        usize_to_u32_saturating(idx),
+                        total_shards,
+                        filename,
+                        s,
+                    ),
                     None => ShardInfo::new(usize_to_u32_saturating(idx), total_shards, filename),
                 };
                 QueuedItem::new_shard(
