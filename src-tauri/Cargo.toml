@@ -32,6 +32,7 @@ tokio.workspace = true
 dotenvy.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing-appender = "0.2"
 open.workspace = true
 
 [features]
