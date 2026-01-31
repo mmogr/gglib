@@ -188,7 +188,7 @@ jobs:
           npm run build
 
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --exclude gglib-tauri --exclude gglib-gui --all-targets --all-features -- -D warnings
 
   cli-cross-os:
     name: CLI Check (${{ matrix.target }})
