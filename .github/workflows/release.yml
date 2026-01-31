@@ -169,7 +169,7 @@ jobs:
           npm run build
 
       - name: Build documentation
-        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-tauri
+        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-tauri --exclude gglib-gui --exclude gglib-app
 
       - name: Create index.html redirect
         run: |
