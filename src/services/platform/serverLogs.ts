@@ -4,6 +4,7 @@
  * UI components should import from 'services/platform' rather than checking isTauriApp directly.
  */
 
+import { getApiBaseUrl } from '../../config/api';
 import { isDesktop } from './detect';
 
 export interface ServerLogEntry {
@@ -48,7 +49,7 @@ export async function getServerLogs(port: number): Promise<ServerLogEntry[]> {
   }
   
   // Web mode: fetch from REST API
-  const baseUrl = import.meta.env.DEV ? 'http://localhost:9887' : '';
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/servers/${port}/logs`);
   if (response.ok) {
     const json = await response.json();
@@ -74,7 +75,7 @@ export async function listenToServerLogs(
   }
   
   // Web mode: use SSE
-  const baseUrl = import.meta.env.DEV ? 'http://localhost:9887' : '';
+  const baseUrl = getApiBaseUrl();
   const eventSource = new EventSource(`${baseUrl}/api/servers/${port}/logs/stream`);
   
   eventSource.onmessage = (event) => {
