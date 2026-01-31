@@ -8,6 +8,7 @@ import { ReactNode } from 'react';
 import { useSettings } from '../../../src/hooks/useSettings';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import { AppSettings } from '../../../src/types';
+import { MOCK_PROXY_PORT, MOCK_BASE_PORT } from '../fixtures/ports';
 
 // Mock the clients/settings service
 vi.mock('../../../src/services/clients/settings', () => ({
@@ -22,8 +23,8 @@ const fetchSettings = getSettings;
 const mockSettings: AppSettings = {
   default_download_path: '/models',
   default_context_size: 4096,
-  proxy_port: 8080,
-  llama_base_port: 9000,
+  proxy_port: MOCK_PROXY_PORT,
+  llama_base_port: MOCK_BASE_PORT,
   max_download_queue_size: 10,
 };
 
@@ -225,7 +226,7 @@ describe('useSettings', () => {
     vi.mocked(updateSettings).mockResolvedValue(mockSettings);
 
     await act(async () => {
-      await result.current.save({ proxy_port: 8080 });
+      await result.current.save({ proxy_port: MOCK_PROXY_PORT });
     });
 
     expect(result.current.error).toBeNull();

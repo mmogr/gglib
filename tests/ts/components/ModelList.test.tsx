@@ -5,6 +5,7 @@ import ModelList from '../../../src/components/ModelList';
 import { removeModel } from '../../../src/services/clients/models';
 import { serveModel } from '../../../src/services/clients/servers';
 import type { GgufModel } from '../../../src/types';
+import { MOCK_BASE_PORT } from '../fixtures/ports';
 
 // Mock clients service functions
 vi.mock('../../../src/services/clients/models', () => ({
@@ -386,7 +387,7 @@ describe('ModelList', () => {
     });
 
     it('calls serveModel with correct params when start button clicked', async () => {
-      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: MOCK_BASE_PORT, message: 'Server started' });
       
       render(<ModelList {...defaultProps} />);
       
@@ -407,7 +408,7 @@ describe('ModelList', () => {
     });
 
     it('uses custom context length when provided', async () => {
-      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: MOCK_BASE_PORT, message: 'Server started' });
       
       render(<ModelList {...defaultProps} />);
       
@@ -431,7 +432,7 @@ describe('ModelList', () => {
     });
 
     it('closes modal and calls onRefresh after successful serve', async () => {
-      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: MOCK_BASE_PORT, message: 'Server started' });
       
       render(<ModelList {...defaultProps} />);
       
@@ -467,7 +468,7 @@ describe('ModelList', () => {
     it('shows loading state during serve', async () => {
       let resolveServe: () => void;
       const servePromise = new Promise<{ port: number; message: string }>((resolve) => {
-        resolveServe = () => resolve({ port: 9000, message: 'Server started' });
+        resolveServe = () => resolve({ port: MOCK_BASE_PORT, message: 'Server started' });
       });
       vi.mocked(serveModel).mockReturnValue(servePromise);
       
@@ -497,7 +498,7 @@ describe('ModelList', () => {
     });
 
     it('auto-enables jinja for agent-tagged model', async () => {
-      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: MOCK_BASE_PORT, message: 'Server started' });
       
       const agentModel = createModel({ tags: ['agent'] });
       render(<ModelList {...defaultProps} models={[agentModel]} />);
@@ -522,7 +523,7 @@ describe('ModelList', () => {
     });
 
     it('auto-enables jinja for reasoning-tagged model', async () => {
-      vi.mocked(serveModel).mockResolvedValue({ port: 9000, message: 'Server started' });
+      vi.mocked(serveModel).mockResolvedValue({ port: MOCK_BASE_PORT, message: 'Server started' });
       
       const reasoningModel = createModel({ tags: ['reasoning'] });
       render(<ModelList {...defaultProps} models={[reasoningModel]} />);

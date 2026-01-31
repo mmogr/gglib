@@ -8,13 +8,14 @@
 import { describe, it, expect } from 'vitest';
 import type { ServeConfig } from '../../../src/types';
 import { toStartServerRequest } from '../../../src/services/transport/mappers';
+import { MOCK_PROXY_PORT } from '../fixtures/ports';
 
 describe('Tauri serve_model IPC Contract', () => {
   it('should construct exact payload shape { id, request }', () => {
     const config: ServeConfig = {
       id: 123,
       context_length: 4096,
-      port: 8080,
+      port: MOCK_PROXY_PORT,
       mlock: false,
       jinja: true,
     };
@@ -34,7 +35,7 @@ describe('Tauri serve_model IPC Contract', () => {
     // Assert request has correct structure (matches StartServerRequest)
     expect(payload.request).toEqual({
       context_length: 4096,
-      port: 8080,
+      port: MOCK_PROXY_PORT,
       mlock: false,
       jinja: true,
       reasoning_format: undefined,

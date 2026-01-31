@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useServers } from '../../../src/hooks/useServers';
 import { ServerInfo } from '../../../src/types';
+import { MOCK_BASE_PORT } from '../fixtures/ports';
 
 // Mock the servers client functions
 vi.mock('../../../src/services/clients/servers', () => ({
@@ -24,13 +25,13 @@ const mockServers: ServerInfo[] = [
   {
     model_id: 1,
     model_name: 'llama-7b',
-    port: 9000,
+    port: MOCK_BASE_PORT,
     status: 'running',
   },
   {
     model_id: 2,
     model_name: 'mistral-7b',
-    port: 9001,
+    port: MOCK_BASE_PORT + 1,
     status: 'running',
   },
 ];

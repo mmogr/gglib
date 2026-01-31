@@ -358,6 +358,85 @@ Downloaded GGUF files now live in a user-configurable directory (default: `~/.lo
 
 The precedence order is: CLI `--models-dir` flag → `GGLIB_MODELS_DIR` from the environment/.env → default path. All download code paths rely on the shared helper in `src/utils/paths.rs`, so whichever option you choose applies consistently across CLI, desktop, web, and background tasks.
 
+## Development Setup
+
+### Running the Development Environment
+
+GGLib uses a split development setup with separate processes for frontend and backend:
+
+1. **Start the Backend API Server:**
+   ```bash
+   # Using VS Code task (recommended):
+   # Press Cmd/Ctrl+Shift+P → "Tasks: Run Task" → "🧠 Run Backend Dev (API-only)"
+   
+   # Or manually:
+   cargo run --package gglib-cli -- web --api-only --port 9887 --base-port 9000
+   ```
+
+2. **Start the Frontend Dev Server:**
+   ```bash
+   npm run dev
+   # Vite will start on port 5173 and proxy API requests to port 9887
+   ```
+
+3. **Access the application:**
+   - Open your browser to `http://localhost:5173`
+   - The frontend proxies all `/api/*` requests to the backend on port 9887
+
+### Configuring Development Ports
+
+You can customize the API port using the `VITE_GGLIB_WEB_PORT` environment variable. Both the backend and frontend will automatically use this value:
+
+```bash
+# Create a .env file in the project root
+echo "VITE_GGLIB_WEB_PORT=9999" > .env
+
+# Now start both servers - they'll both use port 9999
+cargo run --package gglib-cli -- web --api-only
+npm run dev
+```
+
+**How it works:**
+- The Rust backend reads `VITE_GGLIB_WEB_PORT` via clap's environment support
+- Vite's proxy configuration reads the same variable via `process.env.VITE_GGLIB_WEB_PORT`
+- The frontend client code reads it via `import.meta.env.VITE_GGLIB_WEB_PORT`
+- Default port is `9887` if the variable is not set
+
+**Note:** 
+- The `VITE_` prefix is required for Vite to expose the variable to the frontend
+- Port configuration only affects **dev mode** - production builds use same-origin relative paths
+- Tauri (desktop) mode uses dynamic port discovery and ignores this variable
+
+### VS Code Tasks
+
+The repository includes pre-configured VS Code tasks for common development workflows:
+
+- **🚀 Run Dev (Frontend + Backend)** - Starts both frontend and backend in parallel
+- **🧠 Run Backend Dev (API-only)** - Backend server for web development
+- **🎨 Run Frontend Dev** - Vite dev server only
+- **🖥️ Run GUI (Dev)** - Launch Tauri desktop app in development mode
+- **🧪 Run All Tests** - Execute the full test suite
+- **📎 Clippy (Linter)** - Run Rust linter
+- **🎨 Format Code** - Auto-format Rust and TypeScript code
+
+### Production Builds
+
+The production build workflow differs from development:
+
+1. **Build Frontend:**
+   ```bash
+   npm run build
+   # Output: ./web_ui/ directory with static assets
+   ```
+
+2. **Run Backend with Static Serving:**
+   ```bash
+   cargo run --package gglib-cli -- web --port 9887 --static-dir ./web_ui
+   # Backend serves both API and static frontend on single port
+   ```
+
+In production mode, the frontend uses relative URLs (no hardcoded ports) and communicates with the backend on the same origin.
+
 Changing the directory only affects future downloads and servers—it does **not** move any GGUF files you already downloaded. If you want your existing models in the new location, move them manually and then rescan/add them as needed.
 
 ### Accelerated downloads via hf_xet
