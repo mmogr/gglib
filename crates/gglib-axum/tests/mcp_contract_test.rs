@@ -3,12 +3,15 @@
 //! These tests verify that the JSON structure returned by handlers
 //! matches what the TypeScript frontend expects.
 
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use serde_json::json;
 use tower::ServiceExt;
 
+use common::ports::TEST_BASE_PORT;
 use gglib_axum::bootstrap::{CorsConfig, ServerConfig, bootstrap};
 use gglib_axum::routes::create_router;
 
@@ -16,7 +19,7 @@ use gglib_axum::routes::create_router;
 fn test_config() -> ServerConfig {
     ServerConfig {
         port: 0,
-        base_port: 19000,
+        base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent: 1,
         static_dir: None,

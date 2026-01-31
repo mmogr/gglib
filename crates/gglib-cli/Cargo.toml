@@ -22,7 +22,7 @@ gglib-mcp = { path = "../gglib-mcp" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
 
 # CLI-specific dependencies
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive", "env"] }
 chrono = { workspace = true }
 hf-hub = { workspace = true }
 thiserror = { workspace = true }

@@ -1,9 +1,15 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 // https://vitejs.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(async ({ mode }) => {
+  // Load env file based on `mode` in the current working directory.
+  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
+  const env = loadEnv(mode, process.cwd(), '');
+  const backendPort = env.VITE_GGLIB_WEB_PORT || '9887';
+
+  return {
   plugins: [
     react(),
     tailwindcss({
@@ -51,7 +57,7 @@ export default defineConfig(async () => ({
     // Proxy API requests to the backend server during development
     proxy: {
       '/api': {
-        target: 'http://localhost:9887',
+        target: `http://localhost:${backendPort}`,
         changeOrigin: true,
       },
     },
@@ -75,4 +81,5 @@ export default defineConfig(async () => ({
       ],
     },
   },
-}));
+};
+});

@@ -5,6 +5,9 @@
 //! - Bearer token authentication on /api/* endpoints
 //! - Unauthenticated access to /health endpoint
 
+mod common;
+
+use common::ports::TEST_BASE_PORT;
 use gglib_axum::{
     bootstrap::{CorsConfig, ServerConfig, bootstrap},
     embedded::{EmbeddedServerConfig, default_embedded_cors_origins, start_embedded_server},
@@ -15,7 +18,7 @@ use reqwest::{Method, StatusCode, header};
 fn test_config() -> ServerConfig {
     ServerConfig {
         port: 0,
-        base_port: 19000,
+        base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent: 1,
         static_dir: None,

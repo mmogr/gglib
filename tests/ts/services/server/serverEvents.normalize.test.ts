@@ -4,6 +4,7 @@ import {
   normalizeServerEventFromAppEvent,
   normalizeServerEventFromNamedEvent,
 } from '../../../../src/services/serverEvents.normalize';
+import { MOCK_PROXY_PORT, MOCK_BASE_PORT } from '../../fixtures/ports';
 
 describe('serverEvents.normalize', () => {
   beforeEach(() => {
@@ -22,7 +23,7 @@ describe('serverEvents.normalize', () => {
         {
           modelId: 1,
           modelName: 'M',
-          port: 8080,
+          port: MOCK_PROXY_PORT,
           started_at: 1_700_000_000,
           healthy: true,
         },
@@ -35,7 +36,7 @@ describe('serverEvents.normalize', () => {
         {
           modelId: '1',
           status: 'running',
-          port: 8080,
+          port: MOCK_PROXY_PORT,
           updatedAt: 1_700_000_000_000,
         },
       ],
@@ -47,13 +48,13 @@ describe('serverEvents.normalize', () => {
       type: 'server_started',
       modelId: 123,
       modelName: 'TestModel',
-      port: 9000,
+      port: MOCK_BASE_PORT,
     });
 
     expect(evt).toMatchObject({
       type: 'running',
       modelId: '123',
-      port: 9000,
+      port: MOCK_BASE_PORT,
       updatedAt: Date.now(),
     });
   });
@@ -105,7 +106,7 @@ describe('serverEvents.normalize', () => {
   it('named-event path matches app-event path for snapshot', () => {
     const payload = {
       type: 'server_snapshot',
-      servers: [{ modelId: 1, port: 8080, started_at: 1_700_000_000 }],
+      servers: [{ modelId: 1, port: MOCK_PROXY_PORT, started_at: 1_700_000_000 }],
     };
 
     const a = normalizeServerEventFromAppEvent(payload);
