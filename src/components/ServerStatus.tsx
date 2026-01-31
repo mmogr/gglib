@@ -1,5 +1,6 @@
 import { FC, useEffect, useState } from "react";
 import { Circle, MessageCircle, RotateCcw, Square } from "lucide-react";
+import { appLogger } from '../services/platform';
 import { listServers, getProxyStatus } from "../services/clients/servers";
 import { safeStopServer } from "../services/server/safeActions";
 import type { ServerInfo } from "../types";
@@ -34,7 +35,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
         setProxyStatus(null);
       }
     } catch (err) {
-      console.error("Failed to load server status:", err);
+      appLogger.error('component.server', 'Failed to load server status', { error: err });
     } finally {
       setLoading(false);
     }

@@ -10,6 +10,7 @@
 import type { ThreadMessage } from '@assistant-ui/react';
 import { wrapThink, isWrappedThink } from './wrapThink';
 import { coalesceAdjacentReasoning, type Chunk } from './coalesceReasoning';
+import { appLogger } from '@/services/platform';
 
 // Track unknown part types to avoid log spam during streaming
 const warnedUnknownTypes = new Set<string>();
@@ -111,9 +112,9 @@ export function threadMessageToTranscriptMarkdown(
         continue;
       }
 
-      // Unknown part type - warn once in dev mode
-      if (import.meta.env.DEV && !warnedUnknownTypes.has(partType)) {
-        console.warn(`[threadMessageToTranscriptMarkdown] Unknown part type: ${partType}`);
+      // Unknown part type - warn once
+      if (!warnedUnknownTypes.has(partType)) {
+        appLogger.warn('util.format', 'Unknown part type', { partType });
         warnedUnknownTypes.add(partType);
       }
     }

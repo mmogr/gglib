@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { appLogger } from '../../../services/platform';
 import type { GgufModel, ServeConfig, ServerInfo, AppSettings } from '../../../types';
 import { serveModel } from '../../../services/clients/servers';
 import { useToastContext } from '../../../contexts/ToastContext';
@@ -126,7 +127,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         });
       }
     } catch (error) {
-      console.error('Failed to start server:', error);
+      appLogger.error('hook.ui', 'Failed to start server', { error, modelId: model?.id });
       
       // Check if this is a llama-server not installed error
       if (TransportError.isTransportError(error) && error.code === 'LLAMA_SERVER_NOT_INSTALLED') {
@@ -156,7 +157,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       try {
         await onStopServer(model.id);
       } catch (error) {
-        console.error('Failed to stop server:', error);
+        appLogger.error('hook.ui', 'Failed to stop server', { error, modelId: model.id });
         alert(`Failed to stop server: ${error}`);
       }
     }
@@ -169,7 +170,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       await onRemoveModel(model.id, true);
       closeDeleteModal();
     } catch (error) {
-      console.error('Failed to remove model:', error);
+      appLogger.error('hook.ui', 'Failed to remove model', { error, modelId: model.id });
       alert(`Failed to remove model: ${error}`);
     } finally {
       setIsDeleting(false);
@@ -196,7 +197,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       }
       resetEditState();
     } catch (error) {
-      console.error('Failed to update model:', error);
+      appLogger.error('hook.ui', 'Failed to update model', { error, modelId: model?.id });
       alert(`Failed to update model: ${error}`);
     }
   }, [model, editedName, editedQuantization, editedFilePath, onUpdateModel, resetEditState]);

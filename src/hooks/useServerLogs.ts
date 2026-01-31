@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   getServerLogs, 
   listenToServerLogs, 
-  type ServerLogEntry 
+  type ServerLogEntry,
+  appLogger,
 } from '../services/platform';
 
 // Re-export type for consumers
@@ -61,7 +62,7 @@ export function useServerLogs(options: UseServerLogsOptions): UseServerLogsRetur
   const copyAllLogs = useCallback(() => {
     const text = logsRef.current.map(entry => entry.line).join('\n');
     navigator.clipboard.writeText(text).catch(err => {
-      console.error('Failed to copy logs:', err);
+      appLogger.error('hook.server', 'Failed to copy logs', { error: err });
     });
   }, []);
 
@@ -74,7 +75,7 @@ export function useServerLogs(options: UseServerLogsOptions): UseServerLogsRetur
         }
       })
       .catch(e => {
-        console.debug('[useServerLogs] Could not fetch initial logs:', e);
+        appLogger.debug('hook.server', 'Could not fetch initial logs', { error: e });
       });
   }, [serverPort]);
 
@@ -87,7 +88,7 @@ export function useServerLogs(options: UseServerLogsOptions): UseServerLogsRetur
         cleanup = unsubscribe;
       })
       .catch(e => {
-        console.error('[useServerLogs] Failed to setup listener:', e);
+        appLogger.error('hook.server', 'Failed to setup listener', { error: e });
       });
 
     return () => {

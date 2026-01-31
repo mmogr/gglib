@@ -8,6 +8,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { appLogger } from '../../services/platform';
 import {
   useExternalStoreRuntime,
   useExternalMessageConverter,
@@ -144,9 +145,9 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         });
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
-          console.log('Generation aborted');
+          appLogger.debug('hook.runtime', 'Generation aborted');
         } else {
-          console.error('Error in agentic loop:', error);
+          appLogger.error('hook.runtime', 'Error in agentic loop', { error });
           onError?.(error as Error);
         }
       } finally {
@@ -173,7 +174,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     // User reloads conversation (not supported yet)
     onReload: async (_parentId: string | null) => {
       // Reload not implemented yet
-      console.warn('Reload not implemented');
+      appLogger.warn('hook.runtime', 'Reload not implemented');
     },
 
     // User cancels generation

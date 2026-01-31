@@ -6,6 +6,7 @@ import {
   getDownloadQueue,
   queueDownload,
 } from '../services/clients/downloads';
+import { appLogger } from '../services/platform';
 import { subscribeToEvent } from '../services/clients/events';
 import type { DownloadQueueStatus, DownloadQueueItem, DownloadCompletionInfo, QueueDownloadResponse } from '../services/transport/types/downloads';
 import type { DownloadEvent, DownloadSummary, QueueRunSummary } from '../services/transport/types/events';
@@ -387,7 +388,7 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
         cleanupTerminal(id);
       } else {
         // Unexpected error - still cleanup UI to prevent stuck state
-        console.error('Cancel failed:', error);
+        appLogger.error('hook.download', 'Cancel failed', { error });
         cleanupTerminal(id);
         // Could show error toast here if desired
       }
@@ -397,7 +398,7 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
         await refreshQueue();
       } catch (e) {
         // Ignore refresh errors - don't let them break cleanup
-        console.warn('Failed to refresh queue after cancel:', e);
+        appLogger.warn('hook.download', 'Failed to refresh queue after cancel', { error: e });
       }
     }
   }, [refreshQueue, cleanupTerminal]);

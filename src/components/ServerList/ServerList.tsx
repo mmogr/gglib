@@ -1,5 +1,6 @@
 import { FC, useState } from 'react';
 import { RotateCcw, ServerOff, Square } from 'lucide-react';
+import { appLogger } from '../../services/platform';
 import { ServerInfo } from '../../types';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
 import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
@@ -36,7 +37,7 @@ const ServerList: FC<ServerListProps> = ({
     try {
       await onStopServer(modelId);
     } catch (error) {
-      console.error('Failed to stop server:', error);
+      appLogger.error('component.server', 'Failed to stop server', { error, modelId });
     }
   };
 

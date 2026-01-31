@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import 'highlight.js/styles/github-dark.css';
+import { appLogger } from '../../services/platform';
 import {
   ThreadPrimitive,
   ComposerPrimitive,
@@ -193,7 +194,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           );
         }
       } catch (error) {
-        console.error('Failed to persist research state:', error);
+        appLogger.error('component.chat', 'Failed to persist research state', { error });
       }
     },
     onError: (error: Error) => {
@@ -204,7 +205,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
   // Toggle deep research mode
   const toggleDeepResearch = useCallback(() => {
-    console.debug('[DeepResearch] Toggle clicked, current state:', isDeepResearchEnabled);
+    appLogger.debug('component.chat', 'Deep research toggle clicked', { enabled: isDeepResearchEnabled });
     setIsDeepResearchEnabled((prev) => !prev);
   }, [isDeepResearchEnabled]);
 
@@ -216,10 +217,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
 
   // Handle deep research submission
   const handleDeepResearchSubmit = useCallback(async (query: string) => {
-    console.debug('[DeepResearch] Starting submission:', { query: query.slice(0, 50), conversationId: activeConversationId });
+    appLogger.debug('component.chat', 'Starting deep research submission', { query: query.slice(0, 50), conversationId: activeConversationId });
     
     if (!activeConversationId || !threadRuntime) {
-      console.warn('[DeepResearch] Missing activeConversationId or threadRuntime');
+      appLogger.debug('component.chat', 'Missing conversation or runtime for deep research');
       showToast('No active conversation', 'error');
       return;
     }
@@ -305,7 +306,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         query
       );
     } catch (error) {
-      console.error('Failed to save user message:', error);
+      appLogger.error('component.chat', 'Failed to save user message', { error, conversationId: activeConversationId });
     }
 
     // 5. Persist assistant message to database with research metadata
@@ -336,14 +337,14 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       });
       threadRuntime.reset(messagesWithDbId);
     } catch (error) {
-      console.error('Failed to save assistant message:', error);
+      appLogger.error('component.chat', 'Failed to save assistant message', { error, conversationId: activeConversationId });
     }
 
     // 6. Start the research loop
     try {
       await deepResearch.startResearch(query, assistantMessageId);
     } catch (error) {
-      console.error('Research failed:', error);
+      appLogger.error('component.chat', 'Research failed', { error, query: query.slice(0, 50) });
       setChatError(error instanceof Error ? error.message : 'Research failed');
     }
   }, [activeConversationId, threadRuntime, deepResearch, showToast, setChatError]);
@@ -461,7 +462,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       if (dbId) {
         await deleteMessage(dbId);
       } else {
-        console.warn('Could not find DB ID for message:', deleteTargetId);
+        appLogger.debug('component.chat', 'Could not find DB ID for message', { messageId: deleteTargetId });
       }
       
       // Reload messages from DB and reset runtime
@@ -503,7 +504,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       await syncConversations({ silent: true });
       showToast('Message deleted', 'success');
     } catch (error) {
-      console.error('Failed to delete message:', error);
+      appLogger.error('component.chat', 'Failed to delete message', { error, messageId: deleteTargetId });
       showToast('Failed to delete message', 'error');
     } finally {
       setIsDeleting(false);

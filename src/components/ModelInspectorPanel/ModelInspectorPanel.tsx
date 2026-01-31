@@ -1,4 +1,5 @@
 import { FC, useCallback, useState, useEffect } from 'react';
+import { appLogger } from '../../services/platform';
 import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
 import { queueDownload } from '../../services/clients/downloads';
 import type { DownloadQueueStatus } from '../../services/transport/types/downloads';
@@ -132,7 +133,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start download';
       showToast(message, 'error');
-      console.error('Failed to start download:', error);
+      appLogger.error('component.model', 'Failed to start download', { error });
     }
   }, [showToast]);
 
