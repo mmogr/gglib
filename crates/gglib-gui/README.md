@@ -104,22 +104,44 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 ## Usage
 
 ```rust
-use gglib_gui::{GuiBackend, GuiDeps, GuiError};
-use gglib_gui::{ModelOps, DownloadOps, ServerOps};
+use gglib_gui::{GuiBackend, GuiDeps};
+use std::sync::Arc;
 
-// Construct with dependency injection
+# // This example shows the typical usage pattern.
+# // In practice, dependencies would be injected from main or a factory.
+# fn example(
+#     core: Arc<gglib_core::services::AppCore>,
+#     downloads: Arc<dyn gglib_core::ports::DownloadManagerPort>,
+#     hf: Arc<dyn gglib_core::ports::HfClientPort>,
+#     runner: Arc<dyn gglib_core::ports::ProcessRunner>,
+#     mcp: Arc<gglib_mcp::McpService>,
+#     emitter: Arc<dyn gglib_core::ports::AppEventEmitter>,
+#     server_events: Arc<dyn gglib_core::events::ServerEvents>,
+#     tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort>,
+#     proxy_supervisor: Arc<gglib_runtime::proxy::ProxySupervisor>,
+#     model_repo: Arc<dyn gglib_core::ports::ModelRepository>,
+#     system_probe: Arc<dyn gglib_core::ports::SystemProbePort>,
+# ) {
+// Construct backend with dependency injection
 let deps = GuiDeps::new(
+    core,
+    downloads,
+    hf,
+    runner,
+    mcp,
+    emitter,
+    server_events,
+    tool_detector,
+    proxy_supervisor,
     model_repo,
-    hf_client,
-    download_manager,
-    process_manager,
-    settings_store,
-    event_emitter,
+    system_probe,
 );
 
 let backend = GuiBackend::new(deps);
 
-// Use operation modules
-let models = backend.models().list_all().await?;
-let queue = backend.downloads().get_queue_snapshot().await?;
+// Use backend operations (async examples shown in comments)
+// let models = backend.list_models().await?;
+// let queue = backend.get_download_queue().await;
+// backend.start_server(model_id, request).await?;
+# }
 ```
