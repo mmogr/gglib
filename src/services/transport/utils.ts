@@ -3,6 +3,8 @@
  * Provides compile-time collision detection for object spreads.
  */
 
+import { appLogger } from '../platform';
+
 /**
  * Type that ensures A and B have no overlapping keys.
  * If they overlap, B becomes `never`, preventing the merge.
@@ -40,10 +42,6 @@ export function mergeNoOverlap<A extends object, B extends object>(
  * @returns true if collisions found, false otherwise
  */
 export function checkCollisions(...objects: object[]): boolean {
-  if (import.meta.env.PROD) {
-    return false; // Skip in production
-  }
-  
   const allKeys = new Map<string, number>();
   const collisions: string[] = [];
   
@@ -59,11 +57,8 @@ export function checkCollisions(...objects: object[]): boolean {
   }
   
   if (collisions.length > 0) {
-    console.error(
-      '[Transport] Key collisions detected in transport composition:',
-      collisions
-    );
-    console.error('[Transport] This indicates duplicate method names across modules.');
+    appLogger.error('transport.util', 'Key collisions detected in transport composition', { collisions });
+    appLogger.error('transport.util', 'This indicates duplicate method names across modules');
     return true;
   }
   
