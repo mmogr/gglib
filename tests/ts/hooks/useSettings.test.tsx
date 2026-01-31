@@ -226,7 +226,7 @@ describe('useSettings', () => {
     vi.mocked(updateSettings).mockResolvedValue(mockSettings);
 
     await act(async () => {
-      await result.current.save({ proxy_port: 8080 });
+      await result.current.save({ proxy_port: MOCK_PROXY_PORT });
     });
 
     expect(result.current.error).toBeNull();

@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import Header from '../../../src/components/Header';
 import { ServerInfo } from '../../../src/types';
+import { MOCK_PROXY_PORT } from '../fixtures/ports';
 
 // Mock the RunsPopover component since it has its own complex state
 vi.mock('../../../src/components/RunsPopover', () => ({
@@ -17,8 +18,8 @@ describe('Header', () => {
   const mockOnRefreshServers = vi.fn();
 
   const mockServers: ServerInfo[] = [
-    { model_id: 1, model_name: 'Test Model 1', port: 8080, status: 'running' },
-    { model_id: 2, model_name: 'Test Model 2', port: 8081, status: 'running' },
+    { model_id: 1, model_name: 'Test Model 1', port: MOCK_PROXY_PORT, status: 'running' },
+    { model_id: 2, model_name: 'Test Model 2', port: MOCK_PROXY_PORT + 1, status: 'running' },
   ];
 
   const defaultProps = {

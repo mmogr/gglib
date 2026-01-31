@@ -12,6 +12,7 @@ import {
 } from '../../../../src/services/clients/servers';
 import { getTransport, _resetTransport } from '../../../../src/services/transport';
 import type { ServerInfo } from '../../../../src/types';
+import { MOCK_PROXY_PORT } from '../../fixtures/ports';
 
 // Mock the transport module
 vi.mock('../../../../src/services/transport', () => {
@@ -33,7 +34,7 @@ describe('services/clients/servers', () => {
   const mockServerInfo: ServerInfo = {
     model_id: 1,
     model_name: 'Test Model',
-    port: 8080,
+    port: MOCK_PROXY_PORT,
     status: 'running',
   };
 
@@ -47,8 +48,8 @@ describe('services/clients/servers', () => {
 
   describe('serveModel', () => {
     it('delegates to transport.serveModel()', async () => {
-      const config = { model_id: 1, port: 8080 };
-      const mockResponse = { port: 8080, message: 'Server started' };
+      const config = { model_id: 1, port: MOCK_PROXY_PORT };
+      const mockResponse = { port: MOCK_PROXY_PORT, message: 'Server started' };
       vi.mocked(mockTransport.serveModel).mockResolvedValue(mockResponse);
 
       const result = await serveModel(config);
@@ -82,7 +83,7 @@ describe('services/clients/servers', () => {
 
   describe('no platform branching', () => {
     it('client module delegates all calls through transport', async () => {
-      vi.mocked(mockTransport.serveModel).mockResolvedValue({ port: 8080, message: 'ok' });
+      vi.mocked(mockTransport.serveModel).mockResolvedValue({ port: MOCK_PROXY_PORT, message: 'ok' });
       vi.mocked(mockTransport.stopServer).mockResolvedValue(undefined);
       vi.mocked(mockTransport.listServers).mockResolvedValue([]);
 
