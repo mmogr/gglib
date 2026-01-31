@@ -8,7 +8,7 @@ import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
-import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState, initResearchLogger } from "./services/platform";
+import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
 
@@ -55,8 +55,6 @@ function AppContent() {
   // Initialize server lifecycle events (Tauri or SSE based on platform)
   useEffect(() => {
     initServerEvents();
-    // Initialize research logger file streaming (Tauri only, no-op on web)
-    initResearchLogger();
     return () => cleanupServerEvents();
   }, []);
 
