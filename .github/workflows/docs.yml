@@ -69,7 +69,7 @@ jobs:
             ${{ runner.os }}-cargo-registry-
 
       - name: Build documentation
-        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-tauri --exclude src-tauri
+        run: cargo doc --workspace --no-deps --document-private-items
 
       - name: Create index.html redirect
         run: |

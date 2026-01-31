@@ -71,3 +71,5 @@ tarpaulin-report.html
 .env
 boundary-status.json
 .vscode/settings.json
+
+research_logs/

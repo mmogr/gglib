@@ -1836,26 +1836,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gglib-lib"
-version = "0.3.1"
-dependencies = [
- "anyhow",
- "chrono",
- "gglib-core",
- "gglib-db",
- "gglib-download",
- "gglib-gguf",
- "gglib-hf",
- "gglib-runtime",
- "serde_json",
- "sqlx",
- "tempfile",
- "tokio",
- "tokio-test",
- "urlencoding",
-]
-
-[[package]]
 name = "gglib-mcp"
 version = "0.3.1"
 dependencies = [
