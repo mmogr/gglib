@@ -9,9 +9,9 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
+use common::ports::{TEST_BASE_PORT, TEST_MODEL_PORT};
 use gglib_axum::bootstrap::{CorsConfig, ServerConfig, bootstrap};
 use gglib_axum::routes::create_router;
-use common::ports::{TEST_BASE_PORT, TEST_MODEL_PORT};
 
 /// Helper to create a test config that doesn't require llama-server.
 fn test_config() -> ServerConfig {

@@ -7,12 +7,12 @@
 
 mod common;
 
+use common::ports::TEST_BASE_PORT;
 use gglib_axum::{
     bootstrap::{CorsConfig, ServerConfig, bootstrap},
     embedded::{EmbeddedServerConfig, default_embedded_cors_origins, start_embedded_server},
 };
 use reqwest::{Method, StatusCode, header};
-use common::ports::TEST_BASE_PORT;
 
 /// Helper to create a test config that doesn't require llama-server.
 fn test_config() -> ServerConfig {
