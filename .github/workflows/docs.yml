@@ -69,7 +69,10 @@ jobs:
             ${{ runner.os }}-cargo-registry-
 
       - name: Build documentation
-        run: cargo doc --workspace --no-deps --document-private-items
+        # Exclude gglib-app (Tauri desktop) as it requires the web_ui directory to be built.
+        # gglib-app has minimal API documentation (6 items) and is not the primary doc target.
+        # gglib-core (119 items) is the comprehensive library documentation.
+        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
 
       - name: Create index.html redirect
         run: |
