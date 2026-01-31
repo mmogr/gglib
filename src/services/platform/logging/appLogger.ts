@@ -32,6 +32,8 @@ export type AppLogCategory =
   | 'transport.sse'
   | 'transport.tauri'
   | 'transport.events'
+  | 'transport.error'
+  | 'transport.util'
   
   // Services
   | 'service.download'
@@ -44,10 +46,13 @@ export type AppLogCategory =
   // Research system
   | 'research.session'
   | 'research.loop'
+  | 'research.hook'
   | 'research.tool'
   | 'research.fact'
+  | 'research.facts'
   | 'research.llm'
   | 'research.planning'
+  | 'research.context'
   
   // Data flow
   | 'decoder'
@@ -55,11 +60,33 @@ export type AppLogCategory =
   | 'persistence'
   | 'serialization'
   
-  // UI layers
+  // UI layers - Components
   | 'component'
+  | 'component.app'
+  | 'component.server'
+  | 'component.model'
+  | 'component.download'
+  | 'component.chat'
+  | 'component.settings'
+  
+  // UI layers - Hooks
   | 'hook'
+  | 'hook.ui'
+  | 'hook.persistence'
+  | 'hook.download'
+  | 'hook.runtime'
+  | 'hook.llama'
+  | 'hook.models'
+  | 'hook.server'
+  
+  // UI layers - Other
   | 'context'
   | 'page'
+  
+  // Utils
+  | 'util.format'
+  | 'util.batch'
+  | 'util.sse'
   
   // Platform integration
   | 'platform.menu'

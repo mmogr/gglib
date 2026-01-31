@@ -10,7 +10,7 @@
 import type { ThreadMessage } from '@assistant-ui/react';
 import { wrapThink, isWrappedThink } from './wrapThink';
 import { coalesceAdjacentReasoning, type Chunk } from './coalesceReasoning';
-import { appLogger } from '@/services/platform';
+import { appLogger } from '../../services/platform';
 
 // Track unknown part types to avoid log spam during streaming
 const warnedUnknownTypes = new Set<string>();
