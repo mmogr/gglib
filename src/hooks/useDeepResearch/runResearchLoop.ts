@@ -62,58 +62,21 @@ import { researchLogger } from '../../services/platform';
 // Configuration
 // =============================================================================
 
-/** Default maximum research steps before hard stop */
-export const DEFAULT_MAX_STEPS = 30;
-
-/** Soft landing threshold - force synthesis at this percentage of max steps */
-export const SOFT_LANDING_THRESHOLD = 0.8;
-
-/** Maximum concurrent tool calls in a batch */
-export const MAX_PARALLEL_TOOLS = 5;
-
-/** Tool execution timeout (ms) */
-export const TOOL_TIMEOUT_MS = 30000;
-
-/** Maximum retries for transient errors */
-export const MAX_TOOL_RETRIES = 2;
-
-/**
- * Maximum consecutive unproductive steps before a question is marked blocked.
- * A step is "unproductive" if no new facts were gathered.
- * This replaces the old fixed-step timeout for more intelligent course correction.
- */
-export const CONSECUTIVE_UNPRODUCTIVE_LIMIT = 5;
-
-/**
- * Hard maximum steps regardless of productivity.
- * Safety net to prevent infinite loops if agent keeps finding 1 fact at a time.
- */
-export const HARD_MAX_STEPS = 50;
-
-/**
- * Maximum consecutive LLM responses without tool calls before penalizing.
- * When the LLM outputs text-only reasoning without calling tools, we track it.
- * After this many consecutive text-only responses, treat as unproductive step.
- */
-export const MAX_TEXT_ONLY_STEPS = 3;
-
-/**
- * Absolute maximum loop iterations (safety backstop).
- * This fires regardless of any other logic - prevents infinite loops
- * even if all other safeguards fail.
- */
-export const MAX_LOOP_ITERATIONS = 100;
-
-/**
- * Maximum steps to spend on a single question before escalating.
- * After this many productive steps on the same question, the system will
- * strongly encourage answering or auto-trigger force-answer.
- * This prevents over-researching simple questions with redundant facts.
- */
-export const STEPS_PER_QUESTION_LIMIT = 3;
-
-/** @deprecated Use CONSECUTIVE_UNPRODUCTIVE_LIMIT instead */
-export const QUESTION_FOCUS_TIMEOUT_STEPS = 5;
+// Research loop configuration is now centralized in src/config/research.ts
+// Re-export for backward compatibility with existing consumers
+export {
+  DEFAULT_MAX_STEPS,
+  SOFT_LANDING_THRESHOLD,
+  MAX_PARALLEL_TOOLS,
+  TOOL_TIMEOUT_MS,
+  MAX_TOOL_RETRIES,
+  CONSECUTIVE_UNPRODUCTIVE_LIMIT,
+  HARD_MAX_STEPS,
+  MAX_TEXT_ONLY_STEPS,
+  MAX_LOOP_ITERATIONS,
+  STEPS_PER_QUESTION_LIMIT,
+  QUESTION_FOCUS_TIMEOUT_STEPS,
+} from '../../config/research';
 
 // =============================================================================
 // Types
