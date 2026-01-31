@@ -7,6 +7,7 @@
  * @module streamModelResponse
  */
 
+import { appLogger } from '../../services/platform';
 import { getAuthenticatedFetchConfig } from '../../services/transport/api/client';
 import type { ToolDefinition } from '../../services/tools';
 import { parseSSEStream } from './parseSSEStream';
@@ -74,7 +75,7 @@ export async function streamModelResponse(
     ...(hasTools && { tools: toolDefinitions }),
   };
 
-  console.log('📤 Streaming model request:', {
+  appLogger.debug('hook.runtime', 'Streaming model request', {
     port: serverPort,
     messageCount: messages.length,
     toolCount: toolDefinitions.length,
@@ -132,7 +133,7 @@ export async function streamModelResponse(
         
         thinkingHandler.handleReasoningDelta(delta.reasoningContent, partsAcc);
         if (!hasReceivedMainContent && !thinkingHandler.isThinking()) {
-          console.log('💭 Reasoning started');
+          appLogger.debug('hook.runtime', 'Reasoning started');
         }
       }
 
@@ -171,7 +172,7 @@ export async function streamModelResponse(
       // Handle main content
       if (delta.content) {
         if (!hasReceivedMainContent && thinkingHandler.isThinking()) {
-          console.log('💭 Reasoning completed');
+          appLogger.debug('hook.runtime', 'Reasoning completed');
           
           // Track timing: text is a boundary (ends reasoning segment)
           if (messageId && timingTracker) {
@@ -190,7 +191,7 @@ export async function streamModelResponse(
       onContentUpdate(partsAcc.snapshot());
     }
   } catch (error) {
-    console.error('❌ Stream error:', error);
+    appLogger.error('hook.runtime', 'Stream error', { error });
     throw error;
   }
 
@@ -208,7 +209,7 @@ export async function streamModelResponse(
     timingTracker.onEndOfMessage(messageId);
   }
 
-  console.log('✅ Stream complete:', {
+  appLogger.debug('hook.runtime', 'Stream complete', {
     contentLength: finalContent.length,
     toolCalls: accumulatedToolCalls.length,
     finishReason,

@@ -10,6 +10,8 @@
  * @module useDeepResearch/types
  */
 
+import { appLogger } from '../../services/platform';
+
 // =============================================================================
 // Configuration & Model Routing
 // =============================================================================
@@ -1236,9 +1238,9 @@ export function addFacts(
     );
     
     if (isDuplicate) {
-      console.log(
-        `[addFacts] Discarding duplicate: "${newFact.claim.slice(0, 50)}..."`
-      );
+      appLogger.debug('research.facts', 'Discarding duplicate fact', {
+        claim: newFact.claim.slice(0, 50)
+      });
       duplicateCount++;
     } else {
       // Also check against facts we're adding in this batch
@@ -1247,9 +1249,9 @@ export function addFacts(
       );
       
       if (isBatchDuplicate) {
-        console.log(
-          `[addFacts] Discarding batch duplicate: "${newFact.claim.slice(0, 50)}..."`
-        );
+        appLogger.debug('research.facts', 'Discarding batch duplicate', {
+          claim: newFact.claim.slice(0, 50)
+        });
         duplicateCount++;
       } else {
         dedupedNewFacts.push(newFact);
@@ -1258,7 +1260,7 @@ export function addFacts(
   }
   
   if (duplicateCount > 0) {
-    console.log(`[addFacts] Deduplication removed ${duplicateCount} duplicate facts`);
+    appLogger.debug('research.facts', 'Deduplication removed duplicate facts', { duplicateCount });
   }
   
   const combined = [...state.gatheredFacts, ...dedupedNewFacts];

@@ -17,6 +17,7 @@ import type {
   ReasoningPart,
   TextPart,
 } from '../../types/messages';
+import { appLogger } from '../../services/platform';
 
 // =============================================================================
 // Types (re-exported from messages for convenience)
@@ -69,9 +70,9 @@ export class PartsAccumulator {
     // Add tool calls (includes results if executed)
     parts.push(...this.toolCalls.values());
 
-    // Dev logging to verify reasoning parts exist at ingestion point
-    if (import.meta.env.DEV && parts.some(p => typeof p === 'object' && 'type' in p && p.type === 'reasoning')) {
-      console.debug('[PartsAccumulator] snapshot with reasoning:', parts);
+    // Logging to verify reasoning parts exist at ingestion point
+    if (parts.some(p => typeof p === 'object' && 'type' in p && p.type === 'reasoning')) {
+      appLogger.debug('hook.runtime', 'PartsAccumulator snapshot with reasoning', { partCount: parts.length });
     }
 
     return parts;

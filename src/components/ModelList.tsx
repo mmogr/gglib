@@ -1,5 +1,6 @@
 import { useState, FC, useMemo } from "react";
 import { Brain, Package, Rocket, RotateCcw, Trash2, Wrench, X } from "lucide-react";
+import { appLogger } from '../services/platform';
 import { GgufModel } from "../types";
 import { removeModel } from "../services/clients/models";
 import { serveModel } from "../services/clients/servers";
@@ -156,7 +157,7 @@ const ModelList: FC<ModelListProps> = ({
       setServingModel(null);
       onRefresh(); // Refresh to show updated server status
     } catch (err) {
-      console.error('Serve error:', err);
+      appLogger.error('component.model', 'Failed to serve model', { error: err, modelId: servingModel?.id });
       
       // Check if this is a llama-server not installed error
       if (TransportError.isTransportError(err) && err.code === 'LLAMA_SERVER_NOT_INSTALLED') {

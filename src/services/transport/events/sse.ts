@@ -8,6 +8,7 @@
 import type { Unsubscribe, EventHandler } from '../types/common';
 import type { AppEventType, AppEventMap } from '../types/events';
 import { decodeDownloadEvent } from '../../decoders/downloadEvent';
+import { appLogger } from '../../platform';
 import { createSSEStream, type SSEMessage } from '../../../utils/sse';
 import { getApiBaseUrl, getAuthHeaders, getClient } from '../api/client';
 
@@ -108,7 +109,7 @@ export class SSEConnectionManager<T = unknown> {
       try {
         fn(evt);
       } catch (error) {
-        console.error('[SSE] Error in event handler:', error);
+        appLogger.error('transport.sse', '[SSE] Error in event handler', { error });
       }
     }
   }
@@ -138,9 +139,7 @@ export class SSEConnectionManager<T = unknown> {
 
     while (this.running && this.abort && !this.abort.signal.aborted) {
       try {
-        if (import.meta.env.DEV) {
-          console.debug('[SSE] Connecting to:', url);
-        }
+        appLogger.debug('transport.sse', '[SSE] Connecting to', { url });
 
         for await (const msg of createSSEStream(url, {
           headers: getAuthHeaders(),
@@ -156,29 +155,23 @@ export class SSEConnectionManager<T = unknown> {
         }
 
         // Stream ended gracefully
-        if (import.meta.env.DEV) {
-          console.debug('[SSE] Stream ended');
-        }
+        appLogger.debug('transport.sse', '[SSE] Stream ended');
       } catch (error) {
         // Don't reconnect if explicitly stopped
         if (!this.running || this.abort?.signal.aborted) {
           break;
         }
 
-        console.error('[SSE] Connection error:', error);
+        appLogger.error('transport.sse', '[SSE] Connection error', { error });
         const wait = backoff.next();
         
-        if (import.meta.env.DEV) {
-          console.debug(`[SSE] Reconnecting in ${wait}ms...`);
-        }
+        appLogger.debug('transport.sse', '[SSE] Reconnecting', { waitMs: wait });
 
         await new Promise((resolve) => setTimeout(resolve, wait));
       }
     }
 
-    if (import.meta.env.DEV) {
-      console.debug('[SSE] Connection manager stopped');
-    }
+    appLogger.debug('transport.sse', '[SSE] Connection manager stopped');
   }
 }
 
@@ -290,7 +283,7 @@ class SseConnection<T> {
       try {
         handler(data);
       } catch (error) {
-        console.error('[SSE] Error in event handler:', error);
+        appLogger.error('transport.sse', '[SSE] Error in event handler', { error });
       }
     }
   }

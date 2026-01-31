@@ -4,7 +4,8 @@ import {
   installLlama as platformInstallLlama, 
   listenLlamaProgress,
   type LlamaStatus,
-  type LlamaInstallProgress
+  type LlamaInstallProgress,
+  appLogger,
 } from '../services/platform';
 
 // Re-export types for consumers
@@ -91,7 +92,7 @@ export function useLlamaStatus() {
     }).then(unsubscribe => {
       cleanup = unsubscribe;
     }).catch(e => {
-      console.error('Failed to setup llama install progress listener:', e);
+      appLogger.error('hook.llama', 'Failed to setup llama install progress listener', { error: e });
     });
 
     return () => {

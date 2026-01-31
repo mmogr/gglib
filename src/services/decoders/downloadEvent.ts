@@ -5,6 +5,7 @@
  * Includes runtime validation to catch contract drift between Rust backend and TS frontend.
  */
 
+import { appLogger } from '../platform';
 import type { DownloadEvent } from '../transport/types/events';
 
 /**
@@ -66,15 +67,7 @@ export function decodeDownloadEvent(payload: unknown): DownloadEvent | null {
  * In dev: throws an error. In prod: logs a warning.
  */
 function logInvalidEvent(reason: string, payload: unknown): void {
-  const message = `[DownloadEventDecoder] Invalid event: ${reason}`;
-  
-  if (import.meta.env.DEV) {
-    console.error(message, payload);
-    // Don't throw in dev to avoid breaking the app during development
-    // but make it very visible
-  } else {
-    console.warn(message);
-  }
+  appLogger.error('service.download', 'Invalid download event', { reason, payload });
 }
 
 /**
@@ -82,14 +75,11 @@ function logInvalidEvent(reason: string, payload: unknown): void {
  * This indicates the backend added a new event type that the frontend doesn't know about yet.
  */
 function logUnknownEventType(type: string, payload: unknown): void {
-  const message = `[DownloadEventDecoder] Unknown event type: "${type}". Backend may have added a new event variant.`;
-  
-  if (import.meta.env.DEV) {
-    console.error(message, payload);
-    console.error('Known types:', Array.from(KNOWN_DOWNLOAD_EVENT_TYPES));
-  } else {
-    console.warn(message);
-  }
+  appLogger.error('service.download', 'Unknown download event type - backend may have added new variant', {
+    type,
+    payload,
+    knownTypes: Array.from(KNOWN_DOWNLOAD_EVENT_TYPES)
+  });
 }
 
 /**

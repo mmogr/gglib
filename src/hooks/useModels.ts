@@ -7,7 +7,7 @@ import {
   updateModel as updateModelService,
 } from '../services/clients/models';
 // TRANSPORT_EXCEPTION: setSelectedModel is desktop-only (menu sync)
-import { setSelectedModel } from '../services/platform';
+import { setSelectedModel, appLogger } from '../services/platform';
 
 export function useModels() {
   const [models, setModels] = useState<GgufModel[]>([]);
@@ -38,7 +38,7 @@ export function useModels() {
     setSelectedModelId(id);
     // Sync with backend for menu state updates (no-op in web mode)
     setSelectedModel(id).catch((err) => {
-      console.warn('Failed to sync model selection with menu:', err);
+      appLogger.warn('hook.models', 'Failed to sync model selection with menu', { error: err });
     });
   }, []);
 

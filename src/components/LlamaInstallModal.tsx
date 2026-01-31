@@ -1,5 +1,6 @@
 import { FC, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Download, Loader2, XCircle } from 'lucide-react';
+import { appLogger } from '../services/platform';
 import { LlamaInstallProgress } from '../hooks/useLlamaStatus';
 import { formatBytes } from '../utils/format';
 import { installLlama } from '../services/platform/llamaInstall';
@@ -65,7 +66,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
         onClose();
       }
     } catch (err) {
-      console.error('Installation failed:', err);
+      appLogger.error('component.settings', 'Installation failed', { error: err });
       setLocalError(String(err));
     } finally {
       setLocalInstalling(false);

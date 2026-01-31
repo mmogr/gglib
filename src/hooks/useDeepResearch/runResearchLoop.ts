@@ -56,7 +56,7 @@ import {
   PHASE_INSTRUCTIONS,
   type TurnMessage,
 } from './buildTurnMessages';
-import { researchLogger } from '../../services/platform';
+import { researchLogger, appLogger } from '../../services/platform';
 
 // =============================================================================
 // Configuration
@@ -603,10 +603,10 @@ async function executeToolSafely(
     // Convert any error to an observation (resilience pattern)
     const errorMessage = error instanceof Error ? error.message : String(error);
     
-    console.warn(
-      `[runResearchLoop] Tool ${toolCall.function.name} failed:`,
-      errorMessage
-    );
+    appLogger.warn('research.loop', '[runResearchLoop] Tool failed', {
+      toolName: toolCall.function.name,
+      error: errorMessage,
+    });
     
     return {
       toolName: toolCall.function.name,
@@ -650,7 +650,7 @@ function handleInternalTool(
     const remainingGaps = (args.remainingGaps as string[]) || [];
     const strategyUpdate = (args.strategyUpdate as string) || 'Continuing research...';
     
-    console.log('[handleInternalTool] assess_progress:', {
+    appLogger.debug('research.loop', '[handleInternalTool] assess_progress', {
       claimsCovered: claimsCovered.length,
       remainingGaps: remainingGaps.length,
       strategyUpdate: strategyUpdate.slice(0, 100),
@@ -684,7 +684,7 @@ function handleInternalTool(
     const reason = (args.reason as string) || 'No reason provided';
     const factCount = updatedState.gatheredFacts.length;
     
-    console.log('[handleInternalTool] request_synthesis:', {
+    appLogger.debug('research.loop', '[handleInternalTool] request_synthesis', {
       factCount,
       minRequired: MIN_FACTS_FOR_SYNTHESIS,
       reason: reason.slice(0, 100),
@@ -826,10 +826,10 @@ async function executeToolsBatch(
         );
         
         if (isDuplicate) {
-          console.log(
-            `[executeToolsBatch] Skipping duplicate search: "${searchQuery.slice(0, 50)}..." ` +
-            `(similar to round ${existingRecord?.round} query)`
-          );
+          appLogger.debug('research.loop', '[executeToolsBatch] Skipping duplicate search', {
+            searchQuery: searchQuery.slice(0, 50),
+            existingRound: existingRecord?.round,
+          });
           
           // Return a clear system error message that the LLM will see as direct consequence
           // This format (Action -> Error -> Correction) enables intelligent self-correction
@@ -1018,7 +1018,9 @@ async function handleAIDirectedIntervention(
     case 'expand-question': {
       const targetQuestion = state.researchPlan.find(q => q.id === intervention.questionId);
       if (!targetQuestion) {
-        console.warn('[runResearchLoop] Expand intervention: question not found');
+        appLogger.warn('research.loop', '[runResearchLoop] Expand intervention: question not found', {
+          questionId: intervention.questionId,
+        });
         return state;
       }
       prompt = EXPAND_QUESTION_PROMPT.replace(/QUESTION_TEXT/g, targetQuestion.question);
@@ -1071,7 +1073,9 @@ ${prompt}`,
   ];
   
   try {
-    console.log(`[runResearchLoop] Calling LLM for AI intervention: ${intervention.type}`);
+    appLogger.debug('research.loop', '[runResearchLoop] Calling LLM for AI intervention', {
+      interventionType: intervention.type,
+    });
     
     const response = await callLLM(messages, {
       endpoint: modelRouting.reasoningModel,
@@ -1082,7 +1086,7 @@ ${prompt}`,
     const parsed = tryParseStructuredResponse(response.content);
     
     if (!parsed) {
-      console.warn('[runResearchLoop] AI intervention: failed to parse LLM response');
+      appLogger.warn('research.loop', '[runResearchLoop] AI intervention: failed to parse LLM response');
       return pushActivityLog(state, 'Failed to generate additional questions');
     }
     
@@ -1096,7 +1100,7 @@ ${prompt}`,
     }
     
     if (newQuestions.length === 0) {
-      console.log('[runResearchLoop] AI intervention: no new questions generated');
+      appLogger.debug('research.loop', '[runResearchLoop] AI intervention: no new questions generated');
       return pushActivityLog(state, 'No additional questions needed');
     }
     
@@ -1110,7 +1114,7 @@ ${prompt}`,
     );
     
     if (uniqueNewQuestions.length === 0) {
-      console.log('[runResearchLoop] AI intervention: all suggested questions already exist');
+      appLogger.debug('research.loop', '[runResearchLoop] AI intervention: all suggested questions already exist');
       return pushActivityLog(state, 'Suggested questions already in plan');
     }
     
@@ -1133,11 +1137,14 @@ ${prompt}`,
                        'Generated';
     newState = pushActivityLog(newState, `${actionVerb} ${createdQuestions.length} new question(s)`);
     
-    console.log(`[runResearchLoop] AI intervention: added ${createdQuestions.length} questions`);
+    appLogger.info('research.loop', '[runResearchLoop] AI intervention: added questions', {
+      count: createdQuestions.length,
+      interventionType: intervention.type,
+    });
     
     return newState;
   } catch (error) {
-    console.error('[runResearchLoop] AI intervention error:', error);
+    appLogger.error('research.loop', '[runResearchLoop] AI intervention error', { error });
     return pushActivityLog(state, `Failed to generate questions: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -1184,13 +1191,17 @@ async function handleForceAnswerIntervention(
   const targetQuestion = state.researchPlan.find(q => q.id === questionId);
   
   if (!targetQuestion) {
-    console.warn('[runResearchLoop] Force-answer intervention: question not found');
+    appLogger.warn('research.loop', '[runResearchLoop] Force-answer intervention: question not found', {
+      questionId,
+    });
     return pushActivityLog(state, 'Force-answer failed: question not found');
   }
   
   // Already answered? No-op
   if (targetQuestion.status === 'answered') {
-    console.log('[runResearchLoop] Force-answer: question already answered');
+    appLogger.debug('research.loop', '[runResearchLoop] Force-answer: question already answered', {
+      questionId,
+    });
     return state;
   }
   
@@ -1209,7 +1220,10 @@ async function handleForceAnswerIntervention(
   const allFacts = [...relevantFacts, ...recentFacts];
   
   if (allFacts.length === 0) {
-    console.warn('[runResearchLoop] Force-answer: no facts available');
+    appLogger.warn('research.loop', '[runResearchLoop] Force-answer: no facts available', {
+      questionId,
+      questionIndex,
+    });
     
     // Mark as blocked instead of answered if no facts
     return {
@@ -1247,7 +1261,10 @@ async function handleForceAnswerIntervention(
   ];
   
   try {
-    console.log(`[runResearchLoop] Force-answer: generating answer for Q${questionIndex} with ${allFacts.length} facts`);
+    appLogger.debug('research.loop', '[runResearchLoop] Force-answer: generating answer', {
+      questionIndex,
+      factCount: allFacts.length,
+    });
     
     const response = await callLLM(messages, {
       endpoint: modelRouting.reasoningModel,
@@ -1292,11 +1309,15 @@ async function handleForceAnswerIntervention(
       `Force-answered Q${questionIndex}: "${truncatedQuestion}" (${forcedAnswer.confidence} confidence)`
     );
     
-    console.log(`[runResearchLoop] Force-answer: successfully answered Q${questionIndex}`);
+    appLogger.info('research.loop', '[runResearchLoop] Force-answer: successfully answered', {
+      questionIndex,
+      questionId,
+      confidence: forcedAnswer.confidence,
+    });
     
     return newState;
   } catch (error) {
-    console.error('[runResearchLoop] Force-answer error:', error);
+    appLogger.error('research.loop', '[runResearchLoop] Force-answer error', { error, questionId, questionIndex });
     return pushActivityLog(
       state, 
       `Force-answer failed for Q${questionIndex}: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -1315,24 +1336,29 @@ async function handlePlanningPhase(
   state: ResearchState,
   llmResponse: LLMResponse
 ): Promise<ResearchState> {
-  console.debug('[runResearchLoop] Planning phase, response length:', llmResponse.content?.length);
+  appLogger.debug('research.loop', '[runResearchLoop] Planning phase, response length', {
+    contentLength: llmResponse.content?.length,
+  });
   
   const parsed = tryParseStructuredResponse(llmResponse.content);
-  console.debug('[runResearchLoop] Parsed plan:', parsed?.type, parsed && 'questions' in parsed ? parsed.questions?.length : 0);
+  appLogger.debug('research.loop', '[runResearchLoop] Parsed plan', {
+    type: parsed?.type,
+    questionCount: parsed && 'questions' in parsed ? parsed.questions?.length : 0,
+  });
   
   // Log complexity/perspectives if present
   if (parsed && parsed.type === 'plan') {
-    console.log('[runResearchLoop] Planning parsed:', {
+    appLogger.debug('research.loop', '[runResearchLoop] Planning parsed', {
       complexity: parsed.complexity ?? 'not specified',
       perspectives: parsed.perspectives ?? [],
-      questions: parsed.questions?.length ?? 0,
-      hypothesis: parsed.hypothesis?.slice(0, 80) + '...',
+      questionCount: parsed.questions?.length ?? 0,
+      hypothesis: parsed.hypothesis?.slice(0, 80),
     });
   }
   
   if (!parsed || parsed.type !== 'plan') {
     // Model didn't follow protocol - try to extract anything useful
-    console.warn('[runResearchLoop] Planning phase: invalid response format, creating default plan');
+    appLogger.warn('research.loop', '[runResearchLoop] Planning phase: invalid response format, creating default plan');
     
     // Create a default question from the original query
     const defaultQuestion = createQuestion(
@@ -1438,9 +1464,9 @@ async function handleGatheringPhase(
       newState = setLLMGenerating(newState, true, 'Analyzing search results and extracting facts...');
       onStateUpdate?.(newState);
       
-      console.log(
-        `[handleGatheringPhase] Extracting facts from ${newState.pendingObservations.length} observation(s)`
-      );
+      appLogger.debug('research.loop', '[handleGatheringPhase] Extracting facts from observations', {
+        observationCount: newState.pendingObservations.length,
+      });
       
       // Wrap the LLMCaller to match ExtractionLLMCaller signature
       // (ExtractionLLMCaller returns string, LLMCaller returns LLMResponse)
@@ -1470,15 +1496,16 @@ async function handleGatheringPhase(
             newState,
             `📚 Extracted ${extractionResult.newFacts.length} fact(s) from search results`
           );
-          console.log(
-            `[handleGatheringPhase] Extraction complete: ${extractionResult.newFacts.length} new facts, ` +
-            `${extractionResult.discardedInvalidUrl} invalid URLs, ${extractionResult.discardedDuplicates} duplicates`
-          );
+          appLogger.debug('research.loop', '[handleGatheringPhase] Extraction complete: new facts', {
+            newFactCount: extractionResult.newFacts.length,
+            discardedInvalidUrl: extractionResult.discardedInvalidUrl,
+            discardedDuplicates: extractionResult.discardedDuplicates,
+          });
         } else {
-          console.log('[handleGatheringPhase] Extraction complete: no new facts found');
+          appLogger.debug('research.loop', '[handleGatheringPhase] Extraction complete: no new facts found');
         }
       } catch (error) {
-        console.error('[handleGatheringPhase] Fact extraction failed:', error);
+        appLogger.error('research.loop', '[handleGatheringPhase] Fact extraction failed', { error });
         // Don't fail the whole loop on extraction errors - continue with raw observations
         newState = pushActivityLog(newState, '⚠️ Failed to extract facts from search results');
       }
@@ -1512,18 +1539,18 @@ async function handleGatheringPhase(
     if (!targetQuestion) {
       targetQuestion = newState.researchPlan.find(q => q.status === 'in-progress');
       if (targetQuestion) {
-        console.log(
-          `[handleGatheringPhase] Using in-progress question fallback: Q${newState.researchPlan.indexOf(targetQuestion) + 1}`
-        );
+        appLogger.debug('research.loop', '[handleGatheringPhase] Using in-progress question fallback', {
+          questionIndex: newState.researchPlan.indexOf(targetQuestion) + 1,
+        });
       }
     }
     
     // If still no match, log warning but continue (facts still get extracted)
     if (!targetQuestion) {
-      console.warn(
-        '[handleGatheringPhase] Could not resolve target question for answer. ' +
-        `questionIndex=${parsed.questionIndex}, questionId=${parsed.questionId}`
-      );
+      appLogger.warn('research.loop', '[handleGatheringPhase] Could not resolve target question for answer', {
+        questionIndex: parsed.questionIndex,
+        questionId: parsed.questionId,
+      });
     }
     
     const targetQuestionId = targetQuestion?.id ?? 'unknown';
@@ -1605,7 +1632,7 @@ async function handleSynthesisPhase(
   
   if (!parsed || parsed.type !== 'report') {
     // Model didn't follow protocol - use raw content as report
-    console.warn('[runResearchLoop] Synthesis phase: invalid response format');
+    appLogger.warn('research.loop', '[runResearchLoop] Synthesis phase: invalid response format');
     
     return completeResearch(
       state,
@@ -1634,13 +1661,15 @@ async function handleEvaluatingPhase(
   state: ResearchState,
   llmResponse: LLMResponse
 ): Promise<ResearchState> {
-  console.debug('[runResearchLoop] Evaluation phase, response length:', llmResponse.content?.length);
+  appLogger.debug('research.loop', '[runResearchLoop] Evaluation phase, response length', {
+    contentLength: llmResponse.content?.length,
+  });
   
   const parsed = tryParseStructuredResponse(llmResponse.content);
   
   if (!parsed || parsed.type !== 'evaluation') {
     // Model didn't follow protocol - default to synthesis (conservative)
-    console.warn('[runResearchLoop] Evaluation phase: invalid response format, defaulting to synthesis');
+    appLogger.warn('research.loop', '[runResearchLoop] Evaluation phase: invalid response format, defaulting to synthesis');
     
     let newState = pushActivityLog(state, 'Evaluation unclear, proceeding to synthesis...');
     newState = setPhase(newState, 'synthesizing');
@@ -1649,10 +1678,12 @@ async function handleEvaluatingPhase(
   
   const { adequacyScore, missingAspects, suggestedFollowups, shouldContinue } = parsed;
   
-  console.log(
-    `[runResearchLoop] Evaluation: score=${adequacyScore}/10, shouldContinue=${shouldContinue}, ` +
-    `followups=${suggestedFollowups?.length ?? 0}, canContinue=${canContinueResearch(state)}`
-  );
+  appLogger.debug('research.loop', '[runResearchLoop] Evaluation scores', {
+    adequacyScore,
+    shouldContinue,
+    followupsCount: suggestedFollowups?.length ?? 0,
+    canContinue: canContinueResearch(state),
+  });
   
   // Log evaluation for user visibility
   let newState = pushActivityLog(
@@ -1680,7 +1711,7 @@ async function handleEvaluatingPhase(
   // Adapts based on complexity, perspective coverage, and fact diversity
   const synthesisDecision = calculateSynthesisReadiness(newState, adequacyScore, shouldContinue);
   
-  console.log('[runResearchLoop] Synthesis decision:', {
+  appLogger.debug('research.loop', '[runResearchLoop] Synthesis decision', {
     rawScore: adequacyScore,
     adjustedScore: synthesisDecision.adjustedScore,
     threshold: synthesisDecision.threshold,
@@ -1691,14 +1722,15 @@ async function handleEvaluatingPhase(
   });
   
   if (synthesisDecision.shouldSynthesize) {
-    console.log(`[runResearchLoop] Evaluation → Synthesis: ${synthesisDecision.reason}`);
+    appLogger.debug('research.loop', '[runResearchLoop] Evaluation → Synthesis', { reason: synthesisDecision.reason });
     newState = pushActivityLog(newState, `${synthesisDecision.reason}, synthesizing...`);
     newState = setPhase(newState, 'synthesizing');
   } else {
-    console.log(
-      `[runResearchLoop] Evaluation → Compressing: ${synthesisDecision.reason}, ` +
-      `round ${newState.currentRound}/${newState.maxRounds}`
-    );
+    appLogger.debug('research.loop', '[runResearchLoop] Evaluation → Compressing', {
+      reason: synthesisDecision.reason,
+      currentRound: newState.currentRound,
+      maxRounds: newState.maxRounds,
+    });
     newState = pushActivityLog(
       newState,
       `${synthesisDecision.reason}, starting round ${newState.currentRound + 1}...`
@@ -1722,17 +1754,19 @@ async function handleCompressingPhase(
   state: ResearchState,
   llmResponse: LLMResponse
 ): Promise<ResearchState> {
-  console.debug('[runResearchLoop] Compression phase, response length:', llmResponse.content?.length);
+  appLogger.debug('research.loop', '[runResearchLoop] Compression phase, response length', {
+    contentLength: llmResponse.content?.length,
+  });
   
   const parsed = tryParseStructuredResponse(llmResponse.content);
   
   let summary: string;
   if (parsed && parsed.type === 'roundSummary') {
     summary = parsed.summary;
-    console.log(`[runResearchLoop] Round summary generated: ${summary.length} chars, ${parsed.keyInsights?.length ?? 0} insights`);
+    appLogger.debug('research.loop', '[runResearchLoop] Round summary generated', { summaryLength: summary.length, insightsCount: parsed.keyInsights?.length ?? 0 });
   } else {
     // Fallback: use raw content as summary
-    console.warn('[runResearchLoop] Compression phase: invalid response format, using raw content');
+    appLogger.warn('research.loop', '[runResearchLoop] Compression phase: invalid response format, using raw content');
     summary = llmResponse.content?.slice(0, 500) || `Round ${state.currentRound} findings summarized.`;
   }
   
@@ -1760,7 +1794,10 @@ async function handleCompressingPhase(
     }
     
     if (newQuestions.length > 0) {
-      console.log(`[runResearchLoop] Adding ${newQuestions.length} follow-up questions for round ${newState.currentRound + 1}`);
+      appLogger.info('research.loop', '[runResearchLoop] Adding follow-up questions', {
+        count: newQuestions.length,
+        nextRound: newState.currentRound + 1,
+      });
       newState = {
         ...newState,
         researchPlan: [...newState.researchPlan, ...newQuestions],
@@ -1774,7 +1811,9 @@ async function handleCompressingPhase(
   
   // Advance to next round
   newState = advanceRound(newState);
-  console.log(`[runResearchLoop] Advanced to round ${newState.currentRound}/${newState.maxRounds}`, {
+  appLogger.debug('research.loop', '[runResearchLoop] Advanced to next round', {
+    currentRound: newState.currentRound,
+    maxRounds: newState.maxRounds,
     perspective: newState.currentPerspective ?? 'none',
     complexity: newState.complexity ?? 'simple',
   });
@@ -1873,7 +1912,7 @@ function handleIntervention(
 ): ResearchState {
   switch (intervention.type) {
     case 'wrap-up': {
-      console.log('[runResearchLoop] User requested wrap-up, forcing synthesis');
+      appLogger.info('research.loop', '[runResearchLoop] User requested wrap-up, forcing synthesis');
       
       // Set manual termination flag and transition to synthesizing
       return {
@@ -1888,22 +1927,29 @@ function handleIntervention(
       const targetQuestion = state.researchPlan.find(q => q.id === questionId);
       
       if (!targetQuestion) {
-        console.warn(`[runResearchLoop] Skip intervention: question ${questionId} not found`);
+        appLogger.warn('research.loop', '[runResearchLoop] Skip intervention: question not found', {
+          questionId,
+        });
         return state;
       }
       
       // Already answered or blocked? No-op
       if (targetQuestion.status === 'answered' || targetQuestion.status === 'blocked') {
-        console.log(`[runResearchLoop] Skip intervention: question already ${targetQuestion.status}`);
+        appLogger.debug('research.loop', '[runResearchLoop] Skip intervention: question already has status', {
+          questionId,
+          status: targetQuestion.status,
+        });
         return state;
       }
       
       const questionIndex = state.researchPlan.indexOf(targetQuestion) + 1;
       const isCurrentFocus = targetQuestion.status === 'in-progress';
       
-      console.log(
-        `[runResearchLoop] User skipped Q${questionIndex}${isCurrentFocus ? ' (current focus)' : ' (pending)'}`
-      );
+      appLogger.info('research.loop', '[runResearchLoop] User skipped question', {
+        questionIndex,
+        questionId,
+        isCurrentFocus,
+      });
       
       // Mark the question as blocked
       let newState = {
@@ -1936,11 +1982,13 @@ function handleIntervention(
       );
       
       if (pendingQuestions.length === 0) {
-        console.log('[runResearchLoop] Skip-all: no pending questions to skip');
+        appLogger.debug('research.loop', '[runResearchLoop] Skip-all: no pending questions to skip');
         return state;
       }
       
-      console.log(`[runResearchLoop] User skipped all ${pendingQuestions.length} pending questions`);
+      appLogger.info('research.loop', '[runResearchLoop] User skipped all pending questions', {
+        count: pendingQuestions.length,
+      });
       
       // Mark all pending/in-progress questions as blocked
       const newState = {
@@ -1963,7 +2011,7 @@ function handleIntervention(
       const { question } = intervention;
       
       if (!question || question.trim().length === 0) {
-        console.warn('[runResearchLoop] Add-question intervention: empty question text');
+        appLogger.warn('research.loop', '[runResearchLoop] Add-question intervention: empty question text');
         return state;
       }
       
@@ -1974,7 +2022,9 @@ function handleIntervention(
       );
       
       if (isDuplicate) {
-        console.log('[runResearchLoop] Add-question: duplicate question, ignoring');
+        appLogger.debug('research.loop', '[runResearchLoop] Add-question: duplicate question, ignoring', {
+          question: question.slice(0, 50),
+        });
         return state;
       }
       
@@ -1982,7 +2032,9 @@ function handleIntervention(
       // Priority is set to 0 (highest) so user questions are researched first
       const newQuestion = createQuestion(question.trim(), 0, undefined, 'user-added');
       
-      console.log(`[runResearchLoop] User added question: "${question.slice(0, 50)}..."`);
+      appLogger.info('research.loop', '[runResearchLoop] User added question', {
+        question: question.slice(0, 50),
+      });
       
       return {
         ...state,
@@ -1997,7 +2049,9 @@ function handleIntervention(
     case 'force-answer': {
       // These are handled asynchronously in the main loop
       // We just mark that the intervention was received
-      console.log(`[runResearchLoop] AI intervention queued: ${intervention.type}`);
+      appLogger.debug('research.loop', '[runResearchLoop] AI intervention queued', {
+        interventionType: intervention.type,
+      });
       
       // Return state unchanged - the main loop will handle the async work
       // We need to keep the intervention in the ref so it persists
@@ -2005,7 +2059,9 @@ function handleIntervention(
     }
     
     default:
-      console.warn('[runResearchLoop] Unknown intervention type:', intervention);
+      appLogger.warn('research.loop', '[runResearchLoop] Unknown intervention type', {
+        intervention,
+      });
       return state;
   }
 }
@@ -2070,15 +2126,17 @@ export async function runResearchLoop(
     conversationId,
   });
 
-  console.log('[runResearchLoop] Starting research:', {
+  appLogger.info('research.loop', '[runResearchLoop] Starting research', {
     query: query.slice(0, 100),
     maxSteps,
-    tools: tools.length,
+    toolCount: tools.length,
   });
 
   // Get research tools including internal agentic tools (assess_progress, request_synthesis)
   const researchTools = getResearchToolsWithInternals(tools);
-  console.log('[runResearchLoop] Research tools:', researchTools.map(t => t.function.name));
+  appLogger.debug('research.loop', '[runResearchLoop] Research tools', {
+    tools: researchTools.map(t => t.function.name),
+  });
 
   try {
     // === MAIN LOOP ===
@@ -2091,10 +2149,11 @@ export async function runResearchLoop(
       };
       
       if (state.loopIterations >= MAX_LOOP_ITERATIONS) {
-        console.error(
-          `[runResearchLoop] EMERGENCY STOP: Max loop iterations (${MAX_LOOP_ITERATIONS}) reached. ` +
-          `This indicates a bug in the loop logic. Phase: ${state.phase}, Step: ${state.currentStep}`
-        );
+        appLogger.error('research.loop', '[runResearchLoop] EMERGENCY STOP: Max loop iterations reached', {
+          loopIterations: MAX_LOOP_ITERATIONS,
+          phase: state.phase,
+          step: state.currentStep,
+        });
         
         researchLogger.error(messageId, 'runResearchLoop', 'EMERGENCY STOP: Max loop iterations', {
           loopIterations: state.loopIterations,
@@ -2127,7 +2186,9 @@ export async function runResearchLoop(
         
         // Check if this is a force-answer intervention (special handling)
         if (intervention.type === 'force-answer') {
-          console.log(`[runResearchLoop] Processing force-answer for question: ${intervention.questionId}`);
+          appLogger.debug('research.loop', '[runResearchLoop] Processing force-answer', {
+            questionId: intervention.questionId,
+          });
           state = pushActivityLog(state, `User requested immediate answer...`);
           onStateUpdate?.(state);
           
@@ -2150,7 +2211,9 @@ export async function runResearchLoop(
         
         if (isAIDirected) {
           // Handle AI-directed intervention asynchronously
-          console.log(`[runResearchLoop] Processing AI intervention: ${intervention.type}`);
+          appLogger.debug('research.loop', '[runResearchLoop] Processing AI intervention', {
+            interventionType: intervention.type,
+          });
           state = pushActivityLog(state, `AI expanding research: ${intervention.type.replace(/-/g, ' ')}...`);
           onStateUpdate?.(state);
           
@@ -2178,7 +2241,10 @@ export async function runResearchLoop(
         
         state = handleIntervention(state, intervention);
         
-        console.log('[runResearchLoop] Processed intervention:', intervention.type, 'new phase:', state.phase);
+        appLogger.debug('research.loop', '[runResearchLoop] Processed intervention', {
+          interventionType: intervention.type,
+          newPhase: state.phase,
+        });
         
         // Notify UI of intervention-caused state change
         onStateUpdate?.(state);
@@ -2191,7 +2257,9 @@ export async function runResearchLoop(
       // === HARD LIMIT CHECK (Safety net) ===
       // This fires regardless of productivity - absolute protection against infinite loops
       if (state.currentStep >= HARD_MAX_STEPS) {
-        console.warn(`[runResearchLoop] HARD step limit (${HARD_MAX_STEPS}) reached - emergency stop`);
+        appLogger.warn('research.loop', '[runResearchLoop] HARD step limit reached - emergency stop', {
+          hardMaxSteps: HARD_MAX_STEPS,
+        });
         state = setError(
           state,
           `Maximum steps (${HARD_MAX_STEPS}) reached. The research loop has been stopped as a safety measure.`
@@ -2206,9 +2274,11 @@ export async function runResearchLoop(
         
         if (currentQuestion && state.consecutiveUnproductiveSteps >= CONSECUTIVE_UNPRODUCTIVE_LIMIT) {
           const questionIndex = state.researchPlan.indexOf(currentQuestion) + 1;
-          console.log(
-            `[runResearchLoop] Question Q${questionIndex} stalled after ${CONSECUTIVE_UNPRODUCTIVE_LIMIT} unproductive steps, marking as blocked`
-          );
+          appLogger.warn('research.loop', '[runResearchLoop] Question stalled, marking as blocked', {
+            questionIndex,
+            questionId: currentQuestion.id,
+            unproductiveSteps: CONSECUTIVE_UNPRODUCTIVE_LIMIT,
+          });
 
           // Mark as blocked and record knowledge gap
           state = {
@@ -2245,9 +2315,10 @@ export async function runResearchLoop(
 
           if (nextPending) {
             const questionIndex = state.researchPlan.indexOf(nextPending) + 1;
-            console.log(
-              `[runResearchLoop] Setting Q${questionIndex} as current focus`
-            );
+            appLogger.debug('research.loop', '[runResearchLoop] Setting question as current focus', {
+              questionIndex,
+              questionId: nextPending.id,
+            });
             
             // Log question transition for user visibility
             const truncatedQuestion = nextPending.question.length > 40
@@ -2275,7 +2346,10 @@ export async function runResearchLoop(
       
       // Check for global hard limit approaching - force immediate synthesis
       if (shouldForceImmediateSynthesis(state)) {
-        console.log('[runResearchLoop] Global soft landing triggered - forcing immediate synthesis');
+        appLogger.info('research.loop', '[runResearchLoop] Global soft landing triggered - forcing immediate synthesis', {
+          currentStep: state.currentStep,
+          maxSteps: state.maxSteps,
+        });
         state = setPhase(state, 'synthesizing');
         state = pushActivityLog(state, 'Time limit approaching, synthesizing...');
         phaseInstruction =
@@ -2284,10 +2358,11 @@ export async function runResearchLoop(
       // Check for round budget exhaustion - trigger evaluation (not direct synthesis)
       else if (shouldForceEvaluation(state)) {
         const { stepsUsedThisRound, roundBudget } = getRoundStepBudget(state);
-        console.log(
-          `[runResearchLoop] Round soft landing triggered - round ${state.currentRound} budget ` +
-          `(${stepsUsedThisRound}/${roundBudget}) at 80%, moving to evaluation`
-        );
+        appLogger.info('research.loop', '[runResearchLoop] Round soft landing triggered', {
+          currentRound: state.currentRound,
+          stepsUsedThisRound,
+          roundBudget,
+        });
         
         // Check if all questions are answered - if so, go to evaluation
         const unanswered = state.researchPlan.filter(
@@ -2301,7 +2376,10 @@ export async function runResearchLoop(
         } else {
           // Still have unanswered questions but budget is low
           // Mark remaining as blocked and move to evaluation
-          console.log(`[runResearchLoop] ${unanswered.length} questions remaining, marking as blocked due to budget`);
+          appLogger.warn('research.loop', '[runResearchLoop] Questions remaining, marking as blocked due to budget', {
+            unansweredCount: unanswered.length,
+            currentRound: state.currentRound,
+          });
           
           for (const q of unanswered) {
             const questionIndex = state.researchPlan.indexOf(q) + 1;
@@ -2331,9 +2409,11 @@ export async function runResearchLoop(
       }
 
       // Log phase/step
-      console.log(
-        `[runResearchLoop] Step ${state.currentStep}/${state.maxSteps} - Phase: ${state.phase}`
-      );
+      appLogger.debug('research.loop', '[runResearchLoop] Step progress', {
+        step: state.currentStep,
+        maxSteps: state.maxSteps,
+        phase: state.phase,
+      });
       
       // Log step to research logger
       researchLogger.debug(messageId, 'runResearchLoop', `Step ${state.currentStep}`, {
@@ -2392,7 +2472,7 @@ export async function runResearchLoop(
         });
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error('[runResearchLoop] LLM call failed:', errorMsg);
+        appLogger.error('research.loop', '[runResearchLoop] LLM call failed', { error: errorMsg });
         state = setLLMGenerating(state, false);
         state = setError(state, `LLM call failed: ${errorMsg}`);
         break;
@@ -2411,9 +2491,9 @@ export async function runResearchLoop(
       const factsBeforePhase = state.gatheredFacts.length;
 
       if (llmResponse.toolCalls.length > 0) {
-        console.log(
-          `[runResearchLoop] Executing ${llmResponse.toolCalls.length} tool(s) in parallel`
-        );
+        appLogger.debug('research.loop', '[runResearchLoop] Executing tools in parallel', {
+          toolCount: llmResponse.toolCalls.length,
+        });
 
         // Find current in-progress question for attribution
         const currentQuestion = state.researchPlan.find(
@@ -2457,21 +2537,22 @@ export async function runResearchLoop(
         
         // Check if agent requested synthesis (via request_synthesis tool)
         if (toolResult.shouldTransition === 'synthesizing') {
-          console.log('[runResearchLoop] Agent requested synthesis, transitioning...');
+          appLogger.info('research.loop', '[runResearchLoop] Agent requested synthesis, transitioning');
           state = setPhase(state, 'synthesizing');
         }
 
         // Clear active tools after completion
         state = clearActiveToolCalls(state);
 
-        console.log(
-          `[runResearchLoop] Tools completed: ${toolsExecuted} executed, ${toolsSkipped} skipped (duplicate)`,
-          observations.map((o) => ({
+        appLogger.debug('research.loop', '[runResearchLoop] Tools completed', {
+          executed: toolsExecuted,
+          skipped: toolsSkipped,
+          observations: observations.map((o) => ({
             tool: o.toolName,
             hasError: 'error' in (o.rawResult as Record<string, unknown>),
             skipped: (o.rawResult as Record<string, unknown>)?.skipped === true,
-          }))
-        );
+          })),
+        });
         
         // Log tool execution to research logger
         researchLogger.info(messageId, 'toolExecution', 'Tools completed', {
@@ -2505,7 +2586,7 @@ export async function runResearchLoop(
             );
             
             if (unanswered.length === 0) {
-              console.log('[runResearchLoop] All questions answered, moving to evaluation');
+              appLogger.info('research.loop', '[runResearchLoop] All questions answered, moving to evaluation');
               state = setPhase(state, 'evaluating');
               state = pushActivityLog(state, 'All questions answered, evaluating research quality...');
             }
@@ -2525,7 +2606,7 @@ export async function runResearchLoop(
           break;
 
         default:
-          console.warn(`[runResearchLoop] Unexpected phase: ${state.phase}`);
+          appLogger.warn('research.loop', '[runResearchLoop] Unexpected phase', { phase: state.phase });
       }
 
       // === PRODUCTIVE STEP TRACKING ===
@@ -2538,10 +2619,15 @@ export async function runResearchLoop(
         const toolsWereExecuted = toolsExecuted > 0;
         
         // Debug stats for monitoring productive step behavior
-        console.log(
-          `[runResearchLoop] 📊 STATS: Facts=${newFactsGathered} | Tools: Exec=${toolsExecuted}/Skip=${toolsSkipped} | ` +
-          `TextOnly=${state.consecutiveTextOnlySteps}/${MAX_TEXT_ONLY_STEPS} | Unproductive=${state.consecutiveUnproductiveSteps}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT}`
-        );
+        appLogger.debug('research.loop', '[runResearchLoop] Step stats', {
+          newFacts: newFactsGathered,
+          toolsExecuted,
+          toolsSkipped,
+          consecutiveTextOnly: state.consecutiveTextOnlySteps,
+          maxTextOnly: MAX_TEXT_ONLY_STEPS,
+          consecutiveUnproductive: state.consecutiveUnproductiveSteps,
+          unproductiveLimit: CONSECUTIVE_UNPRODUCTIVE_LIMIT,
+        });
         
         // Log stats to research logger for file persistence
         researchLogger.info(messageId, 'productiveStep', 'Step stats', {
@@ -2566,7 +2652,9 @@ export async function runResearchLoop(
           if (stepWasProductive) {
             // Reset unproductive counter - we found something!
             if (state.consecutiveUnproductiveSteps > 0) {
-              console.log(`[runResearchLoop] Productive step! Found ${newFactsGathered} new fact(s), resetting unproductive counter`);
+              appLogger.info('research.loop', '[runResearchLoop] Productive step! Found new facts', {
+                newFactCount: newFactsGathered,
+              });
             }
             
             // Track steps on current focus (for per-question time limits)
@@ -2587,9 +2675,11 @@ export async function runResearchLoop(
                   f => f.relevantQuestionIds.includes(currentQuestion.id)
                 ).length;
                 
-                console.log(
-                  `[runResearchLoop] Q${questionIndex} has been researched for ${newStepsOnFocus} steps with ${questionFactCount} facts - encouraging answer`
-                );
+                appLogger.info('research.loop', '[runResearchLoop] Question step limit reached', {
+                  questionIndex,
+                  stepsOnQuestion: newStepsOnFocus,
+                  factsForQuestion: questionFactCount,
+                });
                 
                 researchLogger.info(messageId, 'perQuestionLimit', 'Question step limit reached', {
                   questionIndex,
@@ -2608,7 +2698,11 @@ export async function runResearchLoop(
           } else {
             // Tools ran but no new facts - increment unproductive counter
             const newUnproductiveCount = state.consecutiveUnproductiveSteps + 1;
-            console.log(`[runResearchLoop] Unproductive step: ${newUnproductiveCount}/${CONSECUTIVE_UNPRODUCTIVE_LIMIT} (no new facts from ${toolsExecuted} tool call(s))`);
+            appLogger.warn('research.loop', '[runResearchLoop] Unproductive step: no new facts', {
+              unproductiveCount: newUnproductiveCount,
+              limit: CONSECUTIVE_UNPRODUCTIVE_LIMIT,
+              toolsExecuted,
+            });
             
             researchLogger.warn(messageId, 'productiveStep', 'Unproductive step', {
               unproductiveCount: newUnproductiveCount,
@@ -2630,7 +2724,9 @@ export async function runResearchLoop(
         } else if (toolsSkipped > 0 && toolsExecuted === 0) {
           // All tools were skipped as duplicates - don't count as a step
           // The error messages already went to the LLM to trigger course correction
-          console.log(`[runResearchLoop] All ${toolsSkipped} tool(s) skipped as duplicates - not counting as a step`);
+          appLogger.debug('research.loop', '[runResearchLoop] All tools skipped as duplicates - not counting as step', {
+            toolsSkipped,
+          });
           // Reset text-only counter since tools were attempted (even if skipped)
           state = {
             ...state,
@@ -2641,9 +2737,10 @@ export async function runResearchLoop(
           // LLM output text without calling any tools - potential infinite loop risk
           const newTextOnlyCount = state.consecutiveTextOnlySteps + 1;
           
-          console.warn(
-            `[runResearchLoop] ⚠️ TEXT-ONLY response (no tools called): ${newTextOnlyCount}/${MAX_TEXT_ONLY_STEPS}`
-          );
+          appLogger.warn('research.loop', '[runResearchLoop] TEXT-ONLY response (no tools called)', {
+            textOnlyCount: newTextOnlyCount,
+            limit: MAX_TEXT_ONLY_STEPS,
+          });
           
           researchLogger.warn(messageId, 'productiveStep', 'Text-only response', {
             textOnlyCount: newTextOnlyCount,
@@ -2658,9 +2755,9 @@ export async function runResearchLoop(
           
           // After threshold, treat accumulated text-only steps as one unproductive step
           if (newTextOnlyCount >= MAX_TEXT_ONLY_STEPS) {
-            console.warn(
-              `[runResearchLoop] Text-only threshold reached (${MAX_TEXT_ONLY_STEPS}), treating as unproductive step`
-            );
+            appLogger.warn('research.loop', '[runResearchLoop] Text-only threshold reached, treating as unproductive step', {
+              threshold: MAX_TEXT_ONLY_STEPS,
+            });
             
             researchLogger.warn(messageId, 'productiveStep', 'Text-only threshold reached', {
               threshold: MAX_TEXT_ONLY_STEPS,
@@ -2700,7 +2797,7 @@ export async function runResearchLoop(
         try {
           await onStatePersist(state);
         } catch (error) {
-          console.error('[runResearchLoop] State persistence failed:', error);
+          appLogger.error('research.loop', '[runResearchLoop] State persistence failed', { error });
           // Don't fail the loop on persistence errors
         }
       }
@@ -2710,7 +2807,7 @@ export async function runResearchLoop(
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[runResearchLoop] Unexpected error:', errorMsg);
+    appLogger.error('research.loop', '[runResearchLoop] Unexpected error', { error: errorMsg });
     state = setError(state, `Unexpected error: ${errorMsg}`);
   }
 
@@ -2722,7 +2819,7 @@ export async function runResearchLoop(
     try {
       await onStatePersist(state);
     } catch (error) {
-      console.error('[runResearchLoop] Final persistence failed:', error);
+      appLogger.error('research.loop', '[runResearchLoop] Final persistence failed', { error });
     }
   }
 
@@ -2743,7 +2840,7 @@ export async function runResearchLoop(
   researchLogger.info(messageId, 'runResearchLoop', 'Research complete', completionData);
   researchLogger.endSession(messageId);
 
-  console.log('[runResearchLoop] Research complete:', {
+  appLogger.info('research.loop', '[runResearchLoop] Research complete', {
     phase: state.phase,
     steps: state.currentStep,
     rounds: state.currentRound,

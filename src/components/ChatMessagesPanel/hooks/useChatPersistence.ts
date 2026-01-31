@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { ThreadRuntime, ThreadMessageLike } from '@assistant-ui/react';
+import { appLogger } from '../../../services/platform';
 import { getMessages, saveMessage, deleteMessage } from '../../../services/clients/chat';
 import type { ConversationSummary, ChatMessage } from '../../../services/clients/chat';
 import { threadMessageToTranscriptMarkdown } from '../../../utils/messages';
@@ -207,7 +208,7 @@ export function useChatPersistence({
           
           await syncConversations({ silent: true });
         } catch (error) {
-          console.error('Failed to persist message', error);
+          appLogger.error('hook.ui', 'Failed to persist message', { error, conversationId: activeConversationId });
         } finally {
           isPersistingRef.current = false;
         }
@@ -330,7 +331,7 @@ export function useMessageDelete({
         // Delete from database (cascade deletes subsequent)
         await deleteMessage(dbId);
       } else {
-        console.warn('Could not find DB ID for message:', deleteTargetId);
+        appLogger.debug('hook.ui', 'Could not find DB ID for message', { messageId: deleteTargetId });
       }
       
       // Reload messages from DB and reset runtime
@@ -373,7 +374,7 @@ export function useMessageDelete({
       await syncConversations({ silent: true });
       showToast('Message deleted', 'success');
     } catch (error) {
-      console.error('Failed to delete message:', error);
+      appLogger.error('hook.ui', 'Failed to delete message', { error, conversationId: activeConversationId });
       showToast('Failed to delete message', 'error');
     } finally {
       isDeletingRef.current = false;

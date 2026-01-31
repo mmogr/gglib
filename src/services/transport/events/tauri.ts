@@ -3,6 +3,7 @@
  * Wraps @tauri-apps/api/event with typed handlers.
  */
 
+import { appLogger } from '../../platform';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { Unsubscribe, EventHandler } from '../types/common';
 import type { AppEventType, AppEventMap } from '../types/events';
@@ -59,13 +60,13 @@ export function subscribeTauriEvent<K extends AppEventType>(
         })
       )
       .catch((error) => {
-        console.error(`Failed to subscribe to Tauri event ${eventName}:`, error);
+        appLogger.error('transport.tauri', 'Failed to subscribe to Tauri event', { eventName, error });
       })
   );
 
   // Wait for all listeners to be set up
   Promise.all(setupPromises).catch((error) => {
-    console.error(`Failed to set up Tauri event listeners for ${eventType}:`, error);
+    appLogger.error('transport.tauri', 'Failed to set up Tauri event listeners', { eventType, error });
   });
 
   // Return unsubscribe function that cleans up all listeners

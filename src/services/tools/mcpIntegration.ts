@@ -15,6 +15,7 @@ import {
 import type { McpTool, McpServerId } from '../clients/mcp';
 import { getToolRegistry, ToolSource } from './registry';
 import type { ToolDefinition, ToolExecutor, ToolResult } from './types';
+import { appLogger } from '../platform';
 
 /**
  * Convert an MCP tool to a ToolDefinition.
@@ -101,7 +102,7 @@ export function registerMcpTools(serverId: McpServerId, tools: McpTool[]): numbe
       count++;
     } catch (err) {
       // Tool might already exist from another source - log and continue
-      console.warn(`Failed to register MCP tool ${tool.name}:`, err);
+      appLogger.warn('service.mcp', 'Failed to register MCP tool', { toolName: tool.name, error: err });
     }
   }
 
@@ -148,7 +149,7 @@ export async function syncAllMcpTools(): Promise<{ added: number; removed: numbe
       }
     }
   } catch (err) {
-    console.error('Failed to sync MCP tools:', err);
+    appLogger.error('service.mcp', 'Failed to sync MCP tools', { error: err });
   }
 
   return { added, removed };
@@ -219,7 +220,7 @@ export function notifyMcpToolsChanged(): void {
     try {
       callback({ total, byServer });
     } catch (err) {
-      console.error('MCP tools change callback error:', err);
+      appLogger.error('service.mcp', 'MCP tools change callback error', { error: err });
     }
   }
 }

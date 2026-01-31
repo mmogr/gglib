@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { type ChatPageTabId } from './chatTabs';
+import { appLogger } from '../services/platform';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
@@ -294,26 +295,20 @@ export default function ChatPage({
   const handleRenameConversation = async (title: string) => {
     if (!activeConversation) return;
     try {
-      console.debug('[ChatPage] handleRenameConversation called:', {
+      appLogger.debug('component.chat', 'Rename conversation called', {
         conversationId: activeConversation.id,
         title,
         titleLength: title.length,
       });
       await updateConversationTitle(activeConversation.id, title);
-      console.debug('[ChatPage] updateConversationTitle succeeded, syncing...');
+      appLogger.debug('component.chat', 'Title update succeeded, syncing');
       await syncConversations({ preferredId: activeConversation.id, silent: true });
-      console.debug('[ChatPage] handleRenameConversation completed successfully');
+      appLogger.debug('component.chat', 'Rename conversation completed successfully');
     } catch (error: any) {
-      console.error('[ChatPage] handleRenameConversation failed:', {
+      appLogger.error('component.chat', 'Rename conversation failed', {
         error,
-        errorType: typeof error,
-        errorName: error?.name,
-        errorMessage: error?.message,
-        errorStack: error?.stack,
-        errorConstructor: error?.constructor?.name,
-        isDOMException: error instanceof DOMException,
-        isError: error instanceof Error,
-        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+        conversationId: activeConversation.id,
+        title
       });
       setChatError(error instanceof Error ? error.message : String(error));
     }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { appLogger } from '../../../services/platform';
 
 export interface ModelTagsState {
   modelTags: string[];
@@ -36,7 +37,7 @@ export function useModelTags({
       const tags = await getModelTags(modelId);
       setModelTags(tags);
     } catch (error) {
-      console.error('Failed to load model tags:', error);
+      appLogger.error('hook.ui', 'Failed to load model tags', { error, modelId });
     }
   }, [modelId, getModelTags]);
 
@@ -57,7 +58,7 @@ export function useModelTags({
       await onRefresh?.();
       setNewTag('');
     } catch (error) {
-      console.error('Failed to add tag:', error);
+      appLogger.error('hook.ui', 'Failed to add tag', { error, modelId, tag: newTag });
     }
   }, [modelId, newTag, onAddTag, loadModelTags, onRefresh]);
 
@@ -68,7 +69,7 @@ export function useModelTags({
       await loadModelTags();
       await onRefresh?.();
     } catch (error) {
-      console.error('Failed to remove tag:', error);
+      appLogger.error('hook.ui', 'Failed to remove tag', { error, modelId, tag });
     }
   }, [modelId, onRemoveTag, loadModelTags, onRefresh]);
 

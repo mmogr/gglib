@@ -5,6 +5,8 @@
  * This ensures consistent error handling across platforms.
  */
 
+import { appLogger } from '../platform';
+
 /**
  * Standardized error codes for transport operations.
  */
@@ -187,10 +189,10 @@ interface ErrorApiResponse {
  * Throws TransportError on failure.
  */
 export async function readData<T>(response: Response): Promise<T> {
-  console.debug('[readData] called:', { status: response.status, ok: response.ok, contentType: response.headers.get('content-type') });
+  appLogger.debug('transport.error', '[readData] called', { status: response.status, ok: response.ok, contentType: response.headers.get('content-type') });
   
   if (!response.ok) {
-    console.debug('[readData] response not ok, extracting error');
+    appLogger.debug('transport.error', '[readData] response not ok, extracting error');
     let errorMessage = response.statusText || `HTTP ${response.status}`;
     let errorCode = httpStatusToCode(response.status);
     let details: unknown = { status: response.status };
@@ -216,23 +218,23 @@ export async function readData<T>(response: Response): Promise<T> {
 
   // Handle 204 No Content or empty responses for void operations
   if (response.status === 204 || response.headers.get('content-length') === '0') {
-    console.debug('[readData] empty response (204 or content-length 0), returning undefined');
+    appLogger.debug('transport.error', '[readData] empty response, returning undefined', { status: response.status });
     return undefined as T;
   }
 
-  console.debug('[readData] parsing response body');
+  appLogger.debug('transport.error', '[readData] parsing response body');
   try {
     // Check if there's actually content to parse
     const text = await response.text();
-    console.debug('[readData] response text:', text);
+    appLogger.debug('transport.error', '[readData] response text', { textPreview: text.slice(0, 200) });
     
     if (!text || text.trim() === '') {
-      console.debug('[readData] empty text body, returning undefined');
+      appLogger.debug('transport.error', '[readData] empty text body, returning undefined');
       return undefined as T;
     }
     
     const body = JSON.parse(text) as ApiResponse<T>;
-    console.debug('[readData] parsed body:', body);
+    appLogger.debug('transport.error', '[readData] parsed body', { body });
     
     if (!body.success && body.error) {
       throw new TransportError('INTERNAL', body.error);
@@ -241,7 +243,7 @@ export async function readData<T>(response: Response): Promise<T> {
     // Return data, defaulting to the entire body if no data field
     return (body.data ?? body) as T;
   } catch (error) {
-    console.error('[readData] JSON parse error:', error);
+    appLogger.error('transport.error', '[readData] JSON parse error', { error });
     throw error;
   }
 }

@@ -1,4 +1,5 @@
 import { FC, useState, useEffect, useCallback } from 'react';
+import { appLogger } from '../../services/platform';
 import {
   AlertTriangle,
   CalendarClock,
@@ -154,7 +155,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
         }
       } catch (err) {
         // Silently fail - tool support is optional info
-        console.warn('Failed to load tool support info:', err);
+        appLogger.debug('component.model', 'Failed to load tool support info', { error: err, modelId: model.id });
       } finally {
         if (!cancelled) {
           setLoadingToolSupport(false);

@@ -7,6 +7,7 @@
  * @module runAgenticLoop
  */
 
+import { appLogger } from '../../services/platform';
 import type { GglibMessage, GglibContent } from '../../types/messages';
 import type { ToolDefinition } from '../../services/tools';
 import { getToolRegistry } from '../../services/tools';
@@ -120,7 +121,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
   const toolDefinitions = getToolDefinitions();
   const hasTools = toolDefinitions.length > 0;
 
-  console.log('🚀 Starting agentic loop:', {
+  appLogger.debug('hook.runtime', 'Starting agentic loop', {
     maxIterations: maxToolIterations,
     maxStagnation: maxStagnationSteps,
     tools: hasTools ? toolDefinitions.length : 0,
@@ -128,7 +129,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
   
   // Log available tool names for debugging
   if (hasTools) {
-    console.log('🔧 Available tools:', toolDefinitions.map(t => t.function.name));
+    appLogger.debug('hook.runtime', 'Available tools', { toolNames: toolDefinitions.map(t => t.function.name) });
   }
 
   // Initialize agent state
@@ -142,10 +143,21 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
 
   // Convert current messages to API format
   const rawMessages = getMessages();
-  console.log('📨 Raw messages from store:', rawMessages.map(m => ({ role: m.role, contentType: typeof m.content, contentLength: Array.isArray(m.content) ? m.content.length : m.content?.length })));
+  appLogger.debug('hook.runtime', 'Raw messages from store', { 
+    messages: rawMessages.map(m => ({ 
+      role: m.role, 
+      contentType: typeof m.content, 
+      contentLength: Array.isArray(m.content) ? m.content.length : m.content?.length 
+    }))
+  });
   
   let apiMessages = convertToApiMessages(rawMessages);
-  console.log('📨 Converted API messages:', apiMessages.map(m => ({ role: m.role, content: m.content?.substring?.(0, 50) || m.content })));
+  appLogger.debug('hook.runtime', 'Converted API messages', { 
+    messages: apiMessages.map(m => ({ 
+      role: m.role, 
+      contentPreview: m.content?.substring?.(0, 50) || m.content 
+    }))
+  });
   
   // Initialize working memory
   apiMessages = upsertWorkingMemory(apiMessages, buildWorkingMemory(agentState.toolDigests));
@@ -156,11 +168,11 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     iteration++;
     agentState.iter = iteration;
 
-    console.log(`\n📍 Iteration ${iteration}/${maxToolIterations}`);
+    appLogger.debug('hook.runtime', 'Starting iteration', { iteration, maxIterations: maxToolIterations });
 
     // Check stagnation before creating message
     if (agentState.stagnation >= maxStagnationSteps) {
-      console.warn('⚠️ Stagnation detected (repeated output)');
+      appLogger.warn('hook.runtime', 'Stagnation detected (repeated output)');
       const stagnationMessage: GglibMessage = {
         ...mkAssistant({ turnId, iteration, conversationId }),
         content: [
@@ -246,16 +258,16 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
         // Model didn't produce a final envelope - check if this is first iteration
         // On first iteration with no tools called, accept as plain response (model may not support tools)
         if (iteration === 1) {
-          console.log('ℹ️ Model responded without tools or final envelope - accepting as plain response');
+          appLogger.info('hook.runtime', 'Model responded without tools or final envelope - accepting as plain response');
           // Keep the response as-is (already set by streaming)
           break;
         }
         
         // In subsequent iterations, this is a protocol violation
         agentState.protocolStrikes++;
-        console.warn(
-          `⚠️ Protocol violation ${agentState.protocolStrikes}: expected final envelope`
-        );
+        appLogger.warn('hook.runtime', 'Protocol violation: expected final envelope', { 
+          strikes: agentState.protocolStrikes 
+        });
         
         if (agentState.protocolStrikes > 2) {
           // Add error message
@@ -297,7 +309,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
             : m
         )
       );
-      console.log('✅ Final envelope received - conversation complete');
+      appLogger.info('hook.runtime', 'Final envelope received - conversation complete');
       break;
     }
 
@@ -309,7 +321,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     agentState = updatedState;
 
     if (loopDetected) {
-      console.warn('⚠️ Tool loop detected');
+      appLogger.warn('hook.runtime', 'Tool loop detected');
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantMessageId
@@ -330,7 +342,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     }
 
     // Execute tools and UPDATE tool-call parts with results
-    console.log(`🔧 Executing ${streamResult.toolCalls.length} tool(s)...`);
+    appLogger.debug('hook.runtime', 'Executing tools', { toolCount: streamResult.toolCalls.length });
     
     const toolCallsForApiHistory: any[] = [];
     const toolResultsForApiHistory: any[] = [];
@@ -351,7 +363,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
         error: String((e as { message?: string })?.message ?? e ?? 'Unknown error'),
       }));
 
-      console.log(`   ${toolCall.function.name}:`, result);
+      appLogger.debug('hook.runtime', 'Tool executed', { toolName: toolCall.function.name, result });
 
       // Create digest for working memory
       const digest: ToolDigest = {
@@ -413,11 +425,11 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     apiMessages = upsertWorkingMemory(apiMessages, buildWorkingMemory(agentState.toolDigests));
     apiMessages = pruneForBudget(apiMessages);
 
-    console.log('🔄 Continuing to next iteration...');
+    appLogger.debug('hook.runtime', 'Continuing to next iteration');
   }
 
   if (iteration >= maxToolIterations) {
-    console.warn(`⚠️ Max iterations (${maxToolIterations}) reached`);
+    appLogger.warn('hook.runtime', 'Max iterations reached', { maxIterations: maxToolIterations });
     const maxIterMessage: GglibMessage = {
       ...mkAssistant({ turnId, iteration, conversationId }),
       content: [
@@ -430,7 +442,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     setMessages(prev => [...prev, maxIterMessage]);
   }
 
-  console.log('✅ Agentic loop complete');
+  appLogger.debug('hook.runtime', 'Agentic loop complete');
 }
 
 /**

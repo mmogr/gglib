@@ -4,6 +4,7 @@
  * UI components should import from 'services/platform' rather than checking isTauriApp directly.
  */
 
+import { appLogger } from './index';
 import { getApiBaseUrl } from '../../config/api';
 import { isDesktop } from './detect';
 
@@ -85,12 +86,12 @@ export async function listenToServerLogs(
       const logEntry = JSON.parse(event.data) as ServerLogEntry;
       callback(logEntry);
     } catch (e) {
-      console.error('[serverLogs] Failed to parse log event:', e);
+      appLogger.error('service.server', 'Failed to parse log event', { error: e, data: event.data });
     }
   };
   
   eventSource.onerror = (err) => {
-    console.error('[serverLogs] SSE Error:', err);
+    appLogger.error('service.server', 'SSE Error', { error: err, port });
   };
   
   return () => eventSource.close();

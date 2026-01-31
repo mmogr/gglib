@@ -1,5 +1,6 @@
 import { FC, useRef, useState, useCallback, useMemo } from 'react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { appLogger } from '../../services/platform';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import {
   cancelShardGroup,
@@ -106,7 +107,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
       }
       onRefresh?.();;
     } catch (error) {
-      console.error('Failed to remove from queue:', error);
+      appLogger.error('component.download', 'Failed to remove from queue', { error });
     } finally {
       setIsProcessing(false);
     }
@@ -126,7 +127,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
       await reorderQueue(newOrder);
       onRefresh?.();
     } catch (error) {
-      console.error('Failed to reorder queue:', error);
+      appLogger.error('component.download', 'Failed to reorder queue', { error });
     } finally {
       setIsProcessing(false);
     }
@@ -146,7 +147,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
       await reorderQueue(newOrder);
       onRefresh?.();
     } catch (error) {
-      console.error('Failed to reorder queue:', error);
+      appLogger.error('component.download', 'Failed to reorder queue', { error });
     } finally {
       setIsProcessing(false);
     }
