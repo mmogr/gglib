@@ -50,7 +50,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 ## Internal Structure
 
-```
+```text
 ┌─────────────┐     ┌─────────────┐     ┌──────────────────┐
 │ OpenAI SDK  │────▶│ gglib-proxy │────▶│ llama-server     │
 │ or Client   │◀────│ (this crate)│◀────│ (via runtime)    │
@@ -132,17 +132,102 @@ Pass `num_ctx` at the request root to override default context size:
 This crate is used by `gglib-runtime`'s `ProxySupervisor`:
 
 ```rust
-// Supervisor binds the listener
-let listener = TcpListener::bind("127.0.0.1:11444").await?;
+use async_trait::async_trait;
+use gglib_core::ports::{
+  CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
+  ModelSummary, RunningTarget,
+};
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
 
-// Then calls serve with the listener
-gglib_proxy::serve(
-    listener,
-    default_ctx,
-    runtime_port,    // Arc<dyn ModelRuntimePort>
-    catalog_port,    // Arc<dyn ModelCatalogPort>
-    cancel_token,
-).await?;
+fn main() -> anyhow::Result<()> {
+
+#[derive(Debug)]
+struct MockRuntimePort;
+
+#[async_trait]
+impl ModelRuntimePort for MockRuntimePort {
+  async fn ensure_model_running(
+    &self,
+    _model_name: &str,
+    _num_ctx: Option<u64>,
+    _default_ctx: u64,
+  ) -> Result<RunningTarget, ModelRuntimeError> {
+    Ok(RunningTarget::local(
+      12345,
+      1,
+      "mock-model".to_string(),
+      4096,
+    ))
+  }
+
+  async fn current_model(&self) -> Option<RunningTarget> {
+    None
+  }
+
+  async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+    Ok(())
+  }
+}
+
+#[derive(Debug)]
+struct MockCatalogPort;
+
+#[async_trait]
+impl ModelCatalogPort for MockCatalogPort {
+  async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
+    Ok(vec![])
+  }
+
+  async fn resolve_model(&self, _name: &str) -> Result<Option<ModelSummary>, CatalogError> {
+    Ok(None)
+  }
+
+  async fn resolve_for_launch(
+    &self,
+    _name: &str,
+  ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
+    Ok(None)
+  }
+}
+
+let rt = tokio::runtime::Runtime::new()?;
+rt.block_on(async {
+  // Supervisor binds the listener (use an ephemeral port in docs/tests)
+  let listener = TcpListener::bind("127.0.0.1:0").await?;
+  let addr = listener.local_addr()?;
+
+  let runtime_port: Arc<dyn ModelRuntimePort> = Arc::new(MockRuntimePort);
+  let catalog_port: Arc<dyn ModelCatalogPort> = Arc::new(MockCatalogPort);
+
+  // Then calls serve with the listener
+  let cancel = CancellationToken::new();
+  let cancel_for_server = cancel.clone();
+
+  let server = tokio::spawn(async move {
+    gglib_proxy::serve(listener, 4096, runtime_port, catalog_port, cancel_for_server).await
+  });
+
+  // Optional: verify the server responds
+  let health_url = format!("http://{addr}/health");
+  for _ in 0..25 {
+    if let Ok(resp) = reqwest::get(&health_url).await {
+      if resp.status().is_success() {
+        break;
+      }
+    }
+    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+  }
+
+  // Shutdown
+  cancel.cancel();
+  server.await??;
+  Ok::<(), anyhow::Error>(())
+})?;
+
+Ok(())
+}
 ```
 
 ## Streaming
