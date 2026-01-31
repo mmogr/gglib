@@ -366,6 +366,16 @@ async fn main() -> anyhow::Result<()> {
             use gglib_axum::{ServerConfig, start_server};
             use gglib_core::paths::llama_server_path;
 
+            // Validate environment variable if present (warn if invalid but parsed to default)
+            if let Ok(env_port) = std::env::var("VITE_GGLIB_WEB_PORT") {
+                if env_port.parse::<u16>().is_err() {
+                    eprintln!(
+                        "Warning: VITE_GGLIB_WEB_PORT='{}' is not a valid port number. Using default: {}",
+                        env_port, port
+                    );
+                }
+            }
+
             // Build server config
             let mut config = ServerConfig {
                 port,
