@@ -1,14 +1,14 @@
-///! Application log commands.
-///!
-///! Commands for bridging frontend logs to Rust tracing infrastructure.
-///! Frontend logs are mapped to tracing events with the target "gglib.frontend.*".
-
+//! Application log commands.
+//!
+//! Commands for bridging frontend logs to Rust tracing infrastructure.
+//! Frontend logs are mapped to tracing events with the target "gglib.frontend.*".
 use serde::Deserialize;
 
 /// Frontend log entry structure.
 ///
 /// Matches the LogEntry interface in TypeScript.
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // timestamp is required for deserialization but not used in logging
 pub struct FrontendLogEntry {
     pub timestamp: String,
     pub level: String,
@@ -44,22 +44,36 @@ pub struct FrontendLogEntry {
 pub fn log_from_frontend(entry: FrontendLogEntry) -> Result<(), String> {
     let message = &entry.message;
     let category = &entry.category;
-    
+
     // Log with static target and category as structured field
     if let Some(data) = &entry.data {
         match entry.level.as_str() {
-            "debug" => tracing::debug!(target: "gglib_frontend", category = %category, data = %data, "{}", message),
-            "info" => tracing::info!(target: "gglib_frontend", category = %category, data = %data, "{}", message),
-            "warn" => tracing::warn!(target: "gglib_frontend", category = %category, data = %data, "{}", message),
-            "error" => tracing::error!(target: "gglib_frontend", category = %category, data = %data, "{}", message),
-            _ => tracing::info!(target: "gglib_frontend", category = %category, data = %data, "{}", message),
+            "debug" => {
+                tracing::debug!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+            }
+            "info" => {
+                tracing::info!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+            }
+            "warn" => {
+                tracing::warn!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+            }
+            "error" => {
+                tracing::error!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+            }
+            _ => {
+                tracing::info!(target: "gglib_frontend", category = %category, data = %data, "{}", message)
+            }
         }
     } else {
         match entry.level.as_str() {
-            "debug" => tracing::debug!(target: "gglib_frontend", category = %category, "{}", message),
+            "debug" => {
+                tracing::debug!(target: "gglib_frontend", category = %category, "{}", message)
+            }
             "info" => tracing::info!(target: "gglib_frontend", category = %category, "{}", message),
             "warn" => tracing::warn!(target: "gglib_frontend", category = %category, "{}", message),
-            "error" => tracing::error!(target: "gglib_frontend", category = %category, "{}", message),
+            "error" => {
+                tracing::error!(target: "gglib_frontend", category = %category, "{}", message)
+            }
             _ => tracing::info!(target: "gglib_frontend", category = %category, "{}", message),
         }
     }
