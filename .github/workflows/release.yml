@@ -134,6 +134,15 @@ jobs:
           # Always checkout main branch for docs, even when triggered by release tag
           ref: main
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -169,7 +178,7 @@ jobs:
           npm run build
 
       - name: Build documentation
-        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-tauri --exclude gglib-gui --exclude gglib-app
+        run: cargo doc --workspace --no-deps --document-private-items
 
       - name: Create index.html redirect
         run: |
