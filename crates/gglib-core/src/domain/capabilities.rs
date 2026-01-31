@@ -424,7 +424,7 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: Some("".to_string()),
+                content: Some(String::new()),
                 tool_calls: None,
             },
             ChatMessage {
