@@ -21,7 +21,7 @@ This is a **utility crate** — it has no layer dependencies and can be used by 
 │                                                                                     │
 │  Constants (populated at compile time):                                             │
 │  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐         │
-│  │      SEMVER         │  │   GIT_SHA_SHORT     │  │     GIT_DIRTY       │         │
+│  │      `SEMVER`       │  │   GIT_SHA_SHORT     │  │     GIT_DIRTY       │         │
 │  │   "0.2.9"           │  │     "a1b2c3d"       │  │    true/false       │         │
 │  └─────────────────────┘  └─────────────────────┘  └─────────────────────┘         │
 │                                                                                     │
@@ -37,7 +37,7 @@ This is a **utility crate** — it has no layer dependencies and can be used by 
 
 | Constant | Type | Description | Example |
 |----------|------|-------------|---------|
-| `SEMVER` | `&str` | SemVer version from Cargo.toml | `"0.2.9"` |
+| `SEMVER` | `&str` | `SemVer` version from Cargo.toml | `"0.2.9"` |
 | `GIT_SHA_SHORT` | `&str` | Short git commit hash (7 chars) | `"a1b2c3d"` |
 | `GIT_DIRTY` | `bool` | Whether repo has uncommitted changes | `true` |
 | `HAS_GIT_SHA` | `bool` | Whether git SHA is valid (not "unknown") | `true` |
@@ -71,7 +71,7 @@ This crate is used by:
 
 The `build.rs` script uses `vergen-gix` to extract git information at compile time:
 
-1. Reads `CARGO_PKG_VERSION` for SemVer
+1. Reads `CARGO_PKG_VERSION` for `SemVer`
 2. Runs `git rev-parse --short HEAD` for commit SHA
 3. Checks `git status --porcelain` for dirty state
 4. Emits values as `cargo:rustc-env` directives
