@@ -16,8 +16,6 @@ members = [
     "crates/gglib-tauri",
     # Tauri desktop app (gglib-app binary)
     "src-tauri",
-    # Legacy monolith - re-enabled for gradual migration, will be removed after extraction complete
-    ".",
 ]
 
 # Shared package metadata for all workspace crates
@@ -120,40 +118,4 @@ opt-level = 0
 
 [profile.test]
 opt-level = 0
-
-# ============================================================================
-# Transitional Facade Package
-# Provides convenience re-exports during migration. Will be removed.
-# New code should import workspace crates directly (gglib-core, gglib-db, etc.)
-# ============================================================================
-
-[package]
-name = "gglib-lib"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
-repository.workspace = true
-description = "GGUF model manager and runner"
-publish = false  # Transitional scaffolding - do not publish
-
-
-[dependencies]
-# Workspace crates for re-exports
-gglib-core.workspace = true
-gglib-db.workspace = true
-gglib-download.workspace = true
-gglib-runtime.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
-tokio-test.workspace = true
-serde_json.workspace = true
-chrono.workspace = true
-anyhow.workspace = true
-tokio.workspace = true
-gglib-gguf.workspace = true
-gglib-hf.workspace = true
-sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "sqlite"] }
-urlencoding = "2.1"
 
