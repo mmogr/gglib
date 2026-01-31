@@ -178,7 +178,10 @@ jobs:
           npm run build
 
       - name: Build documentation
-        run: cargo doc --workspace --no-deps --document-private-items
+        # Exclude gglib-app (Tauri desktop) as it requires the web_ui directory to be built.
+        # gglib-app has minimal API documentation (6 items) and is not the primary doc target.
+        # gglib-core (119 items) is the comprehensive library documentation.
+        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
 
       - name: Create index.html redirect
         run: |
@@ -188,8 +191,8 @@ jobs:
           <head>
             <meta charset="utf-8">
             <title>gglib Documentation</title>
-            <meta http-equiv="refresh" content="0; url=gglib/index.html">
-            <link rel="canonical" href="gglib/index.html">
+            <meta http-equiv="refresh" content="0; url=gglib_core/index.html">
+            <link rel="canonical" href="gglib_core/index.html">
             <style>
               body { 
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -212,8 +215,8 @@ jobs:
           <body>
             <div class="container">
               <h1>🦀 gglib Documentation</h1>
-              <p>Redirecting to the <a href="gglib/index.html">gglib documentation</a>...</p>
-              <p><small>If you're not redirected automatically, <a href="gglib/index.html">click here</a>.</small></p>
+              <p>Redirecting to the <a href="gglib_core/index.html">gglib-core documentation</a>...</p>
+              <p><small>If you're not redirected automatically, <a href="gglib_core/index.html">click here</a>.</small></p>
             </div>
           </body>
           </html>
