@@ -27,6 +27,12 @@ use gglib_core::download::{
 pub use shard_group::ShardGroupId;
 pub use types::{FailedItem, QueuedItem};
 
+/// Saturating conversion from usize to u32 for queue positions.
+/// Returns `u32::MAX` if the value exceeds `u32::MAX`.
+fn usize_to_u32_saturating(n: usize) -> u32 {
+    u32::try_from(n).unwrap_or(u32::MAX)
+}
+
 /// Manages the download queue state.
 ///
 /// This is a sync type with no internal locking — the caller
@@ -100,9 +106,9 @@ impl DownloadQueue {
 
         // Position: if something is active, pending starts at 2
         let position = if has_active {
-            self.pending.len() as u32 + 1
+            usize_to_u32_saturating(self.pending.len()).saturating_add(1)
         } else {
-            self.pending.len() as u32
+            usize_to_u32_saturating(self.pending.len())
         };
 
         Ok(position)
@@ -111,7 +117,6 @@ impl DownloadQueue {
     /// Queue a sharded download (multiple files with shared `group_id`).
     ///
     /// Returns the 1-based queue position of the first shard.
-    #[allow(clippy::cast_possible_truncation)] // Queue positions won't exceed u32::MAX in practice
     pub fn queue_sharded(
         &mut self,
         id: &DownloadId,
@@ -128,9 +133,9 @@ impl DownloadQueue {
         self.remove_from_failed(id);
 
         let first_position = if has_active {
-            self.pending.len() as u32 + 2
+            usize_to_u32_saturating(self.pending.len()).saturating_add(2)
         } else {
-            self.pending.len() as u32 + 1
+            usize_to_u32_saturating(self.pending.len()).saturating_add(1)
         };
 
         let items = self.create_shard_items(id, completion_key, shard_files);
@@ -172,7 +177,6 @@ impl DownloadQueue {
     /// Reorder a queued item (or shard group) to a new position.
     ///
     /// Returns the actual 1-based position where the item(s) were placed.
-    #[allow(clippy::cast_possible_truncation)] // Queue positions won't exceed u32::MAX in practice
     pub fn reorder(
         &mut self,
         id: &DownloadId,
@@ -236,9 +240,9 @@ impl DownloadQueue {
 
         // Return 1-based position
         let result_position = if has_active {
-            insert_pos as u32 + 2
+            usize_to_u32_saturating(insert_pos).saturating_add(2)
         } else {
-            insert_pos as u32 + 1
+            usize_to_u32_saturating(insert_pos).saturating_add(1)
         };
 
         Ok(result_position)
@@ -247,7 +251,6 @@ impl DownloadQueue {
     /// Get a snapshot of the current queue state for API responses.
     ///
     /// The `current_item` is the download currently being processed (if any).
-    #[allow(clippy::cast_possible_truncation)] // Queue item counts won't exceed u32::MAX in practice
     pub fn snapshot(
         &self,
         current_item: Option<gglib_core::download::QueuedDownload>,
@@ -258,13 +261,13 @@ impl DownloadQueue {
             .pending
             .iter()
             .enumerate()
-            .map(|(idx, item)| item.to_dto(base_position + idx as u32, DownloadStatus::Queued))
+            .map(|(idx, item)| item.to_dto(base_position + usize_to_u32_saturating(idx), DownloadStatus::Queued))
             .collect();
 
         let failed: Vec<_> = self.failed.iter().map(types::FailedItem::to_dto).collect();
 
         let active_count = u32::from(current_item.is_some());
-        let pending_count = pending.len() as u32;
+        let pending_count = usize_to_u32_saturating(pending.len());
 
         let mut items = Vec::with_capacity(1 + pending.len());
         if let Some(current) = current_item {
@@ -313,9 +316,9 @@ impl DownloadQueue {
 
         // Return 1-based position
         let position = if has_active {
-            self.pending.len() as u32 + 1
+            usize_to_u32_saturating(self.pending.len()).saturating_add(1)
         } else {
-            self.pending.len() as u32
+            usize_to_u32_saturating(self.pending.len())
         };
 
         Ok(position)
@@ -372,7 +375,7 @@ impl DownloadQueue {
         self.failed.retain(|item| &item.item.id != id);
     }
 
-    #[allow(clippy::unused_self, clippy::cast_possible_truncation)] // Shard counts won't exceed u32::MAX
+    #[allow(clippy::unused_self)]
     fn create_shard_items(
         &self,
         id: &DownloadId,
@@ -380,15 +383,15 @@ impl DownloadQueue {
         shard_files: Vec<(String, Option<u64>)>,
     ) -> Vec<QueuedItem> {
         let group_id = ShardGroupId::generate(id);
-        let total_shards = shard_files.len() as u32;
+        let total_shards = usize_to_u32_saturating(shard_files.len());
 
         shard_files
             .into_iter()
             .enumerate()
             .map(|(idx, (filename, size))| {
                 let shard_info = match size {
-                    Some(s) => ShardInfo::with_size(idx as u32, total_shards, filename, s),
-                    None => ShardInfo::new(idx as u32, total_shards, filename),
+                    Some(s) => ShardInfo::with_size(usize_to_u32_saturating(idx), total_shards, filename, s),
+                    None => ShardInfo::new(usize_to_u32_saturating(idx), total_shards, filename),
                 };
                 QueuedItem::new_shard(
                     id.clone(),
