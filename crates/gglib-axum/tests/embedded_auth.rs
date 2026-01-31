@@ -6,16 +6,19 @@
 //! - Wrong/missing tokens are rejected with 401
 //! - Correct tokens grant access
 
+mod common;
+
 use gglib_axum::{
     bootstrap::{CorsConfig, ServerConfig, bootstrap},
     embedded::{EmbeddedServerConfig, start_embedded_server},
 };
+use common::ports::{TEST_CORS_ORIGIN, TEST_BASE_PORT};
 
 /// Helper to create a test config that doesn't require llama-server.
 fn test_config() -> ServerConfig {
     ServerConfig {
         port: 0,
-        base_port: 19000,
+        base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent: 1,
         static_dir: None,
@@ -32,7 +35,7 @@ async fn test_health_endpoint_no_auth() {
     };
 
     let config = EmbeddedServerConfig {
-        cors_origins: vec!["http://localhost:3000".to_string()],
+        cors_origins: vec![TEST_CORS_ORIGIN.to_string()],
     };
 
     let (info, _handle) = start_embedded_server(ctx, config)
@@ -62,7 +65,7 @@ async fn test_api_requires_auth() {
     };
 
     let config = EmbeddedServerConfig {
-        cors_origins: vec!["http://localhost:3000".to_string()],
+        cors_origins: vec![TEST_CORS_ORIGIN.to_string()],
     };
 
     // Start embedded server to get the auth middleware wired up
@@ -112,7 +115,7 @@ async fn test_api_malformed_auth_header() {
     };
 
     let config = EmbeddedServerConfig {
-        cors_origins: vec!["http://localhost:3000".to_string()],
+        cors_origins: vec![TEST_CORS_ORIGIN.to_string()],
     };
 
     let (info, _handle) = start_embedded_server(ctx, config)

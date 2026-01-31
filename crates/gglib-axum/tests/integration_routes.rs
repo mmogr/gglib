@@ -2,6 +2,8 @@
 //!
 //! These tests verify that routes are correctly wired to handlers.
 
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
@@ -9,12 +11,13 @@ use tower::ServiceExt;
 
 use gglib_axum::bootstrap::{CorsConfig, ServerConfig, bootstrap};
 use gglib_axum::routes::create_router;
+use common::ports::{TEST_BASE_PORT, TEST_MODEL_PORT};
 
 /// Helper to create a test config that doesn't require llama-server.
 fn test_config() -> ServerConfig {
     ServerConfig {
         port: 0, // Not used in tests
-        base_port: 19000,
+        base_port: TEST_BASE_PORT,
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent: 1,
         static_dir: None,
@@ -426,7 +429,7 @@ async fn servers_start_collection_route_accepts_post() {
     let app = create_router(ctx, &CorsConfig::AllowAll);
 
     // Request with model_id in body (matches frontend transport contract)
-    let request_body = r#"{"model_id": 999, "port": 8080}"#;
+    let request_body = format!(r#"{{"model_id": 999, "port": {}}}"#, TEST_MODEL_PORT);
 
     let response = app
         .oneshot(
