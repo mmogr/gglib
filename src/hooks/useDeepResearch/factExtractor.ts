@@ -24,6 +24,7 @@ import {
   addFacts,
 } from './types';
 import type { TurnMessage } from './buildTurnMessages';
+import { appLogger } from '../../services/platform';
 
 // =============================================================================
 // Configuration
@@ -270,9 +271,9 @@ function validateSourceLineage(
     }
     
     if (!foundMatch) {
-      console.warn(
-        `[factExtractor] Discarding fact with invalid URL: ${fact.sourceUrl}`
-      );
+      appLogger.warn('research.facts', 'Discarding fact with invalid URL', { 
+        sourceUrl: fact.sourceUrl 
+      });
       invalidCount++;
     }
   }
@@ -429,9 +430,10 @@ function isDuplicate(
       // Before marking as duplicate, check for numeric divergence
       // "ICE arrests increased 40%" vs "ICE arrests increased 1,153%" should NOT be duplicates
       if (hasNumericDivergence(newClaim, existing.claim)) {
-        console.log(
-          `[factExtractor] Numeric divergence prevents dedup: "${newClaim.slice(0, 40)}..." vs "${existing.claim.slice(0, 40)}..."`
-        );
+        appLogger.debug('research.facts', 'Numeric divergence prevents dedup', {
+          newClaim: newClaim.slice(0, 40),
+          existingClaim: existing.claim.slice(0, 40)
+        });
         continue; // Not a duplicate due to different numbers
       }
       return { isDup: true, existingFact: existing };
@@ -473,14 +475,14 @@ function deduplicateFacts(
       if (newRank > existingRank) {
         // New fact is better - we'll add it, but note we can't remove the old one here
         // (that would require more complex state management)
-        console.log(
-          `[factExtractor] Duplicate found but new has higher confidence: "${fact.claim.slice(0, 50)}..."`
-        );
+        appLogger.debug('research.facts', 'Duplicate found but new has higher confidence', {
+          claim: fact.claim.slice(0, 50)
+        });
         unique.push(fact);
       } else {
-        console.log(
-          `[factExtractor] Discarding duplicate: "${fact.claim.slice(0, 50)}..."`
-        );
+        appLogger.debug('research.facts', 'Discarding duplicate (lower confidence)', {
+          claim: fact.claim.slice(0, 50)
+        });
         duplicateCount++;
       }
       continue;
@@ -499,9 +501,9 @@ function deduplicateFacts(
     });
     
     if (batchDup) {
-      console.log(
-        `[factExtractor] Discarding batch duplicate: "${fact.claim.slice(0, 50)}..."`
-      );
+      appLogger.debug('research.facts', 'Discarding batch duplicate', {
+        claim: fact.claim.slice(0, 50)
+      });
       duplicateCount++;
       continue;
     }
@@ -573,9 +575,10 @@ export function pruneFacts(
   
   // If protected facts alone exceed budget, we can't prune safely
   if (protectedFacts.length >= maxFacts) {
-    console.warn(
-      `[factExtractor] Protected facts (${protectedFacts.length}) exceed budget (${maxFacts}). Cannot prune safely.`
-    );
+    appLogger.warn('research.facts', 'Protected facts exceed budget - cannot prune', {
+      protectedCount: protectedFacts.length,
+      maxFacts
+    });
     return state;
   }
   
@@ -604,9 +607,11 @@ export function pruneFacts(
   const prunedCount = prunableFacts.length - keptPrunable.length;
   
   if (prunedCount > 0) {
-    console.log(
-      `[factExtractor] Pruned ${prunedCount} facts. Protected: ${protectedFacts.length}, Kept: ${keptPrunable.length}`
-    );
+    appLogger.debug('research.facts', 'Pruned facts', {
+      prunedCount,
+      protectedCount: protectedFacts.length,
+      keptCount: keptPrunable.length
+    });
   }
   
   return {
@@ -634,7 +639,7 @@ function parseExtractionResponse(content: string): RawExtractedFact[] {
   const jsonEnd = jsonStr.lastIndexOf('}');
   
   if (jsonStart === -1 || jsonEnd === -1) {
-    console.warn('[factExtractor] No JSON found in extraction response');
+    appLogger.warn('research.facts', 'No JSON found in extraction response');
     return [];
   }
   
@@ -642,7 +647,7 @@ function parseExtractionResponse(content: string): RawExtractedFact[] {
     const parsed = JSON.parse(jsonStr.slice(jsonStart, jsonEnd + 1));
     
     if (!parsed || !Array.isArray(parsed.facts)) {
-      console.warn('[factExtractor] Invalid extraction response structure');
+      appLogger.warn('research.facts', 'Invalid extraction response structure');
       return [];
     }
     
@@ -670,7 +675,7 @@ function parseExtractionResponse(content: string): RawExtractedFact[] {
     
     return validFacts;
   } catch (error) {
-    console.warn('[factExtractor] Failed to parse extraction response:', error);
+    appLogger.warn('research.facts', 'Failed to parse extraction response', { error });
     return [];
   }
 }
@@ -705,9 +710,9 @@ export async function extractFacts(
     };
   }
   
-  console.log(
-    `[factExtractor] Extracting facts from ${state.pendingObservations.length} observation(s)`
-  );
+  appLogger.debug('research.facts', 'Extracting facts from observations', {
+    observationCount: state.pendingObservations.length
+  });
   
   // Find current question for relevance attribution
   const currentQuestion = state.researchPlan.find(
@@ -725,7 +730,7 @@ export async function extractFacts(
   try {
     responseContent = await callLLM(messages, extractionEndpoint, abortSignal);
   } catch (error) {
-    console.error('[factExtractor] LLM call failed:', error);
+    appLogger.error('research.facts', 'LLM call failed during fact extraction', { error });
     // Return state unchanged on extraction failure
     return {
       newFacts: [],
@@ -737,7 +742,7 @@ export async function extractFacts(
   
   // Parse response
   const rawFacts = parseExtractionResponse(responseContent);
-  console.log(`[factExtractor] Parsed ${rawFacts.length} raw facts`);
+  appLogger.debug('research.facts', 'Parsed raw facts', { count: rawFacts.length });
   
   if (rawFacts.length === 0) {
     return {
@@ -753,18 +758,20 @@ export async function extractFacts(
     rawFacts,
     state.pendingObservations
   );
-  console.log(
-    `[factExtractor] Source lineage: ${lineageValid.length} valid, ${invalidCount} discarded`
-  );
+  appLogger.debug('research.facts', 'Source lineage validation', {
+    validCount: lineageValid.length,
+    invalidCount
+  });
   
   // Step 2: Deduplicate
   const { unique, duplicateCount } = deduplicateFacts(
     lineageValid,
     state.gatheredFacts
   );
-  console.log(
-    `[factExtractor] Deduplication: ${unique.length} unique, ${duplicateCount} duplicates`
-  );
+  appLogger.debug('research.facts', 'Deduplication results', {
+    uniqueCount: unique.length,
+    duplicateCount
+  });
   
   // Step 3: Convert to GatheredFact objects
   const newFacts: GatheredFact[] = unique.map((raw) =>
@@ -784,9 +791,10 @@ export async function extractFacts(
   // Step 5: Apply reference-aware pruning
   updatedState = pruneFacts(updatedState, MAX_FACTS_RETAINED);
   
-  console.log(
-    `[factExtractor] Final: ${newFacts.length} new facts added, total: ${updatedState.gatheredFacts.length}`
-  );
+  appLogger.debug('research.facts', 'Fact extraction complete', {
+    newFactCount: newFacts.length,
+    totalFacts: updatedState.gatheredFacts.length
+  });
   
   return {
     newFacts,

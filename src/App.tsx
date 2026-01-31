@@ -8,7 +8,7 @@ import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
-import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState } from "./services/platform";
+import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
 
@@ -87,7 +87,9 @@ function AppContent() {
       [MENU_EVENTS.CHECK_LLAMA_STATUS]: () => checkLlamaStatus(),
       [MENU_EVENTS.COPY_TO_CLIPBOARD]: (payload) => {
         if (payload) {
-          navigator.clipboard.writeText(payload).catch(console.error);
+          navigator.clipboard.writeText(payload).catch((error) => 
+            appLogger.error('component.app', 'Failed to copy to clipboard', { error })
+          );
         }
       },
       [MENU_EVENTS.PROXY_ERROR]: (message) => {
@@ -100,7 +102,7 @@ function AppContent() {
           showToast('Proxy stopped', 'success');
         } catch (error) {
           showToast('Failed to stop proxy', 'error');
-          console.error('Failed to stop proxy:', error);
+          appLogger.error('component.app', 'Failed to stop proxy', { error });
         }
       },
       [MENU_EVENTS.START_PROXY]: async () => {
@@ -110,7 +112,7 @@ function AppContent() {
           showToast(`Proxy started on port ${status.port}`, 'success');
         } catch (error) {
           showToast('Failed to start proxy', 'error');
-          console.error('Failed to start proxy:', error);
+          appLogger.error('component.app', 'Failed to start proxy', { error });
         }
       },
     }).then(unsubscribe => {
