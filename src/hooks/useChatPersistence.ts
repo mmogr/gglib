@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { appLogger } from '../services/platform';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { getMessages, saveMessage } from '../services/clients/chat';
 import type { ChatMessage } from '../services/clients/chat';
@@ -231,7 +232,7 @@ export function useChatPersistence({
 
             await syncConversations({ silent: true });
           } catch (error) {
-            console.error('Failed to persist new message:', error);
+            appLogger.error('hook.persistence', 'Failed to persist new message', { error });
             persistedByMessageId.current.delete(messageId); // Allow retry on next render
           } finally {
             processingRef.current.delete(messageId);
@@ -286,7 +287,7 @@ export function useChatPersistence({
               }
             }
           } catch (error) {
-            console.error('Failed to update message:', error);
+            appLogger.error('hook.persistence', 'Failed to update message', { error });
           } finally {
             processingRef.current.delete(messageId);
             updateTimers.current.delete(messageId);

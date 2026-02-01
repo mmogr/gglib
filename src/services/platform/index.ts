@@ -17,6 +17,11 @@ export type { MenuEventHandlers, MenuEventType } from './menuEvents';
 export { pickGgufFile } from './fileDialogs';
 export type { FilePickerResult } from './fileDialogs';
 
+// Unified logging
+export { appLogger, initAppLogger } from './logging/appLogger';
+export type { AppLogCategory } from './logging/appLogger';
+export type { LogLevel, LogEntry, ILogger } from './logging/types';
+
 // Llama binary management
 export { checkLlamaInstalled, installLlama, listenLlamaProgress } from './llamaInstall';
 export type { LlamaStatus, LlamaInstallProgress } from './llamaInstall';
@@ -28,8 +33,7 @@ export type { ServerLogEntry } from './serverLogs';
 // Research logs (deep research session logging)
 export {
   researchLogger,
-  initResearchLogger,
   truncateString,
   truncatePayload,
 } from './researchLogger';
-export type { ResearchLogEntry, LogLevel } from './researchLogger';
+export type { ResearchLogEntry } from './researchLogger';

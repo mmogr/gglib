@@ -17,6 +17,7 @@ import type {
   ResearchPhase,
   ResearchContextInjection,
 } from './types';
+import { appLogger } from '../../services/platform';
 import {
   serializeForPrompt,
   renderContextForSystemPrompt,
@@ -621,18 +622,19 @@ export function buildTurnMessagesWithBudget(
     result = buildTurnMessages({ ...options, budget: reducedBudget });
 
     if (isWithinBudget(result, maxTokens)) {
-      console.warn(
-        `[buildTurnMessages] Reduced budget to ${factor * 100}% to fit ${maxTokens} token limit`
-      );
+      appLogger.warn('research.context', 'Reduced budget to fit token limit', { 
+        factor: factor * 100, 
+        maxTokens 
+      });
       return result;
     }
   }
 
   // If still over budget, return anyway with warning
-  console.error(
-    `[buildTurnMessages] Unable to fit within ${maxTokens} token budget. ` +
-      `Current: ~${estimateTokens(result.totalChars)} tokens`
-  );
+  appLogger.error('research.context', 'Unable to fit within token budget', {
+    maxTokens,
+    estimatedTokens: estimateTokens(result.totalChars)
+  });
 
   return result;
 }

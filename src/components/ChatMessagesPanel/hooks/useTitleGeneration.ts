@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ThreadRuntime } from '@assistant-ui/react';
+import { appLogger } from '../../../services/platform';
 import { getMessages, generateChatTitle } from '../../../services/clients/chat';
 import type { ConversationSummary } from '../../../services/clients/chat';
 import type { ToastType } from '../../Toast';
@@ -139,7 +140,7 @@ export function useTitleGeneration({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate title';
       showToast(message, 'error');
-      console.error('Title generation failed:', error);
+      appLogger.error('hook.ui', 'Title generation failed', { error, conversationId: activeConversationId });
     } finally {
       setIsGeneratingTitle(false);
     }

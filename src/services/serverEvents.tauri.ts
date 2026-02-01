@@ -12,6 +12,7 @@
  * - server:health_changed - Health status changed
  */
 
+import { appLogger } from './platform';
 import { ingestServerEvent } from './serverRegistry';
 import {
   normalizeServerEventFromNamedEvent,
@@ -54,9 +55,9 @@ export async function initTauriServerEvents(): Promise<void> {
     }
 
     initialized = true;
-    console.debug('[serverEvents.tauri] Initialized server event listeners');
+    appLogger.debug('service.server', 'Initialized server event listeners');
   } catch (error) {
-    console.error('[serverEvents.tauri] Failed to initialize:', error);
+    appLogger.error('service.server', 'Failed to initialize server event listeners', { error });
   }
 }
 

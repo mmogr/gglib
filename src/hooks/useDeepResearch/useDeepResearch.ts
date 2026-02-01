@@ -13,6 +13,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { ResearchState, ModelRouting, ResearchIntervention } from './types';
 import { createInitialState, createDefaultRouting } from './types';
+import { appLogger } from '../../services/platform';
 import {
   runResearchLoop,
   type ToolDefinition,
@@ -127,7 +128,7 @@ function createLLMCaller(): (
       body.tool_choice = 'auto';
     }
 
-    console.debug('[LLMCaller] Request:', { url, messages: messages.length, tools: tools?.length ?? 0 });
+    appLogger.debug('research.hook', '[LLMCaller] Request', { url, messagesCount: messages.length, toolsCount: tools?.length ?? 0 });
 
     try {
       const response = await fetch(url, {
@@ -139,7 +140,7 @@ function createLLMCaller(): (
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[LLMCaller] Error response:', response.status, errorText);
+        appLogger.error('research.hook', '[LLMCaller] Error response', { status: response.status, errorText });
         throw new Error(`LLM request failed: ${response.status} ${response.statusText}`);
       }
 
@@ -155,7 +156,7 @@ function createLLMCaller(): (
       const toolCalls = choice.message?.tool_calls || [];
       const finishReason = choice.finish_reason || 'stop';
       
-      console.debug('[LLMCaller] Response:', { contentLen: content.length, toolCalls: toolCalls.length, finishReason });
+      appLogger.debug('research.hook', '[LLMCaller] Response', { contentLength: content.length, toolCallsCount: toolCalls.length, finishReason });
 
       return {
         content,
@@ -175,7 +176,7 @@ function createLLMCaller(): (
             : 'stop',
       };
     } catch (error) {
-      console.error('[LLMCaller] Fetch error:', error);
+      appLogger.error('research.hook', '[LLMCaller] Fetch error', { error });
       throw error;
     }
   };
@@ -213,7 +214,7 @@ function createDebouncedPersist(
         const stateToSave = pendingState;
         pendingState = null;
         persistPromise = onPersist(stateToSave).catch((err) => {
-          console.error('[useDeepResearch] Persistence error:', err);
+          appLogger.error('research.hook', '[useDeepResearch] Persistence error', { error: err });
         });
         await persistPromise;
         persistPromise = null;
@@ -347,10 +348,10 @@ export function useDeepResearch(
   // Start research
   const startResearch = useCallback(
     async (query: string, messageId: string) => {
-      console.debug('[useDeepResearch] Starting:', { query: query.slice(0, 50), messageId, serverPort });
+      appLogger.debug('research.hook', '[useDeepResearch] Starting', { queryPreview: query.slice(0, 50), messageId, serverPort });
       
       if (isRunning) {
-        console.debug('[useDeepResearch] Already running, ignoring');
+        appLogger.debug('research.hook', '[useDeepResearch] Already running, ignoring');
         return;
       }
 
@@ -366,7 +367,7 @@ export function useDeepResearch(
 
       // Get tools
       const tools = getResearchTools();
-      console.debug('[useDeepResearch] Found tools:', tools.map(t => t.function.name));
+      appLogger.debug('research.hook', '[useDeepResearch] Found tools', { toolNames: tools.map(t => t.function.name) });
       
       if (tools.length === 0) {
         onError?.(
@@ -423,10 +424,10 @@ export function useDeepResearch(
         }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
-          console.log('[useDeepResearch] Research aborted by user');
+          appLogger.debug('research.hook', '[useDeepResearch] Research aborted by user');
           // State is preserved, marked as incomplete
         } else {
-          console.error('[useDeepResearch] Research error:', error);
+          appLogger.error('research.hook', '[useDeepResearch] Research error', { error });
           onError?.(error instanceof Error ? error : new Error(String(error)));
         }
       } finally {
@@ -460,7 +461,7 @@ export function useDeepResearch(
   // Request early wrap-up (synthesize with current facts)
   const requestWrapUp = useCallback(() => {
     if (isRunning && state?.phase === 'gathering') {
-      console.log('[useDeepResearch] User requested wrap-up');
+      appLogger.debug('research.hook', '[useDeepResearch] User requested wrap-up');
       interventionRef.current = { type: 'wrap-up' };
     }
   }, [isRunning, state?.phase]);
@@ -468,7 +469,7 @@ export function useDeepResearch(
   // Skip a specific question (mark as blocked)
   const skipQuestion = useCallback((questionId: string) => {
     if (isRunning && state?.phase === 'gathering') {
-      console.log('[useDeepResearch] User requested skip for question:', questionId);
+      appLogger.debug('research.hook', '[useDeepResearch] User requested skip for question', { questionId });
       interventionRef.current = { type: 'skip-question', questionId };
     }
   }, [isRunning, state?.phase]);
@@ -476,7 +477,7 @@ export function useDeepResearch(
   // Skip all pending questions at once
   const skipAllPending = useCallback(() => {
     if (isRunning && state?.phase === 'gathering') {
-      console.log('[useDeepResearch] User requested skip all pending');
+      appLogger.debug('research.hook', '[useDeepResearch] User requested skip all pending');
       interventionRef.current = { type: 'skip-all-pending' };
     }
   }, [isRunning, state?.phase]);
@@ -484,7 +485,7 @@ export function useDeepResearch(
   // Add a user-specified question to the research plan
   const addQuestion = useCallback((question: string) => {
     if (isRunning && state?.phase === 'gathering') {
-      console.log('[useDeepResearch] User adding question:', question.slice(0, 50));
+      appLogger.debug('research.hook', '[useDeepResearch] User adding question', { questionPreview: question.slice(0, 50) });
       interventionRef.current = { type: 'add-question', question };
     }
   }, [isRunning, state?.phase]);
@@ -492,7 +493,7 @@ export function useDeepResearch(
   // Ask AI to generate more research questions
   const generateMoreQuestions = useCallback(() => {
     if (isRunning && state?.phase === 'gathering') {
-      console.log('[useDeepResearch] User requested generate more questions');
+      appLogger.debug('research.hook', '[useDeepResearch] User requested generate more questions');
       interventionRef.current = { type: 'generate-more-questions' };
     }
   }, [isRunning, state?.phase]);
@@ -500,7 +501,7 @@ export function useDeepResearch(
   // Ask AI to expand a specific question into sub-questions
   const expandQuestion = useCallback((questionId: string) => {
     if (isRunning && state?.phase === 'gathering') {
-      console.log('[useDeepResearch] User requested expand question:', questionId);
+      appLogger.debug('research.hook', '[useDeepResearch] User requested expand question', { questionId });
       interventionRef.current = { type: 'expand-question', questionId };
     }
   }, [isRunning, state?.phase]);
@@ -508,7 +509,7 @@ export function useDeepResearch(
   // Ask AI to go deeper based on current findings
   const goDeeper = useCallback(() => {
     if (isRunning && state?.phase === 'gathering') {
-      console.log('[useDeepResearch] User requested go deeper');
+      appLogger.debug('research.hook', '[useDeepResearch] User requested go deeper');
       interventionRef.current = { type: 'go-deeper' };
     }
   }, [isRunning, state?.phase]);
@@ -516,7 +517,7 @@ export function useDeepResearch(
   // Force answer generation for a specific question
   const forceAnswer = useCallback((questionId: string) => {
     if (isRunning && state?.phase === 'gathering') {
-      console.log('[useDeepResearch] User requested force answer for question:', questionId);
+      appLogger.debug('research.hook', '[useDeepResearch] User requested force answer for question', { questionId });
       interventionRef.current = { type: 'force-answer', questionId };
     }
   }, [isRunning, state?.phase]);

@@ -6,6 +6,7 @@
  */
 
 import { readData } from '../errors';
+import { appLogger } from '../../platform';
 
 /**
  * Module-level API session context.
@@ -22,12 +23,10 @@ export function setApiSession(baseUrl: string, authToken?: string): void {
   apiBaseUrl = baseUrl;
   apiAuthToken = authToken;
   
-  if (import.meta.env.DEV) {
-    console.debug('[ApiClient] API session set:', {
-      baseUrl,
-      hasToken: !!authToken,
-    });
-  }
+  appLogger.debug('transport.api', '[ApiClient] API session set', {
+    baseUrl,
+    hasToken: !!authToken,
+  });
 }
 
 /**
@@ -99,22 +98,18 @@ async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Prom
  */
 async function discoverEmbeddedApi(): Promise<EmbeddedApiInfo> {
   try {
-    if (import.meta.env.DEV) {
-      console.debug('[ApiClient] Discovering embedded API...');
-    }
+    appLogger.debug('transport.api', '[ApiClient] Discovering embedded API...');
     
     const info = await invokeTauri<EmbeddedApiInfo>('get_embedded_api_info');
     
-    if (import.meta.env.DEV) {
-      console.debug('[ApiClient] Embedded API discovered', {
-        port: info.port,
-        tokenPrefix: info.token.substring(0, 8) + '...',
-      });
-    }
+    appLogger.debug('transport.api', '[ApiClient] Embedded API discovered', {
+      port: info.port,
+      tokenPrefix: info.token.substring(0, 8) + '...',
+    });
     
     return info;
   } catch (error) {
-    console.error('[ApiClient] Failed to discover embedded API:', error);
+    appLogger.error('transport.api', '[ApiClient] Failed to discover embedded API', { error });
     throw error;
   }
 }
@@ -128,9 +123,7 @@ let cachedClientPromise: Promise<HttpClient> | null = null;
  * Reset cached client (used on auth/network errors for retry).
  */
 function resetClientCache(): void {
-  if (import.meta.env.DEV) {
-    console.debug('[ApiClient] Resetting client cache for retry');
-  }
+  appLogger.debug('transport.api', '[ApiClient] Resetting client cache for retry');
   cachedClientPromise = null;
 }
 
@@ -153,14 +146,11 @@ function buildClient(config: HttpClientConfig): HttpClient {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
       
-      // Debug log in dev mode
-      if (import.meta.env.DEV) {
-        console.debug('[ApiClient] Request headers:', {
-          hasAuth: !!headers['Authorization'],
-          tokenPrefix: token.substring(0, 8) + '...',
-          contentType: headers['Content-Type'],
-        });
-      }
+      appLogger.debug('transport.api', '[ApiClient] Request headers', {
+        hasAuth: !!headers['Authorization'],
+        tokenPrefix: token.substring(0, 8) + '...',
+        contentType: headers['Content-Type'],
+      });
     }
     
     return headers;
@@ -190,7 +180,7 @@ function buildClient(config: HttpClientConfig): HttpClient {
       
       // If 401 and not already retrying, clear cache and retry once
       if (response.status === 401 && !isRetry && isTauri()) {
-        console.warn('[ApiClient] 401 Unauthorized - clearing cache and retrying');
+        appLogger.warn('transport.api', '[ApiClient] 401 Unauthorized - clearing cache and retrying');
         resetClientCache();
         const newClient = await getClient();
         return newClient.request<T>(path, options, true);
@@ -200,7 +190,7 @@ function buildClient(config: HttpClientConfig): HttpClient {
     } catch (error) {
       // On network error (ECONNREFUSED, etc), clear cache and retry once
       if (!isRetry && isTauri() && error instanceof TypeError) {
-        console.warn('[ApiClient] Network error - clearing cache and retrying:', error.message);
+        appLogger.warn('transport.api', '[ApiClient] Network error - clearing cache and retrying', { errorMessage: error.message });
         resetClientCache();
         const newClient = await getClient();
         return newClient.request<T>(path, options, true);

@@ -23,18 +23,70 @@ use tauri::Wry;
 use tauri::menu::Menu;
 use tracing::{debug, error, info};
 
-fn main() {
-    let _ = dotenv();
+/// Initialize tracing with file appender for persistent logs.
+///
+/// Logs are written to:
+/// - stdout (for console viewing)
+/// - {data_dir}/logs/gglib-{date}.log (daily rotation via tracing-appender)
+///
+/// Log level is controlled by RUST_LOG environment variable (default: warn).
+fn init_tracing() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
 
-    // Initialize tracing/logging for the Tauri GUI
-    // Priority: RUST_LOG env var > default (warn)
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+    // Get data directory for logs
+    let log_dir = match gglib_core::paths::data_root() {
+        Ok(root) => root.join("logs"),
+        Err(e) => {
+            eprintln!("Failed to get data root for logs: {}", e);
+            // Fallback to current directory
+            std::path::PathBuf::from(".")
+        }
+    };
+
+    // Create log directory if it doesn't exist
+    if let Err(e) = std::fs::create_dir_all(&log_dir) {
+        eprintln!("Failed to create log directory: {}", e);
+    }
+
+    // Configure daily rotating file appender
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "gglib");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    // Configure environment filter
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
+
+    // Build layered subscriber with both stdout and file output
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stdout)
+                .compact(),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false) // No ANSI colors in files
+                .compact(),
         )
         .try_init()
         .ok(); // Ignore error if already initialized
+
+    // Store guard in static to prevent early drop
+    // Note: This leaks memory but ensures logs persist for app lifetime
+    std::mem::forget(_guard);
+}
+
+fn main() {
+    let _ = dotenv();
+
+    // Initialize tracing/logging for the Tauri GUI with file appender
+    // Priority: RUST_LOG env var > default (warn)
+    init_tracing();
+
+    info!("Tauri application starting");
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -164,6 +216,8 @@ fn main() {
             commands::research_logs::append_research_log,
             commands::research_logs::get_research_log_path,
             commands::research_logs::list_research_logs,
+            // Frontend logging: bridge to Rust tracing
+            commands::app_logs::log_from_frontend,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

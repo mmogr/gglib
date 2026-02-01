@@ -6,34 +6,18 @@
  *
  * Features:
  * - Multi-session support via Map<sessionId, LogEntry[]>
- * - Tauri file streaming (NDJSON format) for crash resilience
- * - Web fallback to in-memory only
+ * - In-memory buffering for UI export (download logs button)
+ * - Delegates to AppLogger for unified file persistence
  * - Payload truncation to prevent memory bloat
  * - useSyncExternalStore-compatible subscription API
- *
- * TRANSPORT_EXCEPTION: Uses Tauri file system for log persistence.
- * UI components should import from 'services/platform' rather than checking isTauriApp directly.
  */
 
-import { isDesktop } from './detect';
-
-// Type augmentation for Tauri internals
-declare global {
-  interface Window {
-    __TAURI_INTERNALS__?: {
-      invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-    };
-  }
-}
+import { appLogger } from './logging/appLogger';
+import type { LogLevel } from './logging/types';
 
 // =============================================================================
 // Types
 // =============================================================================
-
-/**
- * Log entry severity levels.
- */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 /**
  * Structured log entry for research sessions.
@@ -61,8 +45,6 @@ interface SessionMeta {
   startedAt: string;
   /** Original query (truncated) */
   query: string;
-  /** Whether file streaming is active for this session */
-  fileStreamActive: boolean;
 }
 
 // =============================================================================
@@ -127,73 +109,6 @@ export function truncatePayload(
   return obj;
 }
 
-/**
- * Format a log entry as NDJSON line.
- */
-function toNDJSON(entry: ResearchLogEntry): string {
-  return JSON.stringify(entry) + '\n';
-}
-
-// =============================================================================
-// File Streaming (Tauri Only)
-// =============================================================================
-
-/**
- * Check if the Tauri invoke API is available.
- */
-function hasTauriInvoke(): boolean {
-  return !!(
-    typeof window !== 'undefined' &&
-    window.__TAURI_INTERNALS__ &&
-    typeof window.__TAURI_INTERNALS__.invoke === 'function'
-  );
-}
-
-/**
- * Invoke a Tauri command.
- */
-async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  // Type guard ensures __TAURI_INTERNALS__ is defined when hasTauriInvoke() is true
-  const tauriInternals = window.__TAURI_INTERNALS__!;
-  return tauriInternals.invoke(cmd, args);
-}
-
-/**
- * Initialize file streaming via Tauri command.
- * Returns true if file streaming is available.
- */
-async function initFileStreamTauri(): Promise<boolean> {
-  if (!isDesktop() || !hasTauriInvoke()) return false;
-
-  try {
-    // Try to initialize the log directory via Tauri command
-    await invokeTauri<void>('init_research_logs');
-    return true;
-  } catch (err) {
-    // Command doesn't exist yet - file streaming not available
-    console.warn('[researchLogger] Tauri file streaming not available (command not found):', err);
-    return false;
-  }
-}
-
-/**
- * Append a log entry to the session's log file via Tauri command.
- */
-async function appendToFile(sessionId: string, entry: ResearchLogEntry): Promise<void> {
-  if (!isDesktop() || !hasTauriInvoke()) return;
-
-  try {
-    const line = toNDJSON(entry);
-    await invokeTauri<void>('append_research_log', {
-      sessionId,
-      line,
-    });
-  } catch {
-    // Fail silently - don't break the research loop
-    // Command may not exist yet
-  }
-}
-
 // =============================================================================
 // ResearchLogBuffer Singleton
 // =============================================================================
@@ -217,30 +132,11 @@ class ResearchLogBuffer {
   /** Subscribers for useSyncExternalStore */
   private listeners: Set<Listener> = new Set();
 
-  /** Whether file streaming has been initialized */
-  private fileStreamInitialized = false;
-
-  /**
-   * Initialize file streaming (call once at app startup on desktop).
-   */
-  async initFileStream(): Promise<void> {
-    if (this.fileStreamInitialized || !isDesktop()) return;
-
-    const success = await initFileStreamTauri();
-    this.fileStreamInitialized = success;
-
-    if (success) {
-      console.log('[researchLogger] File streaming initialized');
-    } else {
-      console.log('[researchLogger] File streaming not available, using in-memory only');
-    }
-  }
-
   /**
    * Start a new research session.
    * Call this at the beginning of each deep research run.
    */
-  async startSession(sessionId: string, query: string): Promise<void> {
+  startSession(sessionId: string, query: string): void {
     // LRU eviction if at capacity
     if (this.sessions.size >= MAX_SESSIONS && !this.sessions.has(sessionId)) {
       const oldest = this.sessionOrder.shift();
@@ -255,7 +151,6 @@ class ResearchLogBuffer {
     this.sessionMeta.set(sessionId, {
       startedAt: new Date().toISOString(),
       query: truncateString(query, 200),
-      fileStreamActive: this.fileStreamInitialized,
     });
 
     // Update LRU order
@@ -278,6 +173,7 @@ class ResearchLogBuffer {
 
   /**
    * Log a message to a session.
+   * Dual-storage: buffers in-memory for export + delegates to appLogger for persistence.
    */
   log(
     sessionId: string,
@@ -295,7 +191,7 @@ class ResearchLogBuffer {
       data: data ? (truncatePayload(data) as Record<string, unknown>) : undefined,
     };
 
-    // Add to in-memory buffer
+    // 1. Buffer in-memory for UI/Export
     let logs = this.sessions.get(sessionId);
     if (!logs) {
       // Auto-create session if not exists (fallback)
@@ -310,33 +206,10 @@ class ResearchLogBuffer {
       logs.shift();
     }
 
-    // Stream to file if enabled
-    const meta = this.sessionMeta.get(sessionId);
-    if (meta?.fileStreamActive) {
-      // Fire and forget - don't await
-      appendToFile(sessionId, entry).catch(() => {
-        // Silently ignore file errors
-      });
-    }
-
-    // Also output to console in dev mode
-    if (import.meta.env.DEV) {
-      const prefix = `[${category}]`;
-      switch (level) {
-        case 'debug':
-          console.debug(prefix, message, data ?? '');
-          break;
-        case 'info':
-          console.log(prefix, message, data ?? '');
-          break;
-        case 'warn':
-          console.warn(prefix, message, data ?? '');
-          break;
-        case 'error':
-          console.error(prefix, message, data ?? '');
-          break;
-      }
-    }
+    // 2. Delegate to AppLogger for unified persistence
+    // Map research category to appLogger's research.* categories
+    const appLogCategory = category === 'session' ? 'research.session' : 'research.loop';
+    appLogger.log(level, appLogCategory as any, message, { sessionId, ...data });
   }
 
   /**
@@ -454,11 +327,3 @@ class ResearchLogBuffer {
  * Import this singleton and use its methods directly.
  */
 export const researchLogger = new ResearchLogBuffer();
-
-/**
- * Initialize file streaming (call once at app startup).
- * No-op on web.
- */
-export async function initResearchLogger(): Promise<void> {
-  await researchLogger.initFileStream();
-}

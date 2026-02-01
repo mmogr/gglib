@@ -1,4 +1,5 @@
 import { useState, FC, FormEvent } from "react";
+import { appLogger } from '../services/platform';
 import { addModel } from "../services/clients/models";
 import { pickGgufFile, isDesktop } from "../services/platform";
 import { Button } from "./ui/Button";
@@ -24,7 +25,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
         }
       }
     } catch (err) {
-      console.error("Failed to open file dialog:", err);
+      appLogger.error('component.model', 'Failed to open file dialog', { error: err });
       setError("File browser not available. Please enter the path manually.");
     }
   };

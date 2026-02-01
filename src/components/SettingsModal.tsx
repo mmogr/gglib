@@ -1,4 +1,5 @@
 import { FC, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { appLogger } from '../services/platform';
 import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
@@ -121,7 +122,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         setSuccessMessage("Settings updated successfully");
       } catch (err) {
-        console.error("Failed to update settings", err);
+        appLogger.error('component.settings', 'Failed to update settings', { error: err });
       }
     },
     [
