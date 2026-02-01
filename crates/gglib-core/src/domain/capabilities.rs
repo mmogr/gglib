@@ -267,6 +267,71 @@ mod tests {
         assert!(caps.is_empty());
         assert!(!caps.supports_system_role());
     }
+
+    #[test]
+    fn test_tool_calling_from_template() {
+        let template = r"
+            {% if tools %}
+                <tool_call>{{ message.tool_calls }}</tool_call>
+            {% endif %}
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(caps.supports_tool_calls());
+    }
+
+    #[test]
+    fn test_reasoning_from_template() {
+        let template = r"
+            {% if enable_thinking %}
+                <think>{{ message.thinking }}</think>
+            {% endif %}
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(caps.supports_reasoning());
+    }
+
+    #[test]
+    fn test_tool_calling_name_fallback() {
+        // No template, but model name suggests tool support
+        let caps = infer_from_chat_template(None, Some("hermes-2-pro-7b"));
+        assert!(caps.supports_tool_calls());
+    }
+
+    #[test]
+    fn test_reasoning_name_fallback() {
+        // No template, but model name suggests reasoning support
+        let caps = infer_from_chat_template(None, Some("deepseek-r1-lite"));
+        assert!(caps.supports_reasoning());
+    }
+
+    #[test]
+    fn test_metadata_plus_name_fallback() {
+        // Template present but has no tool markers - should still use name fallback
+        let template = "simple template with no tool markers";
+        let caps = infer_from_chat_template(Some(template), Some("hermes-model"));
+        // Name fallback should kick in because metadata didn't detect tools
+        assert!(caps.supports_tool_calls());
+    }
+
+    #[test]
+    fn test_metadata_detected_skips_name_fallback() {
+        // When metadata detects capability, name pattern is ignored
+        let template = "<tool_call>detected</tool_call>";
+        let caps = infer_from_chat_template(Some(template), Some("not-a-tool-model"));
+        // Metadata detected it, so tool support is enabled regardless of name
+        assert!(caps.supports_tool_calls());
+    }
+
+    #[test]
+    fn test_combined_detections() {
+        let template = r"
+            {% if tools %}<tool_call>{{ tool }}</tool_call>{% endif %}
+            <think>{{ reasoning }}</think>
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(caps.supports_tool_calls());
+        assert!(caps.supports_reasoning());
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
