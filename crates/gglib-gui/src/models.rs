@@ -91,9 +91,7 @@ impl<'a> ModelOps<'a> {
             .import_from_file(&path, self.deps.gguf_parser().as_ref(), None)
             .await
             .map_err(|e| match e {
-                gglib_core::ports::CoreError::Validation(msg) => {
-                    GuiError::ValidationFailed(msg)
-                }
+                gglib_core::ports::CoreError::Validation(msg) => GuiError::ValidationFailed(msg),
                 gglib_core::ports::CoreError::Repository(
                     gglib_core::ports::RepositoryError::AlreadyExists(_),
                 ) => GuiError::AlreadyExists {

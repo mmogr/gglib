@@ -114,9 +114,9 @@ impl ModelService {
         // 1. Validate and parse GGUF file
         let gguf_metadata = crate::utils::validation::validate_and_parse_gguf(
             gguf_parser,
-            file_path.to_str().ok_or_else(|| {
-                CoreError::Validation("Invalid file path encoding".to_string())
-            })?,
+            file_path
+                .to_str()
+                .ok_or_else(|| CoreError::Validation("Invalid file path encoding".to_string()))?,
         )
         .map_err(|e| CoreError::Validation(format!("GGUF validation failed: {}", e)))?;
 
