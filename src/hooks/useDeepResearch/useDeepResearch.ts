@@ -320,7 +320,7 @@ export function useDeepResearch(
       'scrape',
     ];
 
-    // Filter and cast (the types are structurally compatible at runtime)
+    // Filter for research-relevant tools
     const filtered = allDefinitions.filter((def) =>
       researchToolNames.some(
         (name) =>
@@ -329,7 +329,9 @@ export function useDeepResearch(
       )
     );
 
-    // Cast to our internal ToolDefinition type (compatible at runtime)
+    // Type assertion: Registry ToolDefinition and research ToolDefinition are structurally
+    // compatible (both use OpenAI-compatible format), but TypeScript can't prove this
+    // statically due to different JSONSchema definitions.
     return filtered as unknown as ToolDefinition[];
   }, []);
 
