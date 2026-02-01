@@ -4,6 +4,7 @@
 //! the file, extracting metadata, prompting for missing info, and saving.
 
 use anyhow::Result;
+use std::path::PathBuf;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::{ModelSummaryOpts, display_model_summary};
@@ -32,7 +33,9 @@ use gglib_core::utils::validation;
 /// - GGUF metadata extraction fails
 /// - Database operations fail
 pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
-    // Validate the GGUF file and extract metadata using injected parser
+    let path = PathBuf::from(file_path);
+
+    // Validate the GGUF file and extract metadata for CLI preview
     let gguf_metadata = validation::validate_and_parse_gguf(ctx.gguf_parser().as_ref(), file_path)?;
     println!("File validation and metadata extraction successful.");
 
@@ -54,53 +57,25 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
         println!("  Context Length: {context}");
     }
 
-    // Prompt for missing information or allow user to override
-    let param_count_b = if let Some(params) = gguf_metadata.param_count_b {
+    // Prompt for parameter count override (CLI-specific interactive UX)
+    let param_count_override = if let Some(params) = gguf_metadata.param_count_b {
         let user_input =
             input::prompt_float_with_default("Parameter count (in billions)", Some(params))?;
         if user_input == 0.0 {
-            params
+            None
         } else {
-            user_input
+            Some(user_input)
         }
     } else {
-        input::prompt_float("Parameter count (in billions)")?
+        Some(input::prompt_float("Parameter count (in billions)")?)
     };
 
-    // Auto-detect reasoning and tool calling capabilities from metadata
-    let capabilities = ctx.gguf_parser().detect_capabilities(&gguf_metadata);
-    let auto_tags = capabilities.to_tags();
-
-    // Infer model capabilities from chat template
-    let template = gguf_metadata.metadata.get("tokenizer.chat_template");
-    let name = gguf_metadata.metadata.get("general.name");
-    let model_capabilities = gglib_core::domain::infer_from_chat_template(
-        template.map(String::as_str),
-        name.map(String::as_str),
-    );
-
-    // Create the new model instance using gglib_core types
-    let new_model = gglib_core::NewModel {
-        name: name.cloned().unwrap_or_else(|| "Unknown Model".to_string()),
-        file_path: file_path.into(),
-        param_count_b,
-        architecture: gguf_metadata.architecture,
-        quantization: gguf_metadata.quantization,
-        context_length: gguf_metadata.context_length,
-        metadata: gguf_metadata.metadata,
-        added_at: chrono::Utc::now(),
-        hf_repo_id: None,
-        hf_commit_sha: None,
-        hf_filename: None,
-        download_date: None,
-        last_update_check: None,
-        tags: auto_tags,
-        file_paths: None,
-        capabilities: model_capabilities,
-    };
-
-    // Save to database via AppCore
-    let saved_model = ctx.app().models().add(new_model).await?;
+    // Delegate to shared core logic for model import
+    let saved_model = ctx
+        .app()
+        .models()
+        .import_from_file(&path, ctx.gguf_parser().as_ref(), param_count_override)
+        .await?;
 
     // Display clean summary using shared presentation
     println!("\nModel successfully created:");
