@@ -32,10 +32,3 @@ export async function installLlama(): Promise<void> {
 export async function openUrl(url: string): Promise<void> {
   await invokeTauri('open_url', { url });
 }
-
-/**
- * Sync menu state (macOS menu synchronization).
- */
-export async function syncMenu(state: unknown): Promise<void> {
-  await invokeTauri('sync_menu', { state });
-}

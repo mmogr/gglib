@@ -55,18 +55,6 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
     }
 
     // Prompt for missing information or allow user to override
-    let name = if gguf_metadata.name.is_some() {
-        let suggested_name = gguf_metadata.name.as_ref().unwrap();
-        let user_input = input::prompt_string_with_default("Model name", Some(suggested_name))?;
-        if user_input.is_empty() {
-            suggested_name.clone()
-        } else {
-            user_input
-        }
-    } else {
-        input::prompt_string("Model name")?
-    };
-
     let param_count_b = if let Some(params) = gguf_metadata.param_count_b {
         let user_input =
             input::prompt_float_with_default("Parameter count (in billions)", Some(params))?;
@@ -85,12 +73,15 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
 
     // Infer model capabilities from chat template
     let template = gguf_metadata.metadata.get("tokenizer.chat_template");
-    let model_capabilities =
-        gglib_core::domain::infer_from_chat_template(template.map(String::as_str));
+    let name = gguf_metadata.metadata.get("general.name");
+    let model_capabilities = gglib_core::domain::infer_from_chat_template(
+        template.map(String::as_str),
+        name.map(String::as_str),
+    );
 
     // Create the new model instance using gglib_core types
     let new_model = gglib_core::NewModel {
-        name,
+        name: name.cloned().unwrap_or_else(|| "Unknown Model".to_string()),
         file_path: file_path.into(),
         param_count_b,
         architecture: gguf_metadata.architecture,

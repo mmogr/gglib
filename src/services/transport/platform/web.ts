@@ -28,11 +28,3 @@ export async function installLlama(): Promise<void> {
 export async function openUrl(url: string): Promise<void> {
   window.open(url, '_blank');
 }
-
-/**
- * Sync menu state.
- * Not supported in web environment.
- */
-export async function syncMenu(_state: unknown): Promise<void> {
-  // No-op in web (no native menus)
-}

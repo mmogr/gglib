@@ -161,12 +161,3 @@ export const MAX_LOOP_ITERATIONS = 100;
  */
 export const STEPS_PER_QUESTION_LIMIT = 3;
 
-/**
- * @deprecated Use CONSECUTIVE_UNPRODUCTIVE_LIMIT instead.
- * 
- * Legacy timeout for question focus. This constant is maintained for
- * backward compatibility but should not be used in new code.
- * 
- * @default 5
- */
-export const QUESTION_FOCUS_TIMEOUT_STEPS = 5;

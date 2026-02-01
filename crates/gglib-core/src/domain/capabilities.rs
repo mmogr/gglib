@@ -96,53 +96,127 @@ impl ModelCapabilities {
     }
 }
 
-/// Infer model capabilities from chat template Jinja source.
+/// Infer model capabilities from chat template Jinja source and model name.
 ///
 /// Uses string heuristics to detect template constraints. Returns safe
 /// defaults if template is missing or unparseable.
 ///
 /// # Detection Strategy
 ///
+/// Two-layer approach:
+/// - **Layer 1 (Metadata)**: Check chat template for reliable signals (preferred)
+/// - **Layer 2 (Name Heuristics)**: Use model name patterns as fallback when metadata is missing
+///
+/// # Capabilities Detected
+///
 /// - System role: Looks for explicit rejection messages in template
 /// - Strict turns: Looks for alternation enforcement logic
-/// - Tools/reasoning: Can be extended with similar patterns
+/// - Tool calling: Checks for `<tool_call>`, `if tools`, `function_call` patterns (metadata);
+///   falls back to model name patterns like "hermes", "functionary" (heuristic)
+/// - Reasoning: Checks for `<think>`, `<reasoning>`, `enable_thinking` (metadata);
+///   falls back to model name patterns like "deepseek-r1", "qwq", "o1" (heuristic)
 ///
 /// # Fallback Behavior
 ///
-/// Missing or unparseable templates default to OpenAI-style (system supported).
-/// This prevents silent degradation of instruction-following.
-pub fn infer_from_chat_template(template: Option<&str>) -> ModelCapabilities {
-    let Some(template) = template else {
-        // Missing template: assume OpenAI-style
-        return ModelCapabilities::default();
-    };
-
+/// Missing or unparseable templates default to empty capabilities (unknown state).
+pub fn infer_from_chat_template(
+    template: Option<&str>,
+    model_name: Option<&str>,
+) -> ModelCapabilities {
     let mut caps = ModelCapabilities::empty();
 
-    // Check for system role restrictions
-    // Mistral-style templates explicitly reject system role in error messages
-    let forbids_system = template.contains("Only user, assistant and tool roles are supported")
-        || template.contains("got system")
-        || template.contains("Raise exception for unsupported roles");
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Layer 1: Metadata-based detection (chat template analysis)
+    // ─────────────────────────────────────────────────────────────────────────────
 
-    if forbids_system {
-        // Absence of SUPPORTS_SYSTEM_ROLE means transformation required
-    } else {
-        caps |= ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
+    let mut tool_detected_from_metadata = false;
+    let mut reasoning_detected_from_metadata = false;
+
+    if let Some(template) = template {
+        // Check for system role restrictions
+        // Mistral-style templates explicitly reject system role in error messages
+        let forbids_system = template.contains("Only user, assistant and tool roles are supported")
+            || template.contains("got system")
+            || template.contains("Raise exception for unsupported roles");
+
+        if forbids_system {
+            // Absence of SUPPORTS_SYSTEM_ROLE means transformation required
+        } else {
+            caps |= ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
+        }
+
+        // Check for strict alternation requirements
+        // Mistral-style templates enforce user/assistant alternation with modulo checks
+        let requires_alternation = template.contains("must alternate user and assistant")
+            || template.contains("conversation roles must alternate")
+            || template.contains("ns.index % 2");
+
+        if requires_alternation {
+            caps |= ModelCapabilities::REQUIRES_STRICT_TURNS;
+        }
+
+        // Detect tool calling support from template
+        let has_tool_patterns = template.contains("<tool_call>")
+            || template.contains("<|python_tag|>")
+            || template.contains("if tools")
+            || template.contains("tools is defined")
+            || template.contains("tool_calls")
+            || template.contains("function_call");
+
+        if has_tool_patterns {
+            caps |= ModelCapabilities::SUPPORTS_TOOL_CALLS;
+            tool_detected_from_metadata = true;
+        }
+
+        // Detect reasoning/thinking support from template
+        let has_reasoning_patterns = template.contains("<think>")
+            || template.contains("</think>")
+            || template.contains("<reasoning>")
+            || template.contains("</reasoning>")
+            || template.contains("enable_thinking")
+            || template.contains("thinking_forced_open")
+            || template.contains("reasoning_content");
+
+        if has_reasoning_patterns {
+            caps |= ModelCapabilities::SUPPORTS_REASONING;
+            reasoning_detected_from_metadata = true;
+        }
     }
 
-    // Check for strict alternation requirements
-    // Mistral-style templates enforce user/assistant alternation with modulo checks
-    let requires_alternation = template.contains("must alternate user and assistant")
-        || template.contains("conversation roles must alternate")
-        || template.contains("ns.index % 2");
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Layer 2: Name-based heuristic fallback (when metadata is inconclusive)
+    // ─────────────────────────────────────────────────────────────────────────────
+    //
+    // Only use name patterns when chat template didn't provide clear evidence.
+    // This is less reliable but helps with models that have incomplete metadata.
 
-    if requires_alternation {
-        caps |= ModelCapabilities::REQUIRES_STRICT_TURNS;
+    if let Some(name) = model_name {
+        let name_lower = name.to_lowercase();
+
+        // Heuristic: Tool calling support based on model name
+        if !tool_detected_from_metadata {
+            let has_tool_name = name_lower.contains("hermes")
+                || name_lower.contains("functionary")
+                || name_lower.contains("firefunction")
+                || name_lower.contains("gorilla");
+
+            if has_tool_name {
+                caps |= ModelCapabilities::SUPPORTS_TOOL_CALLS;
+            }
+        }
+
+        // Heuristic: Reasoning support based on model name
+        if !reasoning_detected_from_metadata {
+            let has_reasoning_name = name_lower.contains("deepseek-r1")
+                || name_lower.contains("qwq")
+                || name_lower.contains("-r1-")
+                || name_lower.contains("o1");
+
+            if has_reasoning_name {
+                caps |= ModelCapabilities::SUPPORTS_REASONING;
+            }
+        }
     }
-
-    // TODO: Add tool support detection (check for tool_calls handling)
-    // TODO: Add reasoning detection (check for <think> or reasoning_content)
 
     caps
 }
@@ -158,6 +232,8 @@ mod tests {
         assert!(caps.is_empty());
         assert!(!caps.supports_system_role());
         assert!(!caps.requires_strict_turns());
+        assert!(!caps.supports_tool_calls());
+        assert!(!caps.supports_reasoning());
     }
 
     #[test]
@@ -167,7 +243,7 @@ mod tests {
                 {{ message.role }}: {{ message.content }}
             {% endfor %}
         ";
-        let caps = infer_from_chat_template(Some(template));
+        let caps = infer_from_chat_template(Some(template), None);
         assert!(caps.supports_system_role());
         assert!(!caps.requires_strict_turns());
     }
@@ -182,17 +258,82 @@ mod tests {
                 {{ raise_exception('conversation roles must alternate user and assistant') }}
             {% endif %}
         ";
-        let caps = infer_from_chat_template(Some(template));
+        let caps = infer_from_chat_template(Some(template), None);
         assert!(!caps.supports_system_role());
         assert!(caps.requires_strict_turns());
     }
 
     #[test]
     fn test_infer_missing_template() {
-        let caps = infer_from_chat_template(None);
+        let caps = infer_from_chat_template(None, None);
         // Missing template means unknown capabilities - no assumptions made
         assert!(caps.is_empty());
         assert!(!caps.supports_system_role());
+    }
+
+    #[test]
+    fn test_tool_calling_from_template() {
+        let template = r"
+            {% if tools %}
+                <tool_call>{{ message.tool_calls }}</tool_call>
+            {% endif %}
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(caps.supports_tool_calls());
+    }
+
+    #[test]
+    fn test_reasoning_from_template() {
+        let template = r"
+            {% if enable_thinking %}
+                <think>{{ message.thinking }}</think>
+            {% endif %}
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(caps.supports_reasoning());
+    }
+
+    #[test]
+    fn test_tool_calling_name_fallback() {
+        // No template, but model name suggests tool support
+        let caps = infer_from_chat_template(None, Some("hermes-2-pro-7b"));
+        assert!(caps.supports_tool_calls());
+    }
+
+    #[test]
+    fn test_reasoning_name_fallback() {
+        // No template, but model name suggests reasoning support
+        let caps = infer_from_chat_template(None, Some("deepseek-r1-lite"));
+        assert!(caps.supports_reasoning());
+    }
+
+    #[test]
+    fn test_metadata_plus_name_fallback() {
+        // Template present but has no tool markers - should still use name fallback
+        let template = "simple template with no tool markers";
+        let caps = infer_from_chat_template(Some(template), Some("hermes-model"));
+        // Name fallback should kick in because metadata didn't detect tools
+        assert!(caps.supports_tool_calls());
+    }
+
+    #[test]
+    fn test_metadata_detected_skips_name_fallback() {
+        // When metadata detects capability, name pattern is ignored
+        let template = "<tool_call>detected</tool_call>";
+        let caps = infer_from_chat_template(Some(template), Some("not-a-tool-model"));
+        // Metadata detected it, so tool support is enabled regardless of name
+        assert!(caps.supports_tool_calls());
+    }
+
+    #[test]
+    fn test_combined_detections() {
+        let template = r"
+            {% if tools %}<tool_call>{{ tool }}</tool_call>{% endif %}
+            <think>{{ reasoning }}</think>
+        ";
+        let caps = infer_from_chat_template(Some(template), None);
+        assert!(caps.supports_tool_calls());
+        assert!(caps.supports_reasoning());
     }
 }
 

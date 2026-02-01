@@ -21,13 +21,15 @@ export interface ConversationSummary {
   updated_at: string;
 }
 
+import type { ResearchState } from '../../../hooks/useDeepResearch/types';
+
 /**
  * Metadata attached to a chat message.
  * Used for deep research state, custom flags, etc.
  */
 export interface ChatMessageMetadata {
   isDeepResearch?: boolean;
-  researchState?: unknown;
+  researchState?: ResearchState | null;
   [key: string]: unknown;
 }
 

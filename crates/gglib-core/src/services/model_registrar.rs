@@ -89,7 +89,11 @@ impl ModelRegistrarPort for ModelRegistrar {
 
         // Infer model capabilities from chat template
         let template = model.metadata.get("tokenizer.chat_template");
-        model.capabilities = crate::domain::infer_from_chat_template(template.map(String::as_str));
+        let name = model.metadata.get("general.name");
+        model.capabilities = crate::domain::infer_from_chat_template(
+            template.map(String::as_str),
+            name.map(String::as_str),
+        );
 
         let registered = self.model_repo.insert(&model).await?;
 

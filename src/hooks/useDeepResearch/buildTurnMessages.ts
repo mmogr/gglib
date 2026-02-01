@@ -680,7 +680,10 @@ export function getResearchToolsWithInternals<T extends { type: string; function
   allowedPrefixes: string[] = ['tavily', 'search', 'web', 'extract', 'fetch']
 ): T[] {
   const externalTools = filterResearchTools(allTools, allowedPrefixes);
-  // Cast internal tools to match the generic type (they're structurally compatible)
+  
+  // Type assertion: INTERNAL_RESEARCH_TOOLS are defined with the same structure as T
+  // (OpenAI-compatible tool definition format). TypeScript can't prove this statically
+  // due to generic constraints, but the runtime structure is guaranteed compatible.
   return [
     ...externalTools,
     INTERNAL_RESEARCH_TOOLS[0] as unknown as T,

@@ -250,7 +250,11 @@ impl ModelService {
             // Only infer if capabilities are unknown (empty)
             if model.capabilities.is_empty() {
                 let template = model.metadata.get("tokenizer.chat_template");
-                let inferred = infer_from_chat_template(template.map(String::as_str));
+                let name = model.metadata.get("general.name");
+                let inferred = infer_from_chat_template(
+                    template.map(String::as_str),
+                    name.map(String::as_str),
+                );
 
                 model.capabilities = inferred;
                 self.repo.update(&model).await.map_err(CoreError::from)?;

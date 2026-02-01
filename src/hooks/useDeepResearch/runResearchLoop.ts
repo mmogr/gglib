@@ -74,7 +74,6 @@ import {
   MAX_TEXT_ONLY_STEPS,
   MAX_LOOP_ITERATIONS,
   STEPS_PER_QUESTION_LIMIT,
-  QUESTION_FOCUS_TIMEOUT_STEPS,
 } from '../../config/research';
 
 // Re-export for backward compatibility with existing consumers
@@ -89,7 +88,6 @@ export {
   MAX_TEXT_ONLY_STEPS,
   MAX_LOOP_ITERATIONS,
   STEPS_PER_QUESTION_LIMIT,
-  QUESTION_FOCUS_TIMEOUT_STEPS,
 };
 
 // =============================================================================
