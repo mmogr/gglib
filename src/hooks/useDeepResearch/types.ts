@@ -94,12 +94,6 @@ export interface ResearchQuestion {
   priority: number;
   /** Parent question ID if this is a follow-up */
   parentQuestionId?: string;
-  /** 
-   * @deprecated No longer used for timeout detection. 
-   * Timeout is now based on consecutiveUnproductiveSteps in ResearchState.
-   * Kept for backwards compatibility with persisted state.
-   */
-  inProgressSince?: number;
   /** Source of this question (how it was added) */
   source?: QuestionSource;
 }
