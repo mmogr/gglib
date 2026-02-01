@@ -104,7 +104,7 @@ impl ModelService {
     /// 3. Capability detection (reasoning, tool-calling from metadata)
     /// 4. Chat template inference (additional capability signals)
     /// 5. Auto-tag generation from detected capabilities
-    /// 6. Model persistence with complete NewModel struct
+    /// 6. Model persistence with complete `NewModel` struct
     pub async fn import_from_file(
         &self,
         file_path: &Path,
@@ -118,7 +118,7 @@ impl ModelService {
                 .to_str()
                 .ok_or_else(|| CoreError::Validation("Invalid file path encoding".to_string()))?,
         )
-        .map_err(|e| CoreError::Validation(format!("GGUF validation failed: {}", e)))?;
+        .map_err(|e| CoreError::Validation(format!("GGUF validation failed: {e}")))?;
 
         // 2. Resolve parameter count (override > metadata > 0.0 fallback)
         let param_count_b = param_count_override
