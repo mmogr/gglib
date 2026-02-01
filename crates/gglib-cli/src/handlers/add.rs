@@ -86,11 +86,10 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
     // Infer model capabilities from chat template
     let template = gguf_metadata.metadata.get("tokenizer.chat_template");
     let name = gguf_metadata.metadata.get("general.name");
-    let model_capabilities =
-        gglib_core::domain::infer_from_chat_template(
-            template.map(String::as_str),
-            name.map(String::as_str),
-        );
+    let model_capabilities = gglib_core::domain::infer_from_chat_template(
+        template.map(String::as_str),
+        name.map(String::as_str),
+    );
 
     // Create the new model instance using gglib_core types
     let new_model = gglib_core::NewModel {

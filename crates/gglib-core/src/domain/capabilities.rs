@@ -119,7 +119,10 @@ impl ModelCapabilities {
 /// # Fallback Behavior
 ///
 /// Missing or unparseable templates default to empty capabilities (unknown state).
-pub fn infer_from_chat_template(template: Option<&str>, model_name: Option<&str>) -> ModelCapabilities {
+pub fn infer_from_chat_template(
+    template: Option<&str>,
+    model_name: Option<&str>,
+) -> ModelCapabilities {
     let mut caps = ModelCapabilities::empty();
 
     // ─────────────────────────────────────────────────────────────────────────────

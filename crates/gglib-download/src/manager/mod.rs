@@ -36,8 +36,7 @@ use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{
-    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot,
-    ShardInfo,
+    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot, ShardInfo,
 };
 use gglib_core::ports::{
     DownloadEventEmitterPort, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
