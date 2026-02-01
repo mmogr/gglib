@@ -23,7 +23,6 @@ mod worker;
 
 use crate::queue::ShardGroupId;
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -37,7 +36,7 @@ use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{
-    DownloadError, DownloadEvent, DownloadId, DownloadSummary, Quantization, QueueSnapshot,
+    DownloadError, DownloadEvent, DownloadId, DownloadSummary, QueueSnapshot,
     ShardInfo,
 };
 use gglib_core::ports::{
@@ -1449,76 +1448,6 @@ impl DownloadManagerImpl {
             sharded = resolution.is_sharded,
             files = shard_count,
             "Download queued via queue_download_smart"
-        );
-
-        self.queue_notify.notify_one();
-        self.emit_queue_snapshot().await;
-
-        #[allow(clippy::cast_possible_truncation)]
-        Ok(QueueAutoResult {
-            root_id: id,
-            queued: shard_count as u32,
-            group_id,
-        })
-    }
-
-    /// Queue a download with auto-detection of sharded models.
-    ///
-    /// **Deprecated**: Use `queue_download_smart` instead.
-    pub async fn queue_download_auto(
-        &self,
-        repo_id: impl Into<String>,
-        quantization: impl Into<String>,
-    ) -> Result<QueueAutoResult, DownloadError> {
-        let repo_id = repo_id.into();
-        let quantization_str = quantization.into();
-        let quantization =
-            Quantization::from_str(&quantization_str).unwrap_or(Quantization::Unknown);
-        let id = DownloadId::new(&repo_id, Some(&quantization_str));
-
-        let resolution = self.resolver.resolve(&repo_id, quantization).await?;
-
-        let has_active = self.has_active().await;
-        let shard_count = resolution.files.len();
-
-        let shard_files: Vec<_> = resolution
-            .files
-            .iter()
-            .map(|f| (f.path.clone(), f.size))
-            .collect();
-
-        // Compute completion key from first file (canonical base for shards)
-        let first_path = resolution
-            .files
-            .first()
-            .ok_or_else(|| DownloadError::resolution_failed("no files resolved".to_string()))?
-            .path
-            .as_str();
-        let filename = std::path::Path::new(first_path)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or(first_path);
-        let filename_canon = base_shard_filename(filename);
-        let completion_key = gglib_core::download::CompletionKey::HfFile {
-            repo_id: repo_id.clone(),
-            revision: "unspecified".to_string(),
-            filename_canon,
-            quantization: Some(quantization.to_string()),
-        };
-
-        let position = {
-            let mut queue = self.queue.write().await;
-            queue.queue_sharded(&id, &completion_key, shard_files, has_active)?
-        };
-
-        let group_id = Some(id.to_string());
-
-        tracing::info!(
-            id = %id,
-            position = position,
-            sharded = resolution.is_sharded,
-            files = shard_count,
-            "Download queued via queue_download_auto"
         );
 
         self.queue_notify.notify_one();
