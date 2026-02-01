@@ -1788,7 +1788,7 @@ export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful research assistant.';
  * Type guard: Check if research is in planning phase.
  * Use this to safely access planning-specific fields.
  */
-export function isPlanningPhase(state: ResearchState): boolean {
+export function isPlanningPhase(state: ResearchState): state is ResearchState & { phase: 'planning' } {
   return state.phase === 'planning';
 }
 
@@ -1796,7 +1796,7 @@ export function isPlanningPhase(state: ResearchState): boolean {
  * Type guard: Check if research is in gathering phase.
  * Use this to safely access gathering-specific fields.
  */
-export function isGatheringPhase(state: ResearchState): boolean {
+export function isGatheringPhase(state: ResearchState): state is ResearchState & { phase: 'gathering' } {
   return state.phase === 'gathering';
 }
 
@@ -1804,7 +1804,7 @@ export function isGatheringPhase(state: ResearchState): boolean {
  * Type guard: Check if research is in evaluating phase.
  * Use this to safely access evaluation-specific fields.
  */
-export function isEvaluatingPhase(state: ResearchState): boolean {
+export function isEvaluatingPhase(state: ResearchState): state is ResearchState & { phase: 'evaluating' } {
   return state.phase === 'evaluating';
 }
 
@@ -1812,7 +1812,7 @@ export function isEvaluatingPhase(state: ResearchState): boolean {
  * Type guard: Check if research is in compressing phase.
  * Use this to safely access compression-specific fields.
  */
-export function isCompressingPhase(state: ResearchState): boolean {
+export function isCompressingPhase(state: ResearchState): state is ResearchState & { phase: 'compressing' } {
   return state.phase === 'compressing';
 }
 
@@ -1820,7 +1820,7 @@ export function isCompressingPhase(state: ResearchState): boolean {
  * Type guard: Check if research is in synthesizing phase.
  * Use this to safely access synthesis-specific fields.
  */
-export function isSynthesizingPhase(state: ResearchState): boolean {
+export function isSynthesizingPhase(state: ResearchState): state is ResearchState & { phase: 'synthesizing' } {
   return state.phase === 'synthesizing';
 }
 
@@ -1828,7 +1828,7 @@ export function isSynthesizingPhase(state: ResearchState): boolean {
  * Type guard: Check if research is complete.
  * Use this to safely access finalReport and other completion fields.
  */
-export function isCompletePhase(state: ResearchState): boolean {
+export function isCompletePhase(state: ResearchState): state is ResearchState & { phase: 'complete' } {
   return state.phase === 'complete';
 }
 
@@ -1836,6 +1836,6 @@ export function isCompletePhase(state: ResearchState): boolean {
  * Type guard: Check if research encountered an error.
  * Use this to safely access error-specific fields.
  */
-export function isErrorPhase(state: ResearchState): boolean {
+export function isErrorPhase(state: ResearchState): state is ResearchState & { phase: 'error' } {
   return state.phase === 'error';
 }

@@ -94,7 +94,7 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
 
     // Create the new model instance using gglib_core types
     let new_model = gglib_core::NewModel {
-        name,
+        name: name.cloned().unwrap_or_else(|| "Unknown Model".to_string()),
         file_path: file_path.into(),
         param_count_b,
         architecture: gguf_metadata.architecture,
