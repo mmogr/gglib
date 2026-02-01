@@ -55,18 +55,6 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
     }
 
     // Prompt for missing information or allow user to override
-    let name = if gguf_metadata.name.is_some() {
-        let suggested_name = gguf_metadata.name.as_ref().unwrap();
-        let user_input = input::prompt_string_with_default("Model name", Some(suggested_name))?;
-        if user_input.is_empty() {
-            suggested_name.clone()
-        } else {
-            user_input
-        }
-    } else {
-        input::prompt_string("Model name")?
-    };
-
     let param_count_b = if let Some(params) = gguf_metadata.param_count_b {
         let user_input =
             input::prompt_float_with_default("Parameter count (in billions)", Some(params))?;

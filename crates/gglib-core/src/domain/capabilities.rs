@@ -111,9 +111,9 @@ impl ModelCapabilities {
 ///
 /// - System role: Looks for explicit rejection messages in template
 /// - Strict turns: Looks for alternation enforcement logic
-/// - Tool calling: Checks for `<tool_call>`, `if tools`, function_call patterns (metadata);
+/// - Tool calling: Checks for `<tool_call>`, `if tools`, `function_call` patterns (metadata);
 ///   falls back to model name patterns like "hermes", "functionary" (heuristic)
-/// - Reasoning: Checks for `<think>`, `<reasoning>`, enable_thinking (metadata);
+/// - Reasoning: Checks for `<think>`, `<reasoning>`, `enable_thinking` (metadata);
 ///   falls back to model name patterns like "deepseek-r1", "qwq", "o1" (heuristic)
 ///
 /// # Fallback Behavior
