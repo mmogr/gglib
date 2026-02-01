@@ -150,6 +150,9 @@ impl TauriContext {
         let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
             Arc::new(DefaultSystemProbe::new());
 
+        // GGUF parser for model metadata extraction
+        let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
+
         let deps = GuiDeps::new(
             Arc::clone(&self.app),
             self.downloads.clone(),
@@ -162,6 +165,7 @@ impl TauriContext {
             self.proxy_supervisor.clone(),
             self.model_repo.clone(),
             system_probe,
+            gguf_parser,
         );
         GuiBackend::new(deps)
     }

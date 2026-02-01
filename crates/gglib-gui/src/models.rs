@@ -1,10 +1,9 @@
 //! Model CRUD operations for GUI backend.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use gglib_core::ModelFilterOptions;
-use gglib_core::domain::{Model, NewModel};
+use gglib_core::domain::Model;
 
 use crate::deps::GuiDeps;
 use crate::error::GuiError;
@@ -85,47 +84,28 @@ impl<'a> ModelOps<'a> {
     pub async fn add(&self, request: AddModelRequest) -> Result<GuiModel, GuiError> {
         let path = PathBuf::from(&request.file_path);
 
-        if !path.exists() {
-            return Err(GuiError::ValidationFailed(format!(
-                "Model file not found: {}",
-                request.file_path
-            )));
-        }
-
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-
-        let new_model = NewModel {
-            name,
-            file_path: path,
-            param_count_b: 0.0,
-            architecture: None,
-            quantization: None,
-            context_length: None,
-            metadata: HashMap::new(),
-            added_at: chrono::Utc::now(),
-            hf_repo_id: None,
-            hf_commit_sha: None,
-            hf_filename: None,
-            download_date: None,
-            last_update_check: None,
-            tags: Vec::new(),
-            file_paths: None,
-            // Capabilities default to unknown (empty) - will be inferred at bootstrap
-            capabilities: gglib_core::domain::ModelCapabilities::default(),
-        };
-
+        // Delegate to shared core logic for model import with full metadata extraction
         let model = self
             .deps
             .models()
-            .add(new_model)
+            .import_from_file(&path, self.deps.gguf_parser().as_ref(), None)
             .await
-            .map_err(|e| GuiError::Internal(format!("Failed to add model: {e}")))?;
+            .map_err(|e| match e {
+                gglib_core::ports::CoreError::Validation(msg) => {
+                    GuiError::ValidationFailed(msg)
+                }
+                gglib_core::ports::CoreError::Repository(
+                    gglib_core::ports::RepositoryError::AlreadyExists(_),
+                ) => GuiError::AlreadyExists {
+                    entity: "model",
+                    identifier: request.file_path.clone(),
+                },
+                _ => GuiError::Internal(format!("Failed to add model: {}", e)),
+            })?;
 
-        Ok(GuiModel::from_domain(model))
+        // Return with serving status
+        let (is_serving, port) = self.get_server_status(model.id).await;
+        Ok(GuiModel::from_model(model, is_serving, port))
     }
 
     /// Update a model in the database.

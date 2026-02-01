@@ -197,6 +197,9 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
         Arc::new(DefaultSystemProbe::new());
 
+    // GGUF parser for model metadata extraction
+    let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
+
     let deps = GuiDeps::new(
         Arc::clone(&core),
         downloads.clone(),
@@ -209,6 +212,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         proxy_supervisor,
         model_repo,
         system_probe,
+        gguf_parser,
     );
     let gui = Arc::new(GuiBackend::new(deps));
 
