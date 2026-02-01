@@ -94,11 +94,11 @@ impl<'a> ModelOps<'a> {
                 gglib_core::ports::CoreError::Validation(msg) => GuiError::ValidationFailed(msg),
                 gglib_core::ports::CoreError::Repository(
                     gglib_core::ports::RepositoryError::AlreadyExists(_),
-                ) => GuiError::AlreadyExists {
-                    entity: "model",
-                    identifier: request.file_path.clone(),
-                },
-                _ => GuiError::Internal(format!("Failed to add model: {}", e)),
+                ) => GuiError::Conflict(format!(
+                    "Model at path '{}' already exists in database",
+                    request.file_path
+                )),
+                _ => GuiError::Internal(format!("Failed to add model: {e}")),
             })?;
 
         // Return with serving status
