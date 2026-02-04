@@ -58,6 +58,12 @@ export interface ServeConfig {
   mlock?: boolean;
   port?: number;
   jinja?: boolean;
+  // Inference parameters for this serve session
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  max_tokens?: number;
+  repeat_penalty?: number;
 }
 
 export interface ServerInfo {

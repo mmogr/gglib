@@ -19,6 +19,7 @@ export interface ServerActionsConfig {
   customPort: string;
   jinjaOverride: boolean | null;
   hasAgentTag: boolean;
+  inferenceParams: InferenceConfig | undefined;
   // Callbacks
   onStopServer: (modelId: number) => Promise<void>;
   onRemoveModel: (id: number, force: boolean) => void;
@@ -61,6 +62,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     customPort,
     jinjaOverride,
     hasAgentTag,
+    inferenceParams,
     onStopServer,
     onRemoveModel,
     onUpdateModel,
@@ -114,6 +116,12 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         port,
         mlock: false,
         jinja: jinjaOverride === null ? (hasAgentTag ? true : undefined) : jinjaOverride,
+        // Inference parameters for this session
+        temperature: inferenceParams?.temperature,
+        top_p: inferenceParams?.topP,
+        top_k: inferenceParams?.topK,
+        max_tokens: inferenceParams?.maxTokens,
+        repeat_penalty: inferenceParams?.repeatPenalty,
       };
 
       const result = await serveModel(serveConfig);

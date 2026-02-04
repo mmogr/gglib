@@ -186,6 +186,7 @@ impl From<Model> for GuiModel {
 
 /// Request body for starting a server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct StartServerRequest {
     pub context_length: Option<u64>,
     pub port: Option<u16>,
@@ -195,6 +196,9 @@ pub struct StartServerRequest {
     pub jinja: Option<bool>,
     #[serde(default)]
     pub reasoning_format: Option<String>,
+    /// Inference parameters for this serve session (overrides model/global defaults).
+    #[serde(default)]
+    pub inference_params: Option<gglib_core::domain::InferenceConfig>,
 }
 
 /// Response for starting a server.
