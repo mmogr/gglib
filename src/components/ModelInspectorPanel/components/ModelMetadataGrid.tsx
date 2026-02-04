@@ -80,6 +80,45 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
           </div>
         )}
       </div>
+
+      {/* Show inference defaults if any are set */}
+      {model.inferenceDefaults && Object.values(model.inferenceDefaults).some(v => v !== undefined) && (
+        <>
+          <h3>Inference Defaults</h3>
+          <div className="metadata-grid">
+            {model.inferenceDefaults.temperature !== undefined && (
+              <div className="metadata-row">
+                <span className="metadata-label">Temperature:</span>
+                <span className="metadata-value">{model.inferenceDefaults.temperature}</span>
+              </div>
+            )}
+            {model.inferenceDefaults.topP !== undefined && (
+              <div className="metadata-row">
+                <span className="metadata-label">Top P:</span>
+                <span className="metadata-value">{model.inferenceDefaults.topP}</span>
+              </div>
+            )}
+            {model.inferenceDefaults.topK !== undefined && (
+              <div className="metadata-row">
+                <span className="metadata-label">Top K:</span>
+                <span className="metadata-value">{model.inferenceDefaults.topK}</span>
+              </div>
+            )}
+            {model.inferenceDefaults.maxTokens !== undefined && (
+              <div className="metadata-row">
+                <span className="metadata-label">Max Tokens:</span>
+                <span className="metadata-value">{model.inferenceDefaults.maxTokens.toLocaleString()}</span>
+              </div>
+            )}
+            {model.inferenceDefaults.repeatPenalty !== undefined && (
+              <div className="metadata-row">
+                <span className="metadata-label">Repeat Penalty:</span>
+                <span className="metadata-value">{model.inferenceDefaults.repeatPenalty}</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 };

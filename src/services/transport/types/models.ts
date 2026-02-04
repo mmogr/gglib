@@ -53,6 +53,8 @@ export interface AddModelParams {
 export interface UpdateModelParams {
   id: ModelId;
   name?: string;
+  quantization?: string;
+  filePath?: string;
   inferenceDefaults?: import('../../../types').InferenceConfig;
 }
 
