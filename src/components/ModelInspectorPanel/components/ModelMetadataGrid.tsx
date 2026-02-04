@@ -82,35 +82,35 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
       </div>
 
       {/* Show inference defaults if any are set */}
-      {model.inferenceDefaults && Object.values(model.inferenceDefaults).some(v => v !== undefined) && (
+      {model.inferenceDefaults && Object.values(model.inferenceDefaults).some(v => v != null) && (
         <>
           <h3>Inference Defaults</h3>
           <div className="metadata-grid">
-            {model.inferenceDefaults.temperature !== undefined && (
+            {model.inferenceDefaults.temperature != null && (
               <div className="metadata-row">
                 <span className="metadata-label">Temperature:</span>
                 <span className="metadata-value">{model.inferenceDefaults.temperature}</span>
               </div>
             )}
-            {model.inferenceDefaults.topP !== undefined && (
+            {model.inferenceDefaults.topP != null && (
               <div className="metadata-row">
                 <span className="metadata-label">Top P:</span>
                 <span className="metadata-value">{model.inferenceDefaults.topP}</span>
               </div>
             )}
-            {model.inferenceDefaults.topK !== undefined && (
+            {model.inferenceDefaults.topK != null && (
               <div className="metadata-row">
                 <span className="metadata-label">Top K:</span>
                 <span className="metadata-value">{model.inferenceDefaults.topK}</span>
               </div>
             )}
-            {model.inferenceDefaults.maxTokens !== undefined && (
+            {model.inferenceDefaults.maxTokens != null && (
               <div className="metadata-row">
                 <span className="metadata-label">Max Tokens:</span>
                 <span className="metadata-value">{model.inferenceDefaults.maxTokens.toLocaleString()}</span>
               </div>
             )}
-            {model.inferenceDefaults.repeatPenalty !== undefined && (
+            {model.inferenceDefaults.repeatPenalty != null && (
               <div className="metadata-row">
                 <span className="metadata-label">Repeat Penalty:</span>
                 <span className="metadata-value">{model.inferenceDefaults.repeatPenalty}</span>
