@@ -1,12 +1,12 @@
 //! Inference configuration types.
 //!
 //! Defines shared types for configuring LLM inference parameters
-//! (temperature, top_p, top_k, max_tokens, repeat_penalty).
+//! (temperature, `top_p`, `top_k`, `max_tokens`, `repeat_penalty`).
 //!
 //! This module provides the core `InferenceConfig` type that is reused across:
-//! - Per-model defaults (Model.inference_defaults)
-//! - Global settings (Settings.inference_defaults)
-//! - Request-level overrides (flattened in ChatProxyRequest)
+//! - Per-model defaults (`Model.inference_defaults`)
+//! - Global settings (`Settings.inference_defaults`)
+//! - Request-level overrides (flattened in `ChatProxyRequest`)
 
 use serde::{Deserialize, Serialize};
 
@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// When making an inference request, parameters are resolved in this order:
 /// 1. Request-level override (user specified for this request)
-/// 2. Per-model defaults (stored in Model.inference_defaults)
-/// 3. Global settings (stored in Settings.inference_defaults)
+/// 2. Per-model defaults (stored in `Model.inference_defaults`)
+/// 3. Global settings (stored in `Settings.inference_defaults`)
 /// 4. Hardcoded fallback (e.g., temperature = 0.7)
 ///
 /// # Examples
@@ -107,7 +107,7 @@ impl InferenceConfig {
     /// assert_eq!(request.temperature, Some(0.8)); // Request value wins
     /// assert_eq!(request.top_p, Some(0.9));      // Fallback to model default
     /// ```
-    pub fn merge_with(&mut self, other: &InferenceConfig) {
+    pub const fn merge_with(&mut self, other: &Self) {
         if self.temperature.is_none() {
             self.temperature = other.temperature;
         }

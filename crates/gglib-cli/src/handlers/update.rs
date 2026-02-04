@@ -433,6 +433,7 @@ mod tests {
             name: "Original Name".to_string(),
             file_path: PathBuf::from("/test/model.gguf"),
             param_count_b: 7.0,
+            inference_defaults: None,
             architecture: Some("llama".to_string()),
             quantization: Some("Q4_0".to_string()),
             context_length: Some(4096),
@@ -498,6 +499,12 @@ mod tests {
             replace_metadata: false,
             dry_run: false,
             force: false,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            max_tokens: None,
+            repeat_penalty: None,
+            clear_inference_defaults: false,
         };
 
         let metadata_updates = parse_metadata_updates(&args.metadata).unwrap();

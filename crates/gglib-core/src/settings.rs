@@ -121,7 +121,7 @@ impl Settings {
             self.default_model_id = *model_id;
         }
         if let Some(ref inference_defaults) = other.inference_defaults {
-            self.inference_defaults = inference_defaults.clone();
+            self.inference_defaults.clone_from(inference_defaults);
         }
     }
 }
@@ -221,8 +221,7 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
     if let Some(temp) = config.temperature {
         if !(0.0..=2.0).contains(&temp) {
             return Err(format!(
-                "Temperature must be between 0.0 and 2.0, got {}",
-                temp
+                "Temperature must be between 0.0 and 2.0, got {temp}"
             ));
         }
     }
@@ -230,14 +229,14 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
     // Validate top_p (0.0 - 1.0)
     if let Some(top_p) = config.top_p {
         if !(0.0..=1.0).contains(&top_p) {
-            return Err(format!("Top P must be between 0.0 and 1.0, got {}", top_p));
+            return Err(format!("Top P must be between 0.0 and 1.0, got {top_p}"));
         }
     }
 
     // Validate top_k (must be positive)
     if let Some(top_k) = config.top_k {
         if top_k <= 0 {
-            return Err(format!("Top K must be positive, got {}", top_k));
+            return Err(format!("Top K must be positive, got {top_k}"));
         }
     }
 
@@ -252,8 +251,7 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
     if let Some(repeat_penalty) = config.repeat_penalty {
         if repeat_penalty <= 0.0 {
             return Err(format!(
-                "Repeat penalty must be positive, got {}",
-                repeat_penalty
+                "Repeat penalty must be positive, got {repeat_penalty}"
             ));
         }
     }

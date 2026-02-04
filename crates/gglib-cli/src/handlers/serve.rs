@@ -29,6 +29,7 @@ use gglib_runtime::llama::{
 /// * `top_k` - Optional top-k override
 /// * `max_tokens` - Optional max-tokens override
 /// * `repeat_penalty` - Optional repeat-penalty override
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     ctx: &CliContext,
     id: u32,
