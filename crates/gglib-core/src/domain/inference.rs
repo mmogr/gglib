@@ -45,6 +45,7 @@ use serde::{Deserialize, Serialize};
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct InferenceConfig {
     /// Sampling temperature (0.0 - 2.0).
     ///

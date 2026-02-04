@@ -116,6 +116,7 @@ impl<'a> ModelOps<'a> {
             file_paths: None,
             // Capabilities default to unknown (empty) - will be inferred at bootstrap
             capabilities: gglib_core::domain::ModelCapabilities::default(),
+            inference_defaults: None,
         };
 
         let model = self
@@ -140,6 +141,9 @@ impl<'a> ModelOps<'a> {
         }
         if let Some(file_path) = request.file_path {
             model.file_path = PathBuf::from(file_path);
+        }
+        if let Some(inference_defaults) = request.inference_defaults {
+            model.inference_defaults = Some(inference_defaults);
         }
 
         self.deps
