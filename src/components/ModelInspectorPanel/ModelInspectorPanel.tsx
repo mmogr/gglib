@@ -108,6 +108,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     editedName: editMode.editedName,
     editedQuantization: editMode.editedQuantization,
     editedFilePath: editMode.editedFilePath,
+    editedInferenceDefaults: editMode.editedInferenceDefaults,
     customContext: serveModal.customContext,
     customPort: serveModal.customPort,
     jinjaOverride: serveModal.jinjaOverride,
@@ -206,8 +207,10 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               model={model}
               editedQuantization={editMode.editedQuantization}
               editedFilePath={editMode.editedFilePath}
+              editedInferenceDefaults={editMode.editedInferenceDefaults}
               onQuantizationChange={editMode.setEditedQuantization}
               onFilePathChange={editMode.setEditedFilePath}
+              onInferenceDefaultsChange={editMode.setEditedInferenceDefaults}
             />
           ) : (
             <ModelMetadataGrid model={model} />

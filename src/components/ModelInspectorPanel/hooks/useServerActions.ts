@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { appLogger } from '../../../services/platform';
-import type { GgufModel, ServeConfig, ServerInfo, AppSettings } from '../../../types';
+import type { GgufModel, ServeConfig, ServerInfo, AppSettings, InferenceConfig } from '../../../types';
 import { serveModel } from '../../../services/clients/servers';
 import { useToastContext } from '../../../contexts/ToastContext';
 import { TransportError, LlamaServerNotInstalledMetadata } from '../../../services/transport/errors';
@@ -13,6 +13,7 @@ export interface ServerActionsConfig {
   editedName: string;
   editedQuantization: string;
   editedFilePath: string;
+  editedInferenceDefaults: InferenceConfig | undefined;
   // Serve modal state
   customContext: string;
   customPort: string;
@@ -21,7 +22,7 @@ export interface ServerActionsConfig {
   // Callbacks
   onStopServer: (modelId: number) => Promise<void>;
   onRemoveModel: (id: number, force: boolean) => void;
-  onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string }) => Promise<void>;
+  onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: InferenceConfig }) => Promise<void>;
   onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerInfo) => void;
   onLlamaServerNotInstalled?: (metadata: LlamaServerNotInstalledMetadata) => void;
@@ -55,6 +56,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     editedName,
     editedQuantization,
     editedFilePath,
+    editedInferenceDefaults,
     customContext,
     customPort,
     jinjaOverride,
@@ -180,7 +182,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
   const handleSave = useCallback(async () => {
     if (!model?.id) return;
     try {
-      const updates: { name?: string; quantization?: string; file_path?: string } = {};
+      const updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: InferenceConfig } = {};
       
       if (editedName !== model.name) {
         updates.name = editedName;
@@ -191,6 +193,10 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       if (editedFilePath !== model.file_path) {
         updates.file_path = editedFilePath;
       }
+      // Always include inferenceDefaults if it was edited (even if set to empty object to clear)
+      if (JSON.stringify(editedInferenceDefaults) !== JSON.stringify(model.inferenceDefaults)) {
+        updates.inferenceDefaults = editedInferenceDefaults;
+      }
       
       if (Object.keys(updates).length > 0) {
         await onUpdateModel(model.id, updates);
@@ -200,7 +206,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       appLogger.error('hook.ui', 'Failed to update model', { error, modelId: model?.id });
       alert(`Failed to update model: ${error}`);
     }
-  }, [model, editedName, editedQuantization, editedFilePath, onUpdateModel, resetEditState]);
+  }, [model, editedName, editedQuantization, editedFilePath, editedInferenceDefaults, onUpdateModel, resetEditState]);
 
   return {
     handleStartServer,
