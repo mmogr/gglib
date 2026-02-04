@@ -194,9 +194,27 @@ async fn main() -> anyhow::Result<()> {
             mlock,
             jinja,
             port,
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            repeat_penalty,
         } => {
             // NEW: Uses CliContext
-            handlers::serve::execute(&ctx, id, ctx_size, mlock, jinja, port).await?;
+            handlers::serve::execute(
+                &ctx,
+                id,
+                ctx_size,
+                mlock,
+                jinja,
+                port,
+                temperature,
+                top_p,
+                top_k,
+                max_tokens,
+                repeat_penalty,
+            )
+            .await?;
         }
         Commands::Chat {
             identifier,
