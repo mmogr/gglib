@@ -103,6 +103,12 @@ impl ModelRepository for SqliteModelRepository {
 
         let tags_json = serde_json::to_string(&model.tags).unwrap_or_else(|_| "[]".to_string());
 
+        // Serialize inference_defaults if present
+        let inference_defaults_json = model
+            .inference_defaults
+            .as_ref()
+            .and_then(|cfg| serde_json::to_string(cfg).ok());
+
         // Compute model key for deduplication
         let model_key = compute_model_key(model);
 
@@ -117,8 +123,8 @@ impl ModelRepository for SqliteModelRepository {
             r#"INSERT INTO models (
                 name, file_path, param_count_b, architecture, quantization, 
                 context_length, metadata, added_at, hf_repo_id, hf_commit_sha, 
-                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 file_paths_json = excluded.file_paths_json,
@@ -126,7 +132,8 @@ impl ModelRepository for SqliteModelRepository {
                 download_date = excluded.download_date,
                 last_update_check = excluded.last_update_check,
                 tags = excluded.tags,
-                capabilities = excluded.capabilities
+                capabilities = excluded.capabilities,
+                inference_defaults = excluded.inference_defaults
             "#,
         )
         .bind(&model.name)
@@ -146,6 +153,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&model_key)
         .bind(&file_paths_json)
         .bind(model.capabilities.bits() as i64)
+        .bind(&inference_defaults_json)
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -170,8 +178,13 @@ impl ModelRepository for SqliteModelRepository {
         let tags_json = serde_json::to_string(&model.tags)
             .map_err(|e| RepositoryError::Serialization(e.to_string()))?;
 
+        let inference_defaults_json = model
+            .inference_defaults
+            .as_ref()
+            .and_then(|cfg| serde_json::to_string(cfg).ok());
+
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ? WHERE id = ?"
         )
             .bind(&model.name)
             .bind(model.file_path.to_string_lossy().as_ref())
@@ -187,6 +200,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(model.last_update_check.as_ref().map(|dt| dt.to_string()))
             .bind(&tags_json)
             .bind(model.capabilities.bits() as i64)
+            .bind(&inference_defaults_json)
             .bind(model.id)
             .execute(&self.pool)
             .await

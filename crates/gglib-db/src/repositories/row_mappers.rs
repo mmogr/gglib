@@ -6,7 +6,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries.
-pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities";
+pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults";
 
 /// Helper to parse datetime strings that may have "UTC" suffix.
 pub fn parse_datetime(datetime_str: Option<String>) -> Option<DateTime<Utc>> {
@@ -85,6 +85,11 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
             .ok()
             .map(ModelCapabilities::from_bits_truncate)
             .unwrap_or_default(),
+        inference_defaults: row
+            .try_get::<Option<String>, _>("inference_defaults")
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok()),
     })
 }
 

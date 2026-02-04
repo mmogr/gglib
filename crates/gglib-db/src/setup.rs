@@ -136,6 +136,12 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await;
 
+    // Migration: Add inference_defaults column for per-model inference parameters
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN inference_defaults TEXT"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
+
     // Create settings table
     sqlx::query(
         r#"
