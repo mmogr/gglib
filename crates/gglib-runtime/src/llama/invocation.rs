@@ -4,6 +4,7 @@
 //! command invocations, eliminating duplication between chat, serve, and other commands.
 
 use super::args::{ContextResolution, ContextResolutionSource};
+use gglib_core::domain::InferenceConfig;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -26,6 +27,7 @@ pub struct LlamaCommandBuilder {
     model_path: PathBuf,
     context_resolution: Option<ContextResolution>,
     mlock: bool,
+    inference_config: Option<InferenceConfig>,
     additional_args: Vec<(String, Option<String>)>,
 }
 
@@ -37,6 +39,7 @@ impl LlamaCommandBuilder {
             model_path: model_path.into(),
             context_resolution: None,
             mlock: false,
+            inference_config: None,
             additional_args: Vec::new(),
         }
     }
@@ -50,6 +53,12 @@ impl LlamaCommandBuilder {
     /// Enable or disable memory lock.
     pub fn mlock(mut self, enabled: bool) -> Self {
         self.mlock = enabled;
+        self
+    }
+
+    /// Set the inference configuration for sampling parameters.
+    pub fn inference_config(mut self, config: InferenceConfig) -> Self {
+        self.inference_config = Some(config);
         self
     }
 
@@ -98,6 +107,25 @@ impl LlamaCommandBuilder {
         // Memory lock
         if self.mlock {
             cmd.arg("--mlock");
+        }
+
+        // Inference parameters (llama-cli/llama-server flags)
+        if let Some(config) = &self.inference_config {
+            if let Some(temp) = config.temperature {
+                cmd.arg("--temp").arg(temp.to_string());
+            }
+            if let Some(top_p) = config.top_p {
+                cmd.arg("--top-p").arg(top_p.to_string());
+            }
+            if let Some(top_k) = config.top_k {
+                cmd.arg("--top-k").arg(top_k.to_string());
+            }
+            if let Some(max_tokens) = config.max_tokens {
+                cmd.arg("-n").arg(max_tokens.to_string());
+            }
+            if let Some(repeat_penalty) = config.repeat_penalty {
+                cmd.arg("--repeat-penalty").arg(repeat_penalty.to_string());
+            }
         }
 
         // Additional flags

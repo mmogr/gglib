@@ -188,6 +188,21 @@ pub enum Commands {
         /// Use simplified IO mode (better for piping/limited terminals)
         #[arg(long = "simple-io")]
         simple_io: bool,
+        /// Temperature for sampling (0.0-2.0, overrides model/global defaults)
+        #[arg(long)]
+        temperature: Option<f32>,
+        /// Top-p sampling (0.0-1.0, overrides model/global defaults)
+        #[arg(long = "top-p")]
+        top_p: Option<f32>,
+        /// Top-k sampling (overrides model/global defaults)
+        #[arg(long = "top-k")]
+        top_k: Option<i32>,
+        /// Maximum tokens to generate (overrides model/global defaults)
+        #[arg(long = "max-tokens")]
+        max_tokens: Option<u32>,
+        /// Repeat penalty (overrides model/global defaults)
+        #[arg(long = "repeat-penalty")]
+        repeat_penalty: Option<f32>,
     },
 
     /// Ask a question with optional context from stdin or file

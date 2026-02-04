@@ -208,6 +208,11 @@ async fn main() -> anyhow::Result<()> {
             system_prompt,
             multiline_input,
             simple_io,
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            repeat_penalty,
         } => {
             // NEW: Uses CliContext
             let args = handlers::chat::ChatArgs {
@@ -220,6 +225,11 @@ async fn main() -> anyhow::Result<()> {
                 system_prompt,
                 multiline_input,
                 simple_io,
+                temperature,
+                top_p,
+                top_k,
+                max_tokens,
+                repeat_penalty,
             };
             handlers::chat::execute(&ctx, args).await?;
         }
