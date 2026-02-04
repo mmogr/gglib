@@ -134,6 +134,24 @@ pub enum Commands {
         /// Replace entire metadata instead of merging
         #[arg(long)]
         replace_metadata: bool,
+        /// Set default temperature for this model (0.0-2.0)
+        #[arg(long)]
+        temperature: Option<f32>,
+        /// Set default top-p for this model (0.0-1.0)
+        #[arg(long = "top-p")]
+        top_p: Option<f32>,
+        /// Set default top-k for this model
+        #[arg(long = "top-k")]
+        top_k: Option<i32>,
+        /// Set default max-tokens for this model
+        #[arg(long = "max-tokens")]
+        max_tokens: Option<u32>,
+        /// Set default repeat-penalty for this model
+        #[arg(long = "repeat-penalty")]
+        repeat_penalty: Option<f32>,
+        /// Clear all inference parameter defaults (revert to inherit mode)
+        #[arg(long)]
+        clear_inference_defaults: bool,
         /// Show preview without applying changes
         #[arg(long)]
         dry_run: bool,
