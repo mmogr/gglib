@@ -173,9 +173,9 @@ mod tests {
         request.merge_with(&model_defaults);
 
         assert_eq!(request.temperature, Some(0.8)); // Request wins
-        assert_eq!(request.top_p, Some(0.9));       // Fallback to model
-        assert_eq!(request.top_k, Some(50));        // Fallback to model
-        assert!(request.max_tokens.is_none());      // Still None
+        assert_eq!(request.top_p, Some(0.9)); // Fallback to model
+        assert_eq!(request.top_k, Some(50)); // Fallback to model
+        assert!(request.max_tokens.is_none()); // Still None
     }
 
     #[test]

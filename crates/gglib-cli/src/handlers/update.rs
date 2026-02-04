@@ -278,7 +278,7 @@ fn show_inference_defaults_changes(
     }
 
     println!("  Inference Defaults:");
-    
+
     match (old_config, new_config) {
         (Some(_), None) => {
             println!("    ✗ Cleared (will inherit from global/hardcoded)");
