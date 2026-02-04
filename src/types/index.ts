@@ -1,3 +1,34 @@
+// ============================================================================
+// Inference Configuration
+// ============================================================================
+
+/**
+ * Inference parameters for LLM sampling.
+ * All fields are optional to support partial configuration and fallback chains.
+ * 
+ * Hierarchy resolution (backend automatically applies):
+ * 1. Request-level override (user specified for this request)
+ * 2. Per-model defaults (stored in model.inferenceDefaults)
+ * 3. Global settings (stored in AppSettings.inferenceDefaults)
+ * 4. Hardcoded fallback (e.g., temperature = 0.7)
+ */
+export interface InferenceConfig {
+  /** Sampling temperature (0.0 - 2.0). Controls randomness. */
+  temperature?: number;
+  /** Nucleus sampling threshold (0.0 - 1.0). Cumulative probability cutoff. */
+  topP?: number;
+  /** Top-K sampling limit. Considers only K most likely tokens. */
+  topK?: number;
+  /** Maximum tokens to generate in response. */
+  maxTokens?: number;
+  /** Repetition penalty (> 0.0, typically 1.0 - 1.3). */
+  repeatPenalty?: number;
+}
+
+// ============================================================================
+// Model Types
+// ============================================================================
+
 export interface GgufModel {
   id?: number;
   name: string;
@@ -12,6 +43,8 @@ export interface GgufModel {
   // Server status
   is_serving?: boolean;
   port?: number;
+  // Inference defaults
+  inferenceDefaults?: InferenceConfig;
 }
 
 export interface DownloadConfig {
@@ -56,6 +89,8 @@ export interface AppSettings {
   max_stagnation_steps?: number | null;
   /** Default model ID for quick commands (e.g., `gglib question`) */
   default_model_id?: number | null;
+  /** Global inference parameter defaults */
+  inferenceDefaults?: InferenceConfig | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -72,6 +107,8 @@ export interface UpdateSettingsRequest {
   max_stagnation_steps?: number | null | undefined;
   /** Default model ID for quick commands (e.g., `gglib question`) */
   default_model_id?: number | null | undefined;
+  /** Global inference parameter defaults */
+  inferenceDefaults?: InferenceConfig | null | undefined;
 }
 
 // ============================================================================

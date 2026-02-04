@@ -73,6 +73,8 @@ export async function streamModelResponse(
     messages: effectiveMessages,
     stream: true,
     ...(hasTools && { tools: toolDefinitions }),
+    // Inference parameters can be added here if needed
+    // They will be resolved via hierarchy: Request → Model → Global → Hardcoded
   };
 
   appLogger.debug('hook.runtime', 'Streaming model request', {

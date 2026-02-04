@@ -61,6 +61,7 @@ export async function removeModel(id: ModelId): Promise<void> {
 export async function updateModel(params: UpdateModelParams): Promise<GgufModel> {
   return put<GgufModel>(`/api/models/${params.id}`, {
     name: params.name,
+    inferenceDefaults: params.inferenceDefaults,
   });
 }
 
