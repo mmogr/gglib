@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::capabilities::ModelCapabilities;
+use super::inference::InferenceConfig;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Filter/Aggregate Types
@@ -78,6 +79,12 @@ pub struct Model {
     /// Model capabilities inferred from chat template analysis.
     #[serde(default)]
     pub capabilities: ModelCapabilities,
+    /// Per-model inference parameter defaults.
+    ///
+    /// These are preferred over global settings when making inference requests.
+    /// If not set, falls back to global settings or hardcoded defaults.
+    #[serde(default)]
+    pub inference_defaults: Option<InferenceConfig>,
 }
 
 /// A model to be inserted into the system (no ID yet).
@@ -119,6 +126,12 @@ pub struct NewModel {
     /// Model capabilities inferred from chat template analysis.
     #[serde(default)]
     pub capabilities: ModelCapabilities,
+    /// Per-model inference parameter defaults.
+    ///
+    /// These are preferred over global settings when making inference requests.
+    /// If not set, falls back to global settings or hardcoded defaults.
+    #[serde(default)]
+    pub inference_defaults: Option<InferenceConfig>,
 }
 
 impl NewModel {
@@ -149,6 +162,7 @@ impl NewModel {
             tags: Vec::new(),
             file_paths: None,
             capabilities: ModelCapabilities::default(),
+            inference_defaults: None,
         }
     }
 }
@@ -176,6 +190,7 @@ impl Model {
             tags: self.tags.clone(),
             file_paths: None, // Not preserved in conversion
             capabilities: self.capabilities,
+            inference_defaults: self.inference_defaults.clone(),
         }
     }
 }
@@ -219,6 +234,7 @@ mod tests {
             last_update_check: None,
             tags: vec!["chat".to_string()],
             capabilities: ModelCapabilities::default(),
+            inference_defaults: None,
         };
 
         let new_model = model.to_new_model();

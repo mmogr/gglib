@@ -334,6 +334,7 @@ mod tests {
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),
                 capabilities: model.capabilities,
+                inference_defaults: model.inference_defaults.clone(),
             };
             models.push(created.clone());
             Ok(created)

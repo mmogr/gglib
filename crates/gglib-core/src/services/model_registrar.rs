@@ -190,6 +190,7 @@ mod tests {
                 download_date: model.download_date,
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),
+                inference_defaults: model.inference_defaults.clone(),
             };
             *id += 1;
             drop(id);
