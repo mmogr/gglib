@@ -74,7 +74,7 @@ export function useMccMenuActions({
         
         if (selectedModelId) {
           // Try to find server for selected model
-          serverToOpen = servers.find((s) => s.model_id === selectedModelId);
+          serverToOpen = servers.find((s) => s.modelId === selectedModelId);
         }
         
         if (!serverToOpen && servers.length > 0) {
@@ -83,7 +83,7 @@ export function useMccMenuActions({
         }
         
         if (serverToOpen) {
-          openChatSession(serverToOpen.model_id, 'chat');
+          openChatSession(serverToOpen.modelId, 'chat');
         } else {
           // No servers running - show helpful message
           showToast('No servers are currently running. Start a server first to use chat.', 'warning');
@@ -100,7 +100,7 @@ export function useMccMenuActions({
       },
       stopServer: async () => {
         if (!selectedModelId) return;
-        const runningServer = servers.find((s) => s.model_id === selectedModelId);
+        const runningServer = servers.find((s) => s.modelId === selectedModelId);
         if (runningServer) {
           await stopServer(selectedModelId);
           if (chatSessionModelId === selectedModelId) {
@@ -128,7 +128,7 @@ export function useMccMenuActions({
       },
       selectModel: (modelId: number, view?: 'chat' | 'console') => {
         if (view) {
-          const server = servers.find((s) => s.model_id === modelId);
+          const server = servers.find((s) => s.modelId === modelId);
           if (server) {
             openChatSession(modelId, view);
           }

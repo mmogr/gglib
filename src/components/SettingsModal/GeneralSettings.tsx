@@ -121,7 +121,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
       />
       <div className={styles.helperText}>
         {sourceDescription && <span>{sourceDescription}</span>}
-        {info?.default_path && (
+        {info?.defaultPath && (
           <button type="button" className={styles.resetLink} onClick={onReset}>
             Reset to defaults
           </button>

@@ -62,15 +62,15 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
   useEffect(() => {
     if (settings) {
-      setContextSizeInput(settings.default_context_size?.toString() || "");
-      setProxyPortInput(settings.proxy_port?.toString() || "");
-      setServerPortInput(settings.llama_base_port?.toString() || "");
-      setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "");
-      setTitlePromptInput(settings.title_generation_prompt || "");
-      setMaxToolIterationsInput(settings.max_tool_iterations?.toString() || "");
-      setMaxStagnationStepsInput(settings.max_stagnation_steps?.toString() || "");
-      setShowFitIndicators(settings.show_memory_fit_indicators !== false);
-      setDefaultModelInput(settings.default_model_id?.toString() || "");
+      setContextSizeInput(settings.defaultContextSize?.toString() || "");
+      setProxyPortInput(settings.proxyPort?.toString() || "");
+      setServerPortInput(settings.llamaBasePort?.toString() || "");
+      setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() || "");
+      setTitlePromptInput(settings.titleGenerationPrompt || "");
+      setMaxToolIterationsInput(settings.maxToolIterations?.toString() || "");
+      setMaxStagnationStepsInput(settings.maxStagnationSteps?.toString() || "");
+      setShowFitIndicators(settings.showMemoryFitIndicators !== false);
+      setDefaultModelInput(settings.defaultModelId?.toString() || "");
       setInferenceDefaultsInput(settings.inferenceDefaults || undefined);
     }
   }, [settings]);
@@ -95,29 +95,29 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         // Update other settings
         const updates: UpdateSettingsRequest = {
-          default_context_size: parseNumericInput(contextSizeInput),
-          proxy_port: parseNumericInput(proxyPortInput),
-          llama_base_port: parseNumericInput(serverPortInput),
-          max_download_queue_size: parseNumericInput(maxQueueSizeInput),
-          title_generation_prompt: titlePromptInput.trim() || null,
-          max_tool_iterations: parseNumericInput(maxToolIterationsInput),
-          max_stagnation_steps: parseNumericInput(maxStagnationStepsInput),
-          show_memory_fit_indicators: showFitIndicators,
-          default_model_id: parseNumericInput(defaultModelInput),
+          defaultContextSize: parseNumericInput(contextSizeInput),
+          proxyPort: parseNumericInput(proxyPortInput),
+          llamaBasePort: parseNumericInput(serverPortInput),
+          maxDownloadQueueSize: parseNumericInput(maxQueueSizeInput),
+          titleGenerationPrompt: titlePromptInput.trim() || null,
+          maxToolIterations: parseNumericInput(maxToolIterationsInput),
+          maxStagnationSteps: parseNumericInput(maxStagnationStepsInput),
+          showMemoryFitIndicators: showFitIndicators,
+          defaultModelId: parseNumericInput(defaultModelInput),
           inferenceDefaults: inferenceDefaultsInput,
         };
 
         // Check if any updates were made
         const hasUpdates = 
-          updates.default_context_size !== undefined ||
-          updates.proxy_port !== undefined ||
-          updates.llama_base_port !== undefined ||
-          updates.max_download_queue_size !== undefined ||
-          updates.title_generation_prompt !== undefined ||
-          updates.max_tool_iterations !== undefined ||
-          updates.max_stagnation_steps !== undefined ||
-          updates.show_memory_fit_indicators !== undefined ||
-          updates.default_model_id !== undefined ||
+          updates.defaultContextSize !== undefined ||
+          updates.proxyPort !== undefined ||
+          updates.llamaBasePort !== undefined ||
+          updates.maxDownloadQueueSize !== undefined ||
+          updates.titleGenerationPrompt !== undefined ||
+          updates.maxToolIterations !== undefined ||
+          updates.maxStagnationSteps !== undefined ||
+          updates.showMemoryFitIndicators !== undefined ||
+          updates.defaultModelId !== undefined ||
           updates.inferenceDefaults !== undefined;
 
         if (hasUpdates) {
@@ -148,14 +148,14 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   );
 
   const handleReset = useCallback(() => {
-    if (info?.default_path) {
-      setPathInput(info.default_path);
+    if (info?.defaultPath) {
+      setPathInput(info.defaultPath);
     }
     if (settings) {
-      setContextSizeInput(settings.default_context_size?.toString() || "4096");
-      setProxyPortInput(settings.proxy_port?.toString() || "8080");
-      setServerPortInput(settings.llama_base_port?.toString() || "9000");
-      setMaxQueueSizeInput(settings.max_download_queue_size?.toString() || "10");
+      setContextSizeInput(settings.defaultContextSize?.toString() || "4096");
+      setProxyPortInput(settings.proxyPort?.toString() || "8080");
+      setServerPortInput(settings.llamaBasePort?.toString() || "9000");
+      setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() || "10");
       setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
       setShowFitIndicators(true); // Default is enabled
     }

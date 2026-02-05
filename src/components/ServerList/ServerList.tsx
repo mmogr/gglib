@@ -86,17 +86,17 @@ const ServerList: FC<ServerListProps> = ({
       <div className="server-list-items">
         {servers.map((server) => (
           <div
-            key={server.model_id}
-            className={`server-item ${expandedServerId === server.model_id ? 'expanded' : ''}`}
+            key={server.modelId}
+            className={`server-item ${expandedServerId === server.modelId ? 'expanded' : ''}`}
           >
             <div 
               className={`server-item-header ${onSelectModel ? 'clickable' : ''}`}
-              onClick={() => handleServerClick(server.model_id)}
+              onClick={() => handleServerClick(server.modelId)}
             >
               <div className="server-info">
                 <Row gap="sm" align="center" className="server-name">
-                  {server.model_name}
-                  <ServerHealthIndicator modelId={server.model_id} />
+                  {server.modelName}
+                  <ServerHealthIndicator modelId={server.modelId} />
                 </Row>
                 <div className="server-details">
                   <span className="server-port">:{server.port}</span>
@@ -107,19 +107,19 @@ const ServerList: FC<ServerListProps> = ({
                 variant="danger"
                 size="sm"
                 className={`server-stop-btn ${compact ? 'compact' : ''}`}
-                onClick={(e) => handleStop(server.model_id, e)}
+                onClick={(e) => handleStop(server.modelId, e)}
                 title="Stop server"
                 leftIcon={<Icon icon={Square} size={14} />}
               >
                 {!compact && 'Stop'}
               </Button>
             </div>
-            {expandedServerId === server.model_id && onSelectModel && (
+            {expandedServerId === server.modelId && onSelectModel && (
               <div className="server-item-tabs">
                 <SidebarTabs<ChatPageTabId>
                   tabs={CHAT_PAGE_TABS}
                   activeTab="chat"
-                  onTabChange={(tab) => handleTabSelect(server.model_id, tab)}
+                  onTabChange={(tab) => handleTabSelect(server.modelId, tab)}
                 />
               </div>
             )}

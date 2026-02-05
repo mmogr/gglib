@@ -103,12 +103,12 @@ export default function ModelControlCenterPage({
 
   const openChatSession = useCallback(
     (modelId: number, view: 'chat' | 'console') => {
-      const server = servers.find((s) => s.model_id === modelId);
+      const server = servers.find((s) => s.modelId === modelId);
       if (server) {
         setChatSession({
           serverPort: server.port,
-          modelId: server.model_id,
-          modelName: server.model_name,
+          modelId: server.modelId,
+          modelName: server.modelName,
           initialView: view,
         });
       }
@@ -197,8 +197,8 @@ export default function ModelControlCenterPage({
     // Server started, open chat
     setChatSession({
       serverPort: serverInfo.port,
-      modelId: serverInfo.model_id,
-      modelName: serverInfo.model_name,
+      modelId: serverInfo.modelId,
+      modelName: serverInfo.modelName,
       initialView: 'chat',
     });
   };

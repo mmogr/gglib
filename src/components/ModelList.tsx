@@ -51,21 +51,21 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove }) => 
           {model.name}
           {isRunning && <ServerHealthIndicator modelId={model.id ?? 0} />}
         </Row>
-        {model.hf_repo_id && (
+        {model.hfRepoId && (
           <Row gap="xs" align="center" className="name-secondary">
             <Icon icon={Package} size={14} className="shrink-0" />
-            <span>{model.hf_repo_id}</span>
+            <span>{model.hfRepoId}</span>
           </Row>
         )}
       </div>
-      <div className="cell">{formatParamCount(model.param_count_b)}</div>
+      <div className="cell">{formatParamCount(model.paramCountB)}</div>
       <div className="cell">{model.architecture || "—"}</div>
       <div className="cell">
         <span className="quantization-badge">
           {model.quantization || "—"}
         </span>
       </div>
-      <div className="cell">{new Date(model.added_at).toLocaleDateString()}</div>
+      <div className="cell">{new Date(model.addedAt).toLocaleDateString()}</div>
       <div className="cell actions">
         <button
           onClick={() => onServe(model)}
@@ -144,13 +144,13 @@ const ModelList: FC<ModelListProps> = ({
         if (!isNaN(parsed) && parsed > 0) {
           contextLength = parsed;
         }
-      } else if (servingModel.context_length) {
-        contextLength = servingModel.context_length;
+      } else if (servingModel.contextLength) {
+        contextLength = servingModel.contextLength;
       }
       
       await serveModel({
         id: servingModel.id,
-        context_length: contextLength,
+        contextLength: contextLength,
         mlock: false,
         jinja: enableJinja || jinjaAutoEnabled,
       });
@@ -248,7 +248,7 @@ const ModelList: FC<ModelListProps> = ({
             <div className="modal-body">
               <div className="model-info">
                 <strong>{servingModel.name}</strong>
-                <span className="model-size">{formatParamCount(servingModel.param_count_b)}</span>
+                <span className="model-size">{formatParamCount(servingModel.paramCountB)}</span>
               </div>
               
               {/* Capability Badges */}
@@ -284,15 +284,15 @@ const ModelList: FC<ModelListProps> = ({
                   id="context-input"
                   type="number"
                   className="context-input"
-                  placeholder={servingModel.context_length ? `Default: ${servingModel.context_length.toLocaleString()}` : 'Use model default'}
+                  placeholder={servingModel.contextLength ? `Default: ${servingModel.contextLength.toLocaleString()}` : 'Use model default'}
                   value={customContext}
                   onChange={(e) => setCustomContext(e.target.value)}
                   disabled={isServing}
                   min="1"
                 />
                 <p className="input-help">
-                  {servingModel.context_length 
-                    ? `Model's maximum: ${servingModel.context_length.toLocaleString()} tokens`
+                  {servingModel.contextLength 
+                    ? `Model's maximum: ${servingModel.contextLength.toLocaleString()} tokens`
                     : 'Leave empty to use model default'}
                 </p>
               </div>

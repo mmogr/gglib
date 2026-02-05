@@ -85,7 +85,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
   // Memory fit checking
   const { checkFit, getTooltip, loading: memoryLoading } = useSystemMemory();
   const { settings } = useSettings();
-  const showFitIndicators = settings?.show_memory_fit_indicators ?? true;
+  const showFitIndicators = settings?.showMemoryFitIndicators ?? true;
 
   // Format last modified date
   const formatLastModified = (dateStr?: string | null): string => {
