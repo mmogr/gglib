@@ -204,6 +204,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
                 max_tool_iterations: None,
                 max_stagnation_steps: None,
                 default_model_id: None,
+                inference_defaults: None,
             };
 
             // Get current settings and apply updates for validation

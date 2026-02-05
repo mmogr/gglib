@@ -13,11 +13,19 @@ import type { CreateConversationParams, SaveMessageParams } from '../transport/t
  * Must stay in sync with gglib-gui/src/types.rs::StartServerRequest
  */
 export interface StartServerRequest {
-  context_length?: number;
+  contextLength?: number;
   port?: number;
   mlock: boolean;
   jinja?: boolean;
-  reasoning_format?: string;
+  reasoningFormat?: string;
+  // Inference parameters as nested object (matches Rust's inference_params field)
+  inferenceParams?: {
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    maxTokens?: number;
+    repeatPenalty?: number;
+  };
 }
 
 /**
@@ -59,13 +67,29 @@ export interface UpdateConversationRequest {
  * @returns StartServerRequest matching Rust type
  */
 export function toStartServerRequest(config: ServeConfig): StartServerRequest {
+  // Build inference params object only if any values are set
+  const hasInferenceParams = config.temperature !== undefined || 
+    config.top_p !== undefined || 
+    config.top_k !== undefined || 
+    config.max_tokens !== undefined || 
+    config.repeat_penalty !== undefined;
+  
+  const inferenceParams = hasInferenceParams ? {
+    temperature: config.temperature,
+    topP: config.top_p,
+    topK: config.top_k,
+    maxTokens: config.max_tokens,
+    repeatPenalty: config.repeat_penalty,
+  } : undefined;
+
   return {
-    context_length: config.context_length,
+    contextLength: config.context_length,
     port: config.port,
     mlock: config.mlock ?? false,
     jinja: config.jinja,
     // reasoning_format is auto-detected from model tags on backend
-    reasoning_format: undefined,
+    reasoningFormat: undefined,
+    inferenceParams,
   };
 }
 

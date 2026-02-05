@@ -6,12 +6,14 @@
 import { post, get } from './client';
 import type { ModelId } from '../types/ids';
 import type { ServeConfig, ServeResponse, ServerInfo } from '../types/servers';
+import { toStartServerRequest } from '../mappers';
 
 /**
  * Start a llama.cpp server for a model.
  */
 export async function serveModel(config: ServeConfig): Promise<ServeResponse> {
-  return post<ServeResponse>('/api/servers/start', config);
+  const request = toStartServerRequest(config);
+  return post<ServeResponse>('/api/servers/start', { id: config.id, ...request });
 }
 
 /**

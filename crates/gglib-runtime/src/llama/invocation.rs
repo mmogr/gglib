@@ -4,6 +4,7 @@
 //! command invocations, eliminating duplication between chat, serve, and other commands.
 
 use super::args::{ContextResolution, ContextResolutionSource};
+use gglib_core::domain::InferenceConfig;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -26,6 +27,7 @@ pub struct LlamaCommandBuilder {
     model_path: PathBuf,
     context_resolution: Option<ContextResolution>,
     mlock: bool,
+    inference_config: Option<InferenceConfig>,
     additional_args: Vec<(String, Option<String>)>,
 }
 
@@ -37,6 +39,7 @@ impl LlamaCommandBuilder {
             model_path: model_path.into(),
             context_resolution: None,
             mlock: false,
+            inference_config: None,
             additional_args: Vec::new(),
         }
     }
@@ -50,6 +53,12 @@ impl LlamaCommandBuilder {
     /// Enable or disable memory lock.
     pub fn mlock(mut self, enabled: bool) -> Self {
         self.mlock = enabled;
+        self
+    }
+
+    /// Set the inference configuration for sampling parameters.
+    pub fn inference_config(mut self, config: InferenceConfig) -> Self {
+        self.inference_config = Some(config);
         self
     }
 
@@ -98,6 +107,14 @@ impl LlamaCommandBuilder {
         // Memory lock
         if self.mlock {
             cmd.arg("--mlock");
+        }
+
+        // Inference parameters (llama-cli/llama-server flags)
+        // Use shared conversion method for DRY compliance
+        if let Some(config) = &self.inference_config {
+            for arg in config.to_cli_args() {
+                cmd.arg(arg);
+            }
         }
 
         // Additional flags

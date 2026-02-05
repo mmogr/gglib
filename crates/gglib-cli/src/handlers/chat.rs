@@ -6,6 +6,7 @@ use anyhow::Result;
 use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
+use gglib_core::domain::InferenceConfig;
 use gglib_core::paths::llama_cli_path;
 use gglib_runtime::llama::{
     ContextResolution, ContextResolutionSource, LlamaCommandBuilder, ensure_llama_initialized,
@@ -24,6 +25,11 @@ pub struct ChatArgs {
     pub system_prompt: Option<String>,
     pub multiline_input: bool,
     pub simple_io: bool,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub top_k: Option<i32>,
+    pub max_tokens: Option<u32>,
+    pub repeat_penalty: Option<f32>,
 }
 
 /// Execute the chat command.
@@ -51,6 +57,11 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
         system_prompt,
         multiline_input,
         simple_io,
+        temperature,
+        top_p,
+        top_k,
+        max_tokens,
+        repeat_penalty,
     } = args;
 
     // Look up the model using CliContext
@@ -65,10 +76,37 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
     log_context_info(&context_resolution);
     log_mlock_info(mlock);
 
+    // Resolve inference parameters using hierarchy: CLI args → Model → Global → Hardcoded
+    let mut inference_config = InferenceConfig {
+        temperature,
+        top_p,
+        top_k,
+        max_tokens,
+        repeat_penalty,
+    };
+
+    // Apply model defaults
+    if let Some(ref model_defaults) = model.inference_defaults {
+        inference_config.merge_with(model_defaults);
+    }
+
+    // Apply global defaults
+    let settings = ctx.app().settings().get().await?;
+    if let Some(ref global_defaults) = settings.inference_defaults {
+        inference_config.merge_with(global_defaults);
+    }
+
+    // Apply hardcoded defaults
+    inference_config.merge_with(&InferenceConfig::with_hardcoded_defaults());
+
+    // Log resolved inference parameters
+    log_inference_info(&inference_config);
+
     // Build command using shared builder
     let mut cmd = LlamaCommandBuilder::new(&llama_cli_path, &model.file_path)
         .context_resolution(context_resolution)
         .mlock(mlock)
+        .inference_config(inference_config)
         .build();
 
     // Add chat-specific flags
@@ -137,6 +175,25 @@ fn log_context_info(resolution: &ContextResolution) {
 fn log_mlock_info(mlock: bool) {
     if mlock {
         println!("Memory lock: enabled");
+    }
+}
+
+fn log_inference_info(config: &InferenceConfig) {
+    println!("Inference parameters:");
+    if let Some(temp) = config.temperature {
+        println!("  Temperature: {}", temp);
+    }
+    if let Some(top_p) = config.top_p {
+        println!("  Top-p: {}", top_p);
+    }
+    if let Some(top_k) = config.top_k {
+        println!("  Top-k: {}", top_k);
+    }
+    if let Some(max_tokens) = config.max_tokens {
+        println!("  Max tokens: {}", max_tokens);
+    }
+    if let Some(repeat_penalty) = config.repeat_penalty {
+        println!("  Repeat penalty: {}", repeat_penalty);
     }
 }
 

@@ -6,6 +6,7 @@ use anyhow::Result;
 use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
+use gglib_core::domain::InferenceConfig;
 use gglib_runtime::llama::{
     ContextResolution, ContextResolutionSource, LlamaCommandBuilder, ensure_llama_initialized,
     resolve_context_size, resolve_llama_server,
@@ -23,6 +24,12 @@ use gglib_runtime::llama::{
 /// * `mlock` - Whether to enable memory lock
 /// * `jinja_flag` - Whether to enable Jinja templates
 /// * `port` - Port to serve on
+/// * `temperature` - Optional temperature override
+/// * `top_p` - Optional top-p override
+/// * `top_k` - Optional top-k override
+/// * `max_tokens` - Optional max-tokens override
+/// * `repeat_penalty` - Optional repeat-penalty override
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     ctx: &CliContext,
     id: u32,
@@ -30,6 +37,11 @@ pub async fn execute(
     mlock: bool,
     jinja_flag: bool,
     port: u16,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    top_k: Option<i32>,
+    max_tokens: Option<u32>,
+    repeat_penalty: Option<f32>,
 ) -> Result<()> {
     // Ensure llama.cpp is installed
     ensure_llama_initialized().await?;
@@ -58,6 +70,32 @@ pub async fn execute(
     log_context_info(&context_resolution);
     log_mlock_info(mlock);
 
+    // Resolve inference parameters using hierarchy: CLI args → Model → Global → Hardcoded
+    let mut inference_config = InferenceConfig {
+        temperature,
+        top_p,
+        top_k,
+        max_tokens,
+        repeat_penalty,
+    };
+
+    // Apply model defaults
+    if let Some(ref model_defaults) = model.inference_defaults {
+        inference_config.merge_with(model_defaults);
+    }
+
+    // Apply global defaults
+    let settings = ctx.app().settings().get().await?;
+    if let Some(ref global_defaults) = settings.inference_defaults {
+        inference_config.merge_with(global_defaults);
+    }
+
+    // Apply hardcoded defaults
+    inference_config.merge_with(&InferenceConfig::with_hardcoded_defaults());
+
+    // Log resolved inference parameters
+    log_inference_info(&inference_config);
+
     // Handle Jinja flag
     if jinja_flag {
         println!("Jinja templates: enabled");
@@ -69,6 +107,7 @@ pub async fn execute(
     let mut builder = LlamaCommandBuilder::new(&llama_path, &model.file_path)
         .context_resolution(context_resolution)
         .mlock(mlock)
+        .inference_config(inference_config)
         .arg_with_value("--port", port.to_string());
 
     if jinja_flag {
@@ -120,6 +159,25 @@ fn log_context_info(resolution: &ContextResolution) {
 fn log_mlock_info(mlock: bool) {
     if mlock {
         println!("Memory lock: enabled");
+    }
+}
+
+fn log_inference_info(config: &InferenceConfig) {
+    println!("Inference parameters:");
+    if let Some(temp) = config.temperature {
+        println!("  Temperature: {}", temp);
+    }
+    if let Some(top_p) = config.top_p {
+        println!("  Top-p: {}", top_p);
+    }
+    if let Some(top_k) = config.top_k {
+        println!("  Top-k: {}", top_k);
+    }
+    if let Some(max_tokens) = config.max_tokens {
+        println!("  Max tokens: {}", max_tokens);
+    }
+    if let Some(repeat_penalty) = config.repeat_penalty {
+        println!("  Repeat penalty: {}", repeat_penalty);
     }
 }
 

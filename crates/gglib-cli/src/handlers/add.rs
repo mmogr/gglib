@@ -97,6 +97,7 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
         tags: auto_tags,
         file_paths: None,
         capabilities: model_capabilities,
+        inference_defaults: None,
     };
 
     // Save to database via AppCore

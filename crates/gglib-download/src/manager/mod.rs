@@ -892,6 +892,7 @@ impl DownloadManagerImpl {
     }
 
     /// Handle state transitions between drained and busy queue states.
+    #[allow(clippy::cognitive_complexity)]
     async fn handle_drain_transitions(&self, is_drained: bool) {
         let mut prev = self.prev_is_drained.lock().await;
 

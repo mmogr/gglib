@@ -108,10 +108,12 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     editedName: editMode.editedName,
     editedQuantization: editMode.editedQuantization,
     editedFilePath: editMode.editedFilePath,
+    editedInferenceDefaults: editMode.editedInferenceDefaults,
     customContext: serveModal.customContext,
     customPort: serveModal.customPort,
     jinjaOverride: serveModal.jinjaOverride,
     hasAgentTag,
+    inferenceParams: serveModal.inferenceParams,
     onStopServer,
     onRemoveModel,
     onUpdateModel,
@@ -206,8 +208,10 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               model={model}
               editedQuantization={editMode.editedQuantization}
               editedFilePath={editMode.editedFilePath}
+              editedInferenceDefaults={editMode.editedInferenceDefaults}
               onQuantizationChange={editMode.setEditedQuantization}
               onFilePathChange={editMode.setEditedFilePath}
+              onInferenceDefaultsChange={editMode.setEditedInferenceDefaults}
             />
           ) : (
             <ModelMetadataGrid model={model} />
@@ -252,10 +256,12 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           jinjaOverride={serveModal.jinjaOverride}
           isServing={serveModal.isServing}
           hasAgentTag={hasAgentTag}
+          inferenceParams={serveModal.inferenceParams}
           onContextChange={serveModal.setCustomContext}
           onPortChange={serveModal.setCustomPort}
           onJinjaChange={serveModal.setJinjaOverride}
           onJinjaReset={() => serveModal.setJinjaOverride(null)}
+          onInferenceParamsChange={serveModal.setInferenceParams}
           onClose={serveModal.closeServeModal}
           onStart={serverActions.handleStartServer}
         />

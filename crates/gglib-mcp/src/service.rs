@@ -162,6 +162,7 @@ impl McpService {
     /// Returns a `ResolutionStatus` with success flag and diagnostic information.
     /// Resolution failure is not an error - it returns Ok(ResolutionStatus { success: false, ... })
     #[allow(clippy::too_many_lines)]
+    #[allow(clippy::cognitive_complexity)]
     pub async fn ensure_resolved(
         &self,
         server_id: i64,
