@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use gglib_core::events::ServerEvents;
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerPort, HfClientPort, ModelRepository, ProcessRunner,
-    SystemProbePort, ToolSupportDetectorPort,
+    AppEventEmitter, DownloadManagerPort, GgufParserPort, HfClientPort, ModelRepository,
+    ProcessRunner, SystemProbePort, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
@@ -47,6 +47,8 @@ pub struct GuiDeps {
     pub(crate) model_repo: Arc<dyn ModelRepository>,
     /// System probe for hardware detection and memory info.
     pub(crate) system_probe: Arc<dyn SystemProbePort>,
+    /// GGUF parser for file validation and metadata extraction.
+    pub(crate) gguf_parser: Arc<dyn GgufParserPort>,
 }
 
 impl GuiDeps {
@@ -67,6 +69,7 @@ impl GuiDeps {
         proxy_supervisor: Arc<ProxySupervisor>,
         model_repo: Arc<dyn ModelRepository>,
         system_probe: Arc<dyn SystemProbePort>,
+        gguf_parser: Arc<dyn GgufParserPort>,
     ) -> Self {
         Self {
             core,
@@ -80,6 +83,7 @@ impl GuiDeps {
             proxy_supervisor,
             model_repo,
             system_probe,
+            gguf_parser,
         }
     }
 
@@ -110,5 +114,10 @@ impl GuiDeps {
     /// Access the server event emitter.
     pub fn server_events(&self) -> &Arc<dyn ServerEvents> {
         &self.server_events
+    }
+
+    /// Access the GGUF parser.
+    pub fn gguf_parser(&self) -> &Arc<dyn GgufParserPort> {
+        &self.gguf_parser
     }
 }

@@ -896,26 +896,38 @@ impl DownloadManagerImpl {
     async fn handle_drain_transitions(&self, is_drained: bool) {
         let mut prev = self.prev_is_drained.lock().await;
 
-        if *prev && !is_drained {
-            // Transition: drained → busy (start new run)
-            *self.current_run.lock().await = Some(QueueRunState::new());
-            tracing::info!(target: "gglib.download", "Queue run STARTED");
-        } else if !*prev && is_drained {
-            // Transition: busy → drained (finalize and emit)
-            let run = self.current_run.lock().await.take();
-            if let Some(run) = run {
+        let was_drained = *prev;
+        if was_drained && !is_drained {
+            self.start_new_queue_run().await;
+        } else if !was_drained && is_drained {
+            self.finalize_queue_run().await;
+        }
+
+        *prev = is_drained;
+    }
+
+    /// Start a new queue run when transitioning from drained to busy.
+    async fn start_new_queue_run(&self) {
+        *self.current_run.lock().await = Some(QueueRunState::new());
+        tracing::info!(target: "gglib.download", "Queue run STARTED");
+    }
+
+    /// Finalize and emit the current queue run when transitioning from busy to drained.
+    async fn finalize_queue_run(&self) {
+        let run = self.current_run.lock().await.take();
+        match run {
+            Some(run) => {
                 tracing::info!(
                     target: "gglib.download",
                     unique_downloaded = run.completions.len(),
                     "Queue run COMPLETED - emitting summary"
                 );
                 self.emit_queue_run_complete(run);
-            } else {
+            }
+            None => {
                 tracing::warn!(target: "gglib.download", "Queue drained but no run state found");
             }
         }
-
-        *prev = is_drained;
     }
 
     /// Emit the `QueueSnapshot` event to subscribers.
@@ -949,62 +961,17 @@ impl DownloadManagerImpl {
 
     /// Emit queue run complete event with summary.
     fn emit_queue_run_complete(&self, run: QueueRunState) {
-        use gglib_core::download::{AttemptCounts, CompletionDetail, QueueRunSummary};
-        use std::time::SystemTime;
+        use gglib_core::download::QueueRunSummary;
 
-        let completed_at_ms = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            .try_into()
-            .unwrap_or(0);
-
-        // Build completion details from aggregates
-        let mut items: Vec<CompletionDetail> = run
-            .completions
-            .into_iter()
-            .map(|(key, agg)| {
-                let attempt_counts = AttemptCounts {
-                    downloaded: agg.success_count,
-                    failed: agg.failure_count,
-                    cancelled: agg.cancelled_count,
-                };
-
-                CompletionDetail {
-                    key,
-                    display_name: agg.display_name,
-                    download_ids: agg.download_ids,
-                    attempt_counts,
-                    last_result: agg.last_result,
-                    last_completed_at_ms: agg.last_attempt_ms,
-                }
-            })
-            .collect();
-
-        // Sort by most recent first
+        let completed_at_ms = Self::get_current_timestamp_ms();
+        let mut items = Self::build_completion_details(run.completions);
         items.sort_by(|a, b| b.last_completed_at_ms.cmp(&a.last_completed_at_ms));
 
-        // Calculate total attempt counts and unique counts
         let (total_attempts_downloaded, total_attempts_failed, total_attempts_cancelled) =
-            items.iter().fold((0, 0, 0), |(d, f, c), detail| {
-                (
-                    d + detail.attempt_counts.downloaded,
-                    f + detail.attempt_counts.failed,
-                    c + detail.attempt_counts.cancelled,
-                )
-            });
-
-        // Count unique models by last_result
+            Self::calculate_total_attempts(&items);
         let (unique_downloaded, unique_failed, unique_cancelled) =
-            items
-                .iter()
-                .fold((0, 0, 0), |(d, f, c), detail| match detail.last_result {
-                    CompletionKind::Downloaded | CompletionKind::AlreadyPresent => (d + 1, f, c),
-                    CompletionKind::Failed => (d, f + 1, c),
-                    CompletionKind::Cancelled => (d, f, c + 1),
-                });
+            Self::calculate_unique_counts(&items);
 
-        // Truncate to 20 items
         let truncated = items.len() > 20;
         items.truncate(20);
 
@@ -1033,6 +1000,69 @@ impl DownloadManagerImpl {
 
         self.event_emitter
             .emit(DownloadEvent::QueueRunComplete { summary });
+    }
+
+    fn get_current_timestamp_ms() -> u64 {
+        use std::time::SystemTime;
+
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .try_into()
+            .unwrap_or(0)
+    }
+
+    fn build_completion_details(
+        completions: indexmap::IndexMap<gglib_core::download::CompletionKey, CompletionAggregate>,
+    ) -> Vec<gglib_core::download::CompletionDetail> {
+        use gglib_core::download::{AttemptCounts, CompletionDetail};
+
+        completions
+            .into_iter()
+            .map(|(key, agg)| {
+                let attempt_counts = AttemptCounts {
+                    downloaded: agg.success_count,
+                    failed: agg.failure_count,
+                    cancelled: agg.cancelled_count,
+                };
+
+                CompletionDetail {
+                    key,
+                    display_name: agg.display_name,
+                    download_ids: agg.download_ids,
+                    attempt_counts,
+                    last_result: agg.last_result,
+                    last_completed_at_ms: agg.last_attempt_ms,
+                }
+            })
+            .collect()
+    }
+
+    fn calculate_total_attempts(
+        items: &[gglib_core::download::CompletionDetail],
+    ) -> (u32, u32, u32) {
+        items.iter().fold((0, 0, 0), |(d, f, c), detail| {
+            (
+                d + detail.attempt_counts.downloaded,
+                f + detail.attempt_counts.failed,
+                c + detail.attempt_counts.cancelled,
+            )
+        })
+    }
+
+    fn calculate_unique_counts(
+        items: &[gglib_core::download::CompletionDetail],
+    ) -> (u32, u32, u32) {
+        use gglib_core::download::CompletionKind;
+
+        items
+            .iter()
+            .fold((0, 0, 0), |(d, f, c), detail| match detail.last_result {
+                CompletionKind::Downloaded | CompletionKind::AlreadyPresent => (d + 1, f, c),
+                CompletionKind::Failed => (d, f + 1, c),
+                CompletionKind::Cancelled => (d, f, c + 1),
+            })
     }
 }
 

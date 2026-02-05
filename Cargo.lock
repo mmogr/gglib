@@ -1803,7 +1803,6 @@ name = "gglib-gui"
 version = "0.3.1"
 dependencies = [
  "async-trait",
- "chrono",
  "dirs",
  "futures-util",
  "gglib-core",

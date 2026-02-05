@@ -1,7 +1,8 @@
 //! Model service - orchestrates model CRUD operations.
 
 use crate::domain::{Model, NewModel};
-use crate::ports::{CoreError, ModelRepository, RepositoryError};
+use crate::ports::{CoreError, GgufParserPort, ModelRepository, RepositoryError};
+use std::path::Path;
 use std::sync::Arc;
 
 /// Service for model operations.
@@ -78,6 +79,93 @@ impl ModelService {
     /// Add a new model.
     pub async fn add(&self, model: NewModel) -> Result<Model, CoreError> {
         self.repo.insert(&model).await.map_err(CoreError::from)
+    }
+
+    /// Import a model from a local GGUF file with full metadata extraction.
+    ///
+    /// Validates file, parses GGUF metadata, detects capabilities, and registers
+    /// with rich metadata. This is the canonical way to add local models.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - Absolute path to the GGUF file
+    /// * `gguf_parser` - Parser implementation for metadata extraction
+    /// * `param_count_override` - Optional user override for parameter count
+    ///
+    /// # Returns
+    ///
+    /// Returns the registered `Model` with full metadata, or validation error.
+    ///
+    /// # Design
+    ///
+    /// This method orchestrates:
+    /// 1. File validation (existence, extension)
+    /// 2. GGUF metadata parsing (architecture, quantization, context)
+    /// 3. Capability detection (reasoning, tool-calling from metadata)
+    /// 4. Chat template inference (additional capability signals)
+    /// 5. Auto-tag generation from detected capabilities
+    /// 6. Model persistence with complete `NewModel` struct
+    pub async fn import_from_file(
+        &self,
+        file_path: &Path,
+        gguf_parser: &dyn GgufParserPort,
+        param_count_override: Option<f64>,
+    ) -> Result<Model, CoreError> {
+        // 1. Validate and parse GGUF file
+        let gguf_metadata = crate::utils::validation::validate_and_parse_gguf(
+            gguf_parser,
+            file_path
+                .to_str()
+                .ok_or_else(|| CoreError::Validation("Invalid file path encoding".to_string()))?,
+        )
+        .map_err(|e| CoreError::Validation(format!("GGUF validation failed: {e}")))?;
+
+        // 2. Resolve parameter count (override > metadata > 0.0 fallback)
+        let param_count_b = param_count_override
+            .or(gguf_metadata.param_count_b)
+            .unwrap_or(0.0);
+
+        // 3. Detect capabilities from GGUF metadata
+        let gguf_capabilities = gguf_parser.detect_capabilities(&gguf_metadata);
+        let auto_tags = gguf_capabilities.to_tags();
+
+        // 4. Infer additional capabilities from chat template
+        let template = gguf_metadata.metadata.get("tokenizer.chat_template");
+        let name = gguf_metadata.metadata.get("general.name");
+        let model_capabilities = crate::domain::infer_from_chat_template(
+            template.map(String::as_str),
+            name.map(String::as_str),
+        );
+
+        // 5. Construct fully-populated NewModel
+        let new_model = NewModel {
+            name: name.cloned().unwrap_or_else(|| {
+                file_path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Unknown Model")
+                    .to_string()
+            }),
+            file_path: file_path.to_path_buf(),
+            param_count_b,
+            architecture: gguf_metadata.architecture,
+            quantization: gguf_metadata.quantization,
+            context_length: gguf_metadata.context_length,
+            metadata: gguf_metadata.metadata,
+            added_at: chrono::Utc::now(),
+            hf_repo_id: None,
+            hf_commit_sha: None,
+            hf_filename: None,
+            download_date: None,
+            last_update_check: None,
+            tags: auto_tags,
+            file_paths: None,
+            capabilities: model_capabilities,
+            inference_defaults: None,
+        };
+
+        // 6. Persist to repository
+        self.repo.insert(&new_model).await.map_err(CoreError::from)
     }
 
     /// Update a model.
