@@ -170,31 +170,55 @@ impl McpService {
 
         // Only applicable to stdio servers
         if server.server_type != gglib_core::McpServerType::Stdio {
-            return Ok(ResolutionStatus {
-                success: false,
-                resolved_path: None,
-                attempts: vec![],
-                warnings: vec![],
-                error_message: Some("Path resolution only applies to stdio servers".to_string()),
-                suggested_fix: None,
-            });
+            return Ok(Self::stdio_only_error());
         }
 
         let command = match &server.config.command {
             Some(cmd) => cmd.clone(),
-            None => {
-                return Ok(ResolutionStatus {
-                    success: false,
-                    resolved_path: None,
-                    attempts: vec![],
-                    warnings: vec![],
-                    error_message: Some("No command specified".to_string()),
-                    suggested_fix: None,
-                });
-            }
+            None => return Ok(Self::no_command_error()),
         };
 
         // Step 1: Try cached resolved path first
+        if let Some(cached_status) = Self::check_cached_path(&server) {
+            return Ok(cached_status);
+        }
+
+        // Step 2: Cache miss or invalid - resolve from command
+        let user_search_paths = Self::extract_user_search_paths(&server);
+        
+        match crate::resolver::resolve_executable(&command, &user_search_paths) {
+            Ok(result) => {
+                self.handle_resolution_success(&mut server, &command, result).await
+            }
+            Err(e) => {
+                self.handle_resolution_failure(&mut server, &command, e).await
+            }
+        }
+    }
+
+    fn stdio_only_error() -> ResolutionStatus {
+        ResolutionStatus {
+            success: false,
+            resolved_path: None,
+            attempts: vec![],
+            warnings: vec![],
+            error_message: Some("Path resolution only applies to stdio servers".to_string()),
+            suggested_fix: None,
+        }
+    }
+
+    fn no_command_error() -> ResolutionStatus {
+        ResolutionStatus {
+            success: false,
+            resolved_path: None,
+            attempts: vec![],
+            warnings: vec![],
+            error_message: Some("No command specified".to_string()),
+            suggested_fix: None,
+        }
+    }
+
+    fn check_cached_path(server: &McpServer) -> Option<ResolutionStatus> {
         if let Some(ref cached_path) = server.config.resolved_path_cache {
             if crate::path::validate_exe_path(cached_path).is_ok() {
                 tracing::debug!(
@@ -204,7 +228,7 @@ impl McpService {
                     "Using cached resolved path"
                 );
 
-                return Ok(ResolutionStatus {
+                return Some(ResolutionStatus {
                     success: true,
                     resolved_path: Some(cached_path.clone()),
                     attempts: vec![ResolutionAttempt {
@@ -217,115 +241,129 @@ impl McpService {
                 });
             }
         }
+        None
+    }
 
-        // Step 2: Cache miss or invalid - resolve from command
-        let user_search_paths: Vec<String> = server
+    fn extract_user_search_paths(server: &McpServer) -> Vec<String> {
+        server
             .config
             .path_extra
             .as_ref()
             .map(|p| p.split(':').map(String::from).collect())
-            .unwrap_or_default();
+            .unwrap_or_default()
+    }
 
-        match crate::resolver::resolve_executable(&command, &user_search_paths) {
-            Ok(result) => {
-                // Success: update cache
-                let resolved_path_str = result.resolved_path.to_string_lossy().to_string();
-                server.config.resolved_path_cache = Some(resolved_path_str.clone());
-                server.is_valid = true;
-                server.last_error = None;
+    async fn handle_resolution_success(
+        &self,
+        server: &mut McpServer,
+        command: &str,
+        result: crate::resolver::ResolveResult,
+    ) -> Result<ResolutionStatus, McpServiceError> {
+        let resolved_path_str = result.resolved_path.to_string_lossy().to_string();
+        server.config.resolved_path_cache = Some(resolved_path_str.clone());
+        server.is_valid = true;
+        server.last_error = None;
 
-                if let Err(e) = self.repository.update(&server).await {
-                    tracing::warn!(
-                        server_id = server.id,
-                        error = %e,
-                        "Failed to update resolved path cache"
-                    );
-                }
+        if let Err(e) = self.repository.update(server).await {
+            tracing::warn!(
+                server_id = server.id,
+                error = %e,
+                "Failed to update resolved path cache"
+            );
+        }
 
-                tracing::info!(
-                    server_id = server.id,
-                    server_name = %server.name,
-                    command = %command,
-                    resolved_path = %result.resolved_path.display(),
-                    "Successfully resolved command"
-                );
+        tracing::info!(
+            server_id = server.id,
+            server_name = %server.name,
+            command = %command,
+            resolved_path = %result.resolved_path.display(),
+            "Successfully resolved command"
+        );
 
-                Ok(ResolutionStatus {
-                    success: true,
-                    resolved_path: Some(result.resolved_path.to_string_lossy().to_string()),
-                    attempts: result
-                        .attempts
-                        .into_iter()
-                        .map(|a| ResolutionAttempt {
-                            candidate: a.candidate.to_string_lossy().to_string(),
-                            outcome: a.outcome.to_string(),
-                        })
-                        .collect(),
-                    warnings: result.warnings,
-                    error_message: None,
-                    suggested_fix: None,
+        Ok(ResolutionStatus {
+            success: true,
+            resolved_path: Some(result.resolved_path.to_string_lossy().to_string()),
+            attempts: result
+                .attempts
+                .into_iter()
+                .map(|a| ResolutionAttempt {
+                    candidate: a.candidate.to_string_lossy().to_string(),
+                    outcome: a.outcome.to_string(),
                 })
-            }
-            Err(e) => {
-                // Failure: preserve old cache, update error
-                let error_msg = e.to_string();
-                server.is_valid = false;
-                server.last_error = Some(error_msg.clone());
+                .collect(),
+            warnings: result.warnings,
+            error_message: None,
+            suggested_fix: None,
+        })
+    }
 
-                if let Err(update_err) = self.repository.update(&server).await {
-                    tracing::warn!(
-                        server_id = server.id,
-                        error = %update_err,
-                        "Failed to update server error state"
-                    );
-                }
+    async fn handle_resolution_failure(
+        &self,
+        server: &mut McpServer,
+        command: &str,
+        error: crate::resolver::ResolveError,
+    ) -> Result<ResolutionStatus, McpServiceError> {
+        let error_msg = error.to_string();
+        server.is_valid = false;
+        server.last_error = Some(error_msg.clone());
 
-                tracing::warn!(
-                    server_id = server.id,
-                    server_name = %server.name,
-                    command = %command,
-                    error = %e,
-                    "Failed to resolve command"
-                );
+        if let Err(update_err) = self.repository.update(server).await {
+            tracing::warn!(
+                server_id = server.id,
+                error = %update_err,
+                "Failed to update server error state"
+            );
+        }
 
-                // Extract attempts from error if available
-                let attempts = if let crate::resolver::ResolveError::NotResolved {
-                    attempts: err_attempts,
-                    ..
-                } = &e
-                {
-                    // Parse the attempts string back into structured data
-                    err_attempts
-                        .lines()
-                        .filter(|line| line.trim().starts_with("✗"))
-                        .map(|line| {
-                            let parts: Vec<&str> =
-                                line.trim().trim_start_matches("✗").splitn(2, ':').collect();
-                            ResolutionAttempt {
-                                candidate: parts.first().unwrap_or(&"").trim().to_string(),
-                                outcome: parts.get(1).unwrap_or(&"unknown").trim().to_string(),
-                            }
-                        })
-                        .collect()
-                } else {
-                    vec![]
-                };
+        tracing::warn!(
+            server_id = server.id,
+            server_name = %server.name,
+            command = %command,
+            error = %error,
+            "Failed to resolve command"
+        );
 
-                let suggested_fix = if cfg!(windows) {
-                    Some(format!("where {command}"))
-                } else {
-                    Some(format!("command -v {command}"))
-                };
+        let attempts = Self::extract_attempts_from_error(&error);
+        let suggested_fix = Some(Self::generate_suggested_fix(command));
 
-                Ok(ResolutionStatus {
-                    success: false,
-                    resolved_path: server.config.resolved_path_cache.clone(),
-                    attempts,
-                    warnings: vec![],
-                    error_message: Some(error_msg),
-                    suggested_fix,
+        Ok(ResolutionStatus {
+            success: false,
+            resolved_path: server.config.resolved_path_cache.clone(),
+            attempts,
+            warnings: vec![],
+            error_message: Some(error_msg),
+            suggested_fix,
+        })
+    }
+
+    fn extract_attempts_from_error(error: &crate::resolver::ResolveError) -> Vec<ResolutionAttempt> {
+        if let crate::resolver::ResolveError::NotResolved {
+            attempts: err_attempts,
+            ..
+        } = error
+        {
+            err_attempts
+                .lines()
+                .filter(|line| line.trim().starts_with("✗"))
+                .map(|line| {
+                    let parts: Vec<&str> =
+                        line.trim().trim_start_matches("✗").splitn(2, ':').collect();
+                    ResolutionAttempt {
+                        candidate: parts.first().unwrap_or(&"").trim().to_string(),
+                        outcome: parts.get(1).unwrap_or(&"unknown").trim().to_string(),
+                    }
                 })
-            }
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+
+    fn generate_suggested_fix(command: &str) -> String {
+        if cfg!(windows) {
+            format!("where {command}")
+        } else {
+            format!("command -v {command}")
         }
     }
 
