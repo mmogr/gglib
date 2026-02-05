@@ -185,13 +185,15 @@ impl McpService {
 
         // Step 2: Cache miss or invalid - resolve from command
         let user_search_paths = Self::extract_user_search_paths(&server);
-        
+
         match crate::resolver::resolve_executable(&command, &user_search_paths) {
             Ok(result) => {
-                self.handle_resolution_success(&mut server, &command, result).await
+                self.handle_resolution_success(&mut server, &command, result)
+                    .await
             }
             Err(e) => {
-                self.handle_resolution_failure(&mut server, &command, e).await
+                self.handle_resolution_failure(&mut server, &command, e)
+                    .await
             }
         }
     }
@@ -336,7 +338,9 @@ impl McpService {
         })
     }
 
-    fn extract_attempts_from_error(error: &crate::resolver::ResolveError) -> Vec<ResolutionAttempt> {
+    fn extract_attempts_from_error(
+        error: &crate::resolver::ResolveError,
+    ) -> Vec<ResolutionAttempt> {
         if let crate::resolver::ResolveError::NotResolved {
             attempts: err_attempts,
             ..

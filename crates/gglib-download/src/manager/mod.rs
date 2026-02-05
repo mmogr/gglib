@@ -1038,7 +1038,9 @@ impl DownloadManagerImpl {
             .collect()
     }
 
-    fn calculate_total_attempts(items: &[gglib_core::download::CompletionDetail]) -> (u32, u32, u32) {
+    fn calculate_total_attempts(
+        items: &[gglib_core::download::CompletionDetail],
+    ) -> (u32, u32, u32) {
         items.iter().fold((0, 0, 0), |(d, f, c), detail| {
             (
                 d + detail.attempt_counts.downloaded,
@@ -1048,7 +1050,9 @@ impl DownloadManagerImpl {
         })
     }
 
-    fn calculate_unique_counts(items: &[gglib_core::download::CompletionDetail]) -> (u32, u32, u32) {
+    fn calculate_unique_counts(
+        items: &[gglib_core::download::CompletionDetail],
+    ) -> (u32, u32, u32) {
         use gglib_core::download::CompletionKind;
 
         items
