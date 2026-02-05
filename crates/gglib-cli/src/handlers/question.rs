@@ -104,7 +104,7 @@ pub async fn execute(
     };
 
     // Apply 3-level hierarchy: request -> model -> global -> hardcoded defaults
-    
+
     // Apply model defaults
     if let Some(ref model_defaults) = model.inference_defaults {
         inference_config.merge_with(model_defaults);
