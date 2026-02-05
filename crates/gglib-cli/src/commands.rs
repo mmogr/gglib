@@ -264,6 +264,21 @@ pub enum Commands {
         /// Cleaner output for scripting (no prompt echo, no timings)
         #[arg(long, short = 'Q')]
         quiet: bool,
+        /// Temperature for sampling (0.0-2.0, overrides model/global defaults)
+        #[arg(long)]
+        temperature: Option<f32>,
+        /// Top-p for nucleus sampling (0.0-1.0, overrides model/global defaults)
+        #[arg(long = "top-p")]
+        top_p: Option<f32>,
+        /// Top-k for sampling (overrides model/global defaults)
+        #[arg(long = "top-k")]
+        top_k: Option<i32>,
+        /// Maximum tokens to generate (overrides model/global defaults)
+        #[arg(long = "max-tokens")]
+        max_tokens: Option<u32>,
+        /// Repeat penalty (overrides model/global defaults)
+        #[arg(long = "repeat-penalty")]
+        repeat_penalty: Option<f32>,
     },
 
     /// Launch the Tauri desktop GUI

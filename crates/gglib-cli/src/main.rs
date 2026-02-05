@@ -259,10 +259,27 @@ async fn main() -> anyhow::Result<()> {
             mlock,
             verbose,
             quiet,
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            repeat_penalty,
         } => {
             // Ask a question with optional piped/file context
             handlers::question::execute(
-                &ctx, question, model, file, ctx_size, mlock, verbose, quiet,
+                &ctx,
+                question,
+                model,
+                file,
+                ctx_size,
+                mlock,
+                verbose,
+                quiet,
+                temperature,
+                top_p,
+                top_k,
+                max_tokens,
+                repeat_penalty,
             )
             .await?;
         }
