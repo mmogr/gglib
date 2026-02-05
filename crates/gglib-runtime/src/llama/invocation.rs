@@ -110,21 +110,10 @@ impl LlamaCommandBuilder {
         }
 
         // Inference parameters (llama-cli/llama-server flags)
+        // Use shared conversion method for DRY compliance
         if let Some(config) = &self.inference_config {
-            if let Some(temp) = config.temperature {
-                cmd.arg("--temp").arg(temp.to_string());
-            }
-            if let Some(top_p) = config.top_p {
-                cmd.arg("--top-p").arg(top_p.to_string());
-            }
-            if let Some(top_k) = config.top_k {
-                cmd.arg("--top-k").arg(top_k.to_string());
-            }
-            if let Some(max_tokens) = config.max_tokens {
-                cmd.arg("-n").arg(max_tokens.to_string());
-            }
-            if let Some(repeat_penalty) = config.repeat_penalty {
-                cmd.arg("--repeat-penalty").arg(repeat_penalty.to_string());
+            for arg in config.to_cli_args() {
+                cmd.arg(arg);
             }
         }
 

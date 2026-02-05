@@ -183,28 +183,9 @@ impl<'a> ServerOps<'a> {
         }
 
         // Add inference parameters as CLI arguments
-        // Uses same flags as llama-cli/llama-server: --temp, --top-p, --top-k, -n, --repeat-penalty
+        // Use shared conversion method for DRY compliance
         if let Some(ref params) = request.inference_params {
-            if let Some(temp) = params.temperature {
-                extra_args.push("--temp".to_string());
-                extra_args.push(temp.to_string());
-            }
-            if let Some(top_p) = params.top_p {
-                extra_args.push("--top-p".to_string());
-                extra_args.push(top_p.to_string());
-            }
-            if let Some(top_k) = params.top_k {
-                extra_args.push("--top-k".to_string());
-                extra_args.push(top_k.to_string());
-            }
-            if let Some(max_tokens) = params.max_tokens {
-                extra_args.push("-n".to_string());
-                extra_args.push(max_tokens.to_string());
-            }
-            if let Some(repeat_penalty) = params.repeat_penalty {
-                extra_args.push("--repeat-penalty".to_string());
-                extra_args.push(repeat_penalty.to_string());
-            }
+            extra_args.extend(params.to_cli_args());
         }
 
         if !extra_args.is_empty() {

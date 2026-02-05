@@ -139,6 +139,59 @@ impl InferenceConfig {
             repeat_penalty: Some(1.0),
         }
     }
+
+    /// Convert inference config to llama CLI arguments.
+    ///
+    /// Returns a vector of argument strings suitable for passing to llama-cli or llama-server.
+    /// Uses the same flag names as llama.cpp: `--temp`, `--top-p`, `--top-k`, `-n`, `--repeat-penalty`.
+    ///
+    /// This is the single source of truth for CLI flag conversion, used by:
+    /// - `LlamaCommandBuilder` (for CLI commands)
+    /// - GUI server startup (via `ServerConfig.extra_args`)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::InferenceConfig;
+    ///
+    /// let config = InferenceConfig {
+    ///     temperature: Some(0.8),
+    ///     top_p: Some(0.9),
+    ///     top_k: None,
+    ///     max_tokens: Some(1024),
+    ///     repeat_penalty: None,
+    /// };
+    ///
+    /// let args = config.to_cli_args();
+    /// assert_eq!(args, vec!["--temp", "0.8", "--top-p", "0.9", "-n", "1024"]);
+    /// ```
+    #[must_use]
+    pub fn to_cli_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+
+        if let Some(temp) = self.temperature {
+            args.push("--temp".to_string());
+            args.push(temp.to_string());
+        }
+        if let Some(top_p) = self.top_p {
+            args.push("--top-p".to_string());
+            args.push(top_p.to_string());
+        }
+        if let Some(top_k) = self.top_k {
+            args.push("--top-k".to_string());
+            args.push(top_k.to_string());
+        }
+        if let Some(max_tokens) = self.max_tokens {
+            args.push("-n".to_string());
+            args.push(max_tokens.to_string());
+        }
+        if let Some(repeat_penalty) = self.repeat_penalty {
+            args.push("--repeat-penalty".to_string());
+            args.push(repeat_penalty.to_string());
+        }
+
+        args
+    }
 }
 
 #[cfg(test)]
