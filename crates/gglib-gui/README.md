@@ -121,6 +121,7 @@ use std::sync::Arc;
 #     proxy_supervisor: Arc<gglib_runtime::proxy::ProxySupervisor>,
 #     model_repo: Arc<dyn gglib_core::ports::ModelRepository>,
 #     system_probe: Arc<dyn gglib_core::ports::SystemProbePort>,
+#     gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
 # ) {
 // Construct backend with dependency injection
 let deps = GuiDeps::new(
@@ -135,6 +136,7 @@ let deps = GuiDeps::new(
     proxy_supervisor,
     model_repo,
     system_probe,
+    gguf_parser,
 );
 
 let backend = GuiBackend::new(deps);
