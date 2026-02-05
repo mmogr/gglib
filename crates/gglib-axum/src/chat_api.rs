@@ -57,6 +57,7 @@ pub struct UpdateMessageRequest {
 
 /// Request body for chat completion proxy.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatProxyRequest {
     /// The port of the llama-server to forward to.
     pub port: u16,
@@ -68,10 +69,16 @@ pub struct ChatProxyRequest {
     /// Whether to stream the response.
     #[serde(default)]
     pub stream: bool,
-    /// Optional max tokens.
+    /// Optional max tokens (inference parameter - will be resolved via hierarchy).
     pub max_tokens: Option<u32>,
-    /// Optional temperature.
+    /// Optional temperature (inference parameter - will be resolved via hierarchy).
     pub temperature: Option<f32>,
+    /// Optional top_p (inference parameter - will be resolved via hierarchy).
+    pub top_p: Option<f32>,
+    /// Optional top_k (inference parameter - will be resolved via hierarchy).
+    pub top_k: Option<i32>,
+    /// Optional repeat_penalty (inference parameter - will be resolved via hierarchy).
+    pub repeat_penalty: Option<f32>,
     /// Optional tools for function calling.
     #[serde(default)]
     pub tools: Option<Vec<serde_json::Value>>,
@@ -371,8 +378,8 @@ pub async fn proxy_chat(
     let servers = state.gui.list_servers().await;
     let server = servers.iter().find(|s| s.port == request.port);
 
-    let capabilities = if let Some(server) = server {
-        // Found the server, fetch the model to get its capabilities
+    let (capabilities, model_defaults) = if let Some(server) = server {
+        // Found the server, fetch the model to get its capabilities and inference_defaults
         match state.core.models().get_by_id(server.model_id).await {
             Ok(Some(model)) => {
                 tracing::debug!(
@@ -384,7 +391,7 @@ pub async fn proxy_chat(
                     requires_strict_turns = model.capabilities.contains(gglib_core::domain::ModelCapabilities::REQUIRES_STRICT_TURNS),
                     "Model capabilities loaded for chat request"
                 );
-                model.capabilities
+                (model.capabilities, model.inference_defaults)
             }
             Ok(None) => {
                 tracing::warn!(
@@ -392,7 +399,7 @@ pub async fn proxy_chat(
                     model_id = server.model_id,
                     "Model not found for capability detection; assuming default"
                 );
-                gglib_core::domain::ModelCapabilities::default()
+                (gglib_core::domain::ModelCapabilities::default(), None)
             }
             Err(e) => {
                 tracing::warn!(
@@ -401,7 +408,7 @@ pub async fn proxy_chat(
                     error = %e,
                     "Failed to fetch model for capability detection; assuming default"
                 );
-                gglib_core::domain::ModelCapabilities::default()
+                (gglib_core::domain::ModelCapabilities::default(), None)
             }
         }
     } else {
@@ -409,8 +416,50 @@ pub async fn proxy_chat(
             port = request.port,
             "No server found for port; assuming default capabilities"
         );
-        gglib_core::domain::ModelCapabilities::default()
+        (gglib_core::domain::ModelCapabilities::default(), None)
     };
+
+    // Load global settings for inference defaults
+    let global_defaults = state
+        .core
+        .settings()
+        .get()
+        .await
+        .ok()
+        .and_then(|s| s.inference_defaults);
+
+    // Resolve inference parameters using hierarchy:
+    // Request → Model → Global → Hardcoded defaults
+    let mut resolved = gglib_core::domain::InferenceConfig {
+        temperature: request.temperature,
+        top_p: request.top_p,
+        top_k: request.top_k,
+        max_tokens: request.max_tokens,
+        repeat_penalty: request.repeat_penalty,
+    };
+
+    // Apply model defaults (if missing)
+    if let Some(model_defaults) = model_defaults {
+        resolved.merge_with(&model_defaults);
+    }
+
+    // Apply global settings defaults (if missing)
+    if let Some(global_defaults) = global_defaults {
+        resolved.merge_with(&global_defaults);
+    }
+
+    // Apply hardcoded defaults for any still-missing values
+    resolved.merge_with(&gglib_core::domain::InferenceConfig::with_hardcoded_defaults());
+
+    tracing::debug!(
+        port = request.port,
+        resolved_temperature = resolved.temperature,
+        resolved_top_p = resolved.top_p,
+        resolved_top_k = resolved.top_k,
+        resolved_max_tokens = resolved.max_tokens,
+        resolved_repeat_penalty = resolved.repeat_penalty,
+        "Resolved inference parameters via hierarchy"
+    );
 
     // Filter out messages with empty or whitespace-only content
     // EXCEPT: tool role messages (they return results) and assistant messages with tool_calls
@@ -468,13 +517,16 @@ pub async fn proxy_chat(
     // Build the llama-server URL
     let server_url = format!("http://127.0.0.1:{}/v1/chat/completions", request.port);
 
-    // Build the forwarded request body
+    // Build the forwarded request body with resolved inference parameters
     let mut forward_body = serde_json::json!({
         "model": request.model,
         "messages": final_messages,
         "stream": request.stream,
-        "max_tokens": request.max_tokens,
-        "temperature": request.temperature,
+        "max_tokens": resolved.max_tokens,
+        "temperature": resolved.temperature,
+        "top_p": resolved.top_p,
+        "top_k": resolved.top_k,
+        "repeat_penalty": resolved.repeat_penalty,
     });
 
     // Add tools if provided

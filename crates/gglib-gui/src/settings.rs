@@ -102,6 +102,7 @@ impl<'a> SettingsOps<'a> {
             max_tool_iterations: settings.max_tool_iterations,
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
+            inference_defaults: settings.inference_defaults,
         })
     }
 
@@ -117,6 +118,7 @@ impl<'a> SettingsOps<'a> {
             max_tool_iterations: request.max_tool_iterations,
             max_stagnation_steps: request.max_stagnation_steps,
             default_model_id: request.default_model_id,
+            inference_defaults: request.inference_defaults,
         };
 
         let settings = self
@@ -140,6 +142,7 @@ impl<'a> SettingsOps<'a> {
             max_tool_iterations: settings.max_tool_iterations,
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
+            inference_defaults: settings.inference_defaults,
         })
     }
 

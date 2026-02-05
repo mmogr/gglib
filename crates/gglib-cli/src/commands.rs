@@ -134,6 +134,24 @@ pub enum Commands {
         /// Replace entire metadata instead of merging
         #[arg(long)]
         replace_metadata: bool,
+        /// Set default temperature for this model (0.0-2.0)
+        #[arg(long)]
+        temperature: Option<f32>,
+        /// Set default top-p for this model (0.0-1.0)
+        #[arg(long = "top-p")]
+        top_p: Option<f32>,
+        /// Set default top-k for this model
+        #[arg(long = "top-k")]
+        top_k: Option<i32>,
+        /// Set default max-tokens for this model
+        #[arg(long = "max-tokens")]
+        max_tokens: Option<u32>,
+        /// Set default repeat-penalty for this model
+        #[arg(long = "repeat-penalty")]
+        repeat_penalty: Option<f32>,
+        /// Clear all inference parameter defaults (revert to inherit mode)
+        #[arg(long)]
+        clear_inference_defaults: bool,
         /// Show preview without applying changes
         #[arg(long)]
         dry_run: bool,
@@ -158,6 +176,21 @@ pub enum Commands {
         /// Port to serve on
         #[arg(short, long, default_value = "8080")]
         port: u16,
+        /// Temperature for sampling (0.0-2.0, overrides model/global defaults)
+        #[arg(long)]
+        temperature: Option<f32>,
+        /// Top-p sampling (0.0-1.0, overrides model/global defaults)
+        #[arg(long = "top-p")]
+        top_p: Option<f32>,
+        /// Top-k sampling (overrides model/global defaults)
+        #[arg(long = "top-k")]
+        top_k: Option<i32>,
+        /// Maximum tokens to generate (overrides model/global defaults)
+        #[arg(long = "max-tokens")]
+        max_tokens: Option<u32>,
+        /// Repeat penalty (overrides model/global defaults)
+        #[arg(long = "repeat-penalty")]
+        repeat_penalty: Option<f32>,
     },
 
     /// Chat with a model directly via llama-cli
@@ -188,6 +221,21 @@ pub enum Commands {
         /// Use simplified IO mode (better for piping/limited terminals)
         #[arg(long = "simple-io")]
         simple_io: bool,
+        /// Temperature for sampling (0.0-2.0, overrides model/global defaults)
+        #[arg(long)]
+        temperature: Option<f32>,
+        /// Top-p sampling (0.0-1.0, overrides model/global defaults)
+        #[arg(long = "top-p")]
+        top_p: Option<f32>,
+        /// Top-k sampling (overrides model/global defaults)
+        #[arg(long = "top-k")]
+        top_k: Option<i32>,
+        /// Maximum tokens to generate (overrides model/global defaults)
+        #[arg(long = "max-tokens")]
+        max_tokens: Option<u32>,
+        /// Repeat penalty (overrides model/global defaults)
+        #[arg(long = "repeat-penalty")]
+        repeat_penalty: Option<f32>,
     },
 
     /// Ask a question with optional context from stdin or file
@@ -216,6 +264,21 @@ pub enum Commands {
         /// Cleaner output for scripting (no prompt echo, no timings)
         #[arg(long, short = 'Q')]
         quiet: bool,
+        /// Temperature for sampling (0.0-2.0, overrides model/global defaults)
+        #[arg(long)]
+        temperature: Option<f32>,
+        /// Top-p for nucleus sampling (0.0-1.0, overrides model/global defaults)
+        #[arg(long = "top-p")]
+        top_p: Option<f32>,
+        /// Top-k for sampling (overrides model/global defaults)
+        #[arg(long = "top-k")]
+        top_k: Option<i32>,
+        /// Maximum tokens to generate (overrides model/global defaults)
+        #[arg(long = "max-tokens")]
+        max_tokens: Option<u32>,
+        /// Repeat penalty (overrides model/global defaults)
+        #[arg(long = "repeat-penalty")]
+        repeat_penalty: Option<f32>,
     },
 
     /// Launch the Tauri desktop GUI

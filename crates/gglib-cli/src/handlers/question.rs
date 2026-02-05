@@ -8,6 +8,7 @@ use std::io::{self, IsTerminal, Read};
 use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
+use gglib_core::domain::InferenceConfig;
 use gglib_core::paths::llama_cli_path;
 use gglib_runtime::llama::{ContextResolution, LlamaCommandBuilder, resolve_context_size};
 
@@ -28,6 +29,11 @@ use gglib_runtime::llama::{ContextResolution, LlamaCommandBuilder, resolve_conte
 /// * `mlock` - Whether to enable memory lock
 /// * `verbose` - Whether to print the constructed prompt
 /// * `quiet` - Whether to suppress llama-cli banner
+/// * `temperature` - Optional temperature override
+/// * `top_p` - Optional top-p override
+/// * `top_k` - Optional top-k override
+/// * `max_tokens` - Optional max-tokens override
+/// * `repeat_penalty` - Optional repeat-penalty override
 ///
 /// # Returns
 ///
@@ -42,6 +48,11 @@ pub async fn execute(
     mlock: bool,
     verbose: bool,
     quiet: bool,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    top_k: Option<i32>,
+    max_tokens: Option<u32>,
+    repeat_penalty: Option<f32>,
 ) -> Result<()> {
     // Get context from file or piped stdin
     let context_input = if let Some(file_path) = &file {
@@ -83,6 +94,31 @@ pub async fn execute(
     let context_resolution =
         calculate_context_size(&prompt, ctx_size.as_deref(), model.context_length)?;
 
+    // Build request-level inference config from CLI args
+    let mut inference_config = InferenceConfig {
+        temperature,
+        top_p,
+        top_k,
+        max_tokens,
+        repeat_penalty,
+    };
+
+    // Apply 3-level hierarchy: request -> model -> global -> hardcoded defaults
+
+    // Apply model defaults
+    if let Some(ref model_defaults) = model.inference_defaults {
+        inference_config.merge_with(model_defaults);
+    }
+
+    // Apply global defaults
+    let settings = ctx.app().settings().get().await?;
+    if let Some(ref global_defaults) = settings.inference_defaults {
+        inference_config.merge_with(global_defaults);
+    }
+
+    // Apply hardcoded defaults
+    inference_config.merge_with(&InferenceConfig::with_hardcoded_defaults());
+
     // Get llama-cli path
     let llama_cli_path = llama_cli_path().context("Failed to resolve llama-cli path")?;
 
@@ -90,6 +126,7 @@ pub async fn execute(
     let mut cmd = LlamaCommandBuilder::new(&llama_cli_path, &model.file_path)
         .context_resolution(context_resolution)
         .mlock(mlock)
+        .inference_config(inference_config)
         .build();
 
     // Add prompt with single-turn mode (exit after response)

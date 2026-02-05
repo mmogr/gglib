@@ -3,8 +3,9 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Textarea } from "../ui/Textarea";
 import { Select } from "../ui/Select";
+import { InferenceParametersForm } from "../InferenceParametersForm";
 import { DEFAULT_TITLE_GENERATION_PROMPT } from "../../services/clients/chat";
-import type { ModelsDirectoryInfo, GgufModel } from "../../types";
+import type { ModelsDirectoryInfo, GgufModel, InferenceConfig } from "../../types";
 import styles from "../SettingsModal.module.css";
 
 interface GeneralSettingsProps {
@@ -41,6 +42,10 @@ interface GeneralSettingsProps {
   setMaxStagnationStepsInput: (value: string) => void;
   titlePromptInput: string;
   setTitlePromptInput: (value: string) => void;
+  
+  // Inference defaults
+  inferenceDefaultsInput: InferenceConfig | undefined;
+  setInferenceDefaultsInput: (value: InferenceConfig | undefined) => void;
   
   // Actions
   onSubmit: (event: FormEvent) => Promise<void>;
@@ -82,6 +87,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setMaxStagnationStepsInput,
   titlePromptInput,
   setTitlePromptInput,
+  inferenceDefaultsInput,
+  setInferenceDefaultsInput,
   onSubmit,
   onReset,
   onRefresh,
@@ -314,6 +321,19 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
             >
               Reset to default
             </button>
+          </div>
+
+          <div className={styles.separator} />
+          <label className={styles.label}>
+            Global Inference Parameter Defaults
+          </label>
+          <InferenceParametersForm
+            value={inferenceDefaultsInput}
+            onChange={setInferenceDefaultsInput}
+            disabled={saving}
+          />
+          <div className={styles.helperText}>
+            <span>Default inference parameters for all models. Can be overridden per-model in the model inspector.</span>
           </div>
         </div>
       )}

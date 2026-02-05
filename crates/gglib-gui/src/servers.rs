@@ -182,6 +182,12 @@ impl<'a> ServerOps<'a> {
             extra_args.push(format.clone());
         }
 
+        // Add inference parameters as CLI arguments
+        // Use shared conversion method for DRY compliance
+        if let Some(ref params) = request.inference_params {
+            extra_args.extend(params.to_cli_args());
+        }
+
         if !extra_args.is_empty() {
             config.extra_args = extra_args;
         }

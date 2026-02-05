@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::InferenceConfig;
+
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;
 
@@ -14,7 +16,7 @@ pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
 /// Application settings structure.
 ///
 /// All fields are optional to support partial updates and graceful defaults.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Settings {
     /// Default directory for downloading models.
@@ -44,6 +46,13 @@ pub struct Settings {
 
     /// Default model ID for commands that support a default model.
     pub default_model_id: Option<i64>,
+
+    /// Global inference parameter defaults.
+    ///
+    /// Applied when neither request nor per-model defaults are specified.
+    /// If not set, hardcoded defaults are used as final fallback.
+    #[serde(default)]
+    pub inference_defaults: Option<InferenceConfig>,
 }
 
 impl Settings {
@@ -60,6 +69,7 @@ impl Settings {
             max_tool_iterations: Some(25),
             max_stagnation_steps: Some(5),
             default_model_id: None,
+            inference_defaults: None,
         }
     }
 
@@ -110,6 +120,9 @@ impl Settings {
         if let Some(ref model_id) = other.default_model_id {
             self.default_model_id = *model_id;
         }
+        if let Some(ref inference_defaults) = other.inference_defaults {
+            self.inference_defaults.clone_from(inference_defaults);
+        }
     }
 }
 
@@ -130,6 +143,7 @@ pub struct SettingsUpdate {
     pub max_tool_iterations: Option<Option<u32>>,
     pub max_stagnation_steps: Option<Option<u32>>,
     pub default_model_id: Option<Option<i64>>,
+    pub inference_defaults: Option<Option<InferenceConfig>>,
 }
 
 /// Settings validation error.
@@ -146,6 +160,9 @@ pub enum SettingsError {
 
     #[error("Download path cannot be empty")]
     EmptyDownloadPath,
+
+    #[error("Invalid inference parameter: {0}")]
+    InvalidInferenceConfig(String),
 }
 
 /// Validate settings values.
@@ -185,6 +202,58 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
         .is_some_and(|p| p.trim().is_empty())
     {
         return Err(SettingsError::EmptyDownloadPath);
+    }
+
+    // Validate inference defaults if specified
+    if let Some(ref inference_config) = settings.inference_defaults {
+        validate_inference_config(inference_config)
+            .map_err(SettingsError::InvalidInferenceConfig)?;
+    }
+
+    Ok(())
+}
+
+/// Validate inference configuration parameters.
+///
+/// Checks that all specified parameters are within valid ranges.
+pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String> {
+    // Validate temperature (0.0 - 2.0)
+    if let Some(temp) = config.temperature {
+        if !(0.0..=2.0).contains(&temp) {
+            return Err(format!(
+                "Temperature must be between 0.0 and 2.0, got {temp}"
+            ));
+        }
+    }
+
+    // Validate top_p (0.0 - 1.0)
+    if let Some(top_p) = config.top_p {
+        if !(0.0..=1.0).contains(&top_p) {
+            return Err(format!("Top P must be between 0.0 and 1.0, got {top_p}"));
+        }
+    }
+
+    // Validate top_k (must be positive)
+    if let Some(top_k) = config.top_k {
+        if top_k <= 0 {
+            return Err(format!("Top K must be positive, got {top_k}"));
+        }
+    }
+
+    // Validate max_tokens (must be positive)
+    if let Some(max_tokens) = config.max_tokens {
+        if max_tokens == 0 {
+            return Err("Max tokens must be positive".to_string());
+        }
+    }
+
+    // Validate repeat_penalty (must be positive)
+    if let Some(repeat_penalty) = config.repeat_penalty {
+        if repeat_penalty <= 0.0 {
+            return Err(format!(
+                "Repeat penalty must be positive, got {repeat_penalty}"
+            ));
+        }
     }
 
     Ok(())
@@ -257,6 +326,88 @@ mod tests {
             validate_settings(&settings),
             Err(SettingsError::EmptyDownloadPath)
         ));
+    }
+
+    #[test]
+    fn test_validate_inference_config_valid() {
+        let config = InferenceConfig {
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            top_k: Some(40),
+            max_tokens: Some(2048),
+            repeat_penalty: Some(1.1),
+        };
+        assert!(validate_inference_config(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_inference_config_temperature_out_of_range() {
+        let config = InferenceConfig {
+            temperature: Some(2.5),
+            ..Default::default()
+        };
+        assert!(validate_inference_config(&config).is_err());
+
+        let config = InferenceConfig {
+            temperature: Some(-0.1),
+            ..Default::default()
+        };
+        assert!(validate_inference_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_inference_config_top_p_out_of_range() {
+        let config = InferenceConfig {
+            top_p: Some(1.5),
+            ..Default::default()
+        };
+        assert!(validate_inference_config(&config).is_err());
+
+        let config = InferenceConfig {
+            top_p: Some(-0.1),
+            ..Default::default()
+        };
+        assert!(validate_inference_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_inference_config_negative_values() {
+        let config = InferenceConfig {
+            top_k: Some(-1),
+            ..Default::default()
+        };
+        assert!(validate_inference_config(&config).is_err());
+
+        let config = InferenceConfig {
+            repeat_penalty: Some(0.0),
+            ..Default::default()
+        };
+        assert!(validate_inference_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_settings_with_valid_inference_defaults() {
+        let settings = Settings {
+            inference_defaults: Some(InferenceConfig {
+                temperature: Some(0.8),
+                top_p: Some(0.95),
+                ..Default::default()
+            }),
+            ..Settings::with_defaults()
+        };
+        assert!(validate_settings(&settings).is_ok());
+    }
+
+    #[test]
+    fn test_settings_with_invalid_inference_defaults() {
+        let settings = Settings {
+            inference_defaults: Some(InferenceConfig {
+                temperature: Some(3.0), // Invalid
+                ..Default::default()
+            }),
+            ..Settings::with_defaults()
+        };
+        assert!(validate_settings(&settings).is_err());
     }
 
     #[test]

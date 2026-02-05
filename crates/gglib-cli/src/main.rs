@@ -194,9 +194,27 @@ async fn main() -> anyhow::Result<()> {
             mlock,
             jinja,
             port,
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            repeat_penalty,
         } => {
             // NEW: Uses CliContext
-            handlers::serve::execute(&ctx, id, ctx_size, mlock, jinja, port).await?;
+            handlers::serve::execute(
+                &ctx,
+                id,
+                ctx_size,
+                mlock,
+                jinja,
+                port,
+                temperature,
+                top_p,
+                top_k,
+                max_tokens,
+                repeat_penalty,
+            )
+            .await?;
         }
         Commands::Chat {
             identifier,
@@ -208,6 +226,11 @@ async fn main() -> anyhow::Result<()> {
             system_prompt,
             multiline_input,
             simple_io,
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            repeat_penalty,
         } => {
             // NEW: Uses CliContext
             let args = handlers::chat::ChatArgs {
@@ -220,6 +243,11 @@ async fn main() -> anyhow::Result<()> {
                 system_prompt,
                 multiline_input,
                 simple_io,
+                temperature,
+                top_p,
+                top_k,
+                max_tokens,
+                repeat_penalty,
             };
             handlers::chat::execute(&ctx, args).await?;
         }
@@ -231,10 +259,27 @@ async fn main() -> anyhow::Result<()> {
             mlock,
             verbose,
             quiet,
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            repeat_penalty,
         } => {
             // Ask a question with optional piped/file context
             handlers::question::execute(
-                &ctx, question, model, file, ctx_size, mlock, verbose, quiet,
+                &ctx,
+                question,
+                model,
+                file,
+                ctx_size,
+                mlock,
+                verbose,
+                quiet,
+                temperature,
+                top_p,
+                top_k,
+                max_tokens,
+                repeat_penalty,
             )
             .await?;
         }
@@ -294,6 +339,12 @@ async fn main() -> anyhow::Result<()> {
             metadata,
             remove_metadata,
             replace_metadata,
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            repeat_penalty,
+            clear_inference_defaults,
             dry_run,
             force,
         } => {
@@ -308,6 +359,12 @@ async fn main() -> anyhow::Result<()> {
                 metadata,
                 remove_metadata,
                 replace_metadata,
+                temperature,
+                top_p,
+                top_k,
+                max_tokens,
+                repeat_penalty,
+                clear_inference_defaults,
                 dry_run,
                 force,
             };

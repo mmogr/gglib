@@ -161,6 +161,7 @@ impl ModelService {
             tags: auto_tags,
             file_paths: None,
             capabilities: model_capabilities,
+            inference_defaults: None,
         };
 
         // 6. Persist to repository
@@ -421,6 +422,7 @@ mod tests {
                 last_update_check: model.last_update_check,
                 tags: model.tags.clone(),
                 capabilities: model.capabilities,
+                inference_defaults: model.inference_defaults.clone(),
             };
             models.push(created.clone());
             Ok(created)

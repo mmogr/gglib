@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { GgufModel } from '../types';
+import { GgufModel, InferenceConfig } from '../types';
 import {
   listModels,
   addModel as addModelService,
@@ -62,8 +62,15 @@ export function useModels() {
     name?: string;
     quantization?: string;
     file_path?: string;
+    inferenceDefaults?: InferenceConfig;
   }) => {
-    await updateModelService({ id, name: updates.name });
+    await updateModelService({ 
+      id, 
+      name: updates.name,
+      quantization: updates.quantization,
+      filePath: updates.file_path,
+      inferenceDefaults: updates.inferenceDefaults,
+    });
     await loadModels();
   }, [loadModels]);
 

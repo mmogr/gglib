@@ -4,7 +4,7 @@ import { useModelsDirectory } from "../hooks/useModelsDirectory";
 import { useSettings } from "../hooks/useSettings";
 import { useMcpServers } from "../hooks/useMcpServers";
 import { useModels } from "../hooks/useModels";
-import { UpdateSettingsRequest } from "../types";
+import { UpdateSettingsRequest, InferenceConfig } from "../types";
 import type { McpServerInfo } from "../services/clients/mcp";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
@@ -40,6 +40,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [maxStagnationStepsInput, setMaxStagnationStepsInput] = useState("");
   const [showFitIndicators, setShowFitIndicators] = useState(true);
   const [defaultModelInput, setDefaultModelInput] = useState("");
+  const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<InferenceConfig | undefined>(undefined);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
@@ -70,6 +71,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setMaxStagnationStepsInput(settings.max_stagnation_steps?.toString() || "");
       setShowFitIndicators(settings.show_memory_fit_indicators !== false);
       setDefaultModelInput(settings.default_model_id?.toString() || "");
+      setInferenceDefaultsInput(settings.inferenceDefaults || undefined);
     }
   }, [settings]);
 
@@ -102,6 +104,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           max_stagnation_steps: parseNumericInput(maxStagnationStepsInput),
           show_memory_fit_indicators: showFitIndicators,
           default_model_id: parseNumericInput(defaultModelInput),
+          inferenceDefaults: inferenceDefaultsInput,
         };
 
         // Check if any updates were made
@@ -114,7 +117,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.max_tool_iterations !== undefined ||
           updates.max_stagnation_steps !== undefined ||
           updates.show_memory_fit_indicators !== undefined ||
-          updates.default_model_id !== undefined;
+          updates.default_model_id !== undefined ||
+          updates.inferenceDefaults !== undefined;
 
         if (hasUpdates) {
           await saveSettings(updates);
@@ -136,6 +140,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       maxStagnationStepsInput,
       showFitIndicators,
       defaultModelInput,
+      inferenceDefaultsInput,
       info,
       saveDir,
       saveSettings,
@@ -225,6 +230,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setMaxStagnationStepsInput={setMaxStagnationStepsInput}
             titlePromptInput={titlePromptInput}
             setTitlePromptInput={setTitlePromptInput}
+            inferenceDefaultsInput={inferenceDefaultsInput}
+            setInferenceDefaultsInput={setInferenceDefaultsInput}
             onSubmit={handleSubmit}
             onReset={handleReset}
             onRefresh={handleRefresh}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { InferenceConfig } from '../../../types';
 
 export interface ServeModalState {
   showServeModal: boolean;
@@ -6,11 +7,13 @@ export interface ServeModalState {
   customPort: string;
   jinjaOverride: boolean | null;
   isServing: boolean;
+  inferenceParams: InferenceConfig | undefined;
   setShowServeModal: (show: boolean) => void;
   setCustomContext: (context: string) => void;
   setCustomPort: (port: string) => void;
   setJinjaOverride: (override: boolean | null) => void;
   setIsServing: (serving: boolean) => void;
+  setInferenceParams: (params: InferenceConfig | undefined) => void;
   openServeModal: () => void;
   closeServeModal: () => void;
   resetServeModal: () => void;
@@ -25,14 +28,17 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
   const [customPort, setCustomPort] = useState('');
   const [jinjaOverride, setJinjaOverride] = useState<boolean | null>(null);
   const [isServing, setIsServing] = useState(false);
+  const [inferenceParams, setInferenceParams] = useState<InferenceConfig | undefined>(undefined);
 
-  // Reset jinja override when model changes
+  // Reset jinja override and inference params when model changes
   useEffect(() => {
     setJinjaOverride(null);
+    setInferenceParams(undefined);
   }, [modelId]);
 
   const openServeModal = useCallback(() => {
     setJinjaOverride(null);
+    setInferenceParams(undefined);
     setShowServeModal(true);
   }, []);
 
@@ -46,6 +52,7 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
     setCustomPort('');
     setJinjaOverride(null);
     setIsServing(false);
+    setInferenceParams(undefined);
   }, []);
 
   return {
@@ -54,11 +61,13 @@ export function useServeModal(modelId: number | undefined): ServeModalState {
     customPort,
     jinjaOverride,
     isServing,
+    inferenceParams,
     setShowServeModal,
     setCustomContext,
     setCustomPort,
     setJinjaOverride,
     setIsServing,
+    setInferenceParams,
     openServeModal,
     closeServeModal,
     resetServeModal,

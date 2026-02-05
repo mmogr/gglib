@@ -80,6 +80,45 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
           </div>
         )}
       </div>
+
+      {/* Show inference defaults if any are set */}
+      {model.inferenceDefaults && Object.values(model.inferenceDefaults).some(v => v != null) && (
+        <>
+          <h3>Inference Defaults</h3>
+          <div className="metadata-grid">
+            {model.inferenceDefaults.temperature != null && (
+              <div className="metadata-row">
+                <span className="metadata-label">Temperature:</span>
+                <span className="metadata-value">{model.inferenceDefaults.temperature}</span>
+              </div>
+            )}
+            {model.inferenceDefaults.topP != null && (
+              <div className="metadata-row">
+                <span className="metadata-label">Top P:</span>
+                <span className="metadata-value">{model.inferenceDefaults.topP}</span>
+              </div>
+            )}
+            {model.inferenceDefaults.topK != null && (
+              <div className="metadata-row">
+                <span className="metadata-label">Top K:</span>
+                <span className="metadata-value">{model.inferenceDefaults.topK}</span>
+              </div>
+            )}
+            {model.inferenceDefaults.maxTokens != null && (
+              <div className="metadata-row">
+                <span className="metadata-label">Max Tokens:</span>
+                <span className="metadata-value">{model.inferenceDefaults.maxTokens.toLocaleString()}</span>
+              </div>
+            )}
+            {model.inferenceDefaults.repeatPenalty != null && (
+              <div className="metadata-row">
+                <span className="metadata-label">Repeat Penalty:</span>
+                <span className="metadata-value">{model.inferenceDefaults.repeatPenalty}</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 };

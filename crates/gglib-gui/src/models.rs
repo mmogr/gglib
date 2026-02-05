@@ -80,7 +80,6 @@ impl<'a> ModelOps<'a> {
         Ok(GuiModel::from_model(model, is_serving, port))
     }
 
-    /// Add a model to the database from a file path.
     pub async fn add(&self, request: AddModelRequest) -> Result<GuiModel, GuiError> {
         let path = PathBuf::from(&request.file_path);
 
@@ -118,6 +117,9 @@ impl<'a> ModelOps<'a> {
         }
         if let Some(file_path) = request.file_path {
             model.file_path = PathBuf::from(file_path);
+        }
+        if let Some(inference_defaults) = request.inference_defaults {
+            model.inference_defaults = Some(inference_defaults);
         }
 
         self.deps

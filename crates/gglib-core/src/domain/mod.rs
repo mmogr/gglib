@@ -14,11 +14,15 @@
 pub mod capabilities;
 pub mod chat;
 pub mod gguf;
+pub mod inference;
 pub mod mcp;
 mod model;
 
 // Re-export model types at the domain level for convenience
 pub use model::{Model, ModelFilterOptions, NewModel, RangeValues};
+
+// Re-export inference types at the domain level for convenience
+pub use inference::InferenceConfig;
 
 // Re-export MCP types at the domain level for convenience
 pub use mcp::{

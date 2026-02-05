@@ -127,6 +127,7 @@ impl From<gglib_core::ports::ToolSupportDetection> for HfToolSupportResponse {
 
 /// Frontend-friendly model structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GuiModel {
     pub id: i64,
     pub name: String,
@@ -143,6 +144,8 @@ pub struct GuiModel {
     pub is_serving: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
 }
 
 impl GuiModel {
@@ -161,6 +164,7 @@ impl GuiModel {
             tags: model.tags,
             is_serving,
             port,
+            inference_defaults: model.inference_defaults,
         }
     }
 
@@ -182,6 +186,7 @@ impl From<Model> for GuiModel {
 
 /// Request body for starting a server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct StartServerRequest {
     pub context_length: Option<u64>,
     pub port: Option<u16>,
@@ -191,6 +196,9 @@ pub struct StartServerRequest {
     pub jinja: Option<bool>,
     #[serde(default)]
     pub reasoning_format: Option<String>,
+    /// Inference parameters for this serve session (overrides model/global defaults).
+    #[serde(default)]
+    pub inference_params: Option<gglib_core::domain::InferenceConfig>,
 }
 
 /// Response for starting a server.
@@ -242,10 +250,12 @@ pub struct RemoveModelRequest {
 
 /// Request body for updating a model.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateModelRequest {
     pub name: Option<String>,
     pub quantization: Option<String>,
     pub file_path: Option<String>,
+    pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
 }
 
 // ============================================================================
@@ -264,6 +274,7 @@ pub struct ModelsDirectoryInfo {
 
 /// Application settings for the settings UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub default_download_path: Option<String>,
     pub default_context_size: Option<u64>,
@@ -275,10 +286,12 @@ pub struct AppSettings {
     pub max_stagnation_steps: Option<u32>,
     /// Default model ID for quick commands (e.g., `gglib question`).
     pub default_model_id: Option<i64>,
+    pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
 }
 
 /// Request body for updating application settings.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateSettingsRequest {
     pub default_download_path: Option<Option<String>>,
     pub default_context_size: Option<Option<u64>>,
@@ -290,6 +303,7 @@ pub struct UpdateSettingsRequest {
     pub max_stagnation_steps: Option<Option<u32>>,
     /// Default model ID for quick commands (e.g., `gglib question`).
     pub default_model_id: Option<Option<i64>>,
+    pub inference_defaults: Option<Option<gglib_core::domain::InferenceConfig>>,
 }
 
 // ============================================================================

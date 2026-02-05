@@ -1,10 +1,11 @@
-import { FC } from 'react';
-import { Loader2, Play } from 'lucide-react';
+import { FC, useState } from 'react';
+import { Loader2, Play, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { Input } from '../../ui/Input';
 import { Modal } from '../../ui/Modal';
-import type { GgufModel, AppSettings } from '../../../types';
+import { InferenceParametersForm } from '../../InferenceParametersForm';
+import type { GgufModel, AppSettings, InferenceConfig } from '../../../types';
 import { formatParamCount } from '../../../utils/format';
 
 interface ServeModalProps {
@@ -16,11 +17,13 @@ interface ServeModalProps {
   jinjaOverride: boolean | null;
   isServing: boolean;
   hasAgentTag: boolean;
+  inferenceParams: InferenceConfig | undefined;
   // Handlers
   onContextChange: (value: string) => void;
   onPortChange: (value: string) => void;
   onJinjaChange: (value: boolean) => void;
   onJinjaReset: () => void;
+  onInferenceParamsChange: (params: InferenceConfig) => void;
   onClose: () => void;
   onStart: () => void;
 }
@@ -36,15 +39,21 @@ export const ServeModal: FC<ServeModalProps> = ({
   jinjaOverride,
   isServing,
   hasAgentTag,
+  inferenceParams,
   onContextChange,
   onPortChange,
   onJinjaChange,
   onJinjaReset,
+  onInferenceParamsChange,
   onClose,
   onStart,
 }) => {
   const effectiveJinjaEnabled = jinjaOverride === null ? hasAgentTag : jinjaOverride;
   const isAutoJinja = jinjaOverride === null && hasAgentTag;
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Check if any inference params are set (for visual indicator)
+  const hasInferenceOverrides = inferenceParams && Object.values(inferenceParams).some(v => v != null);
 
   return (
     <Modal open={true} onClose={onClose} title="Start model server" size="md" preventClose={isServing}>
@@ -154,6 +163,32 @@ export const ServeModal: FC<ServeModalProps> = ({
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Advanced: Inference Parameters */}
+        <div className="form-group">
+          <button 
+            type="button"
+            className="advanced-toggle"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            disabled={isServing}
+          >
+            <Icon icon={showAdvanced ? ChevronDown : ChevronRight} size={16} />
+            <span>Inference Parameters</span>
+            {hasInferenceOverrides && <span className="override-indicator">•</span>}
+          </button>
+          {showAdvanced && (
+            <div className="advanced-section">
+              <p className="input-help" style={{ marginBottom: '12px' }}>
+                Override sampling parameters for this session. Leave empty to use model or global defaults.
+              </p>
+              <InferenceParametersForm
+                value={inferenceParams}
+                onChange={onInferenceParamsChange}
+                disabled={isServing}
+              />
+            </div>
+          )}
         </div>
       </div>
 

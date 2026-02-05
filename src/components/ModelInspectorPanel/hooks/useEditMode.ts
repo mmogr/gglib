@@ -1,14 +1,16 @@
 import { useState, useCallback } from 'react';
-import type { GgufModel } from '../../../types';
+import type { GgufModel, InferenceConfig } from '../../../types';
 
 export interface EditModeState {
   isEditMode: boolean;
   editedName: string;
   editedQuantization: string;
   editedFilePath: string;
+  editedInferenceDefaults: InferenceConfig | undefined;
   setEditedName: (name: string) => void;
   setEditedQuantization: (quant: string) => void;
   setEditedFilePath: (path: string) => void;
+  setEditedInferenceDefaults: (config: InferenceConfig) => void;
   handleEdit: () => void;
   handleCancel: () => void;
   resetEditState: () => void;
@@ -23,12 +25,14 @@ export function useEditMode(model: GgufModel | null): EditModeState {
   const [editedName, setEditedName] = useState('');
   const [editedQuantization, setEditedQuantization] = useState('');
   const [editedFilePath, setEditedFilePath] = useState('');
+  const [editedInferenceDefaults, setEditedInferenceDefaults] = useState<InferenceConfig | undefined>(undefined);
 
   const handleEdit = useCallback(() => {
     if (!model) return;
     setEditedName(model.name);
     setEditedQuantization(model.quantization || '');
     setEditedFilePath(model.file_path);
+    setEditedInferenceDefaults(model.inferenceDefaults || undefined);
     setIsEditMode(true);
   }, [model]);
 
@@ -41,6 +45,7 @@ export function useEditMode(model: GgufModel | null): EditModeState {
     setEditedName('');
     setEditedQuantization('');
     setEditedFilePath('');
+    setEditedInferenceDefaults(undefined);
   }, []);
 
   return {
@@ -48,9 +53,11 @@ export function useEditMode(model: GgufModel | null): EditModeState {
     editedName,
     editedQuantization,
     editedFilePath,
+    editedInferenceDefaults,
     setEditedName,
     setEditedQuantization,
     setEditedFilePath,
+    setEditedInferenceDefaults,
     handleEdit,
     handleCancel,
     resetEditState,
