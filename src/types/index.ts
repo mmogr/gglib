@@ -32,16 +32,16 @@ export interface InferenceConfig {
 export interface GgufModel {
   id?: number;
   name: string;
-  file_path: string;
-  param_count_b: number;
+  filePath: string;
+  paramCountB: number;
   architecture?: string;
   quantization?: string;
-  context_length?: number;
-  added_at: string;
-  hf_repo_id?: string;
+  contextLength?: number;
+  addedAt: string;
+  hfRepoId?: string;
   tags?: string[];
   // Server status
-  is_serving?: boolean;
+  isServing?: boolean;
   port?: number;
   // Inference defaults
   inferenceDefaults?: InferenceConfig;
@@ -54,21 +54,21 @@ export interface DownloadConfig {
 
 export interface ServeConfig {
   id: number;
-  context_length?: number;
+  contextLength?: number;
   mlock?: boolean;
   port?: number;
   jinja?: boolean;
   // Inference parameters for this serve session
   temperature?: number;
-  top_p?: number;
-  top_k?: number;
-  max_tokens?: number;
-  repeat_penalty?: number;
+  topP?: number;
+  topK?: number;
+  maxTokens?: number;
+  repeatPenalty?: number;
 }
 
 export interface ServerInfo {
-  model_id: number;
-  model_name: string;
+  modelId: number;
+  modelName: string;
   port: number;
   status: string;
 }
@@ -76,43 +76,43 @@ export interface ServerInfo {
 export interface ModelsDirectoryInfo {
   path: string;
   source: 'explicit' | 'env' | 'default';
-  default_path: string;
+  defaultPath: string;
   exists: boolean;
   writable: boolean;
 }
 
 export interface AppSettings {
-  default_download_path?: string | null;
-  default_context_size?: number | null;
-  proxy_port?: number | null;
-  llama_base_port?: number | null;
-  max_download_queue_size?: number | null;
-  title_generation_prompt?: string | null;
-  show_memory_fit_indicators?: boolean | null;
+  defaultDownloadPath?: string | null;
+  defaultContextSize?: number | null;
+  proxyPort?: number | null;
+  llamaBasePort?: number | null;
+  maxDownloadQueueSize?: number | null;
+  titleGenerationPrompt?: string | null;
+  showMemoryFitIndicators?: boolean | null;
   /** Maximum iterations for tool calling agentic loop (default: 25) */
-  max_tool_iterations?: number | null;
+  maxToolIterations?: number | null;
   /** Maximum stagnation steps before stopping agent loop (default: 5) */
-  max_stagnation_steps?: number | null;
+  maxStagnationSteps?: number | null;
   /** Default model ID for quick commands (e.g., `gglib question`) */
-  default_model_id?: number | null;
+  defaultModelId?: number | null;
   /** Global inference parameter defaults */
   inferenceDefaults?: InferenceConfig | null;
 }
 
 export interface UpdateSettingsRequest {
-  default_download_path?: string | null | undefined;
-  default_context_size?: number | null | undefined;
-  proxy_port?: number | null | undefined;
-  llama_base_port?: number | null | undefined;
-  max_download_queue_size?: number | null | undefined;
-  title_generation_prompt?: string | null | undefined;
-  show_memory_fit_indicators?: boolean | null | undefined;
+  defaultDownloadPath?: string | null | undefined;
+  defaultContextSize?: number | null | undefined;
+  proxyPort?: number | null | undefined;
+  llamaBasePort?: number | null | undefined;
+  maxDownloadQueueSize?: number | null | undefined;
+  titleGenerationPrompt?: string | null | undefined;
+  showMemoryFitIndicators?: boolean | null | undefined;
   /** Maximum iterations for tool calling agentic loop (default: 25) */
-  max_tool_iterations?: number | null | undefined;
+  maxToolIterations?: number | null | undefined;
   /** Maximum stagnation steps before stopping agent loop (default: 5) */
-  max_stagnation_steps?: number | null | undefined;
+  maxStagnationSteps?: number | null | undefined;
   /** Default model ID for quick commands (e.g., `gglib question`) */
-  default_model_id?: number | null | undefined;
+  defaultModelId?: number | null | undefined;
   /** Global inference parameter defaults */
   inferenceDefaults?: InferenceConfig | null | undefined;
 }
