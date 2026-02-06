@@ -71,17 +71,42 @@ pub async fn start_proxy_standalone(
         default_context,
     };
 
+    // Show startup banner
+    println!();
+    println!("  🚀 gglib proxy starting...");
+    println!();
+    println!("  Host:            {}", host);
+    println!("  Port:            {}", port);
+    println!("  Llama base port: {}", llama_base_port);
+    println!("  Default context: {}", default_context);
+    println!();
+
     let addr = supervisor
         .start(config, runtime_port, catalog_port)
         .await
         .map_err(|e| anyhow!("{e}"))?;
     tracing::info!("Proxy started on {addr}");
 
+    // Show success message with configuration URL
+    println!("  ✓ Proxy started successfully on {}", addr);
+    println!();
+    println!("  Configure OpenWebUI to use: http://{}/v1", addr);
+    println!();
+    println!("  Press Ctrl+C to stop");
+    println!();
+
     // Wait for Ctrl-C
     tokio::signal::ctrl_c().await?;
 
+    // Show shutdown message
+    println!();
+    println!("  Shutting down proxy...");
+
     // Stop proxy
     supervisor.stop().await.map_err(|e| anyhow!("{e}"))?;
+
+    println!("  Proxy stopped");
+    println!();
 
     Ok(())
 }
