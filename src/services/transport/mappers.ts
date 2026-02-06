@@ -69,21 +69,21 @@ export interface UpdateConversationRequest {
 export function toStartServerRequest(config: ServeConfig): StartServerRequest {
   // Build inference params object only if any values are set
   const hasInferenceParams = config.temperature !== undefined || 
-    config.top_p !== undefined || 
-    config.top_k !== undefined || 
-    config.max_tokens !== undefined || 
-    config.repeat_penalty !== undefined;
+    config.topP !== undefined || 
+    config.topK !== undefined || 
+    config.maxTokens !== undefined || 
+    config.repeatPenalty !== undefined;
   
   const inferenceParams = hasInferenceParams ? {
     temperature: config.temperature,
-    topP: config.top_p,
-    topK: config.top_k,
-    maxTokens: config.max_tokens,
-    repeatPenalty: config.repeat_penalty,
+    topP: config.topP,
+    topK: config.topK,
+    maxTokens: config.maxTokens,
+    repeatPenalty: config.repeatPenalty,
   } : undefined;
 
   return {
-    contextLength: config.context_length,
+    contextLength: config.contextLength,
     port: config.port,
     mlock: config.mlock ?? false,
     jinja: config.jinja,

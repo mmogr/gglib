@@ -79,9 +79,9 @@ export default function ChatPage({
 
   // Settings for title generation prompt and agent loop
   const { settings } = useSettings();
-  const titleGenerationPrompt = settings?.title_generation_prompt || DEFAULT_TITLE_GENERATION_PROMPT;
-  const maxToolIterations = settings?.max_tool_iterations ?? undefined;
-  const maxStagnationSteps = settings?.max_stagnation_steps ?? undefined;
+  const titleGenerationPrompt = settings?.titleGenerationPrompt || DEFAULT_TITLE_GENERATION_PROMPT;
+  const maxToolIterations = settings?.maxToolIterations ?? undefined;
+  const maxStagnationSteps = settings?.maxStagnationSteps ?? undefined;
 
   // Runtime - now with external message state
   const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({

@@ -76,7 +76,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     resetEditState,
   } = config;
 
-  const activeServer = model?.id ? servers.find(s => s.model_id === model.id) : undefined;
+  const activeServer = model?.id ? servers.find(s => s.modelId === model.id) : undefined;
   const isRunning = !!activeServer;
 
   const handleStartServer = useCallback(async () => {
@@ -91,10 +91,10 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         if (!isNaN(parsed) && parsed > 0) {
           contextLength = parsed;
         }
-      } else if (settings?.default_context_size) {
-        contextLength = settings.default_context_size;
-      } else if (model.context_length) {
-        contextLength = model.context_length;
+      } else if (settings?.defaultContextSize) {
+        contextLength = settings.defaultContextSize;
+      } else if (model.contextLength) {
+        contextLength = model.contextLength;
       }
 
       // Parse port if specified (must be >= 1024)
@@ -112,16 +112,16 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
 
       const serveConfig: ServeConfig = {
         id: model.id,
-        context_length: contextLength,
+        contextLength: contextLength,
         port,
         mlock: false,
         jinja: jinjaOverride === null ? (hasAgentTag ? true : undefined) : jinjaOverride,
         // Inference parameters for this session
         temperature: inferenceParams?.temperature,
-        top_p: inferenceParams?.topP,
-        top_k: inferenceParams?.topK,
-        max_tokens: inferenceParams?.maxTokens,
-        repeat_penalty: inferenceParams?.repeatPenalty,
+        topP: inferenceParams?.topP,
+        topK: inferenceParams?.topK,
+        maxTokens: inferenceParams?.maxTokens,
+        repeatPenalty: inferenceParams?.repeatPenalty,
       };
 
       const result = await serveModel(serveConfig);
@@ -130,8 +130,8 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       
       if (onServerStarted && result) {
         onServerStarted({
-          model_id: model.id,
-          model_name: model.name,
+          modelId: model.id,
+          modelName: model.name,
           port: result.port,
           status: 'running',
         });
@@ -190,7 +190,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
   const handleSave = useCallback(async () => {
     if (!model?.id) return;
     try {
-      const updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: InferenceConfig } = {};
+      const updates: { name?: string; quantization?: string; filePath?: string; inferenceDefaults?: InferenceConfig } = {};
       
       if (editedName !== model.name) {
         updates.name = editedName;
@@ -198,8 +198,8 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       if (editedQuantization !== (model.quantization || '')) {
         updates.quantization = editedQuantization || undefined;
       }
-      if (editedFilePath !== model.file_path) {
-        updates.file_path = editedFilePath;
+      if (editedFilePath !== model.filePath) {
+        updates.filePath = editedFilePath;
       }
       // Always include inferenceDefaults if it was edited (even if set to empty object to clear)
       if (JSON.stringify(editedInferenceDefaults) !== JSON.stringify(model.inferenceDefaults)) {

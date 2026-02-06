@@ -25,7 +25,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
       <div className="metadata-grid">
         <div className="metadata-row">
           <span className="metadata-label">Size:</span>
-          <span className="metadata-value">{formatParamCount(model.param_count_b)}</span>
+          <span className="metadata-value">{formatParamCount(model.paramCountB)}</span>
         </div>
         {model.architecture && (
           <div className="metadata-row">
@@ -39,20 +39,20 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
             <span className="metadata-value quantization">{model.quantization}</span>
           </div>
         )}
-        {model.context_length && (
+        {model.contextLength && (
           <div className="metadata-row">
             <span className="metadata-label">Context Length:</span>
-            <span className="metadata-value">{model.context_length.toLocaleString()}</span>
+            <span className="metadata-value">{model.contextLength.toLocaleString()}</span>
           </div>
         )}
         <div className="metadata-row">
           <span className="metadata-label">Path:</span>
           <span className="metadata-value path">
-            {model.file_path}
+            {model.filePath}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => copyToClipboard(model.file_path)}
+              onClick={() => copyToClipboard(model.filePath)}
               title="Copy path"
               iconOnly
             >
@@ -60,15 +60,15 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
             </Button>
           </span>
         </div>
-        {model.hf_repo_id && (
+        {model.hfRepoId && (
           <div className="metadata-row">
             <span className="metadata-label">HuggingFace:</span>
             <span className="metadata-value hf-link-container">
-              <span className="hf-repo-id">{model.hf_repo_id}</span>
+              <span className="hf-repo-id">{model.hfRepoId}</span>
               <button
                 className="hf-link-button"
                 onClick={() => {
-                  const url = getHuggingFaceUrl(model.hf_repo_id);
+                  const url = getHuggingFaceUrl(model.hfRepoId);
                   if (url) openUrl(url);
                 }}
                 title="Open on HuggingFace"

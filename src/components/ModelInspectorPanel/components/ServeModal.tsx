@@ -60,7 +60,7 @@ export const ServeModal: FC<ServeModalProps> = ({
       <div className="modal-body">
         <div className="model-info">
           <strong>{model.name}</strong>
-          <span className="model-size">{formatParamCount(model.param_count_b)}</span>
+          <span className="model-size">{formatParamCount(model.paramCountB)}</span>
         </div>
 
         <div className="form-group">
@@ -73,10 +73,10 @@ export const ServeModal: FC<ServeModalProps> = ({
             type="number"
             className="context-input"
             placeholder={
-              settings?.default_context_size
-                ? `Default: ${settings.default_context_size.toLocaleString()}`
-                : model.context_length
-                  ? `Model max: ${model.context_length.toLocaleString()}`
+              settings?.defaultContextSize
+                ? `Default: ${settings.defaultContextSize.toLocaleString()}`
+                : model.contextLength
+                  ? `Model max: ${model.contextLength.toLocaleString()}`
                   : 'Enter context length'
             }
             value={customContext}
@@ -85,8 +85,8 @@ export const ServeModal: FC<ServeModalProps> = ({
             min="1"
           />
           <p className="input-help">
-            {model.context_length
-              ? `Model's maximum: ${model.context_length.toLocaleString()} tokens`
+            {model.contextLength
+              ? `Model's maximum: ${model.contextLength.toLocaleString()} tokens`
               : 'No model context metadata available'}
           </p>
         </div>
@@ -101,8 +101,8 @@ export const ServeModal: FC<ServeModalProps> = ({
             type="number"
             className="context-input"
             placeholder={
-              settings?.llama_base_port
-                ? `Auto (from ${settings.llama_base_port})`
+              settings?.llamaBasePort
+                ? `Auto (from ${settings.llamaBasePort})`
                 : 'Auto (from 9000)'
             }
             value={customPort}

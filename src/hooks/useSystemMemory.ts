@@ -89,7 +89,7 @@ export function useSystemMemory(): UseSystemMemoryReturn {
   const { settings } = useSettings();
 
   // Context length from settings, default to 4096
-  const contextLength = settings?.default_context_size ?? 4096;
+  const contextLength = settings?.defaultContextSize ?? 4096;
 
   const loadMemoryInfo = useCallback(async () => {
     try {

@@ -87,18 +87,18 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
 
       {/* Running Servers */}
       {servers.map((server) => (
-        <div key={server.model_id} className={styles.statusItem}>
+        <div key={server.modelId} className={styles.statusItem}>
           <span className={`${styles.statusIcon} ${isServerHealthy(server) ? styles.healthy : ''}`} aria-hidden>
             <Icon icon={Circle} size={14} />
           </span>
           <div className={styles.statusInfo}>
-            <strong>{server.model_name}</strong>
+            <strong>{server.modelName}</strong>
             <span className={styles.statusDetail}>Port {server.port}</span>
           </div>
           {isServerHealthy(server) && onOpenChat && (
             <button
               className={styles.chatButton}
-              onClick={() => onOpenChat(server.port, server.model_name)}
+              onClick={() => onOpenChat(server.port, server.modelName)}
               title="Open chat"
             >
               <Icon icon={MessageCircle} size={14} />
@@ -106,7 +106,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
           )}
           <button
             className={styles.stopButton}
-            onClick={() => handleStopServer(server.model_id)}
+            onClick={() => handleStopServer(server.modelId)}
             title="Stop server"
           >
             <Icon icon={Square} size={14} />

@@ -61,14 +61,14 @@ export function useModels() {
   const updateModel = useCallback(async (id: number, updates: {
     name?: string;
     quantization?: string;
-    file_path?: string;
+    filePath?: string;
     inferenceDefaults?: InferenceConfig;
   }) => {
     await updateModelService({ 
       id, 
       name: updates.name,
       quantization: updates.quantization,
-      filePath: updates.file_path,
+      filePath: updates.filePath,
       inferenceDefaults: updates.inferenceDefaults,
     });
     await loadModels();

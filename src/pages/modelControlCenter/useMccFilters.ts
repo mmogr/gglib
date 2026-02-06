@@ -61,7 +61,7 @@ export function useMccFilters({
         !searchQuery ||
         model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         model.architecture?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        model.hf_repo_id?.toLowerCase().includes(searchQuery.toLowerCase());
+        model.hfRepoId?.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesTags =
         filters.selectedTags.length === 0 ||
@@ -69,13 +69,13 @@ export function useMccFilters({
 
       const matchesParams =
         filters.paramRange === null ||
-        (model.param_count_b >= filters.paramRange[0] && model.param_count_b <= filters.paramRange[1]);
+        (model.paramCountB >= filters.paramRange[0] && model.paramCountB <= filters.paramRange[1]);
 
       const matchesContext =
         filters.contextRange === null ||
-        model.context_length === undefined ||
-        model.context_length === null ||
-        (model.context_length >= filters.contextRange[0] && model.context_length <= filters.contextRange[1]);
+        model.contextLength === undefined ||
+        model.contextLength === null ||
+        (model.contextLength >= filters.contextRange[0] && model.contextLength <= filters.contextRange[1]);
 
       const matchesQuantization =
         filters.selectedQuantizations.length === 0 ||

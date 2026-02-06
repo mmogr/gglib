@@ -24,7 +24,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
 }) => {
   const isModelRunning = (modelId?: number) => {
     if (!modelId) return false;
-    return servers.some(s => s.model_id === modelId);
+    return servers.some(s => s.modelId === modelId);
   };
 
   if (loading && models.length === 0) {
@@ -68,7 +68,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
               )}
             </div>
             <div className="model-metadata">
-              <span className="metadata-item">{formatParamCount(model.param_count_b)}</span>
+              <span className="metadata-item">{formatParamCount(model.paramCountB)}</span>
               {model.architecture && (
                 <span className="metadata-item">{model.architecture}</span>
               )}
