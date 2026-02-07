@@ -36,13 +36,30 @@ export const formatNumber = (num: number): string => {
 
 /**
  * Format model parameter count (e.g., "7.0B", "500M")
- * @param paramCount - Parameter count in billions (e.g., 7.0 for 7B, 0.5 for 500M)
+ * For MoE models, show total with active count if available.
+ * @param paramCount - Parameter count in billions (total for MoE)
+ * @param expertUsedCount - Number of experts used (for MoE models)
+ * @param expertCount - Total number of experts (for MoE models)
  */
-export const formatParamCount = (paramCount: number): string => {
-  if (paramCount >= 1) {
-    return `${paramCount.toFixed(1)}B`;
+export const formatParamCount = (
+  paramCount: number,
+  expertUsedCount?: number,
+  expertCount?: number
+): string => {
+  const baseFormat = paramCount >= 1 
+    ? `${paramCount.toFixed(1)}B` 
+    : `${(paramCount * 1000).toFixed(0)}M`;
+
+  // For MoE models, calculate and show active parameters
+  if (expertCount && expertCount > 1 && expertUsedCount && expertUsedCount > 0) {
+    const activeParams = (expertUsedCount / expertCount) * paramCount;
+    const activeFormat = activeParams >= 1
+      ? `${activeParams.toFixed(1)}B`
+      : `${(activeParams * 1000).toFixed(0)}M`;
+    return `${baseFormat} (Active: ${activeFormat})`;
   }
-  return `${(paramCount * 1000).toFixed(0)}M`;
+
+  return baseFormat;
 };
 
 /**

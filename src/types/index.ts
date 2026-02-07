@@ -37,6 +37,9 @@ export interface GgufModel {
   architecture?: string;
   quantization?: string;
   contextLength?: number;
+  expertCount?: number;
+  expertUsedCount?: number;
+  expertSharedCount?: number;
   addedAt: string;
   hfRepoId?: string;
   tags?: string[];
