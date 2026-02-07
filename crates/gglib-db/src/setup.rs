@@ -142,6 +142,18 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         .await;
     // Ignore error if column already exists
 
+    // Migration: Add MoE (Mixture-of-Experts) metadata columns
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN expert_count INTEGER"#)
+        .execute(pool)
+        .await;
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN expert_used_count INTEGER"#)
+        .execute(pool)
+        .await;
+    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN expert_shared_count INTEGER"#)
+        .execute(pool)
+        .await;
+    // Ignore errors if columns already exist
+
     // Create settings table
     sqlx::query(
         r#"

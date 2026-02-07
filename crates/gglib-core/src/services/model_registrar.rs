@@ -70,6 +70,9 @@ impl ModelRegistrarPort for ModelRegistrar {
             .or_else(|| Some(download.quantization.to_string()));
         model.architecture = gguf_metadata.as_ref().and_then(|m| m.architecture.clone());
         model.context_length = gguf_metadata.as_ref().and_then(|m| m.context_length);
+        model.expert_count = gguf_metadata.as_ref().and_then(|m| m.expert_count);
+        model.expert_used_count = gguf_metadata.as_ref().and_then(|m| m.expert_used_count);
+        model.expert_shared_count = gguf_metadata.as_ref().and_then(|m| m.expert_shared_count);
         if let Some(ref meta) = gguf_metadata {
             model.metadata.clone_from(&meta.metadata);
         }
