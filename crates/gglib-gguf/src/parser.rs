@@ -103,9 +103,9 @@ fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
     let context_length = extract_context_length(raw, architecture.as_ref());
     let param_count_b = extract_param_count(raw, file_path);
     let quantization = extract_quantization(raw, file_path);
-    
+
     // Extract MoE metadata
-    let (expert_count, expert_used_count, expert_shared_count) = 
+    let (expert_count, expert_used_count, expert_shared_count) =
         extract_moe_metadata(raw, architecture.as_ref());
 
     GgufMetadata {
@@ -238,12 +238,11 @@ fn parse_param_label(size_label: &str) -> Option<f64> {
     if let Some(x_pos) = upper.find('X') {
         let before_x = &upper[..x_pos];
         let after_x = &upper[x_pos + 1..];
-        
+
         if let Some(expert_size_str) = after_x.strip_suffix('B') {
-            if let (Ok(expert_count), Ok(expert_size)) = (
-                before_x.parse::<f64>(),
-                expert_size_str.parse::<f64>(),
-            ) {
+            if let (Ok(expert_count), Ok(expert_size)) =
+                (before_x.parse::<f64>(), expert_size_str.parse::<f64>())
+            {
                 // Return total: expert_count × expert_size
                 return Some(expert_count * expert_size);
             }
@@ -337,12 +336,12 @@ mod tests {
         assert!((parse_param_label("7B").unwrap() - 7.0).abs() < f64::EPSILON);
         assert!((parse_param_label("13B").unwrap() - 13.0).abs() < f64::EPSILON);
         assert!((parse_param_label("70B").unwrap() - 70.0).abs() < f64::EPSILON);
-        
+
         // MoE models - should return TOTAL parameters (N × M)
         assert!((parse_param_label("8x7B").unwrap() - 56.0).abs() < f64::EPSILON);
         assert!((parse_param_label("64x2.6B").unwrap() - 166.4).abs() < 0.01);
         assert!((parse_param_label("512x2.5B").unwrap() - 1280.0).abs() < 0.01);
-        
+
         // Invalid
         assert!(parse_param_label("invalid").is_none());
     }
@@ -371,18 +370,24 @@ mod tests {
         raw2.insert("qwen2.context_length".to_string(), GgufValue::U64(32768));
         let arch2 = Some("qwen2".to_string());
         assert_eq!(extract_context_length(&raw2, arch2.as_ref()), Some(32768));
-        
+
         // Test with new architectures (deepseek2, qwen3next)
         let mut raw3 = HashMap::new();
-        raw3.insert("deepseek2.context_length".to_string(), GgufValue::U64(131072));
+        raw3.insert(
+            "deepseek2.context_length".to_string(),
+            GgufValue::U64(131072),
+        );
         let arch3 = Some("deepseek2".to_string());
         assert_eq!(extract_context_length(&raw3, arch3.as_ref()), Some(131072));
-        
+
         let mut raw4 = HashMap::new();
-        raw4.insert("qwen3next.context_length".to_string(), GgufValue::U32(131072));
+        raw4.insert(
+            "qwen3next.context_length".to_string(),
+            GgufValue::U32(131072),
+        );
         let arch4 = Some("qwen3next".to_string());
         assert_eq!(extract_context_length(&raw4, arch4.as_ref()), Some(131072));
-        
+
         // Test generic fallback
         let mut raw_generic = HashMap::new();
         raw_generic.insert("context_length".to_string(), GgufValue::U32(2048));
@@ -394,16 +399,19 @@ mod tests {
         let mut raw = HashMap::new();
         raw.insert("deepseek2.expert_count".to_string(), GgufValue::U32(64));
         raw.insert("deepseek2.expert_used_count".to_string(), GgufValue::U32(4));
-        raw.insert("deepseek2.expert_shared_count".to_string(), GgufValue::U32(1));
-        
+        raw.insert(
+            "deepseek2.expert_shared_count".to_string(),
+            GgufValue::U32(1),
+        );
+
         let arch = Some("deepseek2".to_string());
-        let (expert_count, expert_used_count, expert_shared_count) = 
+        let (expert_count, expert_used_count, expert_shared_count) =
             extract_moe_metadata(&raw, arch.as_ref());
-        
+
         assert_eq!(expert_count, Some(64));
         assert_eq!(expert_used_count, Some(4));
         assert_eq!(expert_shared_count, Some(1));
-        
+
         // Test with no architecture
         let (ec, euc, esc) = extract_moe_metadata(&raw, None);
         assert_eq!(ec, None);

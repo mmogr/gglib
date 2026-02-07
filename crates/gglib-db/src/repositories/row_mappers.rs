@@ -67,8 +67,14 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
             .map_err(|e| RepositoryError::Storage(e.to_string()))?,
         context_length,
         expert_count: row.try_get::<Option<u32>, _>("expert_count").ok().flatten(),
-        expert_used_count: row.try_get::<Option<u32>, _>("expert_used_count").ok().flatten(),
-        expert_shared_count: row.try_get::<Option<u32>, _>("expert_shared_count").ok().flatten(),
+        expert_used_count: row
+            .try_get::<Option<u32>, _>("expert_used_count")
+            .ok()
+            .flatten(),
+        expert_shared_count: row
+            .try_get::<Option<u32>, _>("expert_shared_count")
+            .ok()
+            .flatten(),
         metadata: serde_json::from_str(&metadata_json).unwrap_or_default(),
         added_at: parse_datetime(added_at_str).unwrap_or_else(Utc::now),
         hf_repo_id: row
