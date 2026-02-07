@@ -139,30 +139,29 @@ fn extract_architecture(raw: &RawMetadata) -> Option<String> {
         .map(std::string::ToString::to_string)
 }
 
-/// Extract MoE (Mixture-of-Experts) metadata from architecture-specific keys.
+/// Extract `MoE` (Mixture-of-Experts) metadata from architecture-specific keys.
 fn extract_moe_metadata(
     raw: &RawMetadata,
     architecture: Option<&String>,
 ) -> (Option<u32>, Option<u32>, Option<u32>) {
-    let arch = match architecture {
-        Some(a) => a,
-        None => return (None, None, None),
+    let Some(arch) = architecture else {
+        return (None, None, None);
     };
 
     let expert_count = raw
-        .get(&format!("{}.expert_count", arch))
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .get(&format!("{arch}.expert_count"))
+        .and_then(GgufValue::as_u64)
+        .and_then(|v| u32::try_from(v).ok());
 
     let expert_used_count = raw
-        .get(&format!("{}.expert_used_count", arch))
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .get(&format!("{arch}.expert_used_count"))
+        .and_then(GgufValue::as_u64)
+        .and_then(|v| u32::try_from(v).ok());
 
     let expert_shared_count = raw
-        .get(&format!("{}.expert_shared_count", arch))
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32);
+        .get(&format!("{arch}.expert_shared_count"))
+        .and_then(GgufValue::as_u64)
+        .and_then(|v| u32::try_from(v).ok());
 
     (expert_count, expert_used_count, expert_shared_count)
 }
@@ -171,7 +170,7 @@ fn extract_moe_metadata(
 fn extract_context_length(raw: &RawMetadata, architecture: Option<&String>) -> Option<u64> {
     // Try architecture-specific key first (e.g., "llama.context_length")
     if let Some(arch) = architecture {
-        let arch_key = format!("{}.context_length", arch);
+        let arch_key = format!("{arch}.context_length");
         if let Some(value) = raw.get(&arch_key) {
             if let Some(length) = value.as_u64() {
                 return Some(length);
@@ -229,7 +228,7 @@ fn extract_param_count(raw: &RawMetadata, file_path: &Path) -> Option<f64> {
 }
 
 /// Parse parameter count from size label (e.g., "7B", "13B", "70B", "8x7B").
-/// For MoE models ("NxM.MB" format), returns TOTAL parameters (N × M) for VRAM estimation.
+/// For `MoE` models ("NxM.MB" format), returns TOTAL parameters (N × M) for VRAM estimation.
 fn parse_param_label(size_label: &str) -> Option<f64> {
     let upper = size_label.to_uppercase();
 
@@ -375,18 +374,18 @@ mod tests {
         let mut raw3 = HashMap::new();
         raw3.insert(
             "deepseek2.context_length".to_string(),
-            GgufValue::U64(131072),
+            GgufValue::U64(131_072),
         );
         let arch3 = Some("deepseek2".to_string());
-        assert_eq!(extract_context_length(&raw3, arch3.as_ref()), Some(131072));
+        assert_eq!(extract_context_length(&raw3, arch3.as_ref()), Some(131_072));
 
         let mut raw4 = HashMap::new();
         raw4.insert(
             "qwen3next.context_length".to_string(),
-            GgufValue::U32(131072),
+            GgufValue::U32(131_072),
         );
         let arch4 = Some("qwen3next".to_string());
-        assert_eq!(extract_context_length(&raw4, arch4.as_ref()), Some(131072));
+        assert_eq!(extract_context_length(&raw4, arch4.as_ref()), Some(131_072));
 
         // Test generic fallback
         let mut raw_generic = HashMap::new();
@@ -413,10 +412,10 @@ mod tests {
         assert_eq!(expert_shared_count, Some(1));
 
         // Test with no architecture
-        let (ec, euc, esc) = extract_moe_metadata(&raw, None);
-        assert_eq!(ec, None);
-        assert_eq!(euc, None);
-        assert_eq!(esc, None);
+        let (count, used, shared) = extract_moe_metadata(&raw, None);
+        assert_eq!(count, None);
+        assert_eq!(used, None);
+        assert_eq!(shared, None);
     }
 
     #[test]

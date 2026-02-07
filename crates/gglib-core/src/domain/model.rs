@@ -60,11 +60,11 @@ pub struct Model {
     pub quantization: Option<String>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,
-    /// Number of experts (for MoE models).
+    /// Number of experts (for `MoE` models).
     pub expert_count: Option<u32>,
-    /// Number of experts used during inference (for MoE models).
+    /// Number of experts used during inference (for `MoE` models).
     pub expert_used_count: Option<u32>,
-    /// Number of shared experts (for MoE models).
+    /// Number of shared experts (for `MoE` models).
     pub expert_shared_count: Option<u32>,
     /// Additional metadata key-value pairs from the GGUF file.
     pub metadata: HashMap<String, String>,
@@ -111,11 +111,11 @@ pub struct NewModel {
     pub quantization: Option<String>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,
-    /// Number of experts (for MoE models).
+    /// Number of experts (for `MoE` models).
     pub expert_count: Option<u32>,
-    /// Number of experts used during inference (for MoE models).
+    /// Number of experts used during inference (for `MoE` models).
     pub expert_used_count: Option<u32>,
-    /// Number of shared experts (for MoE models).
+    /// Number of shared experts (for `MoE` models).
     pub expert_shared_count: Option<u32>,
     /// Additional metadata key-value pairs from the GGUF file.
     pub metadata: HashMap<String, String>,
