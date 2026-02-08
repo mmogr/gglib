@@ -147,11 +147,7 @@ impl AudioPlayback {
     /// Check whether audio is currently playing.
     #[must_use]
     pub fn is_playing(&self) -> bool {
-        if let Some(sink) = &self.sink {
-            !sink.empty()
-        } else {
-            false
-        }
+        self.sink.as_ref().is_some_and(|sink| !sink.empty())
     }
 
     /// Set playback volume (0.0 = muted, 1.0 = full).

@@ -120,6 +120,7 @@ impl SttEngine {
 
         // Threading
         if config.n_threads > 0 {
+            #[allow(clippy::cast_possible_wrap)]
             params.set_n_threads(config.n_threads as i32);
         }
 

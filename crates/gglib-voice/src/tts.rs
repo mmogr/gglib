@@ -34,7 +34,7 @@ pub struct TtsEngine {
 /// Configuration for the TTS engine.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TtsConfig {
-    /// Voice identifier (e.g., "af_sarah", "am_michael").
+    /// Voice identifier (e.g., `af_sarah`, `am_michael`).
     pub voice: String,
 
     /// Playback speed multiplier (0.5–2.0, default 1.0).
@@ -180,6 +180,7 @@ impl TtsEngine {
     }
 
     /// Set playback speed (0.5–2.0).
+    #[allow(clippy::missing_const_for_fn)] // f32::clamp is not const-stable
     pub fn set_speed(&mut self, speed: f32) {
         self.speed = speed.clamp(0.5, 2.0);
     }
@@ -262,7 +263,7 @@ fn voice(id: &str, name: &str, category: &str, gender: VoiceGender) -> VoiceInfo
     }
 }
 
-/// Convert a voice ID string (e.g., "af_sarah") to a `kokoro_tts::Voice` enum variant.
+/// Convert a voice ID string (e.g., `af_sarah`) to a `kokoro_tts::Voice` enum variant.
 fn voice_from_id(id: &str, speed: f32) -> Result<Voice, VoiceError> {
     match id {
         "af_alloy" => Ok(Voice::AfAlloy(speed)),

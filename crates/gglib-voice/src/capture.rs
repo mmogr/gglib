@@ -22,7 +22,7 @@ pub const WHISPER_SAMPLE_RATE: u32 = 16_000;
 /// audio is resampled to 16 kHz mono for direct consumption by whisper.
 pub struct AudioCapture {
     /// The active cpal input stream (None when not recording).
-    _stream: Option<Stream>,
+    stream: Option<Stream>,
 
     /// Shared buffer of captured samples (16 kHz mono f32).
     buffer: Arc<Mutex<Vec<f32>>>,
@@ -73,7 +73,7 @@ impl AudioCapture {
         );
 
         Ok(Self {
-            _stream: None,
+            stream: None,
             buffer: Arc::new(Mutex::new(Vec::new())),
             is_recording: Arc::new(AtomicBool::new(false)),
             echo_gate,
@@ -110,7 +110,7 @@ impl AudioCapture {
             .play()
             .map_err(|e| VoiceError::InputStreamError(e.to_string()))?;
 
-        self._stream = Some(stream);
+        self.stream = Some(stream);
         self.is_recording.store(true, Ordering::SeqCst);
         tracing::debug!("Audio recording started");
 
@@ -122,7 +122,7 @@ impl AudioCapture {
         self.is_recording.store(false, Ordering::SeqCst);
 
         // Drop the stream to stop capturing
-        self._stream = None;
+        self.stream = None;
 
         let raw_samples = {
             let mut buf = self
@@ -270,10 +270,15 @@ impl AudioCapture {
 
 /// Convert interleaved multi-channel audio to mono by averaging channels.
 fn stereo_to_mono(samples: &[f32], channels: u16) -> Vec<f32> {
-    let channels = channels as usize;
+    let ch = usize::from(channels);
     samples
-        .chunks_exact(channels)
-        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+        .chunks_exact(ch)
+        .map(|frame| {
+            let sum: f32 = frame.iter().sum();
+            #[allow(clippy::cast_precision_loss)]
+            let divisor = ch as f32;
+            sum / divisor
+        })
         .collect()
 }
 
@@ -320,9 +325,9 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>, V
             .map_err(|e| VoiceError::ResampleError(e.to_string()))?;
         if let Some(channel) = result.first() {
             // Only take the proportional amount of output
-            #[allow(clippy::cast_precision_loss)]
+            #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let output_len =
-                (remaining.len() as f64 * to_rate as f64 / from_rate as f64).ceil() as usize;
+                (remaining.len() as f64 * f64::from(to_rate) / f64::from(from_rate)).ceil() as usize;
             let take = output_len.min(channel.len());
             output.extend_from_slice(&channel[..take]);
         }

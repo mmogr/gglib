@@ -1,3 +1,4 @@
+#![allow(clippy::doc_markdown)] // Generated README contains unbackticked identifiers
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unused_crate_dependencies)]
 

@@ -181,7 +181,9 @@ pub struct VoicePipeline {
 // AudioCapture, which is only created/accessed through pipeline methods. On macOS
 // (CoreAudio) the stream is actually thread-safe; the !Send marker is a conservative
 // cross-platform constraint in cpal.
+#[allow(unsafe_code, clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for VoicePipeline {}
+#[allow(unsafe_code, clippy::non_send_fields_in_send_ty)]
 unsafe impl Sync for VoicePipeline {}
 
 impl VoicePipeline {
@@ -212,13 +214,13 @@ impl VoicePipeline {
 
     /// Get the current pipeline state.
     #[must_use]
-    pub fn state(&self) -> VoiceState {
+    pub const fn state(&self) -> VoiceState {
         self.state
     }
 
     /// Get the interaction mode.
     #[must_use]
-    pub fn mode(&self) -> VoiceInteractionMode {
+    pub const fn mode(&self) -> VoiceInteractionMode {
         self.mode
     }
 
@@ -321,13 +323,13 @@ impl VoicePipeline {
 
     /// Check whether the STT engine is loaded and ready.
     #[must_use]
-    pub fn is_stt_loaded(&self) -> bool {
+    pub const fn is_stt_loaded(&self) -> bool {
         self.stt.is_some()
     }
 
     /// Check whether the TTS engine is loaded and ready.
     #[must_use]
-    pub fn is_tts_loaded(&self) -> bool {
+    pub const fn is_tts_loaded(&self) -> bool {
         self.tts.is_some()
     }
 
@@ -471,7 +473,7 @@ impl VoicePipeline {
     /// Check if TTS playback is currently active.
     #[must_use]
     pub fn is_speaking(&self) -> bool {
-        self.playback.as_ref().is_some_and(|p| p.is_playing())
+        self.playback.as_ref().is_some_and(AudioPlayback::is_playing)
     }
 
     // ── Configuration ──────────────────────────────────────────────
@@ -526,12 +528,12 @@ impl VoicePipeline {
 
     /// Get whether auto-speak is enabled.
     #[must_use]
-    pub fn auto_speak(&self) -> bool {
+    pub const fn auto_speak(&self) -> bool {
         self.config.auto_speak
     }
 
     /// Set whether LLM responses should automatically be spoken.
-    pub fn set_auto_speak(&mut self, auto_speak: bool) {
+    pub const fn set_auto_speak(&mut self, auto_speak: bool) {
         self.config.auto_speak = auto_speak;
     }
 
@@ -610,7 +612,10 @@ mod tests {
 
     #[test]
     fn audio_level_calculation() {
-        assert_eq!(calculate_audio_level(&[]), 0.0);
+        #[allow(clippy::float_cmp)]
+        {
+            assert_eq!(calculate_audio_level(&[]), 0.0);
+        }
         assert!(calculate_audio_level(&[0.1, 0.1, 0.1]) < 0.5);
         assert!(calculate_audio_level(&[0.3, 0.3, 0.3]) > 0.9);
     }

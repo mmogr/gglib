@@ -1,8 +1,8 @@
 //! Voice model catalog — curated list of STT and TTS models.
 //!
-//! Rather than extending the HuggingFace browser (which is GGUF-specific),
+//! Rather than extending the `HuggingFace` browser (which is GGUF-specific),
 //! voice models use a curated catalog with deterministic download URLs.
-//! All whisper models come from `ggerganov/whisper.cpp` on HuggingFace.
+//! All whisper models come from `ggerganov/whisper.cpp` on `HuggingFace`.
 //! Kokoro TTS model files come from the `kokoro-tts` releases.
 
 use std::path::{Path, PathBuf};
@@ -33,7 +33,7 @@ pub struct SttModelInfo {
     /// Human-readable name.
     pub name: String,
 
-    /// Filename on HuggingFace (e.g., "ggml-base.en.bin").
+    /// Filename on `HuggingFace` (e.g., `ggml-base.en.bin`).
     pub filename: String,
 
     /// Download URL.
@@ -105,6 +105,7 @@ pub struct VoiceModelCatalog;
 impl VoiceModelCatalog {
     /// Get all available STT (whisper) models.
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn stt_models() -> Vec<SttModelInfo> {
         vec![
             stt_model(
@@ -369,7 +370,7 @@ pub async fn download_voice_model(
     if !response.status().is_success() {
         return Err(crate::error::VoiceError::DownloadError {
             name: url.to_string(),
-            source: anyhow::anyhow!("HTTP {}", response.status()).into(),
+            source: anyhow::anyhow!("HTTP {}", response.status()),
         });
     }
 
@@ -422,16 +423,16 @@ pub async fn ensure_tts_model(
     let model_path = VoiceModelCatalog::tts_model_path()?;
     let voices_path = VoiceModelCatalog::tts_voices_path()?;
 
-    if !model_path.exists() {
-        download_voice_model(&tts.model_url, &model_path, on_progress.clone()).await?;
-    } else {
+    if model_path.exists() {
         tracing::debug!(path = %model_path.display(), "TTS model already downloaded");
+    } else {
+        download_voice_model(&tts.model_url, &model_path, on_progress.clone()).await?;
     }
 
-    if !voices_path.exists() {
-        download_voice_model(&tts.voices_url, &voices_path, on_progress).await?;
-    } else {
+    if voices_path.exists() {
         tracing::debug!(path = %voices_path.display(), "TTS voices already downloaded");
+    } else {
+        download_voice_model(&tts.voices_url, &voices_path, on_progress).await?;
     }
 
     Ok((model_path, voices_path))
@@ -439,6 +440,7 @@ pub async fn ensure_tts_model(
 
 // ── Internal helpers ───────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn stt_model(
     id: &str,
     name: &str,

@@ -163,7 +163,7 @@ impl VoiceActivityDetector {
         let is_speech = energy > energy_threshold_from_vad_threshold(self.config.threshold);
 
         // Frame duration in ms
-        #[allow(clippy::cast_precision_loss)]
+        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let frame_duration_ms = (frame.len() as f32 / self.sample_rate as f32 * 1000.0) as u32;
 
         match self.state {
@@ -182,26 +182,24 @@ impl VoiceActivityDetector {
                         );
                         return Some(VadEvent::SpeechStart);
                     }
-                } else {
+                } else if self.speech_frame_count > 0 {
                     // Reset speech counter if silence interrupts before min duration
-                    if self.speech_frame_count > 0 {
-                        self.speech_frame_count = 0;
-                        self.speech_buffer.clear();
-                    }
+                    self.speech_frame_count = 0;
+                    self.speech_buffer.clear();
                 }
             }
 
             VadState::SpeechDetected => {
                 self.speech_buffer.extend_from_slice(frame);
 
-                if !is_speech {
+                if is_speech {
+                    // Reset silence counter — speech resumed
+                    self.silence_frame_count = 0;
+                } else {
                     self.silence_frame_count += frame_duration_ms;
                     if self.silence_frame_count >= self.config.min_silence_duration_ms {
                         self.state = VadState::SilenceAfterSpeech;
                     }
-                } else {
-                    // Reset silence counter — speech resumed
-                    self.silence_frame_count = 0;
                 }
             }
 
@@ -233,12 +231,12 @@ impl VoiceActivityDetector {
 
     /// Get the current VAD state.
     #[must_use]
-    pub fn state(&self) -> VadState {
+    pub const fn state(&self) -> VadState {
         self.state
     }
 
     /// Update VAD configuration.
-    pub fn set_config(&mut self, config: VadConfig) {
+    pub const fn set_config(&mut self, config: VadConfig) {
         self.config = config;
     }
 }
@@ -263,9 +261,9 @@ fn calculate_rms_energy(samples: &[f32]) -> f32 {
 fn energy_threshold_from_vad_threshold(vad_threshold: f32) -> f32 {
     // Map [0.0, 1.0] → [0.001, 0.05] RMS energy range
     // 0.01 is a reasonable default for normal speech
-    let min_energy = 0.001;
-    let max_energy = 0.05;
-    min_energy + (max_energy - min_energy) * vad_threshold
+    let min_energy: f32 = 0.001;
+    let max_energy: f32 = 0.05;
+    (max_energy - min_energy).mul_add(vad_threshold, min_energy)
 }
 
 #[cfg(test)]
@@ -288,6 +286,7 @@ mod tests {
         gate.start_speaking();
 
         // Send loud audio — should be ignored
+        #[allow(clippy::cast_precision_loss)]
         let loud_frame: Vec<f32> = (0..1600).map(|i| (i as f32 * 0.1).sin() * 0.5).collect();
         let event = vad.process_frame(&loud_frame);
         assert!(event.is_none());

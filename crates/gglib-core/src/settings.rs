@@ -64,7 +64,7 @@ pub struct Settings {
     /// Selected whisper STT model ID (e.g., "base.en", "small.en-q5_1").
     pub voice_stt_model: Option<String>,
 
-    /// Selected TTS voice ID (e.g., "af_sarah", "am_michael").
+    /// Selected TTS voice ID (e.g., `af_sarah`, `am_michael`).
     pub voice_tts_voice: Option<String>,
 
     /// TTS playback speed multiplier (0.5–2.0, default 1.0).
