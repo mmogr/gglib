@@ -450,6 +450,7 @@ export default function ChatPage({
               showToast={showToast}
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
+              voice={voice}
             />
           </div>
         </div>

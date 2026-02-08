@@ -82,6 +82,11 @@
   flex-shrink: 0;
 }
 
+/* Voice mode active indicator */
+.chat-header-actions .voice-active {
+  color: var(--color-error, #f38ba8);
+}
+
 /* Generate title button spinner */
 .icon-btn.generating {
   pointer-events: none;

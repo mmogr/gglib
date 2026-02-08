@@ -1,31 +1,5 @@
 /* VoiceOverlay — floating voice controls at the bottom of the chat. */
 
-/* Floating mic button (shown when voice mode is inactive) */
-.micButton {
-  position: fixed;
-  bottom: var(--spacing-lg, 16px);
-  right: var(--spacing-lg, 16px);
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 1px solid var(--color-border, #313244);
-  background: var(--color-surface, #1e1e2e);
-  color: var(--color-text, #cdd6f4);
-  font-size: 1.4rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  transition: background 150ms ease, transform 150ms ease;
-}
-
-.micButton:hover {
-  background: var(--color-surface-hover, #2a2a3e);
-  transform: scale(1.08);
-}
-
 .overlay {
   position: fixed;
   bottom: var(--spacing-lg, 16px);

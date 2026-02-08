@@ -9,7 +9,7 @@ import {
   useComposerRuntime,
 } from '@assistant-ui/react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
-import { AlertTriangle, Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
+import { AlertTriangle, Download, Mic, MicOff, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { getMessages, deleteMessage, saveMessage, updateMessage } from '../../services/clients/chat';
 import type { ConversationSummary } from '../../services/clients/chat';
@@ -33,6 +33,7 @@ import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import { DeepResearchProvider } from './context/DeepResearchContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
+import type { UseVoiceModeReturn } from '../../hooks/useVoiceMode';
 import { DeepResearchToggle } from '../DeepResearch';
 import { useDeepResearch } from '../../hooks/useDeepResearch';
 import type { ResearchState } from '../../hooks/useDeepResearch/types';
@@ -63,6 +64,8 @@ interface ChatMessagesPanelProps {
   showToast: (message: string, type?: ToastType, duration?: number) => void;
   timingTracker: ReasoningTimingTracker | null;
   currentStreamingAssistantMessageId: string | null;
+  /** Voice mode hook return (optional — only in Tauri) */
+  voice?: UseVoiceModeReturn;
 }
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
@@ -83,6 +86,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   showToast,
   timingTracker,
   currentStreamingAssistantMessageId,
+  voice,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const composerRuntime = useComposerRuntime({ optional: true });
@@ -594,6 +598,18 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         </div>
         <div className="chat-header-actions">
           <ToolsPopover />
+          {voice?.isSupported && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cx(voice.isActive && 'voice-active')}
+              onClick={() => voice.isActive ? voice.stop() : voice.start()}
+              title={voice.isActive ? 'Stop voice mode' : 'Start voice mode'}
+              iconOnly
+            >
+              <Icon icon={voice.isActive ? MicOff : Mic} size={14} />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={onClearConversation} title="Restart conversation" iconOnly>
             <Icon icon={RotateCcw} size={14} />
           </Button>

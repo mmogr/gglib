@@ -49,7 +49,6 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
     error,
     sttLoaded,
     ttsLoaded,
-    start,
     pttStart,
     pttStop,
     stop,
@@ -104,21 +103,8 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
     pttStop();
   }, [pttStop]);
 
-  // Don't render anything outside Tauri
-  if (!isSupported) return null;
-
-  // Show floating mic button when voice mode is not active
-  if (!isActive) {
-    return (
-      <button
-        className={styles.micButton}
-        onClick={() => start()}
-        title="Start voice mode"
-      >
-        🎙️
-      </button>
-    );
-  }
+  // Don't render anything outside Tauri, or when voice mode is not active
+  if (!isSupported || !isActive) return null;
 
   const stateLabel = STATE_LABELS[voiceState] ?? voiceState;
   const stateIcon = STATE_ICONS[voiceState] ?? '🎙️';
