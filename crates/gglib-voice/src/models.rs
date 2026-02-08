@@ -267,9 +267,9 @@ impl VoiceModelCatalog {
             id: VoiceModelId("kokoro-v1.0".to_string()),
             name: "Kokoro v1.0 (82M)".to_string(),
             model_filename: "kokoro-v1.0.onnx".to_string(),
-            voices_filename: "voices-v1.0.bin".to_string(),
+            voices_filename: "voices.bin".to_string(),
             model_url: format!("{KOKORO_RELEASE_BASE}/V1.0/kokoro-v1.0.onnx"),
-            voices_url: format!("{KOKORO_RELEASE_BASE}/V1.0/voices-v1.0.bin"),
+            voices_url: format!("{KOKORO_RELEASE_BASE}/V1.0/voices.bin"),
             size_bytes: 330_000_000,
             size_display: "~330 MB".to_string(),
             voice_count: 27,
@@ -362,6 +362,13 @@ pub async fn download_voice_model(
             name: url.to_string(),
             source: e.into(),
         })?;
+
+    if !response.status().is_success() {
+        return Err(crate::error::VoiceError::DownloadError {
+            name: url.to_string(),
+            source: anyhow::anyhow!("HTTP {}", response.status()).into(),
+        });
+    }
 
     let total_size = response.content_length().unwrap_or(0);
 
