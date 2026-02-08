@@ -86,7 +86,7 @@ export default function ChatPage({
   const maxStagnationSteps = settings?.maxStagnationSteps ?? undefined;
 
   // Runtime - now with external message state
-  const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
+  const { runtime, messages, setMessages, isRunning, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
@@ -102,6 +102,40 @@ export default function ChatPage({
 
   // Voice mode
   const voice = useVoiceMode();
+
+  // Send voice transcript as a chat message
+  const handleVoiceTranscript = useCallback((text: string) => {
+    if (!text.trim()) return;
+    runtime.thread.append({
+      role: 'user',
+      content: [{ type: 'text', text }],
+    });
+  }, [runtime]);
+
+  // Auto-speak: when the LLM finishes responding, speak the last assistant message
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    if (wasRunningRef.current && !isRunning && voice.isActive && voice.autoSpeak && voice.ttsLoaded) {
+      // Find the last assistant message and extract text
+      const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+      if (lastAssistant) {
+        const content = lastAssistant.content;
+        let text = '';
+        if (typeof content === 'string') {
+          text = content;
+        } else if (Array.isArray(content)) {
+          text = content
+            .filter((p): p is { type: 'text'; text: string } => (p as { type: string }).type === 'text')
+            .map(p => p.text)
+            .join(' ');
+        }
+        if (text.trim()) {
+          voice.speak(text);
+        }
+      }
+    }
+    wasRunningRef.current = isRunning;
+  }, [isRunning, voice, messages]);
 
   // Track previous status for transition-only toast
   const prevStatusRef = useRef(serverState?.status);
@@ -420,7 +454,7 @@ export default function ChatPage({
         </div>
 
         {/* Voice overlay (floating controls when voice mode is active) */}
-        <VoiceOverlay voice={voice} />
+        <VoiceOverlay voice={voice} onTranscript={handleVoiceTranscript} />
       </AssistantRuntimeProvider>
 
       {/* Console Tab Content - always mounted, hidden when not active */}
