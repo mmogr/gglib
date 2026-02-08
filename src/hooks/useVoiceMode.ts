@@ -105,13 +105,13 @@ export interface UseVoiceModeReturn {
   /** Toggle auto-speak */
   setAutoSpeak: (enabled: boolean) => Promise<void>;
   /** Download an STT model */
-  downloadSttModel: (modelId: string) => Promise<string>;
+  downloadSttModel: (modelId: string) => Promise<void>;
   /** Download the TTS model */
-  downloadTtsModel: () => Promise<string>;
-  /** Load an STT model from disk */
-  loadStt: (modelPath: string) => Promise<void>;
-  /** Load TTS model from disk */
-  loadTts: (modelDir: string) => Promise<void>;
+  downloadTtsModel: () => Promise<void>;
+  /** Load an STT model by ID */
+  loadStt: (modelId: string) => Promise<void>;
+  /** Load TTS model */
+  loadTts: () => Promise<void>;
   /** Refresh available models and devices */
   refreshModels: () => Promise<void>;
   /** Clear the current error */
@@ -329,7 +329,7 @@ export function useVoiceMode(): UseVoiceModeReturn {
   const downloadSttModelAction = useCallback(async (modelId: string) => {
     try {
       setError(null);
-      return await voiceDownloadSttModel(modelId);
+      await voiceDownloadSttModel(modelId);
     } catch (e) {
       setError(String(e));
       throw e;
@@ -339,27 +339,27 @@ export function useVoiceMode(): UseVoiceModeReturn {
   const downloadTtsModelAction = useCallback(async () => {
     try {
       setError(null);
-      return await voiceDownloadTtsModel();
+      await voiceDownloadTtsModel();
     } catch (e) {
       setError(String(e));
       throw e;
     }
   }, []);
 
-  const loadStt = useCallback(async (modelPath: string) => {
+  const loadStt = useCallback(async (modelId: string) => {
     try {
       setError(null);
-      await voiceLoadStt(modelPath);
+      await voiceLoadStt(modelId);
       setSttLoaded(true);
     } catch (e) {
       setError(String(e));
     }
   }, []);
 
-  const loadTts = useCallback(async (modelDir: string) => {
+  const loadTts = useCallback(async () => {
     try {
       setError(null);
-      await voiceLoadTts(modelDir);
+      await voiceLoadTts();
       setTtsLoaded(true);
     } catch (e) {
       setError(String(e));

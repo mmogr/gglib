@@ -30,27 +30,32 @@ pub mod event_names {
 // ── Event payloads ─────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoiceStatePayload {
     pub state: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoiceTranscriptPayload {
     pub text: String,
     pub is_final: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoiceAudioLevelPayload {
     pub level: f32,
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoiceErrorPayload {
     pub message: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelDownloadProgressPayload {
     pub model_id: String,
     pub bytes_downloaded: u64,
@@ -61,8 +66,9 @@ pub struct ModelDownloadProgressPayload {
 // ── Status / info types ────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoiceStatusResponse {
-    pub active: bool,
+    pub is_active: bool,
     pub state: String,
     pub mode: String,
     pub stt_loaded: bool,
@@ -73,6 +79,7 @@ pub struct VoiceStatusResponse {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoiceModelsResponse {
     pub stt_models: Vec<SttModelInfo>,
     pub stt_downloaded: Vec<String>,
@@ -213,7 +220,7 @@ pub async fn voice_status(state: tauri::State<'_, AppState>) -> Result<VoiceStat
     let voice = state.voice_pipeline.read().await;
     match voice.as_ref() {
         Some(pipeline) => Ok(VoiceStatusResponse {
-            active: pipeline.is_active(),
+            is_active: pipeline.is_active(),
             state: voice_state_string(pipeline.state()),
             mode: mode_string(pipeline.mode()),
             stt_loaded: pipeline.is_stt_loaded(),
@@ -223,7 +230,7 @@ pub async fn voice_status(state: tauri::State<'_, AppState>) -> Result<VoiceStat
             auto_speak: pipeline.auto_speak(),
         }),
         None => Ok(VoiceStatusResponse {
-            active: false,
+            is_active: false,
             state: "idle".to_string(),
             mode: "ptt".to_string(),
             stt_loaded: false,

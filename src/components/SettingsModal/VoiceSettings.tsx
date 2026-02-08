@@ -32,8 +32,8 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
   const handleDownloadStt = useCallback(async () => {
     try {
       setDownloading('stt');
-      const path = await voice.downloadSttModel(selectedSttModel);
-      await voice.loadStt(path);
+      await voice.downloadSttModel(selectedSttModel);
+      await voice.loadStt(selectedSttModel);
     } catch {
       // Error handled by the hook
     } finally {
@@ -44,8 +44,8 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
   const handleDownloadTts = useCallback(async () => {
     try {
       setDownloading('tts');
-      const path = await voice.downloadTtsModel();
-      await voice.loadTts(path);
+      await voice.downloadTtsModel();
+      await voice.loadTts();
     } catch {
       // Error handled by the hook
     } finally {
@@ -112,7 +112,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             >
               {voice.models?.sttModels?.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} ({m.size}) {m.isQuantized ? '⚡' : ''}
+                  {m.name} ({m.sizeDisplay}) {m.englishOnly ? '🇺🇸' : '🌐'}
                 </option>
               )) ?? <option>Loading...</option>}
             </Select>
@@ -139,7 +139,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           <label className={styles.label}>TTS Model</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
-              {voice.models?.ttsModel?.modelName ?? 'Kokoro TTS'}
+              {voice.models?.ttsModel?.name ?? 'Kokoro TTS'}
             </span>
             <Button
               onClick={handleDownloadTts}
@@ -158,9 +158,9 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             value={selectedVoice}
             onChange={(e) => handleVoiceChange(e.target.value)}
           >
-            {voice.models?.availableVoices?.map((v) => (
+            {voice.models?.voices?.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.name} ({v.accent}, {v.gender})
+                {v.name} ({v.category})
               </option>
             )) ?? <option>Loading...</option>}
           </Select>
@@ -232,7 +232,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         <div className={styles.section}>
           <p className={styles.description}>
             Downloading {voice.downloadProgress.modelId}…{' '}
-            {(voice.downloadProgress.progress * 100).toFixed(0)}%
+            {voice.downloadProgress.percent.toFixed(0)}%
           </p>
           <div style={{
             width: '100%',
@@ -242,7 +242,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             overflow: 'hidden',
           }}>
             <div style={{
-              width: `${voice.downloadProgress.progress * 100}%`,
+              width: `${voice.downloadProgress.percent}%`,
               height: '100%',
               background: 'var(--color-accent)',
               borderRadius: 2,

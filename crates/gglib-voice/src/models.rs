@@ -25,6 +25,7 @@ impl std::fmt::Display for VoiceModelId {
 
 /// Information about a whisper STT model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SttModelInfo {
     /// Model identifier (e.g., "base.en").
     pub id: VoiceModelId,
@@ -59,6 +60,7 @@ pub struct SttModelInfo {
 
 /// Information about a TTS model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TtsModelInfo {
     /// Model identifier.
     pub id: VoiceModelId,

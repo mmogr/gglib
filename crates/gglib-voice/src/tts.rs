@@ -52,6 +52,7 @@ impl Default for TtsConfig {
 
 /// Information about an available TTS voice.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoiceInfo {
     /// Voice identifier (used in API calls).
     pub id: String,
@@ -68,6 +69,7 @@ pub struct VoiceInfo {
 
 /// Voice gender.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum VoiceGender {
     Female,
     Male,

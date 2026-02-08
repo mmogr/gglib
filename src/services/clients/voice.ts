@@ -35,28 +35,41 @@ export interface VoiceStatusResponse {
 export interface SttModelInfo {
   id: string;
   name: string;
-  size: string;
-  description: string;
-  isQuantized: boolean;
+  filename: string;
+  url: string;
+  sizeBytes: number;
+  sizeDisplay: string;
+  englishOnly: boolean;
+  quality: number;
+  speed: number;
+  isDefault: boolean;
 }
 
 export interface TtsModelInfo {
-  modelName: string;
-  modelDescription: string;
+  id: string;
+  name: string;
+  modelFilename: string;
+  voicesFilename: string;
+  modelUrl: string;
+  voicesUrl: string;
+  sizeBytes: number;
+  sizeDisplay: string;
+  voiceCount: number;
 }
 
 export interface VoiceInfo {
   id: string;
   name: string;
-  language: string;
-  accent: string;
+  category: string;
   gender: string;
 }
 
 export interface VoiceModelsResponse {
   sttModels: SttModelInfo[];
+  sttDownloaded: string[];
   ttsModel: TtsModelInfo;
-  availableVoices: VoiceInfo[];
+  ttsDownloaded: boolean;
+  voices: VoiceInfo[];
 }
 
 export interface AudioDeviceInfo {
@@ -85,8 +98,8 @@ export interface VoiceErrorPayload {
 export interface ModelDownloadProgressPayload {
   modelId: string;
   bytesDownloaded: number;
-  totalBytes: number | null;
-  progress: number;
+  totalBytes: number;
+  percent: number;
 }
 
 // ── Tauri IPC helper ───────────────────────────────────────────────
@@ -144,20 +157,20 @@ export async function voiceListModels(): Promise<VoiceModelsResponse> {
   return invokeTauri('voice_list_models');
 }
 
-export async function voiceDownloadSttModel(modelId: string): Promise<string> {
-  return invokeTauri('voice_download_stt_model', { modelId });
+export async function voiceDownloadSttModel(modelId: string): Promise<void> {
+  await invokeTauri('voice_download_stt_model', { modelId });
 }
 
-export async function voiceDownloadTtsModel(): Promise<string> {
-  return invokeTauri('voice_download_tts_model');
+export async function voiceDownloadTtsModel(): Promise<void> {
+  await invokeTauri('voice_download_tts_model');
 }
 
-export async function voiceLoadStt(modelPath: string): Promise<void> {
-  await invokeTauri('voice_load_stt', { modelPath });
+export async function voiceLoadStt(modelId: string): Promise<void> {
+  await invokeTauri('voice_load_stt', { modelId });
 }
 
-export async function voiceLoadTts(modelDir: string): Promise<void> {
-  await invokeTauri('voice_load_tts', { modelDir });
+export async function voiceLoadTts(): Promise<void> {
+  await invokeTauri('voice_load_tts');
 }
 
 // ── Configuration ──────────────────────────────────────────────────

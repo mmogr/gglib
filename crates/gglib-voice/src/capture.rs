@@ -42,6 +42,7 @@ pub struct AudioCapture {
 
 /// Information about an available audio input device.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AudioDeviceInfo {
     /// Human-readable device name.
     pub name: String,
