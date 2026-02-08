@@ -5,7 +5,7 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import {
   cancelShardGroup,
   removeFromQueue,
-  reorderQueue,
+  reorderQueueItem,
 } from '../../services/clients/downloads';
 import type { DownloadQueueItem } from '../../services/transport/types/downloads';
 import { Icon } from '../ui/Icon';
@@ -115,16 +115,15 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
 
   // Move item up in queue (swap with previous item)
   const handleMoveUp = useCallback(async (index: number) => {
-    if (isProcessing || index === 0) return;
+    if (isProcessing || index === 0) return; // Can't move first item up
     
     setIsProcessing(true);
     
-    // Build new order by swapping current item with the one above
-    const newOrder = groupedItems.map(item => item.id);
-    [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+    const item = groupedItems[index];
+    const newPosition = item.position - 1; // Move to previous position
     
     try {
-      await reorderQueue(newOrder);
+      await reorderQueueItem(item.id, newPosition);
       onRefresh?.();
     } catch (error) {
       appLogger.error('component.download', 'Failed to reorder queue', { error });
@@ -135,16 +134,15 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
 
   // Move item down in queue (swap with next item)
   const handleMoveDown = useCallback(async (index: number) => {
-    if (isProcessing || index >= groupedItems.length - 1) return;
+    if (isProcessing || index >= groupedItems.length - 1) return; // Can't move last item down
     
     setIsProcessing(true);
     
-    // Build new order by swapping current item with the one below
-    const newOrder = groupedItems.map(item => item.id);
-    [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+    const item = groupedItems[index];
+    const newPosition = item.position + 1; // Move to next position
     
     try {
-      await reorderQueue(newOrder);
+      await reorderQueueItem(item.id, newPosition);
       onRefresh?.();
     } catch (error) {
       appLogger.error('component.download', 'Failed to reorder queue', { error });

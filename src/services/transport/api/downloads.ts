@@ -63,3 +63,17 @@ export async function cancelShardGroup(groupId: string): Promise<void> {
 export async function reorderQueue(ids: DownloadId[]): Promise<void> {
   await post<void>('/api/downloads/reorder-full', { ids });
 }
+
+/**
+ * Reorder a single download to a specific position.
+ * @param id - Download ID to reorder
+ * @param position - Target 1-based position in queue
+ * @returns Actual position after reorder
+ */
+export async function reorderQueueItem(id: DownloadId, position: number): Promise<number> {
+  const response = await post<number>('/api/downloads/reorder', {
+    model_id: id,
+    position,
+  });
+  return response;
+}

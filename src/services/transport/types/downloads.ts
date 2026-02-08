@@ -104,4 +104,7 @@ export interface DownloadsTransport {
 
   /** Reorder downloads in the queue. */
   reorderQueue(ids: DownloadId[]): Promise<void>;
+
+  /** Reorder a single download to a specific position. */
+  reorderQueueItem(id: DownloadId, position: number): Promise<number>;
 }

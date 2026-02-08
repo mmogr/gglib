@@ -63,3 +63,10 @@ export async function cancelShardGroup(groupId: string): Promise<void> {
 export async function reorderQueue(ids: DownloadId[]): Promise<void> {
   return getTransport().reorderQueue(ids);
 }
+
+/**
+ * Reorder a single download to a specific position.
+ */
+export async function reorderQueueItem(id: DownloadId, position: number): Promise<number> {
+  return getTransport().reorderQueueItem(id, position);
+}
