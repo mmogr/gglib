@@ -190,8 +190,8 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             value={voice.mode}
             onChange={(e) => handleModeChange(e.target.value)}
           >
-            <option value="push_to_talk">Push to Talk (Space bar)</option>
-            <option value="voice_activity_detection">Voice Activity Detection (hands-free)</option>
+            <option value="ptt">Push to Talk (Space bar)</option>
+            <option value="vad">Voice Activity Detection (hands-free)</option>
           </Select>
         </div>
 

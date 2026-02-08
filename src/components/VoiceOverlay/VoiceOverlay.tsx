@@ -66,7 +66,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
 
   // Keyboard shortcut: Space for PTT
   useEffect(() => {
-    if (!isActive || mode !== 'push_to_talk') return;
+    if (!isActive || mode !== 'ptt') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only trigger on Space when not in an input/textarea
@@ -141,7 +141,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       </div>
 
       {/* PTT button (only in PTT mode) */}
-      {mode === 'push_to_talk' && modelsReady && (
+      {mode === 'ptt' && modelsReady && (
         <button
           className={`${styles.pttButton} ${isPttHeld ? styles.pttActive : ''}`}
           onMouseDown={handlePttMouseDown}

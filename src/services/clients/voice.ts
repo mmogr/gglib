@@ -21,7 +21,7 @@ export type VoiceState =
   | 'speaking'
   | 'error';
 
-export type VoiceInteractionMode = 'push_to_talk' | 'voice_activity_detection';
+export type VoiceInteractionMode = 'ptt' | 'vad';
 
 export interface VoiceStatusResponse {
   isActive: boolean;
