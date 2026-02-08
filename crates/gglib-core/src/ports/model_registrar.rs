@@ -34,7 +34,7 @@ pub struct CompletedDownload {
     pub total_bytes: u64,
     /// Ordered list of all file paths for sharded models (None for single-file models).
     pub file_paths: Option<Vec<std::path::PathBuf>>,
-    /// HuggingFace tags for the model.
+    /// `HuggingFace` tags for the model.
     pub hf_tags: Vec<String>,
 }
 

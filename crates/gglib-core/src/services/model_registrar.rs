@@ -41,7 +41,7 @@ impl ModelRegistrar {
         }
     }
 
-    /// Filter HuggingFace tags using a blocklist.
+    /// Filter `HuggingFace` tags using a blocklist.
     ///
     /// Removes noisy tags like `gguf`, `arxiv:*`, `region:*`, `license:*`, `dataset:*`.
     fn filter_hf_tags(tags: &[String]) -> Vec<String> {
@@ -61,7 +61,7 @@ impl ModelRegistrar {
     /// Merge GGUF-derived tags with filtered HF tags, removing duplicates.
     ///
     /// GGUF-derived tags are prioritized (appear first in the result).
-    fn merge_tags(gguf_tags: Vec<String>, hf_tags: Vec<String>) -> Vec<String> {
+    fn merge_tags(gguf_tags: Vec<String>, hf_tags: &[String]) -> Vec<String> {
         use std::collections::HashSet;
 
         let mut seen = HashSet::new();
@@ -75,7 +75,7 @@ impl ModelRegistrar {
         }
 
         // Add filtered HF tags
-        for tag in Self::filter_hf_tags(&hf_tags) {
+        for tag in Self::filter_hf_tags(hf_tags) {
             if seen.insert(tag.clone()) {
                 result.push(tag);
             }
@@ -128,15 +128,13 @@ impl ModelRegistrarPort for ModelRegistrar {
         model.file_paths.clone_from(&download.file_paths);
 
         // Auto-detect capabilities from metadata and merge with HF tags
-        let gguf_tags = if let Some(ref meta) = gguf_metadata {
+        let gguf_tags = gguf_metadata.as_ref().map_or_else(Vec::new, |meta| {
             let capabilities = self.gguf_parser.detect_capabilities(meta);
             capabilities.to_tags()
-        } else {
-            vec![]
-        };
+        });
 
         // Merge GGUF-derived tags with filtered HF tags (deduplicated)
-        model.tags = Self::merge_tags(gguf_tags, download.hf_tags.clone());
+        model.tags = Self::merge_tags(gguf_tags, &download.hf_tags);
 
         // Infer model capabilities from chat template
         let template = model.metadata.get("tokenizer.chat_template");
