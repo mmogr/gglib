@@ -5,7 +5,7 @@ import {
   ActionBarPrimitive,
   useMessage,
 } from '@assistant-ui/react';
-import { Bot, Copy, Pencil, Trash2, User as UserIcon } from 'lucide-react';
+import { Bot, Copy, Mic, Pencil, Trash2, User as UserIcon, Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 import { parseThinkingContent } from '../../../utils/thinkingParser';
@@ -41,6 +41,14 @@ function isDeepResearchMessage(message: ReturnType<typeof useMessage>): boolean 
 }
 
 /**
+ * Check if a message originated from voice input/output.
+ */
+function isVoiceMessage(message: ReturnType<typeof useMessage>): boolean {
+  const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
+  return custom?.isVoice === true;
+}
+
+/**
  * Message bubble for assistant responses.
  * Handles thinking blocks, markdown rendering, and deep research artifacts.
  */
@@ -48,6 +56,7 @@ export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
   const timing = useThinkingTiming();
   const deepResearchCtx = useDeepResearchContext();
+  const isVoice = isVoiceMessage(message);
   const timestamp = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
@@ -110,7 +119,7 @@ export const AssistantMessageBubble: React.FC = () => {
     <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-assistant-message')}>
       <div className="chat-message-meta">
         <div className="chat-message-avatar" aria-hidden>
-          <Icon icon={Bot} size={18} />
+          <Icon icon={isVoice ? Volume2 : Bot} size={18} />
         </div>
         <div>
           <div className="chat-message-author">Assistant</div>
@@ -151,6 +160,7 @@ export const AssistantMessageBubble: React.FC = () => {
 export const UserMessageBubble: React.FC = () => {
   const message = useMessage();
   const messageActions = useContext(MessageActionsContext);
+  const isVoice = isVoiceMessage(message);
   const timestamp = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
@@ -166,10 +176,10 @@ export const UserMessageBubble: React.FC = () => {
     <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-user-message')}>
       <div className="chat-message-meta">
         <div className="chat-message-avatar" aria-hidden>
-          <Icon icon={UserIcon} size={18} />
+          <Icon icon={isVoice ? Mic : UserIcon} size={18} />
         </div>
         <div>
-          <div className="chat-message-author">You</div>
+          <div className="chat-message-author">{isVoice ? 'You (voice)' : 'You'}</div>
           <div className="chat-message-timestamp">{timestamp}</div>
         </div>
       </div>

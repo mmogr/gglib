@@ -86,7 +86,7 @@ export default function ChatPage({
   const maxStagnationSteps = settings?.maxStagnationSteps ?? undefined;
 
   // Runtime - now with external message state
-  const { runtime, messages, setMessages, isRunning, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
+  const { runtime, messages, setMessages, isRunning, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
@@ -106,11 +106,12 @@ export default function ChatPage({
   // Send voice transcript as a chat message
   const handleVoiceTranscript = useCallback((text: string) => {
     if (!text.trim()) return;
+    setNextMessageMeta({ isVoice: true });
     runtime.thread.append({
       role: 'user',
       content: [{ type: 'text', text }],
     });
-  }, [runtime]);
+  }, [runtime, setNextMessageMeta]);
 
   // Auto-speak: when the LLM finishes responding, speak the last assistant message
   const wasRunningRef = useRef(false);

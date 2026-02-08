@@ -46,6 +46,8 @@ export type GglibMessageCustom = {
   researchState?: ResearchState;
   /** Marker that this message represents a deep research session */
   isDeepResearch?: boolean;
+  /** Whether this message originated from voice input/output */
+  isVoice?: boolean;
 };
 
 /**
