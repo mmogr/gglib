@@ -10,7 +10,7 @@ use crate::models::{HfConfig, HfRepoRef, HfSearchQuery};
 use url::Url;
 
 /// Fields to explicitly expand in API requests.
-const EXPAND_FIELDS: &[&str] = &["siblings", "gguf", "likes", "downloads"];
+const EXPAND_FIELDS: &[&str] = &["siblings", "gguf", "likes", "downloads", "tags"];
 
 /// Build the expand parameters string for API URLs.
 fn build_expand_params() -> String {
@@ -110,7 +110,8 @@ mod tests {
         assert!(params.contains("expand[]=gguf"));
         assert!(params.contains("expand[]=likes"));
         assert!(params.contains("expand[]=downloads"));
-        assert_eq!(params.matches("expand[]=").count(), 4);
+        assert!(params.contains("expand[]=tags"));
+        assert_eq!(params.matches("expand[]=").count(), 5);
     }
 
     #[test]
