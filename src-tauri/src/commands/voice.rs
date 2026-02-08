@@ -171,6 +171,10 @@ fn spawn_event_forwarder(
 // ── Commands: Pipeline lifecycle ───────────────────────────────────
 
 /// Start the voice pipeline.
+///
+/// If a pipeline already exists (e.g. from model preloading in settings),
+/// it will be reused — only audio I/O is started. Otherwise a new pipeline
+/// is created.
 #[tauri::command]
 pub async fn voice_start(
     mode: Option<String>,
@@ -182,22 +186,29 @@ pub async fn voice_start(
         _ => VoiceInteractionMode::PushToTalk,
     };
 
-    let config = VoicePipelineConfig {
-        mode: interaction_mode,
-        ..VoicePipelineConfig::default()
-    };
-
-    let (mut pipeline, event_rx) = VoicePipeline::new(config);
-
-    pipeline.start().map_err(|e| format!("{e}"))?;
-
-    // Forward events to frontend
-    spawn_event_forwarder(app, event_rx);
-
     let mut voice = state.voice_pipeline.write().await;
-    *voice = Some(pipeline);
 
-    info!(mode = ?interaction_mode, "Voice pipeline started");
+    if let Some(ref mut pipeline) = *voice {
+        // Pipeline already exists (models may be preloaded) — just start audio
+        if !pipeline.is_active() {
+            pipeline.set_mode(interaction_mode);
+            pipeline.start().map_err(|e| format!("{e}"))?;
+            info!(mode = ?interaction_mode, "Voice pipeline started (reused existing)");
+        }
+    } else {
+        // Create fresh pipeline
+        let config = VoicePipelineConfig {
+            mode: interaction_mode,
+            ..VoicePipelineConfig::default()
+        };
+
+        let (mut pipeline, event_rx) = VoicePipeline::new(config);
+        pipeline.start().map_err(|e| format!("{e}"))?;
+        spawn_event_forwarder(app, event_rx);
+        *voice = Some(pipeline);
+        info!(mode = ?interaction_mode, "Voice pipeline started (new)");
+    }
+
     Ok(())
 }
 
@@ -372,10 +383,11 @@ pub async fn voice_download_tts_model(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Load an STT model into the active pipeline.
+/// Load an STT model into the pipeline (auto-creates an idle pipeline if needed).
 #[tauri::command]
 pub async fn voice_load_stt(
     model_id: String,
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let model = VoiceModelCatalog::find_stt_model(&model_id)
@@ -389,13 +401,23 @@ pub async fn voice_load_stt(
     }
 
     let mut voice = state.voice_pipeline.write().await;
-    let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
+    if voice.is_none() {
+        let config = VoicePipelineConfig::default();
+        let (pipeline, event_rx) = VoicePipeline::new(config);
+        spawn_event_forwarder(app, event_rx);
+        *voice = Some(pipeline);
+        info!("Created idle voice pipeline for model preloading");
+    }
+    let pipeline = voice.as_mut().unwrap();
     pipeline.load_stt(&path).map_err(|e| format!("{e}"))
 }
 
-/// Load the TTS model into the active pipeline.
+/// Load the TTS model into the pipeline (auto-creates an idle pipeline if needed).
 #[tauri::command]
-pub async fn voice_load_tts(state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn voice_load_tts(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     let model_path = VoiceModelCatalog::tts_model_path().map_err(|e| format!("{e}"))?;
     let voices_path = VoiceModelCatalog::tts_voices_path().map_err(|e| format!("{e}"))?;
 
@@ -404,7 +426,14 @@ pub async fn voice_load_tts(state: tauri::State<'_, AppState>) -> Result<(), Str
     }
 
     let mut voice = state.voice_pipeline.write().await;
-    let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
+    if voice.is_none() {
+        let config = VoicePipelineConfig::default();
+        let (pipeline, event_rx) = VoicePipeline::new(config);
+        spawn_event_forwarder(app, event_rx);
+        *voice = Some(pipeline);
+        info!("Created idle voice pipeline for model preloading");
+    }
+    let pipeline = voice.as_mut().unwrap();
     pipeline
         .load_tts(&model_path, &voices_path)
         .await
