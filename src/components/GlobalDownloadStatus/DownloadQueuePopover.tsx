@@ -35,7 +35,7 @@ interface DownloadQueuePopoverProps {
   /** Pending items from queue status */
   pendingItems: DownloadQueueItem[];
   /** Called after an item is removed/reordered to refresh queue */
-  onRefresh?: () => void;
+  onRefresh?: () => void | Promise<void>;
 }
 
 /**
@@ -124,7 +124,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     
     try {
       await reorderQueueItem(item.id, newPosition);
-      onRefresh?.();
+      await onRefresh?.();
     } catch (error) {
       appLogger.error('component.download', 'Failed to reorder queue', { error });
     } finally {
@@ -143,7 +143,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     
     try {
       await reorderQueueItem(item.id, newPosition);
-      onRefresh?.();
+      await onRefresh?.();
     } catch (error) {
       appLogger.error('component.download', 'Failed to reorder queue', { error });
     } finally {
