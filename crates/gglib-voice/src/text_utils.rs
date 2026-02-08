@@ -13,6 +13,7 @@ const MAX_CHUNK_CHARS: usize = 400;
 /// Strip markdown formatting from text, producing plain-text suitable for TTS.
 ///
 /// Handles:
+/// - Thinking/reasoning blocks (`<think>`, `<reasoning>`, etc.) → removed entirely
 /// - Fenced code blocks (```…```) → replaced with "code block omitted"
 /// - Inline code (`…`) → unwrapped
 /// - Headers (# … ) → text only
@@ -26,6 +27,9 @@ const MAX_CHUNK_CHARS: usize = 400;
 /// - HTML tags → removed
 #[must_use]
 pub fn strip_markdown(text: &str) -> String {
+    // First pass: strip thinking/reasoning blocks entirely
+    let text = strip_thinking_blocks(text);
+
     let mut result = String::with_capacity(text.len());
     let mut in_code_block = false;
     let mut code_block_replaced = false;
@@ -129,6 +133,66 @@ pub fn split_into_chunks(text: &str) -> Vec<String> {
 }
 
 // ── Internal helpers ───────────────────────────────────────────────
+
+/// Remove `<think>…</think>`, `<reasoning>…</reasoning>`,
+/// `<seed:think>…</seed:think>`, and `<|START_THINKING|>…<|END_THINKING|>`
+/// blocks entirely so that chain-of-thought reasoning is never spoken.
+fn strip_thinking_blocks(text: &str) -> String {
+    let mut result = text.to_string();
+
+    // Strip each known tag pair. We loop because there may be multiple blocks.
+    result = strip_tag_block_pair(&result, "<think", "</think>");
+    result = strip_tag_block_pair(&result, "<reasoning>", "</reasoning>");
+    result = strip_tag_block_pair(&result, "<seed:think>", "</seed:think>");
+    result = strip_tag_block_pair(&result, "<|START_THINKING|>", "<|END_THINKING|>");
+
+    result
+}
+
+/// Remove all occurrences of `<open_tag…>…<close_tag>` from text.
+///
+/// `open_prefix` may be a prefix like `<think` that matches `<think>`,
+/// `<think duration="5">`, etc.
+fn strip_tag_block_pair(text: &str, open_prefix: &str, close_tag: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let haystack = text.to_ascii_lowercase();
+    let open_lower = open_prefix.to_ascii_lowercase();
+    let close_lower = close_tag.to_ascii_lowercase();
+
+    let mut cursor = 0;
+
+    while cursor < text.len() {
+        // Find next opening tag (case-insensitive)
+        if let Some(open_start) = haystack[cursor..].find(&open_lower) {
+            let abs_open = cursor + open_start;
+
+            // The open tag must close with '>'
+            if let Some(tag_end_offset) = haystack[abs_open..].find('>') {
+                let tag_end = abs_open + tag_end_offset + 1; // past the '>'
+
+                // Find matching close tag
+                if let Some(close_offset) = haystack[tag_end..].find(&close_lower) {
+                    let close_end = tag_end + close_offset + close_tag.len();
+
+                    // Append everything before the open tag
+                    result.push_str(&text[cursor..abs_open]);
+                    cursor = close_end;
+                    continue;
+                }
+            }
+
+            // No matching close — keep as-is and move past
+            result.push_str(&text[cursor..abs_open + open_prefix.len()]);
+            cursor = abs_open + open_prefix.len();
+        } else {
+            // No more opening tags — append remainder
+            result.push_str(&text[cursor..]);
+            break;
+        }
+    }
+
+    result
+}
 
 /// Check if a line is a horizontal rule (---, ***, ___).
 fn is_horizontal_rule(line: &str) -> bool {
@@ -494,5 +558,47 @@ mod tests {
         let input = "Above.\n---\nBelow.";
         let result = strip_markdown(input);
         assert_eq!(result, "Above. Below.");
+    }
+
+    #[test]
+    fn test_strip_think_tags() {
+        let input = "<think>While I consider this question, I need to think about many things. While there are multiple approaches...</think>\nHere is the answer.";
+        let result = strip_markdown(input);
+        assert_eq!(result, "Here is the answer.");
+    }
+
+    #[test]
+    fn test_strip_think_with_duration() {
+        let input = "<think duration=\"5.2\">Some internal reasoning...</think>\nThe result is 42.";
+        let result = strip_markdown(input);
+        assert_eq!(result, "The result is 42.");
+    }
+
+    #[test]
+    fn test_strip_reasoning_tags() {
+        let input = "<reasoning>While analyzing the problem...</reasoning>\nThe solution is simple.";
+        let result = strip_markdown(input);
+        assert_eq!(result, "The solution is simple.");
+    }
+
+    #[test]
+    fn test_strip_think_case_insensitive() {
+        let input = "<THINK>Internal thoughts...</THINK>\nVisible answer.";
+        let result = strip_markdown(input);
+        assert_eq!(result, "Visible answer.");
+    }
+
+    #[test]
+    fn test_strip_think_preserves_surrounding_text() {
+        let input = "Before thinking. <think>Hidden reasoning here.</think> After thinking.";
+        let result = strip_markdown(input);
+        assert_eq!(result, "Before thinking. After thinking.");
+    }
+
+    #[test]
+    fn test_strip_multiple_think_blocks() {
+        let input = "<think>First block</think>\nSome text.\n<think>Second block</think>\nMore text.";
+        let result = strip_markdown(input);
+        assert_eq!(result, "Some text. More text.");
     }
 }

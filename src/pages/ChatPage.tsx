@@ -117,7 +117,8 @@ export default function ChatPage({
   const wasRunningRef = useRef(false);
   useEffect(() => {
     if (wasRunningRef.current && !isRunning && voice.isActive && voice.autoSpeak && voice.ttsLoaded) {
-      // Find the last assistant message and extract text
+      // Find the last assistant message and extract only visible text
+      // (skip reasoning/thinking parts — those are internal chain-of-thought)
       const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
       if (lastAssistant) {
         const content = lastAssistant.content;
@@ -126,11 +127,22 @@ export default function ChatPage({
           text = content;
         } else if (Array.isArray(content)) {
           text = content
-            .filter((p): p is { type: 'text'; text: string } => (p as { type: string }).type === 'text')
+            .filter((p): p is { type: 'text'; text: string } =>
+              (p as { type: string }).type === 'text'
+            )
             .map(p => p.text)
             .join(' ');
         }
-        if (text.trim()) {
+        // Strip any residual <think>…</think> blocks that may be embedded
+        // in the text content (some models inline them without using
+        // the reasoning_content SSE field).
+        text = text
+          .replace(/<think[^>]*>[\s\S]*?<\/think>/gi, '')
+          .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+          .replace(/<seed:think>[\s\S]*?<\/seed:think>/gi, '')
+          .replace(/<\|START_THINKING\|>[\s\S]*?<\|END_THINKING\|>/gi, '')
+          .trim();
+        if (text) {
           voice.speak(text).catch(err => {
             appLogger.error('hook.runtime', 'Auto-speak failed', { error: String(err) });
           });
