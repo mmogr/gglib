@@ -25,7 +25,7 @@ pub struct GroupMetadata {
     pub quantization: Quantization,
     /// Primary filename (first shard filename).
     pub primary_filename: String,
-    /// HuggingFace tags for the model.
+    /// `HuggingFace` tags for the model.
     pub hf_tags: Vec<String>,
 }
 

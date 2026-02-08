@@ -257,7 +257,7 @@ pub struct DownloadManagerImpl {
     _download_repo: Arc<dyn DownloadStateRepositoryPort>,
     /// Event emitter for download events.
     event_emitter: Arc<dyn DownloadEventEmitterPort>,
-    /// HuggingFace client for fetching model metadata.
+    /// `HuggingFace` client for fetching model metadata.
     hf_client: Arc<dyn HfClientPort>,
     /// File resolver.
     resolver: HfQuantizationResolver,
