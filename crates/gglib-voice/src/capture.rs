@@ -248,10 +248,8 @@ impl AudioCapture {
                         return;
                     }
                     #[allow(clippy::cast_precision_loss)]
-                    let float_data: Vec<f32> = data
-                        .iter()
-                        .map(|&s| s as f32 / 2_147_483_648.0)
-                        .collect();
+                    let float_data: Vec<f32> =
+                        data.iter().map(|&s| s as f32 / 2_147_483_648.0).collect();
                     if let Ok(mut buf) = buffer.lock() {
                         buf.extend_from_slice(&float_data);
                     }

@@ -10,7 +10,9 @@ use tracing::{error, info};
 
 use gglib_voice::capture::AudioDeviceInfo;
 use gglib_voice::models::{self, SttModelInfo, TtsModelInfo, VoiceModelCatalog};
-use gglib_voice::pipeline::{VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState};
+use gglib_voice::pipeline::{
+    VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
+};
 use gglib_voice::tts::{TtsEngine, VoiceInfo};
 
 use crate::app::state::AppState;
@@ -227,7 +229,9 @@ pub async fn voice_stop(state: tauri::State<'_, AppState>) -> Result<(), String>
 
 /// Get current voice pipeline status.
 #[tauri::command]
-pub async fn voice_status(state: tauri::State<'_, AppState>) -> Result<VoiceStatusResponse, String> {
+pub async fn voice_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<VoiceStatusResponse, String> {
     let voice = state.voice_pipeline.read().await;
     match voice.as_ref() {
         Some(pipeline) => Ok(VoiceStatusResponse {
@@ -299,8 +303,7 @@ pub async fn voice_stop_speaking(state: tauri::State<'_, AppState>) -> Result<()
 #[tauri::command]
 pub async fn voice_list_models() -> Result<VoiceModelsResponse, String> {
     let stt_models = VoiceModelCatalog::stt_models();
-    let downloaded = VoiceModelCatalog::downloaded_stt_models()
-        .map_err(|e| format!("{e}"))?;
+    let downloaded = VoiceModelCatalog::downloaded_stt_models().map_err(|e| format!("{e}"))?;
     let downloaded_ids: Vec<String> = downloaded.iter().map(|m| m.id.0.clone()).collect();
 
     let tts_model = VoiceModelCatalog::tts_model();
@@ -319,10 +322,7 @@ pub async fn voice_list_models() -> Result<VoiceModelsResponse, String> {
 
 /// Download an STT model.
 #[tauri::command]
-pub async fn voice_download_stt_model(
-    model_id: String,
-    app: AppHandle,
-) -> Result<(), String> {
+pub async fn voice_download_stt_model(model_id: String, app: AppHandle) -> Result<(), String> {
     let model_id_clone = model_id.clone();
     let app_clone = app.clone();
 
@@ -393,8 +393,7 @@ pub async fn voice_load_stt(
     let model = VoiceModelCatalog::find_stt_model(&model_id)
         .ok_or_else(|| format!("Unknown STT model: {model_id}"))?;
 
-    let path = VoiceModelCatalog::stt_model_path(&model)
-        .map_err(|e| format!("{e}"))?;
+    let path = VoiceModelCatalog::stt_model_path(&model).map_err(|e| format!("{e}"))?;
 
     if !path.exists() {
         return Err(format!("STT model not downloaded: {model_id}"));
@@ -444,10 +443,7 @@ pub async fn voice_load_tts(
 
 /// Set the interaction mode (PTT or VAD).
 #[tauri::command]
-pub async fn voice_set_mode(
-    mode: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn voice_set_mode(mode: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let interaction_mode = match mode.as_str() {
         "vad" => VoiceInteractionMode::VoiceActivityDetection,
         "ptt" => VoiceInteractionMode::PushToTalk,
@@ -476,10 +472,7 @@ pub async fn voice_set_voice(
 
 /// Set the TTS playback speed.
 #[tauri::command]
-pub async fn voice_set_speed(
-    speed: f32,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn voice_set_speed(speed: f32, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let mut voice = state.voice_pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.set_speed(speed);

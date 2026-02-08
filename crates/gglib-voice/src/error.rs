@@ -47,10 +47,7 @@ pub enum VoiceError {
 
     /// Failed to download voice model.
     #[error("Failed to download voice model '{name}': {source}")]
-    DownloadError {
-        name: String,
-        source: anyhow::Error,
-    },
+    DownloadError { name: String, source: anyhow::Error },
 
     /// Audio resampling error.
     #[error("Audio resampling failed: {0}")]

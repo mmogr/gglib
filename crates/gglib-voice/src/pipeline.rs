@@ -13,8 +13,8 @@
 //! - **Voice Activity Detection (VAD)**: Audio is continuously monitored;
 //!   speech boundaries are detected automatically.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -24,7 +24,7 @@ use crate::error::VoiceError;
 use crate::gate::EchoGate;
 use crate::playback::AudioPlayback;
 use crate::stt::{SttConfig, SttEngine};
-use crate::tts::{TtsConfig, TtsEngine, KOKORO_SAMPLE_RATE};
+use crate::tts::{KOKORO_SAMPLE_RATE, TtsConfig, TtsEngine};
 use crate::vad::{VadConfig, VadEvent, VoiceActivityDetector};
 
 // ── Voice state machine ────────────────────────────────────────────

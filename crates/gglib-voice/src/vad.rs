@@ -4,8 +4,8 @@
 //! In VAD mode, the pipeline continuously monitors mic input and triggers
 //! transcription when speech is detected followed by silence.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::gate::EchoGate;
 

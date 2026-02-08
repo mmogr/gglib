@@ -92,11 +92,9 @@ pub struct TtsModelInfo {
 
 // ── Catalog ────────────────────────────────────────────────────────
 
-const HF_WHISPER_BASE: &str =
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
+const HF_WHISPER_BASE: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
-const KOKORO_RELEASE_BASE: &str =
-    "https://github.com/mzdk100/kokoro/releases/download";
+const KOKORO_RELEASE_BASE: &str = "https://github.com/mzdk100/kokoro/releases/download";
 
 /// The curated voice model catalog.
 ///
@@ -293,13 +291,17 @@ impl VoiceModelCatalog {
     /// Get the path where the TTS model ONNX file would be stored on disk.
     pub fn tts_model_path() -> Result<PathBuf, crate::error::VoiceError> {
         let tts = Self::tts_model();
-        Ok(Self::voice_models_dir()?.join("tts").join(&tts.model_filename))
+        Ok(Self::voice_models_dir()?
+            .join("tts")
+            .join(&tts.model_filename))
     }
 
     /// Get the path where the TTS voices file would be stored on disk.
     pub fn tts_voices_path() -> Result<PathBuf, crate::error::VoiceError> {
         let tts = Self::tts_model();
-        Ok(Self::voice_models_dir()?.join("tts").join(&tts.voices_filename))
+        Ok(Self::voice_models_dir()?
+            .join("tts")
+            .join(&tts.voices_filename))
     }
 
     /// Check which STT models are already downloaded.
@@ -354,14 +356,15 @@ pub async fn download_voice_model(
     tracing::info!(url, dest = %dest.display(), "Downloading voice model");
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| crate::error::VoiceError::DownloadError {
-            name: url.to_string(),
-            source: e.into(),
-        })?;
+    let response =
+        client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| crate::error::VoiceError::DownloadError {
+                name: url.to_string(),
+                source: e.into(),
+            })?;
 
     if !response.status().is_success() {
         return Err(crate::error::VoiceError::DownloadError {

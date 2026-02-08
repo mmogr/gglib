@@ -158,9 +158,7 @@ impl TtsEngine {
     ///
     /// Returns a (sink, stream) pair. Send text sentences to the sink,
     /// and read audio chunks from the stream as they become available.
-    pub fn synthesize_stream(
-        &self,
-    ) -> (kokoro_tts::SynthSink<String>, kokoro_tts::SynthStream) {
+    pub fn synthesize_stream(&self) -> (kokoro_tts::SynthSink<String>, kokoro_tts::SynthStream) {
         self.engine.stream(self.voice)
     }
 
@@ -201,8 +199,18 @@ impl TtsEngine {
             voice("af_aoede", "Aoede", "American English", VoiceGender::Female),
             voice("af_bella", "Bella", "American English", VoiceGender::Female),
             voice("af_heart", "Heart", "American English", VoiceGender::Female),
-            voice("af_jessica", "Jessica", "American English", VoiceGender::Female),
-            voice("af_nicole", "Nicole", "American English", VoiceGender::Female),
+            voice(
+                "af_jessica",
+                "Jessica",
+                "American English",
+                VoiceGender::Female,
+            ),
+            voice(
+                "af_nicole",
+                "Nicole",
+                "American English",
+                VoiceGender::Female,
+            ),
             voice("af_nova", "Nova", "American English", VoiceGender::Female),
             voice("af_river", "River", "American English", VoiceGender::Female),
             voice("af_sarah", "Sarah", "American English", VoiceGender::Female),
@@ -213,17 +221,32 @@ impl TtsEngine {
             voice("am_eric", "Eric", "American English", VoiceGender::Male),
             voice("am_fable", "Fable", "American English", VoiceGender::Male),
             voice("am_liam", "Liam", "American English", VoiceGender::Male),
-            voice("am_michael", "Michael", "American English", VoiceGender::Male),
+            voice(
+                "am_michael",
+                "Michael",
+                "American English",
+                VoiceGender::Male,
+            ),
             voice("am_onyx", "Onyx", "American English", VoiceGender::Male),
             voice("am_puck", "Puck", "American English", VoiceGender::Male),
             // British English — Female
             voice("bf_alice", "Alice", "British English", VoiceGender::Female),
             voice("bf_emma", "Emma", "British English", VoiceGender::Female),
-            voice("bf_isabella", "Isabella", "British English", VoiceGender::Female),
+            voice(
+                "bf_isabella",
+                "Isabella",
+                "British English",
+                VoiceGender::Female,
+            ),
             voice("bf_lily", "Lily", "British English", VoiceGender::Female),
             // British English — Male
             voice("bm_daniel", "Daniel", "British English", VoiceGender::Male),
-            voice("bm_fable", "Fable (British)", "British English", VoiceGender::Male),
+            voice(
+                "bm_fable",
+                "Fable (British)",
+                "British English",
+                VoiceGender::Male,
+            ),
             voice("bm_george", "George", "British English", VoiceGender::Male),
             voice("bm_lewis", "Lewis", "British English", VoiceGender::Male),
         ]
@@ -269,8 +292,6 @@ fn voice_from_id(id: &str, speed: f32) -> Result<Voice, VoiceError> {
         "bm_fable" => Ok(Voice::BmFable(speed)),
         "bm_george" => Ok(Voice::BmGeorge(speed)),
         "bm_lewis" => Ok(Voice::BmLewis(speed)),
-        _ => Err(VoiceError::SynthesisError(format!(
-            "Unknown voice: {id}"
-        ))),
+        _ => Err(VoiceError::SynthesisError(format!("Unknown voice: {id}"))),
     }
 }

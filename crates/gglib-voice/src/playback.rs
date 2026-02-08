@@ -3,8 +3,8 @@
 //! Plays synthesized speech audio and coordinates with the echo gate to
 //! prevent the microphone from picking up playback output.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use rodio::{OutputStream, OutputStreamHandle, Sink};
 
@@ -35,8 +35,8 @@ pub struct AudioPlayback {
 impl AudioPlayback {
     /// Create a new audio playback instance using the default output device.
     pub fn new(echo_gate: EchoGate) -> Result<Self, VoiceError> {
-        let (stream, stream_handle) =
-            OutputStream::try_default().map_err(|e| VoiceError::OutputStreamError(e.to_string()))?;
+        let (stream, stream_handle) = OutputStream::try_default()
+            .map_err(|e| VoiceError::OutputStreamError(e.to_string()))?;
 
         tracing::info!("Audio playback initialized on default output device");
 

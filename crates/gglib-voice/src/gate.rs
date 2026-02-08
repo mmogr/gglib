@@ -4,8 +4,8 @@
 //! suppressed to avoid the AI hearing its own voice and creating an infinite
 //! conversation loop. This module provides a shared atomic flag for that purpose.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Shared echo gate that coordinates audio capture and playback.
 ///

@@ -55,7 +55,6 @@ pub struct Settings {
     pub inference_defaults: Option<InferenceConfig>,
 
     // ── Voice settings ─────────────────────────────────────────────
-
     /// Whether voice mode is enabled.
     pub voice_enabled: Option<bool>,
 
