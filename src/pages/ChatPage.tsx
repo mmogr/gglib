@@ -7,12 +7,14 @@ import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI, TimeToolUI } from '../components/ToolUI';
+import { VoiceOverlay } from '../components/VoiceOverlay';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT as RUNTIME_DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
+import { useVoiceMode } from '../hooks/useVoiceMode';
 import { useToastContext } from '../contexts/ToastContext';
 import { useServerState } from '../services/serverEvents';
 import {
@@ -97,6 +99,9 @@ export default function ChatPage({
   // because ChatPage is only opened when a server is already running
   const serverState = useServerState(modelId);
   const isServerRunning = serverState?.status !== 'stopped' && serverState?.status !== 'crashed';
+
+  // Voice mode
+  const voice = useVoiceMode();
 
   // Track previous status for transition-only toast
   const prevStatusRef = useRef(serverState?.status);
@@ -413,6 +418,9 @@ export default function ChatPage({
             />
           </div>
         </div>
+
+        {/* Voice overlay (floating controls when voice mode is active) */}
+        <VoiceOverlay voice={voice} />
       </AssistantRuntimeProvider>
 
       {/* Console Tab Content - always mounted, hidden when not active */}
