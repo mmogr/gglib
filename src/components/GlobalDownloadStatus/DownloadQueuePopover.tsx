@@ -1,4 +1,4 @@
-import { FC, useRef, useState, useCallback, useMemo } from 'react';
+import { FC, useRef, useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { appLogger } from '../../services/platform';
 import { useClickOutside } from '../../hooks/useClickOutside';
@@ -93,7 +93,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
   const groupedItems = useMemo(() => groupPendingItems(pendingItems), [pendingItems]);
 
   // Handle cancel/remove from queue
-  const handleCancel = useCallback(async (item: GroupedQueueItem) => {
+  const handleCancel = async (item: GroupedQueueItem) => {
     if (isProcessing) return;
     setIsProcessing(true);
     
@@ -111,10 +111,10 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [isProcessing, onRefresh]);
+  };
 
   // Move item up in queue (swap with previous item)
-  const handleMoveUp = useCallback(async (index: number) => {
+  const handleMoveUp = async (index: number) => {
     if (isProcessing || index === 0) return; // Can't move first item up
     
     setIsProcessing(true);
@@ -130,10 +130,10 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [groupedItems, isProcessing, onRefresh]);
+  };
 
   // Move item down in queue (swap with next item)
-  const handleMoveDown = useCallback(async (index: number) => {
+  const handleMoveDown = async (index: number) => {
     if (isProcessing || index >= groupedItems.length - 1) return; // Can't move last item down
     
     setIsProcessing(true);
@@ -149,7 +149,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  }, [groupedItems, isProcessing, onRefresh]);
+  };
 
   if (!isOpen || groupedItems.length === 0) {
     return null;
