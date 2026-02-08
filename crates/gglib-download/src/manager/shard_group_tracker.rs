@@ -25,6 +25,8 @@ pub struct GroupMetadata {
     pub quantization: Quantization,
     /// Primary filename (first shard filename).
     pub primary_filename: String,
+    /// HuggingFace tags for the model.
+    pub hf_tags: Vec<String>,
 }
 
 /// State for a shard group being tracked.
@@ -209,6 +211,7 @@ mod tests {
             commit_sha: "abc123".to_string(),
             quantization: Quantization::Q4KM,
             primary_filename: "model-00001-of-00003.gguf".to_string(),
+            hf_tags: vec![],
         }
     }
 

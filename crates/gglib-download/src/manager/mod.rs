@@ -257,6 +257,8 @@ pub struct DownloadManagerImpl {
     _download_repo: Arc<dyn DownloadStateRepositoryPort>,
     /// Event emitter for download events.
     event_emitter: Arc<dyn DownloadEventEmitterPort>,
+    /// HuggingFace client for fetching model metadata.
+    hf_client: Arc<dyn HfClientPort>,
     /// File resolver.
     resolver: HfQuantizationResolver,
     /// Quantization selector for choosing best quantization.
@@ -307,6 +309,7 @@ impl DownloadManagerImpl {
             model_registrar,
             _download_repo: download_repo,
             event_emitter: event_emitter as Arc<dyn DownloadEventEmitterPort>,
+            hf_client: hf_client_dyn,
             resolver,
             selector,
             queue: RwLock::new(DownloadQueue::new(config.max_queue_size)),
@@ -572,6 +575,7 @@ impl DownloadManagerImpl {
             commit_sha: completed.commit_sha.clone(),
             quantization: completed.quantization,
             primary_filename: base_filename,
+            hf_tags: vec![],
         };
 
         let group_complete = {
@@ -617,6 +621,7 @@ impl DownloadManagerImpl {
                 .first()
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string()),
+            hf_tags: vec![],
         };
         let complete = shard_group_tracker::GroupComplete {
             ordered_paths: completed.all_paths.clone(),
@@ -678,6 +683,15 @@ impl DownloadManagerImpl {
             .first()
             .expect("GroupComplete should have at least one path");
 
+        // Fetch HF model info to get tags (soft fail if unavailable)
+        let hf_tags = self
+            .hf_client
+            .get_model_info(&complete.metadata.repo_id)
+            .await
+            .ok()
+            .map(|info| info.tags)
+            .unwrap_or_default();
+
         let completed = CompletedDownload {
             primary_path: primary_path.clone(),
             all_paths: complete.ordered_paths.clone(),
@@ -691,6 +705,7 @@ impl DownloadManagerImpl {
             } else {
                 None
             },
+            hf_tags,
         };
 
         // Register model (soft-fail)
