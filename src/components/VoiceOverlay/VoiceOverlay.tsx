@@ -165,15 +165,6 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
         </div>
       )}
 
-      {/* Last transcript preview */}
-      {lastTranscript && voiceState !== 'recording' && (
-        <div className={styles.transcript} title={lastTranscript}>
-          "{lastTranscript.length > 60
-            ? lastTranscript.slice(0, 60) + '…'
-            : lastTranscript}"
-        </div>
-      )}
-
       {/* Close voice mode */}
       <button
         className={styles.closeButton}
