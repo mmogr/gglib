@@ -178,7 +178,7 @@ impl<'a> DownloadOps<'a> {
                     last_modified: m.last_modified,
                     parameters_b: m.parameters_b,
                     description: m.description,
-                    tags: vec![],
+                    tags: m.tags,
                 })
                 .collect(),
             has_more: response.has_more,
