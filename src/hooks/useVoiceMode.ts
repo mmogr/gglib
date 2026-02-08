@@ -126,7 +126,7 @@ export function useVoiceMode(): UseVoiceModeReturn {
   // Pipeline state
   const [isActive, setIsActive] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
-  const [mode, setModeState] = useState<VoiceInteractionMode>('push_to_talk');
+  const [mode, setModeState] = useState<VoiceInteractionMode>('ptt');
   const [sttLoaded, setSttLoaded] = useState(false);
   const [ttsLoaded, setTtsLoaded] = useState(false);
   const [autoSpeak, setAutoSpeakState] = useState(true);
