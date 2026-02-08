@@ -8,8 +8,20 @@ authors.workspace = true
 description = "Voice mode for gglib - local STT (whisper.cpp) and TTS (Kokoro) pipeline"
 publish = false
 
-[lints]
-workspace = true
+# gglib-voice wraps FFI crates (cpal, whisper-rs, ort) that need unsafe Send/Sync impls,
+# so we override the workspace-level deny(unsafe_code) to warn.
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+collapsible_if = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
 
 [features]
 default = []

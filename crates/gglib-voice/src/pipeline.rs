@@ -176,6 +176,14 @@ pub struct VoicePipeline {
     config: VoicePipelineConfig,
 }
 
+// Safety: VoicePipeline is always accessed behind a tokio::sync::RwLock in AppState,
+// ensuring exclusive mutable access. The only !Send field is cpal::Stream inside
+// AudioCapture, which is only created/accessed through pipeline methods. On macOS
+// (CoreAudio) the stream is actually thread-safe; the !Send marker is a conservative
+// cross-platform constraint in cpal.
+unsafe impl Send for VoicePipeline {}
+unsafe impl Sync for VoicePipeline {}
+
 impl VoicePipeline {
     /// Create a new voice pipeline.
     ///

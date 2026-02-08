@@ -4,6 +4,11 @@
 // ort is used transitively by kokoro-tts features (coreml, cuda)
 use ort as _;
 
+#[cfg(test)]
+use tempfile as _;
+#[cfg(test)]
+use tokio_test as _;
+
 pub mod capture;
 pub mod error;
 pub mod gate;
