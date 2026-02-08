@@ -7,15 +7,41 @@ import { get, post, del } from './client';
 import type { DownloadId } from '../types/ids';
 import type {
   DownloadQueueStatus,
+  DownloadQueueItem,
   QueueDownloadParams,
   QueueDownloadResponse,
 } from '../types/downloads';
 
 /**
+ * Raw backend response shape for queue snapshot.
+ * Backend returns a flat list of all items that we need to split.
+ */
+interface QueueSnapshotResponse {
+  items: DownloadQueueItem[];
+  max_size: number;
+  active_count: number;
+  pending_count: number;
+}
+
+/**
  * Get current download queue status.
+ * Transforms the backend's flat item list into categorized current/pending/failed.
  */
 export async function getDownloadQueue(): Promise<DownloadQueueStatus> {
-  return get<DownloadQueueStatus>('/api/downloads/queue');
+  const snapshot = await get<QueueSnapshotResponse>('/api/downloads/queue');
+  
+  // Split items by status (same logic as SSE event handler)
+  const items = snapshot.items || [];
+  const current = items.find((item) => item.status === 'downloading') ?? null;
+  const pending = items.filter((item) => item.status === 'queued');
+  const failed = items.filter((item) => item.status === 'failed');
+  
+  return {
+    current,
+    pending,
+    failed,
+    max_size: snapshot.max_size,
+  };
 }
 
 /**
