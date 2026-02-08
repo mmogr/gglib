@@ -222,9 +222,14 @@ export function useVoiceMode(): UseVoiceModeReturn {
     try {
       setError(null);
       await voiceStart(startMode);
-      setIsActive(true);
-      setVoiceState('listening');
-      if (startMode) setModeState(startMode);
+      // Refresh full status from backend (models may have been preloaded)
+      const status = await voiceStatus();
+      setIsActive(status.isActive);
+      setVoiceState(status.state as VoiceState);
+      setModeState(status.mode as VoiceInteractionMode);
+      setSttLoaded(status.sttLoaded);
+      setTtsLoaded(status.ttsLoaded);
+      setAutoSpeakState(status.autoSpeak);
     } catch (e) {
       setError(String(e));
     }
