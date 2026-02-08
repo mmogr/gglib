@@ -110,7 +110,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               onChange={(e) => setSelectedSttModel(e.target.value)}
               style={{ flex: 1 }}
             >
-              {voice.models?.sttModels.map((m) => (
+              {voice.models?.sttModels?.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.size}) {m.isQuantized ? '⚡' : ''}
                 </option>
@@ -139,7 +139,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           <label className={styles.label}>TTS Model</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
-              {voice.models?.ttsModel.modelName ?? 'Kokoro TTS'}
+              {voice.models?.ttsModel?.modelName ?? 'Kokoro TTS'}
             </span>
             <Button
               onClick={handleDownloadTts}
@@ -158,7 +158,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             value={selectedVoice}
             onChange={(e) => handleVoiceChange(e.target.value)}
           >
-            {voice.models?.availableVoices.map((v) => (
+            {voice.models?.availableVoices?.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name} ({v.accent}, {v.gender})
               </option>
