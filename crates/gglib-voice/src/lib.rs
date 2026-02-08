@@ -17,6 +17,7 @@ pub mod models;
 pub mod pipeline;
 pub mod playback;
 pub mod stt;
+pub mod text_utils;
 pub mod tts;
 pub mod vad;
 

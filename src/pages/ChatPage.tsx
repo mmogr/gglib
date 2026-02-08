@@ -131,7 +131,9 @@ export default function ChatPage({
             .join(' ');
         }
         if (text.trim()) {
-          voice.speak(text);
+          voice.speak(text).catch(err => {
+            appLogger.error('hook.runtime', 'Auto-speak failed', { error: String(err) });
+          });
         }
       }
     }

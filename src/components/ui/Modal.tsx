@@ -3,6 +3,19 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { Icon } from "./Icon";
 
+// Styles that visually hide content while keeping it accessible to screen readers.
+const visuallyHiddenStyle: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap",
+  borderWidth: 0,
+};
+
 interface ModalProps {
   open: boolean;
   onClose: () => void;
@@ -42,7 +55,7 @@ export const Modal: FC<ModalProps> = ({
         <DialogPrimitive.Overlay className="modal-overlay" />
         <DialogPrimitive.Content
           className={`modal ${sizeClassMap[size]}`}
-          aria-describedby={descriptionId}
+          aria-describedby={hasDescription ? descriptionId : undefined}
           onPointerDownOutside={(event) => {
             if (preventClose) event.preventDefault();
           }}
@@ -63,12 +76,15 @@ export const Modal: FC<ModalProps> = ({
               </button>
             </DialogPrimitive.Close>
           </div>
-          <DialogPrimitive.Description
-            id={descriptionId}
-            className={hasDescription ? "modal-description" : "sr-only"}
-          >
-            {hasDescription ? description : "Dialog content"}
-          </DialogPrimitive.Description>
+          {hasDescription ? (
+            <DialogPrimitive.Description id={descriptionId} className="modal-description">
+              {description}
+            </DialogPrimitive.Description>
+          ) : (
+            <DialogPrimitive.Description style={visuallyHiddenStyle}>
+              Dialog content
+            </DialogPrimitive.Description>
+          )}
           <div className="modal-body">{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>

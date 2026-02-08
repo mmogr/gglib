@@ -24,6 +24,7 @@ use crate::error::VoiceError;
 use crate::gate::EchoGate;
 use crate::playback::AudioPlayback;
 use crate::stt::{SttConfig, SttEngine};
+use crate::text_utils;
 use crate::tts::{KOKORO_SAMPLE_RATE, TtsConfig, TtsEngine};
 use crate::vad::{VadConfig, VadEvent, VoiceActivityDetector};
 
@@ -431,19 +432,72 @@ impl VoicePipeline {
 
     /// Speak text through TTS and play back the audio.
     ///
+    /// Long text is automatically stripped of markdown formatting and split
+    /// into sentence-sized chunks so that Kokoro TTS can synthesize each
+    /// piece reliably (it struggles with very long inputs).
+    ///
     /// Sets the echo gate to suppress mic capture during playback.
+    #[allow(clippy::cognitive_complexity)]
     pub async fn speak(&mut self, text: &str) -> Result<(), VoiceError> {
         if text.trim().is_empty() {
             return Ok(());
         }
 
-        let tts = self.tts.as_ref().ok_or(VoiceError::TtsModelNotLoaded)?;
-        let (samples, duration) = tts.synthesize(text).await?;
+        // Preprocess: strip markdown → plain text → split into chunks
+        let plain = text_utils::strip_markdown(text);
+        let chunks = text_utils::split_into_chunks(&plain);
+
+        if chunks.is_empty() {
+            return Ok(());
+        }
 
         tracing::debug!(
-            text_len = text.len(),
-            duration_ms = duration.as_millis(),
-            "Synthesised speech, starting playback"
+            original_len = text.len(),
+            plain_len = plain.len(),
+            num_chunks = chunks.len(),
+            "Speaking text in chunks"
+        );
+
+        let tts = self.tts.as_ref().ok_or(VoiceError::TtsModelNotLoaded)?;
+
+        // Synthesize all chunks and concatenate samples
+        let mut all_samples: Vec<f32> = Vec::new();
+        let mut total_duration = std::time::Duration::ZERO;
+
+        for (i, chunk) in chunks.iter().enumerate() {
+            match tts.synthesize(chunk).await {
+                Ok((samples, duration)) => {
+                    tracing::debug!(
+                        chunk = i + 1,
+                        chunk_len = chunk.len(),
+                        samples = samples.len(),
+                        duration_ms = duration.as_millis(),
+                        "Synthesised chunk"
+                    );
+                    all_samples.extend_from_slice(&samples);
+                    total_duration += duration;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        chunk = i + 1,
+                        chunk_text = &chunk[..chunk.len().min(80)],
+                        error = %e,
+                        "Failed to synthesise chunk, skipping"
+                    );
+                    // Continue with remaining chunks rather than failing entirely
+                }
+            }
+        }
+
+        if all_samples.is_empty() {
+            tracing::warn!("No audio was synthesised from any chunk");
+            return Ok(());
+        }
+
+        tracing::debug!(
+            total_samples = all_samples.len(),
+            total_duration_ms = total_duration.as_millis(),
+            "All chunks synthesised, starting playback"
         );
 
         self.set_state(VoiceState::Speaking);
@@ -454,7 +508,7 @@ impl VoicePipeline {
             .as_mut()
             .ok_or_else(|| VoiceError::OutputStreamError("Playback not initialized".to_string()))?;
 
-        playback.play_with_gate_management(samples, KOKORO_SAMPLE_RATE)?;
+        playback.play_with_gate_management(all_samples, KOKORO_SAMPLE_RATE)?;
 
         Ok(())
     }
