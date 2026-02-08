@@ -473,7 +473,9 @@ impl VoicePipeline {
     /// Check if TTS playback is currently active.
     #[must_use]
     pub fn is_speaking(&self) -> bool {
-        self.playback.as_ref().is_some_and(AudioPlayback::is_playing)
+        self.playback
+            .as_ref()
+            .is_some_and(AudioPlayback::is_playing)
     }
 
     // ── Configuration ──────────────────────────────────────────────

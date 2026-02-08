@@ -325,9 +325,13 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>, V
             .map_err(|e| VoiceError::ResampleError(e.to_string()))?;
         if let Some(channel) = result.first() {
             // Only take the proportional amount of output
-            #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let output_len =
-                (remaining.len() as f64 * f64::from(to_rate) / f64::from(from_rate)).ceil() as usize;
+            #[allow(
+                clippy::cast_precision_loss,
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss
+            )]
+            let output_len = (remaining.len() as f64 * f64::from(to_rate) / f64::from(from_rate))
+                .ceil() as usize;
             let take = output_len.min(channel.len());
             output.extend_from_slice(&channel[..take]);
         }

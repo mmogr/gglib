@@ -163,7 +163,11 @@ impl VoiceActivityDetector {
         let is_speech = energy > energy_threshold_from_vad_threshold(self.config.threshold);
 
         // Frame duration in ms
-        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
         let frame_duration_ms = (frame.len() as f32 / self.sample_rate as f32 * 1000.0) as u32;
 
         match self.state {
