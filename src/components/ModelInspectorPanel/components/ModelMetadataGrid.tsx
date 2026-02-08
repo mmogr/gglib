@@ -25,7 +25,9 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
       <div className="metadata-grid">
         <div className="metadata-row">
           <span className="metadata-label">Size:</span>
-          <span className="metadata-value">{formatParamCount(model.paramCountB)}</span>
+          <span className="metadata-value">
+            {formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}
+          </span>
         </div>
         {model.architecture && (
           <div className="metadata-row">

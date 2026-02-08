@@ -60,6 +60,12 @@ pub struct Model {
     pub quantization: Option<String>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,
+    /// Number of experts (for `MoE` models).
+    pub expert_count: Option<u32>,
+    /// Number of experts used during inference (for `MoE` models).
+    pub expert_used_count: Option<u32>,
+    /// Number of shared experts (for `MoE` models).
+    pub expert_shared_count: Option<u32>,
     /// Additional metadata key-value pairs from the GGUF file.
     pub metadata: HashMap<String, String>,
     /// UTC timestamp of when the model was added to the database.
@@ -105,6 +111,12 @@ pub struct NewModel {
     pub quantization: Option<String>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,
+    /// Number of experts (for `MoE` models).
+    pub expert_count: Option<u32>,
+    /// Number of experts used during inference (for `MoE` models).
+    pub expert_used_count: Option<u32>,
+    /// Number of shared experts (for `MoE` models).
+    pub expert_shared_count: Option<u32>,
     /// Additional metadata key-value pairs from the GGUF file.
     pub metadata: HashMap<String, String>,
     /// UTC timestamp of when the model was added to the database.
@@ -152,6 +164,9 @@ impl NewModel {
             architecture: None,
             quantization: None,
             context_length: None,
+            expert_count: None,
+            expert_used_count: None,
+            expert_shared_count: None,
             metadata: HashMap::new(),
             added_at,
             hf_repo_id: None,
@@ -180,6 +195,9 @@ impl Model {
             architecture: self.architecture.clone(),
             quantization: self.quantization.clone(),
             context_length: self.context_length,
+            expert_count: self.expert_count,
+            expert_used_count: self.expert_used_count,
+            expert_shared_count: self.expert_shared_count,
             metadata: self.metadata.clone(),
             added_at: self.added_at,
             hf_repo_id: self.hf_repo_id.clone(),
@@ -225,6 +243,9 @@ mod tests {
             architecture: Some("llama".to_string()),
             quantization: Some("Q4_0".to_string()),
             context_length: Some(4096),
+            expert_count: None,
+            expert_used_count: None,
+            expert_shared_count: None,
             metadata: HashMap::new(),
             added_at: Utc::now(),
             hf_repo_id: Some("TheBloke/Model-GGUF".to_string()),

@@ -68,7 +68,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
               )}
             </div>
             <div className="model-metadata">
-              <span className="metadata-item">{formatParamCount(model.paramCountB)}</span>
+              <span className="metadata-item">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
               {model.architecture && (
                 <span className="metadata-item">{model.architecture}</span>
               )}

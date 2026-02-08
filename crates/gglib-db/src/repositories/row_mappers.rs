@@ -6,7 +6,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries.
-pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults";
+pub const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults";
 
 /// Helper to parse datetime strings that may have "UTC" suffix.
 pub fn parse_datetime(datetime_str: Option<String>) -> Option<DateTime<Utc>> {
@@ -66,6 +66,15 @@ pub fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryEr
             .try_get("quantization")
             .map_err(|e| RepositoryError::Storage(e.to_string()))?,
         context_length,
+        expert_count: row.try_get::<Option<u32>, _>("expert_count").ok().flatten(),
+        expert_used_count: row
+            .try_get::<Option<u32>, _>("expert_used_count")
+            .ok()
+            .flatten(),
+        expert_shared_count: row
+            .try_get::<Option<u32>, _>("expert_shared_count")
+            .ok()
+            .flatten(),
         metadata: serde_json::from_str(&metadata_json).unwrap_or_default(),
         added_at: parse_datetime(added_at_str).unwrap_or_else(Utc::now),
         hf_repo_id: row

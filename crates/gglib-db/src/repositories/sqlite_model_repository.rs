@@ -122,13 +122,18 @@ impl ModelRepository for SqliteModelRepository {
         let _result = sqlx::query(
             r#"INSERT INTO models (
                 name, file_path, param_count_b, architecture, quantization, 
-                context_length, metadata, added_at, hf_repo_id, hf_commit_sha, 
+                context_length, expert_count, expert_used_count, expert_shared_count,
+                metadata, added_at, hf_repo_id, hf_commit_sha, 
                 hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 file_paths_json = excluded.file_paths_json,
                 quantization = COALESCE(excluded.quantization, models.quantization),
+                context_length = COALESCE(excluded.context_length, models.context_length),
+                expert_count = COALESCE(excluded.expert_count, models.expert_count),
+                expert_used_count = COALESCE(excluded.expert_used_count, models.expert_used_count),
+                expert_shared_count = COALESCE(excluded.expert_shared_count, models.expert_shared_count),
                 download_date = excluded.download_date,
                 last_update_check = excluded.last_update_check,
                 tags = excluded.tags,
@@ -142,6 +147,9 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&model.architecture)
         .bind(&model.quantization)
         .bind(model.context_length.map(|c| c as i64))
+        .bind(model.expert_count.map(|c| c as i64))
+        .bind(model.expert_used_count.map(|c| c as i64))
+        .bind(model.expert_shared_count.map(|c| c as i64))
         .bind(&metadata_json)
         .bind(model.added_at.to_string())
         .bind(&model.hf_repo_id)

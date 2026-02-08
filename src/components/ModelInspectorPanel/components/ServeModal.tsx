@@ -60,7 +60,7 @@ export const ServeModal: FC<ServeModalProps> = ({
       <div className="modal-body">
         <div className="model-info">
           <strong>{model.name}</strong>
-          <span className="model-size">{formatParamCount(model.paramCountB)}</span>
+          <span className="model-size">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
         </div>
 
         <div className="form-group">

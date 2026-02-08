@@ -58,7 +58,7 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove }) => 
           </Row>
         )}
       </div>
-      <div className="cell">{formatParamCount(model.paramCountB)}</div>
+      <div className="cell">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</div>
       <div className="cell">{model.architecture || "—"}</div>
       <div className="cell">
         <span className="quantization-badge">
@@ -248,7 +248,7 @@ const ModelList: FC<ModelListProps> = ({
             <div className="modal-body">
               <div className="model-info">
                 <strong>{servingModel.name}</strong>
-                <span className="model-size">{formatParamCount(servingModel.paramCountB)}</span>
+                <span className="model-size">{formatParamCount(servingModel.paramCountB, servingModel.expertUsedCount, servingModel.expertCount)}</span>
               </div>
               
               {/* Capability Badges */}

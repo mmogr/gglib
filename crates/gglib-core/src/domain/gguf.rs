@@ -233,6 +233,12 @@ pub struct GgufMetadata {
     pub param_count_b: Option<f64>,
     /// Maximum context length.
     pub context_length: Option<u64>,
+    /// Number of experts (for `MoE` models).
+    pub expert_count: Option<u32>,
+    /// Number of experts used during inference (for `MoE` models).
+    pub expert_used_count: Option<u32>,
+    /// Number of shared experts (for `MoE` models).
+    pub expert_shared_count: Option<u32>,
     /// Additional key-value metadata from the file (string representation).
     pub metadata: HashMap<String, String>,
 }

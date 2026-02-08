@@ -91,6 +91,10 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             architecture TEXT,
             quantization TEXT,
             context_length INTEGER,
+            inference_defaults TEXT,
+            expert_count INTEGER,
+            expert_used_count INTEGER,
+            expert_shared_count INTEGER,
             metadata TEXT,
             added_at TEXT NOT NULL,
             hf_repo_id TEXT,
@@ -122,25 +126,6 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_models_name ON models(name)")
         .execute(pool)
         .await?;
-
-    // Migration: Add capabilities column if it doesn't exist
-    // Default value of 0 = UNKNOWN (models must be explicitly inferred)
-    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN capabilities INTEGER DEFAULT 0"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
-
-    // Migration: Reset ALL existing models to unknown (0) to force re-inference
-    // This ensures consistency with the new capability detection logic
-    let _ = sqlx::query(r#"UPDATE models SET capabilities = 0 WHERE capabilities IS NOT NULL"#)
-        .execute(pool)
-        .await;
-
-    // Migration: Add inference_defaults column for per-model inference parameters
-    let _ = sqlx::query(r#"ALTER TABLE models ADD COLUMN inference_defaults TEXT"#)
-        .execute(pool)
-        .await;
-    // Ignore error if column already exists
 
     // Create settings table
     sqlx::query(
