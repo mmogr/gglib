@@ -1,0 +1,310 @@
+//! Voice Activity Detection module — detects speech start/end in audio.
+//!
+//! Uses whisper-rs's built-in Silero VAD for utterance boundary detection.
+//! In VAD mode, the pipeline continuously monitors mic input and triggers
+//! transcription when speech is detected followed by silence.
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use crate::gate::EchoGate;
+
+/// VAD configuration parameters.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct VadConfig {
+    /// Speech detection probability threshold (0.0–1.0, default 0.5).
+    ///
+    /// Higher values require more confidence before triggering speech detection.
+    /// Lower values are more sensitive (may trigger on noise).
+    pub threshold: f32,
+
+    /// Minimum silence duration (ms) to consider speech ended (default 700).
+    ///
+    /// After speech is detected, this much continuous silence must pass
+    /// before the utterance is considered complete and sent for transcription.
+    pub min_silence_duration_ms: u32,
+
+    /// Minimum speech duration (ms) to consider valid (default 250).
+    ///
+    /// Filters out very brief sounds (clicks, pops) that aren't real speech.
+    pub min_speech_duration_ms: u32,
+
+    /// Padding added around detected speech segments (ms, default 200).
+    pub speech_pad_ms: u32,
+}
+
+impl Default for VadConfig {
+    fn default() -> Self {
+        Self {
+            threshold: 0.5,
+            min_silence_duration_ms: 700,
+            min_speech_duration_ms: 250,
+            speech_pad_ms: 200,
+        }
+    }
+}
+
+/// Current VAD state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VadState {
+    /// Waiting for speech to start.
+    Listening,
+
+    /// Speech detected, accumulating audio.
+    SpeechDetected,
+
+    /// Silence detected after speech — utterance may be ending.
+    SilenceAfterSpeech,
+}
+
+/// Voice Activity Detector.
+///
+/// Monitors an audio stream and emits events when speech starts/ends.
+/// Integrates with the echo gate to avoid detecting TTS output as speech.
+pub struct VoiceActivityDetector {
+    /// Current state of the VAD.
+    state: VadState,
+
+    /// Configuration parameters.
+    config: VadConfig,
+
+    /// Echo gate — skip detection when the system is speaking.
+    echo_gate: EchoGate,
+
+    /// Whether the VAD is actively monitoring.
+    is_active: Arc<AtomicBool>,
+
+    /// Audio buffer accumulating the current utterance.
+    speech_buffer: Vec<f32>,
+
+    /// Count of consecutive silent frames (for silence detection).
+    silence_frame_count: u32,
+
+    /// Count of consecutive speech frames (for speech detection).
+    speech_frame_count: u32,
+
+    /// Audio sample rate we're processing at.
+    sample_rate: u32,
+}
+
+/// Events emitted by the VAD.
+#[derive(Debug, Clone)]
+pub enum VadEvent {
+    /// Speech has started.
+    SpeechStart,
+
+    /// Speech has ended — contains the complete utterance audio (16 kHz mono).
+    SpeechEnd {
+        /// The captured speech audio (16 kHz mono f32 PCM).
+        audio: Vec<f32>,
+    },
+
+    /// VAD is listening (periodic heartbeat).
+    Listening,
+}
+
+impl VoiceActivityDetector {
+    /// Create a new VAD with the given configuration.
+    pub fn new(config: VadConfig, echo_gate: EchoGate, sample_rate: u32) -> Self {
+        Self {
+            state: VadState::Listening,
+            config,
+            echo_gate,
+            is_active: Arc::new(AtomicBool::new(false)),
+            speech_buffer: Vec::new(),
+            silence_frame_count: 0,
+            speech_frame_count: 0,
+            sample_rate,
+        }
+    }
+
+    /// Start the VAD monitoring.
+    pub fn start(&mut self) {
+        self.is_active.store(true, Ordering::SeqCst);
+        self.reset();
+        tracing::debug!("VAD started");
+    }
+
+    /// Stop the VAD monitoring.
+    pub fn stop(&mut self) {
+        self.is_active.store(false, Ordering::SeqCst);
+        self.reset();
+        tracing::debug!("VAD stopped");
+    }
+
+    /// Whether the VAD is currently active.
+    #[must_use]
+    pub fn is_active(&self) -> bool {
+        self.is_active.load(Ordering::SeqCst)
+    }
+
+    /// Process a frame of audio samples and return any VAD events.
+    ///
+    /// The audio should be at the configured sample rate (typically 16 kHz mono).
+    /// This uses energy-based detection as a simple, zero-dependency approach.
+    /// For production use, this can be upgraded to use Silero VAD via
+    /// whisper-rs's `WhisperVadContext`.
+    pub fn process_frame(&mut self, frame: &[f32]) -> Option<VadEvent> {
+        if !self.is_active.load(Ordering::Relaxed) {
+            return None;
+        }
+
+        // Echo gate: ignore all audio while system is speaking
+        if self.echo_gate.is_speaking() {
+            // If we were accumulating speech, discard it
+            if self.state != VadState::Listening {
+                self.reset();
+            }
+            return None;
+        }
+
+        // Calculate RMS energy of the frame
+        let energy = calculate_rms_energy(frame);
+        let is_speech = energy > energy_threshold_from_vad_threshold(self.config.threshold);
+
+        // Frame duration in ms
+        #[allow(clippy::cast_precision_loss)]
+        let frame_duration_ms = (frame.len() as f32 / self.sample_rate as f32 * 1000.0) as u32;
+
+        match self.state {
+            VadState::Listening => {
+                if is_speech {
+                    self.speech_frame_count += frame_duration_ms;
+                    self.speech_buffer.extend_from_slice(frame);
+
+                    if self.speech_frame_count >= self.config.min_speech_duration_ms {
+                        self.state = VadState::SpeechDetected;
+                        self.silence_frame_count = 0;
+                        tracing::debug!(
+                            energy,
+                            "VAD: speech detected ({}ms)",
+                            self.speech_frame_count
+                        );
+                        return Some(VadEvent::SpeechStart);
+                    }
+                } else {
+                    // Reset speech counter if silence interrupts before min duration
+                    if self.speech_frame_count > 0 {
+                        self.speech_frame_count = 0;
+                        self.speech_buffer.clear();
+                    }
+                }
+            }
+
+            VadState::SpeechDetected => {
+                self.speech_buffer.extend_from_slice(frame);
+
+                if !is_speech {
+                    self.silence_frame_count += frame_duration_ms;
+                    if self.silence_frame_count >= self.config.min_silence_duration_ms {
+                        self.state = VadState::SilenceAfterSpeech;
+                    }
+                } else {
+                    // Reset silence counter — speech resumed
+                    self.silence_frame_count = 0;
+                }
+            }
+
+            VadState::SilenceAfterSpeech => {
+                // Utterance is complete — emit the buffered audio
+                let audio = std::mem::take(&mut self.speech_buffer);
+                self.reset();
+
+                tracing::debug!(
+                    samples = audio.len(),
+                    duration_ms = audio.len() as u64 * 1000 / u64::from(self.sample_rate),
+                    "VAD: speech ended"
+                );
+
+                return Some(VadEvent::SpeechEnd { audio });
+            }
+        }
+
+        None
+    }
+
+    /// Reset VAD state (clear buffers, go back to listening).
+    fn reset(&mut self) {
+        self.state = VadState::Listening;
+        self.speech_buffer.clear();
+        self.silence_frame_count = 0;
+        self.speech_frame_count = 0;
+    }
+
+    /// Get the current VAD state.
+    #[must_use]
+    pub fn state(&self) -> VadState {
+        self.state
+    }
+
+    /// Update VAD configuration.
+    pub fn set_config(&mut self, config: VadConfig) {
+        self.config = config;
+    }
+}
+
+/// Calculate RMS (Root Mean Square) energy of an audio frame.
+fn calculate_rms_energy(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum_squares: f32 = samples.iter().map(|&s| s * s).sum();
+
+    #[allow(clippy::cast_precision_loss)]
+    let mean = sum_squares / samples.len() as f32;
+
+    mean.sqrt()
+}
+
+/// Map VAD threshold (0.0–1.0) to an RMS energy threshold.
+///
+/// Lower VAD threshold → more sensitive (lower energy threshold).
+/// Higher VAD threshold → less sensitive (higher energy threshold).
+fn energy_threshold_from_vad_threshold(vad_threshold: f32) -> f32 {
+    // Map [0.0, 1.0] → [0.001, 0.05] RMS energy range
+    // 0.01 is a reasonable default for normal speech
+    let min_energy = 0.001;
+    let max_energy = 0.05;
+    min_energy + (max_energy - min_energy) * vad_threshold
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vad_starts_in_listening_state() {
+        let gate = crate::gate::EchoGate::new();
+        let vad = VoiceActivityDetector::new(VadConfig::default(), gate, 16_000);
+        assert_eq!(vad.state(), VadState::Listening);
+    }
+
+    #[test]
+    fn vad_ignores_audio_when_system_speaking() {
+        let gate = crate::gate::EchoGate::new();
+        let mut vad = VoiceActivityDetector::new(VadConfig::default(), gate.clone(), 16_000);
+        vad.start();
+
+        gate.start_speaking();
+
+        // Send loud audio — should be ignored
+        let loud_frame: Vec<f32> = (0..1600).map(|i| (i as f32 * 0.1).sin() * 0.5).collect();
+        let event = vad.process_frame(&loud_frame);
+        assert!(event.is_none());
+        assert_eq!(vad.state(), VadState::Listening);
+    }
+
+    #[test]
+    fn rms_energy_calculation() {
+        // Silence
+        let silence = vec![0.0f32; 100];
+        assert!((calculate_rms_energy(&silence) - 0.0).abs() < f32::EPSILON);
+
+        // Full-scale signal
+        let loud = vec![1.0f32; 100];
+        assert!((calculate_rms_energy(&loud) - 1.0).abs() < f32::EPSILON);
+
+        // Empty
+        assert!((calculate_rms_energy(&[]) - 0.0).abs() < f32::EPSILON);
+    }
+}

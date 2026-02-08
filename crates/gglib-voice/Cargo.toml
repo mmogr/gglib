@@ -1,0 +1,66 @@
+[package]
+name = "gglib-voice"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Voice mode for gglib - local STT (whisper.cpp) and TTS (Kokoro) pipeline"
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Apple Silicon acceleration via CoreML for ONNX Runtime (Kokoro TTS)
+coreml = ["ort/coreml"]
+# CUDA acceleration
+cuda = ["ort/cuda"]
+
+[dependencies]
+# Internal crates
+gglib-core = { path = "../gglib-core" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+
+# Audio capture (cross-platform: CoreAudio/WASAPI/ALSA)
+cpal = "0.15"
+
+# Audio playback
+rodio = { version = "0.20", default-features = false, features = ["wav"] }
+
+# Audio resampling (device sample rate → 16kHz for whisper)
+rubato = "0.16"
+
+# Speech-to-Text: whisper.cpp Rust bindings
+whisper-rs = "0.15"
+
+# Text-to-Speech: Kokoro v1.0 (built-in G2P, no espeak-ng dependency)
+kokoro-tts = "0.3"
+
+# ONNX Runtime (used by kokoro-tts, configurable acceleration)
+ort = { version = "2.0.0-rc.11", default-features = false, features = [
+    "download-binaries",
+    "copy-dylibs",
+    "ndarray",
+] }
+
+# HTTP client for model downloads
+reqwest = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tokio-test = { workspace = true }
+tempfile = { workspace = true }
