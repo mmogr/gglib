@@ -5,7 +5,7 @@
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-complexity.json)
 
-**Single Active Backend Proxy** - OpenAI-compatible proxy server for gglib.
+**Dual API Compatibility Proxy** - OpenAI and Ollama compatible proxy server for gglib.
 
 ## Architecture
 
@@ -42,19 +42,25 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 
 ## Overview
 
-This crate provides an OpenAI-compatible HTTP server that:
+This crate provides a dual-API HTTP proxy server that supports both OpenAI and Ollama clients simultaneously:
 
-1. **Receives requests** in OpenAI API format (`/v1/chat/completions`, `/v1/models`)
-2. **Routes to llama-server** instances managed by gglib-runtime
-3. **Streams responses** back to clients with proper SSE formatting
+1. **OpenAI API** (`/v1/*`) — Original compatibility layer for OpenAI SDK clients
+2. **Ollama API** (`/api/*`) — Native Ollama endpoints, making gglib a drop-in replacement for Ollama
+3. **Format translation** — Ollama requests ↔ OpenAI format ↔ llama-server ↔ response translation
+4. **Streaming adaptation** — SSE (Server-Sent Events) ↔ NDJSON (Newline-Delimited JSON)
 
 ## Internal Structure
 
 ```text
-┌─────────────┐     ┌─────────────┐     ┌──────────────────┐
-│ OpenAI SDK  │────▶│ gglib-proxy │────▶│ llama-server     │
-│ or Client   │◀────│ (this crate)│◀────│ (via runtime)    │
-└─────────────┘     └─────────────┘     └──────────────────┘
+┌─────────────┐     ┌─────────────────────────────┐     ┌──────────────────┐
+│ OpenAI SDK  │────▶│ /v1/* (OpenAI endpoints)     │────▶│                  │
+│             │     │                             │     │  llama-server    │
+└─────────────┘     │      gglib-proxy            │     │  (via runtime)   │
+                    │    (this crate)             │     │                  │
+┌─────────────┐     │                             │     │                  │
+│Ollama Client│────▶│ /api/* (Ollama endpoints)   │────▶│                  │
+│             │◀────│  + SSE↔NDJSON translation   │◀────│                  │
+└─────────────┘     └─────────────────────────────┘     └──────────────────┘
 ```
 
 ### Key Design Decisions
@@ -69,13 +75,23 @@ This crate provides an OpenAI-compatible HTTP server that:
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                                gglib-proxy                                          │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐      │
-│  │  server.rs  │     │  models.rs  │     │ forward.rs  │     │   lib.rs    │      │
-│  │   Axum app  │────▶│  /v1/models │────▶│  Streaming  │     │Entry point  │      │
-│  │  & routing  │     │   endpoint  │     │   forward   │     │             │      │
-│  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘      │
-│                                                                                     │
+│  OpenAI API (original)                    Ollama API (new)                          │
+│  ┌─────────────┐     ┌─────────────┐     ┌──────────────────┐                      │
+│  │  server.rs  │     │  models.rs  │     │ ollama_models.rs │                      │
+│  │   Axum app  │────▶│  /v1/models │     │  Ollama types +  │                      │
+│  │  & routing  │     │   endpoint  │     │  normalization   │                      │
+│  └──────┬──────┘     └─────────────┘     └──────────────────┘                      │
+│         │                                                                           │
+│         │            ┌─────────────┐     ┌──────────────────┐                      │
+│         └───────────▶│ forward.rs  │     │ollama_handlers.rs│                      │
+│                      │  Streaming  │     │ 13 Ollama routes │                      │
+│                      │   forward   │     │  + translation   │                      │
+│                      └─────────────┘     └────────┬─────────┘                      │
+│                                                   │                                 │
+│                                          ┌────────▼──────────┐                      │
+│                                          │ollama_stream.rs   │                      │
+│                                          │ SSE↔NDJSON adapter│                      │
+│                                          └───────────────────┘                      │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -87,27 +103,59 @@ This crate provides an OpenAI-compatible HTTP server that:
 |--------|-----|------------|----------|
 | [`forward.rs`](src/forward.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-forward-coverage.json) |
 | [`models.rs`](src/models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-models-coverage.json) |
+| [`ollama_handlers.rs`](src/ollama_handlers.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_handlers-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_handlers-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_handlers-coverage.json) |
+| [`ollama_models.rs`](src/ollama_models.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_models-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_models-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_models-coverage.json) |
+| [`ollama_stream.rs`](src/ollama_stream.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_stream-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_stream-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-ollama_stream-coverage.json) |
 | [`server.rs`](src/server.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-server-coverage.json) |
 <!-- module-table:end -->
 
 </details>
 
 **Module Descriptions:**
-- **`server.rs`** — Axum application setup, routing, `/v1/chat/completions` handler
+
+**OpenAI API (original):**
+- **`server.rs`** — Axum application setup, unified routing for both APIs, shared ProxyState
 - **`models.rs`** — `/v1/models` endpoint, model listing and resolution
-- **`forward.rs`** — HTTP forwarding to llama-server with streaming support
+- **`forward.rs`** — HTTP forwarding to llama-server with SSE streaming support
 - **`lib.rs`** — Public API and module re-exports
+
+**Ollama API (new):**
+- **`ollama_models.rs`** — Ollama data types, model name normalization (`:latest` stripping), timestamp helpers
+- **`ollama_handlers.rs`** — 13 Ollama route handlers (`/api/chat`, `/api/generate`, `/api/tags`, etc.), format translation
+- **`ollama_stream.rs`** — SSE↔NDJSON streaming adapter using `futures_util::stream::unfold`
 
 
 ## API
 
 ### Endpoints
 
+**Health & Common:**
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check (always 200) |
+
+**OpenAI API (original):**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/v1/models` | GET | List available models |
 | `/v1/chat/completions` | POST | Chat completion (streaming/non-streaming) |
+
+**Ollama API (new):**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `GET /` | GET | Root probe ("Ollama is running") |
+| `/api/version` | GET | Version info |
+| `/api/tags` | GET | List models (Ollama format) |
+| `/api/show` | POST | Model metadata |
+| `/api/ps` | GET | Running models |
+| `/api/chat` | POST | Chat completions (streaming/non-streaming, NDJSON) |
+| `/api/generate` | POST | Text generation (streaming/non-streaming, NDJSON) |
+| `/api/embed` | POST | Generate embeddings |
+| `/api/embeddings` | POST | Legacy single-embedding endpoint |
+| `/api/pull` | POST | Stub (redirects to CLI) |
+| `/api/delete` | DELETE | Stub (redirects to CLI) |
+| `/api/copy` | POST | Stub (not supported) |
+| `/api/create` | POST | Stub (not supported) |
 
 ### Model Resolution
 
