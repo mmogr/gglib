@@ -44,6 +44,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
     mode,
     isPttHeld,
     isSpeaking,
+    isTtsGenerating,
     audioLevel,
     lastTranscript,
     error,
@@ -151,6 +152,14 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
         >
           ⏹️ Stop
         </button>
+      )}
+
+      {/* TTS generating indicator */}
+      {isTtsGenerating && !isSpeaking && (
+        <span className={styles.loadingIndicator}>
+          <span className={styles.spinner} />
+          Generating speech…
+        </span>
       )}
 
       {/* Models auto-loading indicator (animated) */}

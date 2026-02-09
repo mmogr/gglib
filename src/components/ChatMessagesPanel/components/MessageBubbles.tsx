@@ -1,11 +1,11 @@
-import React, { useContext } from 'react';
+import React, { useContext, useCallback } from 'react';
 import {
   ComposerPrimitive,
   MessagePrimitive,
   ActionBarPrimitive,
   useMessage,
 } from '@assistant-ui/react';
-import { Bot, Copy, Mic, Pencil, Trash2, User as UserIcon, Volume2 } from 'lucide-react';
+import { Bot, Copy, Loader2, Mic, Pencil, Trash2, User as UserIcon, Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 import { parseThinkingContent } from '../../../utils/thinkingParser';
@@ -19,6 +19,8 @@ import { useDeepResearchContext } from '../context/DeepResearchContext';
 import { ResearchArtifact } from '../../DeepResearch';
 import type { GglibMessageCustom } from '../../../types/messages';
 import type { ResearchState } from '../../../hooks/useDeepResearch/types';
+import { useVoiceContextOptional } from '../context/VoiceContext';
+import { stripThinkingBlocks } from '../../../utils/stripThinkingBlocks';
 
 const cx = (...classes: Array<string | false | undefined>) =>
   classes.filter(Boolean).join(' ');
@@ -47,6 +49,60 @@ function isVoiceMessage(message: ReturnType<typeof useMessage>): boolean {
   const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
   return custom?.isVoice === true;
 }
+
+/**
+ * Extract speakable text from a message's content parts.
+ */
+function extractSpeakableText(message: ReturnType<typeof useMessage>): string {
+  const content = (message as any)?.content;
+  let text = '';
+  if (typeof content === 'string') {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = content
+      .filter((p: any): p is { type: 'text'; text: string } => p?.type === 'text')
+      .map((p: any) => p.text)
+      .join(' ');
+  }
+  return stripThinkingBlocks(text);
+}
+
+/**
+ * Speak button for assistant messages.
+ * Only renders when voice mode is active and TTS is loaded.
+ */
+const SpeakButton: React.FC<{ message: ReturnType<typeof useMessage> }> = ({ message }) => {
+  const voiceCtx = useVoiceContextOptional();
+
+  const handleSpeak = useCallback(() => {
+    if (!voiceCtx) return;
+    const text = extractSpeakableText(message);
+    if (text) {
+      voiceCtx.speak(text);
+    }
+  }, [voiceCtx, message]);
+
+  // Don't render unless voice mode is active with TTS ready
+  if (!voiceCtx?.isActive || !voiceCtx?.ttsLoaded) return null;
+
+  const busy = voiceCtx.isSpeaking || voiceCtx.isTtsGenerating;
+
+  return (
+    <button
+      className="chat-action-btn chat-speak-btn"
+      onClick={handleSpeak}
+      disabled={busy}
+      title={busy ? 'TTS is busy' : 'Read aloud'}
+      aria-label="Read aloud"
+    >
+      <Icon
+        icon={voiceCtx.isTtsGenerating ? Loader2 : Volume2}
+        size={14}
+        className={voiceCtx.isTtsGenerating ? 'chat-action-spin' : undefined}
+      />
+    </button>
+  );
+};
 
 /**
  * Message bubble for assistant responses.
@@ -147,6 +203,7 @@ export const AssistantMessageBubble: React.FC = () => {
         )}
       </div>
       <ActionBarPrimitive.Root className="chat-message-actions">
+        <SpeakButton message={message} />
         <ActionBarPrimitive.Copy />
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>

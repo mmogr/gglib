@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { type ChatPageTabId } from './chatTabs';
 import { appLogger } from '../services/platform';
+import { stripThinkingBlocks } from '../utils/stripThinkingBlocks';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
@@ -142,12 +143,7 @@ export default function ChatPage({
         // Strip any residual <think>…</think> blocks that may be embedded
         // in the text content (some models inline them without using
         // the reasoning_content SSE field).
-        text = text
-          .replace(/<think[^>]*>[\s\S]*?<\/think>/gi, '')
-          .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
-          .replace(/<seed:think>[\s\S]*?<\/seed:think>/gi, '')
-          .replace(/<\|START_THINKING\|>[\s\S]*?<\|END_THINKING\|>/gi, '')
-          .trim();
+        text = stripThinkingBlocks(text);
         if (text) {
           voice.speak(text).catch(err => {
             appLogger.error('hook.runtime', 'Auto-speak failed', { error: String(err) });
