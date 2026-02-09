@@ -47,10 +47,11 @@ pub(crate) async fn ollama_root() -> impl IntoResponse {
 // ── GET /api/version ───────────────────────────────────────────────────
 
 pub(crate) async fn ollama_version() -> impl IntoResponse {
-    // Return a plain semantic version to satisfy Ollama clients (like VSCode extension)
-    // that validate the version format. Use gglib's version but drop the "gglib-" prefix.
+    // Return an Ollama-compatible version number to satisfy client requirements.
+    // VSCode Ollama extension requires >= 0.6.4. We return 0.6.4 to indicate
+    // compatibility while maintaining a stable version claim.
     Json(OllamaVersionResponse {
-        version: env!("CARGO_PKG_VERSION").to_string(),
+        version: "0.6.4".to_string(),
     })
 }
 
