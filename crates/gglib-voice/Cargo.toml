@@ -59,8 +59,12 @@ rubato = "0.16"
 # Speech-to-Text: whisper.cpp Rust bindings
 whisper-rs = "0.15"
 
-# Text-to-Speech: Kokoro v1.0 (built-in G2P, no espeak-ng dependency)
-kokoro-tts = "0.3"
+# Text-to-Speech: Kokoro v1.0 — local fork with Misaki G2P patch.
+# The upstream kokoro-tts crate uses an espeak dictionary for G2P, but the
+# Kokoro model was trained with the Misaki G2P engine. The phoneme mismatch
+# causes garbled/hallucinated speech. Our fork patches the G2P layer to use
+# misaki-rs (the correct engine) while keeping all ONNX inference untouched.
+kokoro-tts = { path = "../kokoro-tts-custom", features = ["misaki-g2p"] }
 
 # ONNX Runtime (used by kokoro-tts, configurable acceleration)
 ort = { version = "2.0.0-rc.11", default-features = false, features = [
