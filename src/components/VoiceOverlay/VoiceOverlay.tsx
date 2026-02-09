@@ -103,12 +103,15 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
     pttStop();
   }, [pttStop]);
 
-  // Don't render anything outside Tauri, or when voice mode is not active
-  if (!isSupported || !isActive) return null;
+  // Don't render anything outside Tauri.
+  // Render during auto-loading even before the pipeline is fully active,
+  // so the user sees the "Loading models…" spinner after clicking the mic.
+  if (!isSupported || (!isActive && !voice.isAutoLoading)) return null;
 
   const stateLabel = STATE_LABELS[voiceState] ?? voiceState;
   const stateIcon = STATE_ICONS[voiceState] ?? '🎙️';
   const modelsReady = sttLoaded && ttsLoaded;
+  const showAutoLoading = voice.isAutoLoading;
 
   return (
     <div className={styles.overlay}>
@@ -150,8 +153,16 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
         </button>
       )}
 
-      {/* Models not loaded warning */}
-      {!modelsReady && (
+      {/* Models auto-loading indicator (animated) */}
+      {showAutoLoading && (
+        <span className={styles.loadingIndicator}>
+          <span className={styles.spinner} />
+          Loading models…
+        </span>
+      )}
+
+      {/* Models not loaded warning (only if NOT currently loading) */}
+      {!modelsReady && !showAutoLoading && (
         <span className={styles.warning}>
           Models not loaded — open Voice settings
         </span>

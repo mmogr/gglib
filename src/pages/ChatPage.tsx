@@ -100,8 +100,14 @@ export default function ChatPage({
   const serverState = useServerState(modelId);
   const isServerRunning = serverState?.status !== 'stopped' && serverState?.status !== 'crashed';
 
-  // Voice mode
-  const voice = useVoiceMode();
+  // Voice mode — pass persisted defaults for auto-loading on first activation
+  const voice = useVoiceMode({
+    sttModel: settings?.voiceSttModel,
+    ttsVoice: settings?.voiceTtsVoice,
+    ttsSpeed: settings?.voiceTtsSpeed,
+    interactionMode: settings?.voiceInteractionMode,
+    autoSpeak: settings?.voiceAutoSpeak,
+  });
 
   // Send voice transcript as a chat message
   const handleVoiceTranscript = useCallback((text: string) => {

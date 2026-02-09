@@ -1,14 +1,19 @@
 /**
  * VoiceSettings — voice mode configuration panel in the settings modal.
  *
- * Controls STT/TTS model selection, interaction mode, voice choice,
- * speed, VAD sensitivity, and model download.
+ * Separates model *management* (downloading) from model *selection*
+ * (choosing persisted defaults). Default models are saved to the SQLite
+ * settings store so voice mode "just works" on subsequent launches
+ * without re-visiting settings.
+ *
+ * @module components/SettingsModal/VoiceSettings
  */
 
-import { FC, useCallback, useEffect, useState } from "react";
+import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
 import { useVoiceMode } from "../../hooks/useVoiceMode";
+import { useSettingsContext } from "../../contexts/SettingsContext";
 import type { VoiceInteractionMode } from "../../services/clients/voice";
 import styles from "../SettingsModal.module.css";
 
@@ -18,10 +23,26 @@ interface VoiceSettingsProps {
 
 export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
   const voice = useVoiceMode();
-  const [selectedSttModel, setSelectedSttModel] = useState<string>('whisper-base');
-  const [selectedVoice, setSelectedVoice] = useState<string>('af_sarah');
-  const [speedInput, setSpeedInput] = useState<number>(1.0);
+  const { settings, save: saveSettings } = useSettingsContext();
+
+  // ── Local state initialised from persisted settings ────────────
+  const [downloadTarget, setDownloadTarget] = useState<string>('base.en');
+  const [selectedVoice, setSelectedVoice] = useState<string>(
+    settings?.voiceTtsVoice ?? 'af_sarah',
+  );
+  const [speedInput, setSpeedInput] = useState<number>(
+    settings?.voiceTtsSpeed ?? 1.0,
+  );
   const [downloading, setDownloading] = useState<string | null>(null);
+
+  // Derived: the persisted default STT model
+  const defaultSttModel = settings?.voiceSttModel ?? null;
+
+  // Re-sync local state when persisted settings load/change
+  useEffect(() => {
+    if (settings?.voiceTtsVoice) setSelectedVoice(settings.voiceTtsVoice);
+    if (settings?.voiceTtsSpeed != null) setSpeedInput(settings.voiceTtsSpeed);
+  }, [settings?.voiceTtsVoice, settings?.voiceTtsSpeed]);
 
   // Load models and devices on mount
   useEffect(() => {
@@ -29,50 +50,100 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Downloaded model lists (derived from model catalog) ────────
+  const downloadedSttIds = useMemo(
+    () => new Set(voice.models?.sttDownloaded ?? []),
+    [voice.models?.sttDownloaded],
+  );
+  const ttsDownloaded = voice.models?.ttsDownloaded ?? false;
+
+  // If the persisted default points to a model no longer on disk, clear it
+  useEffect(() => {
+    if (
+      defaultSttModel &&
+      voice.models &&               // catalog has loaded
+      !downloadedSttIds.has(defaultSttModel)
+    ) {
+      // Model was deleted from disk — reset persisted default
+      saveSettings({ voiceSttModel: null }).catch(() => {});
+    }
+    // Only run when the download list or default changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [downloadedSttIds, defaultSttModel, voice.models]);
+
+  // ── Handlers ───────────────────────────────────────────────────
+
   const handleDownloadStt = useCallback(async () => {
     try {
       setDownloading('stt');
-      await voice.downloadSttModel(selectedSttModel);
-      await voice.loadStt(selectedSttModel);
+      await voice.downloadSttModel(downloadTarget);
+      // Refresh model list so downloadedSttIds updates
+      await voice.refreshModels();
+      // Auto-set as default if no default is configured yet
+      if (!defaultSttModel) {
+        await saveSettings({ voiceSttModel: downloadTarget });
+      }
     } catch {
       // Error handled by the hook
     } finally {
       setDownloading(null);
     }
-  }, [voice, selectedSttModel]);
+  }, [voice, downloadTarget, defaultSttModel, saveSettings]);
 
   const handleDownloadTts = useCallback(async () => {
     try {
       setDownloading('tts');
       await voice.downloadTtsModel();
-      await voice.loadTts();
+      // Refresh model list so ttsDownloaded updates
+      await voice.refreshModels();
+      // Persist default voice if not already set
+      if (!settings?.voiceTtsVoice) {
+        await saveSettings({ voiceTtsVoice: 'af_sarah' });
+      }
     } catch {
       // Error handled by the hook
     } finally {
       setDownloading(null);
     }
-  }, [voice]);
+  }, [voice, settings?.voiceTtsVoice, saveSettings]);
 
-  const handleModeChange = useCallback((mode: string) => {
-    voice.setMode(mode as VoiceInteractionMode);
-  }, [voice]);
+  const handleDefaultSttChange = useCallback(async (modelId: string) => {
+    await saveSettings({ voiceSttModel: modelId });
+    // If a pipeline is already alive, hot-swap the STT engine
+    if (voice.sttLoaded) {
+      voice.loadStt(modelId);
+    }
+  }, [saveSettings, voice]);
 
-  const handleVoiceChange = useCallback((voiceId: string) => {
+  const handleModeChange = useCallback(async (mode: string) => {
+    const m = mode as VoiceInteractionMode;
+    voice.setMode(m);
+    await saveSettings({ voiceInteractionMode: m });
+  }, [voice, saveSettings]);
+
+  const handleVoiceChange = useCallback(async (voiceId: string) => {
     setSelectedVoice(voiceId);
     voice.setVoice(voiceId);
-  }, [voice]);
+    await saveSettings({ voiceTtsVoice: voiceId });
+  }, [voice, saveSettings]);
 
-  const handleSpeedChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSpeedChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const speed = parseFloat(e.target.value);
     if (!isNaN(speed)) {
       setSpeedInput(speed);
       voice.setSpeed(speed);
+      // Debounce-persist: save only on mouse-up is fine because the range
+      // input fires onChange continuously. We persist on every change for
+      // simplicity — the settings service merges partial updates.
+      await saveSettings({ voiceTtsSpeed: speed });
     }
-  }, [voice]);
+  }, [voice, saveSettings]);
 
-  const handleAutoSpeakChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    voice.setAutoSpeak(e.target.checked);
-  }, [voice]);
+  const handleAutoSpeakChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const enabled = e.target.checked;
+    voice.setAutoSpeak(enabled);
+    await saveSettings({ voiceAutoSpeak: enabled });
+  }, [voice, saveSettings]);
 
   if (!voice.isSupported) {
     return (
@@ -84,6 +155,24 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
     );
   }
 
+  // ── Render helpers ─────────────────────────────────────────────
+
+  const downloadedSttModels = voice.models?.sttModels?.filter(
+    (m) => downloadedSttIds.has(m.id),
+  ) ?? [];
+
+  const sttButtonLabel = (() => {
+    if (downloading === 'stt') return 'Downloading…';
+    if (downloadedSttIds.has(downloadTarget)) return '✓ Downloaded';
+    return 'Download';
+  })();
+
+  const ttsButtonLabel = (() => {
+    if (downloading === 'tts') return 'Downloading…';
+    if (ttsDownloaded) return '✓ Downloaded';
+    return 'Download';
+  })();
+
   return (
     <div className={styles.form}>
       {/* Error display */}
@@ -94,7 +183,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         </div>
       )}
 
-      {/* STT Model Section */}
+      {/* ── STT Model Section ──────────────────────────────────── */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>Speech-to-Text (Whisper)</h3>
         <p className={styles.description}>
@@ -102,33 +191,59 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           accurate but slower and use more memory.
         </p>
 
+        {/* Download row: pick any catalog model and download it */}
         <div className={styles.fieldGroup}>
-          <label className={styles.label}>STT Model</label>
+          <label className={styles.label}>Download a Model</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Select
-              value={selectedSttModel}
-              onChange={(e) => setSelectedSttModel(e.target.value)}
+              value={downloadTarget}
+              onChange={(e) => setDownloadTarget(e.target.value)}
               style={{ flex: 1 }}
             >
               {voice.models?.sttModels?.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.sizeDisplay}) {m.englishOnly ? '🇺🇸' : '🌐'}
+                  {downloadedSttIds.has(m.id) ? ' ✓' : ''}
                 </option>
               )) ?? <option>Loading...</option>}
             </Select>
             <Button
               onClick={handleDownloadStt}
-              disabled={downloading === 'stt'}
+              disabled={downloading === 'stt' || downloadedSttIds.has(downloadTarget)}
               variant="secondary"
               size="sm"
             >
-              {downloading === 'stt' ? 'Downloading…' : voice.sttLoaded ? '✓ Loaded' : 'Download & Load'}
+              {sttButtonLabel}
             </Button>
           </div>
         </div>
+
+        {/* Default model selector: only downloaded models */}
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>Default STT Model</label>
+          {downloadedSttModels.length > 0 ? (
+            <Select
+              value={defaultSttModel ?? ''}
+              onChange={(e) => handleDefaultSttChange(e.target.value)}
+            >
+              {!defaultSttModel && (
+                <option value="" disabled>Select a default…</option>
+              )}
+              {downloadedSttModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.sizeDisplay}) {m.englishOnly ? '🇺🇸' : '🌐'}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <p className={styles.description} style={{ fontStyle: 'italic' }}>
+              Download a model above to set a default.
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* TTS Section */}
+      {/* ── TTS Section ────────────────────────────────────────── */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>Text-to-Speech (Kokoro)</h3>
         <p className={styles.description}>
@@ -143,17 +258,17 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             </span>
             <Button
               onClick={handleDownloadTts}
-              disabled={downloading === 'tts'}
+              disabled={downloading === 'tts' || ttsDownloaded}
               variant="secondary"
               size="sm"
             >
-              {downloading === 'tts' ? 'Downloading…' : voice.ttsLoaded ? '✓ Loaded' : 'Download & Load'}
+              {ttsButtonLabel}
             </Button>
           </div>
         </div>
 
         <div className={styles.fieldGroup}>
-          <label className={styles.label}>Voice</label>
+          <label className={styles.label}>Default Voice</label>
           <Select
             value={selectedVoice}
             onChange={(e) => handleVoiceChange(e.target.value)}
@@ -180,7 +295,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         </div>
       </div>
 
-      {/* Interaction Mode */}
+      {/* ── Interaction Mode ───────────────────────────────────── */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>Interaction Mode</h3>
 
@@ -210,7 +325,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         </div>
       </div>
 
-      {/* Audio Devices */}
+      {/* ── Audio Devices ──────────────────────────────────────── */}
       {voice.devices.length > 0 && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Audio Devices</h3>
@@ -227,7 +342,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         </div>
       )}
 
-      {/* Download Progress */}
+      {/* ── Download Progress ──────────────────────────────────── */}
       {voice.downloadProgress && (
         <div className={styles.section}>
           <p className={styles.description}>
@@ -252,18 +367,20 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         </div>
       )}
 
-      {/* Status */}
+      {/* ── Status ─────────────────────────────────────────────── */}
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>Status</h3>
         <div style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
           <div>Pipeline: {voice.isActive ? '🟢 Active' : '⚪ Inactive'}</div>
           <div>STT Engine: {voice.sttLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
           <div>TTS Engine: {voice.ttsLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
+          <div>Default STT: {defaultSttModel ?? '—'}</div>
+          <div>Default Voice: {selectedVoice}</div>
           <div>State: {voice.voiceState}</div>
         </div>
       </div>
 
-      {/* Actions */}
+      {/* ── Actions ────────────────────────────────────────────── */}
       <div className={styles.actions}>
         <Button onClick={onClose} variant="secondary" size="sm">
           Close

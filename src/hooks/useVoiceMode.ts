@@ -4,6 +4,11 @@
  * Manages the voice pipeline lifecycle, event subscriptions, and
  * provides an imperative API for voice controls (PTT, speak, etc.).
  *
+ * When `start()` is called, the hook automatically loads persisted
+ * default models (STT model, TTS voice/speed) from the optional
+ * `defaults` config before starting the pipeline, so the user never
+ * has to manually re‑select models after the initial download.
+ *
  * @module hooks/useVoiceMode
  */
 
@@ -45,6 +50,22 @@ import type {
   ModelDownloadProgressPayload,
 } from '../services/clients/voice';
 
+// ── Defaults from persisted settings ───────────────────────────────
+
+/** Persisted defaults passed from SettingsContext / ChatPage. */
+export interface VoiceDefaults {
+  /** Default STT model id (e.g. "base.en") */
+  sttModel?: string | null;
+  /** Default TTS voice id (e.g. "af_sarah") */
+  ttsVoice?: string | null;
+  /** Default TTS speed multiplier */
+  ttsSpeed?: number | null;
+  /** Default interaction mode */
+  interactionMode?: string | null;
+  /** Default auto-speak preference */
+  autoSpeak?: boolean | null;
+}
+
 // ── Hook return type ───────────────────────────────────────────────
 
 export interface UseVoiceModeReturn {
@@ -80,6 +101,8 @@ export interface UseVoiceModeReturn {
   downloadProgress: ModelDownloadProgressPayload | null;
   /** Whether models are currently loading */
   modelsLoading: boolean;
+  /** Whether default models are being auto-loaded on first activation */
+  isAutoLoading: boolean;
 
   // Actions
   /** Start voice mode */
@@ -120,7 +143,7 @@ export interface UseVoiceModeReturn {
 
 // ── Hook implementation ────────────────────────────────────────────
 
-export function useVoiceMode(): UseVoiceModeReturn {
+export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const isSupported = isTauriEnvironment();
 
   // Pipeline state
@@ -143,9 +166,21 @@ export function useVoiceMode(): UseVoiceModeReturn {
   const [devices, setDevices] = useState<AudioDeviceInfo[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgressPayload | null>(null);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [isAutoLoading, setIsAutoLoading] = useState(false);
 
   // Cleanup refs
   const unlistenRefs = useRef<UnlistenFn[]>([]);
+
+  // Race-condition guard: monotonically increasing load generation.
+  // When a new load is requested, the generation advances; any
+  // in-flight load with an older generation bails out before
+  // mutating state (prevents memory conflicts from Step 8/9).
+  const loadGenRef = useRef(0);
+
+  // Keep defaults in a ref so the `start` callback always sees the
+  // latest values without re-creating the closure on every render.
+  const defaultsRef = useRef(defaults);
+  defaultsRef.current = defaults;
 
   // ── Event subscriptions ────────────────────────────────────────
 
@@ -221,16 +256,121 @@ export function useVoiceMode(): UseVoiceModeReturn {
   const start = useCallback(async (startMode?: VoiceInteractionMode) => {
     try {
       setError(null);
+
+      // Bump load generation so any in-flight load can detect staleness.
+      const gen = ++loadGenRef.current;
+
+      // Check what's already loaded on the backend pipeline.
+      let status: VoiceStatusResponse;
+      try {
+        status = await voiceStatus();
+      } catch {
+        // Pipeline doesn't exist yet — treat as nothing loaded.
+        status = {
+          isActive: false,
+          state: 'idle',
+          mode: 'ptt',
+          sttLoaded: false,
+          ttsLoaded: false,
+          autoSpeak: true,
+        };
+      }
+
+      const defs = defaultsRef.current;
+      const needStt = !status.sttLoaded && !!defs?.sttModel;
+
+      // Only attempt TTS auto-load if the model is actually downloaded.
+      // Query the catalog to check; swallow errors (best-effort).
+      let ttsDownloaded = false;
+      try {
+        const catalog = await voiceListModels();
+        ttsDownloaded = catalog.ttsDownloaded;
+      } catch { /* fall through — skip TTS auto-load */ }
+      const needTts = !status.ttsLoaded && ttsDownloaded;
+
+      // Show an auto-loading overlay immediately so the user sees
+      // feedback while models are being loaded into memory.
+      if (needStt || needTts) {
+        setIsAutoLoading(true);
+      }
+
+      // Auto-load models from persisted defaults (lazy-load on first
+      // activation). Each load is best-effort: if a model fails to
+      // load the pipeline will still start (just without that engine).
+      // Each load is also guarded by the generation counter to handle
+      // race conditions when the user changes defaults mid-load.
+      try {
+        const loadPromises: Promise<void>[] = [];
+
+        if (needStt && defs?.sttModel) {
+          const sttId = defs.sttModel;
+          loadPromises.push(
+            voiceLoadStt(sttId)
+              .then(() => {
+                if (loadGenRef.current === gen) setSttLoaded(true);
+              })
+              .catch((e) => {
+                // STT load failed — surface the error but don't block start.
+                if (loadGenRef.current === gen) {
+                  setError(`STT load failed: ${String(e)}`);
+                }
+              }),
+          );
+        }
+        if (needTts) {
+          loadPromises.push(
+            voiceLoadTts()
+              .then(() => {
+                if (loadGenRef.current === gen) setTtsLoaded(true);
+              })
+              .catch((e) => {
+                // TTS load failed — surface the error but don't block start.
+                if (loadGenRef.current === gen) {
+                  setError(`TTS load failed: ${String(e)}`);
+                }
+              }),
+          );
+        }
+
+        // Wait for model loads to settle (all are best-effort).
+        if (loadPromises.length > 0) {
+          await Promise.all(loadPromises);
+        }
+
+        // Bail out if a newer start/load was triggered while we waited.
+        if (loadGenRef.current !== gen) return;
+
+        // Apply voice / speed / mode defaults to the pipeline.
+        if (defs?.ttsVoice) {
+          await voiceSetVoice(defs.ttsVoice).catch(() => {});
+        }
+        if (defs?.ttsSpeed != null) {
+          await voiceSetSpeed(defs.ttsSpeed).catch(() => {});
+        }
+        if (defs?.autoSpeak != null) {
+          await voiceSetAutoSpeak(defs.autoSpeak).catch(() => {});
+          setAutoSpeakState(defs.autoSpeak);
+        }
+      } finally {
+        if (loadGenRef.current === gen) setIsAutoLoading(false);
+      }
+
+      // Bail out again after async gap.
+      if (loadGenRef.current !== gen) return;
+
+      // Actually start the pipeline (audio I/O).
       await voiceStart(startMode);
+
       // Refresh full status from backend (models may have been preloaded)
-      const status = await voiceStatus();
-      setIsActive(status.isActive);
-      setVoiceState(status.state as VoiceState);
-      setModeState(status.mode as VoiceInteractionMode);
-      setSttLoaded(status.sttLoaded);
-      setTtsLoaded(status.ttsLoaded);
-      setAutoSpeakState(status.autoSpeak);
+      const finalStatus = await voiceStatus();
+      setIsActive(finalStatus.isActive);
+      setVoiceState(finalStatus.state as VoiceState);
+      setModeState(finalStatus.mode as VoiceInteractionMode);
+      setSttLoaded(finalStatus.sttLoaded);
+      setTtsLoaded(finalStatus.ttsLoaded);
+      setAutoSpeakState(finalStatus.autoSpeak);
     } catch (e) {
+      setIsAutoLoading(false);
       setError(String(e));
     }
   }, []);
@@ -354,8 +494,10 @@ export function useVoiceMode(): UseVoiceModeReturn {
   const loadStt = useCallback(async (modelId: string) => {
     try {
       setError(null);
+      // Bump generation to cancel any concurrent/previous load.
+      const gen = ++loadGenRef.current;
       await voiceLoadStt(modelId);
-      setSttLoaded(true);
+      if (loadGenRef.current === gen) setSttLoaded(true);
     } catch (e) {
       setError(String(e));
     }
@@ -364,8 +506,9 @@ export function useVoiceMode(): UseVoiceModeReturn {
   const loadTts = useCallback(async () => {
     try {
       setError(null);
+      const gen = ++loadGenRef.current;
       await voiceLoadTts();
-      setTtsLoaded(true);
+      if (loadGenRef.current === gen) setTtsLoaded(true);
     } catch (e) {
       setError(String(e));
     }
@@ -407,6 +550,7 @@ export function useVoiceMode(): UseVoiceModeReturn {
     devices,
     downloadProgress,
     modelsLoading,
+    isAutoLoading,
 
     start,
     stop,
