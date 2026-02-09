@@ -25,32 +25,40 @@ where
     S: AsRef<str>,
 {
     let model = model.upgrade().ok_or(KokoroError::ModelReleased)?;
-    let phonemes = get_token_ids(phonemes.as_ref(), false);
-    let phonemes = Array::from_shape_vec((1, phonemes.len()), phonemes)?;
-    let ref_s = pack.as_ref()[phonemes.len() - 1]
-        .first()
-        .cloned()
-        .unwrap_or_default();
+    let mut phonemes = get_token_ids(phonemes.as_ref(), false);
 
-    let style = Array::from_shape_vec((1, ref_s.len()), ref_s)?;
-    let speed = Array::from_vec(vec![speed]);
-    let options = RunOptions::new()?;
-    let mut model = model.lock().await;
-    let t = SystemTime::now();
-    let kokoro_output = model
-        .run_async(
-            inputs![
-                "tokens" => TensorRef::from_array_view(&phonemes)?,
-                "style" => TensorRef::from_array_view(&style)?,
-                "speed" => TensorRef::from_array_view(&speed)?,
-            ],
-            &options,
-        )?
-        .await?;
-    let elapsed = t.elapsed()?;
-    let (_, audio) = kokoro_output["audio"].try_extract_tensor::<f32>()?;
+    let mut ret = Vec::new();
+    let mut elapsed = Duration::ZERO;
+    while let p = phonemes.drain(..min(pack.as_ref().len(), phonemes.len()))
+        && p.len() != 0
+    {
+        let phonemes = Array::from_shape_vec((1, p.len()), p.collect())?;
+        let ref_s = pack.as_ref()[phonemes.len() - 1]
+            .first()
+            .cloned()
+            .unwrap_or_default();
 
-    Ok((audio.to_owned(), elapsed))
+        let style = Array::from_shape_vec((1, ref_s.len()), ref_s)?;
+        let speed = Array::from_vec(vec![speed]);
+        let options = RunOptions::new()?;
+        let mut model = model.lock().await;
+        let t = SystemTime::now();
+        let kokoro_output = model
+            .run_async(
+                inputs![
+                    "tokens" => TensorRef::from_array_view(&phonemes)?,
+                    "style" => TensorRef::from_array_view(&style)?,
+                    "speed" => TensorRef::from_array_view(&speed)?,
+                ],
+                &options,
+            )?
+            .await?;
+        elapsed = t.elapsed()?;
+        let (_, audio) = kokoro_output["audio"].try_extract_tensor::<f32>()?;
+        ret.extend_from_slice(audio);
+    }
+
+    Ok((ret, elapsed))
 }
 
 async fn synth_v11<P, S>(

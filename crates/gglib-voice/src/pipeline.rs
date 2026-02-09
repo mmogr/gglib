@@ -477,6 +477,8 @@ impl VoicePipeline {
 
         let mut any_audio = false;
         let mut total_duration = std::time::Duration::ZERO;
+        let mut failed_chunks: usize = 0;
+        let total_chunks = chunks.len();
 
         for (i, chunk) in chunks.iter().enumerate() {
             match tts.synthesize(chunk).await {
@@ -506,6 +508,7 @@ impl VoicePipeline {
                     total_duration += duration;
                 }
                 Err(e) => {
+                    failed_chunks += 1;
                     tracing::warn!(
                         chunk = i + 1,
                         chunk_text = &chunk[..chunk.len().min(80)],
@@ -515,6 +518,14 @@ impl VoicePipeline {
                     // Continue with remaining chunks rather than failing entirely
                 }
             }
+        }
+
+        if failed_chunks > 0 {
+            tracing::warn!(
+                failed = failed_chunks,
+                total = total_chunks,
+                "TTS synthesis completed with chunk failures — audio may be incomplete"
+            );
         }
 
         if !any_audio {

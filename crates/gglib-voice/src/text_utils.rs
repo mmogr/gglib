@@ -6,9 +6,10 @@
 /// Maximum character length per TTS chunk.
 ///
 /// Kokoro TTS works best with sentence-length input. We cap each chunk at
-/// roughly 400 characters (about 2–3 sentences) to stay well within the
-/// model's comfort zone and allow audio to start playing sooner.
-const MAX_CHUNK_CHARS: usize = 400;
+/// roughly 250 characters (about 1–2 sentences) to stay well within the
+/// Kokoro v1.0 voice-pack token limit (~510 tokens) after G2P expansion,
+/// and allow audio to start playing sooner.
+const MAX_CHUNK_CHARS: usize = 250;
 
 /// Strip markdown formatting from text, producing plain-text suitable for TTS.
 ///
