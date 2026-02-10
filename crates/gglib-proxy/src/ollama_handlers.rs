@@ -75,7 +75,7 @@ pub(crate) async fn ollama_show(
     State(state): State<ProxyState>,
     Json(req): Json<OllamaShowRequest>,
 ) -> impl IntoResponse {
-    let name = normalize_model_name(&req.name).to_owned();
+    let name = normalize_model_name(req.effective_model()).to_owned();
     debug!(model = %name, "POST /api/show");
 
     match state.catalog_port.resolve_model(&name).await {

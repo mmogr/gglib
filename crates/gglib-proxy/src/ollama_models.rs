@@ -111,9 +111,25 @@ impl From<ModelSummary> for OllamaModelEntry {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OllamaShowRequest {
-    pub name: String,
+    /// The Ollama API uses `model` as the field name for /api/show.
+    pub model: String,
+    /// Accept `name` as an alias for backward compatibility.
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(default)]
     pub verbose: bool,
+}
+
+impl OllamaShowRequest {
+    /// Return the effective model identifier, preferring `model` but falling
+    /// back to the `name` alias.
+    pub fn effective_model(&self) -> &str {
+        if self.model.is_empty() {
+            self.name.as_deref().unwrap_or("")
+        } else {
+            &self.model
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -123,6 +139,7 @@ pub struct OllamaShowResponse {
     pub template: String,
     pub details: OllamaModelDetails,
     pub model_info: serde_json::Value,
+    pub capabilities: Vec<String>,
 }
 
 impl OllamaShowResponse {
@@ -151,6 +168,7 @@ impl OllamaShowResponse {
                 "general.parameter_count": s.param_count,
                 "general.file_type": s.quantization,
             }),
+            capabilities: vec!["completion".to_string()],
         }
     }
 }
