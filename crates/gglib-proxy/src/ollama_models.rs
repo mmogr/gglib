@@ -4,6 +4,8 @@
 //! plus conversion functions to translate between Ollama and OpenAI formats.
 //! See: <https://github.com/ollama/ollama/blob/main/docs/api.md>
 
+use std::hash::{Hash, Hasher};
+
 use chrono::Utc;
 use gglib_core::ports::ModelSummary;
 use serde::{Deserialize, Serialize};
@@ -28,6 +30,24 @@ use serde::{Deserialize, Serialize};
 #[must_use]
 pub fn normalize_model_name(name: &str) -> &str {
     name.strip_suffix(":latest").unwrap_or(name)
+}
+
+/// Generate a consistent synthetic digest for a model.
+///
+/// Ollama clients expect sha256-style hex digests. Since we don't have
+/// the actual file hash, we produce a deterministic placeholder from
+/// the model name and database ID. The `gglib-` prefix makes it clear
+/// this is not a real sha256.
+///
+/// The same (name, id) pair always produces the same digest, ensuring
+/// consistency between `/api/tags` and `/api/ps`.
+#[must_use]
+pub fn synthetic_digest(model_name: &str, model_id: u32) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    model_name.hash(&mut hasher);
+    model_id.hash(&mut hasher);
+    let h = hasher.finish();
+    format!("gglib-{h:016x}")
 }
 
 // ── GET / ──────────────────────────────────────────────────────────────
@@ -89,8 +109,7 @@ impl From<ModelSummary> for OllamaModelEntry {
             model: name,
             modified_at: epoch_to_rfc3339(s.created_at),
             size: s.file_size,
-            // Ollama uses sha256 digests — synthesise a placeholder.
-            digest: format!("{:016x}", s.id as u64 ^ s.file_size),
+            digest: synthetic_digest(&s.name, s.id),
             details: OllamaModelDetails {
                 parent_model: String::new(),
                 format: "gguf".to_string(),
@@ -199,13 +218,10 @@ pub struct OllamaChatRequest {
     pub messages: Vec<OllamaChatMessage>,
     #[serde(default = "default_true")]
     pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<serde_json::Value>,
     #[serde(default)]
     pub options: OllamaOptions,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub keep_alive: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<serde_json::Value>>,
 }
 
@@ -226,21 +242,13 @@ pub struct OllamaChatMessage {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct OllamaOptions {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub num_ctx: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub top_k: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub num_predict: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub repeat_penalty: Option<f32>,
 }
 
@@ -292,13 +300,10 @@ pub struct OllamaGenerateRequest {
     pub prompt: String,
     #[serde(default = "default_true")]
     pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<serde_json::Value>,
     #[serde(default)]
     pub options: OllamaOptions,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub keep_alive: Option<serde_json::Value>,
     #[serde(default)]
     pub raw: bool,
@@ -352,9 +357,7 @@ pub struct OllamaEmbeddingRequest {
     pub input: OllamaEmbeddingInput,
     #[serde(default)]
     pub options: OllamaOptions,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub keep_alive: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub truncate: Option<bool>,
 }
 
@@ -395,13 +398,7 @@ pub struct OllamaLegacyEmbeddingResponse {
     pub embedding: Vec<f32>,
 }
 
-// ── OpenAI /v1/embeddings request/response (for upstream forwarding) ───
-
-#[derive(Debug, Clone, Serialize)]
-pub struct OpenAiEmbeddingRequest {
-    pub model: String,
-    pub input: Vec<String>,
-}
+// ── OpenAI /v1/embeddings response (for upstream forwarding) ───────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OpenAiEmbeddingResponse {
@@ -409,7 +406,6 @@ pub struct OpenAiEmbeddingResponse {
     pub data: Vec<OpenAiEmbeddingData>,
     #[serde(default)]
     pub model: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<OpenAiEmbeddingUsage>,
 }
 
@@ -530,5 +526,27 @@ mod tests {
             r#"{"model":"phi3","messages":[{"role":"user","content":"hi"}],"stream":false}"#;
         let req: OllamaChatRequest = serde_json::from_str(json).unwrap();
         assert!(!req.stream);
+    }
+
+    #[test]
+    fn test_synthetic_digest_deterministic() {
+        let d1 = synthetic_digest("phi3", 1);
+        let d2 = synthetic_digest("phi3", 1);
+        assert_eq!(d1, d2, "same inputs must produce same digest");
+        assert!(d1.starts_with("gglib-"), "digest should have gglib- prefix");
+    }
+
+    #[test]
+    fn test_synthetic_digest_differs_for_different_models() {
+        let d1 = synthetic_digest("phi3", 1);
+        let d2 = synthetic_digest("llama3", 1);
+        assert_ne!(d1, d2, "different names must produce different digests");
+    }
+
+    #[test]
+    fn test_synthetic_digest_differs_for_different_ids() {
+        let d1 = synthetic_digest("phi3", 1);
+        let d2 = synthetic_digest("phi3", 2);
+        assert_ne!(d1, d2, "different IDs must produce different digests");
     }
 }
