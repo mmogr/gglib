@@ -25,7 +25,6 @@ use gglib_core::ports::{ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
 use crate::forward::forward_chat_completion;
 use crate::models::{ChatCompletionRequest, ErrorResponse, ModelsResponse};
 use crate::ollama_handlers::{self, ProxyState};
-use crate::ollama_models::normalize_model_name;
 
 /// Start the proxy server with a pre-bound listener.
 pub async fn serve(
@@ -139,9 +138,7 @@ async fn chat_completions(
         }
     };
 
-    // Apply Ollama model-name normalization on the OpenAI path too,
-    // so clients mixing conventions still work.
-    let model_name = normalize_model_name(&request.model).to_owned();
+    let model_name = request.model.clone();
     let is_streaming = request.stream;
     let num_ctx = request.num_ctx;
 
