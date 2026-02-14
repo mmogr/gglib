@@ -2,8 +2,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import type { ThreadRuntime, ThreadMessageLike } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
 import { getMessages, saveMessage, deleteMessage } from '../../../services/clients/chat';
-import type { ConversationSummary, ChatMessage } from '../../../services/clients/chat';
-import { threadMessageToTranscriptMarkdown } from '../../../utils/messages';
+import type { ConversationSummary, ChatMessage, ChatMessageMetadata } from '../../../services/clients/chat';
+import { threadMessageToTranscriptMarkdown, extractNonTextContentParts, hasNonTextContent, reconstructContent } from '../../../utils/messages';
+import type { SerializableContentPart } from '../../../utils/messages';
 
 /**
  * Options for the useChatPersistence hook.
@@ -93,11 +94,15 @@ export function useChatPersistence({
             // Restore metadata including research state for deep research messages
             const metadata = message.metadata;
             const isDeepResearch = metadata?.isDeepResearch === true;
+
+            // Reconstruct structured content from metadata if available
+            const storedParts = metadata?.contentParts as SerializableContentPart[] | undefined;
+            const content = reconstructContent(message.content, storedParts);
             
             return {
               id: `db-${message.id}`,
               role: message.role,
-              content: message.content,
+              content,
               createdAt: new Date(message.created_at),
               // Include metadata with dbId for future updates and research state for rendering
               metadata: isDeepResearch
@@ -174,7 +179,10 @@ export function useChatPersistence({
         if (message.role === 'system') continue; // System messages handled separately
 
         const text = threadMessageToTranscriptMarkdown(message);
-        if (!text.trim()) continue;
+        const nonTextParts = extractNonTextContentParts(message);
+
+        // Skip truly empty messages (no text AND no structured content)
+        if (!text.trim() && nonTextParts.length === 0) continue;
 
         isPersistingRef.current = true;
         
@@ -195,11 +203,16 @@ export function useChatPersistence({
             }
           }
 
+          // Build metadata for non-text content parts (tool-call, audio, file, image)
+          const saveMetadata: ChatMessageMetadata | null =
+            nonTextParts.length > 0 ? { contentParts: nonTextParts } : null;
+
           // Save the new message
           const newDbId = await saveMessage(
             activeConversationId,
             message.role as ChatMessage['role'],
             text,
+            saveMetadata,
           );
           
           // Update position mapping for the new message
@@ -349,12 +362,15 @@ export function useMessageDelete({
 
       const reloadedMessages: ThreadMessageLike[] = [
         ...systemPromptMessage,
-        ...messages.map<ThreadMessageLike>((message) => ({
-          id: `db-${message.id}`,
-          role: message.role,
-          content: message.content,
-          createdAt: new Date(message.created_at),
-        })),
+        ...messages.map<ThreadMessageLike>((message) => {
+          const storedParts = message.metadata?.contentParts as SerializableContentPart[] | undefined;
+          return {
+            id: `db-${message.id}`,
+            role: message.role,
+            content: reconstructContent(message.content, storedParts),
+            createdAt: new Date(message.created_at),
+          };
+        }),
       ];
 
       // Rebuild position mapping
