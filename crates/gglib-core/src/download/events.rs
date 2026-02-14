@@ -199,11 +199,7 @@ impl DownloadEvent {
     }
 
     /// Create a download started event with shard information.
-    pub fn started_shard(
-        id: impl Into<String>,
-        shard_index: u32,
-        total_shards: u32,
-    ) -> Self {
+    pub fn started_shard(id: impl Into<String>, shard_index: u32, total_shards: u32) -> Self {
         Self::DownloadStarted {
             id: id.into(),
             shard_index: Some(shard_index),

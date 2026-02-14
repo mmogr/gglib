@@ -436,12 +436,11 @@ impl DownloadManagerImpl {
 
                 // Emit started event (include shard info if this is a sharded download)
                 if let Some(shard) = &item.shard_info {
-                    self.event_emitter
-                        .emit(DownloadEvent::started_shard(
-                            item.id.to_string(),
-                            shard.shard_index,
-                            shard.total_shards,
-                        ));
+                    self.event_emitter.emit(DownloadEvent::started_shard(
+                        item.id.to_string(),
+                        shard.shard_index,
+                        shard.total_shards,
+                    ));
                 } else {
                     self.event_emitter.emit(DownloadEvent::DownloadStarted {
                         id: item.id.to_string(),
