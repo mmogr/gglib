@@ -422,32 +422,8 @@ impl DownloadManagerImpl {
                 // Save primary file path before destination is moved into the job.
                 let primary_file_path = destination.primary_path();
 
-                // Pre-download validation: if the file already exists on disk,
-                // verify it is a valid GGUF file with the expected size.
-                // A previous interrupted download may have left a truncated
-                // file that hf_hub_download would silently accept as "cached".
-                if let Some(ref path) = primary_file_path {
-                    if path.exists() {
-                        let expected_size = item.shard_info.as_ref().and_then(|s| s.file_size);
-                        if expected_size.is_none() {
-                            tracing::warn!(
-                                id = %item.id,
-                                path = %path.display(),
-                                "No expected file size from HF metadata — \
-                                 size validation will be skipped"
-                            );
-                        }
-                        if let Err(reason) = validate_cached_gguf(path, expected_size) {
-                            tracing::warn!(
-                                id = %item.id,
-                                path = %path.display(),
-                                reason,
-                                "Cached file is corrupt — deleting for re-download"
-                            );
-                            let _ = std::fs::remove_file(path);
-                        }
-                    }
-                }
+                // Remove corrupt cached files before hf_hub_download sees them.
+                Self::remove_corrupt_cached_file(&item, primary_file_path.as_ref());
 
                 // Clone the progress sender so we can detect cache hits after
                 // run_job consumes the original.
@@ -462,48 +438,19 @@ impl DownloadManagerImpl {
                 };
 
                 // Emit started event (include shard info if this is a sharded download)
-                if let Some(shard) = &item.shard_info {
-                    self.event_emitter.emit(DownloadEvent::started_shard(
-                        item.id.to_string(),
-                        shard.shard_index,
-                        shard.total_shards,
-                    ));
-                } else {
-                    self.event_emitter.emit(DownloadEvent::DownloadStarted {
-                        id: item.id.to_string(),
-                        shard_index: None,
-                        total_shards: None,
-                    });
-                }
+                self.emit_started_event(&item);
 
                 // Run the worker
                 let result = worker::run_job(job, &deps).await;
 
-                // Cache-hit detection: if the download succeeded but no
-                // progress callbacks fired (seq == 0), hf_hub_download found
-                // the file in cache and returned instantly.  Emit a synthetic
-                // 100% progress update so the bridge produces at least one
-                // ShardProgress event for the UI.
-                if result.is_ok() && progress_tx_clone.borrow().seq == 0 {
-                    let file_size = primary_file_path
-                        .as_ref()
-                        .and_then(|p| std::fs::metadata(p).ok())
-                        .map(|m| m.len())
-                        .or_else(|| item.shard_info.as_ref().and_then(|s| s.file_size))
-                        .unwrap_or(0);
-
-                    progress_tx_clone.send_modify(|state| {
-                        state.downloaded = file_size;
-                        state.total = file_size;
-                        state.seq = 1;
-                    });
-
-                    tracing::debug!(
-                        id = %item.id,
-                        file_size,
-                        "File already cached — emitted synthetic 100% progress"
-                    );
-                }
+                // If the file was cached, emit synthetic progress so the UI
+                // shows at least one ShardProgress event.
+                Self::emit_synthetic_progress_if_cached(
+                    &item,
+                    &result,
+                    &progress_tx_clone,
+                    primary_file_path.as_ref(),
+                );
 
                 // Drop the cloned sender so the bridge sees all senders
                 // dropped and can emit its final progress event.
@@ -522,6 +469,93 @@ impl DownloadManagerImpl {
                 self.queue_notify.notified().await;
             }
         }
+    }
+
+    /// Emit a `DownloadStarted` event, including shard info when available.
+    fn emit_started_event(&self, item: &QueuedItem) {
+        if let Some(shard) = &item.shard_info {
+            self.event_emitter.emit(DownloadEvent::started_shard(
+                item.id.to_string(),
+                shard.shard_index,
+                shard.total_shards,
+            ));
+        } else {
+            self.event_emitter.emit(DownloadEvent::DownloadStarted {
+                id: item.id.to_string(),
+                shard_index: None,
+                total_shards: None,
+            });
+        }
+    }
+
+    /// Validate a cached GGUF file and delete it if corrupt.
+    ///
+    /// A previous interrupted download may have left a truncated file that
+    /// `hf_hub_download` would silently accept as "cached".
+    fn remove_corrupt_cached_file(
+        item: &QueuedItem,
+        primary_file_path: Option<&std::path::PathBuf>,
+    ) {
+        let Some(path) = primary_file_path else {
+            return;
+        };
+        if !path.exists() {
+            return;
+        }
+
+        let expected_size = item.shard_info.as_ref().and_then(|s| s.file_size);
+        if expected_size.is_none() {
+            tracing::warn!(
+                id = %item.id,
+                path = %path.display(),
+                "No expected file size from HF metadata — \
+                 size validation will be skipped"
+            );
+        }
+        if let Err(reason) = validate_cached_gguf(path, expected_size) {
+            tracing::warn!(
+                id = %item.id,
+                path = %path.display(),
+                reason,
+                "Cached file is corrupt — deleting for re-download"
+            );
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    /// Emit synthetic 100% progress when a cache hit produced no callbacks.
+    ///
+    /// When `hf_hub_download(force_download=False)` finds a cached file it
+    /// returns instantly without progress callbacks.  The bridge never emits
+    /// a `ShardProgress` event, so the UI would skip the shard entirely.
+    fn emit_synthetic_progress_if_cached(
+        item: &QueuedItem,
+        result: &Result<worker::CompletedJob, DownloadError>,
+        progress_tx: &watch::Sender<ProgressUpdate>,
+        primary_file_path: Option<&std::path::PathBuf>,
+    ) {
+        if !(result.is_ok() && progress_tx.borrow().seq == 0) {
+            return;
+        }
+
+        let file_size = primary_file_path
+            .as_ref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .map(|m| m.len())
+            .or_else(|| item.shard_info.as_ref().and_then(|s| s.file_size))
+            .unwrap_or(0);
+
+        progress_tx.send_modify(|state| {
+            state.downloaded = file_size;
+            state.total = file_size;
+            state.seq = 1;
+        });
+
+        tracing::debug!(
+            id = %item.id,
+            file_size,
+            "File already cached — emitted synthetic 100% progress"
+        );
     }
 
     /// Get the next job from the queue.
@@ -1282,8 +1316,7 @@ fn validate_cached_gguf(path: &std::path::Path, expected_size: Option<u64>) -> R
 
     if magic != GGUF_MAGIC {
         return Err(format!(
-            "invalid GGUF magic: expected {:?}, got {:?}",
-            GGUF_MAGIC, magic
+            "invalid GGUF magic: expected {GGUF_MAGIC:?}, got {magic:?}"
         ));
     }
 
