@@ -123,6 +123,8 @@ mod tests {
         // Should not panic
         emitter.emit(DownloadEvent::DownloadStarted {
             id: "test".to_string(),
+            shard_index: None,
+            total_shards: None,
         });
     }
 
@@ -137,6 +139,8 @@ mod tests {
         let emitter: Arc<dyn DownloadEventEmitterPort> = Arc::new(NoopDownloadEmitter::new());
         emitter.emit(DownloadEvent::DownloadStarted {
             id: "test".to_string(),
+            shard_index: None,
+            total_shards: None,
         });
     }
 

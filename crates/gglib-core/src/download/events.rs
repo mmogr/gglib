@@ -76,7 +76,7 @@ impl DownloadStatus {
 /// ```typescript
 /// type DownloadEvent =
 ///   | { type: "queue_snapshot"; items: DownloadSummary[]; max_size: number }
-///   | { type: "download_started"; id: string }
+///   | { type: "download_started"; id: string; shard_index?: number; total_shards?: number }
 ///   | { type: "download_progress"; id: string; downloaded: number; total: number; ... }
 ///   | { type: "shard_progress"; id: string; shard_index: number; ... }
 ///   | { type: "download_completed"; id: string }
@@ -98,6 +98,12 @@ pub enum DownloadEvent {
     DownloadStarted {
         /// Canonical ID of the download.
         id: String,
+        /// Current shard index (0-based), present only for sharded downloads.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        shard_index: Option<u32>,
+        /// Total number of shards, present only for sharded downloads.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        total_shards: Option<u32>,
     },
 
     /// Progress update for a non-sharded download.
@@ -185,7 +191,24 @@ impl DownloadEvent {
 
     /// Create a download started event.
     pub fn started(id: impl Into<String>) -> Self {
-        Self::DownloadStarted { id: id.into() }
+        Self::DownloadStarted {
+            id: id.into(),
+            shard_index: None,
+            total_shards: None,
+        }
+    }
+
+    /// Create a download started event with shard information.
+    pub fn started_shard(
+        id: impl Into<String>,
+        shard_index: u32,
+        total_shards: u32,
+    ) -> Self {
+        Self::DownloadStarted {
+            id: id.into(),
+            shard_index: Some(shard_index),
+            total_shards: Some(total_shards),
+        }
     }
 
     /// Create a non-sharded progress event.
@@ -284,7 +307,7 @@ impl DownloadEvent {
     pub fn id(&self) -> Option<&str> {
         match self {
             Self::QueueSnapshot { .. } | Self::QueueRunComplete { .. } => None,
-            Self::DownloadStarted { id }
+            Self::DownloadStarted { id, .. }
             | Self::DownloadProgress { id, .. }
             | Self::ShardProgress { id, .. }
             | Self::DownloadCompleted { id, .. }
