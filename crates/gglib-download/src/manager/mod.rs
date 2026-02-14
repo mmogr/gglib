@@ -1259,14 +1259,10 @@ const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
 /// Checks:
 /// 1. File size matches the expected size from HF metadata (if known)
 /// 2. File starts with the 4-byte GGUF magic number
-fn validate_cached_gguf(
-    path: &std::path::Path,
-    expected_size: Option<u64>,
-) -> Result<(), String> {
+fn validate_cached_gguf(path: &std::path::Path, expected_size: Option<u64>) -> Result<(), String> {
     use std::io::Read;
 
-    let metadata = std::fs::metadata(path)
-        .map_err(|e| format!("cannot stat file: {e}"))?;
+    let metadata = std::fs::metadata(path).map_err(|e| format!("cannot stat file: {e}"))?;
     let actual_size = metadata.len();
 
     // Check size first (cheap)
@@ -1279,8 +1275,7 @@ fn validate_cached_gguf(
     }
 
     // Check GGUF magic (read only 4 bytes)
-    let mut file = std::fs::File::open(path)
-        .map_err(|e| format!("cannot open file: {e}"))?;
+    let mut file = std::fs::File::open(path).map_err(|e| format!("cannot open file: {e}"))?;
     let mut magic = [0u8; 4];
     file.read_exact(&mut magic)
         .map_err(|e| format!("cannot read magic bytes: {e}"))?;
