@@ -241,6 +241,12 @@ export function useChatPersistence({
       // Skip messages without IDs or system messages
       if (!m.id || m.role === 'system') continue;
 
+      // Skip assistant messages that are still streaming (not yet finalized).
+      // The agentic loop sets timingFinalized after streaming completes;
+      // without this guard, partial content is saved as a new DB row on every
+      // streaming update and then the completed content creates another row.
+      if (m.role === 'assistant' && !(m.metadata as any)?.custom?.timingFinalized) continue;
+
       // Skip if already processing this message ID
       if (processingRef.current.has(m.id) || isPersistingRef.current) continue;
 
