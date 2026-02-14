@@ -419,6 +419,13 @@ impl DownloadManagerImpl {
                 let destination =
                     DownloadDestination::plan(&self.config.models_directory, &item.id, files);
 
+                // Save primary file path before destination is moved into the job.
+                let primary_file_path = destination.primary_path();
+
+                // Clone the progress sender so we can detect cache hits after
+                // run_job consumes the original.
+                let progress_tx_clone = progress_tx.clone();
+
                 let job = DownloadJob {
                     id: item.id.clone(),
                     destination,
@@ -445,6 +452,36 @@ impl DownloadManagerImpl {
 
                 // Run the worker
                 let result = worker::run_job(job, &deps).await;
+
+                // Cache-hit detection: if the download succeeded but no
+                // progress callbacks fired (seq == 0), hf_hub_download found
+                // the file in cache and returned instantly.  Emit a synthetic
+                // 100% progress update so the bridge produces at least one
+                // ShardProgress event for the UI.
+                if result.is_ok() && progress_tx_clone.borrow().seq == 0 {
+                    let file_size = primary_file_path
+                        .as_ref()
+                        .and_then(|p| std::fs::metadata(p).ok())
+                        .map(|m| m.len())
+                        .or_else(|| item.shard_info.as_ref().and_then(|s| s.file_size))
+                        .unwrap_or(0);
+
+                    progress_tx_clone.send_modify(|state| {
+                        state.downloaded = file_size;
+                        state.total = file_size;
+                        state.seq = 1;
+                    });
+
+                    tracing::debug!(
+                        id = %item.id,
+                        file_size,
+                        "File already cached — emitted synthetic 100% progress"
+                    );
+                }
+
+                // Drop the cloned sender so the bridge sees all senders
+                // dropped and can emit its final progress event.
+                drop(progress_tx_clone);
 
                 // Wait for bridge to finish (it will exit when sender is dropped)
                 drop(bridge_handle);

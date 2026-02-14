@@ -204,7 +204,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         destination: &job.destination.model_dir,
         files: &job.destination.files,
         token: deps.config.hf_token.as_deref(),
-        force: true,
+        force: false,
         progress: Some(&progress_callback),
         cancel_token: Some(job.cancel.clone()),
     };
