@@ -109,7 +109,7 @@ fn running_target_to_ps_entry(target: &RunningTarget) -> OllamaPsEntry {
         name: format!("{}:latest", target.model_name),
         model: format!("{}:latest", target.model_name),
         size: 0,
-        digest: format!("{:016x}", target.model_id as u64),
+        digest: synthetic_digest(&target.model_name, target.model_id),
         details: OllamaModelDetails {
             parent_model: String::new(),
             format: "gguf".to_string(),
@@ -167,6 +167,10 @@ pub(crate) async fn ollama_chat(
 }
 
 /// Apply Ollama-style options to an OpenAI JSON body.
+///
+/// Maps Ollama options to their OpenAI / llama-server equivalents.
+/// Options without a mapping are silently ignored (e.g. `num_ctx` is
+/// handled at the routing layer, not forwarded in the request body).
 fn apply_openai_options(body: &mut serde_json::Value, options: &OllamaOptions) {
     if let Some(temp) = options.temperature {
         body["temperature"] = serde_json::json!(temp);
@@ -174,9 +178,30 @@ fn apply_openai_options(body: &mut serde_json::Value, options: &OllamaOptions) {
     if let Some(top_p) = options.top_p {
         body["top_p"] = serde_json::json!(top_p);
     }
+    // llama-server supports top_k directly (non-standard OpenAI field).
+    if let Some(top_k) = options.top_k {
+        body["top_k"] = serde_json::json!(top_k);
+    }
+    if let Some(seed) = options.seed {
+        body["seed"] = serde_json::json!(seed);
+    }
+    if let Some(repeat_penalty) = options.repeat_penalty {
+        body["repeat_penalty"] = serde_json::json!(repeat_penalty);
+    }
     if let Some(num_predict) = options.num_predict {
-        if num_predict > 0 {
-            body["max_tokens"] = serde_json::json!(num_predict);
+        match num_predict {
+            n if n > 0 => {
+                body["max_tokens"] = serde_json::json!(n);
+            }
+            // -1 means "unlimited" in Ollama — omitting max_tokens achieves
+            // the same effect in llama-server (generate until stop token).
+            -1 => {}
+            // -2 means "fill context" in Ollama — not supported by llama-server.
+            -2 => {
+                debug!("num_predict=-2 (fill context) is not supported; omitting max_tokens");
+            }
+            // 0 or other negative values — omit max_tokens.
+            _ => {}
         }
     }
     if let Some(ref stop) = options.stop {
@@ -194,6 +219,11 @@ fn build_openai_chat_body(
     normalized_model: &str,
     upstream_stream: bool,
 ) -> serde_json::Value {
+    // Warn once per request if any message contains images (multimodal not supported).
+    if req.messages.iter().any(|m| m.images.is_some()) {
+        warn!("Ollama images field is not supported through the proxy and will be ignored");
+    }
+
     let messages: Vec<serde_json::Value> = req
         .messages
         .iter()
@@ -211,9 +241,33 @@ fn build_openai_chat_body(
         "stream": upstream_stream,
     });
 
+    // When streaming, ask llama-server to include usage data in the final
+    // SSE chunk so we can report accurate token counts to the Ollama client.
+    if upstream_stream {
+        body["stream_options"] = serde_json::json!({"include_usage": true});
+    }
+
     apply_openai_options(&mut body, &req.options);
+    apply_response_format(&mut body, req.format.as_ref());
 
     body
+}
+
+/// Map Ollama's `format` field to OpenAI's `response_format`.
+///
+/// Ollama accepts `"json"` to enable JSON mode. We translate this to
+/// OpenAI's `{"type": "json_object"}`. Schema-based formats are not
+/// supported by llama-server and are logged as a warning.
+fn apply_response_format(body: &mut serde_json::Value, format: Option<&serde_json::Value>) {
+    match format {
+        Some(serde_json::Value::String(s)) if s == "json" => {
+            body["response_format"] = serde_json::json!({"type": "json_object"});
+        }
+        Some(other) if !other.is_null() => {
+            debug!("Unsupported Ollama format value: {other}; ignoring");
+        }
+        _ => {}
+    }
 }
 
 /// Parsed fields from an upstream OpenAI chat-completion response.
@@ -251,6 +305,11 @@ async fn parse_upstream_completion(response: reqwest::Response) -> Result<Upstre
 }
 
 /// Non-streaming: read the full OpenAI response and translate to Ollama format.
+///
+/// Timing breakdown is synthetic — llama-server does not expose per-phase
+/// timing through the OpenAI API. `load_duration` is always 0 because the
+/// model is pre-loaded by the runtime. The prompt/eval duration split is
+/// an approximation (25%/75% of wall-clock time).
 async fn non_streaming_chat_response(
     response: reqwest::Response,
     model: &str,
@@ -322,7 +381,15 @@ pub(crate) async fn ollama_generate(
         "messages": messages,
         "stream": is_streaming,
     });
+
+    // When streaming, ask llama-server to include usage data in the final
+    // SSE chunk so we can report accurate token counts to the Ollama client.
+    if is_streaming {
+        openai_body["stream_options"] = serde_json::json!({"include_usage": true});
+    }
+
     apply_openai_options(&mut openai_body, &req.options);
+    apply_response_format(&mut openai_body, req.format.as_ref());
 
     let upstream_url = format!("{}/v1/chat/completions", target.base_url);
     let start = Instant::now();
@@ -339,6 +406,9 @@ pub(crate) async fn ollama_generate(
     }
 }
 
+/// Non-streaming generate: read the full OpenAI response and translate.
+///
+/// See `non_streaming_chat_response` for notes on synthetic timing metrics.
 async fn non_streaming_generate_response(
     response: reqwest::Response,
     model: &str,
@@ -563,10 +633,8 @@ pub(crate) async fn ensure_model(
             let status = StatusCode::from_u16(e.suggested_status_code())
                 .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             let mut resp = (status, Json(ollama_error(&e.to_string()))).into_response();
-            if e.is_retryable() {
-                if let Ok(val) = "5".parse() {
-                    resp.headers_mut().insert("retry-after", val);
-                }
+            if e.is_retryable() && let Ok(val) = "5".parse() {
+                resp.headers_mut().insert("retry-after", val);
             }
             resp
         })
@@ -581,7 +649,6 @@ async fn forward_post(
     debug!("Forwarding to {url}");
     let response = client
         .post(url)
-        .header("content-type", "application/json")
         .json(body)
         .send()
         .await
