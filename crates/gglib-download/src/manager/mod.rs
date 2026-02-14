@@ -422,6 +422,33 @@ impl DownloadManagerImpl {
                 // Save primary file path before destination is moved into the job.
                 let primary_file_path = destination.primary_path();
 
+                // Pre-download validation: if the file already exists on disk,
+                // verify it is a valid GGUF file with the expected size.
+                // A previous interrupted download may have left a truncated
+                // file that hf_hub_download would silently accept as "cached".
+                if let Some(ref path) = primary_file_path {
+                    if path.exists() {
+                        let expected_size = item.shard_info.as_ref().and_then(|s| s.file_size);
+                        if expected_size.is_none() {
+                            tracing::warn!(
+                                id = %item.id,
+                                path = %path.display(),
+                                "No expected file size from HF metadata — \
+                                 size validation will be skipped"
+                            );
+                        }
+                        if let Err(reason) = validate_cached_gguf(path, expected_size) {
+                            tracing::warn!(
+                                id = %item.id,
+                                path = %path.display(),
+                                reason,
+                                "Cached file is corrupt — deleting for re-download"
+                            );
+                            let _ = std::fs::remove_file(path);
+                        }
+                    }
+                }
+
                 // Clone the progress sender so we can detect cache hits after
                 // run_job consumes the original.
                 let progress_tx_clone = progress_tx.clone();
@@ -1219,6 +1246,53 @@ fn emit_progress(
             speed_bps,
         ));
     }
+}
+
+/// GGUF magic number: "GGUF" in little-endian.
+const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
+
+/// Validate a cached GGUF file before allowing `hf_hub_download` to skip it.
+///
+/// Returns `Ok(())` if the file looks valid, or `Err(reason)` if it should
+/// be deleted and re-downloaded.
+///
+/// Checks:
+/// 1. File size matches the expected size from HF metadata (if known)
+/// 2. File starts with the 4-byte GGUF magic number
+fn validate_cached_gguf(
+    path: &std::path::Path,
+    expected_size: Option<u64>,
+) -> Result<(), String> {
+    use std::io::Read;
+
+    let metadata = std::fs::metadata(path)
+        .map_err(|e| format!("cannot stat file: {e}"))?;
+    let actual_size = metadata.len();
+
+    // Check size first (cheap)
+    if let Some(expected) = expected_size {
+        if actual_size != expected {
+            return Err(format!(
+                "size mismatch: expected {expected} bytes, got {actual_size}"
+            ));
+        }
+    }
+
+    // Check GGUF magic (read only 4 bytes)
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| format!("cannot open file: {e}"))?;
+    let mut magic = [0u8; 4];
+    file.read_exact(&mut magic)
+        .map_err(|e| format!("cannot read magic bytes: {e}"))?;
+
+    if magic != GGUF_MAGIC {
+        return Err(format!(
+            "invalid GGUF magic: expected {:?}, got {:?}",
+            GGUF_MAGIC, magic
+        ));
+    }
+
+    Ok(())
 }
 
 // =============================================================================
