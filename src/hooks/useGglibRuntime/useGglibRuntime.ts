@@ -85,6 +85,75 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     joinStrategy: 'none', // Critical: preserves per-iteration boundaries
   });
 
+  /**
+   * Shared generation logic used by both onNew and onEdit.
+   *
+   * Takes a base message history and a new user message, appends the user
+   * message, synchronises messagesRef, and runs the agentic loop.
+   */
+  const startGeneration = async (
+    baseMessages: GglibMessage[],
+    userMessage: GglibMessage,
+  ) => {
+    // Validate server selection
+    if (!selectedServerPort) {
+      const error = new Error('No server selected. Please serve a model first.');
+      onError?.(error);
+      return;
+    }
+
+    // Abort any existing generation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    // Build the full message list with the new user message
+    const messagesWithUserMessage = [...baseMessages, userMessage];
+
+    // Synchronise ref immediately so async callbacks see the correct history
+    // (the useEffect sync won't fire until after the next render)
+    messagesRef.current = messagesWithUserMessage;
+    setMessages(messagesWithUserMessage);
+
+    // Start generation
+    setIsRunning(true);
+
+    // Generate unique turn ID
+    const turnId = crypto.randomUUID();
+
+    try {
+      // Run agentic loop - creates assistant messages as needed
+      await runAgenticLoop({
+        turnId,
+        getMessages: () => messagesWithUserMessage,
+        setMessages,
+        selectedServerPort,
+        maxToolIterations,
+        maxStagnationSteps,
+        abortSignal: abortController.signal,
+        conversationId,
+        mkAssistantMessage: (custom) => mkAssistantMessage(custom),
+        timingTracker,
+        setCurrentStreamingAssistantMessageId,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        appLogger.debug('hook.runtime', 'Generation aborted');
+      } else {
+        appLogger.error('hook.runtime', 'Error in agentic loop', { error });
+        onError?.(error as Error);
+      }
+    } finally {
+      setIsRunning(false);
+      setCurrentStreamingAssistantMessageId(null);
+      abortControllerRef.current = null;
+    }
+  };
+
   // Create runtime with external message management
   const runtime = useExternalStoreRuntime({
     messages: convertedMessages,
@@ -95,80 +164,29 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
 
     // User sends a new message
     onNew: async (msg: AppendMessage) => {
-      // Validate server selection
-      if (!selectedServerPort) {
-        const error = new Error('No server selected. Please serve a model first.');
-        onError?.(error);
-        return;
-      }
-
-      // Abort any existing generation
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      // Create new abort controller
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
-
-      // Generate unique turn ID
-      const turnId = crypto.randomUUID();
-
-      // Add user message
       const userMessage = mkUserMessage(msg.content as GglibContent, {
         conversationId,
-        turnId,
+        turnId: crypto.randomUUID(),
       });
-      
-      // Capture messages WITH the new user message to avoid race condition
-      // (messagesRef.current won't be updated until after the next render)
-      const messagesWithUserMessage = [...messagesRef.current, userMessage];
-      setMessages(prev => [...prev, userMessage]);
-
-      // Start generation
-      setIsRunning(true);
-
-      try {
-        // Run agentic loop - creates assistant messages as needed
-        await runAgenticLoop({
-          turnId,
-          getMessages: () => messagesWithUserMessage,
-          setMessages,
-          selectedServerPort,
-          maxToolIterations,
-          maxStagnationSteps,
-          abortSignal: abortController.signal,
-          conversationId,
-          mkAssistantMessage: (custom) => mkAssistantMessage(custom),
-          timingTracker,
-          setCurrentStreamingAssistantMessageId,
-        });
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          appLogger.debug('hook.runtime', 'Generation aborted');
-        } else {
-          appLogger.error('hook.runtime', 'Error in agentic loop', { error });
-          onError?.(error as Error);
-        }
-      } finally {
-        setIsRunning(false);
-        setCurrentStreamingAssistantMessageId(null);
-        abortControllerRef.current = null;
-      }
+      await startGeneration(messagesRef.current, userMessage);
     },
 
     // User edits a message (regenerate)
     onEdit: async (msg: AppendMessage) => {
-      // Find the edited message
-      const editedIdx = messages.findIndex(m => m.id === msg.parentId);
-      if (editedIdx === -1) return;
+      // msg.parentId is the ID of the message *before* the edited one
+      // (the branch-point parent in @assistant-ui/react's tree model).
+      const parentIdx = messages.findIndex(m => m.id === msg.parentId);
+      if (parentIdx === -1) return;
 
-      // Remove all messages after the edited one
-      const newMessages = messages.slice(0, editedIdx);
-      setMessages(newMessages);
+      // Keep history up to and including the parent; drop the old edited
+      // message and everything after it.
+      const baseMessages = messages.slice(0, parentIdx + 1);
 
-      // Call onNew to continue generation
-      await runtime.thread.append(msg);
+      const userMessage = mkUserMessage(msg.content as GglibContent, {
+        conversationId,
+        turnId: crypto.randomUUID(),
+      });
+      await startGeneration(baseMessages, userMessage);
     },
 
     // User reloads conversation (not supported yet)
