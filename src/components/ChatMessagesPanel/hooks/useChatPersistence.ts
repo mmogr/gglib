@@ -3,7 +3,7 @@ import type { ThreadRuntime, ThreadMessageLike } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
 import { getMessages, saveMessage, deleteMessage } from '../../../services/clients/chat';
 import type { ConversationSummary, ChatMessage, ChatMessageMetadata } from '../../../services/clients/chat';
-import { threadMessageToTranscriptMarkdown, extractNonTextContentParts, hasNonTextContent, reconstructContent } from '../../../utils/messages';
+import { threadMessageToTranscriptMarkdown, extractNonTextContentParts, reconstructContent } from '../../../utils/messages';
 import type { SerializableContentPart } from '../../../utils/messages';
 
 /**
