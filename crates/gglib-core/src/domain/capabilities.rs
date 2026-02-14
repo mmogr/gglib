@@ -452,7 +452,7 @@ pub fn transform_messages_for_capabilities(
                 let last_msg: &mut ChatMessage = last;
                 // Only merge user/assistant messages (avoid merging tool/system messages)
                 let is_mergeable_role = msg.role == "user" || msg.role == "assistant";
-                
+
                 // Merge if same role and mergeable (user or assistant)
                 if last_msg.role == msg.role && is_mergeable_role {
                     // Merge content if both have content
@@ -475,10 +475,9 @@ pub fn transform_messages_for_capabilities(
                     match (&mut last_msg.tool_calls, &msg.tool_calls) {
                         (Some(last_calls), Some(msg_calls)) => {
                             // Both have tool_calls - concatenate arrays
-                            if let (Some(last_arr), Some(msg_arr)) = (
-                                last_calls.as_array_mut(),
-                                msg_calls.as_array(),
-                            ) {
+                            if let (Some(last_arr), Some(msg_arr)) =
+                                (last_calls.as_array_mut(), msg_calls.as_array())
+                            {
                                 last_arr.extend_from_slice(msg_arr);
                             }
                         }
@@ -490,7 +489,7 @@ pub fn transform_messages_for_capabilities(
                         // If neither have tool_calls, keep None
                         _ => {}
                     }
-                    
+
                     continue; // Skip adding this message separately
                 }
             }
@@ -771,13 +770,13 @@ mod transform_tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].role, "user");
         assert_eq!(result[1].role, "assistant");
-        
+
         // Content should be merged
         assert_eq!(
             result[1].content,
             Some("Let me check...\n\nAnd the time...".to_string())
         );
-        
+
         // Tool calls should be concatenated
         let merged_tool_calls = result[1].tool_calls.as_ref().unwrap();
         let tool_calls_array = merged_tool_calls.as_array().unwrap();
@@ -892,7 +891,7 @@ mod transform_tests {
 
         assert_eq!(result.len(), 1);
         assert!(result[0].content.is_none());
-        
+
         let merged_tool_calls = result[0].tool_calls.as_ref().unwrap();
         let tool_calls_array = merged_tool_calls.as_array().unwrap();
         assert_eq!(tool_calls_array.len(), 2);
