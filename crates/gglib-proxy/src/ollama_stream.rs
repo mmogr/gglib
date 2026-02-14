@@ -62,6 +62,10 @@ struct NdjsonState<S> {
     eval_count: u32,
     kind: StreamKind,
     done: bool,
+    /// Actual token counts captured from the upstream `usage` SSE chunk
+    /// (available when `stream_options: {include_usage: true}` was sent).
+    prompt_tokens: Option<u32>,
+    completion_tokens: Option<u32>,
 }
 
 /// Convert an SSE byte stream from llama-server into an NDJSON byte stream.
@@ -85,6 +89,8 @@ where
         eval_count: 0,
         kind,
         done: false,
+        prompt_tokens: None,
+        completion_tokens: None,
     };
 
     futures_util::stream::unfold(state, |mut st| async move {
@@ -110,12 +116,28 @@ where
                     // SSE termination signal.
                     if data == "[DONE]" {
                         st.done = true;
-                        let out = emit_final_chunk(&st.model, st.start, st.eval_count, st.kind);
+                        let out = emit_final_chunk(
+                            &st.model,
+                            st.start,
+                            st.completion_tokens.unwrap_or(st.eval_count),
+                            st.prompt_tokens.unwrap_or(0),
+                            st.kind,
+                        );
                         return Some((Ok(Bytes::from(out)), st));
                     }
 
                     // Parse the OpenAI chunk and translate.
                     if let Ok(openai) = serde_json::from_str::<serde_json::Value>(data) {
+                        // Capture usage data if present (from stream_options: {include_usage: true}).
+                        if let Some(usage) = openai.get("usage") {
+                            if let Some(pt) = usage["prompt_tokens"].as_u64() {
+                                st.prompt_tokens = Some(pt as u32);
+                            }
+                            if let Some(ct) = usage["completion_tokens"].as_u64() {
+                                st.completion_tokens = Some(ct as u32);
+                            }
+                        }
+
                         let content = openai["choices"][0]["delta"]["content"]
                             .as_str()
                             .unwrap_or("");
@@ -147,8 +169,13 @@ where
                     // Stream ended without [DONE] — emit final done chunk.
                     if !st.done {
                         st.done = true;
-                        let out =
-                            emit_final_chunk(&st.model, st.start, st.eval_count, st.kind);
+                        let out = emit_final_chunk(
+                            &st.model,
+                            st.start,
+                            st.completion_tokens.unwrap_or(st.eval_count),
+                            st.prompt_tokens.unwrap_or(0),
+                            st.kind,
+                        );
                         return Some((Ok(Bytes::from(out)), st));
                     }
                     return None;
@@ -200,7 +227,18 @@ fn emit_content_chunk(model: &str, content: &str, kind: StreamKind) -> String {
 }
 
 /// Emit the final done=true chunk with timing stats.
-fn emit_final_chunk(model: &str, start: Instant, eval_count: u32, kind: StreamKind) -> String {
+///
+/// Timing breakdown is synthetic — llama-server does not expose per-phase
+/// timing through the OpenAI API. `load_duration` is always 0 because the
+/// model is pre-loaded by the runtime. The prompt/eval duration split is
+/// an approximation (25%/75% of wall-clock time).
+fn emit_final_chunk(
+    model: &str,
+    start: Instant,
+    eval_count: u32,
+    prompt_eval_count: u32,
+    kind: StreamKind,
+) -> String {
     let total_nanos = elapsed_nanos(start);
 
     let json = match kind {
@@ -217,7 +255,7 @@ fn emit_final_chunk(model: &str, start: Instant, eval_count: u32, kind: StreamKi
             done_reason: Some("stop".to_string()),
             total_duration: Some(total_nanos),
             load_duration: Some(0),
-            prompt_eval_count: Some(0),
+            prompt_eval_count: Some(prompt_eval_count),
             prompt_eval_duration: Some(total_nanos / 4),
             eval_count: Some(eval_count),
             eval_duration: Some(total_nanos * 3 / 4),
@@ -230,7 +268,7 @@ fn emit_final_chunk(model: &str, start: Instant, eval_count: u32, kind: StreamKi
             done_reason: Some("stop".to_string()),
             total_duration: Some(total_nanos),
             load_duration: Some(0),
-            prompt_eval_count: Some(0),
+            prompt_eval_count: Some(prompt_eval_count),
             prompt_eval_duration: Some(total_nanos / 4),
             eval_count: Some(eval_count),
             eval_duration: Some(total_nanos * 3 / 4),
