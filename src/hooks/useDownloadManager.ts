@@ -114,7 +114,16 @@ function snapshotToQueueStatus(items: DownloadSummary[], maxSize: number): Downl
 function eventToProgress(event: DownloadEvent): DownloadProgressView | null {
   switch (event.type) {
     case 'download_started':
-      return { status: 'started', id: event.id };
+      return {
+        status: 'started',
+        id: event.id,
+        // Populate shard info immediately so the UI shows "shard X/Y"
+        // from the moment the download starts, rather than waiting for
+        // the first progress tick.
+        shard: event.shard_index != null && event.total_shards != null
+          ? { index: event.shard_index, total: event.total_shards }
+          : undefined,
+      };
     case 'download_progress':
       return {
         status: 'progress',

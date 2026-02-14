@@ -113,7 +113,7 @@ export interface QueueRunSummary {
 
 export type DownloadEvent =
   | { type: 'queue_snapshot'; items: DownloadSummary[]; max_size: number }
-  | { type: 'download_started'; id: DownloadId }
+  | { type: 'download_started'; id: DownloadId; shard_index?: number; total_shards?: number }
   | { type: 'download_progress'; id: DownloadId; downloaded: number; total: number; speed_bps: number; eta_seconds: number; percentage: number }
   | { type: 'shard_progress'; id: DownloadId; shard_index: number; total_shards: number; shard_filename: string; shard_downloaded: number; shard_total: number; aggregate_downloaded: number; aggregate_total: number; speed_bps: number; eta_seconds: number; percentage: number }
   | { type: 'download_completed'; id: DownloadId; message?: string | null }
