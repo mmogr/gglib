@@ -1,0 +1,552 @@
+//! Ollama-native API data models and format translation.
+//!
+//! This module provides request/response types matching the Ollama REST API,
+//! plus conversion functions to translate between Ollama and OpenAI formats.
+//! See: <https://github.com/ollama/ollama/blob/main/docs/api.md>
+
+use std::hash::{Hash, Hasher};
+
+use chrono::Utc;
+use gglib_core::ports::ModelSummary;
+use serde::{Deserialize, Serialize};
+
+// ── Model Name Normalization ───────────────────────────────────────────
+
+/// Normalize an Ollama-style model name to match internal catalog IDs.
+///
+/// Ollama clients default to `model:latest` (e.g. `phi3:latest`).
+/// This strips known tag suffixes and normalises the name so it resolves
+/// against the gglib catalog without manual renaming.
+///
+/// # Examples
+/// ```
+/// # use gglib_proxy::ollama_models::normalize_model_name;
+/// assert_eq!(normalize_model_name("phi3:latest"), "phi3");
+/// assert_eq!(normalize_model_name("llama3.2:latest"), "llama3.2");
+/// assert_eq!(normalize_model_name("mistral:7b-instruct-q4_K_M"), "mistral:7b-instruct-q4_K_M");
+/// assert_eq!(normalize_model_name("phi3"), "phi3");
+/// assert_eq!(normalize_model_name(""), "");
+/// ```
+#[must_use]
+pub fn normalize_model_name(name: &str) -> &str {
+    name.strip_suffix(":latest").unwrap_or(name)
+}
+
+/// Generate a consistent synthetic digest for a model.
+///
+/// Ollama clients expect sha256-style hex digests. Since we don't have
+/// the actual file hash, we produce a deterministic placeholder from
+/// the model name and database ID. The `gglib-` prefix makes it clear
+/// this is not a real sha256.
+///
+/// The same (name, id) pair always produces the same digest, ensuring
+/// consistency between `/api/tags` and `/api/ps`.
+#[must_use]
+pub fn synthetic_digest(model_name: &str, model_id: u32) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    model_name.hash(&mut hasher);
+    model_id.hash(&mut hasher);
+    let h = hasher.finish();
+    format!("gglib-{h:016x}")
+}
+
+// ── GET / ──────────────────────────────────────────────────────────────
+
+/// The plain-text response Ollama returns at `GET /`.
+pub const OLLAMA_ROOT_RESPONSE: &str = "Ollama is running";
+
+// ── GET /api/version ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaVersionResponse {
+    pub version: String,
+}
+
+// ── GET /api/tags ──────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaTagsResponse {
+    pub models: Vec<OllamaModelEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaModelEntry {
+    pub name: String,
+    pub model: String,
+    pub modified_at: String,
+    pub size: u64,
+    pub digest: String,
+    pub details: OllamaModelDetails,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaModelDetails {
+    pub parent_model: String,
+    pub format: String,
+    pub family: String,
+    pub families: Vec<String>,
+    pub parameter_size: String,
+    pub quantization_level: String,
+}
+
+impl OllamaTagsResponse {
+    /// Build from the internal model catalog.
+    pub fn from_summaries(summaries: Vec<ModelSummary>) -> Self {
+        Self {
+            models: summaries.into_iter().map(OllamaModelEntry::from).collect(),
+        }
+    }
+}
+
+impl From<ModelSummary> for OllamaModelEntry {
+    fn from(s: ModelSummary) -> Self {
+        let family = s.architecture.clone().unwrap_or_default().to_lowercase();
+        let quant = s.quantization.clone().unwrap_or_default();
+        let name = format!("{}:latest", s.name);
+
+        Self {
+            name: name.clone(),
+            model: name,
+            modified_at: epoch_to_rfc3339(s.created_at),
+            size: s.file_size,
+            digest: synthetic_digest(&s.name, s.id),
+            details: OllamaModelDetails {
+                parent_model: String::new(),
+                format: "gguf".to_string(),
+                family: family.clone(),
+                families: if family.is_empty() {
+                    vec![]
+                } else {
+                    vec![family]
+                },
+                parameter_size: s.param_count.clone(),
+                quantization_level: quant,
+            },
+        }
+    }
+}
+
+// ── POST /api/show ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OllamaShowRequest {
+    /// The Ollama API uses `model` as the field name for /api/show.
+    pub model: String,
+    /// Accept `name` as an alias for backward compatibility.
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub verbose: bool,
+}
+
+impl OllamaShowRequest {
+    /// Return the effective model identifier, preferring `model` but falling
+    /// back to the `name` alias.
+    pub fn effective_model(&self) -> &str {
+        if self.model.is_empty() {
+            self.name.as_deref().unwrap_or("")
+        } else {
+            &self.model
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaShowResponse {
+    pub modelfile: String,
+    pub parameters: String,
+    pub template: String,
+    pub details: OllamaModelDetails,
+    pub model_info: serde_json::Value,
+    pub capabilities: Vec<String>,
+}
+
+impl OllamaShowResponse {
+    pub fn from_summary(s: &ModelSummary) -> Self {
+        let family = s.architecture.clone().unwrap_or_default().to_lowercase();
+        let quant = s.quantization.clone().unwrap_or_default();
+
+        Self {
+            modelfile: format!("# Modelfile generated by gglib\nFROM {}", s.name),
+            parameters: String::new(),
+            template: "{{ .Prompt }}".to_string(),
+            details: OllamaModelDetails {
+                parent_model: String::new(),
+                format: "gguf".to_string(),
+                family: family.clone(),
+                families: if family.is_empty() {
+                    vec![]
+                } else {
+                    vec![family]
+                },
+                parameter_size: s.param_count.clone(),
+                quantization_level: quant,
+            },
+            model_info: serde_json::json!({
+                "general.architecture": s.architecture,
+                "general.parameter_count": s.param_count,
+                "general.file_type": s.quantization,
+            }),
+            capabilities: vec!["completion".to_string()],
+        }
+    }
+}
+
+// ── GET /api/ps ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaPsResponse {
+    pub models: Vec<OllamaPsEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaPsEntry {
+    pub name: String,
+    pub model: String,
+    pub size: u64,
+    pub digest: String,
+    pub details: OllamaModelDetails,
+    pub expires_at: String,
+    pub size_vram: u64,
+}
+
+// ── POST /api/chat ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OllamaChatRequest {
+    pub model: String,
+    pub messages: Vec<OllamaChatMessage>,
+    #[serde(default = "default_true")]
+    pub stream: bool,
+    pub format: Option<serde_json::Value>,
+    #[serde(default)]
+    pub options: OllamaOptions,
+    pub keep_alive: Option<serde_json::Value>,
+    pub tools: Option<Vec<serde_json::Value>>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OllamaChatMessage {
+    pub role: String,
+    #[serde(default)]
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct OllamaOptions {
+    pub num_ctx: Option<u64>,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub top_k: Option<u32>,
+    pub seed: Option<i64>,
+    pub num_predict: Option<i32>,
+    pub stop: Option<Vec<String>>,
+    pub repeat_penalty: Option<f32>,
+}
+
+/// Non-streaming chat response in Ollama format.
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaChatResponse {
+    pub model: String,
+    pub created_at: String,
+    pub message: OllamaChatMessage,
+    pub done: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub done_reason: Option<String>,
+    pub total_duration: u64,
+    pub load_duration: u64,
+    pub prompt_eval_count: u32,
+    pub prompt_eval_duration: u64,
+    pub eval_count: u32,
+    pub eval_duration: u64,
+}
+
+/// Streaming chat chunk in Ollama format (NDJSON).
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaChatStreamChunk {
+    pub model: String,
+    pub created_at: String,
+    pub message: OllamaChatMessage,
+    pub done: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub done_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_eval_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_eval_duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eval_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eval_duration: Option<u64>,
+}
+
+// ── POST /api/generate ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OllamaGenerateRequest {
+    pub model: String,
+    pub prompt: String,
+    #[serde(default = "default_true")]
+    pub stream: bool,
+    pub system: Option<String>,
+    pub format: Option<serde_json::Value>,
+    #[serde(default)]
+    pub options: OllamaOptions,
+    pub keep_alive: Option<serde_json::Value>,
+    #[serde(default)]
+    pub raw: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaGenerateResponse {
+    pub model: String,
+    pub created_at: String,
+    pub response: String,
+    pub done: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub done_reason: Option<String>,
+    pub total_duration: u64,
+    pub load_duration: u64,
+    pub prompt_eval_count: u32,
+    pub prompt_eval_duration: u64,
+    pub eval_count: u32,
+    pub eval_duration: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<Vec<u32>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaGenerateStreamChunk {
+    pub model: String,
+    pub created_at: String,
+    pub response: String,
+    pub done: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub done_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_eval_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_eval_duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eval_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eval_duration: Option<u64>,
+}
+
+// ── POST /api/embeddings ───────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OllamaEmbeddingRequest {
+    pub model: String,
+    pub input: OllamaEmbeddingInput,
+    #[serde(default)]
+    pub options: OllamaOptions,
+    pub keep_alive: Option<serde_json::Value>,
+    pub truncate: Option<bool>,
+}
+
+/// Ollama accepts either a single string or array of strings.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum OllamaEmbeddingInput {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+impl OllamaEmbeddingInput {
+    /// Flatten to a `Vec<String>` for the OpenAI adapter.
+    pub fn into_vec(self) -> Vec<String> {
+        match self {
+            Self::Single(s) => vec![s],
+            Self::Multiple(v) => v,
+        }
+    }
+}
+
+/// Ollama `/api/embed` response (new-style).
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaEmbeddingResponse {
+    pub model: String,
+    pub embeddings: Vec<Vec<f32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_duration: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_eval_count: Option<u32>,
+}
+
+/// Legacy Ollama `/api/embeddings` response (single-vector).
+#[derive(Debug, Clone, Serialize)]
+pub struct OllamaLegacyEmbeddingResponse {
+    pub embedding: Vec<f32>,
+}
+
+// ── OpenAI /v1/embeddings response (for upstream forwarding) ───────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAiEmbeddingResponse {
+    pub object: String,
+    pub data: Vec<OpenAiEmbeddingData>,
+    #[serde(default)]
+    pub model: String,
+    pub usage: Option<OpenAiEmbeddingUsage>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAiEmbeddingData {
+    pub object: String,
+    pub embedding: Vec<f32>,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAiEmbeddingUsage {
+    pub prompt_tokens: u32,
+    pub total_tokens: u32,
+}
+
+// ── Timestamp Helpers ──────────────────────────────────────────────────
+
+/// Convert a Unix epoch timestamp to RFC 3339 string via `chrono`.
+fn epoch_to_rfc3339(epoch: i64) -> String {
+    chrono::DateTime::from_timestamp(epoch, 0)
+        .unwrap_or_default()
+        .to_rfc3339()
+}
+
+/// Return the current UTC time as an RFC 3339 string.
+pub fn now_rfc3339() -> String {
+    Utc::now().to_rfc3339()
+}
+
+/// Duration in nanoseconds from an `Instant`.
+pub fn elapsed_nanos(start: std::time::Instant) -> u64 {
+    start.elapsed().as_nanos() as u64
+}
+
+// ── Unit Tests ─────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_strips_latest() {
+        assert_eq!(normalize_model_name("phi3:latest"), "phi3");
+        assert_eq!(normalize_model_name("llama3.2:latest"), "llama3.2");
+    }
+
+    #[test]
+    fn test_normalize_preserves_other_tags() {
+        assert_eq!(
+            normalize_model_name("mistral:7b-instruct-q4_K_M"),
+            "mistral:7b-instruct-q4_K_M"
+        );
+    }
+
+    #[test]
+    fn test_normalize_no_tag() {
+        assert_eq!(normalize_model_name("phi3"), "phi3");
+        assert_eq!(normalize_model_name(""), "");
+    }
+
+    #[test]
+    fn test_embedding_input_single() {
+        let input: OllamaEmbeddingInput =
+            serde_json::from_str(r#""hello world""#).unwrap();
+        assert_eq!(input.into_vec(), vec!["hello world"]);
+    }
+
+    #[test]
+    fn test_embedding_input_multiple() {
+        let input: OllamaEmbeddingInput =
+            serde_json::from_str(r#"["hello", "world"]"#).unwrap();
+        assert_eq!(input.into_vec(), vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn test_tags_from_summary() {
+        let summary = ModelSummary {
+            id: 1,
+            name: "phi3".to_string(),
+            tags: vec!["chat".to_string()],
+            param_count: "3.8B".to_string(),
+            quantization: Some("Q4_K_M".to_string()),
+            architecture: Some("phi3".to_string()),
+            created_at: 1_700_000_000,
+            file_size: 2_000_000_000,
+        };
+        let entry = OllamaModelEntry::from(summary);
+        assert_eq!(entry.name, "phi3:latest");
+        assert_eq!(entry.details.family, "phi3");
+        assert_eq!(entry.details.quantization_level, "Q4_K_M");
+        assert_eq!(entry.details.format, "gguf");
+    }
+
+    #[test]
+    fn test_epoch_to_rfc3339() {
+        let result = epoch_to_rfc3339(1_700_000_000);
+        assert!(result.starts_with("2023-11-14"));
+    }
+
+    #[test]
+    fn test_now_rfc3339_not_empty() {
+        let result = now_rfc3339();
+        assert!(!result.is_empty());
+        assert!(result.contains('T'));
+    }
+
+    #[test]
+    fn test_chat_request_stream_defaults_true() {
+        let json = r#"{"model":"phi3","messages":[{"role":"user","content":"hi"}]}"#;
+        let req: OllamaChatRequest = serde_json::from_str(json).unwrap();
+        assert!(req.stream);
+    }
+
+    #[test]
+    fn test_chat_request_stream_explicit_false() {
+        let json =
+            r#"{"model":"phi3","messages":[{"role":"user","content":"hi"}],"stream":false}"#;
+        let req: OllamaChatRequest = serde_json::from_str(json).unwrap();
+        assert!(!req.stream);
+    }
+
+    #[test]
+    fn test_synthetic_digest_deterministic() {
+        let d1 = synthetic_digest("phi3", 1);
+        let d2 = synthetic_digest("phi3", 1);
+        assert_eq!(d1, d2, "same inputs must produce same digest");
+        assert!(d1.starts_with("gglib-"), "digest should have gglib- prefix");
+    }
+
+    #[test]
+    fn test_synthetic_digest_differs_for_different_models() {
+        let d1 = synthetic_digest("phi3", 1);
+        let d2 = synthetic_digest("llama3", 1);
+        assert_ne!(d1, d2, "different names must produce different digests");
+    }
+
+    #[test]
+    fn test_synthetic_digest_differs_for_different_ids() {
+        let d1 = synthetic_digest("phi3", 1);
+        let d2 = synthetic_digest("phi3", 2);
+        assert_ne!(d1, d2, "different IDs must produce different digests");
+    }
+}
