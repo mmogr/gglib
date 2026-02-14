@@ -754,12 +754,12 @@ mod transform_tests {
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some("Let me check...".to_string()),
-                tool_calls: Some(tool_call_1.clone()),
+                tool_calls: Some(tool_call_1),
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some("And the time...".to_string()),
-                tool_calls: Some(tool_call_2.clone()),
+                tool_calls: Some(tool_call_2),
             },
         ];
 
@@ -808,7 +808,7 @@ mod transform_tests {
             ChatMessage {
                 role: "assistant".to_string(),
                 content: None,
-                tool_calls: Some(tool_call.clone()),
+                tool_calls: Some(tool_call),
             },
         ];
 
@@ -838,7 +838,7 @@ mod transform_tests {
             ChatMessage {
                 role: "assistant".to_string(),
                 content: None,
-                tool_calls: Some(tool_call.clone()),
+                tool_calls: Some(tool_call),
             },
             ChatMessage {
                 role: "assistant".to_string(),
@@ -877,12 +877,12 @@ mod transform_tests {
             ChatMessage {
                 role: "assistant".to_string(),
                 content: None,
-                tool_calls: Some(tool_call_1.clone()),
+                tool_calls: Some(tool_call_1),
             },
             ChatMessage {
                 role: "assistant".to_string(),
                 content: None,
-                tool_calls: Some(tool_call_2.clone()),
+                tool_calls: Some(tool_call_2),
             },
         ];
 
@@ -940,7 +940,7 @@ mod transform_tests {
             ChatMessage {
                 role: "assistant".to_string(),
                 content: Some("Answer".to_string()),
-                tool_calls: Some(tool_call.clone()),
+                tool_calls: Some(tool_call),
             },
             ChatMessage {
                 role: "user".to_string(),
