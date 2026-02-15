@@ -1750,6 +1750,8 @@ dependencies = [
  "bitflags 2.10.0",
  "chrono",
  "dirs",
+ "gglib-db",
+ "gglib-hf",
  "mockall",
  "serde",
  "serde_json",

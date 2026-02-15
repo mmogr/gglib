@@ -26,6 +26,8 @@ mockall = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 tokio-test = { workspace = true }
+gglib-db = { path = "../gglib-db", features = ["test-utils"] }
+gglib-hf = { path = "../gglib-hf" }
 
 [lints]
 workspace = true

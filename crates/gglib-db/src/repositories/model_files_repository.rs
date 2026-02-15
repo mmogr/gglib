@@ -165,6 +165,7 @@ mod tests {
     use super::*;
     use crate::setup::setup_test_database;
     use gglib_core::domain::NewModel;
+    use gglib_core::services::ModelFilesRepositoryPort;
     use std::path::PathBuf;
 
     async fn setup_test_model(pool: &SqlitePool) -> Result<i64> {
@@ -198,8 +199,7 @@ mod tests {
             Some("abc123def456".to_string()),
         );
 
-        let file_id = repo.insert(&new_file).await.unwrap();
-        assert!(file_id > 0);
+        repo.insert(&new_file).await.unwrap();
 
         // Get files by model ID
         let files = repo.get_by_model_id(model_id).await.unwrap();
@@ -222,7 +222,12 @@ mod tests {
             None,
         );
 
-        let file_id = repo.insert(&new_file).await.unwrap();
+        repo.insert(&new_file).await.unwrap();
+
+        // Get the file ID from the database
+        let files = repo.get_by_model_id(model_id).await.unwrap();
+        assert_eq!(files.len(), 1);
+        let file_id = files[0].id;
 
         // Update verification time
         let now = Utc::now();
