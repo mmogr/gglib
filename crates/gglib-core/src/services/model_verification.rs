@@ -434,6 +434,7 @@ impl ModelVerificationService {
     }
 
     /// Verify a single shard by computing its SHA256 and comparing with OID.
+    #[allow(clippy::cognitive_complexity)]
     async fn verify_shard(
         file: &ModelFile,
         resolved_path: &Path,
