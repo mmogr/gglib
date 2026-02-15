@@ -83,6 +83,7 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 - **`routes.rs`** — Route definitions and handler mounting
 - **`sse.rs`** — Server-Sent Events utilities for streaming
 - **`dto/`** — Request/response DTOs for API endpoints
+- **`handlers/verification.rs`** — Model verification, update checking, and repair endpoints
 
 ## Endpoints
 
@@ -98,6 +99,9 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 | `GET` | `/api/download/:id` | Get download status |
 | `GET` | `/api/mcp/servers` | List MCP servers |
 | `POST` | `/api/mcp/servers/:id/start` | Start MCP server |
+| `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
+| `GET` | `/api/models/:id/updates` | Check for HuggingFace updates |
+| `POST` | `/api/models/:id/repair` | Re-download corrupt shards |
 
 ## Usage
 

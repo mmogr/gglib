@@ -74,7 +74,7 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 </details>
 
 **Module Descriptions:**
-- **`bootstrap.rs`** — Dependency injection and service wiring
+- **`bootstrap.rs`** — Dependency injection and service wiring (includes `ModelVerificationService` initialization)
 - **`error.rs`** — IPC-compatible error types
 - **`event_emitter.rs`** — `TauriEmitter` implementation of `AppEventEmitter`
 - **`events.rs`** — Event type definitions and serialization

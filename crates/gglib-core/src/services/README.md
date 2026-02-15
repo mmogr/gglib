@@ -73,6 +73,14 @@ This module contains the **application services** that orchestrate business logi
   - Validation
   - Persistence
 
+#### Model Integrity
+- **`model_verification.rs`** - Model verification and repair
+  - SHA256 integrity verification against HuggingFace LFS OIDs
+  - Per-shard health tracking with SSE progress streaming
+  - Update detection via HuggingFace API comparison
+  - Corrupt shard repair by triggering re-download
+  - Support for single-file and sharded models
+
 ## Design Patterns
 
 ### Constructor Injection
@@ -173,6 +181,7 @@ async fn example(service: &ModelService<impl ModelRepository>) {
 | [`chat_history.rs`](chat_history.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-chat_history-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-chat_history-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-chat_history-coverage.json) |
 | [`model_registrar.rs`](model_registrar.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_registrar-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_registrar-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_registrar-coverage.json) |
 | [`model_service.rs`](model_service.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_service-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_service-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_service-coverage.json) |
+| [`model_verification.rs`](model_verification.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_verification-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_verification-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-model_verification-coverage.json) |
 | [`server_service.rs`](server_service.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-server_service-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-server_service-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-server_service-coverage.json) |
 | [`settings_service.rs`](settings_service.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-settings_service-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-settings_service-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-services-settings_service-coverage.json) |
 <!-- module-table:end -->
