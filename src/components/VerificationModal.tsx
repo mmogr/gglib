@@ -156,25 +156,31 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
     >
       <div className="flex flex-col gap-4">
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          <div className="p-3 bg-red-500/10 border border-red-500/50 rounded text-red-400 text-sm">
             {error}
           </div>
         )}
 
         {/* Verification Progress */}
-        {verifying && progress && (
+        {verifying && (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <Loader2 className="animate-spin" size={16} />
-              <span className="text-sm font-medium">Verifying {progress.shardName}...</span>
+              <Loader2 className="animate-spin text-primary" size={16} />
+              <span className="text-sm font-medium text-primary">
+                {progress ? `Verifying ${progress.shardName}...` : 'Starting verification...'}
+              </span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${progress.percent}%` }}
-              />
-            </div>
-            <span className="text-xs text-gray-500">{progress.percent}% complete</span>
+            {progress && (
+              <>
+                <div className="w-full bg-surface-elevated rounded-full h-2 border border-subtle">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${progress.percent}%` }}
+                  />
+                </div>
+                <span className="text-xs text-secondary">{progress.percent}% complete</span>
+              </>
+            )}
           </div>
         )}
 
@@ -182,8 +188,8 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
         {checkingUpdates && (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <Loader2 className="animate-spin" size={16} />
-              <span className="text-sm font-medium">Checking HuggingFace for updates...</span>
+              <Loader2 className="animate-spin text-primary" size={16} />
+              <span className="text-sm font-medium text-primary">Checking HuggingFace for updates...</span>
             </div>
           </div>
         )}
@@ -191,21 +197,32 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
         {/* Verification Report */}
         {report && mode === 'verify' && (
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded">
+            <div className="flex items-center gap-2 p-3 bg-surface-elevated border-2 border-strong rounded">
               {getHealthIcon(report.overall_health)}
-              <span className="font-medium">Overall Health: {getHealthLabel(report.overall_health)}</span>
+              <span className="font-semibold text-primary">Overall Health: {getHealthLabel(report.overall_health)}</span>
             </div>
 
             <div className="text-sm">
-              <div className="font-medium mb-2">Shards: {report.shards.length}</div>
-              <div className="max-h-48 overflow-y-auto space-y-1">
+              <div className="font-semibold text-primary mb-2">Shards: {report.shards.length}</div>
+              <div className="max-h-48 overflow-y-auto space-y-2 border border-base rounded p-3 bg-surface">
                 {report.shards.map((shard, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-xs">
-                    {shard.health.type === 'healthy' && <CheckCircle2 size={14} className="text-green-500" />}
-                    {shard.health.type === 'corrupt' && <XCircle size={14} className="text-red-500" />}
-                    {shard.health.type === 'missing' && <AlertCircle size={14} className="text-orange-500" />}
-                    {shard.health.type === 'no_oid' && <AlertCircle size={14} className="text-yellow-500" />}
-                    <span className="truncate">{shard.file_path.split('/').pop()}</span>
+                  <div key={idx} className="flex flex-col gap-1 p-2 bg-surface-elevated rounded border border-subtle">
+                    <div className="flex items-center gap-2">
+                      {shard.health.type === 'healthy' && <CheckCircle2 size={14} className="text-green-500 flex-shrink-0" />}
+                      {shard.health.type === 'corrupt' && <XCircle size={14} className="text-red-500 flex-shrink-0" />}
+                      {shard.health.type === 'missing' && <AlertCircle size={14} className="text-orange-500 flex-shrink-0" />}
+                      {shard.health.type === 'no_oid' && <AlertCircle size={14} className="text-yellow-500 flex-shrink-0" />}
+                      <span className="truncate text-primary font-medium">{shard.file_path.split('/').pop()}</span>
+                    </div>
+                    <div className="ml-6 text-xs text-secondary">
+                      Status: <span className="font-mono">{shard.health.type}</span>
+                      {shard.health.type === 'corrupt' && shard.health.expected && (
+                        <div className="mt-1 text-red-400">Expected: {shard.health.expected.substring(0, 12)}...</div>
+                      )}
+                      {shard.health.type === 'corrupt' && shard.health.actual && (
+                        <div className="text-red-400">Actual: {shard.health.actual.substring(0, 12)}...</div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -236,35 +253,35 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
         {/* Update Check Result */}
         {updateResult && mode === 'update' && (
           <div className="flex flex-col gap-3">
-            <div className={`flex items-center gap-2 p-3 rounded ${
-              hasUpdates ? 'bg-blue-50 border border-blue-200' : 'bg-green-50 border border-green-200'
+            <div className={`flex items-center gap-2 p-3 rounded border-2 ${
+              hasUpdates ? 'bg-blue-500/10 border-blue-500' : 'bg-green-500/10 border-green-500'
             }`}>
               {hasUpdates ? (
                 <>
-                  <Icon icon={RefreshCw} size={20} className="text-blue-500" />
-                  <span className="font-medium">Updates Available</span>
+                  <Icon icon={RefreshCw} size={20} className="text-blue-400" />
+                  <span className="font-semibold text-primary">Updates Available</span>
                 </>
               ) : (
                 <>
-                  <Icon icon={CheckCircle2} size={20} className="text-green-500" />
-                  <span className="font-medium">Model is Up to Date</span>
+                  <Icon icon={CheckCircle2} size={20} className="text-green-400" />
+                  <span className="font-semibold text-primary">Model is Up to Date</span>
                 </>
               )}
             </div>
 
             {hasUpdates && updateResult.details && (
               <div className="text-sm">
-                <div className="font-medium mb-2">
+                <div className="font-semibold text-primary mb-2">
                   {updateResult.details.changed_shards} shard(s) have updates
                 </div>
-                <div className="max-h-48 overflow-y-auto space-y-1">
+                <div className="max-h-48 overflow-y-auto space-y-2 border border-base rounded p-3 bg-surface">
                   {updateResult.details.changes.map((change, idx) => (
-                    <div key={idx} className="flex flex-col gap-1 text-xs p-2 bg-gray-50 rounded">
+                    <div key={idx} className="flex flex-col gap-1 text-xs p-2 bg-surface-elevated rounded border border-subtle">
                       <div className="flex items-center gap-2">
-                        <RefreshCw size={12} className="text-blue-500" />
-                        <span className="truncate font-medium">{change.file_path.split('/').pop()}</span>
+                        <RefreshCw size={12} className="text-blue-400" />
+                        <span className="truncate font-medium text-primary">{change.file_path.split('/').pop()}</span>
                       </div>
-                      <div className="ml-5 text-gray-600 space-y-0.5">
+                      <div className="ml-5 text-secondary space-y-0.5 font-mono text-xs">
                         <div className="truncate">Old: {change.old_oid.substring(0, 12)}...</div>
                         <div className="truncate">New: {change.new_oid.substring(0, 12)}...</div>
                       </div>

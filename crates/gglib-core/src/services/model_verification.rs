@@ -50,7 +50,7 @@ pub enum ShardProgress {
 
 /// Health status of an individual shard after verification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ShardHealth {
     /// File is healthy - hash matches expected OID.
     Healthy,
@@ -323,7 +323,7 @@ impl ModelVerificationService {
             .await?;
 
         // Get model and file metadata
-        let _model = self
+        let model = self
             .model_repo
             .get_by_id(model_id)
             .await
@@ -339,6 +339,12 @@ impl ModelVerificationService {
             return Err("No model files found for verification".to_string());
         }
 
+        // Get base directory from model's file path
+        let base_dir = model.file_path
+            .parent()
+            .ok_or_else(|| "Failed to get model directory".to_string())?
+            .to_path_buf();
+
         let total_shards = model_files.len();
 
         // Create progress channel
@@ -352,7 +358,7 @@ impl ModelVerificationService {
         let handle = tokio::spawn(async move {
             let mut shard_reports = Vec::new();
             let mut has_unhealthy = false;
-            let mut all_unverifiable = true;
+            let mut has_healthy_or_no_oid = false;
 
             for (index, file) in model_files.iter().enumerate() {
                 // Send starting progress
@@ -365,7 +371,9 @@ impl ModelVerificationService {
                     })
                     .await;
 
-                let health = Self::verify_shard(file, model_id, index, total_shards, &tx).await;
+                // Resolve file path relative to base directory
+                let resolved_path = base_dir.join(&file.file_path);
+                let health = Self::verify_shard(file, &resolved_path, model_id, index, total_shards, &tx).await;
 
                 // Update verification timestamp
                 if let Err(e) = model_files_repo
@@ -383,8 +391,7 @@ impl ModelVerificationService {
                 // Track overall health
                 match &health {
                     ShardHealth::Corrupt { .. } | ShardHealth::Missing => has_unhealthy = true,
-                    ShardHealth::Healthy => all_unverifiable = false,
-                    ShardHealth::NoOid => {}
+                    ShardHealth::Healthy | ShardHealth::NoOid => has_healthy_or_no_oid = true,
                 }
 
                 shard_reports.push(ShardHealthReport {
@@ -406,7 +413,7 @@ impl ModelVerificationService {
 
             let overall_health = if has_unhealthy {
                 OverallHealth::Unhealthy
-            } else if all_unverifiable {
+            } else if !has_healthy_or_no_oid {
                 OverallHealth::Unverifiable
             } else {
                 OverallHealth::Healthy
@@ -426,6 +433,7 @@ impl ModelVerificationService {
     /// Verify a single shard by computing its SHA256 and comparing with OID.
     async fn verify_shard(
         file: &ModelFile,
+        resolved_path: &Path,
         model_id: i64,
         index: usize,
         total_shards: usize,
@@ -436,7 +444,7 @@ impl ModelVerificationService {
             return ShardHealth::NoOid;
         };
 
-        let file_path = Path::new(&file.file_path);
+        let file_path = resolved_path;
 
         // Check if file exists
         if !file_path.exists() {
@@ -675,11 +683,17 @@ impl ModelVerificationService {
             let filter_fn = |f: &&ModelFile| indices.contains(&(f.file_index as usize));
             model_files.iter().filter(filter_fn).collect()
         } else {
+            // Get base directory from model's file path
+            let base_dir = model.file_path
+                .parent()
+                .ok_or_else(|| "Failed to get model directory".to_string())?;
+
             // Verify all shards to find unhealthy ones
             let mut unhealthy = Vec::new();
             for file in &model_files {
                 let (tx, _rx) = mpsc::channel(1);
-                let health = Self::verify_shard(file, model_id, 0, 1, &tx).await;
+                let resolved_path = base_dir.join(&file.file_path);
+                let health = Self::verify_shard(file, &resolved_path, model_id, 0, 1, &tx).await;
                 match health {
                     ShardHealth::Corrupt { .. } | ShardHealth::Missing => {
                         unhealthy.push(file);
