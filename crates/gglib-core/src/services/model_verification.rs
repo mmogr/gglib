@@ -444,6 +444,20 @@ impl ModelVerificationService {
             return ShardHealth::NoOid;
         };
 
+        // SHA256 hashes are 64 hex characters. If the stored OID is shorter
+        // (e.g. 40 chars = Git SHA-1), it's the wrong hash type and can't be
+        // used for verification.
+        if expected_oid.len() != 64 {
+            tracing::warn!(
+                model_id = model_id,
+                file_path = %file.file_path,
+                oid_len = expected_oid.len(),
+                "Stored OID is not a SHA256 hash (expected 64 hex chars). \
+                 Re-download or update model metadata to fix."
+            );
+            return ShardHealth::NoOid;
+        }
+
         let file_path = resolved_path;
 
         // Check if file exists
