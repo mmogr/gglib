@@ -14,12 +14,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
+use async_trait::async_trait;
 use gglib_core::ModelRegistrar;
 use gglib_core::ports::{
     DownloadManagerConfig, DownloadManagerPort, GgufParserPort, ModelRepository,
     NoopDownloadEmitter, NoopEmitter, ProcessRunner, Repos,
 };
-use gglib_core::services::AppCore;
+use gglib_core::services::{AppCore, ModelVerificationService};
+use gglib_core::download::DownloadError;
 use gglib_db::{CoreFactory, setup_database};
 use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
@@ -50,6 +52,38 @@ impl CliConfig {
             llama_server_path: llama_server_path()?,
             max_concurrent: 4,
         })
+    }
+}
+
+/// Adapter to implement DownloadTriggerPort for DownloadManagerPort.
+struct DownloadTriggerAdapter {
+    download_manager: Arc<dyn DownloadManagerPort>,
+}
+
+#[async_trait]
+impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
+    async fn queue_download(
+        &self,
+        repo_id: String,
+        quantization: Option<String>,
+    ) -> anyhow::Result<String> {
+        use std::str::FromStr;
+        use gglib_core::ports::DownloadRequest;
+        use gglib_core::download::Quantization;
+        
+        // Convert quantization string to enum, default to Q4_K_M if not specified
+        let quant = quantization
+            .as_ref()
+            .and_then(|q| Quantization::from_str(q).ok())
+            .unwrap_or(Quantization::Q4KM); // Reasonable default
+        
+        let request = DownloadRequest::new(repo_id, quant);
+        let id = self.download_manager
+            .queue_download(request)
+            .await
+            .map_err(|e: DownloadError| anyhow::anyhow!("Failed to queue download: {}", e))?;
+        
+        Ok(id.to_string())
     }
 }
 
@@ -142,8 +176,8 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     // 3. Create GGUF parser (shared across model registrar and handlers)
     let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
 
-    // 4. Assemble AppCore
-    let app = AppCore::new(repos.clone(), runner.clone());
+    // 4. Create initial AppCore (will add verification service later)
+    let mut app = AppCore::new(repos.clone(), runner.clone());
 
     // 5. Create MCP service with injected repository
     // CLI uses NoopEmitter since there's no frontend to broadcast events to
@@ -161,7 +195,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         gguf_parser.clone(), // Share the parser
-        Some(model_files_repo as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
+        Some(model_files_repo.clone() as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
     ));
 
     // Create the download state repository
@@ -178,10 +212,22 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         Arc::new(build_download_manager(DownloadManagerDeps {
             model_registrar,
             download_repo,
-            hf_client,
+            hf_client: hf_client.clone(),
             event_emitter,
             config: download_config,
         }));
+
+    // 7. Create ModelVerificationService with download trigger adapter
+    let download_trigger = Arc::new(DownloadTriggerAdapter {
+        download_manager: downloads.clone(),
+    });
+    let verification_service = Arc::new(ModelVerificationService::new(
+        repos.models.clone(),
+        model_files_repo.clone(),
+        hf_client.clone(),
+        download_trigger,
+    ));
+    app = app.with_verification(verification_service);
 
     Ok(CliContext {
         app,

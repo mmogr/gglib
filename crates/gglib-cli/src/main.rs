@@ -312,6 +312,16 @@ async fn main() -> anyhow::Result<()> {
             // NEW: Uses CliContext
             handlers::download::update_model(&ctx, model_id).await?;
         }
+        Commands::Verify { model_id, verbose } => {
+            handlers::verification::execute_verify(&ctx, model_id, verbose).await?;
+        }
+        Commands::Repair {
+            model_id,
+            shards,
+            force,
+        } => {
+            handlers::verification::execute_repair(&ctx, model_id, shards, force).await?;
+        }
         Commands::Search {
             query,
             limit,
