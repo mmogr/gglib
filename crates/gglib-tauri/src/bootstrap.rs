@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
+use async_trait::async_trait;
 use gglib_core::ModelRegistrar;
 use gglib_core::ports::{
     AppEventBridge, AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, HfClientPort,
@@ -216,8 +217,8 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         config.max_concurrent,
     ));
 
-    // 3. Assemble AppCore
-    let app = Arc::new(AppCore::new(repos.clone(), runner.clone()));
+    // 3. Create AppCore (without Arc yet - we'll add verification first)
+    let app = AppCore::new(repos.clone(), runner.clone());
 
     // 4. Create MCP service with injected repository
     // For Tauri, we'll eventually use a real event emitter that broadcasts to frontend.
@@ -237,7 +238,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         Arc::new(GgufParser::new()), // Real GGUF parser for metadata extraction
-        Some(model_files_repo as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
+        Some(model_files_repo.clone() as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
     ));
 
     // Create the download state repository
@@ -264,11 +265,23 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     // Also keep trait object for code that doesn't need worker control
     let downloads: Arc<dyn DownloadManagerPort> = download_manager.clone();
 
+    // 6. Create ModelVerificationService with download trigger adapter
+    let download_trigger = Arc::new(DownloadTriggerAdapter {
+        download_manager: downloads.clone(),
+    });
+    let verification_service = Arc::new(gglib_core::services::ModelVerificationService::new(
+        repos.models.clone(),
+        model_files_repo.clone(),
+        hf_client.clone(),
+        download_trigger,
+    ));
+    let app = Arc::new(app.with_verification(verification_service));
+
     // Create Arc-wrapped services for GuiBackend
     let models = Arc::new(ModelService::new(repos.models.clone()));
     let settings = Arc::new(SettingsService::new(repos.settings.clone()));
 
-    // 6. Create proxy infrastructure
+    // 7. Create proxy infrastructure
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
 
@@ -360,8 +373,8 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         config.max_concurrent,
     ));
 
-    // 3. Assemble AppCore
-    let app = Arc::new(AppCore::new(repos.clone(), runner.clone()));
+    // 3. Create AppCore (without Arc yet - we'll add verification first)
+    let app = AppCore::new(repos.clone(), runner.clone());
 
     // 4. Create MCP service
     let mcp = Arc::new(McpService::new(
@@ -378,7 +391,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         Arc::new(GgufParser::new()), // Real GGUF parser for metadata extraction
-        Some(model_files_repo as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
+        Some(model_files_repo.clone() as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
     ));
 
     let download_repo = CoreFactory::download_state_repository(pool);
@@ -394,6 +407,18 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         config: download_config,
     }));
     let downloads: Arc<dyn DownloadManagerPort> = download_manager.clone();
+
+    // 6. Create ModelVerificationService with download trigger adapter
+    let download_trigger = Arc::new(DownloadTriggerAdapter {
+        download_manager: downloads.clone(),
+    });
+    let verification_service = Arc::new(gglib_core::services::ModelVerificationService::new(
+        repos.models.clone(),
+        model_files_repo.clone(),
+        hf_client.clone(),
+        download_trigger,
+    ));
+    let app = Arc::new(app.with_verification(verification_service));
 
     // Create Arc-wrapped services for GuiBackend
     let models = Arc::new(ModelService::new(repos.models.clone()));
@@ -423,6 +448,39 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         app_handle: None,
     })
 }
+/// Adapter to implement DownloadTriggerPort for DownloadManagerPort.
+struct DownloadTriggerAdapter {
+    download_manager: Arc<dyn DownloadManagerPort>,
+}
+
+#[async_trait]
+impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
+    async fn queue_download(
+        &self,
+        repo_id: String,
+        quantization: Option<String>,
+    ) -> anyhow::Result<String> {
+        use gglib_core::download::{DownloadError, Quantization};
+        use gglib_core::ports::DownloadRequest;
+        use std::str::FromStr;
+
+        // Convert quantization string to enum, default to Q4_K_M if not specified
+        let quant = quantization
+            .as_ref()
+            .and_then(|q| Quantization::from_str(q).ok())
+            .unwrap_or(Quantization::Q4KM);
+
+        let request = DownloadRequest::new(repo_id, quant);
+        let id = self
+            .download_manager
+            .queue_download(request)
+            .await
+            .map_err(|e: DownloadError| anyhow::anyhow!("Failed to queue download: {}", e))?;
+
+        Ok(id.to_string())
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
