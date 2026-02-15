@@ -108,3 +108,21 @@ pub fn normalized_file_path_string(path: &Path) -> String {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| path.to_string_lossy().to_string())
 }
+
+/// Parse a database row into a ModelFile.
+pub fn map_model_file_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<gglib_core::domain::ModelFile, sqlx::Error> {
+    Ok(gglib_core::domain::ModelFile {
+        id: row.try_get("id")?,
+        model_id: row.try_get("model_id")?,
+        file_path: row.try_get("file_path")?,
+        file_index: row.try_get("file_index")?,
+        expected_size: row.try_get("expected_size")?,
+        hf_oid: row.try_get("hf_oid")?,
+        last_verified_at: row
+            .try_get::<Option<String>, _>("last_verified_at")?
+            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+            .map(|dt| dt.with_timezone(&Utc)),
+    })
+}

@@ -75,11 +75,59 @@ pub async fn setup_test_database() -> Result<SqlitePool> {
     Ok(pool)
 }
 
+/// Checks if the model_files table exists in the database.
+///
+/// Used to determine if breaking migration is needed for model verification feature.
+async fn has_model_files_table(pool: &SqlitePool) -> Result<bool> {
+    let result: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='model_files'"
+    )
+    .fetch_one(pool)
+    .await?;
+    
+    Ok(result.0 > 0)
+}
+
 /// Creates the complete database schema.
 ///
 /// This function creates all tables and indexes required by the application.
 /// It is safe to call multiple times as all operations use IF NOT EXISTS.
+///
+/// **BREAKING MIGRATION (v0.3.4):** This function checks if the model_files table
+/// exists. If not, it performs a breaking migration to add per-shard OID tracking:
+/// - Drops models table and dependent tables (download_queue, chat_conversations)
+/// - Recreates models table with same schema
+/// - Creates new model_files junction table for per-file OID storage
+///
+/// This migration is intentionally destructive to ensure clean data consistency.
+/// Users must re-import models after upgrading.
 async fn create_schema(pool: &SqlitePool) -> Result<()> {
+    // Check if model_files table exists (indicates new schema)
+    let needs_migration = !has_model_files_table(pool).await?;
+    
+    if needs_migration {
+        tracing::warn!("Performing breaking schema migration for model verification (issue #173)");
+        tracing::warn!("Existing models will be cleared - please re-import after migration");
+        
+        // Drop dependent tables first (foreign key constraints)
+        sqlx::query("DROP TABLE IF EXISTS chat_messages")
+            .execute(pool)
+            .await?;
+        sqlx::query("DROP TABLE IF EXISTS chat_conversations")
+            .execute(pool)
+            .await?;
+        sqlx::query("DROP TABLE IF EXISTS download_queue")
+            .execute(pool)
+            .await?;
+        
+        // Drop models table
+        sqlx::query("DROP TABLE IF EXISTS models")
+            .execute(pool)
+            .await?;
+        
+        tracing::info!("Completed breaking migration - tables dropped");
+    }
+    
     // Create the models table
     sqlx::query(
         r#"
@@ -124,6 +172,30 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     // Index on model name for faster LIKE queries
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_models_name ON models(name)")
+        .execute(pool)
+        .await?;
+
+    // Create model_files junction table for per-shard OID tracking
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS model_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            file_index INTEGER NOT NULL,
+            expected_size INTEGER NOT NULL,
+            hf_oid TEXT,
+            last_verified_at TEXT,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+            UNIQUE (model_id, file_path)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Index on model_id for faster model_files lookups
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_model_files_model_id ON model_files(model_id)")
         .execute(pool)
         .await?;
 

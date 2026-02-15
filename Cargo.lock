@@ -1810,6 +1810,9 @@ version = "0.3.3"
 dependencies = [
  "gglib-core",
  "memmap2",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
  "tracing",
 ]
 
