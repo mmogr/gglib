@@ -480,7 +480,11 @@ impl ModelVerificationService {
                 if bytes_processed % (100 * 1024 * 1024) < (1024 * 1024)
                     || bytes_processed == total_bytes
                 {
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss, clippy::cast_sign_loss)]
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_precision_loss,
+                        clippy::cast_sign_loss
+                    )]
                     let percent = ((bytes_processed as f64 / total_bytes as f64) * 100.0) as u8;
 
                     let _ = tx_clone.blocking_send(VerificationProgress {
@@ -578,9 +582,7 @@ impl ModelVerificationService {
             .hf_client
             .get_quantization_files(repo_id, quantization)
             .await
-            .map_err(|e| {
-                RepositoryError::Storage(format!("Failed to fetch remote files: {e}"))
-            })?;
+            .map_err(|e| RepositoryError::Storage(format!("Failed to fetch remote files: {e}")))?;
 
         // Compare OIDs
         let mut changes = Vec::new();
@@ -671,10 +673,7 @@ impl ModelVerificationService {
         let shards_to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
             #[allow(clippy::cast_sign_loss)]
             let filter_fn = |f: &&ModelFile| indices.contains(&(f.file_index as usize));
-            model_files
-                .iter()
-                .filter(filter_fn)
-                .collect()
+            model_files.iter().filter(filter_fn).collect()
         } else {
             // Verify all shards to find unhealthy ones
             let mut unhealthy = Vec::new();

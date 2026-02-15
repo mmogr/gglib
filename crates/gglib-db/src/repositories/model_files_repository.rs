@@ -148,8 +148,7 @@ impl ModelFilesRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        row
-            .as_ref()
+        row.as_ref()
             .map(map_model_file_row)
             .transpose()
             .map_err(|e: sqlx::Error| anyhow::Error::from(e))
@@ -236,8 +235,7 @@ mod tests {
 
         // Insert multiple files
         for i in 0..3 {
-            let new_file =
-                NewModelFile::new(model_id, format!("shard-{}.gguf", i), i, 1024, None);
+            let new_file = NewModelFile::new(model_id, format!("shard-{}.gguf", i), i, 1024, None);
             repo.insert(&new_file).await.unwrap();
         }
 

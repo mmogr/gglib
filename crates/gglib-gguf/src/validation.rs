@@ -48,8 +48,8 @@ pub fn validate_gguf_quick(path: &Path, expected_size: Option<u64>) -> Result<()
     }
 
     // Check GGUF magic (read only first 4 bytes)
-    let mut file = File::open(path)
-        .map_err(|e| ValidationError::IoError(format!("cannot open file: {e}")))?;
+    let mut file =
+        File::open(path).map_err(|e| ValidationError::IoError(format!("cannot open file: {e}")))?;
 
     let mut magic = [0u8; 4];
     file.read_exact(&mut magic)
@@ -104,8 +104,8 @@ pub fn compute_gguf_sha256<F>(
 where
     F: FnMut(u64, u64),
 {
-    let mut file = File::open(path)
-        .map_err(|e| ValidationError::IoError(format!("cannot open file: {e}")))?;
+    let mut file =
+        File::open(path).map_err(|e| ValidationError::IoError(format!("cannot open file: {e}")))?;
 
     let total_bytes = file
         .metadata()
