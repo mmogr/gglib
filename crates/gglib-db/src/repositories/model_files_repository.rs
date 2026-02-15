@@ -40,6 +40,22 @@ impl gglib_core::services::ModelFilesRepositoryPort for ModelFilesRepository {
     }
 }
 
+// Implement the reader trait for verification service
+#[async_trait::async_trait]
+impl gglib_core::services::ModelFilesReaderPort for ModelFilesRepository {
+    async fn get_by_model_id(&self, model_id: i64) -> anyhow::Result<Vec<ModelFile>> {
+        self.get_by_model_id(model_id).await
+    }
+    
+    async fn update_verification_time(
+        &self,
+        id: i64,
+        verified_at: chrono::DateTime<chrono::Utc>,
+    ) -> anyhow::Result<()> {
+        self.update_verification_time(id, verified_at).await
+    }
+}
+
 impl ModelFilesRepository {
     /// Create a new `ModelFilesRepository`.
     pub fn new(pool: SqlitePool) -> Self {

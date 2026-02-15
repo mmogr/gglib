@@ -6,7 +6,7 @@
 use crate::ports::{ProcessRunner, Repos};
 use std::sync::Arc;
 
-use super::{ChatHistoryService, ModelService, ServerService, SettingsService};
+use super::{ChatHistoryService, ModelService, ModelVerificationService, ServerService, SettingsService};
 
 /// The core application facade.
 ///
@@ -29,6 +29,7 @@ pub struct AppCore {
     settings: SettingsService,
     servers: ServerService,
     chat_history: ChatHistoryService,
+    verification: Option<Arc<ModelVerificationService>>,
 }
 
 impl AppCore {
@@ -39,7 +40,16 @@ impl AppCore {
             settings: SettingsService::new(repos.settings),
             servers: ServerService::new(runner),
             chat_history: ChatHistoryService::new(repos.chat_history),
+            verification: None,
         }
+    }
+
+    /// Set the verification service (optional).
+    ///
+    /// This should be called during bootstrap if verification features are needed.
+    pub fn with_verification(mut self, verification: Arc<ModelVerificationService>) -> Self {
+        self.verification = Some(verification);
+        self
     }
 
     /// Access the model service.
@@ -60,6 +70,11 @@ impl AppCore {
     /// Access the chat history service.
     pub const fn chat_history(&self) -> &ChatHistoryService {
         &self.chat_history
+    }
+
+    /// Access the verification service (if available).
+    pub fn verification(&self) -> Option<&ModelVerificationService> {
+        self.verification.as_deref()
     }
 }
 
