@@ -481,7 +481,6 @@ impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #[test]

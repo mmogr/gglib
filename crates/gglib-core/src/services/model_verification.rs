@@ -340,7 +340,8 @@ impl ModelVerificationService {
         }
 
         // Get base directory from model's file path
-        let base_dir = model.file_path
+        let base_dir = model
+            .file_path
             .parent()
             .ok_or_else(|| "Failed to get model directory".to_string())?
             .to_path_buf();
@@ -373,7 +374,9 @@ impl ModelVerificationService {
 
                 // Resolve file path relative to base directory
                 let resolved_path = base_dir.join(&file.file_path);
-                let health = Self::verify_shard(file, &resolved_path, model_id, index, total_shards, &tx).await;
+                let health =
+                    Self::verify_shard(file, &resolved_path, model_id, index, total_shards, &tx)
+                        .await;
 
                 // Update verification timestamp
                 if let Err(e) = model_files_repo
@@ -698,7 +701,8 @@ impl ModelVerificationService {
             model_files.iter().filter(filter_fn).collect()
         } else {
             // Get base directory from model's file path
-            let base_dir = model.file_path
+            let base_dir = model
+                .file_path
                 .parent()
                 .ok_or_else(|| "Failed to get model directory".to_string())?;
 
