@@ -317,7 +317,7 @@ impl ModelVerificationService {
         String,
     > {
         // Acquire lock
-        let _guard = self
+        let guard = self
             .operation_lock
             .try_acquire(model_id, OperationType::Verifying)
             .await?;
@@ -357,6 +357,8 @@ impl ModelVerificationService {
 
         // Spawn verification task
         let handle = tokio::spawn(async move {
+            // Hold the operation lock for the duration of the verification task
+            let _guard = guard;
             let mut shard_reports = Vec::new();
             let mut has_unhealthy = false;
             let mut has_healthy_or_no_oid = false;
@@ -695,18 +697,19 @@ impl ModelVerificationService {
             .await
             .map_err(|e| format!("Failed to get model files: {e}"))?;
 
+        // Get base directory from model's file path
+        let base_dir = model
+            .file_path
+            .parent()
+            .ok_or_else(|| "Failed to get model directory".to_string())?
+            .to_path_buf();
+
         // Determine which shards to repair
         let shards_to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
             #[allow(clippy::cast_sign_loss)]
             let filter_fn = |f: &&ModelFile| indices.contains(&(f.file_index as usize));
             model_files.iter().filter(filter_fn).collect()
         } else {
-            // Get base directory from model's file path
-            let base_dir = model
-                .file_path
-                .parent()
-                .ok_or_else(|| "Failed to get model directory".to_string())?;
-
             // Verify all shards to find unhealthy ones
             let mut unhealthy = Vec::new();
             for file in &model_files {
@@ -729,9 +732,9 @@ impl ModelVerificationService {
 
         // Delete corrupt/missing files
         for file in &shards_to_repair {
-            let path = Path::new(&file.file_path);
-            if path.exists() {
-                if let Err(e) = tokio::fs::remove_file(path).await {
+            let resolved_path = base_dir.join(&file.file_path);
+            if resolved_path.exists() {
+                if let Err(e) = tokio::fs::remove_file(&resolved_path).await {
                     tracing::warn!(
                         model_id = model_id,
                         file_path = %file.file_path,
