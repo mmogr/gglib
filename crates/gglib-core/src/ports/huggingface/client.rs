@@ -36,7 +36,7 @@ pub trait HfClientPort: Send + Sync {
 
     /// Get files for a specific quantization.
     ///
-    /// Returns (path, size) tuples for all files in the quantization,
+    /// Returns file information including OIDs for all files in the quantization,
     /// sorted for correct shard ordering.
     ///
     /// # Arguments
@@ -47,7 +47,7 @@ pub trait HfClientPort: Send + Sync {
         &self,
         model_id: &str,
         quantization: &str,
-    ) -> HfPortResult<Vec<(String, u64)>>;
+    ) -> HfPortResult<Vec<HfFileInfo>>;
 
     /// Get the current commit SHA for a model.
     ///

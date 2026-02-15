@@ -16,6 +16,30 @@ pub struct ModelFilesRepository {
     pool: SqlitePool,
 }
 
+// Implement the trait from gglib_core
+#[async_trait::async_trait]
+impl gglib_core::services::ModelFilesRepositoryPort for ModelFilesRepository {
+    async fn insert(&self, file: &NewModelFile) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO model_files 
+                (model_id, file_path, file_index, expected_size, hf_oid)
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(file.model_id)
+        .bind(&file.file_path)
+        .bind(file.file_index)
+        .bind(file.expected_size)
+        .bind(&file.hf_oid)
+        .execute(&self.pool)
+        .await
+        .map_err(|e: sqlx::Error| anyhow::Error::from(e))?;
+        
+        Ok(())
+    }
+}
+
 impl ModelFilesRepository {
     /// Create a new `ModelFilesRepository`.
     pub fn new(pool: SqlitePool) -> Self {
@@ -25,7 +49,7 @@ impl ModelFilesRepository {
     /// Insert a new model file entry.
     ///
     /// Returns the ID of the inserted row.
-    pub async fn insert(&self, file: &NewModelFile) -> Result<i64> {
+    pub async fn insert_with_id(&self, file: &NewModelFile) -> Result<i64> {
         let result = sqlx::query(
             r#"
             INSERT INTO model_files 

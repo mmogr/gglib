@@ -47,13 +47,16 @@ impl Resolution {
 }
 
 /// A single resolved file.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ResolvedFile {
     /// Path within the repository.
     pub path: String,
     /// Size in bytes (if available from API).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
+    /// Git LFS OID (SHA256 hash from HuggingFace tree API).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oid: Option<String>,
 }
 
 impl ResolvedFile {
@@ -62,6 +65,7 @@ impl ResolvedFile {
         Self {
             path: path.into(),
             size: None,
+            oid: None,
         }
     }
 
@@ -70,6 +74,16 @@ impl ResolvedFile {
         Self {
             path: path.into(),
             size: Some(size),
+            oid: None,
+        }
+    }
+
+    /// Create a new resolved file with size and OID.
+    pub fn with_size_and_oid(path: impl Into<String>, size: u64, oid: Option<String>) -> Self {
+        Self {
+            path: path.into(),
+            size: Some(size),
+            oid,
         }
     }
 }

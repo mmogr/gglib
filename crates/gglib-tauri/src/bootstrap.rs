@@ -231,9 +231,11 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     let download_config = DownloadManagerConfig::new(models_resolution.path);
 
     // Create the model registrar (composes over model repository + GGUF parser)
+    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(pool.clone()));
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         Arc::new(GgufParser::new()), // Real GGUF parser for metadata extraction
+        Some(model_files_repo as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
     ));
 
     // Create the download state repository
@@ -368,9 +370,11 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
     // 5. Create download manager with noop emitter (no AppHandle available yet)
     let download_config = DownloadManagerConfig::new(models_resolution.path);
 
+    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(pool.clone()));
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         Arc::new(GgufParser::new()), // Real GGUF parser for metadata extraction
+        Some(model_files_repo as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
     ));
 
     let download_repo = CoreFactory::download_state_repository(pool);

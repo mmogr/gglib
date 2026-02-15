@@ -159,9 +159,11 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // 7. Create download manager with SSE emitter
     let download_config = DownloadManagerConfig::new(models_resolution.path);
 
+    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(pool.clone()));
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         Arc::new(GgufParser::new()),
+        Some(model_files_repo as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
     ));
 
     let download_repo = CoreFactory::download_state_repository(pool);

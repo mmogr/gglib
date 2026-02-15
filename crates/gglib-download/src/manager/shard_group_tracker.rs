@@ -11,6 +11,7 @@ use std::time::Instant;
 use std::time::Duration;
 
 use gglib_core::download::Quantization;
+use gglib_core::ports::ResolvedFile;
 
 use crate::queue::ShardGroupId;
 
@@ -27,6 +28,8 @@ pub struct GroupMetadata {
     pub primary_filename: String,
     /// `HuggingFace` tags for the model.
     pub hf_tags: Vec<String>,
+    /// File entries with OIDs from resolution (for model_files table).
+    pub file_entries: Vec<ResolvedFile>,
 }
 
 /// State for a shard group being tracked.
@@ -212,6 +215,7 @@ mod tests {
             quantization: Quantization::Q4KM,
             primary_filename: "model-00001-of-00003.gguf".to_string(),
             hf_tags: vec![],
+            file_entries: vec![],
         }
     }
 

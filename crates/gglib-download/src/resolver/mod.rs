@@ -47,11 +47,11 @@ impl QuantizationResolver for HfQuantizationResolver {
 
         // Check if this is a sharded model (multiple parts)
         let is_sharded =
-            files.len() > 1 || files.iter().any(|(path, _)| path.contains("-00001-of-"));
+            files.len() > 1 || files.iter().any(|f| f.path.contains("-00001-of-"));
 
         let resolved_files: Vec<_> = files
             .into_iter()
-            .map(|(path, size)| ResolvedFile::with_size(path, size))
+            .map(|file_info| ResolvedFile::with_size_and_oid(file_info.path, file_info.size, file_info.oid))
             .collect();
 
         Ok(Resolution {
