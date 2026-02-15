@@ -178,15 +178,12 @@ impl ModelRegistrarPort for ModelRegistrar {
                     
                     if let Err(e) = repo.insert(&model_file).await {
                         // Soft fail - log but don't propagate error
-                        #[cfg(feature = "tracing")]
                         tracing::warn!(
                             model_id = registered.id,
                             file_path = %file_entry.path,
                             error = %e,
                             "Failed to insert model_files record - verification features may be unavailable"
                         );
-                        #[cfg(not(feature = "tracing"))]
-                        let _ = (e, &registered.id, &file_entry.path);
                     }
                 }
             }
