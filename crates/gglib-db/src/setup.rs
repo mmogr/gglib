@@ -80,7 +80,6 @@ pub async fn setup_test_database() -> Result<SqlitePool> {
 /// This function creates all tables and indexes required by the application.
 /// It is safe to call multiple times as all operations use IF NOT EXISTS.
 async fn create_schema(pool: &SqlitePool) -> Result<()> {
-
     // Create the models table
     sqlx::query(
         r#"
