@@ -108,6 +108,8 @@ pub struct HfFileEntry {
     pub entry_type: HfEntryType,
     /// File size in bytes (0 for directories)
     pub size: u64,
+    /// Git LFS object ID (SHA256 hash) for files, None for directories
+    pub oid: Option<String>,
 }
 
 impl HfFileEntry {
@@ -344,6 +346,7 @@ mod tests {
             path: "model.Q4_K_M.gguf".to_string(),
             entry_type: HfEntryType::File,
             size: 1000,
+            oid: None,
         };
         assert!(gguf.is_gguf());
 
@@ -351,6 +354,7 @@ mod tests {
             path: "subdir".to_string(),
             entry_type: HfEntryType::Directory,
             size: 0,
+            oid: None,
         };
         assert!(!dir.is_gguf());
 
@@ -358,6 +362,7 @@ mod tests {
             path: "README.md".to_string(),
             entry_type: HfEntryType::File,
             size: 100,
+            oid: None,
         };
         assert!(!other.is_gguf());
     }

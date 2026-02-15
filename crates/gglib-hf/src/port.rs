@@ -176,9 +176,12 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
             message: format!("Invalid model ID format: {model_id}"),
         })?;
 
-        self.find_quantization_files_with_sizes(&repo, quantization)
+        let files = self.find_quantization_files_with_sizes(&repo, quantization)
             .await
-            .map_err(map_error)
+            .map_err(map_error)?;
+        
+        // Convert HfFileEntry to (path, size) tuples for backward compatibility
+        Ok(files.into_iter().map(|f| (f.path, f.size)).collect())
     }
 
     async fn get_commit_sha(&self, model_id: &str) -> HfPortResult<String> {
