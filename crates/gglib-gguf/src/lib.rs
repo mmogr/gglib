@@ -28,4 +28,4 @@ pub use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserP
 pub use capabilities::tool_calling::ToolSupportDetector;
 
 // Re-export validation primitives
-pub use validation::{compute_gguf_sha256, validate_gguf_quick, ValidationError};
+pub use validation::{ValidationError, compute_gguf_sha256, validate_gguf_quick};

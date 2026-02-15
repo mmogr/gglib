@@ -35,7 +35,7 @@ impl gglib_core::services::ModelFilesRepositoryPort for ModelFilesRepository {
         .execute(&self.pool)
         .await
         .map_err(|e: sqlx::Error| anyhow::Error::from(e))?;
-        
+
         Ok(())
     }
 }
@@ -46,7 +46,7 @@ impl gglib_core::services::ModelFilesReaderPort for ModelFilesRepository {
     async fn get_by_model_id(&self, model_id: i64) -> anyhow::Result<Vec<ModelFile>> {
         self.get_by_model_id(model_id).await
     }
-    
+
     async fn update_verification_time(
         &self,
         id: i64,
@@ -106,11 +106,7 @@ impl ModelFilesRepository {
     }
 
     /// Update the last_verified_at timestamp for a model file.
-    pub async fn update_verification_time(
-        &self,
-        id: i64,
-        timestamp: DateTime<Utc>,
-    ) -> Result<()> {
+    pub async fn update_verification_time(&self, id: i64, timestamp: DateTime<Utc>) -> Result<()> {
         sqlx::query(
             r#"
             UPDATE model_files
@@ -171,7 +167,7 @@ mod tests {
     async fn setup_test_model(pool: &SqlitePool) -> Result<i64> {
         use crate::repositories::SqliteModelRepository;
         use gglib_core::ModelRepository;
-        
+
         let model_repo = SqliteModelRepository::new(pool.clone());
         let new_model = NewModel::new(
             "Test Model".to_string(),
@@ -179,7 +175,7 @@ mod tests {
             7.0,
             Utc::now(),
         );
-        
+
         let model = model_repo.insert(&new_model).await?;
         Ok(model.id)
     }
@@ -214,13 +210,7 @@ mod tests {
         let model_id = setup_test_model(&pool).await.unwrap();
         let repo = ModelFilesRepository::new(pool);
 
-        let new_file = NewModelFile::new(
-            model_id,
-            "model.gguf".to_string(),
-            0,
-            1024,
-            None,
-        );
+        let new_file = NewModelFile::new(model_id, "model.gguf".to_string(), 0, 1024, None);
 
         repo.insert(&new_file).await.unwrap();
 
@@ -246,13 +236,8 @@ mod tests {
 
         // Insert multiple files
         for i in 0..3 {
-            let new_file = NewModelFile::new(
-                model_id,
-                format!("shard-{}.gguf", i),
-                i as i32,
-                1024,
-                None,
-            );
+            let new_file =
+                NewModelFile::new(model_id, format!("shard-{}.gguf", i), i as i32, 1024, None);
             repo.insert(&new_file).await.unwrap();
         }
 

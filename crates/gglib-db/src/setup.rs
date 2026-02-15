@@ -80,11 +80,11 @@ pub async fn setup_test_database() -> Result<SqlitePool> {
 /// Used to determine if breaking migration is needed for model verification feature.
 async fn has_model_files_table(pool: &SqlitePool) -> Result<bool> {
     let result: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='model_files'"
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='model_files'",
     )
     .fetch_one(pool)
     .await?;
-    
+
     Ok(result.0 > 0)
 }
 
@@ -104,11 +104,11 @@ async fn has_model_files_table(pool: &SqlitePool) -> Result<bool> {
 async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // Check if model_files table exists (indicates new schema)
     let needs_migration = !has_model_files_table(pool).await?;
-    
+
     if needs_migration {
         tracing::warn!("Performing breaking schema migration for model verification (issue #173)");
         tracing::warn!("Existing models will be cleared - please re-import after migration");
-        
+
         // Drop dependent tables first (foreign key constraints)
         sqlx::query("DROP TABLE IF EXISTS chat_messages")
             .execute(pool)
@@ -119,15 +119,15 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         sqlx::query("DROP TABLE IF EXISTS download_queue")
             .execute(pool)
             .await?;
-        
+
         // Drop models table
         sqlx::query("DROP TABLE IF EXISTS models")
             .execute(pool)
             .await?;
-        
+
         tracing::info!("Completed breaking migration - tables dropped");
     }
-    
+
     // Create the models table
     sqlx::query(
         r#"

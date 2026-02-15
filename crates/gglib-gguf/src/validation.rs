@@ -4,10 +4,10 @@
 //! independent of business logic. These primitives can be used by higher-level
 //! services to implement verification workflows.
 
+use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use sha2::{Digest, Sha256};
 
 /// GGUF magic bytes: "GGUF" (version 3)
 const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
@@ -31,10 +31,7 @@ const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
 /// let result = validate_gguf_quick(Path::new("model.gguf"), Some(4368438272));
 /// assert!(result.is_ok());
 /// ```
-pub fn validate_gguf_quick(
-    path: &Path,
-    expected_size: Option<u64>,
-) -> Result<(), ValidationError> {
+pub fn validate_gguf_quick(path: &Path, expected_size: Option<u64>) -> Result<(), ValidationError> {
     let metadata = std::fs::metadata(path)
         .map_err(|e| ValidationError::IoError(format!("cannot stat file: {}", e)))?;
 
@@ -135,9 +132,7 @@ where
         bytes_processed += n as u64;
 
         // Report progress every ~100MB or at end
-        if bytes_processed % (100 * 1024 * 1024) < (1024 * 1024)
-            || bytes_processed == total_bytes
-        {
+        if bytes_processed % (100 * 1024 * 1024) < (1024 * 1024) || bytes_processed == total_bytes {
             progress_callback(bytes_processed, total_bytes);
         }
     }
@@ -194,10 +189,7 @@ mod tests {
         file.flush().unwrap();
 
         let result = validate_gguf_quick(file.path(), None);
-        assert!(matches!(
-            result,
-            Err(ValidationError::InvalidMagic { .. })
-        ));
+        assert!(matches!(result, Err(ValidationError::InvalidMagic { .. })));
     }
 
     #[test]
@@ -208,10 +200,7 @@ mod tests {
         file.flush().unwrap();
 
         let result = validate_gguf_quick(file.path(), Some(50));
-        assert!(matches!(
-            result,
-            Err(ValidationError::SizeMismatch { .. })
-        ));
+        assert!(matches!(result, Err(ValidationError::SizeMismatch { .. })));
     }
 
     #[test]
@@ -244,6 +233,9 @@ mod tests {
         // First update should be 0 bytes
         assert_eq!(progress_updates[0].0, 0);
         // Last update should be total bytes
-        assert_eq!(progress_updates.last().unwrap().0, progress_updates.last().unwrap().1);
+        assert_eq!(
+            progress_updates.last().unwrap().0,
+            progress_updates.last().unwrap().1
+        );
     }
 }

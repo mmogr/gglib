@@ -175,7 +175,7 @@ impl ModelRegistrarPort for ModelRegistrar {
                         size as i64,
                         file_entry.oid.clone(),
                     );
-                    
+
                     if let Err(e) = repo.insert(&model_file).await {
                         // Soft fail - log but don't propagate error
                         tracing::warn!(

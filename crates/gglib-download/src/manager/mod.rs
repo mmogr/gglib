@@ -685,9 +685,7 @@ impl DownloadManagerImpl {
         // Retrieve file entries with OIDs from map
         let file_entries = {
             let map = self.file_entries_map.lock().await;
-            map.get(&item.id.to_string())
-                .cloned()
-                .unwrap_or_default()
+            map.get(&item.id.to_string()).cloned().unwrap_or_default()
         };
 
         let metadata = GroupMetadata {
@@ -733,15 +731,13 @@ impl DownloadManagerImpl {
     /// Handle completion of a single-file download.
     async fn handle_single_file_completion(&self, item: &QueuedItem, completed: CompletedJob) {
         tracing::info!(id = %item.id, "Single-file download completed");
-        
+
         // Retrieve file entries with OIDs from map
         let file_entries = {
             let map = self.file_entries_map.lock().await;
-            map.get(&item.id.to_string())
-                .cloned()
-                .unwrap_or_default()
+            map.get(&item.id.to_string()).cloned().unwrap_or_default()
         };
-        
+
         let metadata = GroupMetadata {
             repo_id: completed.repo_id.clone(),
             commit_sha: completed.commit_sha.clone(),

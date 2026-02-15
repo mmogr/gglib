@@ -160,7 +160,9 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // 7. Create download manager with SSE emitter
     let download_config = DownloadManagerConfig::new(models_resolution.path);
 
-    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(pool.clone()));
+    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(
+        pool.clone(),
+    ));
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         Arc::new(GgufParser::new()),
@@ -262,22 +264,23 @@ impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
         repo_id: String,
         quantization: Option<String>,
     ) -> anyhow::Result<String> {
-        use std::str::FromStr;
-        use gglib_core::ports::DownloadRequest;
         use gglib_core::download::{DownloadError, Quantization};
-        
+        use gglib_core::ports::DownloadRequest;
+        use std::str::FromStr;
+
         // Convert quantization string to enum, default to Q4_K_M if not specified
         let quant = quantization
             .as_ref()
             .and_then(|q| Quantization::from_str(q).ok())
             .unwrap_or(Quantization::Q4KM);
-        
+
         let request = DownloadRequest::new(repo_id, quant);
-        let id = self.download_manager
+        let id = self
+            .download_manager
             .queue_download(request)
             .await
             .map_err(|e: DownloadError| anyhow::anyhow!("Failed to queue download: {}", e))?;
-        
+
         Ok(id.to_string())
     }
 }

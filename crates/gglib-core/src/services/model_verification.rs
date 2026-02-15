@@ -16,13 +16,11 @@ use async_trait::async_trait;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 
 use crate::domain::ModelFile;
-use crate::ports::{
-    HfClientPort, ModelRepository, RepositoryError,
-};
+use crate::ports::{HfClientPort, ModelRepository, RepositoryError};
 
 // ============================================================================
 // Domain Types
@@ -174,7 +172,7 @@ impl Drop for OperationGuard {
     fn drop(&mut self) {
         let model_id = self.model_id;
         let lock_map: Arc<RwLock<HashMap<i64, OperationType>>> = Arc::clone(&self.lock_map);
-        
+
         // Spawn a task to release the lock asynchronously
         tokio::spawn(async move {
             let mut map = lock_map.write().await;
@@ -208,16 +206,16 @@ impl ModelOperationLock {
         operation: OperationType,
     ) -> Result<OperationGuard, String> {
         let mut map = self.locks.write().await;
-        
+
         if let Some(existing) = map.get(&model_id) {
             return Err(format!(
                 "Model {} is already locked for {:?} operation",
                 model_id, existing
             ));
         }
-        
+
         map.insert(model_id, operation);
-        
+
         Ok(OperationGuard {
             model_id,
             lock_map: Arc::clone(&self.locks),
@@ -243,7 +241,7 @@ impl Default for ModelOperationLock {
 pub trait ModelFilesReaderPort: Send + Sync {
     /// Get all model files for a specific model.
     async fn get_by_model_id(&self, model_id: i64) -> anyhow::Result<Vec<ModelFile>>;
-    
+
     /// Update the last verified timestamp for a model file.
     async fn update_verification_time(
         &self,
@@ -311,15 +309,30 @@ impl ModelVerificationService {
     pub async fn verify_model_integrity(
         &self,
         model_id: i64,
-    ) -> Result<(mpsc::Receiver<VerificationProgress>, JoinHandle<Result<VerificationReport, RepositoryError>>), String> {
+    ) -> Result<
+        (
+            mpsc::Receiver<VerificationProgress>,
+            JoinHandle<Result<VerificationReport, RepositoryError>>,
+        ),
+        String,
+    > {
         // Acquire lock
-        let _guard = self.operation_lock.try_acquire(model_id, OperationType::Verifying).await?;
+        let _guard = self
+            .operation_lock
+            .try_acquire(model_id, OperationType::Verifying)
+            .await?;
 
         // Get model and file metadata
-        let _model = self.model_repo.get_by_id(model_id).await
+        let _model = self
+            .model_repo
+            .get_by_id(model_id)
+            .await
             .map_err(|e| format!("Failed to get model: {}", e))?;
-        
-        let model_files = self.model_files_repo.get_by_model_id(model_id).await
+
+        let model_files = self
+            .model_files_repo
+            .get_by_model_id(model_id)
+            .await
             .map_err(|e| format!("Failed to get model files: {}", e))?;
 
         if model_files.is_empty() {
@@ -343,23 +356,22 @@ impl ModelVerificationService {
 
             for (index, file) in model_files.iter().enumerate() {
                 // Send starting progress
-                let _ = tx.send(VerificationProgress {
-                    model_id,
-                    shard_index: index,
-                    total_shards,
-                    shard_progress: ShardProgress::Starting,
-                }).await;
+                let _ = tx
+                    .send(VerificationProgress {
+                        model_id,
+                        shard_index: index,
+                        total_shards,
+                        shard_progress: ShardProgress::Starting,
+                    })
+                    .await;
 
-                let health = Self::verify_shard(
-                    file,
-                    model_id,
-                    index,
-                    total_shards,
-                    &tx,
-                ).await;
+                let health = Self::verify_shard(file, model_id, index, total_shards, &tx).await;
 
                 // Update verification timestamp
-                if let Err(e) = model_files_repo.update_verification_time(file.id, Utc::now()).await {
+                if let Err(e) = model_files_repo
+                    .update_verification_time(file.id, Utc::now())
+                    .await
+                {
                     tracing::warn!(
                         model_id = model_id,
                         file_id = file.id,
@@ -372,7 +384,7 @@ impl ModelVerificationService {
                 match &health {
                     ShardHealth::Corrupt { .. } | ShardHealth::Missing => has_unhealthy = true,
                     ShardHealth::Healthy => all_unverifiable = false,
-                    ShardHealth::NoOid => {},
+                    ShardHealth::NoOid => {}
                 }
 
                 shard_reports.push(ShardHealthReport {
@@ -382,12 +394,14 @@ impl ModelVerificationService {
                 });
 
                 // Send completion progress
-                let _ = tx.send(VerificationProgress {
-                    model_id,
-                    shard_index: index,
-                    total_shards,
-                    shard_progress: ShardProgress::Completed { health },
-                }).await;
+                let _ = tx
+                    .send(VerificationProgress {
+                        model_id,
+                        shard_index: index,
+                        total_shards,
+                        shard_progress: ShardProgress::Completed { health },
+                    })
+                    .await;
             }
 
             let overall_health = if has_unhealthy {
@@ -436,11 +450,11 @@ impl ModelVerificationService {
         let result = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
             let mut file = File::open(&path_owned)?;
             let total_bytes = file.metadata()?.len();
-            
+
             let mut hasher = Sha256::new();
             let mut buffer = vec![0u8; 1024 * 1024]; // 1MB chunks
             let mut bytes_processed = 0u64;
-            
+
             // Initial progress
             let _ = tx_clone.blocking_send(VerificationProgress {
                 model_id,
@@ -452,23 +466,23 @@ impl ModelVerificationService {
                     total_bytes,
                 },
             });
-            
+
             loop {
                 let n = file.read(&mut buffer)?;
                 if n == 0 {
                     break;
                 }
-                
+
                 hasher.update(&buffer[..n]);
                 bytes_processed += n as u64;
-                
+
                 // Report progress every ~100MB or at end
                 if bytes_processed % (100 * 1024 * 1024) < (1024 * 1024)
                     || bytes_processed == total_bytes
                 {
                     #[allow(clippy::cast_possible_truncation)]
                     let percent = ((bytes_processed as f64 / total_bytes as f64) * 100.0) as u8;
-                    
+
                     let _ = tx_clone.blocking_send(VerificationProgress {
                         model_id,
                         shard_index: index,
@@ -481,9 +495,10 @@ impl ModelVerificationService {
                     });
                 }
             }
-            
+
             Ok(format!("{:x}", hasher.finalize()))
-        }).await;
+        })
+        .await;
 
         match result {
             Ok(Ok(computed_hash)) => {
@@ -520,10 +535,13 @@ impl ModelVerificationService {
     /// Check if updates are available for a model.
     ///
     /// Compares local OIDs with remote OIDs from HuggingFace.
-    pub async fn check_for_updates(&self, model_id: i64) -> Result<UpdateCheckResult, RepositoryError> {
+    pub async fn check_for_updates(
+        &self,
+        model_id: i64,
+    ) -> Result<UpdateCheckResult, RepositoryError> {
         // Get model metadata
         let model = self.model_repo.get_by_id(model_id).await?;
-        
+
         let Some(ref repo_id) = model.hf_repo_id else {
             return Ok(UpdateCheckResult {
                 model_id,
@@ -541,7 +559,10 @@ impl ModelVerificationService {
         };
 
         // Get local file metadata
-        let local_files = self.model_files_repo.get_by_model_id(model_id).await
+        let local_files = self
+            .model_files_repo
+            .get_by_model_id(model_id)
+            .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
         if local_files.is_empty() {
@@ -553,10 +574,13 @@ impl ModelVerificationService {
         }
 
         // Get remote file metadata from HuggingFace
-        let remote_files = self.hf_client
+        let remote_files = self
+            .hf_client
             .get_quantization_files(repo_id, quantization)
             .await
-            .map_err(|e| RepositoryError::Storage(format!("Failed to fetch remote files: {}", e)))?;
+            .map_err(|e| {
+                RepositoryError::Storage(format!("Failed to fetch remote files: {}", e))
+            })?;
 
         // Compare OIDs
         let mut changes = Vec::new();
@@ -567,7 +591,8 @@ impl ModelVerificationService {
             };
 
             // Find matching remote file by path
-            if let Some(remote_file) = remote_files.iter().find(|f| f.path == local_file.file_path) {
+            if let Some(remote_file) = remote_files.iter().find(|f| f.path == local_file.file_path)
+            {
                 if let Some(ref remote_oid) = remote_file.oid {
                     if local_oid != remote_oid {
                         let old_oid_str: String = local_oid.clone();
@@ -613,10 +638,16 @@ impl ModelVerificationService {
         shard_indices: Option<Vec<usize>>,
     ) -> Result<String, String> {
         // Acquire downloading lock
-        let _guard = self.operation_lock.try_acquire(model_id, OperationType::Downloading).await?;
+        let _guard = self
+            .operation_lock
+            .try_acquire(model_id, OperationType::Downloading)
+            .await?;
 
         // Get model metadata
-        let model = self.model_repo.get_by_id(model_id).await
+        let model = self
+            .model_repo
+            .get_by_id(model_id)
+            .await
             .map_err(|e| format!("Failed to get model: {}", e))?;
 
         let Some(ref repo_id) = model.hf_repo_id else {
@@ -628,12 +659,16 @@ impl ModelVerificationService {
         };
 
         // Get file metadata
-        let model_files = self.model_files_repo.get_by_model_id(model_id).await
+        let model_files = self
+            .model_files_repo
+            .get_by_model_id(model_id)
+            .await
             .map_err(|e| format!("Failed to get model files: {}", e))?;
 
         // Determine which shards to repair
         let shards_to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
-            model_files.iter()
+            model_files
+                .iter()
                 .filter(|f| indices.contains(&(f.file_index as usize)))
                 .collect()
         } else {
@@ -672,7 +707,8 @@ impl ModelVerificationService {
         }
 
         // Trigger re-download
-        let download_id = self.download_trigger
+        let download_id = self
+            .download_trigger
             .queue_download(repo_id.clone(), Some(quantization.clone()))
             .await
             .map_err(|e| format!("Failed to queue download: {}", e))?;
@@ -708,7 +744,7 @@ mod tests {
         }
         // Give the drop task time to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        
+
         let guard2 = lock.try_acquire(1, OperationType::Downloading).await;
         assert!(guard2.is_ok());
     }

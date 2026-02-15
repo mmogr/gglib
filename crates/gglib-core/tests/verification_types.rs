@@ -15,7 +15,7 @@ fn test_shard_health_variants() {
     };
     let missing = ShardHealth::Missing;
     let no_oid = ShardHealth::NoOid;
-    
+
     // All variants should be creatable
     assert!(matches!(healthy, ShardHealth::Healthy));
     assert!(matches!(corrupt, ShardHealth::Corrupt { .. }));
@@ -29,7 +29,7 @@ fn test_overall_health_variants() {
     let healthy = OverallHealth::Healthy;
     let unhealthy = OverallHealth::Unhealthy;
     let unverifiable = OverallHealth::Unverifiable;
-    
+
     assert_eq!(format!("{healthy:?}"), "Healthy");
     assert_eq!(format!("{unhealthy:?}"), "Unhealthy");
     assert_eq!(format!("{unverifiable:?}"), "Unverifiable");

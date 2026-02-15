@@ -46,11 +46,17 @@ pub async fn verify(
     Path(id): Path<i64>,
 ) -> Result<Json<VerifyResponse>, HttpError> {
     // Get verification service
-    let verification = state.core.verification()
+    let verification = state
+        .core
+        .verification()
         .ok_or_else(|| HttpError::NotFound("Verification service not available".to_string()))?;
 
     // Get model info for validation
-    let model = state.core.models().get_by_id(id).await?
+    let model = state
+        .core
+        .models()
+        .get_by_id(id)
+        .await?
         .ok_or_else(|| HttpError::NotFound(format!("Model with ID {} not found", id)))?;
 
     tracing::info!(
@@ -61,16 +67,20 @@ pub async fn verify(
     );
 
     // Start verification
-    let (mut progress_rx, handle) = verification.verify_model_integrity(id).await
+    let (mut progress_rx, handle) = verification
+        .verify_model_integrity(id)
+        .await
         .map_err(|e| HttpError::Internal(format!("Failed to start verification: {}", e)))?;
 
     // Stream progress via SSE
     while let Some(progress) = progress_rx.recv().await {
         // Extract progress information from shard_progress
         let (bytes_processed, total_bytes) = match &progress.shard_progress {
-            gglib_core::services::ShardProgress::Hashing { bytes_processed, total_bytes, .. } => {
-                (*bytes_processed, *total_bytes)
-            }
+            gglib_core::services::ShardProgress::Hashing {
+                bytes_processed,
+                total_bytes,
+                ..
+            } => (*bytes_processed, *total_bytes),
             _ => continue, // Skip non-hashing progress updates
         };
 
@@ -88,7 +98,11 @@ pub async fn verify(
         let event = gglib_core::events::AppEvent::VerificationProgress {
             model_id: id,
             model_name: model.name.clone(),
-            shard_name: format!("Shard {}/{}", progress.shard_index + 1, progress.total_shards),
+            shard_name: format!(
+                "Shard {}/{}",
+                progress.shard_index + 1,
+                progress.total_shards
+            ),
             bytes_processed,
             total_bytes,
         };
@@ -96,7 +110,8 @@ pub async fn verify(
     }
 
     // Wait for verification to complete
-    let report = handle.await
+    let report = handle
+        .await
         .map_err(|e| HttpError::Internal(format!("Verification task failed: {}", e)))?
         .map_err(|e| HttpError::Internal(format!("Verification failed: {}", e)))?;
 
@@ -127,11 +142,17 @@ pub async fn check_updates(
     Path(id): Path<i64>,
 ) -> Result<Json<CheckUpdatesResponse>, HttpError> {
     // Get verification service
-    let verification = state.core.verification()
+    let verification = state
+        .core
+        .verification()
         .ok_or_else(|| HttpError::NotFound("Verification service not available".to_string()))?;
 
     // Get model info for validation
-    let model = state.core.models().get_by_id(id).await?
+    let model = state
+        .core
+        .models()
+        .get_by_id(id)
+        .await?
         .ok_or_else(|| HttpError::NotFound(format!("Model with ID {} not found", id)))?;
 
     tracing::info!(
@@ -142,14 +163,21 @@ pub async fn check_updates(
     );
 
     // Check for updates
-    let result = verification.check_for_updates(id).await
+    let result = verification
+        .check_for_updates(id)
+        .await
         .map_err(|e| HttpError::Internal(format!("Failed to check for updates: {}", e)))?;
 
     let message = if result.update_available {
-        let changed_shards = result.details.as_ref()
+        let changed_shards = result
+            .details
+            .as_ref()
             .map(|d| d.changed_shards)
             .unwrap_or(0);
-        format!("Updates available: {} shards can be updated", changed_shards)
+        format!(
+            "Updates available: {} shards can be updated",
+            changed_shards
+        )
     } else {
         "Model is up to date".to_string()
     };
@@ -161,10 +189,7 @@ pub async fn check_updates(
         "Update check complete",
     );
 
-    Ok(Json(CheckUpdatesResponse {
-        result,
-        message,
-    }))
+    Ok(Json(CheckUpdatesResponse { result, message }))
 }
 
 /// Repair model by re-downloading corrupt shards.
@@ -176,11 +201,17 @@ pub async fn repair(
     Json(req): Json<RepairRequest>,
 ) -> Result<Json<RepairResponse>, HttpError> {
     // Get verification service
-    let verification = state.core.verification()
+    let verification = state
+        .core
+        .verification()
         .ok_or_else(|| HttpError::NotFound("Verification service not available".to_string()))?;
 
     // Get model info for validation
-    let model = state.core.models().get_by_id(id).await?
+    let model = state
+        .core
+        .models()
+        .get_by_id(id)
+        .await?
         .ok_or_else(|| HttpError::NotFound(format!("Model with ID {} not found", id)))?;
 
     tracing::info!(
@@ -192,7 +223,9 @@ pub async fn repair(
     );
 
     // Repair model
-    let message = verification.repair_model(id, req.shards).await
+    let message = verification
+        .repair_model(id, req.shards)
+        .await
         .map_err(|e| HttpError::Internal(format!("Failed to repair model: {}", e)))?;
 
     tracing::info!(

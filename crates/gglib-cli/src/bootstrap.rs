@@ -16,12 +16,12 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use gglib_core::ModelRegistrar;
+use gglib_core::download::DownloadError;
 use gglib_core::ports::{
     DownloadManagerConfig, DownloadManagerPort, GgufParserPort, ModelRepository,
     NoopDownloadEmitter, NoopEmitter, ProcessRunner, Repos,
 };
 use gglib_core::services::{AppCore, ModelVerificationService};
-use gglib_core::download::DownloadError;
 use gglib_db::{CoreFactory, setup_database};
 use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
@@ -67,22 +67,23 @@ impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
         repo_id: String,
         quantization: Option<String>,
     ) -> anyhow::Result<String> {
-        use std::str::FromStr;
-        use gglib_core::ports::DownloadRequest;
         use gglib_core::download::Quantization;
-        
+        use gglib_core::ports::DownloadRequest;
+        use std::str::FromStr;
+
         // Convert quantization string to enum, default to Q4_K_M if not specified
         let quant = quantization
             .as_ref()
             .and_then(|q| Quantization::from_str(q).ok())
             .unwrap_or(Quantization::Q4KM); // Reasonable default
-        
+
         let request = DownloadRequest::new(repo_id, quant);
-        let id = self.download_manager
+        let id = self
+            .download_manager
             .queue_download(request)
             .await
             .map_err(|e: DownloadError| anyhow::anyhow!("Failed to queue download: {}", e))?;
-        
+
         Ok(id.to_string())
     }
 }
@@ -191,7 +192,9 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     let download_config = DownloadManagerConfig::new(models_dir_resolution.path);
 
     // Create the model registrar (composes over model repository + GGUF parser)
-    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(pool.clone()));
+    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(
+        pool.clone(),
+    ));
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         gguf_parser.clone(), // Share the parser

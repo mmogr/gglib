@@ -6,7 +6,9 @@
 use crate::ports::{ProcessRunner, Repos};
 use std::sync::Arc;
 
-use super::{ChatHistoryService, ModelService, ModelVerificationService, ServerService, SettingsService};
+use super::{
+    ChatHistoryService, ModelService, ModelVerificationService, ServerService, SettingsService,
+};
 
 /// The core application facade.
 ///

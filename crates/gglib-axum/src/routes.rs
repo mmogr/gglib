@@ -65,18 +65,12 @@ pub(crate) fn api_routes() -> Router<AppState> {
             get(handlers::models::filter_options),
         )
         // Model Verification API
-        .route(
-            "/models/{id}/verify",
-            post(handlers::verification::verify),
-        )
+        .route("/models/{id}/verify", post(handlers::verification::verify))
         .route(
             "/models/{id}/updates",
             get(handlers::verification::check_updates),
         )
-        .route(
-            "/models/{id}/repair",
-            post(handlers::verification::repair),
-        )
+        .route("/models/{id}/repair", post(handlers::verification::repair))
         // Tags API
         .route("/tags", get(handlers::models::list_tags))
         .route("/tags/{tag}/models", get(handlers::models::get_by_tag))
