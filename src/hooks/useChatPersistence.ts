@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { appLogger } from '../services/platform';
 import type { ThreadMessageLike } from '@assistant-ui/react';
-import { getMessages, saveMessage } from '../services/clients/chat';
+import { getMessages, saveMessage, updateMessage, deleteMessage } from '../services/clients/chat';
 import type { ChatMessage } from '../services/clients/chat';
 import { threadMessageToTranscriptMarkdown } from '../utils/messages';
 import type { ReasoningTimingTracker } from './useGglibRuntime/reasoningTiming';
@@ -190,10 +190,62 @@ export function useChatPersistence({
     const conversationId = activeConversationId;
     if (!conversationId) return;
 
+    // --- Detect and delete truncated messages ---
+    // When onEdit truncates the in-memory array, old messages remain in the DB.
+    // Compare current message IDs against persistedByMessageId to find orphans,
+    // then cascade-delete the first one (backend removes it and all subsequent).
+    const currentIds = new Set(messages.map(m => m.id));
+    let firstOrphanDbId: number | null = null;
+
+    for (const [runtimeId, dbId] of persistedByMessageId.current.entries()) {
+      if (!currentIds.has(runtimeId)) {
+        // This persisted message is no longer in the current array
+        if (firstOrphanDbId === null || dbId < firstOrphanDbId) {
+          firstOrphanDbId = dbId;
+        }
+        // Clean up tracking state for the removed message
+        persistedByMessageId.current.delete(runtimeId);
+        lastDigestByMessageId.current.delete(runtimeId);
+        const timer = updateTimers.current.get(runtimeId);
+        if (timer) {
+          window.clearTimeout(timer);
+          updateTimers.current.delete(runtimeId);
+        }
+        const ct = cleanupTimers.current.get(runtimeId);
+        if (ct) {
+          window.clearTimeout(ct);
+          cleanupTimers.current.delete(runtimeId);
+        }
+      }
+    }
+
+    if (firstOrphanDbId !== null) {
+      // Cascade delete: backend removes this message and all with higher IDs
+      // in the same conversation
+      const dbIdToDelete = firstOrphanDbId;
+      (async () => {
+        try {
+          const result = await deleteMessage(dbIdToDelete);
+          appLogger.info('hook.persistence', 'Cascade-deleted truncated messages from DB', {
+            firstDeletedDbId: dbIdToDelete,
+            deletedCount: result.deletedCount,
+          });
+        } catch (error) {
+          appLogger.error('hook.persistence', 'Failed to delete truncated messages', { error });
+        }
+      })();
+    }
+
     // Process each message
     for (const m of messages) {
       // Skip messages without IDs or system messages
       if (!m.id || m.role === 'system') continue;
+
+      // Skip assistant messages that are still streaming (not yet finalized).
+      // The agentic loop sets timingFinalized after streaming completes;
+      // without this guard, partial content is saved as a new DB row on every
+      // streaming update and then the completed content creates another row.
+      if (m.role === 'assistant' && !(m.metadata as any)?.custom?.timingFinalized) continue;
 
       // Skip if already processing this message ID
       if (processingRef.current.has(m.id) || isPersistingRef.current) continue;
@@ -263,11 +315,7 @@ export function useChatPersistence({
                 : undefined
             );
             if (text.trim() && existingDbId) {
-              await saveMessage(
-                conversationId,
-                m.role as ChatMessage['role'],
-                text
-              );
+              await updateMessage(existingDbId, text);
               await syncConversations({ silent: true });
               
               // Cleanup timing data after successful persist (prevent memory growth)
