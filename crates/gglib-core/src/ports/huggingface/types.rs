@@ -41,7 +41,7 @@ pub struct HfFileInfo {
     pub size: u64,
     /// Whether this is a GGUF file
     pub is_gguf: bool,
-    /// Git LFS OID (SHA256 hash from HuggingFace tree API)
+    /// Git LFS OID (SHA256 hash from `HuggingFace` tree API)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oid: Option<String>,
 }

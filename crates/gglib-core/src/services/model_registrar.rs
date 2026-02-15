@@ -18,8 +18,8 @@ use crate::ports::{
 
 /// Repository trait for model files metadata.
 ///
-/// We don't depend on gglib_db directly - adapters inject the implementation.
-/// This type is re-exported from gglib_db for use in adapters.
+/// We don't depend on `gglib_db` directly - adapters inject the implementation.
+/// This type is re-exported from `gglib_db` for use in adapters.
 #[async_trait]
 pub trait ModelFilesRepositoryPort: Send + Sync {
     /// Insert a new model file record.
@@ -168,6 +168,7 @@ impl ModelRegistrarPort for ModelRegistrar {
         if let Some(ref repo) = self.model_files_repo {
             for (file_index, file_entry) in download.hf_file_entries.iter().enumerate() {
                 if let Some(size) = file_entry.size {
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
                     let model_file = NewModelFile::new(
                         registered.id,
                         file_entry.path.clone(),

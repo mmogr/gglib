@@ -1,7 +1,7 @@
 //! Model verification service for integrity checking and update detection.
 //!
 //! This service provides:
-//! - Integrity verification via SHA256 hash comparison against HuggingFace OIDs
+//! - Integrity verification via SHA256 hash comparison against `HuggingFace` OIDs
 //! - Update detection by comparing local OIDs with remote repository state
 //! - Model repair by re-downloading corrupt or missing shards
 //! - Concurrency control to prevent conflicting operations on the same model
@@ -56,7 +56,7 @@ pub enum ShardHealth {
     Healthy,
     /// File is corrupt - hash doesn't match expected OID.
     Corrupt {
-        /// Expected SHA256 hash (from HuggingFace OID).
+        /// Expected SHA256 hash (from `HuggingFace` OID).
         expected: String,
         /// Actual computed SHA256 hash.
         actual: String,
@@ -209,12 +209,12 @@ impl ModelOperationLock {
 
         if let Some(existing) = map.get(&model_id) {
             return Err(format!(
-                "Model {} is already locked for {:?} operation",
-                model_id, existing
+                "Model {model_id} is already locked for {existing:?} operation"
             ));
         }
 
         map.insert(model_id, operation);
+        drop(map);
 
         Ok(OperationGuard {
             model_id,
@@ -235,7 +235,7 @@ impl Default for ModelOperationLock {
 
 /// Port trait for accessing model files repository.
 ///
-/// This is a minimal trait that wraps the concrete ModelFilesRepository
+/// This is a minimal trait that wraps the concrete `ModelFilesRepository`
 /// to avoid circular dependencies.
 #[async_trait]
 pub trait ModelFilesReaderPort: Send + Sync {
@@ -269,7 +269,7 @@ pub struct ModelVerificationService {
     model_repo: Arc<dyn ModelRepository>,
     /// Repository for model file metadata.
     model_files_repo: Arc<dyn ModelFilesReaderPort>,
-    /// HuggingFace client for update checks.
+    /// `HuggingFace` client for update checks.
     hf_client: Arc<dyn HfClientPort>,
     /// Download trigger for repairs.
     download_trigger: Arc<dyn DownloadTriggerPort>,
@@ -327,13 +327,13 @@ impl ModelVerificationService {
             .model_repo
             .get_by_id(model_id)
             .await
-            .map_err(|e| format!("Failed to get model: {}", e))?;
+            .map_err(|e| format!("Failed to get model: {e}"))?;
 
         let model_files = self
             .model_files_repo
             .get_by_model_id(model_id)
             .await
-            .map_err(|e| format!("Failed to get model files: {}", e))?;
+            .map_err(|e| format!("Failed to get model files: {e}"))?;
 
         if model_files.is_empty() {
             return Err("No model files found for verification".to_string());
@@ -480,7 +480,7 @@ impl ModelVerificationService {
                 if bytes_processed % (100 * 1024 * 1024) < (1024 * 1024)
                     || bytes_processed == total_bytes
                 {
-                    #[allow(clippy::cast_possible_truncation)]
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss, clippy::cast_sign_loss)]
                     let percent = ((bytes_processed as f64 / total_bytes as f64) * 100.0) as u8;
 
                     let _ = tx_clone.blocking_send(VerificationProgress {
@@ -534,7 +534,7 @@ impl ModelVerificationService {
 
     /// Check if updates are available for a model.
     ///
-    /// Compares local OIDs with remote OIDs from HuggingFace.
+    /// Compares local OIDs with remote OIDs from `HuggingFace`.
     pub async fn check_for_updates(
         &self,
         model_id: i64,
@@ -579,7 +579,7 @@ impl ModelVerificationService {
             .get_quantization_files(repo_id, quantization)
             .await
             .map_err(|e| {
-                RepositoryError::Storage(format!("Failed to fetch remote files: {}", e))
+                RepositoryError::Storage(format!("Failed to fetch remote files: {e}"))
             })?;
 
         // Compare OIDs
@@ -597,8 +597,10 @@ impl ModelVerificationService {
                     if local_oid != remote_oid {
                         let old_oid_str: String = local_oid.clone();
                         let new_oid_str: String = remote_oid.clone();
+                        #[allow(clippy::cast_sign_loss)]
+                        let index = local_file.file_index as usize;
                         changes.push(ShardUpdate {
-                            index: local_file.file_index as usize,
+                            index,
                             file_path: local_file.file_path.clone(),
                             old_oid: old_oid_str,
                             new_oid: new_oid_str,
@@ -631,7 +633,7 @@ impl ModelVerificationService {
     ///
     /// * `model_id` - ID of the model to repair
     /// * `shard_indices` - Optional list of specific shard indices to repair.
-    ///                     If `None`, all unhealthy shards will be repaired.
+    ///   If `None`, all unhealthy shards will be repaired.
     pub async fn repair_model(
         &self,
         model_id: i64,
@@ -648,7 +650,7 @@ impl ModelVerificationService {
             .model_repo
             .get_by_id(model_id)
             .await
-            .map_err(|e| format!("Failed to get model: {}", e))?;
+            .map_err(|e| format!("Failed to get model: {e}"))?;
 
         let Some(ref repo_id) = model.hf_repo_id else {
             return Err("Model does not have HuggingFace repository information".to_string());
@@ -663,13 +665,15 @@ impl ModelVerificationService {
             .model_files_repo
             .get_by_model_id(model_id)
             .await
-            .map_err(|e| format!("Failed to get model files: {}", e))?;
+            .map_err(|e| format!("Failed to get model files: {e}"))?;
 
         // Determine which shards to repair
         let shards_to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
+            #[allow(clippy::cast_sign_loss)]
+            let filter_fn = |f: &&ModelFile| indices.contains(&(f.file_index as usize));
             model_files
                 .iter()
-                .filter(|f| indices.contains(&(f.file_index as usize)))
+                .filter(filter_fn)
                 .collect()
         } else {
             // Verify all shards to find unhealthy ones
@@ -711,7 +715,7 @@ impl ModelVerificationService {
             .download_trigger
             .queue_download(repo_id.clone(), Some(quantization.clone()))
             .await
-            .map_err(|e| format!("Failed to queue download: {}", e))?;
+            .map_err(|e| format!("Failed to queue download: {e}"))?;
 
         Ok(download_id)
     }

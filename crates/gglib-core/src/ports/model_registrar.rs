@@ -37,7 +37,7 @@ pub struct CompletedDownload {
     pub file_paths: Option<Vec<std::path::PathBuf>>,
     /// `HuggingFace` tags for the model.
     pub hf_tags: Vec<String>,
-    /// File entries with OIDs from HuggingFace (for model_files table).
+    /// File entries with OIDs from `HuggingFace` (for `model_files` table).
     pub hf_file_entries: Vec<ResolvedFile>,
 }
 

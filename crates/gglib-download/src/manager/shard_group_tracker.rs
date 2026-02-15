@@ -28,7 +28,7 @@ pub struct GroupMetadata {
     pub primary_filename: String,
     /// `HuggingFace` tags for the model.
     pub hf_tags: Vec<String>,
-    /// File entries with OIDs from resolution (for model_files table).
+    /// File entries with OIDs from resolution (for `model_files` table).
     pub file_entries: Vec<ResolvedFile>,
 }
 

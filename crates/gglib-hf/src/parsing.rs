@@ -144,7 +144,7 @@ pub fn parse_tree_entries(json: &Value) -> HfResult<Vec<HfFileEntry>> {
             let oid = item
                 .get("oid")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(ToString::to_string);
 
             Some(HfFileEntry {
                 path,

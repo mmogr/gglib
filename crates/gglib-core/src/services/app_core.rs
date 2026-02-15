@@ -49,6 +49,7 @@ impl AppCore {
     /// Set the verification service (optional).
     ///
     /// This should be called during bootstrap if verification features are needed.
+    #[must_use]
     pub fn with_verification(mut self, verification: Arc<ModelVerificationService>) -> Self {
         self.verification = Some(verification);
         self

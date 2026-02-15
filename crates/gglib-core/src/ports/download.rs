@@ -54,7 +54,7 @@ pub struct ResolvedFile {
     /// Size in bytes (if available from API).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
-    /// Git LFS OID (SHA256 hash from HuggingFace tree API).
+    /// Git LFS OID (SHA256 hash from `HuggingFace` tree API).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oid: Option<String>,
 }

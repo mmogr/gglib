@@ -33,7 +33,7 @@ const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
 /// ```
 pub fn validate_gguf_quick(path: &Path, expected_size: Option<u64>) -> Result<(), ValidationError> {
     let metadata = std::fs::metadata(path)
-        .map_err(|e| ValidationError::IoError(format!("cannot stat file: {}", e)))?;
+        .map_err(|e| ValidationError::IoError(format!("cannot stat file: {e}")))?;
 
     let actual_size = metadata.len();
 
@@ -49,11 +49,11 @@ pub fn validate_gguf_quick(path: &Path, expected_size: Option<u64>) -> Result<()
 
     // Check GGUF magic (read only first 4 bytes)
     let mut file = File::open(path)
-        .map_err(|e| ValidationError::IoError(format!("cannot open file: {}", e)))?;
+        .map_err(|e| ValidationError::IoError(format!("cannot open file: {e}")))?;
 
     let mut magic = [0u8; 4];
     file.read_exact(&mut magic)
-        .map_err(|e| ValidationError::IoError(format!("cannot read magic bytes: {}", e)))?;
+        .map_err(|e| ValidationError::IoError(format!("cannot read magic bytes: {e}")))?;
 
     if magic != GGUF_MAGIC {
         return Err(ValidationError::InvalidMagic {
@@ -68,7 +68,7 @@ pub fn validate_gguf_quick(path: &Path, expected_size: Option<u64>) -> Result<()
 /// Compute SHA256 hash of a file with progress reporting
 ///
 /// Streams the file in chunks to avoid memory issues with large files.
-/// The progress callback receives (bytes_processed, total_bytes).
+/// The progress callback receives (`bytes_processed`, `total_bytes`).
 ///
 /// This function is designed to be called from `tokio::task::spawn_blocking`
 /// as it performs blocking I/O.
@@ -105,11 +105,11 @@ where
     F: FnMut(u64, u64),
 {
     let mut file = File::open(path)
-        .map_err(|e| ValidationError::IoError(format!("cannot open file: {}", e)))?;
+        .map_err(|e| ValidationError::IoError(format!("cannot open file: {e}")))?;
 
     let total_bytes = file
         .metadata()
-        .map_err(|e| ValidationError::IoError(format!("cannot get file size: {}", e)))?
+        .map_err(|e| ValidationError::IoError(format!("cannot get file size: {e}")))?
         .len();
 
     let mut hasher = Sha256::new();
@@ -122,7 +122,7 @@ where
     loop {
         let n = file
             .read(&mut buffer)
-            .map_err(|e| ValidationError::IoError(format!("read error: {}", e)))?;
+            .map_err(|e| ValidationError::IoError(format!("read error: {e}")))?;
 
         if n == 0 {
             break;

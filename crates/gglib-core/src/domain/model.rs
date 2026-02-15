@@ -164,9 +164,9 @@ pub struct ModelFile {
     pub file_path: String,
     /// Index of this file in the shard sequence (0 for single-file models).
     pub file_index: i32,
-    /// Expected file size in bytes (from HuggingFace API).
+    /// Expected file size in bytes (from `HuggingFace` API).
     pub expected_size: i64,
-    /// HuggingFace OID (Git LFS SHA256 hash) for this file.
+    /// `HuggingFace` OID (Git LFS SHA256 hash) for this file.
     pub hf_oid: Option<String>,
     /// UTC timestamp of when this file was last verified.
     pub last_verified_at: Option<DateTime<Utc>>,
@@ -181,16 +181,16 @@ pub struct NewModelFile {
     pub file_path: String,
     /// Index of this file in the shard sequence (0 for single-file models).
     pub file_index: i32,
-    /// Expected file size in bytes (from HuggingFace API).
+    /// Expected file size in bytes (from `HuggingFace` API).
     pub expected_size: i64,
-    /// HuggingFace OID (Git LFS SHA256 hash) for this file.
+    /// `HuggingFace` OID (Git LFS SHA256 hash) for this file.
     pub hf_oid: Option<String>,
 }
 
 impl NewModelFile {
     /// Create a new model file entry with minimal required fields.
     #[must_use]
-    pub fn new(
+    pub const fn new(
         model_id: i64,
         file_path: String,
         file_index: i32,
