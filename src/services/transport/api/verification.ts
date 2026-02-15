@@ -15,7 +15,11 @@ import type {
  * Progress updates are streamed via SSE (subscribe to 'verification' events).
  */
 export async function verifyModel(modelId: ModelId): Promise<VerificationReport> {
-  return post<VerificationReport>(`/api/models/${modelId}/verify`, {});
+  const response = await post<{ report: VerificationReport }>(
+    `/api/models/${modelId}/verify`,
+    {}
+  );
+  return response.report;
 }
 
 /**
