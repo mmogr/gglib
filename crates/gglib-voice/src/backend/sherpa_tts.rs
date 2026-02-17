@@ -208,40 +208,28 @@ impl TtsBackend for SherpaTtsBackend {
 // human-friendly IDs used by the legacy Kokoro backend so that stored
 // user preferences carry over.
 
-/// Map a voice ID string (e.g., `"af_sarah"`) to the sherpa-onnx speaker ID (i32).
+/// Map a voice ID string (e.g., `"af_sarah"`) to the sherpa-onnx speaker ID.
 ///
-/// Returns -1 for unknown voices (sherpa-onnx treats -1 as "default").
+/// The IDs match the `speaker2id` metadata in the Kokoro v0.19 English model
+/// (`kokoro-en-v0_19`).  Returns -1 for unknown voices so that
+/// [`set_voice`] can reject them gracefully.
 fn voice_id_to_speaker_id(voice_id: &str) -> i32 {
-    // The speaker IDs correspond to the order in the Kokoro voices.bin
-    // file.  These are the standard Kokoro v1.0 voice IDs.
+    // Speaker IDs from model metadata:
+    //   af->0, af_bella->1, af_nicole->2, af_sarah->3, af_sky->4,
+    //   am_adam->5, am_michael->6, bf_emma->7, bf_isabella->8,
+    //   bm_george->9, bm_lewis->10
     match voice_id {
-        "af_alloy" => 0,
-        "af_aoede" => 1,
-        "af_bella" => 2,
-        "af_heart" => 3,
-        "af_jessica" => 4,
-        "af_kore" => 5,
-        "af_nicole" => 6,
-        "af_nova" => 7,
-        "af_river" => 8,
-        "af_sarah" => 9,
-        "af_sky" => 10,
-        "am_adam" => 11,
-        "am_echo" => 12,
-        "am_eric" => 13,
-        "am_fable" => 14,
-        "am_liam" => 15,
-        "am_michael" => 16,
-        "am_onyx" => 17,
-        "am_puck" => 18,
-        "bf_alice" => 19,
-        "bf_emma" => 20,
-        "bf_isabella" => 21,
-        "bf_lily" => 22,
-        "bm_daniel" => 23,
-        "bm_fable" => 24,
-        "bm_george" => 25,
-        "bm_lewis" => 26,
+        "af" => 0,
+        "af_bella" => 1,
+        "af_nicole" => 2,
+        "af_sarah" => 3,
+        "af_sky" => 4,
+        "am_adam" => 5,
+        "am_michael" => 6,
+        "bf_emma" => 7,
+        "bf_isabella" => 8,
+        "bm_george" => 9,
+        "bm_lewis" => 10,
         _ => {
             tracing::warn!(voice = %voice_id, "Unknown Kokoro voice — using default speaker 0");
             0

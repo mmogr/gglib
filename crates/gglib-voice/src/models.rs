@@ -239,7 +239,7 @@ impl VoiceModelCatalog {
             dir_name: "kokoro-en-v0_19".to_string(),
             size_bytes: 319_815_680, // ~305 MB
             size_display: "305 MB".to_string(),
-            voice_count: 27,
+            voice_count: 11,
         }
     }
 
