@@ -1,0 +1,184 @@
+/* VoiceOverlay — floating voice controls at the bottom of the chat. */
+
+.overlay {
+  position: fixed;
+  bottom: var(--spacing-lg, 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  background: var(--color-surface, #1e1e2e);
+  border: 1px solid var(--color-border, #313244);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  min-width: 320px;
+  max-width: 600px;
+  backdrop-filter: blur(8px);
+}
+
+/* Status indicator */
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+  flex-shrink: 0;
+}
+
+.stateIcon {
+  font-size: 1.1em;
+}
+
+.stateLabel {
+  font-size: var(--font-size-sm, 0.85rem);
+  color: var(--color-text-secondary, #a6adc8);
+  white-space: nowrap;
+}
+
+/* Audio level bar */
+.levelContainer {
+  flex: 1;
+  height: 4px;
+  background: var(--color-border, #313244);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.levelBar {
+  height: 100%;
+  background: var(--color-accent, #89b4fa);
+  border-radius: 2px;
+  transition: width 50ms ease-out;
+}
+
+/* PTT button */
+.pttButton {
+  padding: var(--spacing-xs, 4px) var(--spacing-sm, 8px);
+  border: 1px solid var(--color-border, #313244);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-elevated, #2a2a3e);
+  color: var(--color-text, #cdd6f4);
+  cursor: pointer;
+  font-size: var(--font-size-sm, 0.85rem);
+  white-space: nowrap;
+  transition: all 100ms ease;
+  user-select: none;
+}
+
+.pttButton:hover {
+  background: var(--color-surface-hover, #353550);
+}
+
+.pttActive {
+  background: rgba(243, 139, 168, 0.2);
+  border-color: var(--color-error, #f38ba8);
+  box-shadow: 0 0 8px rgba(243, 139, 168, 0.3);
+}
+
+/* Control buttons */
+.controlButton {
+  padding: var(--spacing-xs, 4px) var(--spacing-sm, 8px);
+  border: 1px solid var(--color-border, #313244);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-elevated, #2a2a3e);
+  color: var(--color-text, #cdd6f4);
+  cursor: pointer;
+  font-size: var(--font-size-sm, 0.85rem);
+  white-space: nowrap;
+}
+
+.controlButton:hover {
+  background: var(--color-surface-hover, #353550);
+}
+
+/* Warning message */
+.warning {
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--color-warning, #fab387);
+  white-space: nowrap;
+}
+
+/* Loading indicator (auto-loading models on first activation) */
+.loadingIndicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--color-accent, #89b4fa);
+  white-space: nowrap;
+}
+
+/* Animated spinner */
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-border, #313244);
+  border-top-color: var(--color-accent, #89b4fa);
+  border-radius: 50%;
+  animation: voiceSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes voiceSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error display */
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--color-error, #f38ba8);
+  max-width: 200px;
+}
+
+.error span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dismissButton {
+  background: none;
+  border: none;
+  color: var(--color-error, #f38ba8);
+  cursor: pointer;
+  padding: 2px;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+/* Transcript preview */
+.transcript {
+  font-size: var(--font-size-xs, 0.75rem);
+  color: var(--color-text-secondary, #a6adc8);
+  font-style: italic;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Close button */
+.closeButton {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary, #a6adc8);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.closeButton:hover {
+  color: var(--color-text, #cdd6f4);
+  background: var(--color-surface-hover, #353550);
+}

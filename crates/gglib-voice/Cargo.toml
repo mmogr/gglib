@@ -1,0 +1,72 @@
+[package]
+name = "gglib-voice"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Voice mode for gglib - local STT and TTS pipeline via sherpa-onnx"
+publish = false
+
+# No unsafe code — audio I/O is isolated on a dedicated OS thread via channels.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+collapsible_if = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+[features]
+default = []
+# CUDA acceleration for sherpa-onnx
+# cuda = ["sherpa-rs/cuda"]
+
+[dependencies]
+# Internal crates
+gglib-core = { path = "../gglib-core" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+
+# Async traits (for TtsBackend dyn compatibility)
+async-trait = { workspace = true }
+
+# Audio capture (cross-platform: CoreAudio/WASAPI/ALSA)
+cpal = "0.15"
+
+# Audio playback
+rodio = { version = "0.20", default-features = false, features = ["wav"] }
+
+# Audio resampling (device sample rate → 16kHz for STT)
+rubato = "0.16"
+
+# Unified STT/TTS/VAD backend via sherpa-onnx bindings
+sherpa-rs = { version = "0.6", features = ["tts", "download-binaries", "static"] }
+
+# HTTP client for model downloads
+reqwest = { workspace = true }
+
+# Archive extraction for sherpa-onnx model bundles (tar.bz2)
+tar = "0.4"
+bzip2 = "0.5"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tokio-test = { workspace = true }
+tempfile = { workspace = true }

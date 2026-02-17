@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C relocation-model=dynamic-no-pic"
 
 jobs:
   fmt:
@@ -70,7 +71,8 @@ jobs:
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libasound2-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -120,6 +122,7 @@ jobs:
           cargo test -p gglib-cli --verbose 2>&1 | tee rust-test-gglib-cli.txt
           cargo test -p gglib-axum --verbose 2>&1 | tee rust-test-gglib-axum.txt
           cargo test -p gglib-tauri --verbose 2>&1 | tee rust-test-gglib-tauri.txt
+          cargo test -p gglib-voice --verbose 2>&1 | tee rust-test-gglib-voice.txt
 
       - name: Run doctests
         run: cargo test --doc --verbose
@@ -146,6 +149,7 @@ jobs:
             rust-test-gglib-cli.txt
             rust-test-gglib-axum.txt
             rust-test-gglib-tauri.txt
+            rust-test-gglib-voice.txt
             ts-test-output.txt
             ts-test-results.json
           retention-days: 30
@@ -176,7 +180,8 @@ jobs:
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libasound2-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master

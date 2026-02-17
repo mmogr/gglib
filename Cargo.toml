@@ -14,6 +14,7 @@ members = [
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
+    "crates/gglib-voice",
     # Tauri desktop app (gglib-app binary)
     "src-tauri",
 ]
@@ -90,6 +91,7 @@ gglib-runtime = { path = "crates/gglib-runtime" }
 gglib-axum = { path = "crates/gglib-axum" }
 gglib-gui = { path = "crates/gglib-gui" }
 gglib-tauri = { path = "crates/gglib-tauri" }
+gglib-voice = { path = "crates/gglib-voice" }
 gglib-build-info = { path = "crates/gglib-build-info" }
 
 # Workspace-wide lints for consistency

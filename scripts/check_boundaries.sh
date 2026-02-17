@@ -156,6 +156,12 @@ main() {
     fi
     log ""
     
+    log "📦 gglib-voice (voice pipeline - no UI adapters)"
+    if ! check_crate_deps "gglib-voice" "${DOMAIN_FORBIDDEN[@]}"; then
+        FAILED=1
+    fi
+    log ""
+    
     # Build JSON output
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     local overall_status="pass"

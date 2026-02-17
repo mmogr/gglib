@@ -287,6 +287,16 @@ pub struct AppSettings {
     /// Default model ID for quick commands (e.g., `gglib question`).
     pub default_model_id: Option<i64>,
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
+    // Voice settings
+    pub voice_enabled: Option<bool>,
+    pub voice_interaction_mode: Option<String>,
+    pub voice_stt_model: Option<String>,
+    pub voice_tts_voice: Option<String>,
+    pub voice_tts_speed: Option<f32>,
+    pub voice_vad_threshold: Option<f32>,
+    pub voice_vad_silence_ms: Option<u32>,
+    pub voice_auto_speak: Option<bool>,
+    pub voice_input_device: Option<String>,
 }
 
 /// Request body for updating application settings.
@@ -304,6 +314,16 @@ pub struct UpdateSettingsRequest {
     /// Default model ID for quick commands (e.g., `gglib question`).
     pub default_model_id: Option<Option<i64>>,
     pub inference_defaults: Option<Option<gglib_core::domain::InferenceConfig>>,
+    // Voice settings
+    pub voice_enabled: Option<Option<bool>>,
+    pub voice_interaction_mode: Option<Option<String>>,
+    pub voice_stt_model: Option<Option<String>>,
+    pub voice_tts_voice: Option<Option<String>>,
+    pub voice_tts_speed: Option<Option<f32>>,
+    pub voice_vad_threshold: Option<Option<f32>>,
+    pub voice_vad_silence_ms: Option<Option<u32>>,
+    pub voice_auto_speak: Option<Option<bool>>,
+    pub voice_input_device: Option<Option<String>>,
 }
 
 // ============================================================================

@@ -103,6 +103,15 @@ impl<'a> SettingsOps<'a> {
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
             inference_defaults: settings.inference_defaults,
+            voice_enabled: settings.voice_enabled,
+            voice_interaction_mode: settings.voice_interaction_mode,
+            voice_stt_model: settings.voice_stt_model,
+            voice_tts_voice: settings.voice_tts_voice,
+            voice_tts_speed: settings.voice_tts_speed,
+            voice_vad_threshold: settings.voice_vad_threshold,
+            voice_vad_silence_ms: settings.voice_vad_silence_ms,
+            voice_auto_speak: settings.voice_auto_speak,
+            voice_input_device: settings.voice_input_device,
         })
     }
 
@@ -119,6 +128,15 @@ impl<'a> SettingsOps<'a> {
             max_stagnation_steps: request.max_stagnation_steps,
             default_model_id: request.default_model_id,
             inference_defaults: request.inference_defaults,
+            voice_enabled: request.voice_enabled,
+            voice_interaction_mode: request.voice_interaction_mode,
+            voice_stt_model: request.voice_stt_model,
+            voice_tts_voice: request.voice_tts_voice,
+            voice_tts_speed: request.voice_tts_speed,
+            voice_vad_threshold: request.voice_vad_threshold,
+            voice_vad_silence_ms: request.voice_vad_silence_ms,
+            voice_auto_speak: request.voice_auto_speak,
+            voice_input_device: request.voice_input_device,
         };
 
         let settings = self
@@ -143,6 +161,15 @@ impl<'a> SettingsOps<'a> {
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
             inference_defaults: settings.inference_defaults,
+            voice_enabled: settings.voice_enabled,
+            voice_interaction_mode: settings.voice_interaction_mode,
+            voice_stt_model: settings.voice_stt_model,
+            voice_tts_voice: settings.voice_tts_voice,
+            voice_tts_speed: settings.voice_tts_speed,
+            voice_vad_threshold: settings.voice_vad_threshold,
+            voice_vad_silence_ms: settings.voice_vad_silence_ms,
+            voice_auto_speak: settings.voice_auto_speak,
+            voice_input_device: settings.voice_input_device,
         })
     }
 

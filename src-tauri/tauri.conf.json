@@ -38,6 +38,10 @@
       "icons/icon.png"
     ],
     "resources": [],
-    "shortDescription": ""
+    "shortDescription": "",
+    "macOS": {
+      "entitlements": "Entitlements.plist",
+      "minimumSystemVersion": "10.13"
+    }
   }
 }

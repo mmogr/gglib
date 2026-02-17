@@ -7,7 +7,7 @@
  * @module useGglibRuntime
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { appLogger } from '../../services/platform';
 import {
   useExternalStoreRuntime,
@@ -35,6 +35,8 @@ export interface UseGglibRuntimeReturn {
   isRunning: boolean;
   timingTracker: ReasoningTimingTracker;
   currentStreamingAssistantMessageId: string | null;
+  /** Set extra custom metadata to merge into the next user message */
+  setNextMessageMeta: (meta: Partial<import('../../types/messages').GglibMessageCustom>) => void;
 }
 
 /**
@@ -64,6 +66,12 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   // Abort controller for cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+
+  // Extra metadata to merge into the next user message (e.g. isVoice)
+  const nextMessageMetaRef = useRef<Partial<import('../../types/messages').GglibMessageCustom>>({});
+  const setNextMessageMeta = useCallback((meta: Partial<import('../../types/messages').GglibMessageCustom>) => {
+    nextMessageMetaRef.current = meta;
+  }, []);
   
   // Track which assistant message is currently streaming (for live timer)
   const [currentStreamingAssistantMessageId, setCurrentStreamingAssistantMessageId] = useState<string | null>(null);
@@ -94,6 +102,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   const startGeneration = async (
     baseMessages: GglibMessage[],
     userMessage: GglibMessage,
+    extraMeta: Partial<import('../../types/messages').GglibMessageCustom> = {},
   ) => {
     // Validate server selection
     if (!selectedServerPort) {
@@ -136,7 +145,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         maxStagnationSteps,
         abortSignal: abortController.signal,
         conversationId,
-        mkAssistantMessage: (custom) => mkAssistantMessage(custom),
+        mkAssistantMessage: (custom) => mkAssistantMessage({ ...custom, ...extraMeta }),
         timingTracker,
         setCurrentStreamingAssistantMessageId,
       });
@@ -164,11 +173,16 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
 
     // User sends a new message
     onNew: async (msg: AppendMessage) => {
+      // Drain any one-shot metadata (e.g. isVoice) queued for this message
+      const extraMeta = nextMessageMetaRef.current;
+      nextMessageMetaRef.current = {};
+
       const userMessage = mkUserMessage(msg.content as GglibContent, {
         conversationId,
         turnId: crypto.randomUUID(),
+        ...extraMeta,
       });
-      await startGeneration(messagesRef.current, userMessage);
+      await startGeneration(messagesRef.current, userMessage, extraMeta);
     },
 
     // User edits a message (regenerate)
@@ -212,6 +226,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     isRunning,
     timingTracker,
     currentStreamingAssistantMessageId,
+    setNextMessageMeta,
   };
 }
 

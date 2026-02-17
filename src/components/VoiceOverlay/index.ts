@@ -1,0 +1,1 @@
+export { VoiceOverlay } from './VoiceOverlay';

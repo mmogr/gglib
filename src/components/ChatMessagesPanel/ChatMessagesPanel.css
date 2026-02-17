@@ -82,6 +82,11 @@
   flex-shrink: 0;
 }
 
+/* Voice mode active indicator */
+.chat-header-actions .voice-active {
+  color: var(--color-error, #f38ba8);
+}
+
 /* Generate title button spinner */
 .icon-btn.generating {
   pointer-events: none;
@@ -341,6 +346,25 @@
 
 .chat-delete-btn:hover {
   background: rgba(243, 139, 168, 0.2);
+}
+
+/* Speak button — accent color on hover */
+.chat-speak-btn:hover {
+  color: var(--color-accent, #89b4fa);
+}
+
+.chat-speak-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Spinner animation for the generating state icon */
+@keyframes chatActionSpin {
+  to { transform: rotate(360deg); }
+}
+
+.chat-action-spin {
+  animation: chatActionSpin 0.7s linear infinite;
 }
 
 /* Edit Composer Styles */

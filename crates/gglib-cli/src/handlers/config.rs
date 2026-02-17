@@ -205,6 +205,15 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
                 max_stagnation_steps: None,
                 default_model_id: None,
                 inference_defaults: None,
+                voice_enabled: None,
+                voice_interaction_mode: None,
+                voice_stt_model: None,
+                voice_tts_voice: None,
+                voice_tts_speed: None,
+                voice_vad_threshold: None,
+                voice_vad_silence_ms: None,
+                voice_auto_speak: None,
+                voice_input_device: None,
             };
 
             // Get current settings and apply updates for validation

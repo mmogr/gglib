@@ -100,6 +100,16 @@ export interface AppSettings {
   defaultModelId?: number | null;
   /** Global inference parameter defaults */
   inferenceDefaults?: InferenceConfig | null;
+  // Voice settings
+  voiceEnabled?: boolean | null;
+  voiceInteractionMode?: string | null;
+  voiceSttModel?: string | null;
+  voiceTtsVoice?: string | null;
+  voiceTtsSpeed?: number | null;
+  voiceVadThreshold?: number | null;
+  voiceVadSilenceMs?: number | null;
+  voiceAutoSpeak?: boolean | null;
+  voiceInputDevice?: string | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -118,6 +128,16 @@ export interface UpdateSettingsRequest {
   defaultModelId?: number | null | undefined;
   /** Global inference parameter defaults */
   inferenceDefaults?: InferenceConfig | null | undefined;
+  // Voice settings
+  voiceEnabled?: boolean | null | undefined;
+  voiceInteractionMode?: string | null | undefined;
+  voiceSttModel?: string | null | undefined;
+  voiceTtsVoice?: string | null | undefined;
+  voiceTtsSpeed?: number | null | undefined;
+  voiceVadThreshold?: number | null | undefined;
+  voiceVadSilenceMs?: number | null | undefined;
+  voiceAutoSpeak?: boolean | null | undefined;
+  voiceInputDevice?: string | null | undefined;
 }
 
 // ============================================================================

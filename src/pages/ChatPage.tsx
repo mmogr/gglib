@@ -1,18 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { type ChatPageTabId } from './chatTabs';
 import { appLogger } from '../services/platform';
+import { stripThinkingBlocks } from '../utils/stripThinkingBlocks';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI, TimeToolUI } from '../components/ToolUI';
+import { VoiceOverlay } from '../components/VoiceOverlay';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT as RUNTIME_DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
+import { useVoiceMode } from '../hooks/useVoiceMode';
 import { useToastContext } from '../contexts/ToastContext';
 import { useServerState } from '../services/serverEvents';
 import {
@@ -84,7 +87,7 @@ export default function ChatPage({
   const maxStagnationSteps = settings?.maxStagnationSteps ?? undefined;
 
   // Runtime - now with external message state
-  const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
+  const { runtime, messages, setMessages, isRunning, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
@@ -97,6 +100,59 @@ export default function ChatPage({
   // because ChatPage is only opened when a server is already running
   const serverState = useServerState(modelId);
   const isServerRunning = serverState?.status !== 'stopped' && serverState?.status !== 'crashed';
+
+  // Voice mode — pass persisted defaults for auto-loading on first activation
+  const voice = useVoiceMode({
+    sttModel: settings?.voiceSttModel,
+    ttsVoice: settings?.voiceTtsVoice,
+    ttsSpeed: settings?.voiceTtsSpeed,
+    interactionMode: settings?.voiceInteractionMode,
+    autoSpeak: settings?.voiceAutoSpeak,
+  });
+
+  // Send voice transcript as a chat message
+  const handleVoiceTranscript = useCallback((text: string) => {
+    if (!text.trim()) return;
+    setNextMessageMeta({ isVoice: true });
+    runtime.thread.append({
+      role: 'user',
+      content: [{ type: 'text', text }],
+    });
+  }, [runtime, setNextMessageMeta]);
+
+  // Auto-speak: when the LLM finishes responding, speak the last assistant message
+  const wasRunningRef = useRef(false);
+  useEffect(() => {
+    if (wasRunningRef.current && !isRunning && voice.isActive && voice.autoSpeak && voice.ttsLoaded) {
+      // Find the last assistant message and extract only visible text
+      // (skip reasoning/thinking parts — those are internal chain-of-thought)
+      const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+      if (lastAssistant) {
+        const content = lastAssistant.content;
+        let text = '';
+        if (typeof content === 'string') {
+          text = content;
+        } else if (Array.isArray(content)) {
+          text = content
+            .filter((p): p is { type: 'text'; text: string } =>
+              (p as { type: string }).type === 'text'
+            )
+            .map(p => p.text)
+            .join(' ');
+        }
+        // Strip any residual <think>…</think> blocks that may be embedded
+        // in the text content (some models inline them without using
+        // the reasoning_content SSE field).
+        text = stripThinkingBlocks(text);
+        if (text) {
+          voice.speak(text).catch(err => {
+            appLogger.error('hook.runtime', 'Auto-speak failed', { error: String(err) });
+          });
+        }
+      }
+    }
+    wasRunningRef.current = isRunning;
+  }, [isRunning, voice, messages]);
 
   // Track previous status for transition-only toast
   const prevStatusRef = useRef(serverState?.status);
@@ -410,9 +466,13 @@ export default function ChatPage({
               showToast={showToast}
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
+              voice={voice}
             />
           </div>
         </div>
+
+        {/* Voice overlay (floating controls when voice mode is active) */}
+        <VoiceOverlay voice={voice} onTranscript={handleVoiceTranscript} />
       </AssistantRuntimeProvider>
 
       {/* Console Tab Content - always mounted, hidden when not active */}
