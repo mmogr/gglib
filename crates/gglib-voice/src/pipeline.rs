@@ -338,10 +338,7 @@ impl VoicePipeline {
     ///
     /// `model_dir` should contain `model.onnx`, `voices.bin`, `tokens.txt`,
     /// and an `espeak-ng-data/` subdirectory.
-    pub async fn load_tts(
-        &mut self,
-        model_dir: &std::path::Path,
-    ) -> Result<(), VoiceError> {
+    pub async fn load_tts(&mut self, model_dir: &std::path::Path) -> Result<(), VoiceError> {
         tracing::info!(dir = %model_dir.display(), "Loading TTS engine");
 
         use crate::backend::sherpa_tts::{SherpaTtsBackend, SherpaTtsConfig};
@@ -531,7 +528,9 @@ impl VoicePipeline {
                         // Can't use self.set_state/emit here because `tts`
                         // holds an immutable borrow on self.tts.
                         self.state = VoiceState::Speaking;
-                        let _ = self.event_tx.send(VoiceEvent::StateChanged(VoiceState::Speaking));
+                        let _ = self
+                            .event_tx
+                            .send(VoiceEvent::StateChanged(VoiceState::Speaking));
                         let _ = self.event_tx.send(VoiceEvent::SpeakingStarted);
                     }
 

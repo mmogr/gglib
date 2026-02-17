@@ -22,8 +22,8 @@ pub mod vad;
 // Re-export key types for convenience
 pub use error::VoiceError;
 pub use gate::EchoGate;
-pub use models::{SttModelInfo, TtsModelInfo, VoiceModelCatalog, VoiceModelId};
 pub use models::VadModelInfo;
+pub use models::{SttModelInfo, TtsModelInfo, VoiceModelCatalog, VoiceModelId};
 pub use pipeline::{VoiceEvent, VoicePipeline, VoicePipelineConfig, VoiceState};
 
 // Re-export backend trait types at crate root for ergonomic imports

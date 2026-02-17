@@ -15,8 +15,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use std::path::Path;
 use sherpa_rs::silero_vad::{SileroVad, SileroVadConfig};
+use std::path::Path;
 
 use crate::error::VoiceError;
 use crate::gate::EchoGate;
@@ -171,9 +171,8 @@ impl VoiceActivityDetector {
         // Buffer up to 60 seconds of speech.
         let buffer_size_secs: f32 = 60.0;
 
-        let vad = SileroVad::new(silero_config, buffer_size_secs).map_err(|e| {
-            VoiceError::ModelLoadError(format!("Failed to load Silero VAD: {e}"))
-        })?;
+        let vad = SileroVad::new(silero_config, buffer_size_secs)
+            .map_err(|e| VoiceError::ModelLoadError(format!("Failed to load Silero VAD: {e}")))?;
 
         tracing::info!(path = %model_path.display(), "Silero VAD model loaded");
         self.silero = Some(vad);

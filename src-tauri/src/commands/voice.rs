@@ -13,8 +13,8 @@ use gglib_voice::models::{self, SttModelInfo, TtsModelInfo, VoiceModelCatalog};
 use gglib_voice::pipeline::{
     VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
 };
-use gglib_voice::tts::VoiceInfo;
 use gglib_voice::tts::TtsEngine;
+use gglib_voice::tts::VoiceInfo;
 
 use crate::app::state::AppState;
 

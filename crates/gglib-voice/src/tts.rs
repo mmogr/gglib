@@ -7,7 +7,7 @@
 pub use crate::backend::{TtsConfig, VoiceGender, VoiceInfo};
 
 pub use crate::backend::sherpa_tts::{
-    SherpaTtsBackend as TtsEngine, SHERPA_TTS_SAMPLE_RATE, sherpa_kokoro_voices,
+    SHERPA_TTS_SAMPLE_RATE, SherpaTtsBackend as TtsEngine, sherpa_kokoro_voices,
 };
 
 impl TtsEngine {

@@ -193,7 +193,10 @@ impl SttBackend for SherpaSttBackend {
 /// `"base.en-encoder.onnx"`, this returns `"base.en"`.
 fn find_file_prefix(dir: &Path, suffix: &str) -> Result<String, VoiceError> {
     let entries = std::fs::read_dir(dir).map_err(|e| {
-        VoiceError::ModelLoadError(format!("Cannot read model directory {}: {e}", dir.display()))
+        VoiceError::ModelLoadError(format!(
+            "Cannot read model directory {}: {e}",
+            dir.display()
+        ))
     })?;
 
     for entry in entries.flatten() {
@@ -214,7 +217,5 @@ fn find_file_prefix(dir: &Path, suffix: &str) -> Result<String, VoiceError> {
 fn path_to_string(path: &Path) -> Result<String, VoiceError> {
     path.to_str()
         .map(ToString::to_string)
-        .ok_or_else(|| {
-            VoiceError::ModelLoadError(format!("Invalid path: {}", path.display()))
-        })
+        .ok_or_else(|| VoiceError::ModelLoadError(format!("Invalid path: {}", path.display())))
 }

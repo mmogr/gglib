@@ -113,11 +113,9 @@ pub struct VadModelInfo {
 
 // ── URL bases ──────────────────────────────────────────────────────
 
-const SHERPA_ASR_BASE: &str =
-    "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
+const SHERPA_ASR_BASE: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
 
-const SHERPA_TTS_BASE: &str =
-    "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models";
+const SHERPA_TTS_BASE: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models";
 
 // ── Catalog ────────────────────────────────────────────────────────
 
@@ -340,11 +338,7 @@ fn has_file_ending(dir: &Path, suffix: &str) -> bool {
         .into_iter()
         .flatten()
         .flatten()
-        .any(|e| {
-            e.file_name()
-                .to_str()
-                .is_some_and(|n| n.ends_with(suffix))
-        })
+        .any(|e| e.file_name().to_str().is_some_and(|n| n.ends_with(suffix)))
 }
 
 // ── Download helpers ───────────────────────────────────────────────
@@ -471,12 +465,12 @@ pub async fn download_and_extract_archive(
         let cursor = std::io::Cursor::new(bytes_vec);
         let decompressor = bzip2::read::BzDecoder::new(cursor);
         let mut archive = tar::Archive::new(decompressor);
-        archive.unpack(&dest_owned).map_err(|e| {
-            crate::error::VoiceError::DownloadError {
+        archive
+            .unpack(&dest_owned)
+            .map_err(|e| crate::error::VoiceError::DownloadError {
                 name: "archive".to_string(),
                 source: anyhow::anyhow!("Failed to extract archive: {e}"),
-            }
-        })?;
+            })?;
         Ok::<(), crate::error::VoiceError>(())
     })
     .await
@@ -509,13 +503,7 @@ pub async fn ensure_stt_model(
     }
 
     let stt_dir = VoiceModelCatalog::voice_models_dir()?.join("stt");
-    download_and_extract_archive(
-        &model.archive_url,
-        &stt_dir,
-        &model.dir_name,
-        on_progress,
-    )
-    .await
+    download_and_extract_archive(&model.archive_url, &stt_dir, &model.dir_name, on_progress).await
 }
 
 /// Download the TTS model if not already present.

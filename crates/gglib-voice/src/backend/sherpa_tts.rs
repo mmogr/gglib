@@ -141,9 +141,10 @@ impl TtsBackend for SherpaTtsBackend {
             "Synthesizing speech (Sherpa Kokoro)"
         );
 
-        let mut engine = self.engine.lock().map_err(|e| {
-            VoiceError::SynthesisError(format!("TTS engine lock poisoned: {e}"))
-        })?;
+        let mut engine = self
+            .engine
+            .lock()
+            .map_err(|e| VoiceError::SynthesisError(format!("TTS engine lock poisoned: {e}")))?;
 
         let audio = engine
             .create(text, self.speaker_id, self.speed)
@@ -261,8 +262,18 @@ pub fn sherpa_kokoro_voices() -> Vec<VoiceInfo> {
         voice_info("af_aoede", "Aoede", "American English", VoiceGender::Female),
         voice_info("af_bella", "Bella", "American English", VoiceGender::Female),
         voice_info("af_heart", "Heart", "American English", VoiceGender::Female),
-        voice_info("af_jessica", "Jessica", "American English", VoiceGender::Female),
-        voice_info("af_nicole", "Nicole", "American English", VoiceGender::Female),
+        voice_info(
+            "af_jessica",
+            "Jessica",
+            "American English",
+            VoiceGender::Female,
+        ),
+        voice_info(
+            "af_nicole",
+            "Nicole",
+            "American English",
+            VoiceGender::Female,
+        ),
         voice_info("af_nova", "Nova", "American English", VoiceGender::Female),
         voice_info("af_river", "River", "American English", VoiceGender::Female),
         voice_info("af_sarah", "Sarah", "American English", VoiceGender::Female),
@@ -273,17 +284,32 @@ pub fn sherpa_kokoro_voices() -> Vec<VoiceInfo> {
         voice_info("am_eric", "Eric", "American English", VoiceGender::Male),
         voice_info("am_fable", "Fable", "American English", VoiceGender::Male),
         voice_info("am_liam", "Liam", "American English", VoiceGender::Male),
-        voice_info("am_michael", "Michael", "American English", VoiceGender::Male),
+        voice_info(
+            "am_michael",
+            "Michael",
+            "American English",
+            VoiceGender::Male,
+        ),
         voice_info("am_onyx", "Onyx", "American English", VoiceGender::Male),
         voice_info("am_puck", "Puck", "American English", VoiceGender::Male),
         // British English — Female
         voice_info("bf_alice", "Alice", "British English", VoiceGender::Female),
         voice_info("bf_emma", "Emma", "British English", VoiceGender::Female),
-        voice_info("bf_isabella", "Isabella", "British English", VoiceGender::Female),
+        voice_info(
+            "bf_isabella",
+            "Isabella",
+            "British English",
+            VoiceGender::Female,
+        ),
         voice_info("bf_lily", "Lily", "British English", VoiceGender::Female),
         // British English — Male
         voice_info("bm_daniel", "Daniel", "British English", VoiceGender::Male),
-        voice_info("bm_fable", "Fable (British)", "British English", VoiceGender::Male),
+        voice_info(
+            "bm_fable",
+            "Fable (British)",
+            "British English",
+            VoiceGender::Male,
+        ),
         voice_info("bm_george", "George", "British English", VoiceGender::Male),
         voice_info("bm_lewis", "Lewis", "British English", VoiceGender::Male),
     ]

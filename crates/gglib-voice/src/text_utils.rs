@@ -197,7 +197,8 @@ fn strip_tag_block_pair(text: &str, open_prefix: &str, close_tag: &str) -> Strin
 /// Check if a line is a horizontal rule (---, ***, ___).
 fn is_horizontal_rule(line: &str) -> bool {
     let chars: Vec<char> = line.chars().filter(|c| !c.is_whitespace()).collect();
-    chars.len() >= 3 && chars.iter().all(|&c| c == '-' || c == '*' || c == '_')
+    chars.len() >= 3
+        && chars.iter().all(|&c| c == '-' || c == '*' || c == '_')
         && chars.windows(2).all(|w| w[0] == w[1])
 }
 
@@ -355,8 +356,8 @@ fn strip_emphasis(text: &str) -> String {
         .replace("__", "")
         .replace("~~", "")
         .replace('*', "")
-        // Be careful with _ — only strip when it looks like emphasis
-        // (surrounded by word chars). For simplicity, leave standalone _ alone.
+    // Be careful with _ — only strip when it looks like emphasis
+    // (surrounded by word chars). For simplicity, leave standalone _ alone.
 }
 
 fn strip_html_tags(text: &str) -> String {
@@ -536,7 +537,11 @@ mod tests {
         let text = sentences.join(" ");
         assert!(text.len() > 400, "Test text must exceed chunk limit");
         let chunks = split_into_chunks(&text);
-        assert!(chunks.len() > 1, "Expected multiple chunks, got {}", chunks.len());
+        assert!(
+            chunks.len() > 1,
+            "Expected multiple chunks, got {}",
+            chunks.len()
+        );
         for chunk in &chunks {
             assert!(
                 chunk.len() <= 500, // MAX_CHUNK_CHARS + grace for word boundaries
@@ -576,7 +581,8 @@ mod tests {
 
     #[test]
     fn test_strip_reasoning_tags() {
-        let input = "<reasoning>While analyzing the problem...</reasoning>\nThe solution is simple.";
+        let input =
+            "<reasoning>While analyzing the problem...</reasoning>\nThe solution is simple.";
         let result = strip_markdown(input);
         assert_eq!(result, "The solution is simple.");
     }
@@ -597,7 +603,8 @@ mod tests {
 
     #[test]
     fn test_strip_multiple_think_blocks() {
-        let input = "<think>First block</think>\nSome text.\n<think>Second block</think>\nMore text.";
+        let input =
+            "<think>First block</think>\nSome text.\n<think>Second block</think>\nMore text.";
         let result = strip_markdown(input);
         assert_eq!(result, "Some text. More text.");
     }

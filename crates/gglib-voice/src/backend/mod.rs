@@ -175,12 +175,7 @@ impl Default for TtsConfig {
 // ── Helpers ────────────────────────────────────────────────────────
 
 /// Convenience constructor for [`VoiceInfo`].
-pub(crate) fn voice_info(
-    id: &str,
-    name: &str,
-    category: &str,
-    gender: VoiceGender,
-) -> VoiceInfo {
+pub(crate) fn voice_info(id: &str, name: &str, category: &str, gender: VoiceGender) -> VoiceInfo {
     VoiceInfo {
         id: id.to_string(),
         name: name.to_string(),
