@@ -68,4 +68,8 @@ pub enum VoiceError {
     /// Pipeline was cancelled.
     #[error("Voice operation cancelled")]
     Cancelled,
+
+    /// The dedicated audio I/O thread died unexpectedly (panic or driver crash).
+    #[error("Audio thread died unexpectedly")]
+    AudioThreadDied,
 }
