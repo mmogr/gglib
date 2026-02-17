@@ -7,6 +7,7 @@ use tempfile as _;
 #[cfg(test)]
 use tokio_test as _;
 
+pub mod audio_thread;
 pub mod backend;
 pub mod capture;
 pub mod error;
