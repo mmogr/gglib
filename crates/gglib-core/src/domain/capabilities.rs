@@ -450,22 +450,46 @@ pub fn transform_messages_for_capabilities(
         for msg in messages {
             if let Some(last) = merged_messages.last_mut() {
                 let last_msg: &mut ChatMessage = last;
-                // Only merge user/assistant messages to avoid tool-call ordering issues
+                // Only merge user/assistant messages (avoid merging tool/system messages)
                 let is_mergeable_role = msg.role == "user" || msg.role == "assistant";
-                if last_msg.role == msg.role
-                    && is_mergeable_role
-                    && last_msg.content.is_some()
-                    && msg.content.is_some()
-                    && last_msg.tool_calls.is_none()
-                    && msg.tool_calls.is_none()
-                {
-                    // Merge content
-                    if let (Some(last_content), Some(msg_content)) =
-                        (&mut last_msg.content, &msg.content)
-                    {
-                        last_content.push_str("\n\n");
-                        last_content.push_str(msg_content);
+
+                // Merge if same role and mergeable (user or assistant)
+                if last_msg.role == msg.role && is_mergeable_role {
+                    // Merge content if both have content
+                    match (&mut last_msg.content, &msg.content) {
+                        (Some(last_content), Some(msg_content)) => {
+                            // Both have content - merge with separator
+                            last_content.push_str("\n\n");
+                            last_content.push_str(msg_content);
+                        }
+                        (None, Some(msg_content)) => {
+                            // Only new message has content - use it
+                            last_msg.content = Some(msg_content.clone());
+                        }
+                        // If last has content and msg doesn't, keep last's content
+                        // If neither have content, keep None
+                        _ => {}
                     }
+
+                    // Merge tool_calls if present
+                    match (&mut last_msg.tool_calls, &msg.tool_calls) {
+                        (Some(last_calls), Some(msg_calls)) => {
+                            // Both have tool_calls - concatenate arrays
+                            if let (Some(last_arr), Some(msg_arr)) =
+                                (last_calls.as_array_mut(), msg_calls.as_array())
+                            {
+                                last_arr.extend_from_slice(msg_arr);
+                            }
+                        }
+                        (None, Some(msg_calls)) => {
+                            // Only new message has tool_calls - use it
+                            last_msg.tool_calls = Some(msg_calls.clone());
+                        }
+                        // If last has tool_calls and msg doesn't, keep last's tool_calls
+                        // If neither have tool_calls, keep None
+                        _ => {}
+                    }
+
                     continue; // Skip adding this message separately
                 }
             }
@@ -694,5 +718,244 @@ mod transform_tests {
         );
         assert!(result[0].content.as_ref().unwrap().contains("First"));
         assert!(result[0].content.as_ref().unwrap().contains("Second"));
+    }
+
+    #[test]
+    fn test_merge_consecutive_assistant_with_tool_calls() {
+        // This is the main bug fix: consecutive assistant messages with tool_calls
+        // should be merged for models requiring strict turns
+        let tool_call_1 = serde_json::json!([
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": "{\"location\":\"Paris\"}"
+                }
+            }
+        ]);
+        let tool_call_2 = serde_json::json!([
+            {
+                "id": "call_2",
+                "type": "function",
+                "function": {
+                    "name": "get_time",
+                    "arguments": "{\"timezone\":\"UTC\"}"
+                }
+            }
+        ]);
+
+        let messages = vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("What's the weather?".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some("Let me check...".to_string()),
+                tool_calls: Some(tool_call_1),
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some("And the time...".to_string()),
+                tool_calls: Some(tool_call_2),
+            },
+        ];
+
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+
+        // Should merge into 2 messages: user + merged assistant
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].role, "user");
+        assert_eq!(result[1].role, "assistant");
+
+        // Content should be merged
+        assert_eq!(
+            result[1].content,
+            Some("Let me check...\n\nAnd the time...".to_string())
+        );
+
+        // Tool calls should be concatenated
+        let merged_tool_calls = result[1].tool_calls.as_ref().unwrap();
+        let tool_calls_array = merged_tool_calls.as_array().unwrap();
+        assert_eq!(tool_calls_array.len(), 2);
+        assert_eq!(tool_calls_array[0]["id"], "call_1");
+        assert_eq!(tool_calls_array[1]["id"], "call_2");
+    }
+
+    #[test]
+    fn test_merge_assistant_messages_only_first_has_content() {
+        // First message has content, second has only tool_calls
+        let tool_call = serde_json::json!([
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": "{}"
+                }
+            }
+        ]);
+
+        let messages = vec![
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some("Let me check...".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: None,
+                tool_calls: Some(tool_call),
+            },
+        ];
+
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].content, Some("Let me check...".to_string()));
+        assert!(result[0].tool_calls.is_some());
+    }
+
+    #[test]
+    fn test_merge_assistant_messages_only_second_has_content() {
+        // First message has only tool_calls, second has content
+        let tool_call = serde_json::json!([
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": "{}"
+                }
+            }
+        ]);
+
+        let messages = vec![
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: None,
+                tool_calls: Some(tool_call),
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some("Result received".to_string()),
+                tool_calls: None,
+            },
+        ];
+
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].content, Some("Result received".to_string()));
+        assert!(result[0].tool_calls.is_some());
+    }
+
+    #[test]
+    fn test_merge_assistant_messages_neither_has_content() {
+        // Both messages have only tool_calls, no content
+        let tool_call_1 = serde_json::json!([
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "tool1", "arguments": "{}"}
+            }
+        ]);
+        let tool_call_2 = serde_json::json!([
+            {
+                "id": "call_2",
+                "type": "function",
+                "function": {"name": "tool2", "arguments": "{}"}
+            }
+        ]);
+
+        let messages = vec![
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: None,
+                tool_calls: Some(tool_call_1),
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: None,
+                tool_calls: Some(tool_call_2),
+            },
+        ];
+
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+
+        assert_eq!(result.len(), 1);
+        assert!(result[0].content.is_none());
+
+        let merged_tool_calls = result[0].tool_calls.as_ref().unwrap();
+        let tool_calls_array = merged_tool_calls.as_array().unwrap();
+        assert_eq!(tool_calls_array.len(), 2);
+    }
+
+    #[test]
+    fn test_no_merge_without_strict_turns_capability() {
+        // Even with consecutive assistant messages, don't merge if capability not set
+        let messages = vec![
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some("First".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some("Second".to_string()),
+                tool_calls: None,
+            },
+        ];
+
+        let caps = ModelCapabilities::empty();
+        let result = transform_messages_for_capabilities(messages, caps);
+
+        // Should NOT merge without REQUIRES_STRICT_TURNS capability
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_merge_preserves_different_role_boundaries() {
+        // Don't merge across different roles
+        let tool_call = serde_json::json!([
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "tool1", "arguments": "{}"}
+            }
+        ]);
+
+        let messages = vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("Question".to_string()),
+                tool_calls: None,
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some("Answer".to_string()),
+                tool_calls: Some(tool_call),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some("Follow-up".to_string()),
+                tool_calls: None,
+            },
+        ];
+
+        let caps = ModelCapabilities::REQUIRES_STRICT_TURNS;
+        let result = transform_messages_for_capabilities(messages, caps);
+
+        // Should remain 3 separate messages
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].role, "user");
+        assert_eq!(result[1].role, "assistant");
+        assert_eq!(result[2].role, "user");
     }
 }

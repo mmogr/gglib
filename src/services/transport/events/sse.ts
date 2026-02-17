@@ -272,6 +272,8 @@ class SseConnection<T> {
     if (outerType.startsWith('server_') || outerType === 'server_snapshot') return 'server';
     // Log events
     if (outerType === 'log' || outerType.startsWith('log_')) return 'log';
+    // Verification events
+    if (outerType.startsWith('verification_') || outerType.startsWith('verification:')) return 'verification';
     return null;
   }
 

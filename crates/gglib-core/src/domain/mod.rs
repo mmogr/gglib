@@ -19,7 +19,7 @@ pub mod mcp;
 mod model;
 
 // Re-export model types at the domain level for convenience
-pub use model::{Model, ModelFilterOptions, NewModel, RangeValues};
+pub use model::{Model, ModelFile, ModelFilterOptions, NewModel, NewModelFile, RangeValues};
 
 // Re-export inference types at the domain level for convenience
 pub use inference::InferenceConfig;

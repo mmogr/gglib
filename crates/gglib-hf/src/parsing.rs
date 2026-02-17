@@ -141,11 +141,20 @@ pub fn parse_tree_entries(json: &Value) -> HfResult<Vec<HfFileEntry>> {
                 .get("size")
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or(0);
+            // Prefer lfs.oid (SHA256 of file content) over top-level oid (Git SHA-1).
+            // The top-level oid is a Git object hash and cannot be used for file verification.
+            let oid = item
+                .get("lfs")
+                .and_then(|lfs| lfs.get("oid"))
+                .and_then(|v| v.as_str())
+                .or_else(|| item.get("oid").and_then(|v| v.as_str()))
+                .map(ToString::to_string);
 
             Some(HfFileEntry {
                 path,
                 entry_type,
                 size,
+                oid,
             })
         })
         .collect();
@@ -332,16 +341,19 @@ mod tests {
                 path: "model-Q4_K_M.gguf".to_string(),
                 entry_type: HfEntryType::File,
                 size: 4_000_000_000,
+                oid: None,
             },
             HfFileEntry {
                 path: "model-Q8_0.gguf".to_string(),
                 entry_type: HfEntryType::File,
                 size: 8_000_000_000,
+                oid: None,
             },
             HfFileEntry {
                 path: "README.md".to_string(),
                 entry_type: HfEntryType::File,
                 size: 1000,
+                oid: None,
             },
         ];
 
@@ -364,16 +376,19 @@ mod tests {
                 path: "model-Q8_0-00001-of-00003.gguf".to_string(),
                 entry_type: HfEntryType::File,
                 size: 4_000_000_000,
+                oid: None,
             },
             HfFileEntry {
                 path: "model-Q8_0-00002-of-00003.gguf".to_string(),
                 entry_type: HfEntryType::File,
                 size: 4_000_000_000,
+                oid: None,
             },
             HfFileEntry {
                 path: "model-Q8_0-00003-of-00003.gguf".to_string(),
                 entry_type: HfEntryType::File,
                 size: 4_000_000_000,
+                oid: None,
             },
         ];
 
@@ -396,16 +411,19 @@ mod tests {
                 path: "model-Q4_K_M.gguf".to_string(),
                 entry_type: HfEntryType::File,
                 size: 4_000_000_000,
+                oid: None,
             },
             HfFileEntry {
                 path: "model-Q8_0.gguf".to_string(),
                 entry_type: HfEntryType::File,
                 size: 8_000_000_000,
+                oid: None,
             },
             HfFileEntry {
                 path: "README.md".to_string(),
                 entry_type: HfEntryType::File,
                 size: 1000,
+                oid: None,
             },
         ];
 

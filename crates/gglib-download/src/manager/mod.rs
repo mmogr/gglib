@@ -41,6 +41,7 @@ use gglib_core::download::{
 use gglib_core::ports::{
     DownloadEventEmitterPort, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
     DownloadStateRepositoryPort, HfClientPort, ModelRegistrarPort, QuantizationResolver,
+    ResolvedFile,
 };
 
 use crate::quant_selector::QuantizationSelector;
@@ -282,6 +283,8 @@ pub struct DownloadManagerImpl {
     current_run: Mutex<Option<QueueRunState>>,
     /// Previous drain state for transition detection.
     prev_is_drained: Mutex<bool>,
+    /// File entries with OIDs for each download (keyed by download ID).
+    file_entries_map: Mutex<HashMap<String, Vec<ResolvedFile>>>,
 }
 
 impl DownloadManagerImpl {
@@ -321,6 +324,7 @@ impl DownloadManagerImpl {
             runner_started: AtomicBool::new(false),
             current_run: Mutex::new(None),
             prev_is_drained: Mutex::new(true), // Start in drained state
+            file_entries_map: Mutex::new(HashMap::new()),
         }
     }
 
@@ -419,6 +423,16 @@ impl DownloadManagerImpl {
                 let destination =
                     DownloadDestination::plan(&self.config.models_directory, &item.id, files);
 
+                // Save primary file path before destination is moved into the job.
+                let primary_file_path = destination.primary_path();
+
+                // Remove corrupt cached files before hf_hub_download sees them.
+                Self::remove_corrupt_cached_file(&item, primary_file_path.as_ref());
+
+                // Clone the progress sender so we can detect cache hits after
+                // run_job consumes the original.
+                let progress_tx_clone = progress_tx.clone();
+
                 let job = DownloadJob {
                     id: item.id.clone(),
                     destination,
@@ -427,13 +441,24 @@ impl DownloadManagerImpl {
                     progress_tx,
                 };
 
-                // Emit started event
-                self.event_emitter.emit(DownloadEvent::DownloadStarted {
-                    id: item.id.to_string(),
-                });
+                // Emit started event (include shard info if this is a sharded download)
+                self.emit_started_event(&item);
 
                 // Run the worker
                 let result = worker::run_job(job, &deps).await;
+
+                // If the file was cached, emit synthetic progress so the UI
+                // shows at least one ShardProgress event.
+                Self::emit_synthetic_progress_if_cached(
+                    &item,
+                    &result,
+                    &progress_tx_clone,
+                    primary_file_path.as_ref(),
+                );
+
+                // Drop the cloned sender so the bridge sees all senders
+                // dropped and can emit its final progress event.
+                drop(progress_tx_clone);
 
                 // Wait for bridge to finish (it will exit when sender is dropped)
                 drop(bridge_handle);
@@ -448,6 +473,93 @@ impl DownloadManagerImpl {
                 self.queue_notify.notified().await;
             }
         }
+    }
+
+    /// Emit a `DownloadStarted` event, including shard info when available.
+    fn emit_started_event(&self, item: &QueuedItem) {
+        if let Some(shard) = &item.shard_info {
+            self.event_emitter.emit(DownloadEvent::started_shard(
+                item.id.to_string(),
+                shard.shard_index,
+                shard.total_shards,
+            ));
+        } else {
+            self.event_emitter.emit(DownloadEvent::DownloadStarted {
+                id: item.id.to_string(),
+                shard_index: None,
+                total_shards: None,
+            });
+        }
+    }
+
+    /// Validate a cached GGUF file and delete it if corrupt.
+    ///
+    /// A previous interrupted download may have left a truncated file that
+    /// `hf_hub_download` would silently accept as "cached".
+    fn remove_corrupt_cached_file(
+        item: &QueuedItem,
+        primary_file_path: Option<&std::path::PathBuf>,
+    ) {
+        let Some(path) = primary_file_path else {
+            return;
+        };
+        if !path.exists() {
+            return;
+        }
+
+        let expected_size = item.shard_info.as_ref().and_then(|s| s.file_size);
+        if expected_size.is_none() {
+            tracing::warn!(
+                id = %item.id,
+                path = %path.display(),
+                "No expected file size from HF metadata — \
+                 size validation will be skipped"
+            );
+        }
+        if let Err(reason) = validate_cached_gguf(path, expected_size) {
+            tracing::warn!(
+                id = %item.id,
+                path = %path.display(),
+                reason,
+                "Cached file is corrupt — deleting for re-download"
+            );
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    /// Emit synthetic 100% progress when a cache hit produced no callbacks.
+    ///
+    /// When `hf_hub_download(force_download=False)` finds a cached file it
+    /// returns instantly without progress callbacks.  The bridge never emits
+    /// a `ShardProgress` event, so the UI would skip the shard entirely.
+    fn emit_synthetic_progress_if_cached(
+        item: &QueuedItem,
+        result: &Result<worker::CompletedJob, DownloadError>,
+        progress_tx: &watch::Sender<ProgressUpdate>,
+        primary_file_path: Option<&std::path::PathBuf>,
+    ) {
+        if !(result.is_ok() && progress_tx.borrow().seq == 0) {
+            return;
+        }
+
+        let file_size = primary_file_path
+            .as_ref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .map(|m| m.len())
+            .or_else(|| item.shard_info.as_ref().and_then(|s| s.file_size))
+            .unwrap_or(0);
+
+        progress_tx.send_modify(|state| {
+            state.downloaded = file_size;
+            state.total = file_size;
+            state.seq = 1;
+        });
+
+        tracing::debug!(
+            id = %item.id,
+            file_size,
+            "File already cached — emitted synthetic 100% progress"
+        );
     }
 
     /// Get the next job from the queue.
@@ -570,12 +682,19 @@ impl DownloadManagerImpl {
             .first()
             .map_or_else(|| "unknown".to_string(), |f| base_shard_filename(f));
 
+        // Retrieve file entries with OIDs from map
+        let file_entries = {
+            let map = self.file_entries_map.lock().await;
+            map.get(&item.id.to_string()).cloned().unwrap_or_default()
+        };
+
         let metadata = GroupMetadata {
             repo_id: completed.repo_id.clone(),
             commit_sha: completed.commit_sha.clone(),
             quantization: completed.quantization,
             primary_filename: base_filename,
             hf_tags: vec![],
+            file_entries,
         };
 
         let group_complete = {
@@ -612,6 +731,13 @@ impl DownloadManagerImpl {
     /// Handle completion of a single-file download.
     async fn handle_single_file_completion(&self, item: &QueuedItem, completed: CompletedJob) {
         tracing::info!(id = %item.id, "Single-file download completed");
+
+        // Retrieve file entries with OIDs from map
+        let file_entries = {
+            let map = self.file_entries_map.lock().await;
+            map.get(&item.id.to_string()).cloned().unwrap_or_default()
+        };
+
         let metadata = GroupMetadata {
             repo_id: completed.repo_id.clone(),
             commit_sha: completed.commit_sha.clone(),
@@ -622,6 +748,7 @@ impl DownloadManagerImpl {
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string()),
             hf_tags: vec![],
+            file_entries,
         };
         let complete = shard_group_tracker::GroupComplete {
             ordered_paths: completed.all_paths.clone(),
@@ -706,6 +833,7 @@ impl DownloadManagerImpl {
                 None
             },
             hf_tags,
+            hf_file_entries: complete.metadata.file_entries,
         };
 
         // Register model (soft-fail)
@@ -1174,6 +1302,47 @@ fn emit_progress(
     }
 }
 
+/// GGUF magic number: "GGUF" in little-endian.
+const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
+
+/// Validate a cached GGUF file before allowing `hf_hub_download` to skip it.
+///
+/// Returns `Ok(())` if the file looks valid, or `Err(reason)` if it should
+/// be deleted and re-downloaded.
+///
+/// Checks:
+/// 1. File size matches the expected size from HF metadata (if known)
+/// 2. File starts with the 4-byte GGUF magic number
+fn validate_cached_gguf(path: &std::path::Path, expected_size: Option<u64>) -> Result<(), String> {
+    use std::io::Read;
+
+    let metadata = std::fs::metadata(path).map_err(|e| format!("cannot stat file: {e}"))?;
+    let actual_size = metadata.len();
+
+    // Check size first (cheap)
+    if let Some(expected) = expected_size {
+        if actual_size != expected {
+            return Err(format!(
+                "size mismatch: expected {expected} bytes, got {actual_size}"
+            ));
+        }
+    }
+
+    // Check GGUF magic (read only 4 bytes)
+    let mut file = std::fs::File::open(path).map_err(|e| format!("cannot open file: {e}"))?;
+    let mut magic = [0u8; 4];
+    file.read_exact(&mut magic)
+        .map_err(|e| format!("cannot read magic bytes: {e}"))?;
+
+    if magic != GGUF_MAGIC {
+        return Err(format!(
+            "invalid GGUF magic: expected {GGUF_MAGIC:?}, got {magic:?}"
+        ));
+    }
+
+    Ok(())
+}
+
 // =============================================================================
 // DownloadManagerPort implementation
 // =============================================================================
@@ -1484,6 +1653,12 @@ impl DownloadManagerImpl {
             let mut queue = self.queue.write().await;
             queue.queue_sharded(&id, &completion_key, shard_files, has_active)?
         };
+
+        // Store file entries with OIDs for later model registration
+        {
+            let mut file_entries = self.file_entries_map.lock().await;
+            file_entries.insert(id.to_string(), resolution.files.clone());
+        }
 
         let group_id = Some(id.to_string());
 

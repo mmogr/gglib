@@ -9,3 +9,13 @@
 export { wrapThink, isWrappedThink } from './wrapThink';
 export { coalesceAdjacentReasoning, type Chunk } from './coalesceReasoning';
 export { threadMessageToTranscriptMarkdown } from './threadMessageToTranscriptMarkdown';
+export {
+  extractNonTextContentParts,
+  hasNonTextContent,
+  reconstructContent,
+  type SerializableContentPart,
+  type SerializableToolCallPart,
+  type SerializableAudioPart,
+  type SerializableFilePart,
+  type SerializableImagePart,
+} from './contentParts';

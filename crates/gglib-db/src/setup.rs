@@ -127,6 +127,30 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await?;
 
+    // Create model_files junction table for per-shard OID tracking
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS model_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            file_index INTEGER NOT NULL,
+            expected_size INTEGER NOT NULL,
+            hf_oid TEXT,
+            last_verified_at TEXT,
+            FOREIGN KEY (model_id) REFERENCES models(id) ON DELETE CASCADE,
+            UNIQUE (model_id, file_path)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Index on model_id for faster model_files lookups
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_model_files_model_id ON model_files(model_id)")
+        .execute(pool)
+        .await?;
+
     // Create settings table
     sqlx::query(
         r#"

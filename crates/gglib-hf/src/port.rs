@@ -163,6 +163,7 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
                 path: f.path.clone(),
                 size: f.size,
                 is_gguf: f.is_gguf(),
+                oid: None, // list_gguf_files doesn't populate OIDs
             })
             .collect())
     }
@@ -171,14 +172,26 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
         &self,
         model_id: &str,
         quantization: &str,
-    ) -> HfPortResult<Vec<(String, u64)>> {
+    ) -> HfPortResult<Vec<HfFileInfo>> {
         let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
             message: format!("Invalid model ID format: {model_id}"),
         })?;
 
-        self.find_quantization_files_with_sizes(&repo, quantization)
+        let files = self
+            .find_quantization_files_with_sizes(&repo, quantization)
             .await
-            .map_err(map_error)
+            .map_err(map_error)?;
+
+        // Convert HfFileEntry to HfFileInfo with OID
+        Ok(files
+            .into_iter()
+            .map(|f| HfFileInfo {
+                path: f.path,
+                size: f.size,
+                is_gguf: matches!(f.entry_type, crate::models::HfEntryType::File),
+                oid: f.oid,
+            })
+            .collect())
     }
 
     async fn get_commit_sha(&self, model_id: &str) -> HfPortResult<String> {

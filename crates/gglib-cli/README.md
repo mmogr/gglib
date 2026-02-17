@@ -111,6 +111,8 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
 | `config default <id>` | Set/show/clear the default model |
+| `verify <id>` | Verify model integrity via SHA256 hash comparison |
+| `repair <id>` | Re-download corrupt shards for a model |
 
 ### Question Command
 

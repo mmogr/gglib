@@ -113,7 +113,7 @@ export interface QueueRunSummary {
 
 export type DownloadEvent =
   | { type: 'queue_snapshot'; items: DownloadSummary[]; max_size: number }
-  | { type: 'download_started'; id: DownloadId }
+  | { type: 'download_started'; id: DownloadId; shard_index?: number; total_shards?: number }
   | { type: 'download_progress'; id: DownloadId; downloaded: number; total: number; speed_bps: number; eta_seconds: number; percentage: number }
   | { type: 'shard_progress'; id: DownloadId; shard_index: number; total_shards: number; shard_filename: string; shard_downloaded: number; shard_total: number; aggregate_downloaded: number; aggregate_total: number; speed_bps: number; eta_seconds: number; percentage: number }
   | { type: 'download_completed'; id: DownloadId; message?: string | null }
@@ -135,6 +135,30 @@ export interface LogEntry {
 export type LogEvent = LogEntry;
 
 // ============================================================================
+// Verification Events
+// ============================================================================
+
+export type OverallHealth = 'healthy' | 'unhealthy' | 'unverifiable';
+
+export interface VerificationProgressEvent {
+  type: 'verification_progress';
+  modelId: number;
+  modelName: string;
+  shardName: string;
+  bytesProcessed: number;
+  totalBytes: number;
+}
+
+export interface VerificationCompleteEvent {
+  type: 'verification_complete';
+  modelId: number;
+  modelName: string;
+  overallHealth: OverallHealth;
+}
+
+export type VerificationEvent = VerificationProgressEvent | VerificationCompleteEvent;
+
+// ============================================================================
 // App Event Map
 // ============================================================================
 
@@ -149,6 +173,7 @@ export interface AppEventMap {
   'server': ServerEvent;
   'download': { type: 'download'; event: DownloadEvent };
   'log': LogEvent;
+  'verification': VerificationEvent;
 }
 
 export type AppEventType = keyof AppEventMap;

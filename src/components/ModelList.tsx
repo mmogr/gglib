@@ -1,5 +1,5 @@
 import { useState, FC, useMemo } from "react";
-import { Brain, Package, Rocket, RotateCcw, Trash2, Wrench, X } from "lucide-react";
+import { Brain, Package, Rocket, RotateCcw, Trash2, Wrench, X, Shield, CloudSync } from "lucide-react";
 import { appLogger } from '../services/platform';
 import { GgufModel } from "../types";
 import { removeModel } from "../services/clients/models";
@@ -8,6 +8,7 @@ import { formatParamCount } from "../utils/format";
 import { TransportError, LlamaServerNotInstalledMetadata } from "../services/transport/errors";
 import { LlamaInstallModal } from "./LlamaInstallModal";
 import { ServerHealthIndicator } from "./ServerHealthIndicator";
+import { VerificationModal } from "./VerificationModal";
 import { useIsServerRunning } from "../services/serverRegistry";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
@@ -39,9 +40,11 @@ interface ModelRowProps {
   removing: number | null;
   onServe: (model: GgufModel) => void;
   onRemove: (model: GgufModel) => void;
+  onVerify: (model: GgufModel) => void;
+  onCheckUpdates: (model: GgufModel) => void;
 }
 
-const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove }) => {
+const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVerify, onCheckUpdates }) => {
   const isRunning = useIsServerRunning(model.id ?? 0);
 
   return (
@@ -67,6 +70,21 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove }) => 
       </div>
       <div className="cell">{new Date(model.addedAt).toLocaleDateString()}</div>
       <div className="cell actions">
+        <button
+          onClick={() => onVerify(model)}
+          className="action-button"
+          title="Verify model integrity"
+        >
+          <Icon icon={Shield} size={16} />
+        </button>
+        <button
+          onClick={() => onCheckUpdates(model)}
+          className="action-button"
+          title="Check for updates on HuggingFace"
+          disabled={!model.hfRepoId}
+        >
+          <Icon icon={CloudSync} size={16} />
+        </button>
         <button
           onClick={() => onServe(model)}
           className="action-button serve-button"
@@ -96,6 +114,8 @@ const ModelList: FC<ModelListProps> = ({
 }) => {
   const [removing, setRemoving] = useState<number | null>(null);
   const [servingModel, setServingModel] = useState<GgufModel | null>(null);
+  const [verifyingModel, setVerifyingModel] = useState<GgufModel | null>(null);
+  const [checkingUpdatesModel, setCheckingUpdatesModel] = useState<GgufModel | null>(null);
   const [customContext, setCustomContext] = useState<string>('');
   const [enableJinja, setEnableJinja] = useState<boolean>(false);
   const [isServing, setIsServing] = useState(false);
@@ -130,6 +150,16 @@ const ModelList: FC<ModelListProps> = ({
     setCustomContext(''); // Reset custom context
     // Auto-enable Jinja for agent/reasoning models, reset for others
     setEnableJinja(shouldAutoEnableJinja(model));
+  };
+
+  const handleVerify = (model: GgufModel) => {
+    if (!model.id) return;
+    setVerifyingModel(model);
+  };
+
+  const handleCheckUpdates = (model: GgufModel) => {
+    if (!model.id) return;
+    setCheckingUpdatesModel(model);
   };
 
   const handleConfirmServe = async () => {
@@ -225,6 +255,8 @@ const ModelList: FC<ModelListProps> = ({
               removing={removing}
               onServe={handleServe}
               onRemove={handleRemove}
+              onVerify={handleVerify}
+              onCheckUpdates={handleCheckUpdates}
             />
           ))}
         </div>
@@ -360,6 +392,28 @@ const ModelList: FC<ModelListProps> = ({
               handleConfirmServe();
             }
           }}
+        />
+      )}
+
+      {/* Verification Modal */}
+      {verifyingModel && verifyingModel.id && (
+        <VerificationModal
+          modelId={verifyingModel.id}
+          modelName={verifyingModel.name}
+          open={!!verifyingModel}
+          onClose={() => setVerifyingModel(null)}
+          mode="verify"
+        />
+      )}
+
+      {/* Update Check Modal */}
+      {checkingUpdatesModel && checkingUpdatesModel.id && (
+        <VerificationModal
+          modelId={checkingUpdatesModel.id}
+          modelName={checkingUpdatesModel.name}
+          open={!!checkingUpdatesModel}
+          onClose={() => setCheckingUpdatesModel(null)}
+          mode="update"
         />
       )}
     </div>

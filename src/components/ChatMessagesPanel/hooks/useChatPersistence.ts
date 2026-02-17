@@ -1,9 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { ThreadRuntime, ThreadMessageLike } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
-import { getMessages, saveMessage, deleteMessage } from '../../../services/clients/chat';
-import type { ConversationSummary, ChatMessage } from '../../../services/clients/chat';
-import { threadMessageToTranscriptMarkdown } from '../../../utils/messages';
+import { getMessages, deleteMessage } from '../../../services/clients/chat';
+import type { ConversationSummary } from '../../../services/clients/chat';
+import { reconstructContent } from '../../../utils/messages';
+import type { SerializableContentPart } from '../../../utils/messages';
 
 /**
  * Options for the useChatPersistence hook.
@@ -49,7 +50,7 @@ export function useChatPersistence({
   activeConversationId,
   activeConversation,
   persistedMessageIds,
-  syncConversations,
+  syncConversations: _syncConversations,
   setChatError,
 }: UseChatPersistenceOptions): UseChatPersistenceResult {
   // Position tracking: maps runtime message index -> DB message ID
@@ -93,11 +94,15 @@ export function useChatPersistence({
             // Restore metadata including research state for deep research messages
             const metadata = message.metadata;
             const isDeepResearch = metadata?.isDeepResearch === true;
+
+            // Reconstruct structured content from metadata if available
+            const storedParts = metadata?.contentParts as SerializableContentPart[] | undefined;
+            const content = reconstructContent(message.content, storedParts);
             
             return {
               id: `db-${message.id}`,
               role: message.role,
-              content: message.content,
+              content,
               createdAt: new Date(message.created_at),
               // Include metadata with dbId for future updates and research state for rendering
               metadata: isDeepResearch
@@ -155,68 +160,10 @@ export function useChatPersistence({
     persistedMessageIds,
   ]);
 
-  // Effect: Persist new messages and handle edit detection
-  useEffect(() => {
-    if (!threadRuntime || !activeConversationId) return;
-
-    const unsubscribe = threadRuntime.subscribe(async () => {
-      // Prevent concurrent persist operations
-      if (isPersistingRef.current) return;
-      
-      const state = threadRuntime.getState();
-      const messages = state.messages;
-      
-      for (let i = 0; i < messages.length; i++) {
-        const message = messages[i];
-        
-        if (persistedMessageIds.current.has(message.id)) continue;
-        if (message.role === 'assistant' && message.status?.type !== 'complete') continue;
-        if (message.role === 'system') continue; // System messages handled separately
-
-        const text = threadMessageToTranscriptMarkdown(message);
-        if (!text.trim()) continue;
-
-        isPersistingRef.current = true;
-        
-        try {
-          // Check if this is an edit: a new message at a position that already has a DB entry
-          // This happens when LocalRuntime creates a new branch from an edit
-          if (message.role === 'user' && dbIdByPosition.current.has(i)) {
-            const existingDbId = dbIdByPosition.current.get(i)!;
-            
-            // Cascade delete from this position onwards in DB
-            await deleteMessage(existingDbId);
-            
-            // Clear stale position mappings from this point forward
-            for (const [pos] of dbIdByPosition.current) {
-              if (pos >= i) {
-                dbIdByPosition.current.delete(pos);
-              }
-            }
-          }
-
-          // Save the new message
-          const newDbId = await saveMessage(
-            activeConversationId,
-            message.role as ChatMessage['role'],
-            text,
-          );
-          
-          // Update position mapping for the new message
-          dbIdByPosition.current.set(i, newDbId);
-          persistedMessageIds.current.add(message.id);
-          
-          await syncConversations({ silent: true });
-        } catch (error) {
-          appLogger.error('hook.ui', 'Failed to persist message', { error, conversationId: activeConversationId });
-        } finally {
-          isPersistingRef.current = false;
-        }
-      }
-    });
-
-    return unsubscribe;
-  }, [threadRuntime, activeConversationId, persistedMessageIds, syncConversations]);
+  // Note: Message persistence (saving new/changed messages) is now handled
+  // exclusively by the hooks-level useChatPersistence in src/hooks/useChatPersistence.ts.
+  // This component-level hook only handles hydration and dbIdByPosition tracking.
+  // The persist effect was removed to prevent duplicate saves.
 
   return {
     isLoading: isLoadingRef.current,
@@ -349,12 +296,15 @@ export function useMessageDelete({
 
       const reloadedMessages: ThreadMessageLike[] = [
         ...systemPromptMessage,
-        ...messages.map<ThreadMessageLike>((message) => ({
-          id: `db-${message.id}`,
-          role: message.role,
-          content: message.content,
-          createdAt: new Date(message.created_at),
-        })),
+        ...messages.map<ThreadMessageLike>((message) => {
+          const storedParts = message.metadata?.contentParts as SerializableContentPart[] | undefined;
+          return {
+            id: `db-${message.id}`,
+            role: message.role,
+            content: reconstructContent(message.content, storedParts),
+            createdAt: new Date(message.created_at),
+          };
+        }),
       ];
 
       // Rebuild position mapping

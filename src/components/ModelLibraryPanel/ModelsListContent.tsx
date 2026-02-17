@@ -53,33 +53,35 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
   }
 
   return (
-    <div className="model-table">
-      {models.map((model) => (
-        <div
-          key={model.id || model.name}
-          className={`model-row ${selectedModelId === model.id ? 'selected' : ''} ${isModelRunning(model.id) ? 'running' : ''}`}
-          onClick={() => onSelectModel(model.id!)}
-        >
-          <div className="model-row-main">
-            <div className="model-name">
-              {model.name}
-              {isModelRunning(model.id) && (
-                <span className="status-badge running">Running</span>
-              )}
-            </div>
-            <div className="model-metadata">
-              <span className="metadata-item">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
-              {model.architecture && (
-                <span className="metadata-item">{model.architecture}</span>
-              )}
-              {model.quantization && (
-                <span className="quantization-badge">{model.quantization}</span>
-              )}
+    <>
+      <div className="model-table">
+        {models.map((model) => (
+          <div
+            key={model.id || model.name}
+            className={`model-row ${selectedModelId === model.id ? 'selected' : ''} ${isModelRunning(model.id) ? 'running' : ''}`}
+            onClick={() => onSelectModel(model.id!)}
+          >
+            <div className="model-row-main">
+              <div className="model-name">
+                {model.name}
+                {isModelRunning(model.id) && (
+                  <span className="status-badge running">Running</span>
+                )}
+              </div>
+              <div className="model-metadata">
+                <span className="metadata-item">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
+                {model.architecture && (
+                  <span className="metadata-item">{model.architecture}</span>
+                )}
+                {model.quantization && (
+                  <span className="quantization-badge">{model.quantization}</span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </>
   );
 };
 

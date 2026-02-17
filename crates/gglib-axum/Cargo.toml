@@ -29,6 +29,7 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
+async-trait = { workspace = true }
 
 # Axum-specific dependencies - use workspace versions for consistency
 axum = { workspace = true }
