@@ -56,11 +56,11 @@ GGLib is organized as a Cargo workspace with compile-time enforced boundaries. T
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                              Infrastructure Layer                                   │
 │                                                                                     │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐                        │
-│  │  gglib-db  │ │ gglib-gguf │ │ gglib-mcp  │ │ gglib-proxy│                        │
-│  │   SQLite   │ │ GGUF file  │ │    MCP     │ │  OpenAI-   │                        │
-│  │   repos    │ │   parser   │ │  servers   │ │  compat    │                        │
-│  └────────────┘ └────────────┘ └────────────┘ └────────────┘                        │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐       │
+│  │  gglib-db  │ │ gglib-gguf │ │ gglib-mcp  │ │ gglib-proxy│ │gglib-voice │       │
+│  │   SQLite   │ │ GGUF file  │ │    MCP     │ │  OpenAI-   │ │Voice mode  │       │
+│  │   repos    │ │   parser   │ │  servers   │ │  compat    │ │STT/TTS/VAD │       │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘       │
 │                                                                                     │
 │  ╔═══════════════════════════════════════════════════════════════════════════════╗  │
 │  ║                          External Gateways                                    ║  │
@@ -173,6 +173,7 @@ GGLib is organized as a Cargo workspace with compile-time enforced boundaries. T
 | [gglib-mcp](crates/gglib-mcp) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-complexity.json) |
 | [gglib-proxy](crates/gglib-proxy) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-complexity.json) |
 | [gglib-runtime](crates/gglib-runtime) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-complexity.json) |
+| [gglib-voice](crates/gglib-voice) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-complexity.json) |
 
 #### Facade Layer
 | Crate | Tests | Coverage | LOC | Complexity |

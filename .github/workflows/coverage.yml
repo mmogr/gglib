@@ -71,6 +71,7 @@ jobs:
             -p gglib-gui \
             -p gglib-cli \
             -p gglib-axum \
+            -p gglib-voice \
             --lcov --output-path lcov.info 2>&1 | tee rust-test-output.txt
 
       - name: Run per-crate Rust coverage
@@ -86,6 +87,7 @@ jobs:
           cargo llvm-cov --all-features --package gglib-gui --lcov --output-path gglib-gui-lcov.info
           cargo llvm-cov --all-features --package gglib-cli --lcov --output-path gglib-cli-lcov.info
           cargo llvm-cov --all-features --package gglib-axum --lcov --output-path gglib-axum-lcov.info
+          cargo llvm-cov --all-features --package gglib-voice --lcov --output-path gglib-voice-lcov.info
 
       - name: Run TypeScript tests with coverage
         run: npm run test:coverage -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
@@ -104,6 +106,7 @@ jobs:
             -p gglib-gui \
             -p gglib-cli \
             -p gglib-axum \
+            -p gglib-voice \
             --html
 
       - name: Archive coverage report
@@ -125,6 +128,7 @@ jobs:
             gglib-gui-lcov.info
             gglib-cli-lcov.info
             gglib-axum-lcov.info
+            gglib-voice-lcov.info
             coverage/
             rust-test-output.txt
             ts-test-output.txt
