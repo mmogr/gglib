@@ -120,6 +120,13 @@ pub struct VoicePipelineConfig {
 
     /// Whether to automatically speak LLM responses via TTS.
     pub auto_speak: bool,
+
+    /// Optional path to a Silero VAD ONNX model.
+    ///
+    /// When set (and the `sherpa` feature is enabled), the pipeline will
+    /// load this model into the VAD on [`start()`](VoicePipeline::start)
+    /// for neural-network-based speech boundary detection.
+    pub vad_model_path: Option<std::path::PathBuf>,
 }
 
 impl Default for VoicePipelineConfig {
@@ -130,6 +137,7 @@ impl Default for VoicePipelineConfig {
             tts: TtsConfig::default(),
             vad: VadConfig::default(),
             auto_speak: true,
+            vad_model_path: None,
         }
     }
 }
@@ -257,6 +265,18 @@ impl VoicePipeline {
                 self.echo_gate.clone(),
                 crate::capture::WHISPER_SAMPLE_RATE,
             );
+
+            // Load Silero VAD model if a path was configured.
+            #[cfg(feature = "sherpa")]
+            if let Some(ref model_path) = self.config.vad_model_path {
+                if let Err(e) = vad.load_silero_model(model_path) {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to load Silero VAD model — falling back to energy-based VAD"
+                    );
+                }
+            }
+
             vad.start();
             self.vad = Some(vad);
         }
@@ -298,8 +318,26 @@ impl VoicePipeline {
     // ── STT/TTS engine management ──────────────────────────────────
 
     /// Load or replace the STT engine with a model at the given path.
+    ///
+    /// For the `sherpa` feature, `model_path` should be a **directory**
+    /// containing `encoder.onnx`, `decoder.onnx`, and `tokens.txt`.
+    ///
+    /// For the legacy `whisper` feature, `model_path` is the GGML model file.
     pub fn load_stt(&mut self, model_path: &std::path::Path) -> Result<(), VoiceError> {
         tracing::info!(path = %model_path.display(), "Loading STT engine");
+
+        #[cfg(feature = "sherpa")]
+        {
+            use crate::backend::sherpa_stt::{SherpaSttBackend, SherpaSttConfig};
+
+            let sherpa_config = SherpaSttConfig {
+                language: self.config.stt.language.clone(),
+                ..SherpaSttConfig::default()
+            };
+            let engine = SherpaSttBackend::load(model_path, &sherpa_config)?;
+            self.stt = Some(Box::new(engine));
+            return Ok(());
+        }
 
         #[cfg(feature = "whisper")]
         {
@@ -311,44 +349,63 @@ impl VoicePipeline {
             };
             let engine = WhisperBackend::load(model_path, &whisper_config)?;
             self.stt = Some(Box::new(engine));
-            Ok(())
+            return Ok(());
         }
 
-        #[cfg(not(feature = "whisper"))]
+        #[allow(unreachable_code)]
         {
             let _ = model_path;
             Err(VoiceError::SttModelNotLoaded)
         }
     }
 
-    /// Load or replace the TTS engine with model files at the given paths.
+    /// Load or replace the TTS engine from a model directory.
+    ///
+    /// For the `sherpa` feature, `model_dir` should contain `model.onnx`,
+    /// `voices.bin`, `tokens.txt`, and an `espeak-ng-data/` subdirectory.
+    ///
+    /// For the legacy `kokoro` feature, `model_dir` should contain the
+    /// Kokoro ONNX model file and a `voices.bin` file (file names are
+    /// inferred from the directory contents).
     pub async fn load_tts(
         &mut self,
-        model_path: &std::path::Path,
-        voices_path: &std::path::Path,
+        model_dir: &std::path::Path,
     ) -> Result<(), VoiceError> {
-        tracing::info!(
-            model = %model_path.display(),
-            voices = %voices_path.display(),
-            "Loading TTS engine"
-        );
+        tracing::info!(dir = %model_dir.display(), "Loading TTS engine");
+
+        #[cfg(feature = "sherpa")]
+        {
+            use crate::backend::sherpa_tts::{SherpaTtsBackend, SherpaTtsConfig};
+
+            let sherpa_config = SherpaTtsConfig {
+                voice: self.config.tts.voice.clone(),
+                speed: self.config.tts.speed,
+            };
+            let engine = SherpaTtsBackend::load(model_dir, &sherpa_config)?;
+            self.tts = Some(Box::new(engine));
+            return Ok(());
+        }
 
         #[cfg(feature = "kokoro")]
         {
             use crate::backend::kokoro::{KokoroBackend, KokoroConfig};
 
+            // Legacy Kokoro: infer individual file paths from the directory.
+            let model_path = model_dir.join("model.onnx");
+            let voices_path = model_dir.join("voices.bin");
+
             let kokoro_config = KokoroConfig {
                 voice: self.config.tts.voice.clone(),
                 speed: self.config.tts.speed,
             };
-            let engine = KokoroBackend::load(model_path, voices_path, &kokoro_config).await?;
+            let engine = KokoroBackend::load(&model_path, &voices_path, &kokoro_config).await?;
             self.tts = Some(Box::new(engine));
-            Ok(())
+            return Ok(());
         }
 
-        #[cfg(not(feature = "kokoro"))]
+        #[allow(unreachable_code)]
         {
-            let _ = (model_path, voices_path);
+            let _ = model_dir;
             Err(VoiceError::TtsModelNotLoaded)
         }
     }
@@ -634,6 +691,17 @@ impl VoicePipeline {
                         self.echo_gate.clone(),
                         crate::capture::WHISPER_SAMPLE_RATE,
                     );
+
+                    #[cfg(feature = "sherpa")]
+                    if let Some(ref model_path) = self.config.vad_model_path {
+                        if let Err(e) = vad.load_silero_model(model_path) {
+                            tracing::warn!(
+                                error = %e,
+                                "Failed to load Silero VAD — falling back to energy-based VAD"
+                            );
+                        }
+                    }
+
                     vad.start();
                     self.vad = Some(vad);
                 }

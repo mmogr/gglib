@@ -1,12 +1,27 @@
 //! Voice Activity Detection module — detects speech start/end in audio.
 //!
-//! Uses whisper-rs's built-in Silero VAD for utterance boundary detection.
-//! In VAD mode, the pipeline continuously monitors mic input and triggers
+//! Two detection strategies are supported:
+//!
+//! * **Silero VAD** (`sherpa` feature) — neural-network-based detection via
+//!   `sherpa_rs::silero_vad::SileroVad`.  Produces high-quality utterance
+//!   boundaries with minimal false positives.
+//!
+//! * **Energy-based** (fallback) — simple RMS energy thresholding.  Always
+//!   available, used when no Silero model is loaded.
+//!
+//! In VAD mode the pipeline continuously monitors mic input and triggers
 //! transcription when speech is detected followed by silence.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(feature = "sherpa")]
+use std::path::Path;
+#[cfg(feature = "sherpa")]
+use sherpa_rs::silero_vad::{SileroVad, SileroVadConfig};
+
+#[cfg(feature = "sherpa")]
+use crate::error::VoiceError;
 use crate::gate::EchoGate;
 
 /// VAD configuration parameters.
@@ -61,6 +76,10 @@ pub enum VadState {
 ///
 /// Monitors an audio stream and emits events when speech starts/ends.
 /// Integrates with the echo gate to avoid detecting TTS output as speech.
+///
+/// When a Silero VAD model is loaded (via [`load_silero_model`](Self::load_silero_model)),
+/// neural-network-based detection is used.  Otherwise the detector falls
+/// back to simple RMS energy thresholding.
 pub struct VoiceActivityDetector {
     /// Current state of the VAD.
     state: VadState,
@@ -85,6 +104,13 @@ pub struct VoiceActivityDetector {
 
     /// Audio sample rate we're processing at.
     sample_rate: u32,
+
+    /// Optional Silero VAD neural-network detector.
+    ///
+    /// When loaded, [`process_frame`](Self::process_frame) delegates to
+    /// Silero instead of the energy-based detector.
+    #[cfg(feature = "sherpa")]
+    silero: Option<SileroVad>,
 }
 
 /// Events emitted by the VAD.
@@ -115,7 +141,49 @@ impl VoiceActivityDetector {
             silence_frame_count: 0,
             speech_frame_count: 0,
             sample_rate,
+            #[cfg(feature = "sherpa")]
+            silero: None,
         }
+    }
+
+    /// Load a Silero VAD model from disk.
+    ///
+    /// Once loaded, [`process_frame`](Self::process_frame) will use the
+    /// neural-network detector instead of plain energy thresholding.
+    ///
+    /// The `model_path` should point to the Silero VAD ONNX model file
+    /// (e.g. `silero_vad.onnx`).
+    #[cfg(feature = "sherpa")]
+    pub fn load_silero_model(&mut self, model_path: &Path) -> Result<(), VoiceError> {
+        if !model_path.exists() {
+            return Err(VoiceError::ModelNotFound(model_path.to_path_buf()));
+        }
+
+        let model_str = model_path
+            .to_str()
+            .ok_or_else(|| VoiceError::ModelNotFound(model_path.to_path_buf()))?;
+
+        let silero_config = SileroVadConfig {
+            model: model_str.to_string(),
+            threshold: self.config.threshold,
+            #[allow(clippy::cast_precision_loss)]
+            min_silence_duration: self.config.min_silence_duration_ms as f32 / 1000.0,
+            #[allow(clippy::cast_precision_loss)]
+            min_speech_duration: self.config.min_speech_duration_ms as f32 / 1000.0,
+            sample_rate: self.sample_rate,
+            ..SileroVadConfig::default()
+        };
+
+        // Buffer up to 60 seconds of speech.
+        let buffer_size_secs: f32 = 60.0;
+
+        let vad = SileroVad::new(silero_config, buffer_size_secs).map_err(|e| {
+            VoiceError::WhisperLoadError(format!("Failed to load Silero VAD: {e}"))
+        })?;
+
+        tracing::info!(path = %model_path.display(), "Silero VAD model loaded");
+        self.silero = Some(vad);
+        Ok(())
     }
 
     /// Start the VAD monitoring.
@@ -141,9 +209,9 @@ impl VoiceActivityDetector {
     /// Process a frame of audio samples and return any VAD events.
     ///
     /// The audio should be at the configured sample rate (typically 16 kHz mono).
-    /// This uses energy-based detection as a simple, zero-dependency approach.
-    /// For production use, this can be upgraded to use Silero VAD via
-    /// whisper-rs's `WhisperVadContext`.
+    ///
+    /// When a Silero model is loaded the neural-network detector is used;
+    /// otherwise falls back to simple RMS energy thresholding.
     pub fn process_frame(&mut self, frame: &[f32]) -> Option<VadEvent> {
         if !self.is_active.load(Ordering::Relaxed) {
             return None;
@@ -158,7 +226,70 @@ impl VoiceActivityDetector {
             return None;
         }
 
-        // Calculate RMS energy of the frame
+        // Delegate to Silero when available.
+        #[cfg(feature = "sherpa")]
+        if self.silero.is_some() {
+            return self.process_frame_silero(frame);
+        }
+
+        self.process_frame_energy(frame)
+    }
+
+    // ── Silero neural-network path ─────────────────────────────────
+
+    /// Process a frame using the Silero VAD neural network.
+    ///
+    /// Silero internally tracks speech state and produces [`SpeechSegment`]s
+    /// that contain the start offset and the captured audio samples.  We
+    /// translate those into our [`VadEvent`] protocol.
+    #[cfg(feature = "sherpa")]
+    fn process_frame_silero(&mut self, frame: &[f32]) -> Option<VadEvent> {
+        let silero = self.silero.as_mut().expect("checked by caller");
+
+        // Feed samples to Silero.
+        silero.accept_waveform(frame.to_vec());
+
+        if silero.is_speech() && self.state == VadState::Listening {
+            // Transition: speech just started.
+            self.state = VadState::SpeechDetected;
+            tracing::debug!("Silero VAD: speech started");
+            return Some(VadEvent::SpeechStart);
+        }
+
+        if !silero.is_speech() && self.state == VadState::SpeechDetected {
+            // Speech ended — drain all queued segments into a single buffer.
+            self.state = VadState::Listening;
+
+            // Flush any remaining samples so they appear as segments.
+            silero.flush();
+
+            let mut audio = Vec::new();
+            while !silero.is_empty() {
+                let seg = silero.front();
+                audio.extend_from_slice(&seg.samples);
+                silero.pop();
+            }
+
+            if audio.is_empty() {
+                return None;
+            }
+
+            tracing::debug!(
+                samples = audio.len(),
+                duration_ms = audio.len() as u64 * 1000 / u64::from(self.sample_rate),
+                "Silero VAD: speech ended"
+            );
+
+            return Some(VadEvent::SpeechEnd { audio });
+        }
+
+        None
+    }
+
+    // ── Energy-based fallback path ─────────────────────────────────
+
+    /// Process a frame using simple RMS energy thresholding (fallback).
+    fn process_frame_energy(&mut self, frame: &[f32]) -> Option<VadEvent> {
         let energy = calculate_rms_energy(frame);
         let is_speech = energy > energy_threshold_from_vad_threshold(self.config.threshold);
 
@@ -231,6 +362,12 @@ impl VoiceActivityDetector {
         self.speech_buffer.clear();
         self.silence_frame_count = 0;
         self.speech_frame_count = 0;
+
+        // Clear any buffered state in the Silero detector.
+        #[cfg(feature = "sherpa")]
+        if let Some(ref mut silero) = self.silero {
+            silero.clear();
+        }
     }
 
     /// Get the current VAD state.
