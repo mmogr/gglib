@@ -232,7 +232,7 @@ impl VoicePipeline {
         tracing::info!(mode = ?self.mode, "Starting voice pipeline");
 
         // Initialise audio I/O on a dedicated OS thread.
-        let audio = AudioThreadHandle::spawn(self.echo_gate.clone())?;
+        let audio = AudioThreadHandle::spawn(&self.echo_gate)?;
         self.audio = Some(audio);
 
         // In VAD mode, initialise the detector
@@ -583,7 +583,9 @@ impl VoicePipeline {
     /// Check if TTS playback is currently active.
     #[must_use]
     pub fn is_speaking(&self) -> bool {
-        self.audio.as_ref().is_some_and(|a| a.is_playing())
+        self.audio
+            .as_ref()
+            .is_some_and(AudioThreadHandle::is_playing)
     }
 
     // ── Configuration ──────────────────────────────────────────────

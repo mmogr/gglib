@@ -84,7 +84,7 @@ impl AudioThreadHandle {
     ///
     /// Errors from `AudioCapture::new` / `AudioPlayback::new` are propagated
     /// back to the caller via a one-shot init channel.
-    pub fn spawn(echo_gate: EchoGate) -> Result<Self, VoiceError> {
+    pub fn spawn(echo_gate: &EchoGate) -> Result<Self, VoiceError> {
         let (cmd_tx, cmd_rx) = mpsc::channel::<AudioCommand>();
         let (init_tx, init_rx) = mpsc::channel::<Result<(), VoiceError>>();
 
@@ -190,6 +190,7 @@ impl AudioThreadHandle {
     /// The body of the dedicated audio thread. Owns `AudioCapture` and
     /// `AudioPlayback` for their entire lifetime — they never cross thread
     /// boundaries.
+    #[allow(clippy::needless_pass_by_value)] // cmd_rx and init_tx are consumed
     fn run(
         echo_gate: EchoGate,
         cmd_rx: mpsc::Receiver<AudioCommand>,
