@@ -13,7 +13,8 @@ use gglib_voice::models::{self, SttModelInfo, TtsModelInfo, VoiceModelCatalog};
 use gglib_voice::pipeline::{
     VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
 };
-use gglib_voice::tts::{TtsEngine, VoiceInfo};
+use gglib_voice::tts::VoiceInfo;
+use gglib_voice::tts::TtsEngine;
 
 use crate::app::state::AppState;
 
@@ -88,6 +89,7 @@ pub struct VoiceModelsResponse {
     pub tts_model: TtsModelInfo,
     pub tts_downloaded: bool,
     pub voices: Vec<VoiceInfo>,
+    pub vad_downloaded: bool,
 }
 
 // ── Helper ─────────────────────────────────────────────────────────
@@ -317,6 +319,7 @@ pub async fn voice_list_models() -> Result<VoiceModelsResponse, String> {
         tts_model,
         tts_downloaded,
         voices,
+        vad_downloaded: VoiceModelCatalog::is_vad_downloaded().unwrap_or(false),
     })
 }
 
@@ -350,12 +353,15 @@ pub async fn voice_download_stt_model(model_id: String, app: AppHandle) -> Resul
     Ok(())
 }
 
-/// Download the TTS model (Kokoro).
+/// Download the TTS model.
 #[tauri::command]
 pub async fn voice_download_tts_model(app: AppHandle) -> Result<(), String> {
+    let tts_model = VoiceModelCatalog::tts_model();
+    let model_id = tts_model.id.0.clone();
     let app_clone = app.clone();
 
-    let (model_path, voices_path) = models::ensure_tts_model(move |downloaded, total| {
+    let model_id_clone = model_id.clone();
+    let path = models::ensure_tts_model(move |downloaded, total| {
         let percent = if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
         } else {
@@ -365,7 +371,7 @@ pub async fn voice_download_tts_model(app: AppHandle) -> Result<(), String> {
             &app_clone,
             event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
             ModelDownloadProgressPayload {
-                model_id: "kokoro-v1.0".to_string(),
+                model_id: model_id_clone.clone(),
                 bytes_downloaded: downloaded,
                 total_bytes: total,
                 percent,
@@ -375,11 +381,37 @@ pub async fn voice_download_tts_model(app: AppHandle) -> Result<(), String> {
     .await
     .map_err(|e| format!("{e}"))?;
 
-    info!(
-        model = %model_path.display(),
-        voices = %voices_path.display(),
-        "TTS model downloaded"
-    );
+    info!(model_id = %model_id, path = %path.display(), "TTS model downloaded");
+
+    Ok(())
+}
+
+/// Download the VAD model (Silero).
+#[tauri::command]
+pub async fn voice_download_vad_model(app: AppHandle) -> Result<(), String> {
+    let app_clone = app.clone();
+
+    let path = models::ensure_vad_model(move |downloaded, total| {
+        let percent = if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        emit_or_log(
+            &app_clone,
+            event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
+            ModelDownloadProgressPayload {
+                model_id: "silero-vad".to_string(),
+                bytes_downloaded: downloaded,
+                total_bytes: total,
+                percent,
+            },
+        );
+    })
+    .await
+    .map_err(|e| format!("{e}"))?;
+
+    info!(path = %path.display(), "VAD model downloaded");
     Ok(())
 }
 
@@ -417,10 +449,12 @@ pub async fn voice_load_tts(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let model_path = VoiceModelCatalog::tts_model_path().map_err(|e| format!("{e}"))?;
-    let voices_path = VoiceModelCatalog::tts_voices_path().map_err(|e| format!("{e}"))?;
+    // The TTS model directory contains model.onnx, voices.bin, tokens.txt, etc.
+    let tts_dir = VoiceModelCatalog::voice_models_dir()
+        .map(|d| d.join("tts"))
+        .map_err(|e| format!("{e}"))?;
 
-    if !model_path.exists() || !voices_path.exists() {
+    if !tts_dir.exists() {
         return Err("TTS model not downloaded".to_string());
     }
 
@@ -434,7 +468,7 @@ pub async fn voice_load_tts(
     }
     let pipeline = voice.as_mut().unwrap();
     pipeline
-        .load_tts(&model_path, &voices_path)
+        .load_tts(&tts_dir)
         .await
         .map_err(|e| format!("{e}"))
 }

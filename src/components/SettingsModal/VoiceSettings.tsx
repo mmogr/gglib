@@ -185,9 +185,9 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
 
       {/* ── STT Model Section ──────────────────────────────────── */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>Speech-to-Text (Whisper)</h3>
+        <h3 className={styles.sectionTitle}>Speech-to-Text</h3>
         <p className={styles.description}>
-          Choose a Whisper model for speech recognition. Larger models are more
+          Choose an STT model for speech recognition. Larger models are more
           accurate but slower and use more memory.
         </p>
 
@@ -245,7 +245,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
 
       {/* ── TTS Section ────────────────────────────────────────── */}
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>Text-to-Speech (Kokoro)</h3>
+        <h3 className={styles.sectionTitle}>Text-to-Speech</h3>
         <p className={styles.description}>
           High-quality local TTS. The model will be downloaded on first use (~300 MB).
         </p>
@@ -254,7 +254,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           <label className={styles.label}>TTS Model</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
-              {voice.models?.ttsModel?.name ?? 'Kokoro TTS'}
+              {voice.models?.ttsModel?.name ?? 'TTS Model'}
             </span>
             <Button
               onClick={handleDownloadTts}

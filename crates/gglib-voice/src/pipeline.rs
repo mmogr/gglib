@@ -19,13 +19,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+use crate::backend::{SttBackend, SttConfig, TtsBackend, TtsConfig};
 use crate::capture::AudioCapture;
 use crate::error::VoiceError;
 use crate::gate::EchoGate;
 use crate::playback::AudioPlayback;
-use crate::stt::{SttConfig, SttEngine};
 use crate::text_utils;
-use crate::tts::{KOKORO_SAMPLE_RATE, TtsConfig, TtsEngine};
 use crate::vad::{VadConfig, VadEvent, VoiceActivityDetector};
 
 // ── Voice state machine ────────────────────────────────────────────
@@ -42,7 +41,7 @@ pub enum VoiceState {
     /// Recording audio (PTT mode — button held down).
     Recording,
 
-    /// Transcribing captured audio via whisper.
+    /// Transcribing captured audio via STT engine.
     Transcribing,
 
     /// Waiting for LLM response (pipeline doesn't own this, but tracks it).
@@ -121,6 +120,13 @@ pub struct VoicePipelineConfig {
 
     /// Whether to automatically speak LLM responses via TTS.
     pub auto_speak: bool,
+
+    /// Optional path to a Silero VAD ONNX model.
+    ///
+    /// When set (and the `sherpa` feature is enabled), the pipeline will
+    /// load this model into the VAD on [`start()`](VoicePipeline::start)
+    /// for neural-network-based speech boundary detection.
+    pub vad_model_path: Option<std::path::PathBuf>,
 }
 
 impl Default for VoicePipelineConfig {
@@ -131,6 +137,7 @@ impl Default for VoicePipelineConfig {
             tts: TtsConfig::default(),
             vad: VadConfig::default(),
             auto_speak: true,
+            vad_model_path: None,
         }
     }
 }
@@ -159,10 +166,10 @@ pub struct VoicePipeline {
     playback: Option<AudioPlayback>,
 
     /// Speech-to-text engine (loaded lazily).
-    stt: Option<SttEngine>,
+    stt: Option<Box<dyn SttBackend>>,
 
     /// Text-to-speech engine (loaded lazily).
-    tts: Option<TtsEngine>,
+    tts: Option<Box<dyn TtsBackend>>,
 
     /// Voice activity detector (used in VAD mode).
     vad: Option<VoiceActivityDetector>,
@@ -256,8 +263,19 @@ impl VoicePipeline {
             let mut vad = VoiceActivityDetector::new(
                 self.config.vad.clone(),
                 self.echo_gate.clone(),
-                crate::capture::WHISPER_SAMPLE_RATE,
+                crate::capture::TARGET_SAMPLE_RATE,
             );
+
+            // Load Silero VAD model if a path was configured.
+            if let Some(ref model_path) = self.config.vad_model_path {
+                if let Err(e) = vad.load_silero_model(model_path) {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to load Silero VAD model — falling back to energy-based VAD"
+                    );
+                }
+            }
+
             vad.start();
             self.vad = Some(vad);
         }
@@ -299,26 +317,41 @@ impl VoicePipeline {
     // ── STT/TTS engine management ──────────────────────────────────
 
     /// Load or replace the STT engine with a model at the given path.
+    ///
+    /// `model_path` should be a **directory** containing `encoder.onnx`,
+    /// `decoder.onnx`, and `tokens.txt`.
     pub fn load_stt(&mut self, model_path: &std::path::Path) -> Result<(), VoiceError> {
         tracing::info!(path = %model_path.display(), "Loading STT engine");
-        let engine = SttEngine::load(model_path, &self.config.stt)?;
-        self.stt = Some(engine);
+
+        use crate::backend::sherpa_stt::{SherpaSttBackend, SherpaSttConfig};
+
+        let sherpa_config = SherpaSttConfig {
+            language: self.config.stt.language.clone(),
+            ..SherpaSttConfig::default()
+        };
+        let engine = SherpaSttBackend::load(model_path, &sherpa_config)?;
+        self.stt = Some(Box::new(engine));
         Ok(())
     }
 
-    /// Load or replace the TTS engine with model files at the given paths.
+    /// Load or replace the TTS engine from a model directory.
+    ///
+    /// `model_dir` should contain `model.onnx`, `voices.bin`, `tokens.txt`,
+    /// and an `espeak-ng-data/` subdirectory.
     pub async fn load_tts(
         &mut self,
-        model_path: &std::path::Path,
-        voices_path: &std::path::Path,
+        model_dir: &std::path::Path,
     ) -> Result<(), VoiceError> {
-        tracing::info!(
-            model = %model_path.display(),
-            voices = %voices_path.display(),
-            "Loading TTS engine"
-        );
-        let engine = TtsEngine::load(model_path, voices_path, &self.config.tts).await?;
-        self.tts = Some(engine);
+        tracing::info!(dir = %model_dir.display(), "Loading TTS engine");
+
+        use crate::backend::sherpa_tts::{SherpaTtsBackend, SherpaTtsConfig};
+
+        let sherpa_config = SherpaTtsConfig {
+            voice: self.config.tts.voice.clone(),
+            speed: self.config.tts.speed,
+        };
+        let engine = SherpaTtsBackend::load(model_dir, &sherpa_config)?;
+        self.tts = Some(Box::new(engine));
         Ok(())
     }
 
@@ -433,7 +466,7 @@ impl VoicePipeline {
     /// Speak text through TTS and play back the audio.
     ///
     /// Long text is automatically stripped of markdown formatting and split
-    /// into sentence-sized chunks so that Kokoro TTS can synthesize each
+    /// into sentence-sized chunks so that the TTS engine can synthesize each
     /// piece reliably (it struggles with very long inputs).
     ///
     /// Audio is **streamed incrementally**: the first chunk starts playing
@@ -482,12 +515,12 @@ impl VoicePipeline {
 
         for (i, chunk) in chunks.iter().enumerate() {
             match tts.synthesize(chunk).await {
-                Ok((samples, duration)) => {
+                Ok(audio) => {
                     tracing::debug!(
                         chunk = i + 1,
                         chunk_len = chunk.len(),
-                        samples = samples.len(),
-                        duration_ms = duration.as_millis(),
+                        samples = audio.samples.len(),
+                        duration_ms = audio.duration.as_millis(),
                         "Synthesised chunk"
                     );
 
@@ -504,8 +537,8 @@ impl VoicePipeline {
 
                     // Re-borrow playback after the &self calls above.
                     let pb = self.playback.as_mut().expect("playback initialised above");
-                    pb.append(samples, KOKORO_SAMPLE_RATE)?;
-                    total_duration += duration;
+                    pb.append(audio.samples, audio.sample_rate)?;
+                    total_duration += audio.duration;
                 }
                 Err(e) => {
                     failed_chunks += 1;
@@ -601,8 +634,18 @@ impl VoicePipeline {
                     let mut vad = VoiceActivityDetector::new(
                         self.config.vad.clone(),
                         self.echo_gate.clone(),
-                        crate::capture::WHISPER_SAMPLE_RATE,
+                        crate::capture::TARGET_SAMPLE_RATE,
                     );
+
+                    if let Some(ref model_path) = self.config.vad_model_path {
+                        if let Err(e) = vad.load_silero_model(model_path) {
+                            tracing::warn!(
+                                error = %e,
+                                "Failed to load Silero VAD — falling back to energy-based VAD"
+                            );
+                        }
+                    }
+
                     vad.start();
                     self.vad = Some(vad);
                 }

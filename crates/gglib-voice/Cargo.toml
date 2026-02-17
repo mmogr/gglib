@@ -5,10 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Voice mode for gglib - local STT (whisper.cpp) and TTS (Kokoro) pipeline"
+description = "Voice mode for gglib - local STT and TTS pipeline via sherpa-onnx"
 publish = false
 
-# gglib-voice wraps FFI crates (cpal, whisper-rs, ort) that need unsafe Send/Sync impls,
+# gglib-voice wraps FFI crates (cpal, sherpa-rs) that need unsafe Send/Sync impls,
 # so we override the workspace-level deny(unsafe_code) to warn.
 [lints.rust]
 unsafe_code = "warn"
@@ -25,10 +25,8 @@ missing_panics_doc = "allow"
 
 [features]
 default = []
-# Apple Silicon acceleration via CoreML for ONNX Runtime (Kokoro TTS)
-coreml = ["ort/coreml"]
-# CUDA acceleration
-cuda = ["ort/cuda"]
+# CUDA acceleration for sherpa-onnx
+# cuda = ["sherpa-rs/cuda"]
 
 [dependencies]
 # Internal crates
@@ -47,34 +45,27 @@ tracing = { workspace = true }
 # Serialization
 serde = { workspace = true }
 
+# Async traits (for TtsBackend dyn compatibility)
+async-trait = { workspace = true }
+
 # Audio capture (cross-platform: CoreAudio/WASAPI/ALSA)
 cpal = "0.15"
 
 # Audio playback
 rodio = { version = "0.20", default-features = false, features = ["wav"] }
 
-# Audio resampling (device sample rate → 16kHz for whisper)
+# Audio resampling (device sample rate → 16kHz for STT)
 rubato = "0.16"
 
-# Speech-to-Text: whisper.cpp Rust bindings
-whisper-rs = "0.15"
-
-# Text-to-Speech: Kokoro v1.0 — local fork with Misaki G2P patch.
-# The upstream kokoro-tts crate uses an espeak dictionary for G2P, but the
-# Kokoro model was trained with the Misaki G2P engine. The phoneme mismatch
-# causes garbled/hallucinated speech. Our fork patches the G2P layer to use
-# misaki-rs (the correct engine) while keeping all ONNX inference untouched.
-kokoro-tts = { path = "../kokoro-tts-custom", features = ["misaki-g2p"] }
-
-# ONNX Runtime (used by kokoro-tts, configurable acceleration)
-ort = { version = "2.0.0-rc.11", default-features = false, features = [
-    "download-binaries",
-    "copy-dylibs",
-    "ndarray",
-] }
+# Unified STT/TTS/VAD backend via sherpa-onnx bindings
+sherpa-rs = { version = "0.6", features = ["tts", "download-binaries", "static"] }
 
 # HTTP client for model downloads
 reqwest = { workspace = true }
+
+# Archive extraction for sherpa-onnx model bundles (tar.bz2)
+tar = "0.4"
+bzip2 = "0.5"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

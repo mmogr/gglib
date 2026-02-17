@@ -236,6 +236,7 @@ fn main() {
             commands::voice::voice_set_speed,
             commands::voice::voice_set_auto_speak,
             commands::voice::voice_list_devices,
+            commands::voice::voice_download_vad_model,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
