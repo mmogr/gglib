@@ -2289,6 +2289,7 @@ name = "gglib-voice"
 version = "0.3.3"
 dependencies = [
  "anyhow",
+ "async-trait",
  "cpal 0.15.3",
  "gglib-core",
  "kokoro-tts",

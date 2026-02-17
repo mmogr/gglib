@@ -19,13 +19,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+use crate::backend::{SttBackend, SttConfig, TtsBackend, TtsConfig};
 use crate::capture::AudioCapture;
 use crate::error::VoiceError;
 use crate::gate::EchoGate;
 use crate::playback::AudioPlayback;
-use crate::stt::{SttConfig, SttEngine};
 use crate::text_utils;
-use crate::tts::{KOKORO_SAMPLE_RATE, TtsConfig, TtsEngine};
 use crate::vad::{VadConfig, VadEvent, VoiceActivityDetector};
 
 // ── Voice state machine ────────────────────────────────────────────
@@ -159,10 +158,10 @@ pub struct VoicePipeline {
     playback: Option<AudioPlayback>,
 
     /// Speech-to-text engine (loaded lazily).
-    stt: Option<SttEngine>,
+    stt: Option<Box<dyn SttBackend>>,
 
     /// Text-to-speech engine (loaded lazily).
-    tts: Option<TtsEngine>,
+    tts: Option<Box<dyn TtsBackend>>,
 
     /// Voice activity detector (used in VAD mode).
     vad: Option<VoiceActivityDetector>,
@@ -301,9 +300,25 @@ impl VoicePipeline {
     /// Load or replace the STT engine with a model at the given path.
     pub fn load_stt(&mut self, model_path: &std::path::Path) -> Result<(), VoiceError> {
         tracing::info!(path = %model_path.display(), "Loading STT engine");
-        let engine = SttEngine::load(model_path, &self.config.stt)?;
-        self.stt = Some(engine);
-        Ok(())
+
+        #[cfg(feature = "whisper")]
+        {
+            use crate::backend::whisper::{WhisperBackend, WhisperConfig};
+
+            let whisper_config = WhisperConfig {
+                language: self.config.stt.language.clone(),
+                ..WhisperConfig::default()
+            };
+            let engine = WhisperBackend::load(model_path, &whisper_config)?;
+            self.stt = Some(Box::new(engine));
+            Ok(())
+        }
+
+        #[cfg(not(feature = "whisper"))]
+        {
+            let _ = model_path;
+            Err(VoiceError::SttModelNotLoaded)
+        }
     }
 
     /// Load or replace the TTS engine with model files at the given paths.
@@ -317,9 +332,25 @@ impl VoicePipeline {
             voices = %voices_path.display(),
             "Loading TTS engine"
         );
-        let engine = TtsEngine::load(model_path, voices_path, &self.config.tts).await?;
-        self.tts = Some(engine);
-        Ok(())
+
+        #[cfg(feature = "kokoro")]
+        {
+            use crate::backend::kokoro::{KokoroBackend, KokoroConfig};
+
+            let kokoro_config = KokoroConfig {
+                voice: self.config.tts.voice.clone(),
+                speed: self.config.tts.speed,
+            };
+            let engine = KokoroBackend::load(model_path, voices_path, &kokoro_config).await?;
+            self.tts = Some(Box::new(engine));
+            Ok(())
+        }
+
+        #[cfg(not(feature = "kokoro"))]
+        {
+            let _ = (model_path, voices_path);
+            Err(VoiceError::TtsModelNotLoaded)
+        }
     }
 
     /// Check whether the STT engine is loaded and ready.
@@ -482,12 +513,12 @@ impl VoicePipeline {
 
         for (i, chunk) in chunks.iter().enumerate() {
             match tts.synthesize(chunk).await {
-                Ok((samples, duration)) => {
+                Ok(audio) => {
                     tracing::debug!(
                         chunk = i + 1,
                         chunk_len = chunk.len(),
-                        samples = samples.len(),
-                        duration_ms = duration.as_millis(),
+                        samples = audio.samples.len(),
+                        duration_ms = audio.duration.as_millis(),
                         "Synthesised chunk"
                     );
 
@@ -504,8 +535,8 @@ impl VoicePipeline {
 
                     // Re-borrow playback after the &self calls above.
                     let pb = self.playback.as_mut().expect("playback initialised above");
-                    pb.append(samples, KOKORO_SAMPLE_RATE)?;
-                    total_duration += duration;
+                    pb.append(audio.samples, audio.sample_rate)?;
+                    total_duration += audio.duration;
                 }
                 Err(e) => {
                     failed_chunks += 1;
