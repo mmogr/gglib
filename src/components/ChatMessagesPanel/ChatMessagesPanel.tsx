@@ -32,6 +32,7 @@ import { useChatPersistence, useTitleGeneration } from './hooks';
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import { DeepResearchProvider } from './context/DeepResearchContext';
+import { VoiceProvider, useVoiceContextValue } from './context/VoiceContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
 import type { UseVoiceModeReturn } from '../../hooks/useVoiceMode';
 import { DeepResearchToggle } from '../DeepResearch';
@@ -98,6 +99,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // and ThinkingBlock re-renders are isolated. If performance issues arise on long
   // threads, migrate to useSyncExternalStore for ticker subscription.
   const tick = useSharedTicker(!!currentStreamingAssistantMessageId, 100);
+
+  // Build a stable voice context value for message bubble components
+  const voiceContextValue = useVoiceContextValue(voice);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Persistence hook — handles message hydration and persistence
@@ -728,6 +732,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 forceAnswer={deepResearch.forceAnswer}
               >
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
+              <VoiceProvider value={voiceContextValue}>
                 <ThreadPrimitive.Root
                   key={activeConversationId ?? 'thread-root'}
                   className="chat-thread-root"
@@ -818,6 +823,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   </ComposerPrimitive.Root>
                 </div>
               </ThreadPrimitive.Root>
+              </VoiceProvider>
               </ThinkingTimingProvider>
               </DeepResearchProvider>
             </MessageActionsContext.Provider>

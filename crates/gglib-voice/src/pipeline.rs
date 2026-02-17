@@ -436,7 +436,15 @@ impl VoicePipeline {
     /// into sentence-sized chunks so that Kokoro TTS can synthesize each
     /// piece reliably (it struggles with very long inputs).
     ///
-    /// Sets the echo gate to suppress mic capture during playback.
+    /// Audio is **streamed incrementally**: the first chunk starts playing
+    /// as soon as it is synthesized, and subsequent chunks are appended to
+    /// the playback sink while synthesis continues in the foreground. This
+    /// means the user hears speech almost immediately, even for very long
+    /// messages.
+    ///
+    /// A background completion watcher is spawned after the last chunk is
+    /// appended so that `SpeakingFinished` is emitted when playback
+    /// naturally drains (rather than only on explicit `stop_speaking()`).
     #[allow(clippy::cognitive_complexity)]
     pub async fn speak(&mut self, text: &str) -> Result<(), VoiceError> {
         if text.trim().is_empty() {
@@ -460,9 +468,17 @@ impl VoicePipeline {
 
         let tts = self.tts.as_ref().ok_or(VoiceError::TtsModelNotLoaded)?;
 
-        // Synthesize all chunks and concatenate samples
-        let mut all_samples: Vec<f32> = Vec::new();
+        // Prepare a streaming playback sink before synthesis begins.
+        let playback = self
+            .playback
+            .as_mut()
+            .ok_or_else(|| VoiceError::OutputStreamError("Playback not initialized".to_string()))?;
+        playback.start_streaming()?;
+
+        let mut any_audio = false;
         let mut total_duration = std::time::Duration::ZERO;
+        let mut failed_chunks: usize = 0;
+        let total_chunks = chunks.len();
 
         for (i, chunk) in chunks.iter().enumerate() {
             match tts.synthesize(chunk).await {
@@ -474,10 +490,25 @@ impl VoicePipeline {
                         duration_ms = duration.as_millis(),
                         "Synthesised chunk"
                     );
-                    all_samples.extend_from_slice(&samples);
+
+                    // Emit SpeakingStarted on the first successful chunk
+                    // so the frontend knows audio is about to play.
+                    if !any_audio {
+                        any_audio = true;
+                        // Can't use self.set_state/emit here because `tts`
+                        // holds an immutable borrow on self.tts.
+                        self.state = VoiceState::Speaking;
+                        let _ = self.event_tx.send(VoiceEvent::StateChanged(VoiceState::Speaking));
+                        let _ = self.event_tx.send(VoiceEvent::SpeakingStarted);
+                    }
+
+                    // Re-borrow playback after the &self calls above.
+                    let pb = self.playback.as_mut().expect("playback initialised above");
+                    pb.append(samples, KOKORO_SAMPLE_RATE)?;
                     total_duration += duration;
                 }
                 Err(e) => {
+                    failed_chunks += 1;
                     tracing::warn!(
                         chunk = i + 1,
                         chunk_text = &chunk[..chunk.len().min(80)],
@@ -489,26 +520,46 @@ impl VoicePipeline {
             }
         }
 
-        if all_samples.is_empty() {
-            tracing::warn!("No audio was synthesised from any chunk");
-            return Ok(());
+        if failed_chunks > 0 {
+            tracing::warn!(
+                failed = failed_chunks,
+                total = total_chunks,
+                "TTS synthesis completed with chunk failures — audio may be incomplete"
+            );
+        }
+
+        if !any_audio {
+            // Every chunk failed — tear down the empty sink and report error.
+            if let Some(ref mut pb) = self.playback {
+                pb.stop();
+            }
+            return Err(VoiceError::SynthesisError(
+                "all chunks failed to synthesize".to_string(),
+            ));
         }
 
         tracing::debug!(
-            total_samples = all_samples.len(),
             total_duration_ms = total_duration.as_millis(),
-            "All chunks synthesised, starting playback"
+            "All chunks synthesised, audio is streaming"
         );
 
-        self.set_state(VoiceState::Speaking);
-        self.emit(VoiceEvent::SpeakingStarted);
+        // Spawn a background thread that fires SpeakingFinished when the
+        // sink drains naturally (all appended audio has been played).
+        let event_tx = self.event_tx.clone();
+        let is_active = Arc::clone(&self.is_active);
+        let on_done = Box::new(move || {
+            let _ = event_tx.send(VoiceEvent::SpeakingFinished);
+            let _ = event_tx.send(VoiceEvent::StateChanged(
+                if is_active.load(Ordering::SeqCst) {
+                    VoiceState::Listening
+                } else {
+                    VoiceState::Idle
+                },
+            ));
+        });
 
-        let playback = self
-            .playback
-            .as_mut()
-            .ok_or_else(|| VoiceError::OutputStreamError("Playback not initialized".to_string()))?;
-
-        playback.play_with_gate_management(all_samples, KOKORO_SAMPLE_RATE)?;
+        let playback = self.playback.as_ref().expect("playback initialised above");
+        playback.spawn_completion_watcher(Some(on_done));
 
         Ok(())
     }

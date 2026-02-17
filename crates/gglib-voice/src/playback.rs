@@ -11,6 +11,9 @@ use rodio::{OutputStream, OutputStreamHandle, Sink};
 use crate::error::VoiceError;
 use crate::gate::EchoGate;
 
+/// Callback invoked when playback finishes naturally (all queued audio drained).
+pub type PlaybackDoneCallback = Box<dyn FnOnce() + Send + 'static>;
+
 /// Audio playback handle for TTS output.
 ///
 /// Wraps `rodio` for audio output. Automatically manages the echo gate —
@@ -23,7 +26,7 @@ pub struct AudioPlayback {
     stream_handle: OutputStreamHandle,
 
     /// Current playback sink (if any).
-    sink: Option<Sink>,
+    sink: Option<Arc<Sink>>,
 
     /// Echo gate — set while playing to suppress mic capture.
     echo_gate: EchoGate,
@@ -67,7 +70,7 @@ impl AudioPlayback {
         self.echo_gate.start_speaking();
         self.is_playing.store(true, Ordering::SeqCst);
 
-        self.sink = Some(sink);
+        self.sink = Some(Arc::new(sink));
 
         tracing::debug!(sample_rate, "Audio playback started");
         Ok(())
@@ -80,32 +83,79 @@ impl AudioPlayback {
         samples: Vec<f32>,
         sample_rate: u32,
     ) -> Result<(), VoiceError> {
-        self.play(samples, sample_rate)?;
+        self.play_with_completion(samples, sample_rate, None)
+    }
 
-        // Spawn a task to monitor playback completion and clear the gate
+    /// Play audio samples. When playback finishes naturally (sink drains),
+    /// clears the echo gate and invokes `on_done` (if provided).
+    pub fn play_with_completion(
+        &mut self,
+        samples: Vec<f32>,
+        sample_rate: u32,
+        on_done: Option<PlaybackDoneCallback>,
+    ) -> Result<(), VoiceError> {
+        self.play(samples, sample_rate)?;
+        self.spawn_completion_watcher(on_done);
+        Ok(())
+    }
+
+    /// Prepare a sink for streaming playback (used by incremental TTS).
+    ///
+    /// Creates a fresh sink and activates the echo gate. Subsequent audio
+    /// chunks should be queued via [`append`]. Call
+    /// [`spawn_completion_watcher`] after the last chunk has been appended
+    /// so that the echo gate and `on_done` callback fire when audio drains.
+    pub fn start_streaming(&mut self) -> Result<(), VoiceError> {
+        // Stop any existing playback
+        self.stop();
+
+        let sink = Sink::try_new(&self.stream_handle)
+            .map_err(|e| VoiceError::OutputStreamError(e.to_string()))?;
+        self.sink = Some(Arc::new(sink));
+        self.echo_gate.start_speaking();
+        self.is_playing.store(true, Ordering::SeqCst);
+
+        tracing::debug!("Streaming playback sink created");
+        Ok(())
+    }
+
+    /// Spawn a background thread that blocks until the sink drains or
+    /// playback is stopped externally. On natural completion, clears the
+    /// echo gate and invokes `on_done`.
+    ///
+    /// This is public so the pipeline can call it after the last chunk has
+    /// been appended during streaming synthesis.
+    pub fn spawn_completion_watcher(&self, on_done: Option<PlaybackDoneCallback>) {
+        let Some(sink) = self.sink.clone() else {
+            return;
+        };
+        if sink.empty() {
+            return;
+        }
+
         let echo_gate = self.echo_gate.clone();
         let is_playing = Arc::clone(&self.is_playing);
 
-        if let Some(sink) = &self.sink {
-            let sink_empty = sink.empty();
-            if !sink_empty {
-                // The sink is playing — we'll poll for completion
-                let is_playing_clone = is_playing;
-                let echo_gate_clone = echo_gate;
-                tokio::spawn(async move {
-                    // Poll until the sink is done or playback was stopped externally
-                    loop {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                        if !is_playing_clone.load(Ordering::SeqCst) {
-                            break;
-                        }
-                    }
-                    echo_gate_clone.stop_speaking();
-                });
-            }
-        }
+        // `Sink` is Send in rodio 0.20+, so we can move it into a
+        // blocking task. `sleep_until_end()` blocks until the queue
+        // drains or `stop()` is called (which drops the internal
+        // sources, causing sleep_until_end to return immediately).
+        std::thread::spawn(move || {
+            sink.sleep_until_end();
 
-        Ok(())
+            // If stop() was called, is_playing is already false and
+            // the gate was already cleared — nothing more to do.
+            if !is_playing.swap(false, Ordering::SeqCst) {
+                return;
+            }
+
+            // Natural completion — clear gate and fire callback.
+            echo_gate.stop_speaking();
+            tracing::debug!("Playback finished naturally");
+            if let Some(cb) = on_done {
+                cb();
+            }
+        });
     }
 
     /// Queue additional audio samples onto the current playback sink.
@@ -119,7 +169,7 @@ impl AudioPlayback {
                 // Create a new sink
                 let new_sink = Sink::try_new(&self.stream_handle)
                     .map_err(|e| VoiceError::OutputStreamError(e.to_string()))?;
-                self.sink = Some(new_sink);
+                self.sink = Some(Arc::new(new_sink));
                 self.echo_gate.start_speaking();
                 self.is_playing.store(true, Ordering::SeqCst);
                 self.sink.as_ref().expect("just created")

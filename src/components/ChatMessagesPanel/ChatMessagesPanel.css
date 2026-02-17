@@ -348,6 +348,25 @@
   background: rgba(243, 139, 168, 0.2);
 }
 
+/* Speak button — accent color on hover */
+.chat-speak-btn:hover {
+  color: var(--color-accent, #89b4fa);
+}
+
+.chat-speak-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Spinner animation for the generating state icon */
+@keyframes chatActionSpin {
+  to { transform: rotate(360deg); }
+}
+
+.chat-action-spin {
+  animation: chatActionSpin 0.7s linear infinite;
+}
+
 /* Edit Composer Styles */
 .chat-edit-mode {
   border: 2px solid var(--color-primary);

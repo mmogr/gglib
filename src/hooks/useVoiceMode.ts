@@ -91,6 +91,8 @@ export interface UseVoiceModeReturn {
   isPttHeld: boolean;
   /** Whether TTS is currently speaking */
   isSpeaking: boolean;
+  /** Whether TTS audio is being generated (before playback starts) */
+  isTtsGenerating: boolean;
   /** Current error message, if any */
   error: string | null;
   /** Available voice models */
@@ -159,6 +161,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   const [isPttHeld, setIsPttHeld] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isTtsGenerating, setIsTtsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Model/device state
@@ -197,10 +200,12 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
         }
       }),
       onVoiceSpeakingStarted(() => {
+        setIsTtsGenerating(false);
         setIsSpeaking(true);
       }),
       onVoiceSpeakingFinished(() => {
         setIsSpeaking(false);
+        setIsTtsGenerating(false);
       }),
       onVoiceAudioLevel(({ level }) => {
         setAudioLevel(level);
@@ -383,6 +388,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       setAudioLevel(0);
       setIsPttHeld(false);
       setIsSpeaking(false);
+      setIsTtsGenerating(false);
     } catch (e) {
       setError(String(e));
     }
@@ -422,8 +428,10 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const speak = useCallback(async (text: string) => {
     try {
       setError(null);
+      setIsTtsGenerating(true);
       await voiceSpeak(text);
     } catch (e) {
+      setIsTtsGenerating(false);
       setError(String(e));
     }
   }, []);
@@ -545,6 +553,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
     lastTranscript,
     isPttHeld,
     isSpeaking,
+    isTtsGenerating,
     error,
     models,
     devices,
