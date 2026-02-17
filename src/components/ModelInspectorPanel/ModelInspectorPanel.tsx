@@ -1,4 +1,5 @@
 import { FC, useCallback, useState, useEffect } from 'react';
+import { Shield, CloudSync } from 'lucide-react';
 import { appLogger } from '../../services/platform';
 import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
 import { queueDownload } from '../../services/clients/downloads';
@@ -8,6 +9,7 @@ import { useToastContext } from '../../contexts/ToastContext';
 import { HfModelPreview } from '../HfModelPreview';
 import { LlamaInstallModal } from '../LlamaInstallModal';
 import { LlamaServerNotInstalledMetadata } from '../../services/transport/errors';
+import { VerificationModal } from '../VerificationModal';
 import {
   useEditMode,
   useModelTags,
@@ -70,6 +72,10 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // State for llama-server install modal
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [installMetadata, setInstallMetadata] = useState<LlamaServerNotInstalledMetadata | null>(null);
+  
+  // State for verification and update modals
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   
   // Callback for when llama-server is not installed
   const handleLlamaServerNotInstalled = useCallback((metadata: LlamaServerNotInstalledMetadata) => {
@@ -187,17 +193,42 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   return (
     <div className="mcc-panel inspector-panel">
       <div className="mcc-panel-header">
-        {editMode.isEditMode ? (
-          <Input
-            type="text"
-            className="inspector-title-edit"
-            value={editMode.editedName}
-            onChange={(e) => editMode.setEditedName(e.target.value)}
-            placeholder="Model name"
-          />
-        ) : (
-          <h2 className="inspector-title">{model.name}</h2>
-        )}
+        <div className="inspector-header-content">
+          {editMode.isEditMode ? (
+            <Input
+              type="text"
+              className="inspector-title-edit"
+              value={editMode.editedName}
+              onChange={(e) => editMode.setEditedName(e.target.value)}
+              placeholder="Model name"
+            />
+          ) : (
+            <h2 className="inspector-title">{model.name}</h2>
+          )}
+          {!editMode.isEditMode && (
+            <div className="inspector-header-actions">
+              <button
+                type="button"
+                className="inspector-action-button"
+                onClick={() => setShowVerifyModal(true)}
+                title="Verify model integrity"
+                aria-label="Verify model integrity"
+              >
+                <Shield className="inspector-action-icon" size={16} />
+              </button>
+              <button
+                type="button"
+                className="inspector-action-button"
+                onClick={() => setShowUpdateModal(true)}
+                disabled={!model.hfRepoId}
+                title={model.hfRepoId ? "Check for updates on HuggingFace" : "No HuggingFace repo linked"}
+                aria-label="Check for updates"
+              >
+                <CloudSync className="inspector-action-icon" size={16} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mcc-panel-content">
@@ -283,6 +314,28 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           isOpen={showInstallModal}
           onClose={() => setShowInstallModal(false)}
           metadata={installMetadata}
+        />
+      )}
+      
+      {/* Verification Modal */}
+      {model.id && (
+        <VerificationModal
+          modelId={model.id}
+          modelName={model.name}
+          open={showVerifyModal}
+          onClose={() => setShowVerifyModal(false)}
+          mode="verify"
+        />
+      )}
+      
+      {/* Update Check Modal */}
+      {model.id && (
+        <VerificationModal
+          modelId={model.id}
+          modelName={model.name}
+          open={showUpdateModal}
+          onClose={() => setShowUpdateModal(false)}
+          mode="update"
         />
       )}
     </div>

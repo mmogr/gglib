@@ -27,3 +27,4 @@ pub mod question;
 pub mod remove;
 pub mod serve;
 pub mod update;
+pub mod verification;

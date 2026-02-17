@@ -58,6 +58,14 @@ export const MODEL_EVENT_NAMES = [
 ] as const;
 
 /**
+ * Verification-related event names.
+ */
+export const VERIFICATION_EVENT_NAMES = [
+  'verification:progress',
+  'verification:complete',
+] as const;
+
+/**
  * Type helper to extract event name literals.
  */
 export type DownloadEventName = typeof DOWNLOAD_EVENT_NAMES[number];
@@ -65,3 +73,4 @@ export type ServerEventName = typeof SERVER_EVENT_NAMES[number];
 export type LogEventName = typeof LOG_EVENT_NAMES[number];
 export type McpEventName = typeof MCP_EVENT_NAMES[number];
 export type ModelEventName = typeof MODEL_EVENT_NAMES[number];
+export type VerificationEventName = typeof VERIFICATION_EVENT_NAMES[number];

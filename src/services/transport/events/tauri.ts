@@ -11,6 +11,7 @@ import {
   DOWNLOAD_EVENT_NAMES,
   SERVER_EVENT_NAMES,
   LOG_EVENT_NAMES,
+  VERIFICATION_EVENT_NAMES,
 } from './eventNames';
 
 const eventModulePromise = import('@tauri-apps/api/event');
@@ -23,6 +24,7 @@ const TAURI_EVENT_NAMES: Record<AppEventType, readonly string[]> = {
   'server': SERVER_EVENT_NAMES,
   'download': DOWNLOAD_EVENT_NAMES,
   'log': LOG_EVENT_NAMES,
+  'verification': VERIFICATION_EVENT_NAMES,
 };
 
 /**

@@ -1678,6 +1678,7 @@ name = "gglib-axum"
 version = "0.3.3"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "chrono",
  "futures-util",
@@ -1718,6 +1719,7 @@ name = "gglib-cli"
 version = "0.3.3"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "clap",
  "dotenvy",
@@ -1751,10 +1753,12 @@ dependencies = [
  "mockall",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-test",
+ "tracing",
  "uuid",
 ]
 
@@ -1810,6 +1814,9 @@ version = "0.3.3"
 dependencies = [
  "gglib-core",
  "memmap2",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
  "tracing",
 ]
 
@@ -1915,6 +1922,7 @@ name = "gglib-tauri"
 version = "0.3.3"
 dependencies = [
  "anyhow",
+ "async-trait",
  "gglib-core",
  "gglib-db",
  "gglib-download",

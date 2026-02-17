@@ -25,6 +25,7 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+async-trait = { workspace = true }
 
 # Tauri-specific dependencies
 # Note: version should match src-tauri/Cargo.toml

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
+use async_trait::async_trait;
 use gglib_core::ModelRegistrar;
 use gglib_core::ports::{
     AppEventBridge, DownloadManagerConfig, DownloadManagerPort, HfClientPort, ModelRepository,
@@ -139,8 +140,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         config.max_concurrent,
     ));
 
-    // 3. Assemble AppCore (as Arc for GuiDeps)
-    let core = Arc::new(AppCore::new(repos.clone(), runner.clone()));
+    // 3. Create initial AppCore (will add verification service later)
+    let core = AppCore::new(repos.clone(), runner.clone());
 
     // 4. Bootstrap capabilities for existing models
     if let Err(e) = core.models().bootstrap_capabilities().await {
@@ -159,9 +160,13 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // 7. Create download manager with SSE emitter
     let download_config = DownloadManagerConfig::new(models_resolution.path);
 
+    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(
+        pool.clone(),
+    ));
     let model_registrar = Arc::new(ModelRegistrar::new(
         repos.models.clone(),
         Arc::new(GgufParser::new()),
+        Some(model_files_repo.clone() as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
     ));
 
     let download_repo = CoreFactory::download_state_repository(pool);
@@ -180,7 +185,19 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     }));
     let downloads: Arc<dyn DownloadManagerPort> = download_manager.clone();
 
-    // 7. Build GuiBackend using shared GuiDeps
+    // 8. Create ModelVerificationService with download trigger adapter
+    let download_trigger = Arc::new(DownloadTriggerAdapter {
+        download_manager: downloads.clone(),
+    });
+    let verification_service = Arc::new(gglib_core::services::ModelVerificationService::new(
+        repos.models.clone(),
+        model_files_repo,
+        hf_client.clone(),
+        download_trigger,
+    ));
+    let core = Arc::new(core.with_verification(verification_service));
+
+    // 9. Build GuiBackend using shared GuiDeps
     // SSE broadcaster implements AppEventEmitter for health event emission
     // Create server events adapter for lifecycle events
     let server_events = Arc::new(crate::sse::AxumServerEvents::new((*sse).clone()));
@@ -233,6 +250,39 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         runner,
         sse,
     })
+}
+
+/// Adapter to implement DownloadTriggerPort for DownloadManagerPort.
+struct DownloadTriggerAdapter {
+    download_manager: Arc<dyn DownloadManagerPort>,
+}
+
+#[async_trait]
+impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
+    async fn queue_download(
+        &self,
+        repo_id: String,
+        quantization: Option<String>,
+    ) -> anyhow::Result<String> {
+        use gglib_core::download::{DownloadError, Quantization};
+        use gglib_core::ports::DownloadRequest;
+        use std::str::FromStr;
+
+        // Convert quantization string to enum, default to Q4_K_M if not specified
+        let quant = quantization
+            .as_ref()
+            .and_then(|q| Quantization::from_str(q).ok())
+            .unwrap_or(Quantization::Q4KM);
+
+        let request = DownloadRequest::new(repo_id, quant);
+        let id = self
+            .download_manager
+            .queue_download(request)
+            .await
+            .map_err(|e: DownloadError| anyhow::anyhow!("Failed to queue download: {}", e))?;
+
+        Ok(id.to_string())
+    }
 }
 
 /// Start the web server on the specified port.

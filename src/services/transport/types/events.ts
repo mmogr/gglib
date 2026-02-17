@@ -135,6 +135,30 @@ export interface LogEntry {
 export type LogEvent = LogEntry;
 
 // ============================================================================
+// Verification Events
+// ============================================================================
+
+export type OverallHealth = 'healthy' | 'unhealthy' | 'unverifiable';
+
+export interface VerificationProgressEvent {
+  type: 'verification_progress';
+  modelId: number;
+  modelName: string;
+  shardName: string;
+  bytesProcessed: number;
+  totalBytes: number;
+}
+
+export interface VerificationCompleteEvent {
+  type: 'verification_complete';
+  modelId: number;
+  modelName: string;
+  overallHealth: OverallHealth;
+}
+
+export type VerificationEvent = VerificationProgressEvent | VerificationCompleteEvent;
+
+// ============================================================================
 // App Event Map
 // ============================================================================
 
@@ -149,6 +173,7 @@ export interface AppEventMap {
   'server': ServerEvent;
   'download': { type: 'download'; event: DownloadEvent };
   'log': LogEvent;
+  'verification': VerificationEvent;
 }
 
 export type AppEventType = keyof AppEventMap;

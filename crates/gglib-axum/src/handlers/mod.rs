@@ -12,3 +12,4 @@ pub mod models;
 pub mod proxy;
 pub mod servers;
 pub mod settings;
+pub mod verification;

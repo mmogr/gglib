@@ -66,6 +66,27 @@ pub enum Commands {
         force: bool,
     },
 
+    /// Verify model integrity by computing SHA256 hashes
+    Verify {
+        /// ID of the model to verify
+        model_id: i64,
+        /// Show detailed progress for each shard
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
+    /// Repair a corrupt model by re-downloading failed shards
+    Repair {
+        /// ID of the model to repair
+        model_id: i64,
+        /// Specific shard indices to repair (comma-separated, e.g., "0,2,5")
+        #[arg(short, long)]
+        shards: Option<String>,
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
+
     /// Search HuggingFace Hub for GGUF models
     Search {
         /// Search query (model name, author, or keywords)

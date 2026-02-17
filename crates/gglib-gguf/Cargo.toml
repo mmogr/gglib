@@ -18,8 +18,15 @@ gglib-core = { path = "../gglib-core" }
 # Logging
 tracing = { workspace = true }
 
+# Validation
+sha2 = "0.10"
+thiserror = "1.0"
+
 # Memory-mapped file reading (optional, default enabled)
 memmap2 = { version = "0.9", optional = true }
+
+[dev-dependencies]
+tempfile = "3.8"
 
 [lints]
 workspace = true

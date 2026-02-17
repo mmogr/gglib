@@ -78,19 +78,18 @@ impl<B: HttpBackend> HfClient<B> {
         Ok(matching)
     }
 
-    /// Find GGUF files for a specific quantization, returning (path, size) tuples.
+    /// Find GGUF files for a specific quantization, returning file entries with OIDs.
     pub(crate) async fn find_quantization_files_with_sizes(
         &self,
         repo: &HfRepoRef,
         quantization: &str,
-    ) -> HfResult<Vec<(String, u64)>> {
-        let files = self.find_quantization_files(repo, quantization).await?;
-        let mut result: Vec<(String, u64)> = files.into_iter().map(|f| (f.path, f.size)).collect();
+    ) -> HfResult<Vec<HfFileEntry>> {
+        let mut files = self.find_quantization_files(repo, quantization).await?;
 
         // Sort by path to ensure correct shard order
-        result.sort_by(|a, b| a.0.cmp(&b.0));
+        files.sort_by(|a, b| a.path.cmp(&b.path));
 
-        Ok(result)
+        Ok(files)
     }
 
     /// Fetch model info (commit SHA, metadata, etc.).

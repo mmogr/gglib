@@ -19,6 +19,7 @@ export * from './downloads';
 export * from './mcp';
 export * from './events';
 export * from './chat';
+export * from './verification';
 
 // Import sub-interfaces for composition
 import type { ModelsTransport } from './models';
@@ -30,6 +31,7 @@ import type { DownloadsTransport } from './downloads';
 import type { McpTransport } from './mcp';
 import type { EventsTransport } from './events';
 import type { ChatTransport } from './chat';
+import type { VerificationTransport } from './verification';
 
 /**
  * Unified transport interface.
@@ -49,4 +51,5 @@ export interface Transport
     DownloadsTransport,
     McpTransport,
     EventsTransport,
-    ChatTransport {}
+    ChatTransport,
+    VerificationTransport {}

@@ -115,6 +115,39 @@ pub enum AppEvent {
         model: ModelSummary,
     },
 
+    // ========== Verification Events ==========
+    /// Model verification progress update.
+    VerificationProgress {
+        /// ID of the model being verified.
+        #[serde(rename = "modelId")]
+        model_id: i64,
+        /// Name of the model being verified.
+        #[serde(rename = "modelName")]
+        model_name: String,
+        /// Name of the shard being verified.
+        #[serde(rename = "shardName")]
+        shard_name: String,
+        /// Bytes processed so far.
+        #[serde(rename = "bytesProcessed")]
+        bytes_processed: u64,
+        /// Total bytes to process.
+        #[serde(rename = "totalBytes")]
+        total_bytes: u64,
+    },
+
+    /// Model verification completed.
+    VerificationComplete {
+        /// ID of the verified model.
+        #[serde(rename = "modelId")]
+        model_id: i64,
+        /// Name of the verified model.
+        #[serde(rename = "modelName")]
+        model_name: String,
+        /// Overall health status.
+        #[serde(rename = "overallHealth")]
+        overall_health: crate::services::OverallHealth,
+    },
+
     /// Server health status has changed.
     ///
     /// Emitted by continuous monitoring when a server's health state changes.
@@ -190,6 +223,8 @@ impl AppEvent {
             Self::ModelAdded { .. } => "model:added",
             Self::ModelRemoved { .. } => "model:removed",
             Self::ModelUpdated { .. } => "model:updated",
+            Self::VerificationProgress { .. } => "verification:progress",
+            Self::VerificationComplete { .. } => "verification:complete",
             Self::McpServerAdded { .. } => "mcp:added",
             Self::McpServerRemoved { .. } => "mcp:removed",
             Self::McpServerStarted { .. } => "mcp:started",

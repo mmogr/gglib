@@ -41,6 +41,7 @@ use gglib_core::download::{
 use gglib_core::ports::{
     DownloadEventEmitterPort, DownloadManagerConfig, DownloadManagerPort, DownloadRequest,
     DownloadStateRepositoryPort, HfClientPort, ModelRegistrarPort, QuantizationResolver,
+    ResolvedFile,
 };
 
 use crate::quant_selector::QuantizationSelector;
@@ -282,6 +283,8 @@ pub struct DownloadManagerImpl {
     current_run: Mutex<Option<QueueRunState>>,
     /// Previous drain state for transition detection.
     prev_is_drained: Mutex<bool>,
+    /// File entries with OIDs for each download (keyed by download ID).
+    file_entries_map: Mutex<HashMap<String, Vec<ResolvedFile>>>,
 }
 
 impl DownloadManagerImpl {
@@ -321,6 +324,7 @@ impl DownloadManagerImpl {
             runner_started: AtomicBool::new(false),
             current_run: Mutex::new(None),
             prev_is_drained: Mutex::new(true), // Start in drained state
+            file_entries_map: Mutex::new(HashMap::new()),
         }
     }
 
@@ -678,12 +682,19 @@ impl DownloadManagerImpl {
             .first()
             .map_or_else(|| "unknown".to_string(), |f| base_shard_filename(f));
 
+        // Retrieve file entries with OIDs from map
+        let file_entries = {
+            let map = self.file_entries_map.lock().await;
+            map.get(&item.id.to_string()).cloned().unwrap_or_default()
+        };
+
         let metadata = GroupMetadata {
             repo_id: completed.repo_id.clone(),
             commit_sha: completed.commit_sha.clone(),
             quantization: completed.quantization,
             primary_filename: base_filename,
             hf_tags: vec![],
+            file_entries,
         };
 
         let group_complete = {
@@ -720,6 +731,13 @@ impl DownloadManagerImpl {
     /// Handle completion of a single-file download.
     async fn handle_single_file_completion(&self, item: &QueuedItem, completed: CompletedJob) {
         tracing::info!(id = %item.id, "Single-file download completed");
+
+        // Retrieve file entries with OIDs from map
+        let file_entries = {
+            let map = self.file_entries_map.lock().await;
+            map.get(&item.id.to_string()).cloned().unwrap_or_default()
+        };
+
         let metadata = GroupMetadata {
             repo_id: completed.repo_id.clone(),
             commit_sha: completed.commit_sha.clone(),
@@ -730,6 +748,7 @@ impl DownloadManagerImpl {
                 .cloned()
                 .unwrap_or_else(|| "unknown".to_string()),
             hf_tags: vec![],
+            file_entries,
         };
         let complete = shard_group_tracker::GroupComplete {
             ordered_paths: completed.all_paths.clone(),
@@ -814,6 +833,7 @@ impl DownloadManagerImpl {
                 None
             },
             hf_tags,
+            hf_file_entries: complete.metadata.file_entries,
         };
 
         // Register model (soft-fail)
@@ -1633,6 +1653,12 @@ impl DownloadManagerImpl {
             let mut queue = self.queue.write().await;
             queue.queue_sharded(&id, &completion_key, shard_files, has_active)?
         };
+
+        // Store file entries with OIDs for later model registration
+        {
+            let mut file_entries = self.file_entries_map.lock().await;
+            file_entries.insert(id.to_string(), resolution.files.clone());
+        }
 
         let group_id = Some(id.to_string());
 

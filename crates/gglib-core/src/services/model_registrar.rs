@@ -10,11 +10,21 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 
-use crate::domain::{Model, NewModel};
+use crate::domain::{Model, NewModel, NewModelFile};
 use crate::download::Quantization;
 use crate::ports::{
     CompletedDownload, GgufParserPort, ModelRegistrarPort, ModelRepository, RepositoryError,
 };
+
+/// Repository trait for model files metadata.
+///
+/// We don't depend on `gglib_db` directly - adapters inject the implementation.
+/// This type is re-exported from `gglib_db` for use in adapters.
+#[async_trait]
+pub trait ModelFilesRepositoryPort: Send + Sync {
+    /// Insert a new model file record.
+    async fn insert(&self, model_file: &NewModelFile) -> anyhow::Result<()>;
+}
 
 /// Implementation of the model registrar port.
 ///
@@ -25,6 +35,8 @@ pub struct ModelRegistrar {
     model_repo: Arc<dyn ModelRepository>,
     /// Parser for extracting GGUF metadata.
     gguf_parser: Arc<dyn GgufParserPort>,
+    /// Repository for persisting model file metadata.
+    model_files_repo: Option<Arc<dyn ModelFilesRepositoryPort>>,
 }
 
 impl ModelRegistrar {
@@ -34,10 +46,16 @@ impl ModelRegistrar {
     ///
     /// * `model_repo` - Repository for persisting models
     /// * `gguf_parser` - Parser for extracting GGUF metadata
-    pub fn new(model_repo: Arc<dyn ModelRepository>, gguf_parser: Arc<dyn GgufParserPort>) -> Self {
+    /// * `model_files_repo` - Optional repository for persisting model file metadata
+    pub fn new(
+        model_repo: Arc<dyn ModelRepository>,
+        gguf_parser: Arc<dyn GgufParserPort>,
+        model_files_repo: Option<Arc<dyn ModelFilesRepositoryPort>>,
+    ) -> Self {
         Self {
             model_repo,
             gguf_parser,
+            model_files_repo,
         }
     }
 
@@ -146,6 +164,32 @@ impl ModelRegistrarPort for ModelRegistrar {
 
         let registered = self.model_repo.insert(&model).await?;
 
+        // Insert model_files records with OIDs for each shard (if repo is available)
+        if let Some(ref repo) = self.model_files_repo {
+            for (file_index, file_entry) in download.hf_file_entries.iter().enumerate() {
+                if let Some(size) = file_entry.size {
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+                    let model_file = NewModelFile::new(
+                        registered.id,
+                        file_entry.path.clone(),
+                        file_index as i32,
+                        size as i64,
+                        file_entry.oid.clone(),
+                    );
+
+                    if let Err(e) = repo.insert(&model_file).await {
+                        // Soft fail - log but don't propagate error
+                        tracing::warn!(
+                            model_id = registered.id,
+                            file_path = %file_entry.path,
+                            error = %e,
+                            "Failed to insert model_files record - verification features may be unavailable"
+                        );
+                    }
+                }
+            }
+        }
+
         Ok(registered)
     }
 
@@ -166,6 +210,7 @@ impl ModelRegistrarPort for ModelRegistrar {
             total_bytes: 0,
             file_paths: None,
             hf_tags: vec![],
+            hf_file_entries: vec![],
         };
 
         self.register_model(&download).await
@@ -264,7 +309,7 @@ mod tests {
     async fn test_register_model_basic() {
         let repo = Arc::new(MockModelRepo::new());
         let parser = Arc::new(NoopGgufParser);
-        let registrar = ModelRegistrar::new(repo.clone(), parser);
+        let registrar = ModelRegistrar::new(repo.clone(), parser, None);
 
         let download = CompletedDownload {
             primary_path: PathBuf::from("/models/test-model-q4_k_m.gguf"),
@@ -276,6 +321,7 @@ mod tests {
             total_bytes: 1024,
             file_paths: None,
             hf_tags: vec![],
+            hf_file_entries: vec![],
         };
 
         let result = registrar.register_model(&download).await;
@@ -292,7 +338,7 @@ mod tests {
     async fn test_register_sharded_model() {
         let repo = Arc::new(MockModelRepo::new());
         let parser = Arc::new(NoopGgufParser);
-        let registrar = ModelRegistrar::new(repo.clone(), parser);
+        let registrar = ModelRegistrar::new(repo.clone(), parser, None);
 
         let download = CompletedDownload {
             primary_path: PathBuf::from("/models/llama-00001-of-00004.gguf"),
@@ -309,6 +355,7 @@ mod tests {
             total_bytes: 4096,
             file_paths: None,
             hf_tags: vec![],
+            hf_file_entries: vec![],
         };
 
         let result = registrar.register_model(&download).await;
@@ -322,7 +369,7 @@ mod tests {
     async fn test_register_model_from_path() {
         let repo = Arc::new(MockModelRepo::new());
         let parser = Arc::new(NoopGgufParser);
-        let registrar = ModelRegistrar::new(repo.clone(), parser);
+        let registrar = ModelRegistrar::new(repo.clone(), parser, None);
 
         let result = registrar
             .register_model_from_path(
