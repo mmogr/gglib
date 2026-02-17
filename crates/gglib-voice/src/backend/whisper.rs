@@ -62,13 +62,13 @@ impl WhisperBackend {
 
         let model_path_str = model_path
             .to_str()
-            .ok_or_else(|| VoiceError::WhisperLoadError("Invalid model path".to_string()))?;
+            .ok_or_else(|| VoiceError::ModelLoadError("Invalid model path".to_string()))?;
 
         tracing::info!(path = %model_path.display(), "Loading whisper model");
 
         let params = WhisperContextParameters::default();
         let context = WhisperContext::new_with_params(model_path_str, params)
-            .map_err(|e| VoiceError::WhisperLoadError(format!("{e}")))?;
+            .map_err(|e| VoiceError::ModelLoadError(format!("{e}")))?;
 
         tracing::info!("Whisper model loaded successfully");
 

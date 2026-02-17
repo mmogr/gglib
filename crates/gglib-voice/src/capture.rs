@@ -1,7 +1,7 @@
 //! Audio capture module — microphone input via `cpal`.
 //!
 //! Captures audio from the default input device, resamples to 16 kHz mono
-//! (the format required by whisper.cpp), and respects the echo gate.
+//! (the standard format for STT models), and respects the echo gate.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -13,13 +13,13 @@ use rubato::{FftFixedIn, Resampler as _};
 use crate::error::VoiceError;
 use crate::gate::EchoGate;
 
-/// Target sample rate for whisper.cpp (16 kHz mono).
-pub const WHISPER_SAMPLE_RATE: u32 = 16_000;
+/// Target sample rate for STT input (16 kHz mono).
+pub const TARGET_SAMPLE_RATE: u32 = 16_000;
 
 /// Audio capture handle.
 ///
 /// Wraps a `cpal` input stream and accumulates PCM samples. The captured
-/// audio is resampled to 16 kHz mono for direct consumption by whisper.
+/// audio is resampled to 16 kHz mono for direct consumption by the STT engine.
 pub struct AudioCapture {
     /// The active cpal input stream (None when not recording).
     stream: Option<Stream>,
@@ -146,10 +146,10 @@ impl AudioCapture {
         };
 
         // Resample to 16 kHz if device sample rate differs
-        if self.device_sample_rate == WHISPER_SAMPLE_RATE {
+        if self.device_sample_rate == TARGET_SAMPLE_RATE {
             Ok(mono)
         } else {
-            resample(&mono, self.device_sample_rate, WHISPER_SAMPLE_RATE)
+            resample(&mono, self.device_sample_rate, TARGET_SAMPLE_RATE)
         }
     }
 

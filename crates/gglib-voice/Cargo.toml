@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Voice mode for gglib - local STT (whisper.cpp) and TTS (Kokoro) pipeline"
+description = "Voice mode for gglib - local STT and TTS pipeline via sherpa-onnx"
 publish = false
 
 # gglib-voice wraps FFI crates (cpal, whisper-rs, ort) that need unsafe Send/Sync impls,
@@ -62,7 +62,7 @@ cpal = "0.15"
 # Audio playback
 rodio = { version = "0.20", default-features = false, features = ["wav"] }
 
-# Audio resampling (device sample rate → 16kHz for whisper)
+# Audio resampling (device sample rate → 16kHz for STT)
 rubato = "0.16"
 
 # Speech-to-Text: whisper.cpp Rust bindings (optional — feature "whisper")

@@ -107,7 +107,7 @@ impl SherpaSttBackend {
         };
 
         let recognizer = WhisperRecognizer::new(whisper_config).map_err(|e| {
-            VoiceError::WhisperLoadError(format!("Failed to load Sherpa Whisper model: {e}"))
+            VoiceError::ModelLoadError(format!("Failed to load Sherpa Whisper model: {e}"))
         })?;
 
         tracing::info!("Sherpa Whisper STT model loaded successfully");
@@ -177,6 +177,6 @@ fn path_to_string(path: &Path) -> Result<String, VoiceError> {
     path.to_str()
         .map(ToString::to_string)
         .ok_or_else(|| {
-            VoiceError::WhisperLoadError(format!("Invalid path: {}", path.display()))
+            VoiceError::ModelLoadError(format!("Invalid path: {}", path.display()))
         })
 }

@@ -178,7 +178,7 @@ impl VoiceActivityDetector {
         let buffer_size_secs: f32 = 60.0;
 
         let vad = SileroVad::new(silero_config, buffer_size_secs).map_err(|e| {
-            VoiceError::WhisperLoadError(format!("Failed to load Silero VAD: {e}"))
+            VoiceError::ModelLoadError(format!("Failed to load Silero VAD: {e}"))
         })?;
 
         tracing::info!(path = %model_path.display(), "Silero VAD model loaded");

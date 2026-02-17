@@ -41,7 +41,7 @@ pub enum VoiceState {
     /// Recording audio (PTT mode — button held down).
     Recording,
 
-    /// Transcribing captured audio via whisper.
+    /// Transcribing captured audio via STT engine.
     Transcribing,
 
     /// Waiting for LLM response (pipeline doesn't own this, but tracks it).
@@ -263,7 +263,7 @@ impl VoicePipeline {
             let mut vad = VoiceActivityDetector::new(
                 self.config.vad.clone(),
                 self.echo_gate.clone(),
-                crate::capture::WHISPER_SAMPLE_RATE,
+                crate::capture::TARGET_SAMPLE_RATE,
             );
 
             // Load Silero VAD model if a path was configured.
@@ -521,7 +521,7 @@ impl VoicePipeline {
     /// Speak text through TTS and play back the audio.
     ///
     /// Long text is automatically stripped of markdown formatting and split
-    /// into sentence-sized chunks so that Kokoro TTS can synthesize each
+    /// into sentence-sized chunks so that the TTS engine can synthesize each
     /// piece reliably (it struggles with very long inputs).
     ///
     /// Audio is **streamed incrementally**: the first chunk starts playing
@@ -689,7 +689,7 @@ impl VoicePipeline {
                     let mut vad = VoiceActivityDetector::new(
                         self.config.vad.clone(),
                         self.echo_gate.clone(),
-                        crate::capture::WHISPER_SAMPLE_RATE,
+                        crate::capture::TARGET_SAMPLE_RATE,
                     );
 
                     #[cfg(feature = "sherpa")]

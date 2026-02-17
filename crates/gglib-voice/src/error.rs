@@ -22,20 +22,20 @@ pub enum VoiceError {
     MicrophonePermissionDenied,
 
     /// STT model not loaded.
-    #[error("STT model not loaded — download a whisper model first")]
+    #[error("STT model not loaded — download an STT model first")]
     SttModelNotLoaded,
 
     /// TTS model not loaded.
-    #[error("TTS model not loaded — download Kokoro TTS model first")]
+    #[error("TTS model not loaded — download the TTS model first")]
     TtsModelNotLoaded,
 
     /// Model file not found at expected path.
     #[error("Voice model not found at {0}")]
     ModelNotFound(PathBuf),
 
-    /// Failed to load whisper model.
-    #[error("Failed to load whisper model: {0}")]
-    WhisperLoadError(String),
+    /// Failed to load a voice model (STT, TTS, or VAD).
+    #[error("Failed to load voice model: {0}")]
+    ModelLoadError(String),
 
     /// Failed to transcribe audio.
     #[error("Transcription failed: {0}")]
