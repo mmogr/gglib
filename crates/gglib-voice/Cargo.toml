@@ -8,10 +8,9 @@ authors.workspace = true
 description = "Voice mode for gglib - local STT and TTS pipeline via sherpa-onnx"
 publish = false
 
-# gglib-voice wraps FFI crates (cpal, sherpa-rs) that need unsafe Send/Sync impls,
-# so we override the workspace-level deny(unsafe_code) to warn.
+# No unsafe code — audio I/O is isolated on a dedicated OS thread via channels.
 [lints.rust]
-unsafe_code = "warn"
+unsafe_code = "deny"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
