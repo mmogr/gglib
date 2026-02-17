@@ -144,8 +144,8 @@ impl TtsBackend for SherpaTtsBackend {
         let audio = self
             .engine
             .lock()
-            .map_err(|e| VoiceError::SynthesisError(format!("TTS engine lock poisoned: {e}")))?.
-            create(text, self.speaker_id, self.speed)
+            .map_err(|e| VoiceError::SynthesisError(format!("TTS engine lock poisoned: {e}")))?
+            .create(text, self.speaker_id, self.speed)
             .map_err(|e| VoiceError::SynthesisError(format!("{e}")))?;
 
         let sample_rate = audio.sample_rate;

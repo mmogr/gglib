@@ -154,9 +154,13 @@ impl SttBackend for SherpaSttBackend {
             "Transcribing audio (Sherpa Whisper)"
         );
 
-        let result = self.recognizer.lock().map_err(|e| {
-            VoiceError::TranscriptionError(format!("STT recognizer lock poisoned: {e}"))
-        })?.transcribe(SHERPA_STT_SAMPLE_RATE, audio);
+        let result = self
+            .recognizer
+            .lock()
+            .map_err(|e| {
+                VoiceError::TranscriptionError(format!("STT recognizer lock poisoned: {e}"))
+            })?
+            .transcribe(SHERPA_STT_SAMPLE_RATE, audio);
 
         let text = result.text.trim().to_string();
 
