@@ -35,8 +35,8 @@ export interface VoiceStatusResponse {
 export interface SttModelInfo {
   id: string;
   name: string;
-  filename: string;
-  url: string;
+  archiveUrl: string;
+  dirName: string;
   sizeBytes: number;
   sizeDisplay: string;
   englishOnly: boolean;
@@ -48,10 +48,8 @@ export interface SttModelInfo {
 export interface TtsModelInfo {
   id: string;
   name: string;
-  modelFilename: string;
-  voicesFilename: string;
-  modelUrl: string;
-  voicesUrl: string;
+  archiveUrl: string;
+  dirName: string;
   sizeBytes: number;
   sizeDisplay: string;
   voiceCount: number;
@@ -70,6 +68,7 @@ export interface VoiceModelsResponse {
   ttsModel: TtsModelInfo;
   ttsDownloaded: boolean;
   voices: VoiceInfo[];
+  vadDownloaded: boolean;
 }
 
 export interface AudioDeviceInfo {
@@ -163,6 +162,10 @@ export async function voiceDownloadSttModel(modelId: string): Promise<void> {
 
 export async function voiceDownloadTtsModel(): Promise<void> {
   await invokeTauri('voice_download_tts_model');
+}
+
+export async function voiceDownloadVadModel(): Promise<void> {
+  await invokeTauri('voice_download_vad_model');
 }
 
 export async function voiceLoadStt(modelId: string): Promise<void> {

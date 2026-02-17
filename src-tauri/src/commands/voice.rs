@@ -200,9 +200,15 @@ pub async fn voice_start(
             info!(mode = ?interaction_mode, "Voice pipeline started (reused existing)");
         }
     } else {
+        // Resolve VAD model path if Silero model is downloaded
+        let vad_model_path = VoiceModelCatalog::vad_model_path()
+            .ok()
+            .filter(|p| p.exists());
+
         // Create fresh pipeline
         let config = VoicePipelineConfig {
             mode: interaction_mode,
+            vad_model_path,
             ..VoicePipelineConfig::default()
         };
 

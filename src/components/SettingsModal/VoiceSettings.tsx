@@ -56,6 +56,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
     [voice.models?.sttDownloaded],
   );
   const ttsDownloaded = voice.models?.ttsDownloaded ?? false;
+  const vadDownloaded = voice.models?.vadDownloaded ?? false;
 
   // If the persisted default points to a model no longer on disk, clear it
   useEffect(() => {
@@ -106,6 +107,18 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
       setDownloading(null);
     }
   }, [voice, settings?.voiceTtsVoice, saveSettings]);
+
+  const handleDownloadVad = useCallback(async () => {
+    try {
+      setDownloading('vad');
+      await voice.downloadVadModel();
+      await voice.refreshModels();
+    } catch {
+      // Error handled by the hook
+    } finally {
+      setDownloading(null);
+    }
+  }, [voice]);
 
   const handleDefaultSttChange = useCallback(async (modelId: string) => {
     await saveSettings({ voiceSttModel: modelId });
@@ -309,6 +322,30 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             <option value="vad">Voice Activity Detection (hands-free)</option>
           </Select>
         </div>
+
+        {/* VAD model download — shown when VAD mode is selected */}
+        {voice.mode === 'vad' && (
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>Silero VAD Model</label>
+            <p className={styles.description}>
+              Neural-network voice detection for more accurate hands-free mode.
+              Falls back to energy-based detection if not downloaded.
+            </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+                Silero VAD v5 (~2 MB)
+              </span>
+              <Button
+                onClick={handleDownloadVad}
+                disabled={downloading === 'vad' || vadDownloaded}
+                variant="secondary"
+                size="sm"
+              >
+                {downloading === 'vad' ? 'Downloading…' : vadDownloaded ? '✓ Downloaded' : 'Download'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className={styles.fieldGroup}>
           <label className={styles.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

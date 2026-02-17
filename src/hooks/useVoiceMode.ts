@@ -31,6 +31,7 @@ import {
   voiceListModels,
   voiceDownloadSttModel,
   voiceDownloadTtsModel,
+  voiceDownloadVadModel,
   voiceLoadStt,
   voiceLoadTts,
   onVoiceStateChanged,
@@ -133,6 +134,8 @@ export interface UseVoiceModeReturn {
   downloadSttModel: (modelId: string) => Promise<void>;
   /** Download the TTS model */
   downloadTtsModel: () => Promise<void>;
+  /** Download the VAD model (Silero) */
+  downloadVadModel: () => Promise<void>;
   /** Load an STT model by ID */
   loadStt: (modelId: string) => Promise<void>;
   /** Load TTS model */
@@ -499,6 +502,16 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
     }
   }, []);
 
+  const downloadVadModelAction = useCallback(async () => {
+    try {
+      setError(null);
+      await voiceDownloadVadModel();
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
+  }, []);
+
   const loadStt = useCallback(async (modelId: string) => {
     try {
       setError(null);
@@ -574,6 +587,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
     setAutoSpeak: setAutoSpeakAction,
     downloadSttModel: downloadSttModelAction,
     downloadTtsModel: downloadTtsModelAction,
+    downloadVadModel: downloadVadModelAction,
     loadStt,
     loadTts,
     refreshModels,
