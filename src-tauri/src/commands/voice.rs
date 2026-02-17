@@ -14,9 +14,6 @@ use gglib_voice::pipeline::{
     VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
 };
 use gglib_voice::tts::VoiceInfo;
-
-// TtsEngine is only available when a TTS backend feature is enabled.
-#[cfg(feature = "sherpa")]
 use gglib_voice::tts::TtsEngine;
 
 use crate::app::state::AppState;
@@ -92,7 +89,6 @@ pub struct VoiceModelsResponse {
     pub tts_model: TtsModelInfo,
     pub tts_downloaded: bool,
     pub voices: Vec<VoiceInfo>,
-    #[cfg(feature = "sherpa")]
     pub vad_downloaded: bool,
 }
 
@@ -315,10 +311,7 @@ pub async fn voice_list_models() -> Result<VoiceModelsResponse, String> {
     let tts_model = VoiceModelCatalog::tts_model();
     let tts_downloaded = VoiceModelCatalog::is_tts_downloaded().unwrap_or(false);
 
-    #[cfg(feature = "sherpa")]
     let voices = TtsEngine::available_voices();
-    #[cfg(not(feature = "sherpa"))]
-    let voices = Vec::<VoiceInfo>::new();
 
     Ok(VoiceModelsResponse {
         stt_models,
@@ -326,7 +319,6 @@ pub async fn voice_list_models() -> Result<VoiceModelsResponse, String> {
         tts_model,
         tts_downloaded,
         voices,
-        #[cfg(feature = "sherpa")]
         vad_downloaded: VoiceModelCatalog::is_vad_downloaded().unwrap_or(false),
     })
 }
@@ -368,101 +360,59 @@ pub async fn voice_download_tts_model(app: AppHandle) -> Result<(), String> {
     let model_id = tts_model.id.0.clone();
     let app_clone = app.clone();
 
-    #[cfg(feature = "sherpa")]
-    {
-        let model_id_clone = model_id.clone();
-        let path = models::ensure_tts_model(move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emit_or_log(
-                &app_clone,
-                event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
-                ModelDownloadProgressPayload {
-                    model_id: model_id_clone.clone(),
-                    bytes_downloaded: downloaded,
-                    total_bytes: total,
-                    percent,
-                },
-            );
-        })
-        .await
-        .map_err(|e| format!("{e}"))?;
-
-        info!(model_id = %model_id, path = %path.display(), "TTS model downloaded");
-    }
-
-    #[cfg(not(feature = "sherpa"))]
-    {
-        let model_id_clone = model_id.clone();
-        let (model_path, voices_path) = models::ensure_tts_model(move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emit_or_log(
-                &app_clone,
-                event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
-                ModelDownloadProgressPayload {
-                    model_id: model_id_clone.clone(),
-                    bytes_downloaded: downloaded,
-                    total_bytes: total,
-                    percent,
-                },
-            );
-        })
-        .await
-        .map_err(|e| format!("{e}"))?;
-
-        info!(
-            model = %model_path.display(),
-            voices = %voices_path.display(),
-            "TTS model downloaded"
+    let model_id_clone = model_id.clone();
+    let path = models::ensure_tts_model(move |downloaded, total| {
+        let percent = if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        emit_or_log(
+            &app_clone,
+            event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
+            ModelDownloadProgressPayload {
+                model_id: model_id_clone.clone(),
+                bytes_downloaded: downloaded,
+                total_bytes: total,
+                percent,
+            },
         );
-    }
+    })
+    .await
+    .map_err(|e| format!("{e}"))?;
+
+    info!(model_id = %model_id, path = %path.display(), "TTS model downloaded");
 
     Ok(())
 }
 
-/// Download the VAD model (Silero, sherpa only).
+/// Download the VAD model (Silero).
 #[tauri::command]
 pub async fn voice_download_vad_model(app: AppHandle) -> Result<(), String> {
-    #[cfg(feature = "sherpa")]
-    {
-        let app_clone = app.clone();
+    let app_clone = app.clone();
 
-        let path = models::ensure_vad_model(move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emit_or_log(
-                &app_clone,
-                event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
-                ModelDownloadProgressPayload {
-                    model_id: "silero-vad".to_string(),
-                    bytes_downloaded: downloaded,
-                    total_bytes: total,
-                    percent,
-                },
-            );
-        })
-        .await
-        .map_err(|e| format!("{e}"))?;
+    let path = models::ensure_vad_model(move |downloaded, total| {
+        let percent = if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        emit_or_log(
+            &app_clone,
+            event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
+            ModelDownloadProgressPayload {
+                model_id: "silero-vad".to_string(),
+                bytes_downloaded: downloaded,
+                total_bytes: total,
+                percent,
+            },
+        );
+    })
+    .await
+    .map_err(|e| format!("{e}"))?;
 
-        info!(path = %path.display(), "VAD model downloaded");
-        Ok(())
-    }
-
-    #[cfg(not(feature = "sherpa"))]
-    {
-        let _ = app;
-        Err("VAD model download requires the 'sherpa' feature".to_string())
-    }
+    info!(path = %path.display(), "VAD model downloaded");
+    Ok(())
 }
 
 /// Load an STT model into the pipeline (auto-creates an idle pipeline if needed).

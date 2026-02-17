@@ -6,14 +6,10 @@
 // Re-export backend types under their old names for compatibility.
 pub use crate::backend::{TtsConfig, VoiceGender, VoiceInfo};
 
-// ── sherpa backend ─────────────────────────────────────────────────
-
-#[cfg(feature = "sherpa")]
 pub use crate::backend::sherpa_tts::{
     SherpaTtsBackend as TtsEngine, SHERPA_TTS_SAMPLE_RATE, sherpa_kokoro_voices,
 };
 
-#[cfg(feature = "sherpa")]
 impl TtsEngine {
     /// List all available voices with metadata.
     ///
@@ -22,21 +18,5 @@ impl TtsEngine {
     #[must_use]
     pub fn available_voices() -> Vec<VoiceInfo> {
         sherpa_kokoro_voices()
-    }
-}
-
-// ── legacy kokoro backend ──────────────────────────────────────────
-
-#[cfg(feature = "kokoro")]
-pub use crate::backend::kokoro::{
-    KOKORO_SAMPLE_RATE, KokoroBackend as TtsEngine, kokoro_voices,
-};
-
-#[cfg(feature = "kokoro")]
-impl TtsEngine {
-    /// List all available voices with metadata.
-    #[must_use]
-    pub fn available_voices() -> Vec<VoiceInfo> {
-        kokoro_voices()
     }
 }

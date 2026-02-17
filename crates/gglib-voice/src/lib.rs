@@ -2,10 +2,6 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 #![deny(unused_crate_dependencies)]
 
-// ort is used transitively by kokoro-tts features (coreml, cuda)
-#[cfg(feature = "kokoro")]
-use ort as _;
-
 #[cfg(test)]
 use tempfile as _;
 #[cfg(test)]
@@ -27,7 +23,6 @@ pub mod vad;
 pub use error::VoiceError;
 pub use gate::EchoGate;
 pub use models::{SttModelInfo, TtsModelInfo, VoiceModelCatalog, VoiceModelId};
-#[cfg(feature = "sherpa")]
 pub use models::VadModelInfo;
 pub use pipeline::{VoiceEvent, VoicePipeline, VoicePipelineConfig, VoiceState};
 

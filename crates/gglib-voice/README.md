@@ -50,18 +50,12 @@ All models are downloaded on first voice activation from the
 [k2-fsa/sherpa-onnx releases](https://github.com/k2-fsa/sherpa-onnx/releases)
 and stored in `~/.local/share/gglib/voice_models/`.
 
-## Features
+## Backend
 
-- `sherpa` *(default)* — unified STT/TTS/VAD backend via [sherpa-rs](https://github.com/thewh1teagle/sherpa-rs) (sherpa-onnx bindings)
-- `coreml` — Apple Silicon acceleration for ONNX Runtime
-- `cuda` — NVIDIA GPU acceleration
-
-### Legacy features (preserved for fallback)
-
-- `kokoro` — Kokoro v1.0 TTS via vendored `kokoro-tts` fork + ONNX Runtime
-- `whisper` — Whisper STT via `whisper-rs` (whisper.cpp GGML bindings)
+All speech processing uses [sherpa-rs](https://github.com/thewh1teagle/sherpa-rs)
+(Rust bindings for sherpa-onnx) for STT, TTS, and VAD.
 
 ## Dependencies
 
-The `sherpa` feature downloads pre-built sherpa-onnx static libraries at build
+Pre-built sherpa-onnx static libraries are downloaded at build
 time — no system install of espeak-ng or other native libraries is required.

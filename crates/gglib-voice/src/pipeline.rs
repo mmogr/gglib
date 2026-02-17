@@ -267,7 +267,6 @@ impl VoicePipeline {
             );
 
             // Load Silero VAD model if a path was configured.
-            #[cfg(feature = "sherpa")]
             if let Some(ref model_path) = self.config.vad_model_path {
                 if let Err(e) = vad.load_silero_model(model_path) {
                     tracing::warn!(
@@ -319,95 +318,41 @@ impl VoicePipeline {
 
     /// Load or replace the STT engine with a model at the given path.
     ///
-    /// For the `sherpa` feature, `model_path` should be a **directory**
-    /// containing `encoder.onnx`, `decoder.onnx`, and `tokens.txt`.
-    ///
-    /// For the legacy `whisper` feature, `model_path` is the GGML model file.
+    /// `model_path` should be a **directory** containing `encoder.onnx`,
+    /// `decoder.onnx`, and `tokens.txt`.
     pub fn load_stt(&mut self, model_path: &std::path::Path) -> Result<(), VoiceError> {
         tracing::info!(path = %model_path.display(), "Loading STT engine");
 
-        #[cfg(feature = "sherpa")]
-        {
-            use crate::backend::sherpa_stt::{SherpaSttBackend, SherpaSttConfig};
+        use crate::backend::sherpa_stt::{SherpaSttBackend, SherpaSttConfig};
 
-            let sherpa_config = SherpaSttConfig {
-                language: self.config.stt.language.clone(),
-                ..SherpaSttConfig::default()
-            };
-            let engine = SherpaSttBackend::load(model_path, &sherpa_config)?;
-            self.stt = Some(Box::new(engine));
-            return Ok(());
-        }
-
-        #[cfg(feature = "whisper")]
-        {
-            use crate::backend::whisper::{WhisperBackend, WhisperConfig};
-
-            let whisper_config = WhisperConfig {
-                language: self.config.stt.language.clone(),
-                ..WhisperConfig::default()
-            };
-            let engine = WhisperBackend::load(model_path, &whisper_config)?;
-            self.stt = Some(Box::new(engine));
-            return Ok(());
-        }
-
-        #[allow(unreachable_code)]
-        {
-            let _ = model_path;
-            Err(VoiceError::SttModelNotLoaded)
-        }
+        let sherpa_config = SherpaSttConfig {
+            language: self.config.stt.language.clone(),
+            ..SherpaSttConfig::default()
+        };
+        let engine = SherpaSttBackend::load(model_path, &sherpa_config)?;
+        self.stt = Some(Box::new(engine));
+        Ok(())
     }
 
     /// Load or replace the TTS engine from a model directory.
     ///
-    /// For the `sherpa` feature, `model_dir` should contain `model.onnx`,
-    /// `voices.bin`, `tokens.txt`, and an `espeak-ng-data/` subdirectory.
-    ///
-    /// For the legacy `kokoro` feature, `model_dir` should contain the
-    /// Kokoro ONNX model file and a `voices.bin` file (file names are
-    /// inferred from the directory contents).
+    /// `model_dir` should contain `model.onnx`, `voices.bin`, `tokens.txt`,
+    /// and an `espeak-ng-data/` subdirectory.
     pub async fn load_tts(
         &mut self,
         model_dir: &std::path::Path,
     ) -> Result<(), VoiceError> {
         tracing::info!(dir = %model_dir.display(), "Loading TTS engine");
 
-        #[cfg(feature = "sherpa")]
-        {
-            use crate::backend::sherpa_tts::{SherpaTtsBackend, SherpaTtsConfig};
+        use crate::backend::sherpa_tts::{SherpaTtsBackend, SherpaTtsConfig};
 
-            let sherpa_config = SherpaTtsConfig {
-                voice: self.config.tts.voice.clone(),
-                speed: self.config.tts.speed,
-            };
-            let engine = SherpaTtsBackend::load(model_dir, &sherpa_config)?;
-            self.tts = Some(Box::new(engine));
-            return Ok(());
-        }
-
-        #[cfg(feature = "kokoro")]
-        {
-            use crate::backend::kokoro::{KokoroBackend, KokoroConfig};
-
-            // Legacy Kokoro: infer individual file paths from the directory.
-            let model_path = model_dir.join("model.onnx");
-            let voices_path = model_dir.join("voices.bin");
-
-            let kokoro_config = KokoroConfig {
-                voice: self.config.tts.voice.clone(),
-                speed: self.config.tts.speed,
-            };
-            let engine = KokoroBackend::load(&model_path, &voices_path, &kokoro_config).await?;
-            self.tts = Some(Box::new(engine));
-            return Ok(());
-        }
-
-        #[allow(unreachable_code)]
-        {
-            let _ = model_dir;
-            Err(VoiceError::TtsModelNotLoaded)
-        }
+        let sherpa_config = SherpaTtsConfig {
+            voice: self.config.tts.voice.clone(),
+            speed: self.config.tts.speed,
+        };
+        let engine = SherpaTtsBackend::load(model_dir, &sherpa_config)?;
+        self.tts = Some(Box::new(engine));
+        Ok(())
     }
 
     /// Check whether the STT engine is loaded and ready.
@@ -692,7 +637,6 @@ impl VoicePipeline {
                         crate::capture::TARGET_SAMPLE_RATE,
                     );
 
-                    #[cfg(feature = "sherpa")]
                     if let Some(ref model_path) = self.config.vad_model_path {
                         if let Err(e) = vad.load_silero_model(model_path) {
                             tracing::warn!(

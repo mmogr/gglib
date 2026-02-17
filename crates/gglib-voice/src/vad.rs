@@ -15,12 +15,9 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg(feature = "sherpa")]
 use std::path::Path;
-#[cfg(feature = "sherpa")]
 use sherpa_rs::silero_vad::{SileroVad, SileroVadConfig};
 
-#[cfg(feature = "sherpa")]
 use crate::error::VoiceError;
 use crate::gate::EchoGate;
 
@@ -109,7 +106,6 @@ pub struct VoiceActivityDetector {
     ///
     /// When loaded, [`process_frame`](Self::process_frame) delegates to
     /// Silero instead of the energy-based detector.
-    #[cfg(feature = "sherpa")]
     silero: Option<SileroVad>,
 }
 
@@ -141,7 +137,6 @@ impl VoiceActivityDetector {
             silence_frame_count: 0,
             speech_frame_count: 0,
             sample_rate,
-            #[cfg(feature = "sherpa")]
             silero: None,
         }
     }
@@ -153,7 +148,6 @@ impl VoiceActivityDetector {
     ///
     /// The `model_path` should point to the Silero VAD ONNX model file
     /// (e.g. `silero_vad.onnx`).
-    #[cfg(feature = "sherpa")]
     pub fn load_silero_model(&mut self, model_path: &Path) -> Result<(), VoiceError> {
         if !model_path.exists() {
             return Err(VoiceError::ModelNotFound(model_path.to_path_buf()));
@@ -227,7 +221,6 @@ impl VoiceActivityDetector {
         }
 
         // Delegate to Silero when available.
-        #[cfg(feature = "sherpa")]
         if self.silero.is_some() {
             return self.process_frame_silero(frame);
         }
@@ -242,7 +235,6 @@ impl VoiceActivityDetector {
     /// Silero internally tracks speech state and produces [`SpeechSegment`]s
     /// that contain the start offset and the captured audio samples.  We
     /// translate those into our [`VadEvent`] protocol.
-    #[cfg(feature = "sherpa")]
     fn process_frame_silero(&mut self, frame: &[f32]) -> Option<VadEvent> {
         let silero = self.silero.as_mut().expect("checked by caller");
 
@@ -364,7 +356,6 @@ impl VoiceActivityDetector {
         self.speech_frame_count = 0;
 
         // Clear any buffered state in the Silero detector.
-        #[cfg(feature = "sherpa")]
         if let Some(ref mut silero) = self.silero {
             silero.clear();
         }

@@ -1,26 +1,19 @@
 //! Voice engine backend traits — engine-agnostic interfaces for STT and TTS.
 //!
 //! This module defines the [`SttBackend`] and [`TtsBackend`] traits that
-//! abstract over concrete speech engine implementations (Whisper, Kokoro,
-//! sherpa-onnx, etc.). The [`VoicePipeline`](crate::pipeline::VoicePipeline)
-//! operates on trait objects (`Box<dyn SttBackend>`, `Box<dyn TtsBackend>`)
-//! so that engines can be swapped without touching the pipeline logic.
+//! abstract over concrete speech engine implementations. The
+//! [`VoicePipeline`](crate::pipeline::VoicePipeline) operates on trait
+//! objects (`Box<dyn SttBackend>`, `Box<dyn TtsBackend>`) so that engines
+//! can be swapped without touching the pipeline logic.
 //!
 //! ## Backend implementations
 //!
-//! | Feature    | Module             | STT | TTS |
-//! |------------|--------------------|-----|-----|
-//! | `kokoro`   | [`kokoro`]         |     |  ✓  |
-//! | `whisper`  | [`whisper`]        |  ✓  |     |
-//! | `sherpa`   | [`sherpa_tts`] / [`sherpa_stt`] |  ✓  |  ✓  |
+//! | Module             | STT | TTS |
+//! |--------------------|-----|-----|
+//! | [`sherpa_stt`]     |  ✓  |     |
+//! | [`sherpa_tts`]     |     |  ✓  |
 
-#[cfg(feature = "kokoro")]
-pub mod kokoro;
-#[cfg(feature = "whisper")]
-pub mod whisper;
-#[cfg(feature = "sherpa")]
 pub mod sherpa_stt;
-#[cfg(feature = "sherpa")]
 pub mod sherpa_tts;
 
 use std::time::Duration;
@@ -35,7 +28,7 @@ pub struct TtsAudio {
     /// PCM f32 samples.
     pub samples: Vec<f32>,
 
-    /// Sample rate of the audio (e.g., 24 000 Hz for Kokoro).
+    /// Sample rate of the audio (e.g., 24 000 Hz).
     pub sample_rate: u32,
 
     /// Duration of the audio.
@@ -105,7 +98,7 @@ pub trait SttBackend: Send + Sync {
 /// across `.await` points behind a `tokio::sync::RwLock`.
 ///
 /// The `synthesize` method is async (via [`async_trait`]) because some
-/// backends (e.g., Kokoro) perform inference asynchronously.
+/// backends perform inference asynchronously.
 #[async_trait::async_trait]
 pub trait TtsBackend: Send + Sync {
     /// Synthesize text to audio.
@@ -140,8 +133,8 @@ pub trait TtsBackend: Send + Sync {
 /// Backend-agnostic STT configuration.
 ///
 /// Contains only the settings that are meaningful regardless of which STT
-/// engine is active (Whisper, sherpa-onnx, etc.).  Backend constructors
-/// can accept additional engine-specific options.
+/// engine is active.  Backend constructors can accept additional
+/// engine-specific options.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SttConfig {
     /// Language code (e.g., `"en"`). Empty string means auto-detect.
@@ -159,8 +152,8 @@ impl Default for SttConfig {
 /// Backend-agnostic TTS configuration.
 ///
 /// Contains only the settings that are meaningful regardless of which TTS
-/// engine is active (Kokoro, sherpa-onnx, etc.).  Backend constructors
-/// can accept additional engine-specific options.
+/// engine is active.  Backend constructors can accept additional
+/// engine-specific options.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TtsConfig {
     /// Voice identifier (backend-specific meaning, e.g. `"af_sarah"`).
