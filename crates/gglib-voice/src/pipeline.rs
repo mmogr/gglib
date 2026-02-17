@@ -57,19 +57,14 @@ pub enum VoiceState {
 // ── Interaction mode ───────────────────────────────────────────────
 
 /// How the user triggers speech input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum VoiceInteractionMode {
     /// User holds a button to record, releases to send.
+    #[default]
     PushToTalk,
 
     /// Continuous listening with automatic speech boundary detection.
     VoiceActivityDetection,
-}
-
-impl Default for VoiceInteractionMode {
-    fn default() -> Self {
-        Self::PushToTalk
-    }
 }
 
 // ── Events emitted by the pipeline ─────────────────────────────────
@@ -321,9 +316,9 @@ impl VoicePipeline {
     /// `model_path` should be a **directory** containing `encoder.onnx`,
     /// `decoder.onnx`, and `tokens.txt`.
     pub fn load_stt(&mut self, model_path: &std::path::Path) -> Result<(), VoiceError> {
-        tracing::info!(path = %model_path.display(), "Loading STT engine");
-
         use crate::backend::sherpa_stt::{SherpaSttBackend, SherpaSttConfig};
+
+        tracing::info!(path = %model_path.display(), "Loading STT engine");
 
         let sherpa_config = SherpaSttConfig {
             language: self.config.stt.language.clone(),
@@ -338,10 +333,11 @@ impl VoicePipeline {
     ///
     /// `model_dir` should contain `model.onnx`, `voices.bin`, `tokens.txt`,
     /// and an `espeak-ng-data/` subdirectory.
+    #[allow(clippy::unused_async)]
     pub async fn load_tts(&mut self, model_dir: &std::path::Path) -> Result<(), VoiceError> {
-        tracing::info!(dir = %model_dir.display(), "Loading TTS engine");
-
         use crate::backend::sherpa_tts::{SherpaTtsBackend, SherpaTtsConfig};
+
+        tracing::info!(dir = %model_dir.display(), "Loading TTS engine");
 
         let sherpa_config = SherpaTtsConfig {
             voice: self.config.tts.voice.clone(),

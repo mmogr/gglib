@@ -146,17 +146,18 @@ impl SttBackend for SherpaSttBackend {
             return Ok(String::new());
         }
 
+        #[allow(clippy::cast_precision_loss)]
+        let duration_secs = audio.len() as f64 / f64::from(SHERPA_STT_SAMPLE_RATE);
         tracing::debug!(
             samples = audio.len(),
-            duration_secs = audio.len() as f64 / f64::from(SHERPA_STT_SAMPLE_RATE),
+            duration_secs,
             "Transcribing audio (Sherpa Whisper)"
         );
 
-        let mut recognizer = self.recognizer.lock().map_err(|e| {
+        let result = self.recognizer.lock().map_err(|e| {
             VoiceError::TranscriptionError(format!("STT recognizer lock poisoned: {e}"))
-        })?;
+        })?.transcribe(SHERPA_STT_SAMPLE_RATE, audio);
 
-        let result = recognizer.transcribe(SHERPA_STT_SAMPLE_RATE, audio);
         let text = result.text.trim().to_string();
 
         tracing::debug!(
@@ -201,8 +202,8 @@ fn find_file_prefix(dir: &Path, suffix: &str) -> Result<String, VoiceError> {
 
     for entry in entries.flatten() {
         if let Some(name) = entry.file_name().to_str() {
-            if name.ends_with(suffix) {
-                return Ok(name[..name.len() - suffix.len()].to_string());
+            if let Some(stripped) = name.strip_suffix(suffix) {
+                return Ok(stripped.to_string());
             }
         }
     }

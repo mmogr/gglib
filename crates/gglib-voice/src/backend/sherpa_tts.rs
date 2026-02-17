@@ -141,19 +141,18 @@ impl TtsBackend for SherpaTtsBackend {
             "Synthesizing speech (Sherpa Kokoro)"
         );
 
-        let mut engine = self
+        let audio = self
             .engine
             .lock()
-            .map_err(|e| VoiceError::SynthesisError(format!("TTS engine lock poisoned: {e}")))?;
-
-        let audio = engine
-            .create(text, self.speaker_id, self.speed)
+            .map_err(|e| VoiceError::SynthesisError(format!("TTS engine lock poisoned: {e}")))?.
+            create(text, self.speaker_id, self.speed)
             .map_err(|e| VoiceError::SynthesisError(format!("{e}")))?;
 
         let sample_rate = audio.sample_rate;
         let samples = audio.samples;
 
         // Compute duration from samples and sample rate
+        #[allow(clippy::cast_precision_loss)]
         let duration = if sample_rate > 0 {
             Duration::from_secs_f64(samples.len() as f64 / f64::from(sample_rate))
         } else {
