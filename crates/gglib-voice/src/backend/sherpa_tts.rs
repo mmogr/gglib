@@ -203,10 +203,9 @@ impl TtsBackend for SherpaTtsBackend {
 
 // ── Voice catalogue ────────────────────────────────────────────────
 //
-// Kokoro v1.0 ships ~54 voice styles.  The speaker IDs are the indices
-// into the packed `voices.bin` style matrix.  We maintain the same
-// human-friendly IDs used by the legacy Kokoro backend so that stored
-// user preferences carry over.
+// Kokoro v0.19 English ships 11 voice styles.  The speaker IDs are the
+// indices into the packed `voices.bin` style matrix, as declared in the
+// ONNX model's `speaker2id` metadata.
 
 /// Map a voice ID string (e.g., `"af_sarah"`) to the sherpa-onnx speaker ID.
 ///
@@ -239,48 +238,32 @@ fn voice_id_to_speaker_id(voice_id: &str) -> i32 {
 
 /// List all Sherpa Kokoro voices with metadata.
 ///
-/// Free function so it can be called without a loaded engine (e.g., to
-/// populate a settings UI before model download).
+/// Matches the 11 voices in the `kokoro-en-v0_19` model. Free function so
+/// it can be called without a loaded engine (e.g., to populate a settings
+/// UI before model download).
 #[must_use]
 pub fn sherpa_kokoro_voices() -> Vec<VoiceInfo> {
     vec![
         // American English — Female
-        voice_info("af_alloy", "Alloy", "American English", VoiceGender::Female),
-        voice_info("af_aoede", "Aoede", "American English", VoiceGender::Female),
+        voice_info("af", "Default", "American English", VoiceGender::Female),
         voice_info("af_bella", "Bella", "American English", VoiceGender::Female),
-        voice_info("af_heart", "Heart", "American English", VoiceGender::Female),
-        voice_info(
-            "af_jessica",
-            "Jessica",
-            "American English",
-            VoiceGender::Female,
-        ),
         voice_info(
             "af_nicole",
             "Nicole",
             "American English",
             VoiceGender::Female,
         ),
-        voice_info("af_nova", "Nova", "American English", VoiceGender::Female),
-        voice_info("af_river", "River", "American English", VoiceGender::Female),
         voice_info("af_sarah", "Sarah", "American English", VoiceGender::Female),
         voice_info("af_sky", "Sky", "American English", VoiceGender::Female),
         // American English — Male
         voice_info("am_adam", "Adam", "American English", VoiceGender::Male),
-        voice_info("am_echo", "Echo", "American English", VoiceGender::Male),
-        voice_info("am_eric", "Eric", "American English", VoiceGender::Male),
-        voice_info("am_fable", "Fable", "American English", VoiceGender::Male),
-        voice_info("am_liam", "Liam", "American English", VoiceGender::Male),
         voice_info(
             "am_michael",
             "Michael",
             "American English",
             VoiceGender::Male,
         ),
-        voice_info("am_onyx", "Onyx", "American English", VoiceGender::Male),
-        voice_info("am_puck", "Puck", "American English", VoiceGender::Male),
         // British English — Female
-        voice_info("bf_alice", "Alice", "British English", VoiceGender::Female),
         voice_info("bf_emma", "Emma", "British English", VoiceGender::Female),
         voice_info(
             "bf_isabella",
@@ -288,15 +271,7 @@ pub fn sherpa_kokoro_voices() -> Vec<VoiceInfo> {
             "British English",
             VoiceGender::Female,
         ),
-        voice_info("bf_lily", "Lily", "British English", VoiceGender::Female),
         // British English — Male
-        voice_info("bm_daniel", "Daniel", "British English", VoiceGender::Male),
-        voice_info(
-            "bm_fable",
-            "Fable (British)",
-            "British English",
-            VoiceGender::Male,
-        ),
         voice_info("bm_george", "George", "British English", VoiceGender::Male),
         voice_info("bm_lewis", "Lewis", "British English", VoiceGender::Male),
     ]
