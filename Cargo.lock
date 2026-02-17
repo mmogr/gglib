@@ -540,6 +540,15 @@ dependencies = [
 
 [[package]]
 name = "bzip2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49ecfb22d906f800d4fe833b6282cf4dc1c298f5057ca0b5445e5c209735ca47"
+dependencies = [
+ "bzip2-sys",
+]
+
+[[package]]
+name = "bzip2"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3a53fac24f34a81bc9954b5d6cfce0c21e18ec6959f44f56e8e90e4bb7c346c"
@@ -2364,6 +2373,7 @@ version = "0.3.3"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bzip2 0.5.2",
  "cpal 0.15.3",
  "gglib-core",
  "kokoro-tts",
@@ -2373,6 +2383,7 @@ dependencies = [
  "rubato",
  "serde",
  "sherpa-rs",
+ "tar",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

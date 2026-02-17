@@ -1,21 +1,31 @@
 //! Text-to-Speech module — re-exports from [`crate::backend`].
 //!
 //! This module exists for backward compatibility. The canonical types are
-//! in [`crate::backend`] (traits) and [`crate::backend::kokoro`] (Kokoro
-//! implementation).
-//!
-//! ## Migration guide
-//!
-//! | Old import                          | New import                                    |
-//! |-------------------------------------|-----------------------------------------------|
-//! | `gglib_voice::tts::TtsEngine`       | `gglib_voice::backend::kokoro::KokoroBackend` |
-//! | `gglib_voice::tts::TtsConfig`       | `gglib_voice::backend::TtsConfig`             |
-//! | `gglib_voice::tts::VoiceInfo`       | `gglib_voice::backend::VoiceInfo`             |
-//! | `gglib_voice::tts::VoiceGender`     | `gglib_voice::backend::VoiceGender`           |
-//! | `gglib_voice::tts::KOKORO_SAMPLE_RATE` | `gglib_voice::backend::kokoro::KOKORO_SAMPLE_RATE` |
+//! in [`crate::backend`] (traits) and the backend-specific modules.
 
 // Re-export backend types under their old names for compatibility.
 pub use crate::backend::{TtsConfig, VoiceGender, VoiceInfo};
+
+// ── sherpa backend ─────────────────────────────────────────────────
+
+#[cfg(feature = "sherpa")]
+pub use crate::backend::sherpa_tts::{
+    SherpaTtsBackend as TtsEngine, SHERPA_TTS_SAMPLE_RATE, sherpa_kokoro_voices,
+};
+
+#[cfg(feature = "sherpa")]
+impl TtsEngine {
+    /// List all available voices with metadata.
+    ///
+    /// Static method for backward compatibility (settings UI can call this
+    /// without a loaded engine instance).
+    #[must_use]
+    pub fn available_voices() -> Vec<VoiceInfo> {
+        sherpa_kokoro_voices()
+    }
+}
+
+// ── legacy kokoro backend ──────────────────────────────────────────
 
 #[cfg(feature = "kokoro")]
 pub use crate::backend::kokoro::{
@@ -25,9 +35,6 @@ pub use crate::backend::kokoro::{
 #[cfg(feature = "kokoro")]
 impl TtsEngine {
     /// List all available voices with metadata.
-    ///
-    /// Static method for backward compatibility (settings UI can call this
-    /// without a loaded engine instance).
     #[must_use]
     pub fn available_voices() -> Vec<VoiceInfo> {
         kokoro_voices()

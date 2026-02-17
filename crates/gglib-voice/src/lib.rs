@@ -27,6 +27,8 @@ pub mod vad;
 pub use error::VoiceError;
 pub use gate::EchoGate;
 pub use models::{SttModelInfo, TtsModelInfo, VoiceModelCatalog, VoiceModelId};
+#[cfg(feature = "sherpa")]
+pub use models::VadModelInfo;
 pub use pipeline::{VoiceEvent, VoicePipeline, VoicePipelineConfig, VoiceState};
 
 // Re-export backend trait types at crate root for ergonomic imports

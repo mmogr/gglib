@@ -40,3 +40,6 @@ open.workspace = true
 # This feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
+# Forward voice backend features to gglib-voice
+sherpa = ["gglib-voice/sherpa"]
+default = ["sherpa"]
