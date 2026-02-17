@@ -12,11 +12,16 @@
 //! |------------|--------------------|-----|-----|
 //! | `kokoro`   | [`kokoro`]         |     |  ✓  |
 //! | `whisper`  | [`whisper`]        |  ✓  |     |
+//! | `sherpa`   | [`sherpa_tts`] / [`sherpa_stt`] |  ✓  |  ✓  |
 
 #[cfg(feature = "kokoro")]
 pub mod kokoro;
 #[cfg(feature = "whisper")]
 pub mod whisper;
+#[cfg(feature = "sherpa")]
+pub mod sherpa_stt;
+#[cfg(feature = "sherpa")]
+pub mod sherpa_tts;
 
 use std::time::Duration;
 

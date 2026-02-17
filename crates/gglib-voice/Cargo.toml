@@ -24,14 +24,16 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
 [features]
-default = ["kokoro", "whisper"]
-# Kokoro v1.0 TTS backend (via vendored kokoro-tts fork)
+default = ["sherpa"]
+# sherpa-onnx unified backend — Kokoro TTS + Whisper STT + Silero VAD via sherpa-rs
+sherpa = ["dep:sherpa-rs"]
+# Legacy: Kokoro v1.0 TTS backend (via vendored kokoro-tts fork)
 kokoro = ["dep:kokoro-tts", "dep:ort"]
-# Whisper STT backend (via whisper-rs / whisper.cpp)
+# Legacy: Whisper STT backend (via whisper-rs / whisper.cpp)
 whisper = ["dep:whisper-rs"]
 # Apple Silicon acceleration via CoreML for ONNX Runtime (Kokoro TTS)
 coreml = ["ort/coreml"]
-# CUDA acceleration
+# CUDA acceleration (sherpa-onnx or ORT)
 cuda = ["ort/cuda"]
 
 [dependencies]
@@ -65,6 +67,9 @@ rubato = "0.16"
 
 # Speech-to-Text: whisper.cpp Rust bindings (optional — feature "whisper")
 whisper-rs = { version = "0.15", optional = true }
+
+# Unified STT/TTS/VAD backend via sherpa-onnx bindings (optional — feature "sherpa")
+sherpa-rs = { version = "0.6", features = ["tts", "download-binaries", "static"], optional = true }
 
 # Text-to-Speech: Kokoro v1.0 — local fork with Misaki G2P patch (optional — feature "kokoro").
 # The upstream kokoro-tts crate uses an espeak dictionary for G2P, but the
