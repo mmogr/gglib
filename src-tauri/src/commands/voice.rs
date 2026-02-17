@@ -455,10 +455,7 @@ pub async fn voice_load_tts(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    // The TTS model directory contains model.onnx, voices.bin, tokens.txt, etc.
-    let tts_dir = VoiceModelCatalog::voice_models_dir()
-        .map(|d| d.join("tts"))
-        .map_err(|e| format!("{e}"))?;
+    let tts_dir = VoiceModelCatalog::tts_model_path().map_err(|e| format!("{e}"))?;
 
     if !tts_dir.exists() {
         return Err("TTS model not downloaded".to_string());
