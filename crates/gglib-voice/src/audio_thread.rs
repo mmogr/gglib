@@ -31,9 +31,7 @@ enum AudioCommand {
     },
 
     /// Query whether the microphone is currently recording.
-    IsRecording {
-        reply: mpsc::Sender<bool>,
-    },
+    IsRecording { reply: mpsc::Sender<bool> },
 
     /// Prepare a streaming playback sink (echo gate activated).
     StartStreaming {
@@ -51,9 +49,7 @@ enum AudioCommand {
     StopPlayback,
 
     /// Query whether audio is currently playing.
-    IsPlaying {
-        reply: mpsc::Sender<bool>,
-    },
+    IsPlaying { reply: mpsc::Sender<bool> },
 
     /// Spawn a background watcher that fires `on_done` when the sink drains.
     SpawnCompletionWatcher {
@@ -99,12 +95,12 @@ impl AudioThreadHandle {
             .spawn(move || {
                 Self::run(gate_clone, cmd_rx, init_tx);
             })
-            .map_err(|e| VoiceError::InputStreamError(format!("failed to spawn audio thread: {e}")))?;
+            .map_err(|e| {
+                VoiceError::InputStreamError(format!("failed to spawn audio thread: {e}"))
+            })?;
 
         // Wait for the audio thread to finish initialisation.
-        init_rx
-            .recv()
-            .map_err(|_| VoiceError::AudioThreadDied)??;
+        init_rx.recv().map_err(|_| VoiceError::AudioThreadDied)??;
 
         Ok(Self {
             cmd_tx,
@@ -183,10 +179,7 @@ impl AudioThreadHandle {
 
     /// Like `send_and_recv` but for simple queries that return a bare value
     /// (no `Result` wrapper). Returns `None` if the thread is dead.
-    fn query<T>(
-        &self,
-        build: impl FnOnce(mpsc::Sender<T>) -> AudioCommand,
-    ) -> Option<T> {
+    fn query<T>(&self, build: impl FnOnce(mpsc::Sender<T>) -> AudioCommand) -> Option<T> {
         let (tx, rx) = mpsc::channel();
         self.cmd_tx.send(build(tx)).ok()?;
         rx.recv().ok()
