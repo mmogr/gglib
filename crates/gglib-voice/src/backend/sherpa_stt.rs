@@ -52,10 +52,12 @@ pub struct SherpaSttBackend {
 impl SherpaSttBackend {
     /// Load a Sherpa Whisper model from a directory.
     ///
-    /// The directory must contain:
-    /// - `encoder.onnx` — Whisper encoder model
-    /// - `decoder.onnx` — Whisper decoder model
-    /// - `tokens.txt` — tokenizer vocabulary
+    /// The directory must contain encoder, decoder, and tokens files following
+    /// the sherpa-onnx naming convention: `{prefix}-encoder.onnx`,
+    /// `{prefix}-decoder.onnx`, `{prefix}-tokens.txt` (e.g.,
+    /// `base.en-encoder.onnx`).  If an int8-quantised decoder is available
+    /// (`{prefix}-decoder.int8.onnx`) it will be preferred over the
+    /// full-precision variant.
     ///
     /// # Arguments
     /// * `model_dir` — Path to the directory containing model files.
@@ -65,14 +67,27 @@ impl SherpaSttBackend {
             return Err(VoiceError::ModelNotFound(model_dir.to_path_buf()));
         }
 
-        let encoder_path = model_dir.join("encoder.onnx");
-        let decoder_path = model_dir.join("decoder.onnx");
-        let tokens_path = model_dir.join("tokens.txt");
+        // Discover the file-name prefix used by sherpa-onnx archives.
+        // Archives contain e.g. `base.en-encoder.onnx`, `base.en-decoder.onnx`,
+        // `base.en-tokens.txt`.  We find the encoder and derive the prefix.
+        let prefix = find_file_prefix(model_dir, "-encoder.onnx")?;
+
+        let encoder_path = model_dir.join(format!("{prefix}-encoder.onnx"));
+
+        // Prefer int8-quantised decoder if available (smaller + faster).
+        let decoder_int8 = model_dir.join(format!("{prefix}-decoder.int8.onnx"));
+        let decoder_path = if decoder_int8.exists() {
+            decoder_int8
+        } else {
+            model_dir.join(format!("{prefix}-decoder.onnx"))
+        };
+
+        let tokens_path = model_dir.join(format!("{prefix}-tokens.txt"));
 
         for (path, desc) in [
-            (&encoder_path, "encoder.onnx"),
-            (&decoder_path, "decoder.onnx"),
-            (&tokens_path, "tokens.txt"),
+            (&encoder_path, "encoder"),
+            (&decoder_path, "decoder"),
+            (&tokens_path, "tokens"),
         ] {
             if !path.exists() {
                 return Err(VoiceError::ModelNotFound(path.clone()));
@@ -170,6 +185,29 @@ impl SttBackend for SherpaSttBackend {
     fn language(&self) -> &str {
         &self.language
     }
+}
+
+/// Scan `dir` for a file whose name ends with `suffix` and return the prefix.
+///
+/// For example, given suffix `"-encoder.onnx"` and a file named
+/// `"base.en-encoder.onnx"`, this returns `"base.en"`.
+fn find_file_prefix(dir: &Path, suffix: &str) -> Result<String, VoiceError> {
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        VoiceError::ModelLoadError(format!("Cannot read model directory {}: {e}", dir.display()))
+    })?;
+
+    for entry in entries.flatten() {
+        if let Some(name) = entry.file_name().to_str() {
+            if name.ends_with(suffix) {
+                return Ok(name[..name.len() - suffix.len()].to_string());
+            }
+        }
+    }
+
+    Err(VoiceError::ModelLoadError(format!(
+        "No file matching *{suffix} found in {}",
+        dir.display()
+    )))
 }
 
 /// Convert a path to a string, returning a `VoiceError` on invalid UTF-8.

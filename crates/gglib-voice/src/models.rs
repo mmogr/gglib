@@ -322,13 +322,29 @@ impl VoiceModelCatalog {
         match model {
             Some(m) => {
                 let path = Self::stt_model_path(&m)?;
-                // Check the directory contains expected model files.
-                Ok(path.join("encoder.onnx").exists()
-                    || path.join("tiny-encoder.onnx").exists())
+                // Check the directory contains an encoder ONNX file.
+                // sherpa-onnx archives use prefixed names like `base.en-encoder.onnx`.
+                Ok(path.exists() && has_file_ending(&path, "-encoder.onnx"))
             }
             None => Ok(false),
         }
     }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+/// Return `true` if `dir` contains at least one file whose name ends with `suffix`.
+fn has_file_ending(dir: &Path, suffix: &str) -> bool {
+    std::fs::read_dir(dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|e| {
+            e.file_name()
+                .to_str()
+                .is_some_and(|n| n.ends_with(suffix))
+        })
 }
 
 // ── Download helpers ───────────────────────────────────────────────
