@@ -81,10 +81,10 @@ async fn parallel_cleanup(state: &AppState) -> Result<(), String> {
         let mut voice = state.voice_pipeline.write().await;
         if voice.is_some() {
             info!("Unloading voice pipeline during shutdown");
-            if let Some(ref mut pipeline) = *voice {
-                if pipeline.is_active() {
-                    pipeline.stop();
-                }
+            if let Some(ref mut pipeline) = *voice
+                && pipeline.is_active()
+            {
+                pipeline.stop();
             }
             *voice = None;
         }
