@@ -8,7 +8,7 @@ import { ServerHealthIndicator } from '../ServerHealthIndicator';
 import { Row } from '../primitives';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
-import './ServerList.css';
+import { cn } from '../../utils/cn';
 
 interface ServerListProps {
   servers: ServerInfo[];
@@ -52,21 +52,21 @@ const ServerList: FC<ServerListProps> = ({
 
   if (servers.length === 0) {
     return (
-      <div className={`server-list-empty ${compact ? 'compact' : ''}`}>
-        <div className="empty-icon" aria-hidden>
+      <div className={cn("flex flex-col items-center justify-center text-center text-text-muted", compact ? "p-base" : "p-xl")}>
+        <div className="text-2xl mb-sm opacity-50" aria-hidden>
           <Icon icon={ServerOff} size={22} />
         </div>
-        <p>No active servers</p>
-        {!compact && <p className="text-muted-small">Start a model to see it here</p>}
+        <p className="my-xs text-sm">No active servers</p>
+        {!compact && <p className="my-xs text-xs opacity-70">Start a model to see it here</p>}
       </div>
     );
   }
 
   return (
-    <div className={`server-list ${compact ? 'compact' : ''}`}>
+    <div className={cn("flex flex-col", compact && "gap-xs")}>
       {showHeader && (
-        <div className="server-list-header">
-          <span className="server-list-title">
+        <div className="flex justify-between items-center pb-sm border-b border-border mb-sm">
+          <span className="text-sm font-semibold text-text">
             Active Servers ({servers.length})
           </span>
           {onRefresh && (
@@ -83,30 +83,30 @@ const ServerList: FC<ServerListProps> = ({
         </div>
       )}
 
-      <div className="server-list-items">
+      <div className="flex flex-col gap-sm">
         {servers.map((server) => (
           <div
             key={server.modelId}
-            className={`server-item ${expandedServerId === server.modelId ? 'expanded' : ''}`}
+            className={cn("flex flex-col gap-0 bg-background border border-border rounded-md transition duration-200 overflow-hidden", expandedServerId === server.modelId && "border-primary")}
           >
             <div 
-              className={`server-item-header ${onSelectModel ? 'clickable' : ''}`}
+              className={cn("flex justify-between items-center gap-sm py-sm px-md", onSelectModel && "cursor-pointer hover:bg-background-hover")}
               onClick={() => handleServerClick(server.modelId)}
             >
-              <div className="server-info">
-                <Row gap="sm" align="center" className="server-name">
+              <div className="flex-1 min-w-0">
+                <Row gap="sm" align="center" className="font-medium text-sm overflow-hidden text-ellipsis whitespace-nowrap">
                   {server.modelName}
                   <ServerHealthIndicator modelId={server.modelId} />
                 </Row>
-                <div className="server-details">
-                  <span className="server-port">:{server.port}</span>
-                  <span className="server-status">{server.status}</span>
+                <div className="flex items-center gap-sm text-xs text-text-muted mt-xs">
+                  <span className="font-mono">:{server.port}</span>
+                  <span className="text-success font-medium">{server.status}</span>
                 </div>
               </div>
               <Button
                 variant="danger"
                 size="sm"
-                className={`server-stop-btn ${compact ? 'compact' : ''}`}
+                className={cn("shrink-0 !bg-transparent !border !border-border !text-text hover:!bg-danger hover:!border-danger hover:!text-white", compact ? "!p-xs" : "!py-xs !px-sm")}
                 onClick={(e) => handleStop(server.modelId, e)}
                 title="Stop server"
                 leftIcon={<Icon icon={Square} size={14} />}
@@ -115,7 +115,7 @@ const ServerList: FC<ServerListProps> = ({
               </Button>
             </div>
             {expandedServerId === server.modelId && onSelectModel && (
-              <div className="server-item-tabs">
+              <div className="border-t border-border bg-background-alt">
                 <SidebarTabs<ChatPageTabId>
                   tabs={CHAT_PAGE_TABS}
                   activeTab="chat"
