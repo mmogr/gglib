@@ -2,11 +2,12 @@
 //!
 //! Wraps `sherpa_rs::whisper::WhisperRecognizer` behind the engine-agnostic
 //! [`SttBackend`] trait.  The sherpa-rs `transcribe` method requires `&mut self`,
-//! while our trait uses `&self`, so the inner recognizer is wrapped in a
-//! [`std::sync::Mutex`].
+//! while our trait uses `&self`, so the inner recognizer is wrapped in an
+//! `Arc<Mutex<…>>`.  Inference is dispatched via `tokio::task::spawn_blocking`
+//! so the Tokio worker thread is never blocked during transcription.
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use sherpa_rs::whisper::{WhisperConfig, WhisperRecognizer};
 
@@ -42,8 +43,13 @@ impl Default for SherpaSttConfig {
 /// `WhisperRecognizer::transcribe` takes `&mut self` while our
 /// [`SttBackend`] trait requires `&self`.
 pub struct SherpaSttBackend {
-    /// The loaded sherpa-onnx Whisper recognizer (behind Mutex for interior mutability).
-    recognizer: Mutex<WhisperRecognizer>,
+    /// The loaded sherpa-onnx Whisper recognizer.
+    ///
+    /// Wrapped in `Arc<Mutex<…>>` so it can be moved into
+    /// `tokio::task::spawn_blocking` closures while the outer `&self` stays
+    /// alive.  `WhisperRecognizer` is `Send + Sync` (per sherpa-rs's own
+    /// `unsafe impl`).
+    recognizer: Arc<Mutex<WhisperRecognizer>>,
 
     /// Language code (stored for `language()` accessor).
     language: String,
@@ -134,14 +140,15 @@ impl SherpaSttBackend {
         };
 
         Ok(Self {
-            recognizer: Mutex::new(recognizer),
+            recognizer: Arc::new(Mutex::new(recognizer)),
             language: display_language,
         })
     }
 }
 
+#[async_trait::async_trait]
 impl SttBackend for SherpaSttBackend {
-    fn transcribe(&self, audio: &[f32]) -> Result<String, VoiceError> {
+    async fn transcribe(&self, audio: &[f32]) -> Result<String, VoiceError> {
         if audio.is_empty() {
             return Ok(String::new());
         }
@@ -154,15 +161,22 @@ impl SttBackend for SherpaSttBackend {
             "Transcribing audio (Sherpa Whisper)"
         );
 
-        let result = self
-            .recognizer
-            .lock()
-            .map_err(|e| {
-                VoiceError::TranscriptionError(format!("STT recognizer lock poisoned: {e}"))
-            })?
-            .transcribe(SHERPA_STT_SAMPLE_RATE, audio);
+        // Whisper inference is CPU-bound and can take hundreds of milliseconds.
+        // Offload to a blocking thread pool so the Tokio worker is not stalled.
+        let recognizer = Arc::clone(&self.recognizer);
+        let audio = audio.to_vec();
 
-        let text = result.text.trim().to_string();
+        let text = tokio::task::spawn_blocking(move || {
+            let result = recognizer
+                .lock()
+                .map_err(|e| {
+                    VoiceError::TranscriptionError(format!("STT recognizer lock poisoned: {e}"))
+                })?
+                .transcribe(SHERPA_STT_SAMPLE_RATE, &audio);
+            Ok::<String, VoiceError>(result.text.trim().to_string())
+        })
+        .await
+        .map_err(|e| VoiceError::TranscriptionError(format!("spawn_blocking join error: {e}")))??;
 
         tracing::debug!(
             chars = text.len(),
@@ -178,9 +192,22 @@ impl SttBackend for SherpaSttBackend {
         mut on_segment: Box<dyn FnMut(&str) + Send + 'static>,
     ) -> Result<String, VoiceError> {
         // sherpa-rs WhisperRecognizer does not support streaming segment
-        // callbacks, so we fall back to full transcription and invoke the
-        // callback once with the complete result.
-        let text = self.transcribe(audio)?;
+        // callbacks.  This sync method locks and runs inference directly —
+        // it is safe to call from non-async contexts.  In async contexts,
+        // prefer transcribe() which offloads to spawn_blocking.
+        if audio.is_empty() {
+            return Ok(String::new());
+        }
+        let text = self
+            .recognizer
+            .lock()
+            .map_err(|e| {
+                VoiceError::TranscriptionError(format!("STT recognizer lock poisoned: {e}"))
+            })?
+            .transcribe(SHERPA_STT_SAMPLE_RATE, audio)
+            .text
+            .trim()
+            .to_string();
         if !text.is_empty() {
             on_segment(&text);
         }

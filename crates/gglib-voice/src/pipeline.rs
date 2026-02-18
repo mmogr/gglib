@@ -360,7 +360,7 @@ impl VoicePipeline {
     /// Finish recording and transcribe (PTT mode: user released the talk button).
     ///
     /// Returns the transcribed text. Also emits a `VoiceEvent::Transcript`.
-    pub fn ptt_stop(&mut self) -> Result<String, VoiceError> {
+    pub async fn ptt_stop(&mut self) -> Result<String, VoiceError> {
         if !self.is_active() {
             return Err(VoiceError::NotActive);
         }
@@ -376,7 +376,7 @@ impl VoicePipeline {
         self.set_state(VoiceState::Transcribing);
 
         let stt = self.stt.as_ref().ok_or(VoiceError::SttModelNotLoaded)?;
-        let text = stt.transcribe(&audio)?;
+        let text = stt.transcribe(&audio).await?;
 
         self.emit(VoiceEvent::Transcript {
             text: text.clone(),
@@ -397,7 +397,7 @@ impl VoicePipeline {
     /// When the VAD detects a complete utterance (speech followed by silence),
     /// the audio is automatically transcribed and a `VoiceEvent::Transcript`
     /// is emitted.
-    pub fn vad_process_frame(&mut self, frame: &[f32]) -> Result<Option<String>, VoiceError> {
+    pub async fn vad_process_frame(&mut self, frame: &[f32]) -> Result<Option<String>, VoiceError> {
         // Calculate audio level for UI visualization
         let level = calculate_audio_level(frame);
         self.emit(VoiceEvent::AudioLevel(level));
@@ -414,7 +414,7 @@ impl VoicePipeline {
                 self.set_state(VoiceState::Transcribing);
 
                 let stt = self.stt.as_ref().ok_or(VoiceError::SttModelNotLoaded)?;
-                let text = stt.transcribe(&audio)?;
+                let text = stt.transcribe(&audio).await?;
 
                 if !text.is_empty() {
                     self.emit(VoiceEvent::Transcript {
