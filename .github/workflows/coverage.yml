@@ -78,19 +78,24 @@ jobs:
 
       - name: Run per-crate Rust coverage
         run: |
-          # --no-clean reuses artifacts compiled in the previous combined step (avoids re-linking sherpa-rs)
-          cargo llvm-cov --no-clean --all-features --package gglib-core --lcov --output-path gglib-core-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-db --lcov --output-path gglib-db-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-gguf --lcov --output-path gglib-gguf-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-hf --lcov --output-path gglib-hf-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-download --lcov --output-path gglib-download-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-gui --lcov --output-path gglib-gui-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-cli --lcov --output-path gglib-cli-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-axum --lcov --output-path gglib-axum-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-voice --lcov --output-path gglib-voice-lcov.info
+          # Use `cargo llvm-cov report` (report-only subcommand) to slice per-package
+          # lcov files from the profdata already collected in the combined step above.
+          # This does NOT recompile or relink anything — it just re-processes the
+          # existing profdata + instrumented binaries. This avoids the sherpa-rs
+          # (sherpa-onnx native static lib) linker error that occurs when
+          # `cargo llvm-cov --package gglib-voice` tries to build a fresh test binary.
+          cargo llvm-cov report --all-features --package gglib-core --lcov --output-path gglib-core-lcov.info
+          cargo llvm-cov report --all-features --package gglib-db --lcov --output-path gglib-db-lcov.info
+          cargo llvm-cov report --all-features --package gglib-gguf --lcov --output-path gglib-gguf-lcov.info
+          cargo llvm-cov report --all-features --package gglib-hf --lcov --output-path gglib-hf-lcov.info
+          cargo llvm-cov report --all-features --package gglib-download --lcov --output-path gglib-download-lcov.info
+          cargo llvm-cov report --all-features --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
+          cargo llvm-cov report --all-features --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
+          cargo llvm-cov report --all-features --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
+          cargo llvm-cov report --all-features --package gglib-gui --lcov --output-path gglib-gui-lcov.info
+          cargo llvm-cov report --all-features --package gglib-cli --lcov --output-path gglib-cli-lcov.info
+          cargo llvm-cov report --all-features --package gglib-axum --lcov --output-path gglib-axum-lcov.info
+          cargo llvm-cov report --all-features --package gglib-voice --lcov --output-path gglib-voice-lcov.info
 
       - name: Run TypeScript tests with coverage
         run: npm run test:coverage -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
