@@ -12,11 +12,11 @@
 //! In VAD mode the pipeline continuously monitors mic input and triggers
 //! transcription when speech is detected followed by silence.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use sherpa_rs::silero_vad::{SileroVad, SileroVadConfig};
-use std::path::Path;
 
 use crate::error::VoiceError;
 use crate::gate::EchoGate;
@@ -107,6 +107,13 @@ pub struct VoiceActivityDetector {
     /// When loaded, [`process_frame`](Self::process_frame) delegates to
     /// Silero instead of the energy-based detector.
     silero: Option<SileroVad>,
+
+    /// Path to the loaded Silero model file.
+    ///
+    /// Retained so that [`set_config`](Self::set_config) can reconstruct the
+    /// Silero instance with updated parameters without the caller having to
+    /// re-supply the path.
+    silero_model_path: Option<PathBuf>,
 }
 
 /// Events emitted by the VAD.
@@ -138,6 +145,7 @@ impl VoiceActivityDetector {
             speech_frame_count: 0,
             sample_rate,
             silero: None,
+            silero_model_path: None,
         }
     }
 
@@ -176,6 +184,7 @@ impl VoiceActivityDetector {
 
         tracing::info!(path = %model_path.display(), "Silero VAD model loaded");
         self.silero = Some(vad);
+        self.silero_model_path = Some(model_path.to_path_buf());
         Ok(())
     }
 
@@ -367,8 +376,34 @@ impl VoiceActivityDetector {
     }
 
     /// Update VAD configuration.
-    pub const fn set_config(&mut self, config: VadConfig) {
+    ///
+    /// When a Silero model is loaded the detector is automatically
+    /// reconstructed with the new parameters — the API is safe by default.
+    /// If the reload fails the error is logged and the previous Silero
+    /// instance is dropped (the energy-based fallback remains active).
+    pub fn set_config(&mut self, config: VadConfig) {
         self.config = config;
+        if self.silero_model_path.is_some() {
+            self.reload_silero();
+        }
+    }
+
+    /// Reconstruct the Silero detector from the stored model path and the
+    /// current `self.config`. Called internally whenever config changes.
+    fn reload_silero(&mut self) {
+        let path = match self.silero_model_path.clone() {
+            Some(p) => p,
+            None => return,
+        };
+        match self.load_silero_model(&path) {
+            Ok(()) => tracing::debug!("Silero VAD reloaded with new config"),
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to reload Silero VAD after config change; falling back to energy-based detection");
+                // silero is cleared inside load_silero_model on error paths;
+                // ensure it is None so the energy fallback takes over.
+                self.silero = None;
+            }
+        }
     }
 }
 
