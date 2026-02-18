@@ -58,7 +58,7 @@ import type {
   RoundSummary,
 } from '../../hooks/useDeepResearch/types';
 import { useResearchLogExport } from '../../hooks/useResearchLogs';
-import styles from './ResearchArtifact.module.css';
+import { cn } from '../../utils/cn';
 
 // =============================================================================
 // Props
@@ -178,19 +178,19 @@ function getLiveActivity(state: ResearchState, isRunning: boolean): string {
 function getPhaseConfig(phase: ResearchPhase): { label: string; className: string } {
   switch (phase) {
     case 'planning':
-      return { label: 'Planning', className: styles.phasePlanning };
+      return { label: 'Planning', className: 'bg-[rgba(168,85,247,0.2)] text-[#c084fc]' };
     case 'gathering':
-      return { label: 'Gathering', className: styles.phaseGathering };
+      return { label: 'Gathering', className: 'bg-[rgba(59,130,246,0.2)] text-[#60a5fa]' };
     case 'evaluating':
-      return { label: 'Evaluating', className: styles.phaseEvaluating };
+      return { label: 'Evaluating', className: 'bg-[rgba(251,146,60,0.2)] text-[#fb923c]' };
     case 'compressing':
-      return { label: 'Compressing', className: styles.phaseCompressing };
+      return { label: 'Compressing', className: 'bg-[rgba(147,51,234,0.2)] text-[#a78bfa]' };
     case 'synthesizing':
-      return { label: 'Synthesizing', className: styles.phaseSynthesizing };
+      return { label: 'Synthesizing', className: 'bg-[rgba(234,179,8,0.2)] text-[#facc15]' };
     case 'complete':
-      return { label: 'Complete', className: styles.phaseComplete };
+      return { label: 'Complete', className: 'bg-[rgba(34,197,94,0.2)] text-[#4ade80]' };
     case 'error':
-      return { label: 'Error', className: styles.phaseError };
+      return { label: 'Error', className: 'bg-[rgba(239,68,68,0.2)] text-[#f87171]' };
   }
 }
 
@@ -200,13 +200,13 @@ function getPhaseConfig(phase: ResearchPhase): { label: string; className: strin
 function QuestionStatusIcon({ status }: { status: QuestionStatus }) {
   switch (status) {
     case 'pending':
-      return <Icon icon={Circle} size={16} className={styles.statusPending} />;
+      return <Icon icon={Circle} size={16} className="text-text-muted" />;
     case 'in-progress':
-      return <Icon icon={Loader2} size={16} className={styles.statusInProgress} />;
+      return <Icon icon={Loader2} size={16} className="text-[#60a5fa] animate-research-pulse" />;
     case 'answered':
-      return <Icon icon={CircleCheck} size={16} className={styles.statusAnswered} />;
+      return <Icon icon={CircleCheck} size={16} className="text-[#4ade80]" />;
     case 'blocked':
-      return <Icon icon={CircleX} size={16} className={styles.statusBlocked} />;
+      return <Icon icon={CircleX} size={16} className="text-[#f87171]" />;
   }
 }
 
@@ -281,12 +281,12 @@ const ThinkingBlock: React.FC<{ reasoning: string | null }> = ({ reasoning }) =>
   if (!reasoning) return null;
 
   return (
-    <div className={styles.thinkingBlock}>
-      <div className={styles.thinkingHeader}>
+    <div className="px-3.5 py-3 bg-background border-b border-border">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted mb-2">
         <Icon icon={Brain} size={12} />
         <span>Thinking</span>
       </div>
-      <div className={styles.thinkingContent}>{reasoning}</div>
+      <div className="text-xs text-text-secondary leading-normal italic max-h-[100px] overflow-y-auto whitespace-pre-wrap">{reasoning}</div>
     </div>
   );
 };
@@ -414,14 +414,14 @@ const ResearchPlanSection: React.FC<{
   
   if (questions.length === 0) {
     return (
-      <div className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionTitle}>
+      <div className="px-3.5 py-3 border-b border-border last:border-b-0">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-text uppercase tracking-[0.5px]">
             <Icon icon={ListTodo} size={14} />
             Research Plan
           </span>
         </div>
-        <div className={styles.emptyState}>No research questions yet...</div>
+        <div className="text-center p-4 text-text-muted text-xs italic">No research questions yet...</div>
       </div>
     );
   }
@@ -445,23 +445,23 @@ const ResearchPlanSection: React.FC<{
   });
 
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>
+    <div className="px-3.5 py-3 border-b border-border last:border-b-0">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-text uppercase tracking-[0.5px]">
           <Icon icon={ListTodo} size={14} />
           Research Plan
         </span>
-        <span className={styles.sectionCount}>
+        <span className="text-[11px] text-text-muted font-normal">
           {questions.filter(q => q.status === 'answered').length}/{questions.length} answered
         </span>
       </div>
       
       {/* Action buttons row - only show when research is running */}
       {actionsAvailable && (
-        <div className={styles.questionActions}>
+        <div className="flex flex-wrap gap-1.5 py-2 mb-2 border-b border-border">
           {/* Add question button/input */}
           {showAddInput ? (
-            <div className={styles.addQuestionInput}>
+            <div className="flex items-center gap-1 flex-1 min-w-[200px]">
               <input
                 type="text"
                 value={newQuestionText}
@@ -475,11 +475,11 @@ const ResearchPlanSection: React.FC<{
                   }
                 }}
                 placeholder="Type your question..."
-                className={styles.addQuestionField}
+                className="flex-1 px-2 py-1 text-xs text-text bg-background-secondary border border-[#60a5fa] rounded outline-none placeholder:text-text-muted"
                 autoFocus
               />
               <button
-                className={styles.addQuestionSubmit}
+                className="flex items-center justify-center w-6 h-6 p-0 text-[#60a5fa] bg-[rgba(96,165,250,0.1)] border border-[#60a5fa] rounded cursor-pointer transition-all duration-150 ease-out hover:enabled:bg-[rgba(96,165,250,0.2)] disabled:opacity-40 disabled:cursor-default"
                 onClick={handleAddQuestion}
                 disabled={!newQuestionText.trim()}
                 title="Add question"
@@ -488,7 +488,7 @@ const ResearchPlanSection: React.FC<{
                 <Icon icon={Plus} size={14} />
               </button>
               <button
-                className={styles.addQuestionCancel}
+                className="flex items-center justify-center w-6 h-6 p-0 text-base text-text-muted bg-transparent border border-border rounded cursor-pointer transition-all duration-150 ease-out hover:text-text hover:bg-background-tertiary"
                 onClick={() => {
                   setShowAddInput(false);
                   setNewQuestionText('');
@@ -501,7 +501,7 @@ const ResearchPlanSection: React.FC<{
             </div>
           ) : (
             <button
-              className={styles.actionButton}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-text-secondary bg-background-tertiary border border-border rounded cursor-pointer transition-all duration-150 ease-out hover:text-text hover:bg-background-hover hover:border-[#4a4a4a] disabled:opacity-50 disabled:cursor-default disabled:hover:bg-background-tertiary disabled:hover:border-border"
               onClick={() => setShowAddInput(true)}
               title="Add your own research question"
               type="button"
@@ -513,14 +513,14 @@ const ResearchPlanSection: React.FC<{
           
           {/* AI action buttons */}
           <button
-            className={styles.actionButton}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-text-secondary bg-background-tertiary border border-border rounded cursor-pointer transition-all duration-150 ease-out hover:text-text hover:bg-background-hover hover:border-[#4a4a4a] disabled:opacity-50 disabled:cursor-default disabled:hover:bg-background-tertiary disabled:hover:border-border"
             onClick={handleGenerateMore}
             disabled={isGenerating}
             title="Ask AI to generate more research questions"
             type="button"
           >
             {isGenerating ? (
-              <Icon icon={Loader2} size={12} className={styles.spinIcon} />
+              <Icon icon={Loader2} size={12} className="animate-spin" />
             ) : (
               <Icon icon={Wand2} size={12} />
             )}
@@ -528,14 +528,14 @@ const ResearchPlanSection: React.FC<{
           </button>
           
           <button
-            className={styles.actionButton}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-text-secondary bg-background-tertiary border border-border rounded cursor-pointer transition-all duration-150 ease-out hover:text-text hover:bg-background-hover hover:border-[#4a4a4a] disabled:opacity-50 disabled:cursor-default disabled:hover:bg-background-tertiary disabled:hover:border-border"
             onClick={handleGoDeeper}
             disabled={isGoingDeeper}
             title="Ask AI to explore deeper based on current findings"
             type="button"
           >
             {isGoingDeeper ? (
-              <Icon icon={Loader2} size={12} className={styles.spinIcon} />
+              <Icon icon={Loader2} size={12} className="animate-spin" />
             ) : (
               <Icon icon={ArrowDownToLine} size={12} />
             )}
@@ -545,7 +545,7 @@ const ResearchPlanSection: React.FC<{
           {/* Skip all pending - only show if there are multiple pending questions */}
           {pendingCount > 1 && onSkipAllPending && (
             <button
-              className={`${styles.actionButton} ${styles.actionButtonDanger}`}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#f87171] bg-background-tertiary border border-border rounded cursor-pointer transition-all duration-150 ease-out hover:bg-[rgba(248,113,113,0.1)] hover:border-[rgba(248,113,113,0.3)] disabled:opacity-50 disabled:cursor-default"
               onClick={handleSkipAll}
               title="Skip all remaining questions"
               type="button"
@@ -557,7 +557,7 @@ const ResearchPlanSection: React.FC<{
         </div>
       )}
       
-      <div className={styles.questionList}>
+      <div className="flex flex-col gap-2">
         {sortedQuestions.map(question => {
           const canSkip = actionsAvailable && 
             onSkipQuestion && 
@@ -591,35 +591,41 @@ const ResearchPlanSection: React.FC<{
           return (
             <div 
               key={question.id} 
-              className={`${styles.questionItem} ${isBlocked ? styles.questionBlocked : ''}`}
+              className={cn(
+                'group flex items-start gap-2.5 px-2.5 py-2 bg-background-tertiary rounded-md',
+                isBlocked && 'opacity-50 bg-transparent',
+              )}
             >
-              <div className={styles.questionStatus}>
+              <div className="shrink-0 w-[18px] h-[18px] flex items-center justify-center mt-px">
                 <QuestionStatusIcon status={question.status} />
               </div>
-              <div className={styles.questionContent}>
-                <div className={styles.questionText}>
+              <div className="flex-1 min-w-0">
+                <div className={cn(
+                  'text-[13px] text-text leading-[1.4]',
+                  isBlocked && 'line-through text-text-muted',
+                )}>
                   {sourceIcon && (
-                    <span className={styles.questionSourceIcon} title={`Source: ${question.source}`}>
+                    <span className="inline-flex items-center justify-center mr-1 text-text-muted align-middle" title={`Source: ${question.source}`}>
                       <Icon icon={sourceIcon} size={10} />
                     </span>
                   )}
                   {question.question}
                 </div>
                 {question.answerSummary && (
-                  <div className={styles.questionAnswer}>{question.answerSummary}</div>
+                  <div className="mt-1 text-xs text-text-secondary leading-[1.4]">{question.answerSummary}</div>
                 )}
               </div>
-              <div className={styles.questionButtons}>
+              <div className="flex items-center gap-1 shrink-0">
                 {/* Expand button */}
                 {canExpand && (
                   <button
-                    className={styles.expandButton}
+                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-[rgba(96,165,250,0.15)] hover:text-[#60a5fa] active:bg-[rgba(96,165,250,0.25)]"
                     onClick={() => handleExpand(question.id)}
                     title="Ask AI to break this into sub-questions"
                     type="button"
                   >
                     {pendingExpands.has(question.id) ? (
-                      <Icon icon={Loader2} size={12} className={styles.spinIcon} />
+                      <Icon icon={Loader2} size={12} className="animate-spin" />
                     ) : (
                       <Icon icon={Maximize2} size={12} />
                     )}
@@ -628,13 +634,13 @@ const ResearchPlanSection: React.FC<{
                 {/* Force-answer / Synthesize button - for in-progress questions */}
                 {canForceAnswer && (
                   <button
-                    className={`${styles.expandButton} ${styles.synthesizeButton}`}
+                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-[rgba(251,191,36,0.15)] hover:text-[#fbbf24] active:bg-[rgba(251,191,36,0.25)]"
                     onClick={() => handleForceAnswer(question.id)}
                     title={`Generate answer now with ${relevantFactCount > 0 ? relevantFactCount : facts.length} facts`}
                     type="button"
                   >
                     {pendingForceAnswers.has(question.id) ? (
-                      <Icon icon={Loader2} size={12} className={styles.spinIcon} />
+                      <Icon icon={Loader2} size={12} className="animate-spin" />
                     ) : (
                       <Icon icon={Zap} size={12} />
                     )}
@@ -643,7 +649,7 @@ const ResearchPlanSection: React.FC<{
                 {/* Skip button */}
                 {showSkipButton && (
                   <button
-                    className={styles.skipButton}
+                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-[rgba(251,146,60,0.15)] hover:text-[#fb923c] active:bg-[rgba(251,146,60,0.25)] disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:hover:bg-transparent disabled:hover:text-text-muted"
                     onClick={() => handleSkip(question.id)}
                     title={isCompleted ? "Question was skipped" : "Skip this question"}
                     type="button"
@@ -653,8 +659,8 @@ const ResearchPlanSection: React.FC<{
                   </button>
                 )}
                 {pendingSkips.has(question.id) && (
-                  <div className={styles.skipPending}>
-                    <Icon icon={Loader2} size={12} className={styles.skipSpinner} />
+                  <div className="flex items-center justify-center w-6 h-6 text-[#fb923c]">
+                    <Icon icon={Loader2} size={12} className="animate-spin" />
                   </div>
                 )}
               </div>
@@ -675,14 +681,14 @@ const GatheredFactsSection: React.FC<{ facts: GatheredFact[] }> = ({ facts }) =>
 
   if (facts.length === 0) {
     return (
-      <div className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionTitle}>
+      <div className="px-3.5 py-3 border-b border-border last:border-b-0">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-text uppercase tracking-[0.5px]">
             <Icon icon={FileSearch} size={14} />
             Gathered Facts
           </span>
         </div>
-        <div className={styles.emptyState}>No facts gathered yet...</div>
+        <div className="text-center p-4 text-text-muted text-xs italic">No facts gathered yet...</div>
       </div>
     );
   }
@@ -692,34 +698,34 @@ const GatheredFactsSection: React.FC<{ facts: GatheredFact[] }> = ({ facts }) =>
   const displayedFacts = showAll ? sortedFacts : sortedFacts.slice(0, displayLimit);
 
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>
+    <div className="px-3.5 py-3 border-b border-border last:border-b-0">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-text uppercase tracking-[0.5px]">
           <Icon icon={FileSearch} size={14} />
           Gathered Facts
         </span>
-        <span className={styles.sectionCount}>{facts.length} facts</span>
+        <span className="text-[11px] text-text-muted font-normal">{facts.length} facts</span>
       </div>
-      <div className={styles.factList}>
+      <div className="flex flex-col gap-2">
         {displayedFacts.map(fact => (
           <div
             key={fact.id}
-            className={styles.factItem}
+            className="px-2.5 py-2 bg-background-tertiary rounded-md border-l-[3px] border-l-transparent data-[confidence=high]:border-l-[#4ade80] data-[confidence=medium]:border-l-[#facc15] data-[confidence=low]:border-l-[#f87171]"
             data-confidence={fact.confidence}
           >
-            <div className={styles.factClaim}>{fact.claim}</div>
-            <div className={styles.factMeta}>
+            <div className="text-[13px] text-text leading-[1.4]">{fact.claim}</div>
+            <div className="flex items-center gap-2 mt-1.5 text-[11px] text-text-muted">
               <a
                 href={fact.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={styles.factSource}
+                className="flex items-center gap-1 text-[#60a5fa] no-underline max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap hover:underline"
                 title={fact.sourceUrl}
               >
                 <Icon icon={ExternalLink} size={10} />
                 {fact.sourceTitle || new URL(fact.sourceUrl).hostname}
               </a>
-              <span className={styles.factConfidence}>
+              <span className="flex items-center gap-1">
                 {fact.confidence === 'high' && <Icon icon={CheckCircle2} size={10} />}
                 {fact.confidence === 'medium' && <Icon icon={AlertTriangle} size={10} />}
                 {fact.confidence === 'low' && <Icon icon={XCircle} size={10} />}
@@ -731,7 +737,7 @@ const GatheredFactsSection: React.FC<{ facts: GatheredFact[] }> = ({ facts }) =>
       </div>
       {facts.length > displayLimit && (
         <button
-          className={styles.showMoreButton}
+          className="block w-full mt-2 px-3 py-1.5 bg-background-tertiary border border-border rounded text-text-secondary text-xs cursor-pointer transition-all duration-200 ease-out hover:bg-background-hover hover:text-text"
           onClick={() => setShowAll(!showAll)}
         >
           {showAll ? 'Show less' : `Show ${facts.length - displayLimit} more`}
@@ -748,13 +754,13 @@ const HypothesisBlock: React.FC<{ hypothesis: string | null }> = ({ hypothesis }
   if (!hypothesis) return null;
 
   return (
-    <div className={styles.section}>
-      <div className={styles.hypothesisBlock}>
-        <div className={styles.hypothesisLabel}>
+    <div className="px-3.5 py-3 border-b border-border last:border-b-0">
+      <div className="px-3.5 py-3 bg-background rounded-md">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted mb-2">
           <Icon icon={Lightbulb} size={12} />
           <span>Working Hypothesis</span>
         </div>
-        <div className={styles.hypothesisText}>{hypothesis}</div>
+        <div className="text-[13px] text-text leading-normal">{hypothesis}</div>
       </div>
     </div>
   );
@@ -767,16 +773,16 @@ const KnowledgeGapsSection: React.FC<{ gaps: string[] }> = ({ gaps }) => {
   if (gaps.length === 0) return null;
 
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>
+    <div className="px-3.5 py-3 border-b border-border last:border-b-0">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-text uppercase tracking-[0.5px]">
           <Icon icon={Search} size={14} />
           Knowledge Gaps
         </span>
       </div>
-      <div className={styles.gapList}>
+      <div className="flex flex-wrap gap-1.5">
         {gaps.map((gap, idx) => (
-          <span key={idx} className={styles.gapItem}>
+          <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-[rgba(234,179,8,0.1)] border border-[rgba(234,179,8,0.3)] rounded text-[11px] text-[#facc15]">
             <Icon icon={AlertTriangle} size={10} />
             {gap}
           </span>
@@ -798,9 +804,9 @@ const PreviousRoundsSection: React.FC<{
   if (roundSummaries.length === 0) return null;
 
   return (
-    <div className={styles.section}>
+    <div className="px-3.5 py-3 border-b border-border last:border-b-0">
       <div
-        className={styles.sectionHeader}
+        className="flex items-center justify-between mb-2.5"
         onClick={() => setExpanded(!expanded)}
         role="button"
         tabIndex={0}
@@ -812,11 +818,11 @@ const PreviousRoundsSection: React.FC<{
         }}
         style={{ cursor: 'pointer' }}
       >
-        <span className={styles.sectionTitle}>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-text uppercase tracking-[0.5px]">
           <Icon icon={History} size={14} />
           Previous Rounds
         </span>
-        <span className={styles.sectionCount}>
+        <span className="text-[11px] text-text-muted font-normal">
           {roundSummaries.length} round{roundSummaries.length !== 1 ? 's' : ''}
           <Icon
             icon={expanded ? ChevronDown : ChevronRight}
@@ -826,24 +832,24 @@ const PreviousRoundsSection: React.FC<{
         </span>
       </div>
       {expanded && (
-        <div className={styles.previousRoundsContent}>
+        <div className="flex flex-col gap-2.5 px-3 py-2.5">
           {roundSummaries.map((round) => (
-            <div key={round.round} className={styles.roundSummaryCard}>
-              <div className={styles.roundSummaryHeader}>
-                <span className={styles.roundNumber}>
+            <div key={round.round} className="p-3 bg-background-tertiary border border-border rounded-lg border-l-[3px] border-l-[#a78bfa]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-[#a78bfa]">
                   <Icon icon={Layers} size={12} />
                   Round {round.round}
                   {round.perspective && (
-                    <span className={styles.roundPerspective}>
+                    <span className="font-medium text-[#c4b5fd] italic ml-1">
                       ({round.perspective})
                     </span>
                   )}
                 </span>
-                <span className={styles.roundMeta}>
+                <span className="text-[11px] text-text-muted">
                   {round.factCountAtEnd} facts · {round.questionsAnsweredThisRound.length} questions
                 </span>
               </div>
-              <div className={styles.roundSummaryText}>
+              <div className="text-xs text-text-secondary leading-normal mb-2">
                 {round.summary}
               </div>
             </div>
@@ -925,8 +931,8 @@ const FinalReportSection: React.FC<{
   }, [report, citationToFact]);
 
   return (
-    <div className={styles.finalReport}>
-      <div className={styles.reportContent}>{renderedReport}</div>
+    <div className="p-4">
+      <div className="text-sm text-text leading-relaxed whitespace-pre-wrap">{renderedReport}</div>
     </div>
   );
 };
@@ -952,17 +958,17 @@ const CitationRef: React.FC<{ number: number; fact: GatheredFact }> = ({
   }, [fact.sourceUrl]);
 
   return (
-    <span className={styles.citationRef} tabIndex={0} role="button">
+    <span className="group/cite relative inline cursor-pointer text-[#60a5fa] font-semibold text-[0.85em] align-super px-0.5 rounded-sm transition-all duration-150 ease-out hover:bg-[rgba(96,165,250,0.15)] hover:text-[#93c5fd]" tabIndex={0} role="button">
       [{number}]
-      <span className={styles.citationHoverCard}>
-        <div className={styles.hoverCardHeader}>
-          <span className={styles.hoverCardNumber}>{number}</span>
-          <span className={styles.hoverCardTitle}>{fact.sourceTitle}</span>
+      <span className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 w-[320px] max-w-[90vw] bg-background-tertiary border border-[#444] rounded-lg p-3 shadow-[0_4px_20px_rgba(0,0,0,0.4)] z-[1000] opacity-0 invisible transition-[opacity,visibility] duration-150 ease-out pointer-events-none group-hover/cite:opacity-100 group-hover/cite:visible group-hover/cite:pointer-events-auto group-focus/cite:opacity-100 group-focus/cite:visible group-focus/cite:pointer-events-auto after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-[6px] after:border-transparent after:border-t-border">
+        <div className="flex items-start gap-2 mb-2">
+          <span className="flex items-center justify-center w-5 h-5 rounded bg-[rgba(96,165,250,0.2)] text-[#60a5fa] text-[11px] font-bold shrink-0">{number}</span>
+          <span className="font-semibold text-text text-[13px] leading-[1.3] flex-1 min-w-0 overflow-hidden text-ellipsis line-clamp-2">{fact.sourceTitle}</span>
         </div>
-        <div className={styles.hoverCardClaim}>{displayClaim}</div>
-        <div className={styles.hoverCardMeta}>
+        <div className="text-xs text-text-secondary leading-normal mb-2 p-2 bg-background-secondary rounded border-l-2 border-l-[rgba(96,165,250,0.5)]">{displayClaim}</div>
+        <div className="flex items-center justify-between gap-2 text-[11px]">
           <span
-            className={styles.hoverCardConfidence}
+            className="flex items-center gap-1 text-text-muted data-[confidence=high]:text-[#4ade80] data-[confidence=medium]:text-[#fbbf24] data-[confidence=low]:text-[#f87171]"
             data-confidence={fact.confidence}
           >
             <CheckCircle2 size={12} />
@@ -972,7 +978,7 @@ const CitationRef: React.FC<{ number: number; fact: GatheredFact }> = ({
             href={fact.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={styles.hoverCardLink}
+            className="flex items-center gap-1 text-[#60a5fa] no-underline text-[11px] max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
             <ExternalLink size={10} />
@@ -1023,12 +1029,16 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
   return (
     <div
-      className={`${styles.artifactContainer} ${className || ''}`}
+      className={cn(
+        'bg-background-secondary border border-border rounded-xl my-3 overflow-hidden text-[13px] max-w-full',
+        'data-[running=true]:border-[rgba(59,130,246,0.4)] data-[running=true]:shadow-[0_0_0_1px_rgba(59,130,246,0.1)]',
+        className,
+      )}
       data-running={isRunning}
     >
       {/* Header (always visible) */}
       <div
-        className={styles.header}
+        className="flex items-center gap-2.5 px-3.5 py-3 bg-background-tertiary border-b border-border cursor-pointer select-none hover:bg-background-hover"
         onClick={() => setExpanded(!expanded)}
         role="button"
         tabIndex={0}
@@ -1040,31 +1050,34 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
         }}
         aria-expanded={expanded}
       >
-        <div className={styles.headerIcon}>
+        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] text-white shrink-0">
           <Icon icon={Sparkles} size={18} />
         </div>
 
-        <div className={styles.headerContent}>
-          <div className={styles.headerTitle}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 font-semibold text-text text-sm">
             <span>Deep Research</span>
-            <span className={`${styles.phaseBadge} ${phaseConfig.className}`}>
+            <span className={cn(
+              'inline-flex items-center gap-1 px-2 py-0.5 rounded-xl text-[10px] font-semibold uppercase tracking-[0.5px]',
+              phaseConfig.className,
+            )}>
               {phaseConfig.label}
             </span>
             {effectiveState.maxRounds > 1 && (
-              <span className={styles.roundBadge}>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl text-[10px] font-semibold bg-[rgba(100,116,139,0.2)] text-[#94a3b8] ml-1.5">
                 Round {effectiveState.currentRound}/{effectiveState.maxRounds}
               </span>
             )}
             {effectiveState.currentPerspective && (
-              <span className={styles.perspectiveBadge}>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[10px] font-semibold bg-[rgba(147,51,234,0.25)] text-[#c4b5fd] ml-1.5 border border-[rgba(147,51,234,0.4)] max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
                 🎭 {effectiveState.currentPerspective}
               </span>
             )}
           </div>
 
-          <div className={styles.liveActivity}>
+          <div className="flex items-center gap-1.5 mt-1 text-xs text-text-secondary">
             {isRunning && (
-              <Icon icon={Loader2} size={12} className={styles.activitySpinner} />
+              <Icon icon={Loader2} size={12} className="animate-spin text-[#60a5fa]" />
             )}
             <span>{liveActivity}</span>
           </div>
@@ -1072,7 +1085,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
         {/* Download logs button - always visible in header */}
         <button
-          className={styles.headerDownloadButton}
+          className="flex items-center justify-center w-7 h-7 rounded-md border border-border bg-background-secondary text-text-muted cursor-pointer transition-all duration-150 ease-out shrink-0 hover:text-text hover:bg-background-hover hover:border-border-hover active:scale-95"
           onClick={(e) => {
             e.stopPropagation();
             downloadAsJSON();
@@ -1082,21 +1095,21 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
           <Icon icon={Download} size={14} />
         </button>
 
-        <div className={styles.expandToggle} data-expanded={expanded}>
+        <div className="flex items-center justify-center w-6 h-6 rounded text-text-muted shrink-0 transition-transform duration-200 ease-out data-[expanded=true]:rotate-180" data-expanded={expanded}>
           <Icon icon={ChevronDown} size={18} />
         </div>
       </div>
 
       {/* Progress bar (always visible when not complete) */}
       {effectiveState.phase !== 'complete' && effectiveState.phase !== 'error' && (
-        <div className={styles.progressContainer}>
-          <div className={styles.progressBar}>
+        <div className="px-3.5 pb-3">
+          <div className="h-1 bg-background rounded-sm overflow-hidden">
             <div
-              className={styles.progressFill}
+              className="h-full bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] rounded-sm transition-[width] duration-300 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <div className={styles.progressLabel}>
+          <div className="flex justify-between mt-1.5 text-[11px] text-text-muted">
             <span>Step {effectiveState.currentStep}/{effectiveState.maxSteps}</span>
             <span>{progress}%</span>
           </div>
@@ -1105,13 +1118,16 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
       {/* Activity log (trailing events for velocity visibility) */}
       {isRunning && effectiveState.activityLog && effectiveState.activityLog.length > 0 && (
-        <div className={styles.activityLog}>
+        <div className="px-3.5 py-2 bg-background-tertiary border-t border-border flex flex-col gap-1">
           {effectiveState.activityLog.map((entry, idx) => {
             const isSkipped = entry.startsWith('Search skipped:') || entry.includes('(duplicate)');
             return (
               <div
                 key={idx}
-                className={`${styles.activityEntry} ${isSkipped ? styles.activitySkipped : ''}`}
+                className={cn(
+                  "text-[11px] text-text-secondary font-mono whitespace-nowrap overflow-hidden text-ellipsis transition-opacity duration-200 ease-out before:content-['›'] before:mr-1.5 before:text-text-muted",
+                  isSkipped && "text-text-muted italic before:content-['⊘'] before:text-[rgba(251,146,60,0.6)]",
+                )}
                 style={{ opacity: 0.5 + (idx / effectiveState.activityLog.length) * 0.5 }}
               >
                 {entry}
@@ -1123,16 +1139,16 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
       {/* Collapsed summary stats */}
       {!expanded && (
-        <div className={styles.collapsedSummary}>
-          <div className={styles.summaryStats}>
-            <span className={styles.summaryStat}>
+        <div className="px-3.5 py-2 pb-3">
+          <div className="flex gap-4 text-[11px] text-text-muted">
+            <span className="flex items-center gap-1 [&>strong]:text-text-secondary">
               <strong>{effectiveState.researchPlan.length}</strong> questions
             </span>
-            <span className={styles.summaryStat}>
+            <span className="flex items-center gap-1 [&>strong]:text-text-secondary">
               <strong>{effectiveState.gatheredFacts.length}</strong> facts
             </span>
             {effectiveState.knowledgeGaps.length > 0 && (
-              <span className={styles.summaryStat}>
+              <span className="flex items-center gap-1 [&>strong]:text-text-secondary">
                 <strong>{effectiveState.knowledgeGaps.length}</strong> gaps
               </span>
             )}
@@ -1142,7 +1158,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
       {/* Expanded content */}
       {expanded && (
-        <div className={styles.expandedContent}>
+        <div className="border-t border-border">
           {/* Thinking/Reasoning block */}
           <ThinkingBlock reasoning={effectiveState.lastReasoning} />
 
@@ -1156,18 +1172,18 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
               />
 
               {/* Collapsible Research Details Section */}
-              <div className={styles.researchDetailsContainer}>
+              <div className="border-t border-border bg-background-tertiary">
                 <div
-                  className={styles.researchDetailsHeader}
+                  className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer select-none transition-colors duration-150 ease-out hover:bg-background-hover"
                   onClick={() => setDetailsExpanded(!detailsExpanded)}
                 >
-                  <div className={styles.researchDetailsTitle}>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary uppercase tracking-[0.5px]">
                     <Icon icon={FileSearch} size={14} />
                     Research Details
                   </div>
-                  <div className={styles.researchDetailsActions}>
+                  <div className="flex items-center gap-2">
                     <button
-                      className={styles.downloadLogsButton}
+                      className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-text-secondary bg-background-secondary border border-border rounded cursor-pointer transition-all duration-150 ease-out hover:text-text hover:bg-background-hover hover:border-border-hover active:scale-[0.97]"
                       onClick={(e) => {
                         e.stopPropagation();
                         downloadAsJSON();
@@ -1177,7 +1193,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
                       <Icon icon={Download} size={14} />
                       Logs
                     </button>
-                    <div className={styles.researchDetailsToggle}>
+                    <div className="flex items-center justify-center text-text-muted transition-transform duration-200 ease-out">
                       <Icon
                         icon={detailsExpanded ? ChevronDown : ChevronRight}
                         size={16}
@@ -1187,26 +1203,26 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
                 </div>
 
                 {detailsExpanded && (
-                  <div className={styles.researchDetailsContent}>
+                  <div className="bg-background-secondary">
                     {/* Activity Log Snapshot */}
                     {effectiveState.completionSnapshot?.activityLog &&
                       effectiveState.completionSnapshot.activityLog.length > 0 && (
-                        <div className={styles.section}>
-                          <div className={styles.sectionHeader}>
-                            <span className={styles.sectionTitle}>
+                        <div className="px-3.5 py-3 border-b border-border last:border-b-0">
+                          <div className="flex items-center justify-between mb-2.5">
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-text uppercase tracking-[0.5px]">
                               <Icon icon={ListTodo} size={14} />
                               Activity Timeline
                             </span>
-                            <span className={styles.sectionCount}>
+                            <span className="text-[11px] text-text-muted font-normal">
                               {effectiveState.completionSnapshot.stepsTaken} steps
                               {effectiveState.completionSnapshot.elapsedTime &&
                                 ` · ${Math.round(effectiveState.completionSnapshot.elapsedTime / 1000)}s`}
                             </span>
                           </div>
-                          <div className={styles.activityLogSnapshot}>
+                          <div className="flex flex-col gap-1.5 text-xs text-text-secondary">
                             {effectiveState.completionSnapshot.activityLog.map(
                               (event, i) => (
-                                <div key={i} className={styles.activityItem}>
+                                <div key={i} className="flex items-start gap-1.5 px-2 py-1.5 bg-background-tertiary rounded leading-[1.4]">
                                   {event}
                                 </div>
                               )
@@ -1273,10 +1289,10 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
               {/* Error message if failed */}
               {effectiveState.phase === 'error' && effectiveState.errorMessage && (
-                <div className={styles.section}>
-                  <div className={styles.contradictionItem}>
-                    <div className={styles.contradictionLabel}>Error</div>
-                    <div className={styles.contradictionText}>
+                <div className="px-3.5 py-3 border-b border-border last:border-b-0">
+                  <div className="px-3 py-2.5 bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] rounded-md">
+                    <div className="text-[11px] font-semibold text-[#f87171] mb-1.5">Error</div>
+                    <div className="text-xs text-text leading-[1.4]">
                       {effectiveState.errorMessage}
                     </div>
                   </div>
