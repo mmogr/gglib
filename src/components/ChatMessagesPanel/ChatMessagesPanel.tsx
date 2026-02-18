@@ -38,14 +38,11 @@ import type { UseVoiceModeReturn } from '../../hooks/useVoiceMode';
 import { DeepResearchToggle } from '../DeepResearch';
 import { useDeepResearch } from '../../hooks/useDeepResearch';
 import type { ResearchState } from '../../hooks/useDeepResearch/types';
-import './ChatMessagesPanel.css';
+import { cn } from '../../utils/cn';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
 
 // Use the same prompts as the runtime for consistency
 const FALLBACK_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT;
-
-const cx = (...classes: Array<string | false | undefined>) =>
-  classes.filter(Boolean).join(' ');
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -547,13 +544,13 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Render
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none chat-messages-panel">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface">
       {/* Header */}
-      <div className="p-base border-b border-border bg-background shrink-0 chat-header">
-        <div className="chat-title-group">
+      <div className="p-base border-b border-border bg-background shrink-0 flex justify-between items-center gap-md max-tablet:flex-wrap">
+        <div className="flex items-center gap-sm min-w-0 flex-1 max-tablet:basis-full">
           {isRenaming ? (
             <Input
-              className="chat-title-input"
+              className="text-lg font-semibold bg-background border border-primary rounded-sm py-xs px-sm text-text min-w-[150px]"
               value={titleDraft}
               autoFocus
               onChange={(e) => setTitleDraft(e.target.value)}
@@ -564,7 +561,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
               }}
             />
           ) : (
-            <h2 className="chat-title">{activeConversation?.title || 'New Chat'}</h2>
+            <h2 className="text-lg font-semibold m-0 overflow-hidden text-ellipsis whitespace-nowrap">{activeConversation?.title || 'New Chat'}</h2>
           )}
           <Button
             variant="ghost"
@@ -578,7 +575,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            className={cx(isGeneratingTitle && 'generating')}
+            className={cn(isGeneratingTitle && 'pointer-events-none')}
             title={
               !activeConversationId
                 ? 'No active conversation'
@@ -591,22 +588,22 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             iconOnly
           >
             {isGeneratingTitle ? (
-              <span className="icon-btn-spinner" aria-label="Generating title…" />
+              <span className="inline-block w-[14px] h-[14px] border-2 border-text-muted border-t-primary rounded-full animate-icon-btn-spin" aria-label="Generating title…" />
             ) : (
               <Icon icon={Sparkles} size={14} />
             )}
           </Button>
-          <span className={cx('chat-status-badge', isThreadRunning && 'active')}>
+          <span className={cn('text-xs py-xs px-sm rounded-full bg-background text-text-muted shrink-0', isThreadRunning && 'bg-primary-alpha text-primary animate-research-pulse')}>
             {isThreadRunning ? 'Responding…' : 'Idle'}
           </span>
         </div>
-        <div className="chat-header-actions">
+        <div className="flex gap-sm shrink-0">
           <ToolsPopover />
           {voice?.isSupported && (
             <Button
               variant="ghost"
               size="sm"
-              className={cx(voice.isActive && 'voice-active')}
+              className={cn(voice.isActive && 'text-error')}
               onClick={() => voice.isActive ? voice.stop() : voice.start()}
               title={voice.isActive ? 'Stop voice mode' : 'Start voice mode'}
               iconOnly
@@ -624,19 +621,19 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col chat-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         {/* System prompt card */}
-        <section className="chat-prompt-card">
-          <div className="chat-prompt-header">
+        <section className="border border-border rounded-base p-md bg-background flex flex-col gap-sm shrink-0">
+          <div className="flex justify-between gap-md items-start">
             <div>
-              <p className="chat-prompt-label">System prompt</p>
+              <p className="text-xs uppercase tracking-[1px] text-text-muted m-0 mb-xs">System prompt</p>
               {!isEditingPrompt && (
-                <p className="chat-prompt-preview">{promptPreview}</p>
+                <p className="m-0 text-text text-sm leading-[1.5] line-clamp-2">{promptPreview}</p>
               )}
             </div>
-            <div className="chat-prompt-actions">
+            <div className="flex gap-sm items-center shrink-0">
               {isEditingPrompt ? (
-                <span className="chat-prompt-editing-badge">Editing…</span>
+                <span className="text-xs text-primary">Editing…</span>
               ) : (
                 <Button
                   variant="secondary"
@@ -656,14 +653,14 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             <>
               <Textarea
                 ref={promptTextareaRef}
-                className="chat-prompt-textarea"
+                className="w-full p-sm border border-border rounded-sm bg-surface text-text text-sm font-[inherit] resize-y min-h-[80px] focus:outline-none focus:border-primary"
                 value={systemPromptDraft}
                 onChange={(e) => setSystemPromptDraft(e.target.value)}
                 placeholder={DEFAULT_SYSTEM_PROMPT}
                 rows={4}
                 onKeyDown={handlePromptKeyDown}
               />
-              <div className="chat-prompt-editor-actions">
+              <div className="flex justify-between items-center gap-sm">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -671,7 +668,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 >
                   Reset
                 </Button>
-                <div className="chat-prompt-editor-btns">
+                <div className="flex gap-sm">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -698,11 +695,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         </section>
 
         {/* Error banner */}
-        {chatError && <div className="chat-error-banner">{chatError}</div>}
+        {chatError && <div className="py-sm px-md bg-danger-alpha border border-danger rounded-sm text-danger text-sm shrink-0">{chatError}</div>}
 
         {/* Server stopped banner */}
         {!isServerConnected && (
-          <div className="chat-server-stopped-banner">
+          <div className="flex items-center justify-between gap-md py-sm px-md bg-[var(--color-warning-alpha,rgba(255,193,7,0.1))] border border-[var(--color-warning,#ffc107)] rounded-sm text-[var(--color-warning-text,#856404)] text-sm shrink-0">
             <span className="inline-flex items-center gap-2">
               <Icon icon={AlertTriangle} size={16} />
               Server not running — Chat is read-only
@@ -716,9 +713,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         )}
 
         {/* Messages area */}
-        <div className="chat-messages-surface">
+        <div className="flex-1 min-h-0 flex flex-col border border-border rounded-base bg-background overflow-hidden">
           {messageLoading ? (
-            <div className="chat-empty-state">Loading messages…</div>
+            <div className="flex items-center justify-center h-full text-text-muted">Loading messages…</div>
           ) : (
             <MessageActionsContext.Provider value={messageActionsValue}>
               <DeepResearchProvider
@@ -735,27 +732,27 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
               <VoiceProvider value={voiceContextValue}>
                 <ThreadPrimitive.Root
                   key={activeConversationId ?? 'thread-root'}
-                  className="chat-thread-root"
+                  className="flex flex-col h-full min-h-0"
                 >
-                  <ThreadPrimitive.Viewport className="chat-viewport" autoScroll>
+                  <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto p-md flex flex-col gap-md scroll-smooth" autoScroll>
                     <ThreadPrimitive.Messages
                       components={messageComponents}
                     />
-                  <ThreadPrimitive.ScrollToBottom className="chat-scroll-button">
+                  <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                     Jump to latest
                   </ThreadPrimitive.ScrollToBottom>
                 </ThreadPrimitive.Viewport>
 
-                <div className="chat-composer-shell">
+                <div className="border-t border-border p-md shrink-0">
                   {isThreadRunning && !deepResearch.isRunning && (
-                    <div className="chat-typing-indicator">Assistant is thinking…</div>
+                    <div className="text-sm text-primary mb-sm animate-research-pulse">Assistant is thinking…</div>
                   )}
                   {deepResearch.isRunning && (
-                    <div className="chat-typing-indicator chat-research-indicator">Researching… This may take a few minutes.</div>
+                    <div className="text-sm text-primary mb-sm animate-research-pulse">Researching… This may take a few minutes.</div>
                   )}
-                  <ComposerPrimitive.Root className="chat-composer-root">
+                  <ComposerPrimitive.Root className="flex gap-sm items-end">
                     <ComposerPrimitive.Input
-                      className="chat-composer-input"
+                      className="flex-1 py-sm px-md border border-border rounded-base bg-surface text-text text-sm font-[inherit] resize-none min-h-[40px] max-h-[150px] focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                       placeholder={
                         isServerConnected
                           ? isDeepResearchEnabled
@@ -765,7 +762,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       }
                       disabled={!isServerConnected || deepResearch.isRunning}
                     />
-                    <div className="chat-composer-actions">
+                    <div className="flex gap-sm shrink-0">
                       <DeepResearchToggle
                         isEnabled={isDeepResearchEnabled}
                         onToggle={toggleDeepResearch}
