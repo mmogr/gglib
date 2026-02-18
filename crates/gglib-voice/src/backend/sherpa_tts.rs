@@ -231,8 +231,8 @@ impl TtsBackend for SherpaTtsBackend {
 /// Map a voice ID string (e.g., `"af_sarah"`) to the sherpa-onnx speaker ID.
 ///
 /// The IDs match the `speaker2id` metadata in the Kokoro v0.19 English model
-/// (`kokoro-en-v0_19`).  Returns -1 for unknown voices so that
-/// [`set_voice`] can reject them gracefully.
+/// (`kokoro-en-v0_19`).  Returns `-1` for unknown voice IDs so that
+/// [`set_voice`] can detect them and keep the current voice unchanged.
 fn voice_id_to_speaker_id(voice_id: &str) -> i32 {
     // Speaker IDs from model metadata:
     //   af->0, af_bella->1, af_nicole->2, af_sarah->3, af_sky->4,
@@ -250,10 +250,7 @@ fn voice_id_to_speaker_id(voice_id: &str) -> i32 {
         "bf_isabella" => 8,
         "bm_george" => 9,
         "bm_lewis" => 10,
-        _ => {
-            tracing::warn!(voice = %voice_id, "Unknown Kokoro voice — using default speaker 0");
-            0
-        }
+        _ => -1,
     }
 }
 
