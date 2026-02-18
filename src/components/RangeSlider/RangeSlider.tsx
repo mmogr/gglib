@@ -1,4 +1,5 @@
 import { FC, useCallback, useRef } from 'react';
+import { cn } from '../../utils/cn';
 import './RangeSlider.css';
 
 interface RangeSliderProps {
@@ -62,22 +63,22 @@ const RangeSlider: FC<RangeSliderProps> = ({
   };
 
   return (
-    <div className={`range-slider ${disabled ? 'range-slider-disabled' : ''}`}>
+    <div className={cn("w-full py-xs", disabled && "opacity-50 pointer-events-none")}>
       {label && (
-        <div className="range-slider-header">
-          <span className="range-slider-label">{label}</span>
-          <span className="range-slider-values">
+        <div className="flex justify-between items-center mb-sm">
+          <span className="text-sm font-medium text-text">{label}</span>
+          <span className="text-xs font-semibold text-primary bg-surface-elevated py-[2px] px-[6px] rounded-sm">
             {formatValue(minValue)} — {formatValue(maxValue)}
           </span>
         </div>
       )}
       
-      <div className="range-slider-container">
+      <div className="relative h-[20px] flex items-center">
         {/* Background track */}
-        <div className="range-slider-track" ref={trackRef}>
+        <div className="absolute w-full h-1 bg-border rounded-[2px]" ref={trackRef}>
           {/* Highlighted range */}
           <div
-            className="range-slider-range"
+            className={cn("absolute h-full rounded-[2px]", disabled ? "bg-border" : "bg-primary")}
             style={{
               left: `${minPercent}%`,
               width: `${maxPercent - minPercent}%`,
@@ -93,7 +94,7 @@ const RangeSlider: FC<RangeSliderProps> = ({
           step={step}
           value={minValue}
           onChange={handleMinChange}
-          className="range-slider-thumb range-slider-thumb-min"
+          className="range-slider-thumb range-slider-thumb-min absolute w-full h-0 pointer-events-none appearance-none bg-transparent z-[3]"
           disabled={disabled}
           aria-label={`${label} minimum`}
         />
@@ -106,16 +107,16 @@ const RangeSlider: FC<RangeSliderProps> = ({
           step={step}
           value={maxValue}
           onChange={handleMaxChange}
-          className="range-slider-thumb range-slider-thumb-max"
+          className="range-slider-thumb range-slider-thumb-max absolute w-full h-0 pointer-events-none appearance-none bg-transparent z-[4]"
           disabled={disabled}
           aria-label={`${label} maximum`}
         />
       </div>
 
       {/* Min/Max labels */}
-      <div className="range-slider-bounds">
-        <span className="range-slider-bound-min">{formatValue(min)}</span>
-        <span className="range-slider-bound-max">{formatValue(max)}</span>
+      <div className="flex justify-between mt-xs">
+        <span className="text-xs text-text-muted">{formatValue(min)}</span>
+        <span className="text-xs text-text-muted">{formatValue(max)}</span>
       </div>
     </div>
   );

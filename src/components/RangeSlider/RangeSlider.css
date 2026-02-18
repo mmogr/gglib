@@ -1,67 +1,4 @@
-.range-slider {
-  width: 100%;
-  padding: var(--spacing-xs, 4px) 0;
-}
-
-.range-slider-disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.range-slider-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-sm, 8px);
-}
-
-.range-slider-label {
-  font-size: var(--font-size-sm, 13px);
-  font-weight: 500;
-  color: var(--color-text-primary, #e0e0e0);
-}
-
-.range-slider-values {
-  font-size: var(--font-size-xs, 11px);
-  font-weight: 600;
-  color: var(--color-primary, #4a9eff);
-  background: var(--color-surface-elevated, #333);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm, 4px);
-}
-
-.range-slider-container {
-  position: relative;
-  height: 20px;
-  display: flex;
-  align-items: center;
-}
-
-.range-slider-track {
-  position: absolute;
-  width: 100%;
-  height: 4px;
-  background: var(--color-border, #3a3a3a);
-  border-radius: 2px;
-}
-
-.range-slider-range {
-  position: absolute;
-  height: 100%;
-  background: var(--color-primary, #4a9eff);
-  border-radius: 2px;
-}
-
-/* Hide default appearance and style the thumb */
-.range-slider-thumb {
-  position: absolute;
-  width: 100%;
-  height: 0;
-  pointer-events: none;
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-}
+/* RangeSlider - Thumb pseudo-element styles (can't be expressed in Tailwind) */
 
 .range-slider-thumb::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -105,15 +42,6 @@
 }
 
 /* Ensure min thumb is above max when at same position */
-.range-slider-thumb-min {
-  z-index: 3;
-}
-
-.range-slider-thumb-max {
-  z-index: 4;
-}
-
-/* When thumbs overlap, keep min grabbable */
 .range-slider-thumb-min::-webkit-slider-thumb {
   z-index: 3;
 }
@@ -122,24 +50,13 @@
   z-index: 4;
 }
 
-.range-slider-bounds {
-  display: flex;
-  justify-content: space-between;
-  margin-top: var(--spacing-xs, 4px);
-}
-
-.range-slider-bound-min,
-.range-slider-bound-max {
-  font-size: var(--font-size-xs, 11px);
-  color: var(--color-text-tertiary, #888);
-}
-
 /* Disabled state */
-.range-slider-disabled .range-slider-thumb::-webkit-slider-thumb {
+.range-slider-thumb:disabled::-webkit-slider-thumb {
   background: var(--color-border, #3a3a3a);
   cursor: not-allowed;
 }
 
-.range-slider-disabled .range-slider-range {
+.range-slider-thumb:disabled::-moz-range-thumb {
   background: var(--color-border, #3a3a3a);
+  cursor: not-allowed;
 }
