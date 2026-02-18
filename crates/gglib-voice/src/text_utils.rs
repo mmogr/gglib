@@ -393,16 +393,15 @@ fn strip_balanced_markers(text: &str, marker: &str) -> String {
         if bytes[i..].starts_with(marker.as_bytes()) {
             let after_open = i + marker_len;
             // Opening marker must be followed immediately by non-whitespace.
-            let opens = after_open < total
-                && !bytes[after_open].is_ascii_whitespace();
+            let opens = after_open < total && !bytes[after_open].is_ascii_whitespace();
 
             if opens {
                 // Look for a matching closing marker.
                 if let Some(rel) = find_closing_marker(&text[after_open..], marker) {
                     let close_start = after_open + rel;
                     // Closing marker must be preceded by non-whitespace.
-                    let closes = close_start > after_open
-                        && !bytes[close_start - 1].is_ascii_whitespace();
+                    let closes =
+                        close_start > after_open && !bytes[close_start - 1].is_ascii_whitespace();
                     if closes {
                         // Emit the middle (unwrapped content) and skip both markers.
                         result.push_str(&text[after_open..close_start]);

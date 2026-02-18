@@ -14,10 +14,7 @@ use std::path::Path;
 /// util::path_to_string(&path, VoiceError::ModelLoadError)?;
 /// util::path_to_string(&path, VoiceError::SynthesisError)?;
 /// ```
-pub(super) fn path_to_string<E>(
-    path: &Path,
-    err: impl FnOnce(String) -> E,
-) -> Result<String, E> {
+pub(super) fn path_to_string<E>(path: &Path, err: impl FnOnce(String) -> E) -> Result<String, E> {
     path.to_str()
         .map(ToString::to_string)
         .ok_or_else(|| err(format!("Invalid UTF-8 path: {}", path.display())))

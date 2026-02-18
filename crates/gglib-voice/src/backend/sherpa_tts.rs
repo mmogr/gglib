@@ -294,5 +294,3 @@ pub fn sherpa_kokoro_voices() -> Vec<VoiceInfo> {
         voice_info("bm_lewis", "Lewis", "British English", VoiceGender::Male),
     ]
 }
-
-

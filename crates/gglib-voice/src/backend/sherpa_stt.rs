@@ -246,5 +246,3 @@ fn find_file_prefix(dir: &Path, suffix: &str) -> Result<String, VoiceError> {
         dir.display()
     )))
 }
-
-

@@ -31,7 +31,9 @@ struct MockStt {
 
 impl MockStt {
     fn new(response: impl Into<String>) -> Self {
-        Self { response: response.into() }
+        Self {
+            response: response.into(),
+        }
     }
 }
 
@@ -70,9 +72,15 @@ impl TtsBackend for MockTts {
 
     fn set_voice(&mut self, _voice_id: &str) {}
     fn set_speed(&mut self, _speed: f32) {}
-    fn voice(&self) -> &str { "mock_voice" }
-    fn sample_rate(&self) -> u32 { 16_000 }
-    fn available_voices(&self) -> Vec<VoiceInfo> { vec![] }
+    fn voice(&self) -> &str {
+        "mock_voice"
+    }
+    fn sample_rate(&self) -> u32 {
+        16_000
+    }
+    fn available_voices(&self) -> Vec<VoiceInfo> {
+        vec![]
+    }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -150,7 +158,10 @@ fn set_active_for_test_reaches_listening() {
     assert!(pipeline.is_active());
 
     let emitted = states_from(&drain_events(&mut rx));
-    assert!(emitted.contains(&VoiceState::Listening), "expected Listening event, got {emitted:?}");
+    assert!(
+        emitted.contains(&VoiceState::Listening),
+        "expected Listening event, got {emitted:?}"
+    );
 }
 
 #[test]
@@ -164,8 +175,15 @@ fn ptt_start_transitions_to_recording_when_active() {
     let (mut pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
     pipeline.set_active_for_test();
 
-    assert!(pipeline.is_active(), "pipeline should be active after set_active_for_test");
-    assert_eq!(pipeline.state(), VoiceState::Listening, "should be Listening");
+    assert!(
+        pipeline.is_active(),
+        "pipeline should be active after set_active_for_test"
+    );
+    assert_eq!(
+        pipeline.state(),
+        VoiceState::Listening,
+        "should be Listening"
+    );
 
     // The error is expected (no audio hardware in test), but the state
     // must not revert to Idle due to the is_active() guard — it stays Listening.
