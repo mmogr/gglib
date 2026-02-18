@@ -378,21 +378,34 @@ pub async fn download_voice_model(
         });
     }
 
+    // Content-Length may be absent; treat 0 as "unknown size".
     let total_size = response.content_length().unwrap_or(0);
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| crate::error::VoiceError::DownloadError {
+    let file = tokio::fs::File::create(dest).await?;
+    let mut writer = BufWriter::new(file);
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_reported: u64 = 0;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| crate::error::VoiceError::DownloadError {
             name: url.to_string(),
             source: e.into(),
         })?;
+        writer.write_all(&chunk).await?;
+        downloaded += chunk.len() as u64;
+        if downloaded - last_reported >= 100_000 {
+            on_progress(downloaded, total_size);
+            last_reported = downloaded;
+        }
+    }
 
-    tokio::fs::write(dest, &bytes).await?;
-    on_progress(bytes.len() as u64, total_size.max(bytes.len() as u64));
+    // Flush the buffer to disk and guarantee the final 100% event is emitted.
+    writer.flush().await?;
+    on_progress(downloaded, total_size.max(downloaded));
 
     tracing::info!(
-        size_mb = bytes.len() / 1_048_576,
+        size_mb = downloaded / 1_048_576,
         dest = %dest.display(),
         "Voice model download complete"
     );
