@@ -2,10 +2,12 @@
 //!
 //! Wraps `sherpa_rs::tts::KokoroTts` behind the engine-agnostic [`TtsBackend`]
 //! trait.  The sherpa-rs `create` method requires `&mut self`, while our trait
-//! uses `&self`, so the inner engine is wrapped in a [`std::sync::Mutex`].
+//! uses `&self`, so the inner engine is wrapped in an `Arc<Mutex<…>>`.
+//! Synthesis is dispatched via `tokio::task::spawn_blocking` so the Tokio
+//! worker thread is never blocked during inference.
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use sherpa_rs::tts::{KokoroTts, KokoroTtsConfig};
@@ -41,8 +43,12 @@ impl Default for SherpaTtsConfig {
 /// is behind a [`Mutex`] because `KokoroTts::create` takes `&mut self`
 /// while our [`TtsBackend`] trait requires `&self`.
 pub struct SherpaTtsBackend {
-    /// The loaded sherpa-onnx TTS engine (behind Mutex for interior mutability).
-    engine: Mutex<KokoroTts>,
+    /// The loaded sherpa-onnx TTS engine.
+    ///
+    /// Wrapped in `Arc<Mutex<…>>` so it can be moved into
+    /// `tokio::task::spawn_blocking` closures while the outer `&self` stays
+    /// alive.  `KokoroTts` is `Send + Sync` (per sherpa-rs's own `unsafe impl`).
+    engine: Arc<Mutex<KokoroTts>>,
 
     /// Currently selected voice ID string.
     voice_id: String,
@@ -115,7 +121,7 @@ impl SherpaTtsBackend {
         tracing::info!("Sherpa Kokoro TTS model loaded successfully");
 
         Ok(Self {
-            engine: Mutex::new(engine),
+            engine: Arc::new(Mutex::new(engine)),
             voice_id: config.voice.clone(),
             speaker_id,
             speed: config.speed,
@@ -141,12 +147,25 @@ impl TtsBackend for SherpaTtsBackend {
             "Synthesizing speech (Sherpa Kokoro)"
         );
 
-        let audio = self
-            .engine
-            .lock()
-            .map_err(|e| VoiceError::SynthesisError(format!("TTS engine lock poisoned: {e}")))?
-            .create(text, self.speaker_id, self.speed)
-            .map_err(|e| VoiceError::SynthesisError(format!("{e}")))?;
+        // Kokoro inference is CPU-bound and can take hundreds of milliseconds.
+        // Offload to a blocking thread pool so the Tokio worker is not stalled.
+        let engine = Arc::clone(&self.engine);
+        let sid = self.speaker_id;
+        let speed = self.speed;
+        let text = text.to_string();
+
+        let audio = tokio::task::spawn_blocking(move || {
+            engine
+                .lock()
+                .map_err(|e| VoiceError::SynthesisError(format!("TTS engine lock poisoned: {e}")))
+                .and_then(|mut guard| {
+                    guard
+                        .create(&text, sid, speed)
+                        .map_err(|e| VoiceError::SynthesisError(format!("{e}")))
+                })
+        })
+        .await
+        .map_err(|e| VoiceError::SynthesisError(format!("spawn_blocking join error: {e}")))??;
 
         let sample_rate = audio.sample_rate;
         let samples = audio.samples;
