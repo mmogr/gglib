@@ -18,6 +18,7 @@ import {
   isTauriEnvironment,
   voiceStart,
   voiceStop,
+  voiceUnload,
   voiceStatus,
   voicePttStart,
   voicePttStop,
@@ -144,6 +145,13 @@ export interface UseVoiceModeReturn {
   refreshModels: () => Promise<void>;
   /** Clear the current error */
   clearError: () => void;
+  /**
+   * Fully unload the voice pipeline, freeing STT/TTS model memory.
+   *
+   * Use this when the user switches models or when memory must be reclaimed.
+   * For simply pausing voice mode while keeping models warm, use `stop()`.
+   */
+  unload: () => Promise<void>;
 }
 
 // ── Hook implementation ────────────────────────────────────────────
@@ -237,6 +245,20 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
         unlisten();
       }
       unlistenRefs.current = [];
+
+      // Release the microphone if voice is still active when this component
+      // unmounts (e.g. user navigates away). voiceStop pauses the pipeline
+      // and drops the audio thread (OS mic indicator off) but keeps loaded
+      // models warm so the next start() is instant.
+      voiceStatus()
+        .then((status) => {
+          if (status.isActive) {
+            return voiceStop();
+          }
+        })
+        .catch(() => {
+          // Best-effort: ignore errors during unmount cleanup.
+        });
     };
   }, [subscribeToEvents]);
 
@@ -554,6 +576,22 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const unload = useCallback(async () => {
+    try {
+      await voiceUnload();
+      setIsActive(false);
+      setVoiceState('idle');
+      setSttLoaded(false);
+      setTtsLoaded(false);
+      setAudioLevel(0);
+      setIsPttHeld(false);
+      setIsSpeaking(false);
+      setIsTtsGenerating(false);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
   return {
     isSupported,
     isActive,
@@ -592,5 +630,6 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
     loadTts,
     refreshModels,
     clearError,
+    unload,
   };
 }

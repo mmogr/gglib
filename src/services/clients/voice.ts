@@ -29,6 +29,10 @@ export interface VoiceStatusResponse {
   mode: VoiceInteractionMode;
   sttLoaded: boolean;
   ttsLoaded: boolean;
+  /** ID of the currently loaded STT model, or null if none is loaded. */
+  sttModelId: string | null;
+  /** Currently configured TTS voice ID, or null if no pipeline exists. */
+  ttsVoice: string | null;
   autoSpeak: boolean;
 }
 
@@ -124,6 +128,17 @@ export async function voiceStart(mode?: VoiceInteractionMode): Promise<void> {
 
 export async function voiceStop(): Promise<void> {
   await invokeTauri('voice_stop');
+}
+
+/**
+ * Fully unload the voice pipeline, freeing STT/TTS model memory.
+ *
+ * Use this when the user explicitly changes models or when memory must be
+ * reclaimed. For simply pausing voice mode while keeping models warm,
+ * use {@link voiceStop} instead.
+ */
+export async function voiceUnload(): Promise<void> {
+  await invokeTauri('voice_unload');
 }
 
 export async function voiceStatus(): Promise<VoiceStatusResponse> {
