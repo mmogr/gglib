@@ -6,7 +6,7 @@ import type { QueueRunSummary } from '../../services/transport/types/events';
 import { formatBytes, formatTime } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
 import { Icon } from '../ui/Icon';
-import styles from './GlobalDownloadStatus.module.css';
+import { cn } from '../../utils/cn';
 
 interface GlobalDownloadStatusProps {
   /** Current download progress from useDownloadManager hook */
@@ -73,36 +73,36 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
     const remaining = Math.max(0, uniqueTotal - shownCount);
 
     return (
-      <div className={styles.container}>
-        <div className={styles.completionSection}>
-          <div className={styles.completionHeader}>
-            <span className={styles.completionIcon} aria-hidden>
+      <div className="bg-background border-b border-border rounded-none p-base mb-0">
+        <div className="flex flex-col gap-sm">
+          <div className="flex items-center gap-sm">
+            <span className="text-[1.25rem]" aria-hidden>
               <Icon icon={CheckCircle2} size={16} />
             </span>
-            <span className={styles.completionTitle}>
+            <span className="text-base font-semibold text-success">
               {uniqueTotal === 1 ? 'Download Complete' : `${uniqueTotal} Downloads Complete`}
             </span>
           </div>
-          <div className={styles.completedList}>
+          <div className="flex flex-col gap-xs p-sm bg-surface-raised rounded-base max-h-[120px] overflow-y-auto">
             {displayItems.length > 0 ? (
               <>
                 {displayItems.map((item, idx) => (
-                  <div key={idx} className={styles.completedItem}>
-                    <span className={styles.completedIcon} aria-hidden>
+                  <div key={idx} className="text-sm text-text py-xs border-b border-border last:border-b-0">
+                    <span className="text-sm" aria-hidden>
                       <Icon icon={Box} size={14} />
                     </span>
                     {item.display_name}
                   </div>
                 ))}
                 {remaining > 0 && (
-                  <div className={styles.completedItem}>
+                  <div className="text-sm text-text py-xs border-b border-border last:border-b-0">
                     …and {remaining} more
                   </div>
                 )}
               </>
             ) : (
-              <div className={styles.completedItem}>
-                <span className={styles.completedIcon} aria-hidden>
+              <div className="text-sm text-text py-xs border-b border-border last:border-b-0">
+                <span className="text-sm" aria-hidden>
                   <Icon icon={Box} size={14} />
                 </span>
                 {uniqueTotal} {uniqueTotal === 1 ? 'model' : 'models'} downloaded
@@ -111,14 +111,14 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             )}
           </div>
           {hasRetries && (
-            <div className={styles.retryNotice}>
-              <span className={styles.retryIcon} aria-hidden>
+            <div className="text-sm text-text-secondary">
+              <span className="text-sm" aria-hidden>
                 <Icon icon={RotateCcw} size={14} />
               </span>
               {totalAttempts} total attempts
             </div>
           )}
-          <button className={styles.dismissBtn} onClick={onDismissSummary}>
+          <button className="self-end bg-[rgba(16,185,129,0.15)] text-success border border-[rgba(16,185,129,0.3)] rounded-base px-[1.25rem] py-[0.4rem] text-sm font-semibold cursor-pointer transition-all hover:bg-[rgba(74,222,128,0.25)] hover:border-[rgba(74,222,128,0.5)]" onClick={onDismissSummary}>
             OK
           </button>
         </div>
@@ -133,20 +133,20 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   const isSharded = !!(shard && shard.total > 1);
 
   return (
-    <div className={styles.container}>
-      <div className={styles.progressSection}>
-        <div className={styles.progressHeader}>
-          <div className={styles.progressInfo}>
-            <span className={styles.statusIcon} aria-hidden>
+    <div className="bg-background border-b border-border rounded-none p-base mb-0">
+      <div className="flex flex-col gap-sm">
+        <div className="flex items-center justify-between gap-md">
+          <div className="flex items-center gap-sm">
+            <span className="text-[1.1rem]" aria-hidden>
               <Icon icon={Download} size={16} />
             </span>
-            <span className={styles.statusText}>
+            <span className="text-sm font-medium text-text">
               {isSharded && shard ? `Downloading shard ${shard.index + 1}/${shard.total}` : 'Downloading'}
             </span>
             {queueCount > 0 && (
-              <div className={styles.queueBadgeContainer}>
+              <div className="relative">
                 <button
-                  className={styles.queueBadge}
+                  className="bg-[rgba(34,211,238,0.15)] text-primary text-xs font-medium px-[0.5rem] py-[0.15rem] rounded-sm border-none cursor-pointer transition-all hover:bg-[rgba(34,211,238,0.25)]"
                   onClick={() => setIsQueuePopoverOpen((prev) => !prev)}
                   title="Click to view and manage queue"
                 >
@@ -163,7 +163,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           </div>
           {currentId && (
             <button 
-              className={styles.cancelBtn} 
+              className="bg-[rgba(239,68,68,0.15)] text-danger border border-[rgba(239,68,68,0.3)] rounded-base px-[0.75rem] py-[0.3rem] text-sm font-medium cursor-pointer transition-all hover:bg-[rgba(239,68,68,0.25)] hover:border-[rgba(239,68,68,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[rgba(239,68,68,0.1)] disabled:border-[rgba(239,68,68,0.2)]"
               onClick={() => onCancel(currentId)}
               disabled={isCancelling}
             >
@@ -172,51 +172,54 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           )}
         </div>
 
-        <div className={styles.modelName} title={currentId}>
+        <div className="text-sm text-text-secondary font-mono overflow-hidden text-ellipsis whitespace-nowrap" title={currentId}>
           {currentId.length > 50 ? `${currentId.substring(0, 47)}...` : currentId}
         </div>
 
-        <div className={styles.progressBarContainer}>
-          <div className={styles.progressBar}>
+        <div className="flex items-center gap-sm">
+          <div className="flex-1 h-2 bg-surface-raised rounded-sm overflow-hidden">
             <div
-              className={`${styles.progressBarFill} ${percentage === undefined ? styles.indeterminate : ''}`}
+              className={cn(
+                'h-full bg-linear-to-r from-primary to-info rounded-sm transition-[width] duration-200 ease-linear',
+                percentage === undefined && 'w-[30%] animate-indeterminate'
+              )}
               style={percentage !== undefined ? { width: `${percentage}%` } : {}}
             />
           </div>
-          <span className={styles.percentageText}>
+          <span className="text-sm font-semibold text-text min-w-[48px] text-right">
             {percentage !== undefined ? `${percentage.toFixed(1)}%` : '...'}
           </span>
         </div>
 
-        <div className={styles.statsRow}>
+        <div className="flex gap-md flex-wrap">
           {progress?.downloaded !== undefined && progress?.total !== undefined && (
-            <span className={styles.stat}>
+            <span className="text-xs text-text-secondary">
               {formatBytes(progress.downloaded)} / {formatBytes(progress.total)}
             </span>
           )}
           {progress?.speedBps !== undefined && (
-            <span className={styles.stat}>{formatBytes(progress.speedBps)}/s</span>
+            <span className="text-xs text-text-secondary">{formatBytes(progress.speedBps)}/s</span>
           )}
           {progress?.etaSeconds !== undefined && (
-            <span className={styles.stat}>ETA: {formatTime(progress.etaSeconds)}</span>
+            <span className="text-xs text-text-secondary">ETA: {formatTime(progress.etaSeconds)}</span>
           )}
         </div>
 
         {isSharded && shard && (
-          <div className={styles.shardSection}>
-            <div className={styles.shardHeader}>
-              <span className={styles.shardLabel}>
+          <div className="bg-surface-raised rounded-base p-sm mt-xs">
+            <div className="flex items-center justify-between mb-xs">
+              <span className="text-xs font-medium text-warning">
                 Shard {shard.index + 1}/{shard.total}
               </span>
               {shard.filename && (
-                <span className={styles.shardFilename} title={shard.filename}>
+                <span className="text-xs text-text-secondary font-mono" title={shard.filename}>
                   {shard.filename.length > 25 ? `...${shard.filename.slice(-22)}` : shard.filename}
                 </span>
               )}
             </div>
-            <div className={styles.shardProgressBar}>
+            <div className="h-1 bg-[rgba(255,255,255,0.1)] rounded-[2px] overflow-hidden">
               <div
-                className={styles.shardProgressFill}
+                className="h-full bg-warning rounded-[2px] transition-[width] duration-200 ease-linear"
                 style={{
                   width:
                     shard.totalBytes && shard.totalBytes > 0

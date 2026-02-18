@@ -19,7 +19,7 @@ import { formatBytes, formatNumber, getHuggingFaceModelUrl } from '../../utils/f
 import { useSystemMemory } from '../../hooks/useSystemMemory';
 import { useSettings } from '../../hooks/useSettings';
 import { Icon } from '../ui/Icon';
-import styles from './HfModelPreview.module.css';
+import { cn } from '../../utils/cn';
 
 interface HfModelPreviewProps {
   /** The selected HuggingFace model to preview */
@@ -44,17 +44,17 @@ const FitIndicator: FC<FitIndicatorProps> = ({ sizeBytes, checkFit, getTooltip }
   const tooltip = getTooltip(sizeBytes);
 
   const iconMap: Record<FitStatus, { icon: typeof CheckCircle2; className: string }> = {
-    fits: { icon: CheckCircle2, className: styles.fitIndicatorFits },
-    tight: { icon: AlertTriangle, className: styles.fitIndicatorTight },
-    wont_fit: { icon: XCircle, className: styles.fitIndicatorWontFit },
-    unknown: { icon: HelpCircle, className: styles.fitIndicatorUnknown },
+    fits: { icon: CheckCircle2, className: '' },
+    tight: { icon: AlertTriangle, className: '' },
+    wont_fit: { icon: XCircle, className: '' },
+    unknown: { icon: HelpCircle, className: 'grayscale opacity-60' },
   };
 
   const { icon, className } = iconMap[status];
 
   return (
     <span 
-      className={`${styles.fitIndicator} ${className}`}
+      className={cn('text-base cursor-help', className)}
       title={tooltip}
       aria-label={tooltip}
     >
@@ -189,13 +189,13 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
   };
 
   return (
-    <div className={styles.hfModelPreview}>
+    <div className="flex flex-col gap-lg h-full overflow-y-auto p-base">
       {/* Model Header */}
-      <div className={styles.modelHeader}>
-        <div className={styles.modelTitleRow}>
-          <h2 className={styles.modelName}>{model.name}</h2>
+      <div className="flex flex-col gap-sm pb-base border-b border-border">
+        <div className="flex items-center justify-between gap-md">
+          <h2 className="m-0 text-xl font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap flex-1">{model.name}</h2>
           <button
-            className={styles.hfButton}
+            className="shrink-0 bg-transparent border-none text-[1.25rem] cursor-pointer px-sm py-xs rounded-base transition-colors duration-150 ease-linear hover:bg-surface-hover"
             onClick={handleOpenHuggingFace}
             title="Open on HuggingFace"
             aria-label="Open on HuggingFace"
@@ -203,45 +203,45 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
             <Icon icon={ExternalLink} size={16} />
           </button>
         </div>
-        <div className={styles.modelAuthor}>by {model.author || model.id.split('/')[0]}</div>
+        <div className="text-sm text-text-secondary">by {model.author || model.id.split('/')[0]}</div>
         
         {/* Stats row */}
-        <div className={styles.statsRow}>
+        <div className="flex flex-wrap gap-md items-center mt-sm">
           {model.parameters_b && (
-            <span className={styles.statBadge}>
+            <span className="bg-primary text-white px-sm py-xs rounded-base text-xs font-semibold">
               {model.parameters_b.toFixed(1)}B params
             </span>
           )}
           {/* Tool support badge - only show when loaded and supported */}
           {!loadingToolSupport && toolSupport?.supports_tool_calling && (
             <span 
-              className={styles.toolBadge}
+              className="inline-flex items-center gap-1 px-sm py-xs bg-[rgba(37,99,235,0.15)] text-primary-light rounded-base text-xs font-medium cursor-help transition-colors duration-150 ease-linear hover:bg-[rgba(37,99,235,0.25)]"
               title={getToolSupportTooltip()}
             >
-              <span className={styles.toolBadgeIcon} aria-hidden>
+              <span aria-hidden>
                 <Icon icon={Wrench} size={14} />
               </span>
               <span>Tools</span>
-              <span className={styles.infoIcon} aria-hidden="true">
+              <span className="text-[0.7rem] opacity-70 ml-[0.15rem]" aria-hidden="true">
                 <Icon icon={Info} size={12} />
               </span>
             </span>
           )}
-          <span className={styles.stat}>
-            <span className={styles.statIcon} aria-hidden>
+          <span className="flex items-center gap-xs text-sm text-text-secondary">
+            <span className="text-sm" aria-hidden>
               <Icon icon={Download} size={14} />
             </span>
             {formatNumber(model.downloads)}
           </span>
-          <span className={styles.stat}>
-            <span className={styles.statIcon} aria-hidden>
+          <span className="flex items-center gap-xs text-sm text-text-secondary">
+            <span className="text-sm" aria-hidden>
               <Icon icon={Heart} size={14} />
             </span>
             {formatNumber(model.likes)}
           </span>
           {model.last_modified && (
-            <span className={styles.stat}>
-              <span className={styles.statIcon} aria-hidden>
+            <span className="flex items-center gap-xs text-sm text-text-secondary">
+              <span className="text-sm" aria-hidden>
                 <Icon icon={CalendarClock} size={14} />
               </span>
               {formatLastModified(model.last_modified)}
@@ -251,47 +251,47 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       </div>
 
       {/* Quantization Table */}
-      <div className={styles.quantSection}>
-        <h3 className={styles.sectionTitle}>Quantization Options</h3>
+      <div className="flex flex-col gap-md">
+        <h3 className="m-0 text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Quantization Options</h3>
         
         {loadingQuants && (
-          <div className={styles.loadingState}>
-            <span className={styles.spinner}></span>
+          <div className="p-lg text-center text-text-secondary bg-surface-elevated rounded-lg">
+            <span className="inline-block w-4 h-4 border-2 border-border border-t-primary rounded-full animate-thinking-spin mr-sm"></span>
             Loading quantizations...
           </div>
         )}
 
         {quantError && (
-          <div className={styles.errorState}>{quantError}</div>
+          <div className="p-lg text-center text-error bg-[rgba(239,68,68,0.1)] rounded-lg">{quantError}</div>
         )}
 
         {!loadingQuants && !quantError && quantizations.length === 0 && (
-          <div className={styles.emptyState}>No GGUF quantizations found</div>
+          <div className="p-lg text-center text-text-secondary bg-surface-elevated rounded-lg">No GGUF quantizations found</div>
         )}
 
         {!loadingQuants && !quantError && quantizations.length > 0 && (
-          <div className={styles.quantTable}>
-            <div className={styles.quantTableHeader}>
-              <span className={styles.colQuant}>Quant</span>
-              <span className={styles.colSize}>Size</span>
-              <span className={styles.colShards}>Shards</span>
+          <div className="flex flex-col border border-border rounded-lg overflow-hidden bg-surface">
+            <div className="grid grid-cols-[1fr_80px_60px_50px_90px] gap-sm px-base py-md bg-surface-elevated text-xs font-semibold text-text-secondary uppercase tracking-[0.05em]">
+              <span>Quant</span>
+              <span>Size</span>
+              <span>Shards</span>
               {showFitIndicators && !memoryLoading && (
-                <span className={styles.colFit}>Fit</span>
+                <span>Fit</span>
               )}
-              <span className={styles.colAction}></span>
+              <span></span>
             </div>
-            <div className={styles.quantTableBody}>
+            <div className="flex flex-col max-h-[300px] overflow-y-auto">
               {quantizations.map((quant) => (
-                <div key={quant.name} className={styles.quantRow}>
-                  <span className={styles.colQuant}>
-                    <span className={styles.quantName}>{quant.name}</span>
+                <div key={quant.name} className="grid grid-cols-[1fr_80px_60px_50px_90px] gap-sm px-base py-md items-center border-b border-border-light last:border-b-0 transition-colors duration-150 ease-linear hover:bg-surface-hover">
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                    <span className="font-medium text-text">{quant.name}</span>
                   </span>
-                  <span className={styles.colSize}>{formatBytes(quant.size_bytes)}</span>
-                  <span className={styles.colShards}>
+                  <span className="text-sm text-text-secondary text-right">{formatBytes(quant.size_bytes)}</span>
+                  <span className="text-sm text-text-secondary text-center">
                     {quant.is_sharded ? quant.shard_count : 1}
                   </span>
                   {showFitIndicators && !memoryLoading && (
-                    <span className={styles.colFit}>
+                    <span className="text-center">
                       <FitIndicator
                         sizeBytes={quant.size_bytes}
                         checkFit={checkFit}
@@ -299,9 +299,9 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
                       />
                     </span>
                   )}
-                  <span className={styles.colAction}>
+                  <span className="text-right">
                     <button
-                      className={styles.downloadBtn}
+                      className="px-md py-xs text-xs font-medium text-white bg-primary border-none rounded-base cursor-pointer transition-[background-color,opacity] duration-150 ease-linear hover:not-disabled:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={() => handleDownload(quant)}
                       disabled={downloadsDisabled}
                       title={downloadsDisabled ? disabledReason : `Download ${quant.name}`}
@@ -318,22 +318,22 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
 
       {/* Model Description */}
       {model.description && (
-        <div className={styles.descriptionSection}>
-          <h3 className={styles.sectionTitle}>Description</h3>
-          <p className={styles.description}>{model.description}</p>
+        <div className="flex flex-col gap-sm">
+          <h3 className="m-0 text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Description</h3>
+          <p className="m-0 text-sm leading-relaxed text-text-secondary">{model.description}</p>
         </div>
       )}
 
       {/* Tags */}
       {model.tags && model.tags.length > 0 && (
-        <div className={styles.tagsSection}>
-          <h3 className={styles.sectionTitle}>Tags</h3>
-          <div className={styles.tagsList}>
+        <div className="flex flex-col gap-sm">
+          <h3 className="m-0 text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Tags</h3>
+          <div className="flex flex-wrap gap-sm">
             {model.tags.slice(0, 10).map((tag) => (
-              <span key={tag} className={styles.tag}>{tag}</span>
+              <span key={tag} className="px-sm py-xs text-xs text-text-secondary bg-surface-elevated rounded-base">{tag}</span>
             ))}
             {model.tags.length > 10 && (
-              <span className={styles.moreTagsIndicator}>+{model.tags.length - 10} more</span>
+              <span className="px-sm py-xs text-xs text-text-muted italic">+{model.tags.length - 10} more</span>
             )}
           </div>
         </div>
