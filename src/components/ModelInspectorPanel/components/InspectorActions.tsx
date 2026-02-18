@@ -27,7 +27,7 @@ export const InspectorActions: FC<InspectorActionsProps> = ({
   onDelete,
 }) => {
   return (
-    <section className="inspector-section actions-section">
+    <section className="mb-xl flex flex-col gap-base">
       <Button 
         variant={isRunning ? 'danger' : 'primary'}
         size="lg"
@@ -37,7 +37,7 @@ export const InspectorActions: FC<InspectorActionsProps> = ({
       >
         {isRunning ? 'Stop Endpoint' : 'Start Endpoint'}
       </Button>
-      <div className="secondary-actions">
+      <div className="flex gap-md">
         {isEditMode ? (
           <>
             <Button 

@@ -55,7 +55,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
       <h2>Add New Model</h2>
 
       <form onSubmit={handleSubmit} className="add-model-form">
-        <div className="form-group">
+        <div className="mb-lg">
           <label htmlFor="filePath">Model File Path:</label>
           <div className="flex flex-wrap gap-spacing-sm tablet:flex-col tablet:items-stretch">
             <Input

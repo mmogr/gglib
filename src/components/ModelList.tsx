@@ -48,7 +48,7 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVer
 
   return (
     <div className="table-row">
-      <div className="cell model-name">
+      <div className="cell font-medium text-base flex items-center gap-sm w-full break-words">
         <Row gap="sm" align="center" className="name-primary">
           {model.name}
           {isRunning && <ServerHealthIndicator modelId={model.id ?? 0} />}
@@ -63,7 +63,7 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVer
       <div className="cell">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</div>
       <div className="cell">{model.architecture || "—"}</div>
       <div className="cell">
-        <span className="quantization-badge">
+        <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-primary border border-[rgba(59,130,246,0.3)]">
           {model.quantization || "—"}
         </span>
       </div>
@@ -221,7 +221,7 @@ const ModelList: FC<ModelListProps> = ({
     <div className="model-list-container">
       <div className="list-header">
         <h2>Your Models ({models.length})</h2>
-        <button onClick={onRefresh} className="refresh-button" disabled={loading}>
+        <button onClick={onRefresh} className="text-lg" disabled={loading}>
           {loading ? "Loading..." : (
             <span className="inline-flex items-center gap-2">
               <Icon icon={RotateCcw} size={16} />
@@ -234,11 +234,11 @@ const ModelList: FC<ModelListProps> = ({
       {loading && models.length === 0 ? (
         <div className="loading">Loading models...</div>
       ) : models.length === 0 ? (
-        <div className="empty-state">
+        <div className="flex flex-col items-center justify-center py-3xl px-xl text-center min-h-[300px]">
           <p>No models found. Add your first model to get started!</p>
         </div>
       ) : (
-        <div className="model-table">
+        <div className="flex flex-col w-full">
           <div className="table-header">
             <div className="header-cell">Name</div>
             <div className="header-cell">Size</div>
@@ -277,9 +277,9 @@ const ModelList: FC<ModelListProps> = ({
             </div>
             
             <div className="modal-body">
-              <div className="model-info">
+              <div className="flex justify-between items-center mb-lg p-base bg-background rounded-md border border-border">
                 <strong>{servingModel.name}</strong>
-                <span className="model-size">{formatParamCount(servingModel.paramCountB, servingModel.expertUsedCount, servingModel.expertCount)}</span>
+                <span className="text-text-secondary text-sm">{formatParamCount(servingModel.paramCountB, servingModel.expertUsedCount, servingModel.expertCount)}</span>
               </div>
               
               {/* Capability Badges */}
@@ -306,22 +306,22 @@ const ModelList: FC<ModelListProps> = ({
                 </Row>
               )}
               
-              <div className="form-group">
-                <label htmlFor="context-input">
+              <div className="mb-lg">
+                <label htmlFor="context-input" className="block mb-sm font-medium text-text">
                   Context Length
-                  <span className="label-hint"> (optional)</span>
+                  <span className="font-normal text-text-secondary text-sm"> (optional)</span>
                 </label>
                 <Input
                   id="context-input"
                   type="number"
-                  className="context-input"
+                  className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
                   placeholder={servingModel.contextLength ? `Default: ${servingModel.contextLength.toLocaleString()}` : 'Use model default'}
                   value={customContext}
                   onChange={(e) => setCustomContext(e.target.value)}
                   disabled={isServing}
                   min="1"
                 />
-                <p className="input-help">
+                <p className="mt-sm text-sm text-text-secondary">
                   {servingModel.contextLength 
                     ? `Model's maximum: ${servingModel.contextLength.toLocaleString()} tokens`
                     : 'Leave empty to use model default'}
@@ -329,7 +329,7 @@ const ModelList: FC<ModelListProps> = ({
               </div>
 
               {/* Jinja Templates Toggle */}
-              <div className="form-group mt-4">
+              <div className="mb-lg mt-4">
                 <label 
                   htmlFor="jinja-toggle" 
                   className="flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
@@ -349,7 +349,7 @@ const ModelList: FC<ModelListProps> = ({
                     </span>
                   )}
                 </label>
-                <p className="input-help mt-1">
+                <p className="mt-sm text-sm text-text-secondary mt-1">
                   Required for tool calling and advanced chat templates. {jinjaAutoEnabled ? 'Automatically enabled for agent/reasoning models.' : 'Enable if using function calling.'}
                 </p>
               </div>

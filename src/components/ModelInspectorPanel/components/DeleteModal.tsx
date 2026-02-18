@@ -34,7 +34,7 @@ export const DeleteModal: FC<DeleteModalProps> = ({
     <Modal open={true} onClose={onClose} title="Delete model" size="sm" preventClose={isDeleting}>
       <div className="modal-body">
         <p>Are you sure you want to remove <strong>"{model.name}"</strong> from the database?</p>
-        <p className="text-muted mt-4">
+        <p className="text-text-muted text-sm mt-4">
           Note: The model file will remain on disk and won't be deleted.
         </p>
       </div>
