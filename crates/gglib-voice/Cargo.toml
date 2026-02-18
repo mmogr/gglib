@@ -62,6 +62,9 @@ sherpa-rs = { version = "0.6", features = ["tts", "download-binaries", "static"]
 # HTTP client for model downloads
 reqwest = { workspace = true }
 
+# Stream adaptor — provides StreamExt::next() for reqwest byte streams
+futures-util = "0.3"
+
 # Archive extraction for sherpa-onnx model bundles (tar.bz2)
 tar = "0.4"
 bzip2 = "0.5"
