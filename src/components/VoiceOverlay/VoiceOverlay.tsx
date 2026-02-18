@@ -11,7 +11,8 @@ import type { UseVoiceModeReturn } from '../../hooks/useVoiceMode';
 import styles from './VoiceOverlay.module.css';
 
 interface VoiceOverlayProps {
-  voice: UseVoiceModeReturn;
+  /** Shared voice mode instance. Passing null/undefined renders nothing. */
+  voice: UseVoiceModeReturn | null | undefined;
   /** Callback when transcript is ready to send as a chat message */
   onTranscript?: (text: string) => void;
 }
@@ -37,25 +38,23 @@ const STATE_ICONS: Record<string, string> = {
 };
 
 export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => {
-  const {
-    isSupported,
-    isActive,
-    voiceState,
-    mode,
-    isPttHeld,
-    isSpeaking,
-    isTtsGenerating,
-    audioLevel,
-    lastTranscript,
-    error,
-    sttLoaded,
-    ttsLoaded,
-    pttStart,
-    pttStop,
-    stop,
-    stopSpeaking,
-    clearError,
-  } = voice;
+  const isSupported = voice?.isSupported ?? false;
+  const isActive = voice?.isActive ?? false;
+  const voiceState = voice?.voiceState ?? 'idle';
+  const mode = voice?.mode ?? 'ptt';
+  const isPttHeld = voice?.isPttHeld ?? false;
+  const isSpeaking = voice?.isSpeaking ?? false;
+  const isTtsGenerating = voice?.isTtsGenerating ?? false;
+  const audioLevel = voice?.audioLevel ?? 0;
+  const lastTranscript = voice?.lastTranscript ?? null;
+  const error = voice?.error ?? null;
+  const sttLoaded = voice?.sttLoaded ?? false;
+  const ttsLoaded = voice?.ttsLoaded ?? false;
+  const pttStart = voice?.pttStart;
+  const pttStop = voice?.pttStop;
+  const stop = voice?.stop;
+  const stopSpeaking = voice?.stopSpeaking;
+  const clearError = voice?.clearError;
 
   // Forward transcripts to chat
   useEffect(() => {
@@ -76,7 +75,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       if (e.repeat) return;
 
       e.preventDefault();
-      pttStart();
+      pttStart?.();
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -85,7 +84,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
       e.preventDefault();
-      pttStop();
+      pttStop?.();
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -97,22 +96,22 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
   }, [isActive, mode, pttStart, pttStop]);
 
   const handlePttMouseDown = useCallback(() => {
-    pttStart();
+    pttStart?.();
   }, [pttStart]);
 
   const handlePttMouseUp = useCallback(() => {
-    pttStop();
+    pttStop?.();
   }, [pttStop]);
 
-  // Don't render anything outside Tauri.
-  // Render during auto-loading even before the pipeline is fully active,
-  // so the user sees the "Loading models…" spinner after clicking the mic.
-  if (!isSupported || (!isActive && !voice.isAutoLoading)) return null;
+  // Don't render anything outside Tauri or when voice is unavailable.
+  // Render during auto-loading even before the pipeline is fully active.
+  const isAutoLoading = voice?.isAutoLoading ?? false;
+  if (!isSupported || (!isActive && !isAutoLoading)) return null;
 
   const stateLabel = STATE_LABELS[voiceState] ?? voiceState;
   const stateIcon = STATE_ICONS[voiceState] ?? '🎙️';
   const modelsReady = sttLoaded && ttsLoaded;
-  const showAutoLoading = voice.isAutoLoading;
+  const showAutoLoading = isAutoLoading;
 
   return (
     <div className={styles.overlay}>
@@ -147,7 +146,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {isSpeaking && (
         <button
           className={styles.controlButton}
-          onClick={stopSpeaking}
+          onClick={() => stopSpeaking?.()}
           title="Stop speaking"
         >
           ⏹️ Stop
@@ -181,14 +180,14 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {error && (
         <div className={styles.error}>
           <span>{error}</span>
-          <button className={styles.dismissButton} onClick={clearError}>✕</button>
+          <button className={styles.dismissButton} onClick={() => clearError?.()}>✕</button>
         </div>
       )}
 
       {/* Close voice mode */}
       <button
         className={styles.closeButton}
-        onClick={stop}
+        onClick={() => stop?.()}
         title="Close voice mode"
       >
         ✕

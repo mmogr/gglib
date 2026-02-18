@@ -12,7 +12,7 @@
 import { FC, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
-import { useVoiceMode } from "../../hooks/useVoiceMode";
+import { useVoiceModeContext } from "../../contexts/VoiceModeContext";
 import { useSettingsContext } from "../../contexts/SettingsContext";
 import type { VoiceInteractionMode } from "../../services/clients/voice";
 import styles from "../SettingsModal.module.css";
@@ -22,7 +22,7 @@ interface VoiceSettingsProps {
 }
 
 export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
-  const voice = useVoiceMode();
+  const voice = useVoiceModeContext();
   const { settings, save: saveSettings } = useSettingsContext();
 
   // ── Local state initialised from persisted settings ────────────
@@ -44,42 +44,39 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
     if (settings?.voiceTtsSpeed != null) setSpeedInput(settings.voiceTtsSpeed);
   }, [settings?.voiceTtsVoice, settings?.voiceTtsSpeed]);
 
-  // Load models and devices on mount
+  // Load models and devices on mount (re-runs if the voice context instance changes).
   useEffect(() => {
-    voice.refreshModels();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void voice?.refreshModels();
+  }, [voice]);
 
   // ── Downloaded model lists (derived from model catalog) ────────
   const downloadedSttIds = useMemo(
-    () => new Set(voice.models?.sttDownloaded ?? []),
-    [voice.models?.sttDownloaded],
+    () => new Set(voice?.models?.sttDownloaded ?? []),
+    [voice?.models?.sttDownloaded],
   );
-  const ttsDownloaded = voice.models?.ttsDownloaded ?? false;
-  const vadDownloaded = voice.models?.vadDownloaded ?? false;
+  const ttsDownloaded = voice?.models?.ttsDownloaded ?? false;
+  const vadDownloaded = voice?.models?.vadDownloaded ?? false;
 
   // If the persisted default points to a model no longer on disk, clear it
   useEffect(() => {
     if (
       defaultSttModel &&
-      voice.models &&               // catalog has loaded
+      voice?.models &&               // catalog has loaded
       !downloadedSttIds.has(defaultSttModel)
     ) {
       // Model was deleted from disk — reset persisted default
       saveSettings({ voiceSttModel: null }).catch(() => {});
     }
-    // Only run when the download list or default changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [downloadedSttIds, defaultSttModel, voice.models]);
+  }, [downloadedSttIds, defaultSttModel, voice?.models, saveSettings]);
 
   // ── Handlers ───────────────────────────────────────────────────
 
   const handleDownloadStt = useCallback(async () => {
     try {
       setDownloading('stt');
-      await voice.downloadSttModel(downloadTarget);
+      await voice?.downloadSttModel(downloadTarget);
       // Refresh model list so downloadedSttIds updates
-      await voice.refreshModels();
+      await voice?.refreshModels();
       // Auto-set as default if no default is configured yet
       if (!defaultSttModel) {
         await saveSettings({ voiceSttModel: downloadTarget });
@@ -94,9 +91,9 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
   const handleDownloadTts = useCallback(async () => {
     try {
       setDownloading('tts');
-      await voice.downloadTtsModel();
+      await voice?.downloadTtsModel();
       // Refresh model list so ttsDownloaded updates
-      await voice.refreshModels();
+      await voice?.refreshModels();
       // Persist default voice if not already set
       if (!settings?.voiceTtsVoice) {
         await saveSettings({ voiceTtsVoice: 'af_sarah' });
@@ -111,8 +108,8 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
   const handleDownloadVad = useCallback(async () => {
     try {
       setDownloading('vad');
-      await voice.downloadVadModel();
-      await voice.refreshModels();
+      await voice?.downloadVadModel();
+      await voice?.refreshModels();
     } catch {
       // Error handled by the hook
     } finally {
@@ -123,20 +120,20 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
   const handleDefaultSttChange = useCallback(async (modelId: string) => {
     await saveSettings({ voiceSttModel: modelId });
     // If a pipeline is already alive, hot-swap the STT engine
-    if (voice.sttLoaded) {
-      voice.loadStt(modelId);
+    if (voice?.sttLoaded) {
+      voice?.loadStt(modelId);
     }
   }, [saveSettings, voice]);
 
   const handleModeChange = useCallback(async (mode: string) => {
     const m = mode as VoiceInteractionMode;
-    voice.setMode(m);
+    voice?.setMode(m);
     await saveSettings({ voiceInteractionMode: m });
   }, [voice, saveSettings]);
 
   const handleVoiceChange = useCallback(async (voiceId: string) => {
     setSelectedVoice(voiceId);
-    voice.setVoice(voiceId);
+    voice?.setVoice(voiceId);
     await saveSettings({ voiceTtsVoice: voiceId });
   }, [voice, saveSettings]);
 
@@ -144,21 +141,18 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
     const speed = parseFloat(e.target.value);
     if (!isNaN(speed)) {
       setSpeedInput(speed);
-      voice.setSpeed(speed);
-      // Debounce-persist: save only on mouse-up is fine because the range
-      // input fires onChange continuously. We persist on every change for
-      // simplicity — the settings service merges partial updates.
+      voice?.setSpeed(speed);
       await saveSettings({ voiceTtsSpeed: speed });
     }
   }, [voice, saveSettings]);
 
   const handleAutoSpeakChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const enabled = e.target.checked;
-    voice.setAutoSpeak(enabled);
+    voice?.setAutoSpeak(enabled);
     await saveSettings({ voiceAutoSpeak: enabled });
   }, [voice, saveSettings]);
 
-  if (!voice.isSupported) {
+  if (!voice || !voice.isSupported) {
     return (
       <div className={styles.section}>
         <p className={styles.description}>
@@ -170,7 +164,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
 
   // ── Render helpers ─────────────────────────────────────────────
 
-  const downloadedSttModels = voice.models?.sttModels?.filter(
+  const downloadedSttModels = voice?.models?.sttModels?.filter(
     (m) => downloadedSttIds.has(m.id),
   ) ?? [];
 
@@ -189,10 +183,10 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
   return (
     <div className={styles.form}>
       {/* Error display */}
-      {voice.error && (
+      {voice?.error && (
         <div className={styles.error}>
           {voice.error}
-          <button onClick={voice.clearError} style={{ marginLeft: 8, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit' }}>✕</button>
+          <button onClick={() => voice?.clearError()} style={{ marginLeft: 8, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit' }}>✕</button>
         </div>
       )}
 
@@ -213,7 +207,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               onChange={(e) => setDownloadTarget(e.target.value)}
               style={{ flex: 1 }}
             >
-              {voice.models?.sttModels?.map((m) => (
+              {voice?.models?.sttModels?.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.sizeDisplay}) {m.englishOnly ? '🇺🇸' : '🌐'}
                   {downloadedSttIds.has(m.id) ? ' ✓' : ''}
@@ -267,7 +261,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           <label className={styles.label}>TTS Model</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
-              {voice.models?.ttsModel?.name ?? 'TTS Model'}
+              {voice?.models?.ttsModel?.name ?? 'TTS Model'}
             </span>
             <Button
               onClick={handleDownloadTts}
@@ -286,7 +280,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             value={selectedVoice}
             onChange={(e) => handleVoiceChange(e.target.value)}
           >
-            {voice.models?.voices?.map((v) => (
+            {voice?.models?.voices?.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name} ({v.category})
               </option>
@@ -315,7 +309,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         <div className={styles.fieldGroup}>
           <label className={styles.label}>Mode</label>
           <Select
-            value={voice.mode}
+            value={voice?.mode ?? 'ptt'}
             onChange={(e) => handleModeChange(e.target.value)}
           >
             <option value="ptt">Push to Talk (Space bar)</option>
@@ -324,7 +318,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         </div>
 
         {/* VAD model download — shown when VAD mode is selected */}
-        {voice.mode === 'vad' && (
+        {voice?.mode === 'vad' && (
           <div className={styles.fieldGroup}>
             <label className={styles.label}>Silero VAD Model</label>
             <p className={styles.description}>
@@ -351,7 +345,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           <label className={styles.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input
               type="checkbox"
-              checked={voice.autoSpeak}
+              checked={voice?.autoSpeak ?? false}
               onChange={handleAutoSpeakChange}
             />
             Auto-speak responses
@@ -363,13 +357,13 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
       </div>
 
       {/* ── Audio Devices ──────────────────────────────────────── */}
-      {voice.devices.length > 0 && (
+      {(voice?.devices?.length ?? 0) > 0 && (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Audio Devices</h3>
           <div className={styles.fieldGroup}>
             <label className={styles.label}>Input Device</label>
             <Select value="" onChange={() => {}}>
-              {voice.devices.map((d) => (
+              {voice?.devices?.map((d) => (
                 <option key={d.name} value={d.name}>
                   {d.name} {d.isDefault ? '(default)' : ''}
                 </option>
@@ -380,7 +374,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
       )}
 
       {/* ── Download Progress ──────────────────────────────────── */}
-      {voice.downloadProgress && (
+      {voice?.downloadProgress && (
         <div className={styles.section}>
           <p className={styles.description}>
             Downloading {voice.downloadProgress.modelId}…{' '}
@@ -394,7 +388,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             overflow: 'hidden',
           }}>
             <div style={{
-              width: `${voice.downloadProgress.percent}%`,
+              width: `${voice?.downloadProgress?.percent ?? 0}%`,
               height: '100%',
               background: 'var(--color-accent)',
               borderRadius: 2,
@@ -408,12 +402,12 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>Status</h3>
         <div style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
-          <div>Pipeline: {voice.isActive ? '🟢 Active' : '⚪ Inactive'}</div>
-          <div>STT Engine: {voice.sttLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
-          <div>TTS Engine: {voice.ttsLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
+          <div>Pipeline: {voice?.isActive ? '🟢 Active' : '⚪ Inactive'}</div>
+          <div>STT Engine: {voice?.sttLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
+          <div>TTS Engine: {voice?.ttsLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
           <div>Default STT: {defaultSttModel ?? '—'}</div>
           <div>Default Voice: {selectedVoice}</div>
-          <div>State: {voice.voiceState}</div>
+          <div>State: {voice?.voiceState}</div>
         </div>
       </div>
 

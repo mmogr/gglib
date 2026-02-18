@@ -325,39 +325,122 @@ fn strip_links(text: &str) -> String {
 }
 
 fn strip_inline_code(text: &str) -> String {
-    // Simple approach: remove backticks surrounding inline code
+    // Iterate over chars (not bytes) so multi-byte Unicode is handled correctly.
+    // Unwrap each `…` span to its contents; a lone opening backtick with no
+    // closing match is emitted verbatim.
     let mut result = String::with_capacity(text.len());
-    let bytes = text.as_bytes();
-    let len = bytes.len();
-    let mut i = 0;
+    let mut chars = text.chars();
 
-    while i < len {
-        if bytes[i] == b'`' {
-            // Find the closing backtick
-            let start = i + 1;
-            if let Some(end) = text[start..].find('`') {
-                result.push_str(&text[start..start + end]);
-                i = start + end + 1;
-            } else {
-                i += 1;
+    while let Some(c) = chars.next() {
+        if c == '`' {
+            // Collect until the next backtick (or end of input).
+            let mut span = String::new();
+            let mut closed = false;
+            for inner in chars.by_ref() {
+                if inner == '`' {
+                    closed = true;
+                    break;
+                }
+                span.push(inner);
             }
+            if !closed {
+                // No closing backtick — emit the opening backtick verbatim.
+                result.push('`');
+            }
+            result.push_str(&span);
         } else {
-            result.push(bytes[i] as char);
-            i += 1;
+            result.push(c);
         }
     }
 
     result
 }
 
+/// Strip Markdown emphasis markers — `**bold**`, `*italic*`, `~~strike~~`,
+/// `__bold__` — while leaving bare `*` that appear as arithmetic operators
+/// or in other non-emphasis contexts.
+///
+/// Only balanced pairs of `*` / `**` / `***` that wrap non-whitespace content
+/// are removed.  A lone `*` with spaces on both sides (e.g. `5 * 3`) is kept
+/// so TTS does not corrupt arithmetic expressions.
 fn strip_emphasis(text: &str) -> String {
-    // Remove **, __, ~~, *, _ markers (simple approach)
-    text.replace("**", "")
-        .replace("__", "")
-        .replace("~~", "")
-        .replace('*', "")
-    // Be careful with _ — only strip when it looks like emphasis
-    // (surrounded by word chars). For simplicity, leave standalone _ alone.
+    // Pass 1: strip balanced **, *, ~~, __ pairs using a char-scanning approach.
+    let text = strip_balanced_markers(text, "**");
+    let text = strip_balanced_markers(&text, "~~");
+    let text = strip_balanced_markers(&text, "__");
+    // Single * last: by this point any ** has already been consumed, so only
+    // lone emphasis * remain to be considered.
+    strip_balanced_markers(&text, "*")
+}
+
+/// Remove balanced occurrences of `marker` that wrap non-whitespace content.
+/// A marker is considered an emphasis wrapper when:
+///   - It begins immediately before a non-whitespace character, and
+///   - Its matching closing marker follows immediately after a non-whitespace character.
+///
+/// This preserves `5 * 3`, `a ** b`, etc. (operator-style usage).
+fn strip_balanced_markers(text: &str, marker: &str) -> String {
+    let marker_len = marker.len();
+    let mut result = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let total = bytes.len();
+    let mut i = 0;
+
+    while i < total {
+        // Check if the marker starts here.
+        if bytes[i..].starts_with(marker.as_bytes()) {
+            let after_open = i + marker_len;
+            // Opening marker must be followed immediately by non-whitespace.
+            let opens = after_open < total && !bytes[after_open].is_ascii_whitespace();
+
+            if opens {
+                // Look for a matching closing marker.
+                if let Some(rel) = find_closing_marker(&text[after_open..], marker) {
+                    let close_start = after_open + rel;
+                    // Closing marker must be preceded by non-whitespace.
+                    let closes =
+                        close_start > after_open && !bytes[close_start - 1].is_ascii_whitespace();
+                    if closes {
+                        // Emit the middle (unwrapped content) and skip both markers.
+                        result.push_str(&text[after_open..close_start]);
+                        i = close_start + marker_len;
+                        continue;
+                    }
+                }
+            }
+            // Not an emphasis wrapper — emit the marker literally.
+            result.push_str(marker);
+            i += marker_len;
+        } else {
+            // Emit one byte at a time.  Multi-byte chars are safe because we only
+            // match ASCII marker bytes at position boundaries.
+            result.push(text[i..].chars().next().unwrap_or('\0'));
+            i += text[i..].chars().next().map_or(1, char::len_utf8);
+        }
+    }
+
+    result
+}
+
+/// Find the next occurrence of `marker` in `text` that could close an emphasis
+/// span — i.e., it does not overlap a nested opening of the same marker.
+/// Returns the byte offset into `text` of the closing marker's first byte.
+fn find_closing_marker(text: &str, marker: &str) -> Option<usize> {
+    let marker_bytes = marker.as_bytes();
+    let marker_len = marker.len();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+
+    while i + marker_len <= bytes.len() {
+        if bytes[i..].starts_with(marker_bytes) {
+            return Some(i);
+        }
+        // Advance by one char.
+        let ch_len = text[i..].chars().next().map_or(1, char::len_utf8);
+        i += ch_len;
+    }
+
+    None
 }
 
 fn strip_html_tags(text: &str) -> String {
@@ -607,5 +690,62 @@ mod tests {
             "<think>First block</think>\nSome text.\n<think>Second block</think>\nMore text.";
         let result = strip_markdown(input);
         assert_eq!(result, "Some text. More text.");
+    }
+
+    // ── strip_emphasis / strip_inline_code ─────────────────────────
+
+    #[test]
+    fn strip_emphasis_preserves_arithmetic_asterisk() {
+        // A bare * between spaces is an operator, not emphasis — must survive.
+        assert_eq!(strip_emphasis("5 * 3 = 15"), "5 * 3 = 15");
+    }
+
+    #[test]
+    fn strip_emphasis_removes_bold() {
+        assert_eq!(strip_emphasis("**bold**"), "bold");
+    }
+
+    #[test]
+    fn strip_emphasis_removes_italic() {
+        assert_eq!(strip_emphasis("*italic*"), "italic");
+    }
+
+    #[test]
+    fn strip_emphasis_removes_strikethrough() {
+        assert_eq!(strip_emphasis("~~strike~~"), "strike");
+    }
+
+    #[test]
+    fn strip_emphasis_removes_bold_underscore() {
+        assert_eq!(strip_emphasis("__bold__"), "bold");
+    }
+
+    #[test]
+    fn strip_emphasis_mixed_emphasis_and_operator() {
+        let input = "The value **x** is 2 * n.";
+        let result = strip_emphasis(input);
+        assert_eq!(result, "The value x is 2 * n.");
+    }
+
+    #[test]
+    fn strip_inline_code_unicode_safe() {
+        // Non-ASCII inside backticks must be preserved correctly.
+        let input = "Use `café` for the variable.";
+        assert_eq!(strip_inline_code(input), "Use café for the variable.");
+    }
+
+    #[test]
+    fn strip_inline_code_no_closing_backtick() {
+        // Unclosed backtick span should be emitted verbatim, not garbled.
+        let input = "a `unclosed";
+        assert_eq!(strip_inline_code(input), "a `unclosed");
+    }
+
+    #[test]
+    fn strip_emphasis_full_markdown_via_strip_markdown() {
+        // Regression: arithmetic expressions must survive the full pipeline.
+        let input = "**Hello** world! The result is 5 * 3 = 15.";
+        let result = strip_markdown(input);
+        assert_eq!(result, "Hello world! The result is 5 * 3 = 15.");
     }
 }
