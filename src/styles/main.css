@@ -1,15 +1,6 @@
 /* ===========================
    GGLIB Rust - Main Stylesheet
-   Modular, DRY, Clean CSS Architecture
    =========================== */
 
-/* Base Layer - CSS Variables, Resets, Typography */
+/* Base Layer - CSS Variables */
 @import './base/variables.css';
-@import './base/reset.css';
-@import './base/typography.css';
-
-/* Components Layer - Reusable UI Components */
-@import './components/modals.css';
-
-/* Application Layer - App-specific Styles */
-@import './app.css';

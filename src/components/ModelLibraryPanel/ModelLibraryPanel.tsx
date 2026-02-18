@@ -111,7 +111,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
           <div className="error-container">
-            <p className="error-message">Error: {error}</p>
+            <p className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-md p-base text-danger flex items-start gap-sm">Error: {error}</p>
             <button onClick={onRefresh} className="retry-button">
               Retry
             </button>

@@ -256,7 +256,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
               </div>
             )}
 
-            <div className="modal-footer">
+            <div className="flex items-center justify-end gap-md p-lg border-t border-border shrink-0">
               <Button
                 type="button"
                 variant="ghost"

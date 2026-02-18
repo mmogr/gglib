@@ -100,9 +100,9 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
 }) => {
   if (loading) {
     return (
-      <div className="modal-loading">
-        <div className="modal-spinner" aria-hidden />
-        <p className="modal-loading-text">Loading current settings…</p>
+      <div className="flex flex-col items-center justify-center p-2xl gap-base min-h-[200px]">
+        <div className="w-[40px] h-[40px] border-[3px] border-border border-t-primary rounded-full animate-icon-btn-spin" aria-hidden />
+        <p className="text-text-secondary text-sm">Loading current settings…</p>
       </div>
     );
   }
@@ -347,7 +347,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
       {error && <p className="text-[#ef4444] text-sm" role="alert">{error}</p>}
       {successMessage && <p className="text-[#10b981] text-sm" role="status" aria-live="polite">{successMessage}</p>}
 
-      <div className="modal-footer modal-footer-between">
+      <div className="flex items-center justify-between gap-md p-lg border-t border-border shrink-0">
         <Button type="button" variant="secondary" onClick={onRefresh} disabled={loading || saving}>
           Refresh
         </Button>

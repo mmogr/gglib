@@ -43,10 +43,10 @@ const Header: FC<HeaderProps> = ({
   };
 
   return (
-    <header className="header">
+    <header className="bg-[linear-gradient(135deg,var(--color-background-elevated)_0%,var(--color-surface-elevated)_100%)] text-text py-sm px-xl border-b border-border shadow-md shrink-0">
       <div className="flex justify-between items-center w-full">
         <div className="flex flex-row items-center gap-spacing-sm">
-          <h1 className="app-title">
+          <h1 className="flex items-center gap-sm text-xl font-bold m-0">
             <Library className="w-5 h-5" aria-hidden />
             <span>GGLib</span>
           </h1>

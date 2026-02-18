@@ -330,6 +330,8 @@
     line-height: var(--line-height-normal);
     color: var(--color-text);
     background-color: var(--color-background);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   #root {
@@ -337,6 +339,11 @@
     width: 100%;
     display: flex;
     flex-direction: column;
+  }
+
+  /* Button reset (Tailwind preflight covers font/color/bg, but not cursor) */
+  button {
+    cursor: pointer;
   }
 
   /* Scrollbar */
@@ -362,5 +369,23 @@
   ::selection {
     background-color: var(--color-primary);
     color: white;
+  }
+
+  /* Headings */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-tight);
+    margin: 0;
+  }
+  h1 { font-size: var(--font-size-3xl); }
+  h2 { font-size: var(--font-size-2xl); }
+  h3 { font-size: var(--font-size-xl); }
+  h4 { font-size: var(--font-size-lg); }
+  h5 { font-size: var(--font-size-base); }
+  h6 { font-size: var(--font-size-sm); }
+
+  /* Monospace elements */
+  code, pre {
+    font-family: var(--font-family-mono);
   }
 }

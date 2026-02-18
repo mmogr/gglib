@@ -2,6 +2,7 @@ import { FC, ReactNode, useId } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { Icon } from "./Icon";
+import { cn } from "../../utils/cn";
 
 // Styles that visually hide content while keeping it accessible to screen readers.
 const visuallyHiddenStyle: React.CSSProperties = {
@@ -27,9 +28,9 @@ interface ModalProps {
 }
 
 const sizeClassMap: Record<NonNullable<ModalProps["size"]>, string> = {
-  sm: "modal-sm",
-  md: "modal-md",
-  lg: "modal-lg",
+  sm: "max-w-[400px]",
+  md: "max-w-[600px]",
+  lg: "max-w-[800px]",
 };
 
 export const Modal: FC<ModalProps> = ({
@@ -52,9 +53,12 @@ export const Modal: FC<ModalProps> = ({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="modal-overlay" />
+        <DialogPrimitive.Overlay className="fixed inset-0 bg-black/70 flex items-center justify-center z-modal-backdrop p-base overflow-y-auto" />
         <DialogPrimitive.Content
-          className={`modal ${sizeClassMap[size]}`}
+          className={cn(
+            "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-background-elevated rounded-lg shadow-2xl w-full max-h-[90vh] flex flex-col z-modal animate-modal-slide-in",
+            sizeClassMap[size],
+          )}
           aria-describedby={hasDescription ? descriptionId : undefined}
           onPointerDownOutside={(event) => {
             if (preventClose) event.preventDefault();
@@ -63,11 +67,11 @@ export const Modal: FC<ModalProps> = ({
             if (preventClose) event.preventDefault();
           }}
         >
-          <div className="modal-header">
-            <DialogPrimitive.Title className="modal-title">{title}</DialogPrimitive.Title>
+          <div className="flex items-center justify-between p-lg border-b border-border shrink-0">
+            <DialogPrimitive.Title className="text-xl font-semibold text-text m-0">{title}</DialogPrimitive.Title>
             <DialogPrimitive.Close asChild>
               <button
-                className="modal-close"
+                className="w-[32px] h-[32px] rounded-base flex items-center justify-center bg-transparent text-text-secondary transition-all duration-200 cursor-pointer border-none shrink-0 hover:bg-background-hover hover:text-text"
                 onClick={onClose}
                 aria-label="Close dialog"
                 disabled={preventClose}
@@ -77,7 +81,7 @@ export const Modal: FC<ModalProps> = ({
             </DialogPrimitive.Close>
           </div>
           {hasDescription ? (
-            <DialogPrimitive.Description id={descriptionId} className="modal-description">
+            <DialogPrimitive.Description id={descriptionId} className="px-lg pb-md text-sm text-text-secondary leading-normal">
               {description}
             </DialogPrimitive.Description>
           ) : (
@@ -85,7 +89,7 @@ export const Modal: FC<ModalProps> = ({
               Dialog content
             </DialogPrimitive.Description>
           )}
-          <div className="modal-body">{children}</div>
+          <div className="p-lg overflow-y-auto flex-1 min-h-0">{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

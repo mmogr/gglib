@@ -57,7 +57,7 @@ export const ServeModal: FC<ServeModalProps> = ({
 
   return (
     <Modal open={true} onClose={onClose} title="Start model server" size="md" preventClose={isServing}>
-      <div className="modal-body">
+      <div className="p-lg overflow-y-auto flex-1 min-h-0">
         <div className="flex justify-between items-center mb-lg p-base bg-background rounded-md border border-border">
           <strong>{model.name}</strong>
           <span className="text-text-secondary text-sm">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
@@ -192,7 +192,7 @@ export const ServeModal: FC<ServeModalProps> = ({
         </div>
       </div>
 
-      <div className="modal-footer">
+      <div className="flex items-center justify-end gap-md p-lg border-t border-border shrink-0">
         <Button variant="ghost" onClick={onClose} disabled={isServing}>
           Cancel
         </Button>

@@ -51,7 +51,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
   };
 
   return (
-    <div className="add-model-container">
+    <div className="bg-surface rounded-lg p-xl max-w-[800px] shadow-md border border-border">
       <h2>Add New Model</h2>
 
       <form onSubmit={handleSubmit} className="add-model-form">
@@ -76,7 +76,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
           </div>
         </div>
 
-        {error && <div className="error-message">{error}</div>}
+        {error && <div className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-md p-base text-danger flex items-start gap-sm">{error}</div>}
 
         <div className="form-actions">
           <Button
