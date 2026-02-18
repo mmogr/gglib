@@ -1,47 +1,4 @@
-/* Console Log Panel - Terminal-style output viewer */
-
-.console-log-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--color-surface);
-}
-
-.console-log-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.console-log-title {
-  margin: 0;
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
-}
-
-.console-log-controls {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
-.console-log-content {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  background: #1e1e1e;
-  border-radius: var(--radius-sm);
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  padding: var(--spacing-sm);
-}
-
-.console-log-lines {
-  white-space: pre-wrap;
-  word-break: break-all;
-}
+/* Console Log Panel - ANSI colors + scrollbar (can't be expressed in Tailwind) */
 
 .console-log-line {
   padding: 1px 0;
@@ -80,33 +37,6 @@
 .console-log-line .ansi-dim { opacity: 0.7; }
 .console-log-line .ansi-italic { font-style: italic; }
 .console-log-line .ansi-underline { text-decoration: underline; }
-
-/* Empty state */
-.console-log-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 200px;
-  color: #808080;
-  text-align: center;
-  gap: var(--spacing-sm);
-}
-
-.console-log-empty-icon {
-  font-size: 48px;
-  opacity: 0.5;
-}
-
-.console-log-empty p {
-  margin: 0;
-}
-
-.console-log-empty-hint {
-  font-size: var(--font-size-xs);
-  opacity: 0.7;
-}
 
 /* Scrollbar styling for dark theme */
 .console-log-content::-webkit-scrollbar {
