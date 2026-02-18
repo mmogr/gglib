@@ -1,7 +1,337 @@
 @import "tailwindcss";
+@import "./base/variables.css";
+
+/* =============================================================================
+   THEME: Bridge CSS custom properties from variables.css into Tailwind tokens.
+   Using @theme inline so that these values don't generate extra CSS variables —
+   they reference the existing ones from variables.css.
+
+   Namespace reference (Tailwind v4):
+     --color-*        → bg-*, text-*, border-*, ring-*, etc.
+     --spacing-*      → p-*, m-*, gap-*, w-*, h-*, size-*, etc.
+     --font-*         → font-* (font-family)
+     --text-*         → text-* (font-size)
+     --font-weight-*  → font-* (font-weight)
+     --leading-*      → leading-* (line-height)
+     --radius-*       → rounded-*
+     --shadow-*       → shadow-*
+     --animate-*      → animate-*
+     --breakpoint-*   → sm:, md:, etc.
+   ============================================================================= */
+
+@theme inline {
+  /* ---------- Colors ---------- */
+
+  /* Primary */
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-light: var(--color-primary-light);
+  --color-primary-dark: var(--color-primary-dark);
+
+  /* Semantic */
+  --color-success: var(--color-success);
+  --color-success-hover: var(--color-success-hover);
+  --color-warning: var(--color-warning);
+  --color-warning-hover: var(--color-warning-hover);
+  --color-danger: var(--color-danger);
+  --color-danger-hover: var(--color-danger-hover);
+  --color-info: var(--color-info);
+
+  /* Backgrounds */
+  --color-background: var(--color-background);
+  --color-background-elevated: var(--color-background-elevated);
+  --color-background-overlay: var(--color-background-overlay);
+  --color-background-hover: var(--color-background-hover);
+  --color-background-active: var(--color-background-active);
+  --color-background-input: var(--color-background-input);
+  --color-background-secondary: var(--color-background-secondary);
+  --color-background-tertiary: var(--color-background-tertiary);
+
+  /* Surfaces */
+  --color-surface: var(--color-surface);
+  --color-surface-elevated: var(--color-surface-elevated);
+  --color-surface-hover: var(--color-surface-hover);
+
+  /* Borders */
+  --color-border: var(--color-border);
+  --color-border-light: var(--color-border-light);
+  --color-border-hover: var(--color-border-hover);
+  --color-border-focus: var(--color-border-focus);
+
+  /* Text */
+  --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-disabled: var(--color-text-disabled);
+  --color-text-inverse: var(--color-text-inverse);
+  --color-text-primary: var(--color-text-primary);
+  --color-accent: var(--color-accent);
+
+  /* Status */
+  --color-online: var(--color-online);
+  --color-offline: var(--color-offline);
+  --color-error: var(--color-error);
+
+  /* ---------- Spacing ---------- */
+  --spacing-xs: var(--spacing-xs);
+  --spacing-sm: var(--spacing-sm);
+  --spacing-md: var(--spacing-md);
+  --spacing-base: var(--spacing-base);
+  --spacing-lg: var(--spacing-lg);
+  --spacing-xl: var(--spacing-xl);
+  --spacing-2xl: var(--spacing-2xl);
+  --spacing-3xl: var(--spacing-3xl);
+
+  /* Layout (as spacing so they work with w-*, h-*, etc.) */
+  --spacing-header-height: var(--header-height);
+  --spacing-sidebar-width: var(--sidebar-width);
+  --spacing-sidebar-collapsed-width: var(--sidebar-collapsed-width);
+
+  /* Component Sizes (as spacing for h-*, min-h-*, etc.) */
+  --spacing-input-height-sm: var(--input-height-sm);
+  --spacing-input-height-base: var(--input-height-base);
+  --spacing-input-height-lg: var(--input-height-lg);
+  --spacing-button-height-sm: var(--button-height-sm);
+  --spacing-button-height-base: var(--button-height-base);
+  --spacing-button-height-lg: var(--button-height-lg);
+
+  /* ---------- Font Family ---------- */
+  --font-base: var(--font-family-base);
+  --font-mono: var(--font-family-mono);
+
+  /* ---------- Font Size ---------- */
+  --text-xs: var(--font-size-xs);
+  --text-sm: var(--font-size-sm);
+  --text-base: var(--font-size-base);
+  --text-lg: var(--font-size-lg);
+  --text-xl: var(--font-size-xl);
+  --text-2xl: var(--font-size-2xl);
+  --text-3xl: var(--font-size-3xl);
+  --text-4xl: var(--font-size-4xl);
+
+  /* ---------- Font Weight ---------- */
+  --font-weight-normal: var(--font-weight-normal);
+  --font-weight-medium: var(--font-weight-medium);
+  --font-weight-semibold: var(--font-weight-semibold);
+  --font-weight-bold: var(--font-weight-bold);
+
+  /* ---------- Line Height ---------- */
+  --leading-tight: var(--line-height-tight);
+  --leading-normal: var(--line-height-normal);
+  --leading-relaxed: var(--line-height-relaxed);
+
+  /* ---------- Border Radius ---------- */
+  --radius-sm: var(--radius-sm);
+  --radius-base: var(--radius-base);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  /* ---------- Shadows ---------- */
+  --shadow-sm: var(--shadow-sm);
+  --shadow-base: var(--shadow-base);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+
+  /* ---------- Custom Breakpoints ---------- */
+  /* NOTE: --breakpoint-sm (40rem/640px) and --breakpoint-md (48rem/768px)
+     are Tailwind defaults. We add custom ones for non-standard media queries
+     without overriding the defaults. */
+  --breakpoint-xs: 30rem;          /* 480px */
+  --breakpoint-mobile: 31.25rem;   /* 500px */
+  --breakpoint-tablet: 37.5rem;    /* 600px */
+
+  /* ---------- Custom Animations ---------- */
+  --animate-modal-slide-in: modal-slide-in 0.2s ease-out;
+  --animate-toast-enter: toast-enter 0.3s ease-out;
+  --animate-toast-exit: toast-exit 0.3s ease-in forwards;
+  --animate-slide-down: slide-down 0.2s ease-out;
+  --animate-indeterminate: indeterminate 1.5s infinite ease-in-out;
+  --animate-blink: blink 1s ease-in-out infinite;
+  --animate-thinking-spin: thinking-spin 0.8s linear infinite;
+  --animate-voice-spin: voice-spin 1s linear infinite;
+  --animate-icon-btn-spin: icon-btn-spin 0.8s linear infinite;
+  --animate-chat-action-spin: chat-action-spin 0.7s linear infinite;
+}
+
+/* ---------- Z-Index Utilities ---------- */
+/* z-index has no theme namespace in Tailwind v4, so we define custom utilities.
+   Usage: z-base, z-dropdown, z-modal, z-tooltip, etc. */
+
+@utility z-base {
+  z-index: var(--z-base);
+}
+@utility z-dropdown {
+  z-index: var(--z-dropdown);
+}
+@utility z-sticky {
+  z-index: var(--z-sticky);
+}
+@utility z-fixed {
+  z-index: var(--z-fixed);
+}
+@utility z-modal-backdrop {
+  z-index: var(--z-modal-backdrop);
+}
+@utility z-modal {
+  z-index: var(--z-modal);
+}
+@utility z-popover {
+  z-index: var(--z-popover);
+}
+@utility z-tooltip {
+  z-index: var(--z-tooltip);
+}
+@utility z-notification {
+  z-index: var(--z-notification);
+}
+
+/* ---------- Custom Keyframes ---------- */
+
+@keyframes modal-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-enter {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-exit {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes voice-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes icon-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes chat-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =============================================================================
+   BASE: Styles not covered by Tailwind Preflight that we need to preserve.
+   These duplicate what reset.css provides, so they coexist harmlessly now and
+   will become the sole source once reset.css is deleted in Phase 4.
+   ============================================================================= */
 
 @layer base {
   :root {
     color-scheme: dark;
+  }
+
+  html,
+  body {
+    height: 100%;
+    width: 100%;
+  }
+
+  body {
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    color: var(--color-text);
+    background-color: var(--color-background);
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-background);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-base);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-hover);
+  }
+
+  /* Selection */
+  ::selection {
+    background-color: var(--color-primary);
+    color: white;
   }
 }
