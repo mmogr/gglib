@@ -57,7 +57,7 @@ rodio = { version = "0.20", default-features = false, features = ["wav"] }
 rubato = "0.16"
 
 # Unified STT/TTS/VAD backend via sherpa-onnx bindings
-sherpa-rs = { version = "0.6", features = ["tts", "download-binaries", "static"] }
+sherpa-rs = { version = "0.6", features = ["tts", "vad", "download-binaries", "static"] }
 
 # HTTP client for model downloads
 reqwest = { workspace = true }

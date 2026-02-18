@@ -73,6 +73,7 @@ pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution,
 #[allow(unsafe_code)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_default_models_dir_contains_relative() {
@@ -81,6 +82,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_resolve_models_dir_prefers_explicit() {
         let prev = env::var("GGLIB_MODELS_DIR").ok();
         unsafe {
@@ -93,6 +95,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_resolve_models_dir_env_value() {
         let prev = env::var("GGLIB_MODELS_DIR").ok();
         unsafe {
