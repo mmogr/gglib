@@ -66,6 +66,11 @@ pub enum VoiceGender {
 ///
 /// Implementations must be `Send + Sync` so the pipeline can hold them
 /// across `.await` points behind a `tokio::sync::RwLock`.
+///
+/// Both `transcribe` and `transcribe_with_callback` are `async` so that
+/// CPU-bound inference can be offloaded to a blocking thread pool (via
+/// `tokio::task::spawn_blocking`) without stalling a Tokio worker thread.
+#[async_trait::async_trait]
 pub trait SttBackend: Send + Sync {
     /// Transcribe audio samples to text.
     ///
@@ -74,13 +79,13 @@ pub trait SttBackend: Send + Sync {
     ///
     /// # Returns
     /// The transcribed text, or an empty string if no speech was detected.
-    fn transcribe(&self, audio: &[f32]) -> Result<String, VoiceError>;
+    async fn transcribe(&self, audio: &[f32]) -> Result<String, VoiceError>;
 
     /// Transcribe audio with a segment callback for streaming partial results.
     ///
     /// The callback is invoked for each transcribed segment as it becomes
     /// available.
-    fn transcribe_with_callback(
+    async fn transcribe_with_callback(
         &self,
         audio: &[f32],
         on_segment: Box<dyn FnMut(&str) + Send + 'static>,
