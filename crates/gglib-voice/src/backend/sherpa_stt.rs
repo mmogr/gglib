@@ -186,15 +186,28 @@ impl SttBackend for SherpaSttBackend {
         Ok(text)
     }
 
-    async fn transcribe_with_callback(
+    fn transcribe_with_callback(
         &self,
         audio: &[f32],
         mut on_segment: Box<dyn FnMut(&str) + Send + 'static>,
     ) -> Result<String, VoiceError> {
         // sherpa-rs WhisperRecognizer does not support streaming segment
-        // callbacks, so we fall back to full transcription and invoke the
-        // callback once with the complete result.
-        let text = self.transcribe(audio).await?;
+        // callbacks.  This sync method locks and runs inference directly —
+        // it is safe to call from non-async contexts.  In async contexts,
+        // prefer transcribe() which offloads to spawn_blocking.
+        if audio.is_empty() {
+            return Ok(String::new());
+        }
+        let text = self
+            .recognizer
+            .lock()
+            .map_err(|e| {
+                VoiceError::TranscriptionError(format!("STT recognizer lock poisoned: {e}"))
+            })?
+            .transcribe(SHERPA_STT_SAMPLE_RATE, audio)
+            .text
+            .trim()
+            .to_string();
         if !text.is_empty() {
             on_segment(&text);
         }
