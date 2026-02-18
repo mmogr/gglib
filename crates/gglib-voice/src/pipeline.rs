@@ -319,7 +319,11 @@ impl VoicePipeline {
     /// `model_id` is stored verbatim and returned by
     /// [`stt_model_id`](VoicePipeline::stt_model_id) so the frontend can
     /// display which model is currently active without querying the catalog.
-    pub fn load_stt(&mut self, model_path: &std::path::Path, model_id: &str) -> Result<(), VoiceError> {
+    pub fn load_stt(
+        &mut self,
+        model_path: &std::path::Path,
+        model_id: &str,
+    ) -> Result<(), VoiceError> {
         use crate::backend::sherpa_stt::{SherpaSttBackend, SherpaSttConfig};
 
         tracing::info!(path = %model_path.display(), model_id, "Loading STT engine");

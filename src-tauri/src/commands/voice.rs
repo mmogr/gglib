@@ -492,7 +492,9 @@ pub async fn voice_load_stt(
         pipeline.stop();
     }
 
-    pipeline.load_stt(&path, &model_id).map_err(|e| format!("{e}"))
+    pipeline
+        .load_stt(&path, &model_id)
+        .map_err(|e| format!("{e}"))
 }
 
 /// Load the TTS model into the pipeline (auto-creates an idle pipeline if needed).
