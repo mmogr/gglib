@@ -8,6 +8,7 @@ import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
+import { VoiceModeProvider } from "./contexts/VoiceModeContext";
 import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
@@ -145,6 +146,7 @@ function AppContent() {
 
   return (
     <SettingsProvider showToast={showToast}>
+      <VoiceModeProvider>
       <div className="app">
         <Header
           onOpenSettings={() => setIsSettingsOpen(true)}
@@ -175,6 +177,7 @@ function AppContent() {
         />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </div>
+      </VoiceModeProvider>
     </SettingsProvider>
   );
 }

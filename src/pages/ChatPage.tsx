@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { type ChatPageTabId } from './chatTabs';
 import { appLogger } from '../services/platform';
-import { stripThinkingBlocks } from '../utils/stripThinkingBlocks';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
@@ -15,7 +14,7 @@ import { Textarea } from '../components/ui/Textarea';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT as RUNTIME_DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
-import { useVoiceMode } from '../hooks/useVoiceMode';
+import { useVoiceModeContext } from '../contexts/VoiceModeContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { useServerState } from '../services/serverEvents';
 import {
@@ -101,14 +100,10 @@ export default function ChatPage({
   const serverState = useServerState(modelId);
   const isServerRunning = serverState?.status !== 'stopped' && serverState?.status !== 'crashed';
 
-  // Voice mode — pass persisted defaults for auto-loading on first activation
-  const voice = useVoiceMode({
-    sttModel: settings?.voiceSttModel,
-    ttsVoice: settings?.voiceTtsVoice,
-    ttsSpeed: settings?.voiceTtsSpeed,
-    interactionMode: settings?.voiceInteractionMode,
-    autoSpeak: settings?.voiceAutoSpeak,
-  });
+  // Voice mode — shared singleton from App-level VoiceModeProvider.
+  // The provider reads the same settings defaults so behaviour is identical
+  // to the previous per-component useVoiceMode() call.
+  const voice = useVoiceModeContext();
 
   // Send voice transcript as a chat message
   const handleVoiceTranscript = useCallback((text: string) => {
@@ -123,9 +118,10 @@ export default function ChatPage({
   // Auto-speak: when the LLM finishes responding, speak the last assistant message
   const wasRunningRef = useRef(false);
   useEffect(() => {
-    if (wasRunningRef.current && !isRunning && voice.isActive && voice.autoSpeak && voice.ttsLoaded) {
-      // Find the last assistant message and extract only visible text
-      // (skip reasoning/thinking parts — those are internal chain-of-thought)
+    if (wasRunningRef.current && !isRunning && voice?.isActive && voice?.autoSpeak && voice?.ttsLoaded) {
+      // Find the last assistant message and extract only visible text.
+      // Thinking blocks are stripped by the Rust pipeline's strip_markdown();
+      // no need to strip them here.
       const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
       if (lastAssistant) {
         const content = lastAssistant.content;
@@ -140,12 +136,10 @@ export default function ChatPage({
             .map(p => p.text)
             .join(' ');
         }
-        // Strip any residual <think>…</think> blocks that may be embedded
-        // in the text content (some models inline them without using
-        // the reasoning_content SSE field).
-        text = stripThinkingBlocks(text);
+        // The Rust voice pipeline strips thinking blocks in strip_markdown();
+        // calling stripThinkingBlocks() here is redundant and has been removed.
         if (text) {
-          voice.speak(text).catch(err => {
+          voice?.speak(text).catch(err => {
             appLogger.error('hook.runtime', 'Auto-speak failed', { error: String(err) });
           });
         }
@@ -466,7 +460,7 @@ export default function ChatPage({
               showToast={showToast}
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
-              voice={voice}
+              voice={voice ?? undefined}
             />
           </div>
         </div>
