@@ -61,7 +61,11 @@ jobs:
 
       - name: Run Rust tests with coverage
         run: |
-          cargo llvm-cov --all-features \
+          # NOTE: Do NOT use --all-features here. It enables cuda/directml in
+          # sherpa-rs which downloads a CUDA-flavoured native library that
+          # requires system CUDA libs not present on the CI runner, causing
+          # undefined-symbol linker errors for SherpaOnnx VAD functions.
+          cargo llvm-cov \
             -p gglib-core \
             -p gglib-db \
             -p gglib-gguf \
@@ -81,40 +85,41 @@ jobs:
           # Use `cargo llvm-cov report` (report-only subcommand) to slice per-package
           # lcov files from the profdata already collected in the combined step above.
           # This does NOT recompile or relink anything — it just re-processes the
-          # existing profdata + instrumented binaries. This avoids the sherpa-rs
-          # (sherpa-onnx native static lib) linker error that occurs when
-          # `cargo llvm-cov --package gglib-voice` tries to build a fresh test binary.
-          cargo llvm-cov report --all-features --package gglib-core --lcov --output-path gglib-core-lcov.info
-          cargo llvm-cov report --all-features --package gglib-db --lcov --output-path gglib-db-lcov.info
-          cargo llvm-cov report --all-features --package gglib-gguf --lcov --output-path gglib-gguf-lcov.info
-          cargo llvm-cov report --all-features --package gglib-hf --lcov --output-path gglib-hf-lcov.info
-          cargo llvm-cov report --all-features --package gglib-download --lcov --output-path gglib-download-lcov.info
-          cargo llvm-cov report --all-features --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
-          cargo llvm-cov report --all-features --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
-          cargo llvm-cov report --all-features --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
-          cargo llvm-cov report --all-features --package gglib-gui --lcov --output-path gglib-gui-lcov.info
-          cargo llvm-cov report --all-features --package gglib-cli --lcov --output-path gglib-cli-lcov.info
-          cargo llvm-cov report --all-features --package gglib-axum --lcov --output-path gglib-axum-lcov.info
-          cargo llvm-cov report --all-features --package gglib-voice --lcov --output-path gglib-voice-lcov.info
+          # existing profdata + instrumented binaries.
+          #
+          # NOTE: `report` does NOT accept --all-features (it's a report-only
+          # subcommand that doesn't invoke cargo build).
+          cargo llvm-cov report --package gglib-core --lcov --output-path gglib-core-lcov.info
+          cargo llvm-cov report --package gglib-db --lcov --output-path gglib-db-lcov.info
+          cargo llvm-cov report --package gglib-gguf --lcov --output-path gglib-gguf-lcov.info
+          cargo llvm-cov report --package gglib-hf --lcov --output-path gglib-hf-lcov.info
+          cargo llvm-cov report --package gglib-download --lcov --output-path gglib-download-lcov.info
+          cargo llvm-cov report --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
+          cargo llvm-cov report --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
+          cargo llvm-cov report --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
+          cargo llvm-cov report --package gglib-gui --lcov --output-path gglib-gui-lcov.info
+          cargo llvm-cov report --package gglib-cli --lcov --output-path gglib-cli-lcov.info
+          cargo llvm-cov report --package gglib-axum --lcov --output-path gglib-axum-lcov.info
+          cargo llvm-cov report --package gglib-voice --lcov --output-path gglib-voice-lcov.info
 
       - name: Run TypeScript tests with coverage
         run: npm run test:coverage -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
 
       - name: Generate HTML report
         run: |
-          cargo llvm-cov --all-features \
-            -p gglib-core \
-            -p gglib-db \
-            -p gglib-gguf \
-            -p gglib-hf \
-            -p gglib-download \
-            -p gglib-mcp \
-            -p gglib-proxy \
-            -p gglib-runtime \
-            -p gglib-gui \
-            -p gglib-cli \
-            -p gglib-axum \
-            -p gglib-voice \
+          cargo llvm-cov report \
+            --package gglib-core \
+            --package gglib-db \
+            --package gglib-gguf \
+            --package gglib-hf \
+            --package gglib-download \
+            --package gglib-mcp \
+            --package gglib-proxy \
+            --package gglib-runtime \
+            --package gglib-gui \
+            --package gglib-cli \
+            --package gglib-axum \
+            --package gglib-voice \
             --html
 
       - name: Archive coverage report
