@@ -329,7 +329,7 @@ fn strip_inline_code(text: &str) -> String {
     // Unwrap each `…` span to its contents; a lone opening backtick with no
     // closing match is emitted verbatim.
     let mut result = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
+    let mut chars = text.chars();
 
     while let Some(c) = chars.next() {
         if c == '`' {
@@ -343,13 +343,11 @@ fn strip_inline_code(text: &str) -> String {
                 }
                 span.push(inner);
             }
-            if closed {
-                result.push_str(&span);
-            } else {
-                // No closing backtick — emit the opening backtick and content verbatim.
+            if !closed {
+                // No closing backtick — emit the opening backtick verbatim.
                 result.push('`');
-                result.push_str(&span);
             }
+            result.push_str(&span);
         } else {
             result.push(c);
         }
@@ -417,7 +415,7 @@ fn strip_balanced_markers(text: &str, marker: &str) -> String {
             // Emit one byte at a time.  Multi-byte chars are safe because we only
             // match ASCII marker bytes at position boundaries.
             result.push(text[i..].chars().next().unwrap_or('\0'));
-            i += text[i..].chars().next().map_or(1, |c| c.len_utf8());
+            i += text[i..].chars().next().map_or(1, char::len_utf8);
         }
     }
 
@@ -438,7 +436,7 @@ fn find_closing_marker(text: &str, marker: &str) -> Option<usize> {
             return Some(i);
         }
         // Advance by one char.
-        let ch_len = text[i..].chars().next().map_or(1, |c| c.len_utf8());
+        let ch_len = text[i..].chars().next().map_or(1, char::len_utf8);
         i += ch_len;
     }
 

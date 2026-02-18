@@ -52,7 +52,7 @@ impl SttBackend for MockStt {
         Ok(self.response.clone())
     }
 
-    fn language(&self) -> &str {
+    fn language(&self) -> &'static str {
         "en"
     }
 }
@@ -72,7 +72,7 @@ impl TtsBackend for MockTts {
 
     fn set_voice(&mut self, _voice_id: &str) {}
     fn set_speed(&mut self, _speed: f32) {}
-    fn voice(&self) -> &str {
+    fn voice(&self) -> &'static str {
         "mock_voice"
     }
     fn sample_rate(&self) -> u32 {
@@ -94,7 +94,7 @@ fn drain_events(rx: &mut tokio::sync::mpsc::UnboundedReceiver<VoiceEvent>) -> Ve
     events
 }
 
-/// Collect only the VoiceState values from StateChanged events.
+/// Collect only the `VoiceState` values from `StateChanged` events.
 fn states_from(events: &[VoiceEvent]) -> Vec<VoiceState> {
     events
         .iter()

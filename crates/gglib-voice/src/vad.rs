@@ -391,10 +391,7 @@ impl VoiceActivityDetector {
     /// Reconstruct the Silero detector from the stored model path and the
     /// current `self.config`. Called internally whenever config changes.
     fn reload_silero(&mut self) {
-        let path = match self.silero_model_path.clone() {
-            Some(p) => p,
-            None => return,
-        };
+        let Some(path) = self.silero_model_path.clone() else { return };
         match self.load_silero_model(&path) {
             Ok(()) => tracing::debug!("Silero VAD reloaded with new config"),
             Err(e) => {
