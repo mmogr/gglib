@@ -282,7 +282,7 @@ pub async fn voice_ptt_start(state: tauri::State<'_, AppState>) -> Result<(), St
 pub async fn voice_ptt_stop(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let mut voice = state.voice_pipeline.write().await;
     let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
-    pipeline.ptt_stop().map_err(|e| format!("{e}"))
+    pipeline.ptt_stop().await.map_err(|e| format!("{e}"))
 }
 
 // ── Commands: TTS ──────────────────────────────────────────────────
