@@ -78,19 +78,21 @@ jobs:
 
       - name: Run per-crate Rust coverage
         run: |
-          # --no-clean reuses artifacts compiled in the previous combined step (avoids re-linking sherpa-rs)
-          cargo llvm-cov --no-clean --all-features --package gglib-core --lcov --output-path gglib-core-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-db --lcov --output-path gglib-db-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-gguf --lcov --output-path gglib-gguf-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-hf --lcov --output-path gglib-hf-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-download --lcov --output-path gglib-download-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-gui --lcov --output-path gglib-gui-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-cli --lcov --output-path gglib-cli-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-axum --lcov --output-path gglib-axum-lcov.info
-          cargo llvm-cov --no-clean --all-features --package gglib-voice --lcov --output-path gglib-voice-lcov.info
+          # Per-crate coverage. gglib-voice is intentionally excluded here:
+          # sherpa-rs (native C++ static lib) cannot be re-linked under coverage
+          # instrumentation in a per-crate build. gglib-voice is still fully
+          # covered in the combined step above (lcov.info).
+          cargo llvm-cov --all-features --package gglib-core --lcov --output-path gglib-core-lcov.info
+          cargo llvm-cov --all-features --package gglib-db --lcov --output-path gglib-db-lcov.info
+          cargo llvm-cov --all-features --package gglib-gguf --lcov --output-path gglib-gguf-lcov.info
+          cargo llvm-cov --all-features --package gglib-hf --lcov --output-path gglib-hf-lcov.info
+          cargo llvm-cov --all-features --package gglib-download --lcov --output-path gglib-download-lcov.info
+          cargo llvm-cov --all-features --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
+          cargo llvm-cov --all-features --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
+          cargo llvm-cov --all-features --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
+          cargo llvm-cov --all-features --package gglib-gui --lcov --output-path gglib-gui-lcov.info
+          cargo llvm-cov --all-features --package gglib-cli --lcov --output-path gglib-cli-lcov.info
+          cargo llvm-cov --all-features --package gglib-axum --lcov --output-path gglib-axum-lcov.info
 
       - name: Run TypeScript tests with coverage
         run: npm run test:coverage -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
@@ -131,7 +133,6 @@ jobs:
             gglib-gui-lcov.info
             gglib-cli-lcov.info
             gglib-axum-lcov.info
-            gglib-voice-lcov.info
             coverage/
             rust-test-output.txt
             ts-test-output.txt
