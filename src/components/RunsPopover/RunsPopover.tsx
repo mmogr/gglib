@@ -5,7 +5,6 @@ import { ServerList } from '../ServerList';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
-import './RunsPopover.css';
 
 interface RunsPopoverProps {
   isOpen: boolean;
@@ -49,9 +48,9 @@ const RunsPopover: FC<RunsPopoverProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="runs-popover" ref={popoverRef}>
-      <div className="runs-popover-header">
-        <span className="runs-popover-title">Running Servers</span>
+    <div className="absolute top-full right-0 mt-xs bg-surface border border-border rounded-md shadow-[0_4px_16px_rgba(0,0,0,0.3)] min-w-[280px] max-w-[360px] z-[1000] overflow-hidden" ref={popoverRef}>
+      <div className="flex items-center justify-between px-md py-sm border-b border-border bg-surface-elevated">
+        <span className="text-sm font-semibold text-text">Running Servers</span>
         {onRefresh && (
           <Button
             variant="ghost"
@@ -64,7 +63,7 @@ const RunsPopover: FC<RunsPopoverProps> = ({
           </Button>
         )}
       </div>
-      <div className="runs-popover-content">
+      <div className="max-h-[300px] overflow-y-auto scrollbar-thin">
         <ServerList
           servers={servers}
           onStopServer={handleStopServer}
