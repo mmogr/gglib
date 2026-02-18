@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
+import { cn } from "../../utils/cn";
 
-const baseStyles = "w-full rounded-md border bg-[var(--color-background-input)] text-[var(--color-text)] text-sm transition-colors outline-none focus-visible:border-[var(--color-border-focus)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/10 hover:border-[var(--color-border-hover)] disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[var(--color-background)] cursor-pointer appearance-none bg-no-repeat";
+const baseStyles = "w-full rounded-md border bg-background-input text-text text-sm transition-colors outline-none focus-visible:border-border-focus focus-visible:ring-2 focus-visible:ring-primary/10 hover:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-background cursor-pointer appearance-none bg-no-repeat";
 
 const sizeStyles: Record<SelectSize, string> = {
   sm: "h-8 px-2 pr-8 text-xs",
@@ -9,8 +10,8 @@ const sizeStyles: Record<SelectSize, string> = {
 };
 
 const variantStyles: Record<SelectVariant, string> = {
-  default: "border-[var(--color-border)]",
-  error: "border-[var(--color-danger)] focus-visible:border-[var(--color-danger)] focus-visible:ring-[var(--color-danger)]/10",
+  default: "border-border",
+  error: "border-danger focus-visible:border-danger focus-visible:ring-danger/10",
 };
 
 // SVG chevron-down icon as data URI
@@ -41,14 +42,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <select
         ref={ref}
-        className={[
+        className={cn(
           baseStyles,
           sizeStyles[size],
           variantStyles[variant],
           className,
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        )}
         style={{
           backgroundImage: `url("${chevronIcon}")`,
           backgroundPosition: bgPosition,

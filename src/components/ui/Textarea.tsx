@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
+import { cn } from "../../utils/cn";
 
-const baseStyles = "w-full rounded-md border bg-[var(--color-background-input)] text-[var(--color-text)] text-sm transition-colors placeholder:text-[var(--color-text-disabled)] outline-none focus-visible:border-[var(--color-border-focus)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/10 hover:border-[var(--color-border-hover)] disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[var(--color-background)] resize-vertical leading-normal";
+const baseStyles = "w-full rounded-md border bg-background-input text-text text-sm transition-colors placeholder:text-text-disabled outline-none focus-visible:border-border-focus focus-visible:ring-2 focus-visible:ring-primary/10 hover:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-background resize-vertical leading-normal";
 
 const sizeStyles: Record<TextareaSize, string> = {
   sm: "min-h-[80px] p-2 text-xs",
@@ -9,8 +10,8 @@ const sizeStyles: Record<TextareaSize, string> = {
 };
 
 const variantStyles: Record<TextareaVariant, string> = {
-  default: "border-[var(--color-border)]",
-  error: "border-[var(--color-danger)] focus-visible:border-[var(--color-danger)] focus-visible:ring-[var(--color-danger)]/10",
+  default: "border-border",
+  error: "border-danger focus-visible:border-danger focus-visible:ring-danger/10",
 };
 
 export type TextareaSize = "sm" | "base" | "lg";
@@ -34,14 +35,12 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <textarea
         ref={ref}
-        className={[
+        className={cn(
           baseStyles,
           sizeStyles[size],
           variantStyles[variant],
           className,
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        )}
         {...props}
       />
     );

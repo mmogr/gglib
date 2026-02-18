@@ -1,6 +1,7 @@
 import { forwardRef, type ReactNode } from "react";
+import { cn } from "../../utils/cn";
 
-const baseStyles = "w-full rounded-md border bg-[var(--color-background-input)] text-[var(--color-text)] text-sm transition-colors placeholder:text-[var(--color-text-disabled)] outline-none focus-visible:border-[var(--color-border-focus)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/10 hover:border-[var(--color-border-hover)] disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[var(--color-background)]";
+const baseStyles = "w-full rounded-md border bg-background-input text-text text-sm transition-colors placeholder:text-text-disabled outline-none focus-visible:border-border-focus focus-visible:ring-2 focus-visible:ring-primary/10 hover:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-background";
 
 const sizeStyles: Record<InputSize, string> = {
   sm: "h-8 px-2 text-xs",
@@ -9,8 +10,8 @@ const sizeStyles: Record<InputSize, string> = {
 };
 
 const variantStyles: Record<InputVariant, string> = {
-  default: "border-[var(--color-border)]",
-  error: "border-[var(--color-danger)] focus-visible:border-[var(--color-danger)] focus-visible:ring-[var(--color-danger)]/10",
+  default: "border-border",
+  error: "border-danger focus-visible:border-danger focus-visible:ring-danger/10",
 };
 
 export type InputSize = "sm" | "base" | "lg";
@@ -49,14 +50,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       return (
         <input
           ref={ref}
-          className={[
+          className={cn(
             baseStyles,
             sizeStyles[size],
             variantStyles[variant],
             className,
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          )}
           {...props}
         />
       );
@@ -66,7 +65,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       <div className="relative w-full">
         {leftIcon && (
           <div
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
             style={{
               left: size === "sm" ? "0.5rem" : size === "lg" ? "1rem" : "0.75rem",
             }}
@@ -76,20 +75,18 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <input
           ref={ref}
-          className={[
+          className={cn(
             baseStyles,
             sizeStyles[size],
             variantStyles[variant],
             className,
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          )}
           style={paddingStyle}
           {...props}
         />
         {rightIcon && (
           <div
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
             style={{
               right: size === "sm" ? "0.5rem" : size === "lg" ? "1rem" : "0.75rem",
             }}

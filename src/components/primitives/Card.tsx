@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from '../../utils/cn';
 
 interface CardProps {
   children: React.ReactNode;
@@ -20,9 +21,9 @@ export const Card: React.FC<CardProps> = ({
   const baseClasses = 'rounded-lg';
   
   const variantClasses = {
-    default: 'bg-[var(--color-surface)] border border-[var(--color-border)]',
-    elevated: 'bg-[var(--color-surface)] shadow-md',
-    outlined: 'border-2 border-[var(--color-border)]',
+    default: 'bg-surface border border-border',
+    elevated: 'bg-surface shadow-md',
+    outlined: 'border-2 border-border',
   };
 
   const paddingClasses = {
@@ -34,7 +35,7 @@ export const Card: React.FC<CardProps> = ({
 
   return (
     <div
-      className={`${baseClasses} ${variantClasses[variant]} ${paddingClasses[padding]} ${className}`}
+      className={cn(baseClasses, variantClasses[variant], paddingClasses[padding], className)}
     >
       {children}
     </div>
