@@ -189,6 +189,24 @@
   z-index: var(--z-notification);
 }
 
+/* ---------- Scrollbar Utilities ---------- */
+
+@utility scrollbar-thin {
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-hover);
+  }
+}
+
 /* ---------- Custom Keyframes ---------- */
 
 @keyframes modal-slide-in {

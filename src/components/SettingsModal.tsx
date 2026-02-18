@@ -11,7 +11,7 @@ import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
 import { VoiceSettings } from "./SettingsModal/VoiceSettings";
 import { Modal } from "./ui/Modal";
-import styles from "./SettingsModal.module.css";
+import { cn } from '../utils/cn';
 
 type SettingsTab = "general" | "mcp" | "voice";
 
@@ -185,24 +185,33 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         preventClose={saving}
       >
         {/* Tab Navigation */}
-        <div className={styles.tabs}>
+        <div className="flex gap-xs border-b border-border mb-md">
           <button
             type="button"
-            className={`${styles.tab} ${activeTab === "general" ? styles.tabActive : ""}`}
+            className={cn(
+              'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
+              activeTab === "general" && 'text-primary border-b-primary',
+            )}
             onClick={() => setActiveTab("general")}
           >
             General
           </button>
           <button
             type="button"
-            className={`${styles.tab} ${activeTab === "mcp" ? styles.tabActive : ""}`}
+            className={cn(
+              'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
+              activeTab === "mcp" && 'text-primary border-b-primary',
+            )}
             onClick={() => setActiveTab("mcp")}
           >
             MCP Servers
           </button>
           <button
             type="button"
-            className={`${styles.tab} ${activeTab === "voice" ? styles.tabActive : ""}`}
+            className={cn(
+              'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
+              activeTab === "voice" && 'text-primary border-b-primary',
+            )}
             onClick={() => setActiveTab("voice")}
           >
             Voice

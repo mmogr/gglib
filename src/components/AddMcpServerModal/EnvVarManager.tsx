@@ -3,7 +3,6 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Icon } from "../ui/Icon";
 import { Plus, X } from "lucide-react";
-import styles from "../AddMcpServerModal.module.css";
 
 interface EnvVarManagerProps {
   envVars: [string, string][];
@@ -21,14 +20,14 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
   disabled,
 }) => {
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionHeader}>
-        <label className={styles.label}>Environment Variables</label>
+    <div className="flex flex-col gap-xs">
+      <div className="flex justify-between items-center">
+        <label className="text-sm font-semibold text-text">Environment Variables</label>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className={styles.addBtn}
+          className="px-0 text-xs text-primary hover:text-primary"
           onClick={onAdd}
           disabled={disabled}
         >
@@ -37,16 +36,16 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
         </Button>
       </div>
       {envVars.length === 0 ? (
-        <p className={styles.hint}>
+        <p className="text-xs text-text-secondary">
           Add environment variables for API keys and secrets
         </p>
       ) : (
-        <div className={styles.envVars}>
+        <div className="flex flex-col gap-sm">
           {envVars.map(([key, value], index) => (
-            <div key={index} className={styles.envRow}>
+            <div key={index} className="flex gap-sm items-center">
               <Input
                 type="text"
-                className={styles.envKey}
+                className="flex-1 font-mono"
                 value={key}
                 onChange={(e) => onUpdate(index, 0, e.target.value)}
                 placeholder="KEY"
@@ -54,7 +53,7 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
               />
               <Input
                 type="password"
-                className={styles.envValue}
+                className="flex-[2]"
                 value={value}
                 onChange={(e) => onUpdate(index, 1, e.target.value)}
                 placeholder="value"
@@ -62,7 +61,7 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
               />
               <button
                 type="button"
-                className={styles.envRemove}
+                className="flex items-center justify-center w-6 h-6 bg-none border-none text-[1.25rem] text-[#6b7280] cursor-pointer rounded-[0.25rem] hover:bg-[rgba(239,68,68,0.15)] hover:text-[#ef4444]"
                 onClick={() => onRemove(index)}
                 disabled={disabled}
                 aria-label="Remove variable"

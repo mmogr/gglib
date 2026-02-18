@@ -1,7 +1,6 @@
 import { FC } from "react";
 import type { McpServerType } from "../../services/transport/types/mcp";
 import { Input } from "../ui/Input";
-import styles from "../AddMcpServerModal.module.css";
 
 interface StdioConfigFieldsProps {
   command: string;
@@ -38,10 +37,10 @@ export const ServerTypeConfig: FC<ServerTypeConfigProps> = ({
 }) => {
   return (
     <>
-      <div className={styles.section}>
-        <label className={styles.label}>Connection Type</label>
-        <div className={styles.radioGroup}>
-          <label className={styles.radioLabel}>
+      <div className="flex flex-col gap-xs">
+        <label className="text-sm font-semibold text-text">Connection Type</label>
+        <div className="flex gap-lg">
+          <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:accent-primary">
             <input
               type="radio"
               name="serverType"
@@ -51,7 +50,7 @@ export const ServerTypeConfig: FC<ServerTypeConfigProps> = ({
             />
             <span>Stdio (spawn process)</span>
           </label>
-          <label className={styles.radioLabel}>
+          <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:accent-primary">
             <input
               type="radio"
               name="serverType"
@@ -83,8 +82,8 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
 }) => {
   return (
     <>
-      <div className={styles.section}>
-        <label className={styles.label} htmlFor="mcp-command">
+      <div className="flex flex-col gap-xs">
+        <label className="text-sm font-semibold text-text" htmlFor="mcp-command">
           Command *
         </label>
         <Input
@@ -95,13 +94,13 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
           placeholder="npx, python3, node"
           disabled={disabled}
         />
-        <span className={styles.hint}>
+        <span className="text-xs text-text-secondary">
           Single executable name or path (no arguments). Will be resolved via PATH.
         </span>
       </div>
 
-      <div className={styles.section}>
-        <label className={styles.label} htmlFor="mcp-args">
+      <div className="flex flex-col gap-xs">
+        <label className="text-sm font-semibold text-text" htmlFor="mcp-args">
           Arguments
         </label>
         <Input
@@ -112,11 +111,11 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
           placeholder="-y @tavily/mcp-server"
           disabled={disabled}
         />
-        <span className={styles.hint}>Space-separated arguments</span>
+        <span className="text-xs text-text-secondary">Space-separated arguments</span>
       </div>
 
-      <div className={styles.section}>
-        <label className={styles.label} htmlFor="mcp-working-dir">
+      <div className="flex flex-col gap-xs">
+        <label className="text-sm font-semibold text-text" htmlFor="mcp-working-dir">
           Working Directory
         </label>
         <Input
@@ -127,11 +126,11 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
           placeholder="(optional) /absolute/path/to/directory"
           disabled={disabled}
         />
-        <span className={styles.hint}>Must be absolute if specified</span>
+        <span className="text-xs text-text-secondary">Must be absolute if specified</span>
       </div>
 
-      <div className={styles.section}>
-        <label className={styles.label} htmlFor="mcp-path-extra">
+      <div className="flex flex-col gap-xs">
+        <label className="text-sm font-semibold text-text" htmlFor="mcp-path-extra">
           Additional PATH Entries
         </label>
         <Input
@@ -142,7 +141,7 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
           placeholder="(optional) /custom/bin:/other/path"
           disabled={disabled}
         />
-        <span className={styles.hint}>Colon-separated paths added to child process PATH</span>
+        <span className="text-xs text-text-secondary">Colon-separated paths added to child process PATH</span>
       </div>
     </>
   );
@@ -150,8 +149,8 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
 
 const SseConfigFields: FC<SseConfigFieldsProps> = ({ url, setUrl, disabled }) => {
   return (
-    <div className={styles.section}>
-      <label className={styles.label} htmlFor="mcp-url">
+    <div className="flex flex-col gap-xs">
+      <label className="text-sm font-semibold text-text" htmlFor="mcp-url">
         Server URL *
       </label>
       <Input

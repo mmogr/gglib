@@ -9,7 +9,7 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import { getToolRegistry, type ToolDefinition } from '../../services/tools';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
-import styles from './ToolsPopover.module.css';
+import { cn } from '../../utils/cn';
 
 /**
  * Get a human-readable name from a tool function name.
@@ -114,45 +114,45 @@ export const ToolsPopover: React.FC = () => {
   };
 
   return (
-    <div className={styles.container} ref={containerRef}>
+    <div className="relative inline-block" ref={containerRef}>
       <Button
         variant="ghost"
         size="sm"
-        className={styles.triggerButton}
+        className="relative"
         onClick={() => setIsOpen(!isOpen)}
         title="Tools"
         iconOnly
       >
         <Icon icon={Wrench} size={14} />
         {enabledTools.size > 0 && (
-          <span className={styles.badge}>{enabledTools.size}</span>
+          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 text-[9px] font-semibold leading-[14px] text-center text-white bg-accent rounded-[7px]">{enabledTools.size}</span>
         )}
       </Button>
 
       {isOpen && (
-        <div className={styles.popover} ref={popoverRef}>
-          <div className={styles.header}>
-            <span className={styles.title}>
+        <div className="absolute top-full right-0 mt-1 bg-surface border border-border rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.3)] min-w-[300px] max-w-[400px] z-popover overflow-hidden" ref={popoverRef}>
+          <div className="flex items-center justify-between px-[14px] py-[10px] border-b border-border bg-surface-elevated">
+            <span className="text-[13px] font-semibold text-text-primary">
               <Icon icon={Wrench} size={14} />
               <span className="ml-1.5">Tools</span>
             </span>
-            <span className={styles.count}>
+            <span className="text-[11px] text-text-secondary bg-surface px-2 py-[2px] rounded-[10px]">
               {enabledTools.size}/{tools.length} active
             </span>
           </div>
 
           {tools.length === 0 ? (
-            <div className={styles.emptyState}>
-              <p>No tools registered</p>
-              <p className={styles.emptyHint}>
+            <div className="px-[14px] py-6 text-center">
+              <p className="m-0 text-text-secondary text-[13px]">No tools registered</p>
+              <p className="mt-2 text-[11px] text-text-muted">
                 Tools can be added via the tool registry API.
               </p>
             </div>
           ) : (
             <>
               {/* Toggle all row */}
-              <div className={styles.toggleAllRow}>
-                <label className={styles.toggleAllLabel}>
+              <div className="px-[14px] py-2 border-b border-border bg-surface-elevated">
+                <label className="flex items-center gap-2 cursor-pointer text-[12px] text-text-secondary hover:text-text-primary">
                   <input
                     type="checkbox"
                     checked={allEnabled}
@@ -160,14 +160,14 @@ export const ToolsPopover: React.FC = () => {
                       if (el) el.indeterminate = !allEnabled && !noneEnabled;
                     }}
                     onChange={handleToggleAll}
-                    className={styles.checkbox}
+                    className="mt-[2px] accent-accent cursor-pointer"
                   />
                   <span>{allEnabled ? 'Disable all' : 'Enable all'}</span>
                 </label>
               </div>
 
               {/* Tool list */}
-              <div className={styles.content}>
+              <div className="max-h-[280px] overflow-y-auto scrollbar-thin">
                 {tools.map((tool) => {
                   const name = tool.function.name;
                   const enabled = enabledTools.has(name);
@@ -178,21 +178,24 @@ export const ToolsPopover: React.FC = () => {
                   return (
                     <div
                       key={name}
-                      className={`${styles.toolItem} ${!enabled ? styles.toolItemDisabled : ''}`}
+                      className={cn(
+                        'px-[14px] py-[10px] border-b border-border-subtle last:border-b-0 hover:bg-surface-hover transition-colors duration-150',
+                        !enabled && 'opacity-50',
+                      )}
                     >
-                      <label className={styles.toolLabel}>
+                      <label className="flex items-start gap-[10px] cursor-pointer">
                         <input
                           type="checkbox"
                           checked={enabled}
                           onChange={(e) => handleToggleTool(name, e.target.checked)}
-                          className={styles.checkbox}
+                          className="mt-[2px] accent-accent cursor-pointer"
                         />
-                        <span className={styles.toolIcon} aria-hidden>
+                        <span className="text-[18px] -mt-[1px]" aria-hidden>
                           <Icon icon={icon} size={14} />
                         </span>
-                        <div className={styles.toolInfo}>
-                          <span className={styles.toolName}>{displayName}</span>
-                          <span className={styles.toolDescription}>{description}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="block text-[13px] font-medium text-text-primary mb-[2px]">{displayName}</span>
+                          <span className="text-[11px] text-text-secondary leading-[1.4] line-clamp-2">{description}</span>
                         </div>
                       </label>
                     </div>
@@ -202,8 +205,8 @@ export const ToolsPopover: React.FC = () => {
             </>
           )}
 
-          <div className={styles.footer}>
-            <span className={styles.footerHint}>
+          <div className="px-[14px] py-2 border-t border-border bg-surface-elevated">
+            <span className="text-[10px] text-text-muted italic">
               Enabled tools are sent to the model for function calling.
             </span>
           </div>
