@@ -222,16 +222,45 @@ pub async fn voice_start(
     Ok(())
 }
 
-/// Stop the voice pipeline.
+/// Stop the voice pipeline, releasing audio resources (microphone + playback)
+/// but keeping loaded STT/TTS models in memory.
+///
+/// This allows the user to toggle voice off and back on without the
+/// 5–10 second model-reload delay. The pipeline transitions to `Idle` and
+/// the OS microphone indicator turns off immediately.
+///
+/// To also free the model memory, call [`voice_unload`] instead.
 #[tauri::command]
 pub async fn voice_stop(state: tauri::State<'_, AppState>) -> Result<(), String> {
     let mut voice = state.voice_pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.stop();
     }
+    // Intentionally keep *voice = Some(pipeline) so loaded models stay warm.
+
+    info!("Voice pipeline stopped (models retained)");
+    Ok(())
+}
+
+/// Fully unload the voice pipeline, freeing all model memory (STT + TTS weights).
+///
+/// Use this for explicit "unload" actions (e.g. switching models, low-memory
+/// situations, or app shutdown). After this call [`voice_status`] will report
+/// `sttLoaded: false` and `ttsLoaded: false`.
+///
+/// For simply pausing voice mode while keeping models warm, use [`voice_stop`].
+#[tauri::command]
+pub async fn voice_unload(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let mut voice = state.voice_pipeline.write().await;
+    if let Some(ref mut pipeline) = *voice {
+        // Ensure audio is stopped and mic released before dropping.
+        if pipeline.is_active() {
+            pipeline.stop();
+        }
+    }
     *voice = None;
 
-    info!("Voice pipeline stopped");
+    info!("Voice pipeline unloaded (models freed)");
     Ok(())
 }
 
@@ -248,8 +277,8 @@ pub async fn voice_status(
             mode: mode_string(pipeline.mode()),
             stt_loaded: pipeline.is_stt_loaded(),
             tts_loaded: pipeline.is_tts_loaded(),
-            stt_model_id: None, // TODO: track in pipeline
-            tts_voice: None,    // TODO: track in pipeline
+            stt_model_id: pipeline.stt_model_id().map(str::to_owned),
+            tts_voice: Some(pipeline.tts_voice().to_owned()),
             auto_speak: pipeline.auto_speak(),
         }),
         None => Ok(VoiceStatusResponse {
@@ -422,12 +451,19 @@ pub async fn voice_download_vad_model(app: AppHandle) -> Result<(), String> {
 }
 
 /// Load an STT model into the pipeline (auto-creates an idle pipeline if needed).
+///
+/// If the pipeline is currently active (mic open / transcribing), it is
+/// automatically paused first to prevent a hot-swap race with an in-flight
+/// transcription. Audio resources are released and the pipeline can be
+/// restarted with [`voice_start`] after loading completes.
 #[tauri::command]
 pub async fn voice_load_stt(
     model_id: String,
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // Resolve catalog metadata and path *before* acquiring the write lock,
+    // so we hold the lock for as short a time as possible.
     let model = VoiceModelCatalog::find_stt_model(&model_id)
         .ok_or_else(|| format!("Unknown STT model: {model_id}"))?;
 
@@ -446,7 +482,19 @@ pub async fn voice_load_stt(
         info!("Created idle voice pipeline for model preloading");
     }
     let pipeline = voice.as_mut().unwrap();
-    pipeline.load_stt(&path).map_err(|e| format!("{e}"))
+
+    // Safety: pause the pipeline before swapping the STT engine.
+    // ptt_stop / vad_process_frame hold this same write lock during transcription,
+    // so the lock itself serialises access — but an explicit stop here ensures
+    // the audio thread is also quiesced and the mic is released.
+    if pipeline.is_active() {
+        info!(model_id = %model_id, "Pausing active pipeline before STT model hot-swap");
+        pipeline.stop();
+    }
+
+    pipeline
+        .load_stt(&path, &model_id)
+        .map_err(|e| format!("{e}"))
 }
 
 /// Load the TTS model into the pipeline (auto-creates an idle pipeline if needed).
