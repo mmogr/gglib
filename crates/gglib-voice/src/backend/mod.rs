@@ -15,6 +15,7 @@
 
 pub mod sherpa_stt;
 pub mod sherpa_tts;
+mod util;
 
 use std::time::Duration;
 

@@ -7,6 +7,8 @@
 //! worker thread is never blocked during inference.
 
 use std::path::Path;
+
+use super::util;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -93,10 +95,10 @@ impl SherpaTtsBackend {
             tracing::debug!(path = %path.display(), "Found TTS {desc}");
         }
 
-        let model_str = path_to_string(&model_path)?;
-        let voices_str = path_to_string(&voices_path)?;
-        let tokens_str = path_to_string(&tokens_path)?;
-        let data_dir_str = path_to_string(&data_dir)?;
+        let model_str = util::path_to_string(&model_path, VoiceError::SynthesisError)?;
+        let voices_str = util::path_to_string(&voices_path, VoiceError::SynthesisError)?;
+        let tokens_str = util::path_to_string(&tokens_path, VoiceError::SynthesisError)?;
+        let data_dir_str = util::path_to_string(&data_dir, VoiceError::SynthesisError)?;
 
         tracing::info!(
             dir = %model_dir.display(),
@@ -296,9 +298,4 @@ pub fn sherpa_kokoro_voices() -> Vec<VoiceInfo> {
     ]
 }
 
-/// Convert a path to a string, returning a `VoiceError` on invalid UTF-8.
-fn path_to_string(path: &Path) -> Result<String, VoiceError> {
-    path.to_str()
-        .map(ToString::to_string)
-        .ok_or_else(|| VoiceError::SynthesisError(format!("Invalid path: {}", path.display())))
-}
+

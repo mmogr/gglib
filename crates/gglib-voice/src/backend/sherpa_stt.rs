@@ -9,6 +9,8 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use super::util;
+
 use sherpa_rs::whisper::{WhisperConfig, WhisperRecognizer};
 
 use crate::backend::SttBackend;
@@ -101,9 +103,9 @@ impl SherpaSttBackend {
             tracing::debug!(path = %path.display(), "Found STT {desc}");
         }
 
-        let encoder_str = path_to_string(&encoder_path)?;
-        let decoder_str = path_to_string(&decoder_path)?;
-        let tokens_str = path_to_string(&tokens_path)?;
+        let encoder_str = util::path_to_string(&encoder_path, VoiceError::ModelLoadError)?;
+        let decoder_str = util::path_to_string(&decoder_path, VoiceError::ModelLoadError)?;
+        let tokens_str = util::path_to_string(&tokens_path, VoiceError::ModelLoadError)?;
 
         tracing::info!(
             dir = %model_dir.display(),
@@ -245,9 +247,4 @@ fn find_file_prefix(dir: &Path, suffix: &str) -> Result<String, VoiceError> {
     )))
 }
 
-/// Convert a path to a string, returning a `VoiceError` on invalid UTF-8.
-fn path_to_string(path: &Path) -> Result<String, VoiceError> {
-    path.to_str()
-        .map(ToString::to_string)
-        .ok_or_else(|| VoiceError::ModelLoadError(format!("Invalid path: {}", path.display())))
-}
+
