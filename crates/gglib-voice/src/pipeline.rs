@@ -173,6 +173,13 @@ pub struct VoicePipeline {
 
     /// Pipeline configuration.
     config: VoicePipelineConfig,
+
+    /// The model ID of the currently loaded STT engine, if any.
+    ///
+    /// Set when [`load_stt`](VoicePipeline::load_stt) succeeds; cleared when
+    /// the pipeline is dropped. Used by `voice_status` to report the active
+    /// model to the frontend without requiring a round-trip to the catalog.
+    loaded_stt_model_id: Option<String>,
 }
 
 impl VoicePipeline {
@@ -195,6 +202,7 @@ impl VoicePipeline {
             event_tx,
             is_active: Arc::new(AtomicBool::new(false)),
             config,
+            loaded_stt_model_id: None,
         };
 
         (pipeline, event_rx)
@@ -216,6 +224,18 @@ impl VoicePipeline {
     #[must_use]
     pub fn is_active(&self) -> bool {
         self.is_active.load(Ordering::SeqCst)
+    }
+
+    /// Return the model ID of the currently loaded STT engine, if any.
+    #[must_use]
+    pub fn stt_model_id(&self) -> Option<&str> {
+        self.loaded_stt_model_id.as_deref()
+    }
+
+    /// Return the currently configured TTS voice ID.
+    #[must_use]
+    pub fn tts_voice(&self) -> &str {
+        &self.config.tts.voice
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────
@@ -295,10 +315,14 @@ impl VoicePipeline {
     ///
     /// `model_path` should be a **directory** containing `encoder.onnx`,
     /// `decoder.onnx`, and `tokens.txt`.
-    pub fn load_stt(&mut self, model_path: &std::path::Path) -> Result<(), VoiceError> {
+    ///
+    /// `model_id` is stored verbatim and returned by
+    /// [`stt_model_id`](VoicePipeline::stt_model_id) so the frontend can
+    /// display which model is currently active without querying the catalog.
+    pub fn load_stt(&mut self, model_path: &std::path::Path, model_id: &str) -> Result<(), VoiceError> {
         use crate::backend::sherpa_stt::{SherpaSttBackend, SherpaSttConfig};
 
-        tracing::info!(path = %model_path.display(), "Loading STT engine");
+        tracing::info!(path = %model_path.display(), model_id, "Loading STT engine");
 
         let sherpa_config = SherpaSttConfig {
             language: self.config.stt.language.clone(),
@@ -306,6 +330,7 @@ impl VoicePipeline {
         };
         let engine = SherpaSttBackend::load(model_path, &sherpa_config)?;
         self.stt = Some(Box::new(engine));
+        self.loaded_stt_model_id = Some(model_id.to_owned());
         Ok(())
     }
 
