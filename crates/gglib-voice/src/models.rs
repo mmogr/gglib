@@ -7,7 +7,9 @@
 
 use std::path::{Path, PathBuf};
 
+use futures_util::StreamExt as _;
 use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncWriteExt as _, BufWriter};
 
 // ── Model identifiers ──────────────────────────────────────────────
 
@@ -376,21 +378,34 @@ pub async fn download_voice_model(
         });
     }
 
+    // Content-Length may be absent; treat 0 as "unknown size".
     let total_size = response.content_length().unwrap_or(0);
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| crate::error::VoiceError::DownloadError {
+    let file = tokio::fs::File::create(dest).await?;
+    let mut writer = BufWriter::new(file);
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_reported: u64 = 0;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| crate::error::VoiceError::DownloadError {
             name: url.to_string(),
             source: e.into(),
         })?;
+        writer.write_all(&chunk).await?;
+        downloaded += chunk.len() as u64;
+        if downloaded - last_reported >= 100_000 {
+            on_progress(downloaded, total_size);
+            last_reported = downloaded;
+        }
+    }
 
-    tokio::fs::write(dest, &bytes).await?;
-    on_progress(bytes.len() as u64, total_size.max(bytes.len() as u64));
+    // Flush the buffer to disk and guarantee the final 100% event is emitted.
+    writer.flush().await?;
+    on_progress(downloaded, total_size.max(downloaded));
 
     tracing::info!(
-        size_mb = bytes.len() / 1_048_576,
+        size_mb = downloaded / 1_048_576,
         dest = %dest.display(),
         "Voice model download complete"
     );
@@ -438,32 +453,54 @@ pub async fn download_and_extract_archive(
         });
     }
 
+    // Content-Length may be absent; treat 0 as "unknown size".
     let total_size = response.content_length().unwrap_or(0);
-    let archive_bytes =
-        response
-            .bytes()
-            .await
-            .map_err(|e| crate::error::VoiceError::DownloadError {
-                name: url.to_string(),
-                source: e.into(),
-            })?;
 
-    on_progress(
-        archive_bytes.len() as u64,
-        total_size.max(archive_bytes.len() as u64),
-    );
+    // Stream the archive to a temp file instead of buffering it in memory.
+    // For large models (e.g. small.en ~610 MB) this avoids potential OOM.
+    let tmp_path = dest_dir.join(format!(".{dir_name}.tar.bz2.tmp"));
+    let file = tokio::fs::File::create(&tmp_path).await?;
+    let mut writer = BufWriter::new(file);
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_reported: u64 = 0;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| crate::error::VoiceError::DownloadError {
+            name: url.to_string(),
+            source: e.into(),
+        })?;
+        writer.write_all(&chunk).await?;
+        downloaded += chunk.len() as u64;
+        if downloaded - last_reported >= 100_000 {
+            on_progress(downloaded, total_size);
+            last_reported = downloaded;
+        }
+    }
+
+    // Flush the BufWriter and drop it explicitly so the file handle is fully
+    // released before the blocking thread opens the same path for extraction.
+    writer.flush().await?;
+    drop(writer);
+    on_progress(downloaded, total_size.max(downloaded));
 
     tracing::info!(
-        size_mb = archive_bytes.len() / 1_048_576,
+        size_mb = downloaded / 1_048_576,
         "Archive downloaded, extracting"
     );
 
     // Extract in a blocking thread to avoid blocking the async runtime.
+    // Open the temp file from disk rather than using an in-memory Cursor.
     let dest_owned = dest_dir.to_path_buf();
-    let bytes_vec = archive_bytes.to_vec();
+    let tmp_path_owned = tmp_path.clone();
     tokio::task::spawn_blocking(move || {
-        let cursor = std::io::Cursor::new(bytes_vec);
-        let decompressor = bzip2::read::BzDecoder::new(cursor);
+        let file = std::fs::File::open(&tmp_path_owned).map_err(|e| {
+            crate::error::VoiceError::DownloadError {
+                name: "archive".to_string(),
+                source: anyhow::anyhow!("Failed to open temp archive: {e}"),
+            }
+        })?;
+        let decompressor = bzip2::read::BzDecoder::new(file);
         let mut archive = tar::Archive::new(decompressor);
         archive
             .unpack(&dest_owned)
@@ -478,6 +515,9 @@ pub async fn download_and_extract_archive(
         name: url.to_string(),
         source: anyhow::anyhow!("Join error: {e}"),
     })??;
+
+    // Remove the temp archive now that extraction is complete.
+    let _ = tokio::fs::remove_file(&tmp_path).await;
 
     tracing::info!(path = %extract_path.display(), "Archive extracted successfully");
     Ok(extract_path)

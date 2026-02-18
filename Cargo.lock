@@ -2139,6 +2139,7 @@ dependencies = [
  "async-trait",
  "bzip2 0.5.2",
  "cpal",
+ "futures-util",
  "gglib-core",
  "reqwest 0.13.2",
  "rodio",
