@@ -221,6 +221,7 @@ fn main() {
             // Voice mode: OS-specific audio pipeline
             commands::voice::voice_start,
             commands::voice::voice_stop,
+            commands::voice::voice_unload,
             commands::voice::voice_status,
             commands::voice::voice_ptt_start,
             commands::voice::voice_ptt_stop,
