@@ -302,6 +302,8 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
           mode: 'ptt',
           sttLoaded: false,
           ttsLoaded: false,
+          sttModelId: null,
+          ttsVoice: null,
           autoSpeak: true,
         };
       }
