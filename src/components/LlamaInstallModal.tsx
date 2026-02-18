@@ -7,7 +7,7 @@ import { installLlama } from '../services/platform/llamaInstall';
 import { Button } from './ui/Button';
 import { Icon } from './ui/Icon';
 import { Modal } from './ui/Modal';
-import styles from './LlamaInstallModal.module.css';
+import { cn } from '../utils/cn';
 
 interface LlamaInstallModalProps {
   isOpen?: boolean;
@@ -81,51 +81,51 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
     const isIndeterminate = progress.status === 'started';
 
     return (
-      <div className={styles.progressBlock}>
-        <div className={styles.progressBar}>
+      <div className="flex flex-col gap-[0.35rem]">
+        <div className="h-2 bg-background-tertiary rounded overflow-hidden">
           <div
-            className={`${styles.progressBarFill} ${isIndeterminate ? styles.indeterminate : ''}`}
+            className={cn('h-full bg-gradient-to-r from-primary to-[#74c7ec] rounded transition-[width] duration-300', isIndeterminate && 'w-[30%] animate-indeterminate')}
             style={!isIndeterminate ? { width: `${progress.percentage}%` } : undefined}
           />
         </div>
-        <div className={styles.progressMeta}>
+        <div className="flex justify-between text-text-secondary text-[0.9rem]">
           <span>{progress.percentage.toFixed(1)}%</span>
           {progress.total > 0 && (
             <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
           )}
         </div>
-        <div className={styles.progressMessage}>{progress.message}</div>
+        <div className="text-text text-[0.95rem]">{progress.message}</div>
       </div>
     );
   };
 
   const renderMetadataContent = () => (
     <>
-      <div className={styles.lede}>
-        <div className={styles.iconCircle}>
-          <Icon icon={installing ? Loader2 : AlertTriangle} size={28} className={installing ? styles.iconSpin : ''} />
+      <div className="flex gap-3 items-center">
+        <div className="w-10 h-10 rounded-full inline-flex items-center justify-center bg-background-secondary border border-border text-primary">
+          <Icon icon={installing ? Loader2 : AlertTriangle} size={28} className={installing ? 'animate-spin' : ''} />
         </div>
         <div>
-          <h2 className={styles.title}>llama-server Not Installed</h2>
-          <p className={styles.subtitle}>{metadata?.reason}</p>
+          <h2 className="m-0 text-[1.1rem] font-semibold text-text">llama-server Not Installed</h2>
+          <p className="mt-1 mb-0 text-text-secondary text-[0.95rem]">{metadata?.reason}</p>
         </div>
       </div>
 
-      <div className={styles.block}>
-        <p className={styles.description}>The llama-server binary was not found at:</p>
-        <code className={styles.code}>{metadata?.expectedPath}</code>
+      <div className="flex flex-col gap-2">
+        <p className="m-0 text-text-secondary leading-normal">The llama-server binary was not found at:</p>
+        <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-[0.9rem] text-text break-all">{metadata?.expectedPath}</code>
         {metadata?.legacyPath && (
-          <div className={styles.callout}>
-            <p className={styles.calloutTitle}>Older installation detected</p>
-            <code className={styles.code}>{metadata.legacyPath}</code>
-            <p className={styles.calloutNote}>Move or symlink it to the expected path to reuse.</p>
+          <div className="p-3 rounded-lg border border-border bg-background-secondary flex flex-col gap-[0.35rem]">
+            <p className="m-0 font-semibold text-text">Older installation detected</p>
+            <code className="block bg-background-tertiary border border-border rounded-md py-2 px-3 font-mono text-[0.9rem] text-text break-all">{metadata.legacyPath}</code>
+            <p className="m-0 text-[0.9rem] text-text-secondary">Move or symlink it to the expected path to reuse.</p>
           </div>
         )}
       </div>
 
-      {error ? <div className={styles.error}>{error}</div> : null}
+      {error ? <div className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
 
-      <div className={styles.actions}>
+      <div className="flex gap-2 flex-wrap justify-end">
         <Button onClick={handleErrorModeInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
           Install now
         </Button>
@@ -140,18 +140,18 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
 
   const renderStandardContent = () => (
     <>
-      <div className={styles.lede}>
-        <div className={styles.iconCircle}>
+      <div className="flex gap-3 items-center">
+        <div className="w-10 h-10 rounded-full inline-flex items-center justify-center bg-background-secondary border border-border text-primary">
           <Icon
             icon={isCompleted ? CheckCircle2 : isError ? XCircle : AlertCircle}
             size={28}
-            className={installing ? styles.iconPulse : ''}
+            className={installing ? 'animate-pulse' : ''}
           />
         </div>
         <div>
-          <h2 className={styles.title}>{isCompleted ? 'Installation complete' : 'llama.cpp required'}</h2>
+          <h2 className="m-0 text-[1.1rem] font-semibold text-text">{isCompleted ? 'Installation complete' : 'llama.cpp required'}</h2>
           {!installing && !isCompleted && (
-            <p className={styles.subtitle}>
+            <p className="mt-1 mb-0 text-text-secondary text-[0.95rem]">
               {canDownload
                 ? 'We will download a prebuilt binary for your platform (~15 MB).'
                 : 'Please build llama.cpp via the CLI: gglib llama install'}
@@ -160,16 +160,16 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
         </div>
       </div>
 
-      {error && !installing ? <div className={styles.error}>{error}</div> : null}
+      {error && !installing ? <div className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
 
       {renderProgress()}
 
       {isCompleted ? (
-        <p className={styles.success}>llama.cpp is ready! You can now serve models.</p>
+        <p className="text-success font-semibold">llama.cpp is ready! You can now serve models.</p>
       ) : null}
 
       {!installing && !isCompleted && canDownload ? (
-        <div className={styles.actions}>
+        <div className="flex gap-2 flex-wrap justify-end">
           <Button onClick={onInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
             Install llama.cpp
           </Button>
@@ -182,7 +182,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       ) : null}
 
       {!installing && !isCompleted && !canDownload && onSkip ? (
-        <div className={styles.actions}>
+        <div className="flex gap-2 flex-wrap justify-end">
           <Button variant="ghost" onClick={onSkip}>
             I understand
           </Button>
@@ -199,7 +199,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       size="md"
       preventClose={installing}
     >
-      <div className={styles.content}>{metadata ? renderMetadataContent() : renderStandardContent()}</div>
+      <div className="flex flex-col gap-4">{metadata ? renderMetadataContent() : renderStandardContent()}</div>
     </Modal>
   );
 };
