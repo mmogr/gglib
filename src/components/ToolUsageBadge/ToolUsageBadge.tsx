@@ -3,7 +3,7 @@ import { useMessage } from '@assistant-ui/react';
 import type { ThreadMessage } from '@assistant-ui/react';
 import ToolDetailsModal from './ToolDetailsModal';
 import { Wrench } from 'lucide-react';
-import styles from './ToolUsageBadge.module.css';
+import { cn } from '../../utils/cn';
 import { Icon } from '../ui/Icon';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
@@ -68,14 +68,19 @@ const ToolUsageBadge: React.FC = () => {
   return (
     <>
       <button
-        className={`${styles.badge} ${styles[`badge-${status}`]}`}
+        className={cn(
+          'inline-flex items-center gap-1 py-[2px] px-2 text-[11px] font-medium border-none rounded-[10px] cursor-pointer transition-all duration-150 ml-2 hover:scale-105 hover:shadow-[0_2px_4px_rgba(0,0,0,0.1)] active:scale-[0.98]',
+          status === 'success' && 'bg-[#10b981] text-white hover:bg-[#059669]',
+          status === 'error' && 'bg-[#ef4444] text-white hover:bg-[#dc2626]',
+          status === 'mixed' && 'bg-[#f59e0b] text-white hover:bg-[#d97706]',
+        )}
         onClick={() => setIsModalOpen(true)}
         title="Click to view tool execution details"
       >
-        <span className={styles.badgeIcon} aria-hidden="true">
+        <span className="text-[12px] leading-none" aria-hidden="true">
           <Icon icon={Wrench} size={14} />
         </span>
-        <span className={styles.badgeText}>{displayNames}</span>
+        <span className="leading-none whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">{displayNames}</span>
       </button>
 
       {isModalOpen && (

@@ -4,7 +4,6 @@ import { addModel } from "../services/clients/models";
 import { pickGgufFile, isDesktop } from "../services/platform";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
-import styles from './AddModel.module.css';
 
 interface AddModelProps {
   onModelAdded: () => void;
@@ -58,19 +57,19 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
       <form onSubmit={handleSubmit} className="add-model-form">
         <div className="form-group">
           <label htmlFor="filePath">Model File Path:</label>
-          <div className={styles.fileInputGroup}>
+          <div className="flex flex-wrap gap-spacing-sm tablet:flex-col tablet:items-stretch">
             <Input
               type="text"
               id="filePath"
               value={filePath}
               onChange={(e) => setFilePath(e.target.value)}
               placeholder="/path/to/your/model.gguf"
-              className={styles.formInput}
+              className="flex-[1_1_200px] min-w-0"
             />
             <button
               type="button"
               onClick={handleBrowse}
-              className={styles.browseButton}
+              className="px-spacing-base py-spacing-sm bg-primary text-white border-none rounded-base cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:bg-primary-hover hover:-translate-y-px active:translate-y-0 tablet:w-full tablet:text-center"
             >
               📁 Browse
             </button>

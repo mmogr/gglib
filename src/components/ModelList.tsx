@@ -13,7 +13,6 @@ import { useIsServerRunning } from "../services/serverRegistry";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Row } from "./primitives";
-import styles from "./ModelList.module.css";
 import { Input } from "./ui/Input";
 
 interface ModelListProps {
@@ -288,7 +287,7 @@ const ModelList: FC<ModelListProps> = ({
                 <Row gap="sm" className="capability-badges mb-4">
                   {hasTag(servingModel, 'reasoning') && (
                     <span 
-                      className={`${styles.capabilityBadge} ${styles.reasoning}`}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-[#f3e8ff] text-[#7c3aed]"
                       title="Model supports chain-of-thought reasoning with thinking tags"
                     >
                       <Icon icon={Brain} size={14} />
@@ -297,7 +296,7 @@ const ModelList: FC<ModelListProps> = ({
                   )}
                   {hasTag(servingModel, 'agent') && (
                     <span 
-                      className={`${styles.capabilityBadge} ${styles.agent}`}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-[#dbeafe] text-[#2563eb]"
                       title="Model supports tool/function calling for agentic workflows"
                     >
                       <Icon icon={Wrench} size={14} />

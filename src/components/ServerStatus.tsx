@@ -6,7 +6,7 @@ import { safeStopServer } from "../services/server/safeActions";
 import type { ServerInfo } from "../types";
 import type { ProxyStatus } from "../services/transport/types/proxy";
 import { Icon } from "./ui/Icon";
-import styles from './ServerStatus.module.css';
+import { cn } from "../utils/cn";
 
 interface ServerStatusProps {
   onOpenChat?: (port: number, modelName: string) => void;
@@ -66,16 +66,16 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
   }
 
   return (
-    <div className={styles.banner}>
+    <div className="flex gap-spacing-base px-spacing-lg py-spacing-md bg-gradient-to-br from-primary to-[#764ba2] border-b border-white/10 flex-wrap items-center">
       {/* Proxy Status */}
       {proxyStatus && proxyStatus.running && (
-        <div className={`${styles.statusItem} ${styles.proxyStatus}`}>
-          <span className={styles.statusIcon} aria-hidden>
+        <div className="flex items-center gap-spacing-sm px-spacing-md py-spacing-sm bg-white/10 rounded-md backdrop-blur-[10px] border border-white/20">
+          <span className="text-xl leading-none" aria-hidden>
             <Icon icon={RotateCcw} size={16} />
           </span>
-          <div className={styles.statusInfo}>
-            <strong>Proxy Active</strong>
-            <span className={styles.statusDetail}>
+          <div className="flex flex-col gap-spacing-xs text-white text-sm">
+            <strong className="font-semibold">Proxy Active</strong>
+            <span className="text-xs opacity-90">
               Port {proxyStatus.port}
               {proxyStatus.current_model && (
                 <> • {proxyStatus.current_model} on port {proxyStatus.model_port}</>
@@ -87,17 +87,17 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
 
       {/* Running Servers */}
       {servers.map((server) => (
-        <div key={server.modelId} className={styles.statusItem}>
-          <span className={`${styles.statusIcon} ${isServerHealthy(server) ? styles.healthy : ''}`} aria-hidden>
+        <div key={server.modelId} className="flex items-center gap-spacing-sm px-spacing-md py-spacing-sm bg-white/10 rounded-md backdrop-blur-[10px]">
+          <span className={cn('text-xl leading-none', isServerHealthy(server) && 'animate-pulse')} aria-hidden>
             <Icon icon={Circle} size={14} />
           </span>
-          <div className={styles.statusInfo}>
-            <strong>{server.modelName}</strong>
-            <span className={styles.statusDetail}>Port {server.port}</span>
+          <div className="flex flex-col gap-spacing-xs text-white text-sm">
+            <strong className="font-semibold">{server.modelName}</strong>
+            <span className="text-xs opacity-90">Port {server.port}</span>
           </div>
           {isServerHealthy(server) && onOpenChat && (
             <button
-              className={styles.chatButton}
+              className="bg-white/20 border-none rounded-base px-spacing-sm py-spacing-xs cursor-pointer text-base transition-all text-white flex items-center justify-center hover:bg-white/30 hover:-translate-y-px active:translate-y-0"
               onClick={() => onOpenChat(server.port, server.modelName)}
               title="Open chat"
             >
@@ -105,7 +105,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
             </button>
           )}
           <button
-            className={styles.stopButton}
+            className="bg-white/20 border-none rounded-base px-spacing-sm py-spacing-xs cursor-pointer text-base transition-all ml-spacing-sm text-white hover:bg-white/30 hover:scale-110 active:scale-95"
             onClick={() => handleStopServer(server.modelId)}
             title="Stop server"
           >
