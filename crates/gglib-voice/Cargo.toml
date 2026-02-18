@@ -24,8 +24,10 @@ missing_panics_doc = "allow"
 
 [features]
 default = []
-# CUDA acceleration for sherpa-onnx
-# cuda = ["sherpa-rs/cuda"]
+# Expose test-helper methods on VoicePipeline (inject_stt, inject_tts,
+# set_active_for_test). Enabled automatically in integration tests via
+# the dev-dependencies entry below — never enable in production builds.
+test-helpers = []
 
 [dependencies]
 # Internal crates

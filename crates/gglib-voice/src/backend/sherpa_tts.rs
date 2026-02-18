@@ -7,6 +7,8 @@
 //! worker thread is never blocked during inference.
 
 use std::path::Path;
+
+use super::util;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -93,10 +95,10 @@ impl SherpaTtsBackend {
             tracing::debug!(path = %path.display(), "Found TTS {desc}");
         }
 
-        let model_str = path_to_string(&model_path)?;
-        let voices_str = path_to_string(&voices_path)?;
-        let tokens_str = path_to_string(&tokens_path)?;
-        let data_dir_str = path_to_string(&data_dir)?;
+        let model_str = util::path_to_string(&model_path, VoiceError::SynthesisError)?;
+        let voices_str = util::path_to_string(&voices_path, VoiceError::SynthesisError)?;
+        let tokens_str = util::path_to_string(&tokens_path, VoiceError::SynthesisError)?;
+        let data_dir_str = util::path_to_string(&data_dir, VoiceError::SynthesisError)?;
 
         tracing::info!(
             dir = %model_dir.display(),
@@ -229,8 +231,8 @@ impl TtsBackend for SherpaTtsBackend {
 /// Map a voice ID string (e.g., `"af_sarah"`) to the sherpa-onnx speaker ID.
 ///
 /// The IDs match the `speaker2id` metadata in the Kokoro v0.19 English model
-/// (`kokoro-en-v0_19`).  Returns -1 for unknown voices so that
-/// [`set_voice`] can reject them gracefully.
+/// (`kokoro-en-v0_19`).  Returns `-1` for unknown voice IDs so that
+/// [`set_voice`] can detect them and keep the current voice unchanged.
 fn voice_id_to_speaker_id(voice_id: &str) -> i32 {
     // Speaker IDs from model metadata:
     //   af->0, af_bella->1, af_nicole->2, af_sarah->3, af_sky->4,
@@ -248,10 +250,7 @@ fn voice_id_to_speaker_id(voice_id: &str) -> i32 {
         "bf_isabella" => 8,
         "bm_george" => 9,
         "bm_lewis" => 10,
-        _ => {
-            tracing::warn!(voice = %voice_id, "Unknown Kokoro voice — using default speaker 0");
-            0
-        }
+        _ => -1,
     }
 }
 
@@ -294,11 +293,4 @@ pub fn sherpa_kokoro_voices() -> Vec<VoiceInfo> {
         voice_info("bm_george", "George", "British English", VoiceGender::Male),
         voice_info("bm_lewis", "Lewis", "British English", VoiceGender::Male),
     ]
-}
-
-/// Convert a path to a string, returning a `VoiceError` on invalid UTF-8.
-fn path_to_string(path: &Path) -> Result<String, VoiceError> {
-    path.to_str()
-        .map(ToString::to_string)
-        .ok_or_else(|| VoiceError::SynthesisError(format!("Invalid path: {}", path.display())))
 }

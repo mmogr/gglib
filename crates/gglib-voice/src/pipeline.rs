@@ -711,6 +711,34 @@ impl VoicePipeline {
             tracing::warn!("Voice event receiver dropped");
         }
     }
+
+    // ── Test helpers ───────────────────────────────────────────────
+
+    /// Inject a mock STT backend (available with the `test-helpers` feature only).
+    ///
+    /// Allows integration tests to drive the pipeline with a canned backend
+    /// without loading real model files.
+    #[cfg(any(test, feature = "test-helpers"))]
+    pub fn inject_stt(&mut self, stt: Box<dyn SttBackend>) {
+        self.stt = Some(stt);
+    }
+
+    /// Inject a mock TTS backend (available with the `test-helpers` feature only).
+    #[cfg(any(test, feature = "test-helpers"))]
+    pub fn inject_tts(&mut self, tts: Box<dyn TtsBackend>) {
+        self.tts = Some(tts);
+    }
+
+    /// Mark the pipeline active without starting real audio hardware.
+    ///
+    /// Used by tests that need `is_active() == true` to exercise guards that
+    /// require an active pipeline (e.g. `ptt_start`), but only test state
+    /// transitions — not actual audio I/O.
+    #[cfg(any(test, feature = "test-helpers"))]
+    pub fn set_active_for_test(&mut self) {
+        self.is_active.store(true, Ordering::SeqCst);
+        self.set_state(VoiceState::Listening);
+    }
 }
 
 impl Drop for VoicePipeline {
