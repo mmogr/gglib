@@ -101,15 +101,15 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   // Error state
   if (error) {
     return (
-      <div className="mcc-panel library-panel">
-        <div className="mcc-panel-header">
+      <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border library-panel">
+        <div className="p-base border-b border-border bg-background shrink-0">
           <SidebarTabs
             tabs={SIDEBAR_TABS}
             activeTab={activeTab}
             onTabChange={handleTabChange}
           />
         </div>
-        <div className="mcc-panel-content">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
           <div className="error-container">
             <p className="error-message">Error: {error}</p>
             <button onClick={onRefresh} className="retry-button">
@@ -146,8 +146,8 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   );
 
   return (
-    <div className="mcc-panel library-panel">
-      <div className="mcc-panel-header">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border library-panel">
+      <div className="p-base border-b border-border bg-background shrink-0">
         <SidebarTabs
           tabs={SIDEBAR_TABS}
           activeTab={activeTab}
@@ -196,7 +196,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         )}
       </div>
 
-      <div className="mcc-panel-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         {activeTab === 'models' ? (
           <ModelsListContent
             models={models}

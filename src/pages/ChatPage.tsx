@@ -26,7 +26,7 @@ import {
   DEFAULT_TITLE_GENERATION_PROMPT,
 } from '../services/clients/chat';
 import type { ConversationSummary } from '../services/clients/chat';
-import './ChatPage.css';
+import { cn } from '../utils/cn';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 // Base prompt stored on the conversation by default.
@@ -408,7 +408,7 @@ export default function ChatPage({
   };
 
   return (
-    <div className="chat-page">
+    <div className="flex-1 flex flex-col min-h-0 bg-background">
       {/* Chat Tab Content - always mounted, hidden when not active */}
       <AssistantRuntimeProvider runtime={runtime}>
         {/* Tool UI Components - render tool calls in chat messages */}
@@ -417,11 +417,14 @@ export default function ChatPage({
         
         <div
           ref={activeTab === 'chat' ? layoutRef : undefined}
-          className={`chat-page-layout ${activeTab !== 'chat' ? 'chat-page-layout--hidden' : ''}`}
+          className={cn(
+            "grid flex-1 min-h-0 gap-0",
+            activeTab !== 'chat' && "hidden"
+          )}
           style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
         >
           {/* Left Panel: Conversation List */}
-          <div className="grid-panel-container">
+          <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:max-h-[40vh] max-md:border-b max-md:border-border">
             <ConversationListPanel
               conversations={conversations}
               activeConversationId={activeConversationId}
@@ -436,11 +439,11 @@ export default function ChatPage({
               activeTab={activeTab}
               onTabChange={setActiveTab}
             />
-            <div className="resize-handle" onMouseDown={handleMouseDown} />
+            <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" onMouseDown={handleMouseDown} />
           </div>
 
           {/* Right Panel: Chat Messages */}
-          <div className="grid-panel-container">
+          <div className="relative flex flex-col h-full min-h-0 overflow-hidden">
             <ChatMessagesPanel
               key={activeConversationId ?? "none"}
               activeConversation={activeConversation}
@@ -472,11 +475,14 @@ export default function ChatPage({
       {/* Console Tab Content - always mounted, hidden when not active */}
       <div
         ref={activeTab === 'console' ? layoutRef : undefined}
-        className={`chat-page-layout ${activeTab !== 'console' ? 'chat-page-layout--hidden' : ''}`}
+        className={cn(
+          "grid flex-1 min-h-0 gap-0",
+          activeTab !== 'console' && "hidden"
+        )}
         style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
       >
         {/* Left Panel: Server Info */}
-        <div className="grid-panel-container">
+        <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:max-h-[40vh] max-md:border-b max-md:border-border">
           <ConsoleInfoPanel
             modelId={modelId}
             modelName={modelName}
@@ -487,11 +493,11 @@ export default function ChatPage({
             activeTab={activeTab}
             onTabChange={setActiveTab}
           />
-          <div className="resize-handle" onMouseDown={handleMouseDown} />
+          <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" onMouseDown={handleMouseDown} />
         </div>
 
         {/* Right Panel: Server Logs */}
-        <div className="grid-panel-container">
+        <div className="relative flex flex-col h-full min-h-0 overflow-hidden">
           <ConsoleLogPanel serverPort={serverPort} />
         </div>
       </div>
@@ -499,34 +505,34 @@ export default function ChatPage({
       {/* New Conversation Modal */}
       {isNewConversationModalOpen && (
         <div
-          className="chat-modal-overlay"
+          className="fixed inset-0 bg-black/60 backdrop-blur-[4px] flex items-center justify-center z-[1000]"
           onMouseDown={(e) => e.target === e.currentTarget && !creatingConversation && setIsNewConversationModalOpen(false)}
         >
-          <div className="chat-modal">
-            <h3 className="chat-modal-title">Start a new chat</h3>
-            <label className="chat-modal-label">
+          <div className="bg-surface border border-border rounded-lg p-xl w-[min(450px,90vw)] max-h-[90vh] overflow-y-auto flex flex-col gap-md">
+            <h3 className="text-lg font-semibold m-0">Start a new chat</h3>
+            <label className="flex flex-col gap-xs text-sm text-text-muted">
               Title
               <Input
-                className="chat-modal-input"
+                className="py-sm px-md border border-border rounded-sm bg-background text-text text-sm focus:outline-none focus:border-primary"
                 value={newConversationTitle}
                 onChange={(e) => setNewConversationTitle(e.target.value)}
                 placeholder="New Chat"
               />
             </label>
-            <label className="chat-modal-label">
+            <label className="flex flex-col gap-xs text-sm text-text-muted">
               System Prompt
               <Textarea
-                className="chat-modal-textarea"
+                className="py-sm px-md border border-border rounded-sm bg-background text-text text-sm font-[inherit] resize-y min-h-[100px] focus:outline-none focus:border-primary"
                 value={newConversationPrompt}
                 onChange={(e) => setNewConversationPrompt(e.target.value)}
                 placeholder={DEFAULT_SYSTEM_PROMPT}
                 rows={4}
               />
             </label>
-            <p className="chat-modal-hint">
+            <p className="text-xs text-text-muted m-0">
               The system prompt steers the assistant's behavior for the entire conversation.
             </p>
-            <div className="chat-modal-actions">
+            <div className="flex justify-end gap-sm mt-sm">
               <Button
                 type="button"
                 variant="secondary"

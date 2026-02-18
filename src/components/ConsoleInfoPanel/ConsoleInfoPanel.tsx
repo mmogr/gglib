@@ -163,8 +163,8 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
       : null;
 
   return (
-    <div className="mcc-panel console-info-panel">
-      <div className="mcc-panel-header">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border console-info-panel">
+      <div className="p-base border-b border-border bg-background shrink-0">
         {/* View Tabs */}
         <div className="console-info-tabs">
           <SidebarTabs<ChatPageTabId>
@@ -182,7 +182,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
         </div>
       </div>
 
-      <div className="mcc-panel-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         <div className="console-info-content">
           {/* Server Info Section */}
           <section className="console-info-section">

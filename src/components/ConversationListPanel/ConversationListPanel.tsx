@@ -6,7 +6,7 @@ import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import './ConversationListPanel.css';
+import { cn } from '../../utils/cn';
 
 interface ConversationListPanelProps {
   conversations: ConversationSummary[];
@@ -62,10 +62,10 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
     : conversations;
 
   return (
-    <div className="mcc-panel conversation-list-panel">
-      <div className="mcc-panel-header">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 bg-surface max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border">
+      <div className="p-base border-b border-border bg-background shrink-0">
         {/* View Tabs */}
-        <div className="conversation-list-tabs">
+        <div className="mb-md">
           <SidebarTabs<ChatPageTabId>
             tabs={CHAT_PAGE_TABS}
             activeTab={activeTab}
@@ -73,12 +73,12 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
           />
         </div>
 
-        <div className="conversation-list-header">
-          <div className="conversation-list-title-group">
-            <span className="conversation-list-label">Chatting with</span>
-            <h2 className="conversation-list-title">{modelName}</h2>
+        <div className="flex justify-between items-start gap-md max-mobile:flex-col max-mobile:gap-sm">
+          <div className="flex flex-col gap-xs min-w-0">
+            <span className="text-xs uppercase tracking-[1px] text-text-muted">Chatting with</span>
+            <h2 className="text-lg font-semibold m-0 text-text overflow-hidden text-ellipsis whitespace-nowrap">{modelName}</h2>
           </div>
-          <div className="conversation-list-actions">
+          <div className="flex gap-sm items-center shrink-0 max-mobile:w-full max-mobile:justify-between">
             <Button
               variant="primary"
               size="sm"
@@ -100,45 +100,46 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
           </div>
         </div>
         
-        <div className="search-bar">
+        <div className="flex-1">
           <Input
             type="text"
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="search-input"
+            className="w-full"
             size="sm"
           />
         </div>
       </div>
 
-      <div className="mcc-panel-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         {loading ? (
-          <div className="conversation-list-empty">Loading conversations…</div>
+          <div className="flex items-center justify-center p-xl text-text-muted text-center">Loading conversations…</div>
         ) : filteredConversations.length === 0 ? (
-          <div className="conversation-list-empty">
+          <div className="flex items-center justify-center p-xl text-text-muted text-center">
             {searchQuery ? 'No matching conversations' : 'No conversations yet'}
           </div>
         ) : (
-          <div className="conversation-list">
+          <div className="flex flex-col gap-sm">
             {filteredConversations.map((conversation) => (
               <button
                 key={conversation.id}
                 type="button"
-                className={`conversation-item ${
-                  conversation.id === activeConversationId ? 'active' : ''
-                }`}
+                className={cn(
+                  "group/item flex justify-between items-center py-md px-base border border-border rounded-base bg-transparent text-inherit text-left cursor-pointer transition-all duration-200 hover:border-primary hover:bg-background-hover",
+                  conversation.id === activeConversationId && "border-primary bg-primary-alpha"
+                )}
                 onClick={() => onSelectConversation(conversation.id)}
               >
-                <div className="conversation-item-content">
-                  <span className="conversation-item-title">{conversation.title}</span>
-                  <span className="conversation-item-time">
+                <div className="flex flex-col gap-xs min-w-0 flex-1">
+                  <span className="font-medium text-text overflow-hidden text-ellipsis whitespace-nowrap">{conversation.title}</span>
+                  <span className="text-sm text-text-muted">
                     {formatRelativeTime(conversation.updated_at)}
                   </span>
                 </div>
                 <button
                   type="button"
-                  className="conversation-item-delete"
+                  className="opacity-0 group-hover/item:opacity-100 border-0 bg-transparent text-text-muted cursor-pointer p-xs rounded-sm transition-all duration-200 shrink-0 hover:bg-danger-alpha hover:text-danger"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteConversation(conversation.id);

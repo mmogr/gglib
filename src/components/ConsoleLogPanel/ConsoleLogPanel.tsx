@@ -72,8 +72,8 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
   }, [isAutoScroll, setIsAutoScroll]);
 
   return (
-    <div className="mcc-panel console-log-panel">
-      <div className="mcc-panel-header">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none console-log-panel">
+      <div className="p-base border-b border-border bg-background shrink-0">
         <div className="console-log-header">
           <h3 className="console-log-title">Server Output</h3>
           <div className="console-log-controls">

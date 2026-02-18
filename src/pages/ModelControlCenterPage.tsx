@@ -17,7 +17,6 @@ const ChatPage = lazy(() => import('./ChatPage'));
 import { ServerInfo, HfModelSummary } from '../types';
 import { SidebarTabId } from '../components/ModelLibraryPanel/SidebarTabs';
 import { AddDownloadSubTab } from '../components/ModelLibraryPanel/AddDownloadContent';
-import './ModelControlCenterPage.css';
 
 interface ChatSession {
   serverPort: number;
@@ -214,7 +213,7 @@ export default function ModelControlCenterPage({
   // If chat session is active, show ChatPage
   if (chatSession) {
     return (
-      <Suspense fallback={<div className="model-control-center"><div className="loading-chat">Loading chat...</div></div>}>
+      <Suspense fallback={<div className="flex flex-col h-full w-full overflow-hidden"><div className="loading-chat">Loading chat...</div></div>}>
         <ChatPage
           serverPort={chatSession.serverPort}
           modelId={chatSession.modelId}
@@ -227,16 +226,16 @@ export default function ModelControlCenterPage({
   }
 
   return (
-    <div className="model-control-center">
+    <div className="flex flex-col h-full w-full overflow-hidden max-md:h-auto max-md:min-h-full max-md:overflow-auto">
       <div 
         ref={layoutRef}
-        className="mcc-layout"
+        className="grid grid-cols-2 gap-0 h-full overflow-hidden max-md:flex max-md:flex-col max-md:h-auto max-md:overflow-visible"
         style={{
           gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%`
         }}
       >
         {/* Left Panel: Model Library */}
-        <div className="grid-panel-container">
+        <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:min-h-auto max-md:h-auto">
           <ModelLibraryPanel
             models={filteredModels}
             selectedModelId={selectedModelId}
@@ -262,13 +261,13 @@ export default function ModelControlCenterPage({
             onTabChange={handleSidebarTabChange}
           />
           <div 
-            className="resize-handle" 
+            className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" 
             onMouseDown={handleMouseDown}
           />
         </div>
 
         {/* Right Panel: Model Inspector */}
-        <div className="grid-panel-container right-panel-container">
+        <div className="relative flex flex-col h-full min-h-0 overflow-hidden gap-0 max-md:min-h-auto max-md:h-auto">
           {/* Global Download Status - always visible regardless of selected tab/model */}
           {!downloadDismissed && (
             <GlobalDownloadStatus

@@ -547,9 +547,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Render
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="mcc-panel chat-messages-panel">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none chat-messages-panel">
       {/* Header */}
-      <div className="mcc-panel-header chat-header">
+      <div className="p-base border-b border-border bg-background shrink-0 chat-header">
         <div className="chat-title-group">
           {isRenaming ? (
             <Input
@@ -624,7 +624,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       </div>
 
       {/* Content */}
-      <div className="mcc-panel-content chat-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col chat-content">
         {/* System prompt card */}
         <section className="chat-prompt-card">
           <div className="chat-prompt-header">

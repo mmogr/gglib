@@ -165,7 +165,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // If HuggingFace model is selected, show HF model preview
   if (selectedHfModel) {
     return (
-      <div className="mcc-panel inspector-panel hf-preview-panel">
+      <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none inspector-panel hf-preview-panel">
         <HfModelPreview
           model={selectedHfModel}
           onDownload={handleHfDownload}
@@ -179,8 +179,8 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // Empty state
   if (!model) {
     return (
-      <div className="mcc-panel inspector-panel">
-        <div className="mcc-panel-content">
+      <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none inspector-panel">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
           <div className="inspector-empty">
             <div className="empty-icon">👈</div>
             <p>Select a model to view details</p>
@@ -191,8 +191,8 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   }
 
   return (
-    <div className="mcc-panel inspector-panel">
-      <div className="mcc-panel-header">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none inspector-panel">
+      <div className="p-base border-b border-border bg-background shrink-0">
         <div className="inspector-header-content">
           {editMode.isEditMode ? (
             <Input
@@ -231,7 +231,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
         </div>
       </div>
 
-      <div className="mcc-panel-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         <div className="inspector-content">
           {/* Metadata Section */}
           {editMode.isEditMode ? (
