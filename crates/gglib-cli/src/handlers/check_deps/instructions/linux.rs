@@ -39,9 +39,17 @@ fn print_debian_instructions(missing: &[&Dependency]) {
             "cmake" => Some("cmake"),
             "python3" => Some("python3"),
             "curl" => Some("curl"),
-            "make" => Some("build-essential"),
-            "cc" => Some("build-essential"),
+            "make" | "gcc" | "g++" | "cc" => Some("build-essential"),
             "pkg-config" => Some("pkg-config"),
+            "libssl-dev" => Some("libssl-dev"),
+            "libclang-dev" => Some("libclang-dev"),
+            "libsqlite3-dev" => Some("libsqlite3-dev"),
+            "libasound2-dev" => Some("libasound2-dev"),
+            "libcurl-dev" => Some("libcurl4-openssl-dev"),
+            "webkit2gtk-4.1" => Some("libwebkit2gtk-4.1-dev"),
+            "librsvg" => Some("librsvg2-dev"),
+            "libappindicator-gtk3" => Some("libayatana-appindicator3-dev"),
+            "patchelf" => Some("patchelf"),
             _ => None,
         })
         .collect();
@@ -69,9 +77,17 @@ fn print_fedora_instructions(missing: &[&Dependency]) {
             "cmake" => Some("cmake"),
             "python3" => Some("python3"),
             "curl" => Some("curl"),
-            "make" => Some("make"),
-            "cc" => Some("gcc gcc-c++"),
+            "make" | "gcc" | "g++" | "cc" => Some("gcc gcc-c++ make"),
             "pkg-config" => Some("pkgconfig"),
+            "libssl-dev" => Some("openssl-devel"),
+            "libclang-dev" => Some("clang-devel"),
+            "libsqlite3-dev" => Some("sqlite-devel"),
+            "libasound2-dev" => Some("alsa-lib-devel"),
+            "libcurl-dev" => Some("libcurl-devel"),
+            "webkit2gtk-4.1" => Some("webkit2gtk4.1-devel"),
+            "librsvg" => Some("librsvg2-devel"),
+            "libappindicator-gtk3" => Some("libappindicator-gtk3-devel"),
+            "patchelf" => Some("patchelf"),
             _ => None,
         })
         .collect();
@@ -82,7 +98,10 @@ fn print_fedora_instructions(missing: &[&Dependency]) {
     }
 
     // Development tools group
-    if missing.iter().any(|d| d.name == "make" || d.name == "cc") {
+    if missing
+        .iter()
+        .any(|d| matches!(d.name.as_str(), "make" | "gcc" | "g++" | "cc"))
+    {
         println!();
         println!("  Or install the development tools group:");
         print_command(r#"sudo dnf groupinstall -y "Development Tools""#);
@@ -97,9 +116,17 @@ fn print_arch_instructions(missing: &[&Dependency]) {
             "cmake" => Some("cmake"),
             "python3" => Some("python"),
             "curl" => Some("curl"),
-            "make" => Some("base-devel"),
-            "cc" => Some("base-devel"),
+            "make" | "gcc" | "g++" | "cc" => Some("base-devel"),
             "pkg-config" => Some("pkgconf"),
+            "libssl-dev" => Some("openssl"),
+            "libclang-dev" => Some("clang"),
+            "libsqlite3-dev" => Some("sqlite"),
+            "libasound2-dev" => Some("alsa-lib"),
+            "libcurl-dev" => Some("curl"),
+            "webkit2gtk-4.1" => Some("webkit2gtk-4.1"),
+            "librsvg" => Some("librsvg"),
+            "libappindicator-gtk3" => Some("libappindicator-gtk3"),
+            "patchelf" => Some("patchelf"),
             _ => None,
         })
         .collect();
@@ -125,9 +152,17 @@ fn print_suse_instructions(missing: &[&Dependency]) {
             "cmake" => Some("cmake"),
             "python3" => Some("python3"),
             "curl" => Some("curl"),
-            "make" => Some("make"),
-            "cc" => Some("gcc gcc-c++"),
+            "make" | "gcc" | "g++" | "cc" => Some("gcc gcc-c++ make"),
             "pkg-config" => Some("pkg-config"),
+            "libssl-dev" => Some("libopenssl-devel"),
+            "libclang-dev" => Some("clang-devel"),
+            "libsqlite3-dev" => Some("sqlite3-devel"),
+            "libasound2-dev" => Some("alsa-devel"),
+            "libcurl-dev" => Some("libcurl-devel"),
+            "webkit2gtk-4.1" => Some("webkit2gtk3-devel"),
+            "librsvg" => Some("librsvg-devel"),
+            "libappindicator-gtk3" => Some("libappindicator3-devel"),
+            "patchelf" => Some("patchelf"),
             _ => None,
         })
         .collect();
@@ -141,7 +176,10 @@ fn print_suse_instructions(missing: &[&Dependency]) {
     }
 
     // Pattern for development
-    if missing.iter().any(|d| d.name == "make" || d.name == "cc") {
+    if missing
+        .iter()
+        .any(|d| matches!(d.name.as_str(), "make" | "gcc" | "g++" | "cc"))
+    {
         println!();
         println!("  Or install the development pattern:");
         print_command("sudo zypper install -t pattern devel_basis");
@@ -159,9 +197,18 @@ fn print_generic_instructions(missing: &[&Dependency]) {
             "git" | "cmake" | "python3" | "curl" | "make" | "pkg-config" => {
                 println!("  - {}", dep.name);
             }
-            "cc" => {
-                println!("  - gcc or clang (C compiler)");
+            "gcc" | "g++" | "cc" => {
+                println!("  - gcc/g++ (C/C++ compiler)");
             }
+            "libssl-dev" => println!("  - OpenSSL development headers"),
+            "libclang-dev" => println!("  - libclang development headers"),
+            "libsqlite3-dev" => println!("  - SQLite3 development headers"),
+            "libasound2-dev" => println!("  - ALSA development headers"),
+            "libcurl-dev" => println!("  - libcurl development headers"),
+            "webkit2gtk-4.1" => println!("  - WebKit2GTK 4.1 development headers"),
+            "librsvg" => println!("  - librsvg development headers"),
+            "libappindicator-gtk3" => println!("  - libappindicator-gtk3 development headers"),
+            "patchelf" => println!("  - patchelf"),
             _ => {}
         }
     }

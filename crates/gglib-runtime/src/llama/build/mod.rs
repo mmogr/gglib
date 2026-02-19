@@ -34,7 +34,7 @@ pub fn build_llama_cpp(llama_dir: &Path, acceleration: Acceleration) -> Result<(
     configure_cmake(llama_dir, &build_dir, acceleration)?;
 
     // Step 2: Build
-    build_project(&build_dir)?;
+    build_project(&build_dir, acceleration)?;
 
     println!();
     println!("✓ Build completed successfully");
@@ -223,10 +223,10 @@ fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleratio
 }
 
 /// Build the project with progress tracking
-fn build_project(build_dir: &Path) -> Result<()> {
+fn build_project(build_dir: &Path, acceleration: Acceleration) -> Result<()> {
     println!();
 
-    let num_cores = get_num_cores();
+    let num_cores = build_parallelism(acceleration);
     println!("Building with {} parallel jobs...", num_cores);
 
     let pb = ProgressBar::new(100);
@@ -292,21 +292,66 @@ fn build_project(build_dir: &Path) -> Result<()> {
             last_progress = progress;
         }
 
-        // Show important lines
-        if line.contains("Building") || line.contains("Linking") || line.contains("Error") {
+        // Show important lines: build progress, errors, and warnings
+        let line_lower = line.to_ascii_lowercase();
+        if line.contains("Building")
+            || line.contains("Linking")
+            || line_lower.contains("error")
+            || line_lower.contains("warning:")
+            || line_lower.contains("fatal")
+            || line_lower.contains("undefined reference")
+            || line_lower.contains("cannot find")
+        {
             pb.println(&line);
         }
     }
 
     let status = child.wait().context("Failed to wait for build")?;
+
+    // Drain any remaining output after process exits
+    while let Ok(line) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
+        let line_lower = line.to_ascii_lowercase();
+        if line_lower.contains("error") || line_lower.contains("fatal") {
+            eprintln!("{}", line);
+        }
+    }
+
     pb.finish_and_clear();
 
     if !status.success() {
-        bail!("Build failed");
+        bail!("Build failed (exit code: {})", status.code().unwrap_or(-1));
     }
 
     println!("✓ Compilation complete");
     Ok(())
+}
+
+/// Determine build parallelism, capping CUDA builds to avoid OOM.
+///
+/// CUDA compilation (nvcc) uses significantly more memory per process than
+/// regular C++ compilation. Using all CPU cores (e.g. -j32) for CUDA builds
+/// can easily exhaust system memory, especially on WSL2 where available RAM
+/// may be limited. We cap CUDA builds at 4 parallel jobs by default.
+///
+/// Respects `CMAKE_BUILD_PARALLEL_LEVEL` environment variable as an override.
+fn build_parallelism(acceleration: Acceleration) -> usize {
+    // Allow explicit override via environment variable
+    if let Ok(val) = std::env::var("CMAKE_BUILD_PARALLEL_LEVEL") {
+        if let Ok(n) = val.parse::<usize>() {
+            if n > 0 {
+                return n;
+            }
+        }
+    }
+
+    let cores = get_num_cores();
+
+    match acceleration {
+        // CUDA compilation is very memory-intensive (~2-4 GB per nvcc process)
+        Acceleration::Cuda => cores.min(4),
+        // CPU and Metal builds are fine with full parallelism
+        _ => cores,
+    }
 }
 
 /// Parse build progress from `CMake` output
