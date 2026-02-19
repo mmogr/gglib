@@ -149,6 +149,48 @@ check_python() {
     return 1
 }
 
+# Dedicated Node.js checker that validates version meets the project minimum:
+# package.json engines: "^20.19.0 || ^22.12.0 || >=24.0.0"
+check_node_version() {
+    local description="Required for building web UI and Tauri (>=20.19, 22.12, or 24+)"
+    local min_node_20_minor=19
+    local min_node_22_minor=12
+
+    if ! command_exists node; then
+        printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "node" "✗" "MISSING" "$description"
+        MISSING_REQUIRED+=("node")
+        return 1
+    fi
+
+    local version
+    version=$(node --version 2>/dev/null | sed 's/^v//')
+    local major minor patch
+    IFS='.' read -r major minor patch <<< "$version"
+    major=${major:-0}
+    minor=${minor:-0}
+
+    local ok=false
+    if [ "$major" -ge 24 ]; then
+        ok=true
+    elif [ "$major" -eq 22 ] && [ "$minor" -ge "$min_node_22_minor" ]; then
+        ok=true
+    elif [ "$major" -eq 20 ] && [ "$minor" -ge "$min_node_20_minor" ]; then
+        ok=true
+    fi
+
+    if [ "$ok" = true ]; then
+        printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "node" "✓" "v$version" "$description"
+        PRESENT_REQUIRED+=("node")
+        return 0
+    else
+        printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "node" "✗" "v$version (TOO OLD)" "$description"
+        echo -e "   ${YELLOW}Node.js v$version is installed but v20.19+, v22.12+, or v24+ is required.${RESET}"
+        echo -e "   ${YELLOW}Run: nvm install 22 && nvm use 22  (or update via https://nodejs.org)${RESET}"
+        MISSING_REQUIRED+=("node")
+        return 1
+    fi
+}
+
 # Check a single dependency
 check_dep() {
     local name=$1
@@ -589,7 +631,7 @@ main() {
     # Check core dependencies
     check_dep "cargo" "Required for building Rust code" "true" "cargo"
     check_dep "rustc" "Rust compiler" "true" "rustc"
-    check_dep "node" "Required for building web UI and Tauri" "true" "node"
+    check_node_version
     check_dep "npm" "Node package manager" "true" "npm"
     check_dep "git" "Required for llama.cpp installation" "true" "git"
     check_dep "make" "Required for llama.cpp build" "true" "make"
