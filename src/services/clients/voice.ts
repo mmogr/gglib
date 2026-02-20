@@ -1,123 +1,56 @@
 /**
- * Voice mode client — Tauri-only commands for voice pipeline control.
+ * Voice mode client.
  *
- * Voice mode is a desktop-only feature that requires native OS APIs
- * (microphone, audio playback). These commands bypass the HTTP transport
- * and call Tauri IPC directly.
+ * Data/config operations (status, model management, configuration) delegate
+ * to the transport layer via getTransport() and work in both desktop and WebUI.
+ *
+ * Audio I/O operations (start, stop, ptt, speak) still call Tauri IPC directly
+ * and remain desktop-only until Phase 3 (WebSocket audio bridge).
  *
  * @module services/clients/voice
  */
 
 import type { UnlistenFn } from '@tauri-apps/api/event';
+import { getTransport } from '../transport';
+import type {
+  VoiceState,
+  VoiceInteractionMode,
+  VoiceStatusResponse,
+  SttModelInfo,
+  TtsModelInfo,
+  VoiceInfo,
+  VoiceModelsResponse,
+  AudioDeviceInfo,
+  VoiceStatePayload,
+  VoiceTranscriptPayload,
+  VoiceAudioLevelPayload,
+  VoiceErrorPayload,
+  ModelDownloadProgressPayload,
+} from '../../types/voice';
 
-// ── Types ──────────────────────────────────────────────────────────
+// Re-export all voice types so existing importers of this module keep working.
+export type {
+  VoiceState,
+  VoiceInteractionMode,
+  VoiceStatusResponse,
+  SttModelInfo,
+  TtsModelInfo,
+  VoiceInfo,
+  VoiceModelsResponse,
+  AudioDeviceInfo,
+  VoiceStatePayload,
+  VoiceTranscriptPayload,
+  VoiceAudioLevelPayload,
+  VoiceErrorPayload,
+  ModelDownloadProgressPayload,
+};
 
-export type VoiceState =
-  | 'idle'
-  | 'listening'
-  | 'recording'
-  | 'transcribing'
-  | 'thinking'
-  | 'speaking'
-  | 'error';
-
-export type VoiceInteractionMode = 'ptt' | 'vad';
-
-export interface VoiceStatusResponse {
-  isActive: boolean;
-  state: VoiceState;
-  mode: VoiceInteractionMode;
-  sttLoaded: boolean;
-  ttsLoaded: boolean;
-  /** ID of the currently loaded STT model, or null if none is loaded. */
-  sttModelId: string | null;
-  /** Currently configured TTS voice ID, or null if no pipeline exists. */
-  ttsVoice: string | null;
-  autoSpeak: boolean;
-}
-
-export interface SttModelInfo {
-  id: string;
-  name: string;
-  archiveUrl: string;
-  dirName: string;
-  sizeBytes: number;
-  sizeDisplay: string;
-  englishOnly: boolean;
-  quality: number;
-  speed: number;
-  isDefault: boolean;
-}
-
-export interface TtsModelInfo {
-  id: string;
-  name: string;
-  archiveUrl: string;
-  dirName: string;
-  sizeBytes: number;
-  sizeDisplay: string;
-  voiceCount: number;
-}
-
-export interface VoiceInfo {
-  id: string;
-  name: string;
-  category: string;
-  gender: string;
-}
-
-export interface VoiceModelsResponse {
-  sttModels: SttModelInfo[];
-  sttDownloaded: string[];
-  ttsModel: TtsModelInfo;
-  ttsDownloaded: boolean;
-  voices: VoiceInfo[];
-  vadDownloaded: boolean;
-}
-
-export interface AudioDeviceInfo {
-  name: string;
-  isDefault: boolean;
-}
-
-// Event payloads
-export interface VoiceStatePayload {
-  state: VoiceState;
-}
-
-export interface VoiceTranscriptPayload {
-  text: string;
-  isFinal: boolean;
-}
-
-export interface VoiceAudioLevelPayload {
-  level: number;
-}
-
-export interface VoiceErrorPayload {
-  message: string;
-}
-
-export interface ModelDownloadProgressPayload {
-  modelId: string;
-  bytesDownloaded: number;
-  totalBytes: number;
-  percent: number;
-}
-
-// ── Tauri IPC helper ───────────────────────────────────────────────
+// ── Tauri IPC helper (audio I/O only) ─────────────────────────────
 
 async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   // @ts-expect-error - Tauri API injected at runtime
   const { invoke } = window.__TAURI_INTERNALS__;
   return invoke(cmd, args);
-}
-
-/**
- * Check if running inside a Tauri desktop app.
- */
-export function isTauriEnvironment(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
 // ── Pipeline lifecycle ─────────────────────────────────────────────
@@ -138,11 +71,11 @@ export async function voiceStop(): Promise<void> {
  * use {@link voiceStop} instead.
  */
 export async function voiceUnload(): Promise<void> {
-  await invokeTauri('voice_unload');
+  return getTransport().voiceUnload();
 }
 
 export async function voiceStatus(): Promise<VoiceStatusResponse> {
-  return invokeTauri('voice_status');
+  return getTransport().voiceStatus();
 }
 
 // ── Push-to-talk ───────────────────────────────────────────────────
@@ -168,51 +101,51 @@ export async function voiceStopSpeaking(): Promise<void> {
 // ── Model management ───────────────────────────────────────────────
 
 export async function voiceListModels(): Promise<VoiceModelsResponse> {
-  return invokeTauri('voice_list_models');
+  return getTransport().voiceListModels();
 }
 
 export async function voiceDownloadSttModel(modelId: string): Promise<void> {
-  await invokeTauri('voice_download_stt_model', { modelId });
+  return getTransport().voiceDownloadSttModel(modelId);
 }
 
 export async function voiceDownloadTtsModel(): Promise<void> {
-  await invokeTauri('voice_download_tts_model');
+  return getTransport().voiceDownloadTtsModel();
 }
 
 export async function voiceDownloadVadModel(): Promise<void> {
-  await invokeTauri('voice_download_vad_model');
+  return getTransport().voiceDownloadVadModel();
 }
 
 export async function voiceLoadStt(modelId: string): Promise<void> {
-  await invokeTauri('voice_load_stt', { modelId });
+  return getTransport().voiceLoadStt(modelId);
 }
 
 export async function voiceLoadTts(): Promise<void> {
-  await invokeTauri('voice_load_tts');
+  return getTransport().voiceLoadTts();
 }
 
 // ── Configuration ──────────────────────────────────────────────────
 
 export async function voiceSetMode(mode: VoiceInteractionMode): Promise<void> {
-  await invokeTauri('voice_set_mode', { mode });
+  return getTransport().voiceSetMode(mode);
 }
 
 export async function voiceSetVoice(voiceId: string): Promise<void> {
-  await invokeTauri('voice_set_voice', { voiceId });
+  return getTransport().voiceSetVoice(voiceId);
 }
 
 export async function voiceSetSpeed(speed: number): Promise<void> {
-  await invokeTauri('voice_set_speed', { speed });
+  return getTransport().voiceSetSpeed(speed);
 }
 
 export async function voiceSetAutoSpeak(autoSpeak: boolean): Promise<void> {
-  await invokeTauri('voice_set_auto_speak', { autoSpeak });
+  return getTransport().voiceSetAutoSpeak(autoSpeak);
 }
 
 // ── Device management ──────────────────────────────────────────────
 
 export async function voiceListDevices(): Promise<AudioDeviceInfo[]> {
-  return invokeTauri('voice_list_devices');
+  return getTransport().voiceListDevices();
 }
 
 // ── Event subscriptions ────────────────────────────────────────────
