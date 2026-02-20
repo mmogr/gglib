@@ -6,6 +6,7 @@ import type { QueueRunSummary } from '../../services/transport/types/events';
 import { formatBytes, formatTime } from '../../utils/format';
 import DownloadQueuePopover from './DownloadQueuePopover';
 import { Icon } from '../ui/Icon';
+import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
 
 interface GlobalDownloadStatusProps {
@@ -83,7 +84,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               {uniqueTotal === 1 ? 'Download Complete' : `${uniqueTotal} Downloads Complete`}
             </span>
           </div>
-          <div className="flex flex-col gap-xs p-sm bg-surface-raised rounded-base max-h-[120px] overflow-y-auto">
+          <Stack gap="xs" className="p-sm bg-surface-raised rounded-base max-h-[120px] overflow-y-auto">
             {displayItems.length > 0 ? (
               <>
                 {displayItems.map((item, idx) => (
@@ -109,7 +110,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
                 {lastQueueSummary.truncated && ' (details truncated)'}
               </div>
             )}
-          </div>
+          </Stack>
           {hasRetries && (
             <div className="text-sm text-text-secondary">
               <span className="text-sm" aria-hidden>

@@ -3,6 +3,7 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import { RangeSlider } from '../RangeSlider';
 import { ModelFilterOptions } from '../../types';
 import { Button } from '../ui/Button';
+import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
 
 export interface FilterState {
@@ -208,7 +209,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
           <div className={cn("py-sm border-b border-border last:border-b-0", !quantizationsHaveVariety && "opacity-50")}>
             <span className="block text-sm font-medium text-text mb-xs">Quantization</span>
             {quantizationsHaveVariety ? (
-              <div className="flex flex-col gap-xs mt-xs">
+              <Stack gap="xs" className="mt-xs">
                 {filterOptions!.quantizations.map(quant => (
                   <label key={quant} className="flex items-center gap-sm cursor-pointer py-[4px] hover:bg-surface-elevated hover:rounded-sm hover:mx-[-4px] hover:px-[4px]">
                     <input
@@ -220,7 +221,7 @@ const FilterPopover: FC<FilterPopoverProps> = ({
                     <span className="text-sm text-text">{quant}</span>
                   </label>
                 ))}
-              </div>
+              </Stack>
             ) : (
               <span className="block text-xs text-text-muted italic mt-xs">All models same quantization</span>
             )}

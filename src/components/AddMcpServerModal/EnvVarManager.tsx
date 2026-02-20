@@ -3,6 +3,7 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Icon } from "../ui/Icon";
 import { Plus, X } from "lucide-react";
+import { Stack, Label } from '../primitives';
 
 interface EnvVarManagerProps {
   envVars: [string, string][];
@@ -20,9 +21,9 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
   disabled,
 }) => {
   return (
-    <div className="flex flex-col gap-xs">
+    <Stack gap="xs">
       <div className="flex justify-between items-center">
-        <label className="text-sm font-semibold text-text">Environment Variables</label>
+        <Label size="sm">Environment Variables</Label>
         <Button
           type="button"
           variant="ghost"
@@ -72,6 +73,6 @@ export const EnvVarManager: FC<EnvVarManagerProps> = ({
           ))}
         </div>
       )}
-    </div>
+    </Stack>
   );
 };

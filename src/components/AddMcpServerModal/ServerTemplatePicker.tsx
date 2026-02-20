@@ -1,5 +1,6 @@
 import { FC } from "react";
 import type { McpServerType } from "../../services/transport/types/mcp";
+import { Stack, Label } from '../primitives';
 
 interface ServerTemplatePickerProps {
   onSelectTemplate: (template: ServerTemplate) => void;
@@ -51,8 +52,8 @@ export const SERVER_TEMPLATES: ServerTemplate[] = [
 
 export const ServerTemplatePicker: FC<ServerTemplatePickerProps> = ({ onSelectTemplate }) => {
   return (
-    <div className="flex flex-col gap-xs">
-      <label className="text-sm font-semibold text-text">Quick Start Templates</label>
+    <Stack gap="xs">
+      <Label size="sm">Quick Start Templates</Label>
       <div className="grid grid-cols-2 gap-sm">
         {SERVER_TEMPLATES.map((template) => (
           <button
@@ -66,6 +67,6 @@ export const ServerTemplatePicker: FC<ServerTemplatePickerProps> = ({ onSelectTe
           </button>
         ))}
       </div>
-    </div>
+    </Stack>
   );
 };
