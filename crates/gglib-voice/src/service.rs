@@ -157,18 +157,8 @@ impl VoicePipelinePort for VoiceService {
     async fn status(&self) -> Result<VoiceStatusDto, VoicePortError> {
         // Shared read lock — does not block other concurrent reads.
         let guard = self.pipeline.read().await;
-        let dto = match guard.as_ref() {
-            Some(p) => VoiceStatusDto {
-                is_active: p.is_active(),
-                state: state_label(p.state()),
-                mode: mode_label(p.mode()),
-                stt_loaded: p.is_stt_loaded(),
-                tts_loaded: p.is_tts_loaded(),
-                stt_model_id: p.stt_model_id().map(str::to_owned),
-                tts_voice: Some(p.tts_voice().to_owned()),
-                auto_speak: p.auto_speak(),
-            },
-            None => {
+        let dto = guard.as_ref().map_or_else(
+            || {
                 // No pipeline yet — return defaults from PendingConfig so that
                 // settings written via set_mode / set_auto_speak / etc. are
                 // visible before any model is loaded.
@@ -183,9 +173,20 @@ impl VoicePipelinePort for VoiceService {
                     tts_voice: cfg.voice_id.clone(),
                     auto_speak: cfg.auto_speak,
                 }
-            }
-        };
-        // Lock is dropped here, before any other work.
+            },
+            |p| VoiceStatusDto {
+                is_active: p.is_active(),
+                state: state_label(p.state()),
+                mode: mode_label(p.mode()),
+                stt_loaded: p.is_stt_loaded(),
+                tts_loaded: p.is_tts_loaded(),
+                stt_model_id: p.stt_model_id().map(str::to_owned),
+                tts_voice: Some(p.tts_voice().to_owned()),
+                auto_speak: p.auto_speak(),
+            },
+        );
+        // Release the read lock before returning.
+        drop(guard);
         Ok(dto)
     }
 
@@ -241,6 +242,7 @@ impl VoicePipelinePort for VoiceService {
         })
     }
 
+    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_stt_model(&self, model_id: &str) -> Result<(), VoicePortError> {
         // Clone the emitter and model_id before entering the download so
         // the closure is 'static and the pipeline lock is never held.
@@ -267,6 +269,7 @@ impl VoicePipelinePort for VoiceService {
         Ok(())
     }
 
+    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_tts_model(&self) -> Result<(), VoicePortError> {
         let emitter = Arc::clone(&self.emitter);
         let model_id = VoiceModelCatalog::tts_model().id.0;
@@ -292,6 +295,7 @@ impl VoicePipelinePort for VoiceService {
         Ok(())
     }
 
+    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_vad_model(&self) -> Result<(), VoicePortError> {
         let emitter = Arc::clone(&self.emitter);
 
@@ -315,6 +319,9 @@ impl VoicePipelinePort for VoiceService {
         Ok(())
     }
 
+    // The write-lock guard must stay alive for the duration of the function
+    // because `pipeline` borrows from it; early drop is not possible here.
+    #[allow(clippy::significant_drop_tightening)]
     async fn load_stt(&self, model_id: &str) -> Result<(), VoicePortError> {
         // Resolve catalog + path *before* acquiring the write lock to
         // minimise lock hold time.
@@ -356,6 +363,9 @@ impl VoicePipelinePort for VoiceService {
         Ok(())
     }
 
+    // The write-lock guard must stay alive for the duration of the function
+    // because `pipeline` borrows from it; early drop is not possible here.
+    #[allow(clippy::significant_drop_tightening)]
     async fn load_tts(&self) -> Result<(), VoicePortError> {
         let tts_dir = VoiceModelCatalog::tts_model_path().map_err(to_port_err)?;
         if !tts_dir.exists() {
@@ -404,6 +414,7 @@ impl VoicePipelinePort for VoiceService {
         if let Some(ref mut p) = *guard {
             p.set_mode(interaction_mode);
         }
+        drop(guard);
         Ok(())
     }
 
@@ -413,6 +424,7 @@ impl VoicePipelinePort for VoiceService {
         if let Some(ref mut p) = *guard {
             p.set_voice(voice_id);
         }
+        drop(guard);
         Ok(())
     }
 
@@ -422,6 +434,7 @@ impl VoicePipelinePort for VoiceService {
         if let Some(ref mut p) = *guard {
             p.set_speed(speed);
         }
+        drop(guard);
         Ok(())
     }
 
@@ -431,6 +444,7 @@ impl VoicePipelinePort for VoiceService {
         if let Some(ref mut p) = *guard {
             p.set_auto_speak(enabled);
         }
+        drop(guard);
         Ok(())
     }
 
@@ -442,6 +456,7 @@ impl VoicePipelinePort for VoiceService {
             }
         }
         *guard = None;
+        drop(guard);
         info!("Voice pipeline unloaded via HTTP");
         Ok(())
     }
