@@ -31,6 +31,31 @@ use crate::models::{self, VoiceModelCatalog};
 use crate::pipeline::{VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState};
 use crate::tts::TtsEngine;
 
+// ── Pending config ────────────────────────────────────────────────────────────
+
+/// User-visible config settings that persist across pipeline load/unload cycles.
+///
+/// Written by `set_mode`, `set_voice`, `set_speed`, `set_auto_speak` and read
+/// back by `status()` when no pipeline is loaded.  Applied to a freshly
+/// created pipeline at the end of `load_stt` / `load_tts`.
+struct PendingConfig {
+    mode: VoiceInteractionMode,
+    voice_id: Option<String>,
+    speed: f32,
+    auto_speak: bool,
+}
+
+impl Default for PendingConfig {
+    fn default() -> Self {
+        Self {
+            mode: VoiceInteractionMode::PushToTalk,
+            voice_id: None,
+            speed: 1.0,
+            auto_speak: true,
+        }
+    }
+}
+
 // ── Service struct ────────────────────────────────────────────────────────────
 
 /// Implements [`VoicePipelinePort`] by wrapping the shared pipeline state.
@@ -40,6 +65,10 @@ use crate::tts::TtsEngine;
 pub struct VoiceService {
     pipeline: Arc<RwLock<Option<VoicePipeline>>>,
     emitter: Arc<dyn AppEventEmitter>,
+    /// Config persisted even when pipeline is None.
+    /// Uses a std (non-async) lock because it is only accessed in sync
+    /// context — never across an `.await` point.
+    config: std::sync::RwLock<PendingConfig>,
 }
 
 impl VoiceService {
@@ -51,6 +80,7 @@ impl VoiceService {
         Self {
             pipeline: Arc::new(RwLock::new(None)),
             emitter,
+            config: std::sync::RwLock::new(PendingConfig::default()),
         }
     }
 
@@ -62,7 +92,11 @@ impl VoiceService {
         pipeline: Arc<RwLock<Option<VoicePipeline>>>,
         emitter: Arc<dyn AppEventEmitter>,
     ) -> Self {
-        Self { pipeline, emitter }
+        Self {
+            pipeline,
+            emitter,
+            config: std::sync::RwLock::new(PendingConfig::default()),
+        }
     }
 
     /// Return a clone of the underlying pipeline `Arc`.
@@ -134,16 +168,22 @@ impl VoicePipelinePort for VoiceService {
                 tts_voice: Some(p.tts_voice().to_owned()),
                 auto_speak: p.auto_speak(),
             },
-            None => VoiceStatusDto {
-                is_active: false,
-                state: "idle".to_owned(),
-                mode: "ptt".to_owned(),
-                stt_loaded: false,
-                tts_loaded: false,
-                stt_model_id: None,
-                tts_voice: None,
-                auto_speak: true,
-            },
+            None => {
+                // No pipeline yet — return defaults from PendingConfig so that
+                // settings written via set_mode / set_auto_speak / etc. are
+                // visible before any model is loaded.
+                let cfg = self.config.read().unwrap();
+                VoiceStatusDto {
+                    is_active: false,
+                    state: "idle".to_owned(),
+                    mode: mode_label(cfg.mode),
+                    stt_loaded: false,
+                    tts_loaded: false,
+                    stt_model_id: None,
+                    tts_voice: cfg.voice_id.clone(),
+                    auto_speak: cfg.auto_speak,
+                }
+            }
         };
         // Lock is dropped here, before any other work.
         Ok(dto)
@@ -301,6 +341,17 @@ impl VoicePipelinePort for VoiceService {
             pipeline.stop();
         }
         pipeline.load_stt(&path, model_id).map_err(to_port_err)?;
+
+        // Apply any pending config that was written before the pipeline existed.
+        {
+            let cfg = self.config.read().unwrap();
+            pipeline.set_mode(cfg.mode);
+            if let Some(ref v) = cfg.voice_id {
+                pipeline.set_voice(v);
+            }
+            pipeline.set_speed(cfg.speed);
+            pipeline.set_auto_speak(cfg.auto_speak);
+        }
         info!(model_id, "STT model loaded via HTTP");
         Ok(())
     }
@@ -319,6 +370,17 @@ impl VoicePipelinePort for VoiceService {
         }
         let pipeline = guard.as_mut().expect("just set above");
         pipeline.load_tts(&tts_dir).await.map_err(to_port_err)?;
+
+        // Apply any pending config that was written before the pipeline existed.
+        {
+            let cfg = self.config.read().unwrap();
+            pipeline.set_mode(cfg.mode);
+            if let Some(ref v) = cfg.voice_id {
+                pipeline.set_voice(v);
+            }
+            pipeline.set_speed(cfg.speed);
+            pipeline.set_auto_speak(cfg.auto_speak);
+        }
         info!("TTS model loaded via HTTP");
         Ok(())
     }
@@ -333,6 +395,9 @@ impl VoicePipelinePort for VoiceService {
                 )));
             }
         };
+        // Always persist — survives pipeline being None.
+        self.config.write().unwrap().mode = interaction_mode;
+        // Also apply to the live pipeline if one exists.
         let mut guard = self.pipeline.write().await;
         if let Some(ref mut p) = *guard {
             p.set_mode(interaction_mode);
@@ -341,6 +406,7 @@ impl VoicePipelinePort for VoiceService {
     }
 
     async fn set_voice(&self, voice_id: &str) -> Result<(), VoicePortError> {
+        self.config.write().unwrap().voice_id = Some(voice_id.to_owned());
         let mut guard = self.pipeline.write().await;
         if let Some(ref mut p) = *guard {
             p.set_voice(voice_id);
@@ -349,6 +415,7 @@ impl VoicePipelinePort for VoiceService {
     }
 
     async fn set_speed(&self, speed: f32) -> Result<(), VoicePortError> {
+        self.config.write().unwrap().speed = speed;
         let mut guard = self.pipeline.write().await;
         if let Some(ref mut p) = *guard {
             p.set_speed(speed);
@@ -357,6 +424,7 @@ impl VoicePipelinePort for VoiceService {
     }
 
     async fn set_auto_speak(&self, enabled: bool) -> Result<(), VoicePortError> {
+        self.config.write().unwrap().auto_speak = enabled;
         let mut guard = self.pipeline.write().await;
         if let Some(ref mut p) = *guard {
             p.set_auto_speak(enabled);
