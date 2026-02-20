@@ -1,12 +1,19 @@
 .PHONY: help install build test clean clean-llama clean-all run-serve run-proxy check fmt lint doc build-gui build-tauri build-all check-deps check-rust llama-install-auto
 
 # Environment Variables
-export RUST_MIN_STACK := 16777216
+# 32 MB — LLVM optimisation passes (SROAPass) on sherpa-onnx FFI code can
+# overflow the default thread stack on Linux.
+export RUST_MIN_STACK := 33554432
 
 # Platform specific configuration
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
     export LIBSQLITE3_SYS_USE_PKG_CONFIG := 1
+    # Fix Node.js/npm segfault on WSL2 (io_uring not fully supported by WSL2 kernel)
+    export UV_USE_IO_URING := 0
+    # Cap cmake parallelism for sherpa-onnx / heavy C++ deps — GCC 13 ICEs
+    # under high parallelism with openfst template-heavy code.
+    export CMAKE_BUILD_PARALLEL_LEVEL := 4
 endif
 
 # Define cargo command that sources Rust environment if needed (for non-interactive shells like VS Code tasks)
@@ -136,8 +143,8 @@ build-dev:
 build-gui:
 	@echo "Building web UI frontend..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
-	npm install
-	npm run build
+	UV_USE_IO_URING=0 npm install
+	UV_USE_IO_URING=0 npm run build
 	@echo "✓ Web UI built to web_ui/"
 
 # Build everything (Rust + Web UI)
@@ -272,9 +279,9 @@ build-tauri:
 	@echo "Building Tauri desktop app..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
 	@rm -f target/release/bundle/dmg/*.dmg 2>/dev/null || true
-	npm install
+	UV_USE_IO_URING=0 npm install
 	# Step A: Build frontend
-	npm run build:tauri
+	UV_USE_IO_URING=0 npm run build:tauri
 	# Step B: Unified cargo build - both CLI and Tauri app share dependency compilation
 	$(CARGO) build --release -p gglib-cli -p gglib-app
 	# Step C: Bundle the already-built binary into platform installers
@@ -283,7 +290,7 @@ build-tauri:
 	# NO_STRIP=1 is a linuxdeploy-supported knob that avoids the failure by skipping stripping.
 	# On macOS: use defaults to produce .app bundle.
 	@if [ "$(UNAME_S)" = "Linux" ]; then \
-		NO_STRIP=1 npm run tauri:bundle -- --bundles deb,rpm; \
+		NO_STRIP=1 UV_USE_IO_URING=0 npm run tauri:bundle -- --bundles deb,rpm; \
 	else \
 		npm run tauri:bundle; \
 	fi
