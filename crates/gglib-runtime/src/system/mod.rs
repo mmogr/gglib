@@ -15,11 +15,15 @@ use gglib_core::utils::system::{Dependency, DependencyStatus, GpuInfo, SystemMem
 use commands::get_patchelf_version;
 use commands::{
     get_cargo_version, get_cmake_version, get_gcc_version, get_git_version, get_gxx_version,
-    get_make_version, get_node_version, get_npm_version, get_pkgconfig_version, get_rustc_version,
+    get_make_version, get_node_version, get_npm_version, get_pkgconfig_version,
+    get_python3_version, get_rustc_version,
 };
 use deps::check_libssl;
 #[cfg(target_os = "linux")]
-use deps::{check_libappindicator, check_librsvg, check_webkit2gtk};
+use deps::{
+    check_libappindicator, check_libasound, check_libclang, check_libcurl, check_librsvg,
+    check_libsqlite3, check_webkit2gtk,
+};
 use gpu::{detect_gpu_info, get_system_memory_info};
 
 /// Default implementation of `SystemProbePort`.
@@ -137,6 +141,13 @@ impl SystemProbePort for DefaultSystemProbe {
                         .map(|v| DependencyStatus::Present { version: v })
                         .unwrap_or(DependencyStatus::Missing),
                 ),
+            Dependency::required("python3", "Required for hf_xet fast download helper")
+                .with_hint("apt install python3")
+                .with_status(
+                    get_python3_version()
+                        .map(|v| DependencyStatus::Present { version: v })
+                        .unwrap_or(DependencyStatus::Missing),
+                ),
         ];
 
         // Add GTK/Tauri dependencies for Linux only
@@ -174,6 +185,34 @@ impl SystemProbePort for DefaultSystemProbe {
                         .map(|v| DependencyStatus::Present { version: v })
                         .unwrap_or(DependencyStatus::Missing),
                 ),
+                Dependency::required("libasound2-dev", "Required for voice/audio support")
+                    .with_hint("apt install libasound2-dev")
+                    .with_status(
+                        check_libasound()
+                            .map(|v| DependencyStatus::Present { version: v })
+                            .unwrap_or(DependencyStatus::Missing),
+                    ),
+                Dependency::required("libcurl-dev", "Required for llama.cpp HTTP/HTTPS support")
+                    .with_hint("apt install libcurl4-openssl-dev")
+                    .with_status(
+                        check_libcurl()
+                            .map(|v| DependencyStatus::Present { version: v })
+                            .unwrap_or(DependencyStatus::Missing),
+                    ),
+                Dependency::required("libsqlite3-dev", "Required for database support")
+                    .with_hint("apt install libsqlite3-dev")
+                    .with_status(
+                        check_libsqlite3()
+                            .map(|v| DependencyStatus::Present { version: v })
+                            .unwrap_or(DependencyStatus::Missing),
+                    ),
+                Dependency::required("libclang-dev", "Required for Rust FFI bindings (bindgen)")
+                    .with_hint("apt install libclang-dev")
+                    .with_status(
+                        check_libclang()
+                            .map(|v| DependencyStatus::Present { version: v })
+                            .unwrap_or(DependencyStatus::Missing),
+                    ),
             ]);
         }
 

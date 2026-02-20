@@ -58,9 +58,6 @@ rodio = { version = "0.20", default-features = false, features = ["wav"] }
 # Audio resampling (device sample rate → 16kHz for STT)
 rubato = "0.16"
 
-# Unified STT/TTS/VAD backend via sherpa-onnx bindings
-sherpa-rs = { version = "0.6", features = ["tts", "download-binaries", "static"] }
-
 # HTTP client for model downloads
 reqwest = { workspace = true }
 
@@ -70,6 +67,12 @@ futures-util = "0.3"
 # Archive extraction for sherpa-onnx model bundles (tar.bz2)
 tar = "0.4"
 bzip2 = "0.5"
+
+# Unified STT/TTS/VAD backend via sherpa-onnx bindings.
+# Builds from bundled C++ source via cmake (download-binaries disabled: Linux
+# pre-built tarballs lack .a library files, and Cargo unifies features across targets).
+# On Linux: the cmake build uses -fPIC so static linking works without special RUSTFLAGS.
+sherpa-rs = { version = "0.6", default-features = false, features = ["tts", "static"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
