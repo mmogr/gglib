@@ -208,7 +208,9 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   // ── Event subscriptions ────────────────────────────────────────
 
   const subscribeToEvents = useCallback(async () => {
-    if (!isSupported) return;
+    // All voice events are emitted by the Tauri audio pipeline — not available
+    // in a plain web browser until Phase 3 (WebSocket audio bridge).
+    if (!isAudioSupported) return;
 
     const unlisteners = await Promise.all([
       onVoiceStateChanged(({ state }) => {
@@ -243,8 +245,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
     ]);
 
     unlistenRefs.current = unlisteners;
-  }, [isSupported]);
-
+  }, [isAudioSupported]);
   // Subscribe on mount, cleanup on unmount
   useEffect(() => {
     subscribeToEvents();
@@ -259,23 +260,25 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       // unmounts (e.g. user navigates away). voiceStop pauses the pipeline
       // and drops the audio thread (OS mic indicator off) but keeps loaded
       // models warm so the next start() is instant.
-      voiceStatus()
-        .then((status) => {
-          if (status.isActive) {
-            return voiceStop();
-          }
-        })
-        .catch(() => {
-          // Best-effort: ignore errors during unmount cleanup.
-        });
+      // Guard: voiceStop() calls Tauri IPC — only safe in desktop context.
+      if (isAudioSupported) {
+        voiceStatus()
+          .then((status) => {
+            if (status.isActive) {
+              return voiceStop();
+            }
+          })
+          .catch(() => {
+            // Best-effort: ignore errors during unmount cleanup.
+          });
+      }
     };
   }, [subscribeToEvents]);
 
   // ── Sync status on mount ───────────────────────────────────────
 
   useEffect(() => {
-    if (!isSupported) return;
-
+    // voiceStatus() is served via HTTP — works in both Tauri and web UI.
     voiceStatus()
       .then((status: VoiceStatusResponse) => {
         setIsActive(status.isActive);
@@ -286,9 +289,9 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
         setAutoSpeakState(status.autoSpeak);
       })
       .catch(() => {
-        // Voice commands may not be available yet
+        // Voice service may not be reachable yet — ignore on mount.
       });
-  }, [isSupported]);
+  }, []);
 
   // ── Actions ────────────────────────────────────────────────────
 
@@ -325,7 +328,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       let ttsDownloaded = false;
       try {
         const catalog = await voiceListModels();
-        ttsDownloaded = catalog.ttsDownloaded;
+        ttsDownloaded = catalog.ttsModel.isDownloaded;
       } catch { /* fall through — skip TTS auto-load */ }
       const needTts = !status.ttsLoaded && ttsDownloaded;
 
@@ -569,7 +572,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   }, []);
 
   const refreshModels = useCallback(async () => {
-    if (!isSupported) return;
+    // voiceListModels / voiceListDevices are served via HTTP — always available.
     try {
       setModelsLoading(true);
       const [modelsData, devicesData] = await Promise.all([
@@ -583,7 +586,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
     } finally {
       setModelsLoading(false);
     }
-  }, [isSupported]);
+  }, []);
 
   const clearError = useCallback(() => setError(null), []);
 

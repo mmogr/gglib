@@ -39,38 +39,35 @@ export interface VoiceStatusResponse {
 export interface SttModelInfo {
   id: string;
   name: string;
-  archiveUrl: string;
-  dirName: string;
   sizeBytes: number;
   sizeDisplay: string;
   englishOnly: boolean;
   quality: number;
   speed: number;
   isDefault: boolean;
+  /** Whether the model archive is already present on disk. */
+  isDownloaded: boolean;
 }
 
 export interface TtsModelInfo {
   id: string;
   name: string;
-  archiveUrl: string;
-  dirName: string;
   sizeBytes: number;
   sizeDisplay: string;
   voiceCount: number;
+  /** Whether the model archive is already present on disk. */
+  isDownloaded: boolean;
 }
 
 export interface VoiceInfo {
   id: string;
   name: string;
   category: string;
-  gender: string;
 }
 
 export interface VoiceModelsResponse {
   sttModels: SttModelInfo[];
-  sttDownloaded: string[];
   ttsModel: TtsModelInfo;
-  ttsDownloaded: boolean;
   voices: VoiceInfo[];
   vadDownloaded: boolean;
 }
