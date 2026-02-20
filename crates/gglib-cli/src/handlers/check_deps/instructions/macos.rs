@@ -11,7 +11,7 @@ pub fn print_instructions(missing: &[&Dependency]) {
     let needs_brew = missing.iter().any(|d| {
         matches!(
             d.name.as_str(),
-            "git" | "cmake" | "python3" | "curl" | "pkg-config"
+            "git" | "cmake" | "python3" | "curl" | "pkg-config" | "libssl-dev"
         )
     });
 
@@ -31,6 +31,7 @@ pub fn print_instructions(missing: &[&Dependency]) {
             "python3" => Some("python3"),
             "curl" => Some("curl"),
             "pkg-config" => Some("pkg-config"),
+            "libssl-dev" => Some("openssl"),
             _ => None,
         })
         .collect();
@@ -65,7 +66,10 @@ pub fn print_instructions(missing: &[&Dependency]) {
     }
 
     // Xcode Command Line Tools (for make, cc)
-    if missing.iter().any(|d| d.name == "make" || d.name == "cc") {
+    if missing
+        .iter()
+        .any(|d| matches!(d.name.as_str(), "make" | "gcc" | "g++" | "cc"))
+    {
         print_subsection("Install Xcode Command Line Tools");
         print_command("xcode-select --install");
     }
