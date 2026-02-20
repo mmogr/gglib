@@ -19,6 +19,7 @@ gglib-gui = { path = "../gglib-gui" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
+gglib-voice = { path = "../gglib-voice" }  # Composition root: constructs VoiceService shared with AppState
 
 # Shared deps
 serde = { workspace = true }

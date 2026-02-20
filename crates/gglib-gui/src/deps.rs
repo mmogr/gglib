@@ -7,7 +7,7 @@ use std::sync::Arc;
 use gglib_core::events::ServerEvents;
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, GgufParserPort, HfClientPort, ModelRepository,
-    ProcessRunner, SystemProbePort, ToolSupportDetectorPort,
+    ProcessRunner, SystemProbePort, ToolSupportDetectorPort, VoicePipelinePort,
 };
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
@@ -49,6 +49,8 @@ pub struct GuiDeps {
     pub(crate) system_probe: Arc<dyn SystemProbePort>,
     /// GGUF parser for file validation and metadata extraction.
     pub(crate) gguf_parser: Arc<dyn GgufParserPort>,
+    /// Voice pipeline for data/config operations (Phase 1 ops only).
+    pub(crate) voice: Arc<dyn VoicePipelinePort>,
 }
 
 impl GuiDeps {
@@ -70,6 +72,7 @@ impl GuiDeps {
         model_repo: Arc<dyn ModelRepository>,
         system_probe: Arc<dyn SystemProbePort>,
         gguf_parser: Arc<dyn GgufParserPort>,
+        voice: Arc<dyn VoicePipelinePort>,
     ) -> Self {
         Self {
             core,
@@ -84,6 +87,7 @@ impl GuiDeps {
             model_repo,
             system_probe,
             gguf_parser,
+            voice,
         }
     }
 

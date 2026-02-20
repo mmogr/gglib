@@ -31,6 +31,7 @@ pub mod server_log_sink;
 pub mod settings_repository;
 pub mod system_probe;
 pub mod tool_support;
+pub mod voice;
 
 use std::sync::Arc;
 use thiserror::Error;
@@ -63,6 +64,10 @@ pub use system_probe::{SystemProbeError, SystemProbePort, SystemProbeResult};
 pub use tool_support::{
     ModelSource, ToolFormat, ToolSupportDetection, ToolSupportDetectionInput,
     ToolSupportDetectorPort,
+};
+pub use voice::{
+    AudioDeviceDto, SttModelInfoDto, TtsModelInfoDto, VoiceInfoDto, VoiceModelsDto,
+    VoicePipelinePort, VoicePortError, VoiceStatusDto,
 };
 
 /// Container for all repository trait objects.

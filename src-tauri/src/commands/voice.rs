@@ -190,7 +190,8 @@ pub async fn voice_start(
         _ => VoiceInteractionMode::PushToTalk,
     };
 
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
 
     if let Some(ref mut pipeline) = *voice {
         // Pipeline already exists (models may be preloaded) — just start audio
@@ -232,7 +233,8 @@ pub async fn voice_start(
 /// To also free the model memory, call [`voice_unload`] instead.
 #[tauri::command]
 pub async fn voice_stop(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.stop();
     }
@@ -251,7 +253,8 @@ pub async fn voice_stop(state: tauri::State<'_, AppState>) -> Result<(), String>
 /// For simply pausing voice mode while keeping models warm, use [`voice_stop`].
 #[tauri::command]
 pub async fn voice_unload(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         // Ensure audio is stopped and mic released before dropping.
         if pipeline.is_active() {
@@ -269,7 +272,8 @@ pub async fn voice_unload(state: tauri::State<'_, AppState>) -> Result<(), Strin
 pub async fn voice_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<VoiceStatusResponse, String> {
-    let voice = state.voice_pipeline.read().await;
+    let _pipeline = state.voice_service.pipeline();
+    let voice = _pipeline.read().await;
     match voice.as_ref() {
         Some(pipeline) => Ok(VoiceStatusResponse {
             is_active: pipeline.is_active(),
@@ -299,7 +303,8 @@ pub async fn voice_status(
 /// Begin PTT recording (user pressed talk button).
 #[tauri::command]
 pub async fn voice_ptt_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
     pipeline.ptt_start().map_err(|e| format!("{e}"))
 }
@@ -309,7 +314,8 @@ pub async fn voice_ptt_start(state: tauri::State<'_, AppState>) -> Result<(), St
 /// Returns the transcribed text.
 #[tauri::command]
 pub async fn voice_ptt_stop(state: tauri::State<'_, AppState>) -> Result<String, String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
     pipeline.ptt_stop().await.map_err(|e| format!("{e}"))
 }
@@ -319,7 +325,8 @@ pub async fn voice_ptt_stop(state: tauri::State<'_, AppState>) -> Result<String,
 /// Speak text through TTS.
 #[tauri::command]
 pub async fn voice_speak(text: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
     pipeline.speak(&text).await.map_err(|e| format!("{e}"))
 }
@@ -327,7 +334,8 @@ pub async fn voice_speak(text: String, state: tauri::State<'_, AppState>) -> Res
 /// Stop active TTS playback.
 #[tauri::command]
 pub async fn voice_stop_speaking(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.stop_speaking();
     }
@@ -473,7 +481,8 @@ pub async fn voice_load_stt(
         return Err(format!("STT model not downloaded: {model_id}"));
     }
 
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if voice.is_none() {
         let config = VoicePipelineConfig::default();
         let (pipeline, event_rx) = VoicePipeline::new(config);
@@ -509,7 +518,8 @@ pub async fn voice_load_tts(
         return Err("TTS model not downloaded".to_string());
     }
 
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if voice.is_none() {
         let config = VoicePipelineConfig::default();
         let (pipeline, event_rx) = VoicePipeline::new(config);
@@ -535,7 +545,8 @@ pub async fn voice_set_mode(mode: String, state: tauri::State<'_, AppState>) -> 
         _ => return Err(format!("Unknown voice mode: {mode}")),
     };
 
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.set_mode(interaction_mode);
     }
@@ -548,7 +559,8 @@ pub async fn voice_set_voice(
     voice_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.set_voice(&voice_id);
     }
@@ -558,7 +570,8 @@ pub async fn voice_set_voice(
 /// Set the TTS playback speed.
 #[tauri::command]
 pub async fn voice_set_speed(speed: f32, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.set_speed(speed);
     }
@@ -571,7 +584,8 @@ pub async fn voice_set_auto_speak(
     auto_speak: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.set_auto_speak(auto_speak);
     }
