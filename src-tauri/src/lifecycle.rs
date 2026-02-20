@@ -78,7 +78,8 @@ async fn parallel_cleanup(state: &AppState) -> Result<(), String> {
     // model memory is freed in a deterministic order rather than relying on
     // the process-exit Drop path.
     {
-        let mut voice = state.voice_pipeline.write().await;
+        let _pipeline = state.voice_service.pipeline();
+        let mut voice = _pipeline.write().await;
         if voice.is_some() {
             info!("Unloading voice pipeline during shutdown");
             if let Some(ref mut pipeline) = *voice
