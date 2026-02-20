@@ -5,7 +5,8 @@ import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { useServerState } from '../../services/serverEvents';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
-import './ConsoleInfoPanel.css';
+import { cn } from '../../utils/cn';
+import { Stack } from '../primitives';
 
 interface ConsoleInfoPanelProps {
   modelId: number;
@@ -163,10 +164,10 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
       : null;
 
   return (
-    <div className="mcc-panel console-info-panel">
-      <div className="mcc-panel-header">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border">
+      <div className="p-base border-b border-border bg-background shrink-0">
         {/* View Tabs */}
-        <div className="console-info-tabs">
+        <div className="mb-md">
           <SidebarTabs<ChatPageTabId>
             tabs={CHAT_PAGE_TABS}
             activeTab={activeTab}
@@ -174,23 +175,23 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
           />
         </div>
 
-        <div className="console-info-header">
-          <div className="console-info-title-group">
-            <span className="console-info-label">Server running</span>
-            <h2 className="console-info-title">{modelName}</h2>
-          </div>
+        <div className="flex items-start justify-between gap-md">
+          <Stack gap="xs">
+            <span className="text-xs text-text-muted uppercase tracking-[0.05em]">Server running</span>
+            <h2 className="m-0 text-lg font-semibold text-text break-words">{modelName}</h2>
+          </Stack>
         </div>
       </div>
 
-      <div className="mcc-panel-content">
-        <div className="console-info-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
+        <div className="flex flex-col gap-lg">
           {/* Server Info Section */}
-          <section className="console-info-section">
-            <h3>Server Info</h3>
-            <div className="console-info-grid">
-              <div className="console-info-row">
-                <span className="console-info-key">Port</span>
-                <span className="console-info-value">
+          <section className="flex flex-col gap-sm">
+            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Server Info</h3>
+            <Stack gap="xs">
+              <div className="flex justify-between items-center gap-sm py-xs">
+                <span className="text-sm text-text-muted">Port</span>
+                <span className="text-sm text-text flex items-center gap-xs [&_code]:bg-background [&_code]:py-[2px] [&_code]:px-[6px] [&_code]:rounded-xs [&_code]:font-mono [&_code]:text-xs">
                   <code>{serverPort}</code>
                   <Button
                     iconOnly
@@ -203,41 +204,44 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
                   </Button>
                 </span>
               </div>
-              <div className="console-info-row">
-                <span className="console-info-key">Uptime</span>
-                <span className="console-info-value">{uptime}</span>
+              <div className="flex justify-between items-center gap-sm py-xs">
+                <span className="text-sm text-text-muted">Uptime</span>
+                <span className="text-sm text-text">{uptime}</span>
               </div>
               {contextLength && (
-                <div className="console-info-row">
-                  <span className="console-info-key">Context Size</span>
-                  <span className="console-info-value">{contextLength.toLocaleString()} tokens</span>
+                <div className="flex justify-between items-center gap-sm py-xs">
+                  <span className="text-sm text-text-muted">Context Size</span>
+                  <span className="text-sm text-text">{contextLength.toLocaleString()} tokens</span>
                 </div>
               )}
-            </div>
+            </Stack>
           </section>
 
           {/* Context Usage Section */}
-          <section className="console-info-section">
-            <h3>Context Usage</h3>
+          <section className="flex flex-col gap-sm">
+            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Context Usage</h3>
             {contextUsagePercent !== null ? (
-              <div className="console-info-context-usage">
-                <div className="context-usage-bar">
+              <Stack gap="xs">
+                <div className="h-[8px] bg-background rounded-sm overflow-hidden">
                   <div 
-                    className={`context-usage-fill ${contextUsagePercent >= 80 ? 'high-usage' : ''}`}
+                    className={cn(
+                      "h-full rounded-sm transition-[width] duration-300 ease-out bg-gradient-to-r from-primary to-primary-hover",
+                      contextUsagePercent >= 80 && "from-warning to-warning-hover"
+                    )}
                     style={{ width: `${Math.min(100, contextUsagePercent)}%` }}
                   />
                 </div>
-                <div className="context-usage-stats">
-                  <span className="context-usage-percent">{contextUsagePercent}%</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-semibold text-text">{contextUsagePercent}%</span>
                   {(metrics?.kvCacheTokens != null || metrics?.nTokensMax != null) && (
-                    <span className="context-usage-tokens">
+                    <span className="text-xs text-text-muted">
                       {(metrics.kvCacheTokens ?? metrics.nTokensMax ?? 0).toLocaleString()} tokens
                     </span>
                   )}
                 </div>
-              </div>
+              </Stack>
             ) : (
-              <p className="console-info-hint">
+              <p className="text-xs text-text-muted m-0">
                 No usage yet
               </p>
             )}
@@ -245,46 +249,46 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
 
           {/* Request Stats Section */}
           {metrics && (
-            <section className="console-info-section">
-              <h3>Statistics</h3>
-              <div className="console-info-grid">
-                <div className="console-info-row">
-                  <span className="console-info-key">Prompt Tokens</span>
-                  <span className="console-info-value">{metrics.promptTokensTotal.toLocaleString()}</span>
+            <section className="flex flex-col gap-sm">
+              <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Statistics</h3>
+              <Stack gap="xs">
+                <div className="flex justify-between items-center gap-sm py-xs">
+                  <span className="text-sm text-text-muted">Prompt Tokens</span>
+                  <span className="text-sm text-text">{metrics.promptTokensTotal.toLocaleString()}</span>
                 </div>
-                <div className="console-info-row">
-                  <span className="console-info-key">Generated Tokens</span>
-                  <span className="console-info-value">{metrics.predictedTokensTotal.toLocaleString()}</span>
+                <div className="flex justify-between items-center gap-sm py-xs">
+                  <span className="text-sm text-text-muted">Generated Tokens</span>
+                  <span className="text-sm text-text">{metrics.predictedTokensTotal.toLocaleString()}</span>
                 </div>
-                <div className="console-info-row">
-                  <span className="console-info-key">Active Requests</span>
-                  <span className="console-info-value">{metrics.requestsProcessing}</span>
+                <div className="flex justify-between items-center gap-sm py-xs">
+                  <span className="text-sm text-text-muted">Active Requests</span>
+                  <span className="text-sm text-text">{metrics.requestsProcessing}</span>
                 </div>
-              </div>
+              </Stack>
             </section>
           )}
 
           {/* API Endpoints Section */}
-          <section className="console-info-section">
-            <h3>API Endpoints</h3>
-            <div className="console-info-endpoints">
-              <div className="console-info-endpoint">
+          <section className="flex flex-col gap-sm">
+            <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">API Endpoints</h3>
+            <Stack gap="xs">
+              <div className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text">
                 <code>POST /v1/chat/completions</code>
-                <span className="endpoint-hint">OpenAI-compatible chat</span>
+                <span className="text-[10px] text-text-muted">OpenAI-compatible chat</span>
               </div>
-              <div className="console-info-endpoint">
+              <div className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text">
                 <code>POST /v1/completions</code>
-                <span className="endpoint-hint">Text completion</span>
+                <span className="text-[10px] text-text-muted">Text completion</span>
               </div>
-              <div className="console-info-endpoint">
+              <div className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text">
                 <code>GET /health</code>
-                <span className="endpoint-hint">Health check</span>
+                <span className="text-[10px] text-text-muted">Health check</span>
               </div>
-            </div>
+            </Stack>
           </section>
 
           {/* Stop Server Button */}
-          <section className="console-info-section console-info-actions">
+          <section className="flex flex-col gap-sm mt-auto pt-md">
             <Button
               variant="danger"
               size="lg"

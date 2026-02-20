@@ -1,6 +1,6 @@
 import { FC } from "react";
 import type { McpServerType } from "../../services/transport/types/mcp";
-import styles from "../AddMcpServerModal.module.css";
+import { Stack, Label } from '../primitives';
 
 interface ServerTemplatePickerProps {
   onSelectTemplate: (template: ServerTemplate) => void;
@@ -52,21 +52,21 @@ export const SERVER_TEMPLATES: ServerTemplate[] = [
 
 export const ServerTemplatePicker: FC<ServerTemplatePickerProps> = ({ onSelectTemplate }) => {
   return (
-    <div className={styles.section}>
-      <label className={styles.label}>Quick Start Templates</label>
-      <div className={styles.templates}>
+    <Stack gap="xs">
+      <Label size="sm">Quick Start Templates</Label>
+      <div className="grid grid-cols-2 gap-sm">
         {SERVER_TEMPLATES.map((template) => (
           <button
             key={template.name}
             type="button"
-            className={styles.templateBtn}
+            className="flex flex-col items-start gap-[2px] px-md py-sm bg-background-secondary border border-border rounded-base cursor-pointer text-left transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary"
             onClick={() => onSelectTemplate(template)}
           >
-            <span className={styles.templateName}>{template.name}</span>
-            <span className={styles.templateDesc}>{template.description}</span>
+            <span className="text-sm font-semibold text-text">{template.name}</span>
+            <span className="text-xs text-text-secondary">{template.description}</span>
           </button>
         ))}
       </div>
-    </div>
+    </Stack>
   );
 };

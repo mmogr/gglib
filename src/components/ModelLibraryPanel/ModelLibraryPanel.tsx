@@ -8,7 +8,7 @@ import ProxyControl from '../ProxyControl';
 import { FilterPopover, FilterState } from '../FilterPopover';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import './ModelLibraryPanel.css';
+import { cn } from '../../utils/cn';
 
 interface ModelLibraryPanelProps {
   // Models list props
@@ -101,20 +101,20 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   // Error state
   if (error) {
     return (
-      <div className="mcc-panel library-panel">
-        <div className="mcc-panel-header">
+      <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border bg-surface">
+        <div className="p-base border-b border-border bg-background shrink-0">
           <SidebarTabs
             tabs={SIDEBAR_TABS}
             activeTab={activeTab}
             onTabChange={handleTabChange}
           />
         </div>
-        <div className="mcc-panel-content">
-          <div className="error-container">
-            <p className="error-message">Error: {error}</p>
-            <button onClick={onRefresh} className="retry-button">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-xl gap-md">
+            <p className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-md p-base text-danger flex items-start gap-sm">Error: {error}</p>
+            <Button variant="ghost" onClick={onRefresh}>
               Retry
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -137,17 +137,17 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         </Button>
       )}
       <ProxyControl
-        buttonClassName="proxy-sidebar-btn"
-        buttonActiveClassName="proxy-sidebar-btn-active"
-        statusDotClassName="proxy-status-dot"
-        statusDotActiveClassName="proxy-status-dot-active"
+        buttonClassName="relative text-base w-auto h-auto py-xs px-sm gap-xs inline-flex"
+        buttonActiveClassName="text-success"
+        statusDotClassName="absolute top-[2px] right-[2px] w-[6px] h-[6px] rounded-full bg-transparent"
+        statusDotActiveClassName="bg-success animate-pulse"
       />
     </>
   );
 
   return (
-    <div className="mcc-panel library-panel">
-      <div className="mcc-panel-header">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border bg-surface">
+      <div className="p-base border-b border-border bg-background shrink-0">
         <SidebarTabs
           tabs={SIDEBAR_TABS}
           activeTab={activeTab}
@@ -157,29 +157,29 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
 
         {/* Search and filters - only show on models tab */}
         {activeTab === 'models' && (
-          <div className="search-filter-row">
-            <div className="search-bar">
+          <div className="flex items-center gap-sm mt-md">
+            <div className="flex-1">
               <Input
                 type="text"
                 placeholder="Search models..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="search-input"
+                className="w-full"
                 size="sm"
               />
             </div>
 
-            <div className="filter-button-container">
+            <div className="relative">
               <Button
                 variant="ghost"
                 size="sm"
-                className={`filter-btn ${hasActiveFilters ? 'filter-btn-active' : ''}`}
+                className={cn("relative", hasActiveFilters && "text-primary")}
                 onClick={() => setFilterPopoverOpen(!filterPopoverOpen)}
                 title="Filter models"
                 iconOnly
               >
                 🔽
-                {hasActiveFilters && <span className="filter-badge" />}
+                {hasActiveFilters && <span className="absolute top-[2px] right-[2px] w-[8px] h-[8px] bg-primary rounded-full border-2 border-surface" />}
               </Button>
               
               <FilterPopover
@@ -196,7 +196,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
         )}
       </div>
 
-      <div className="mcc-panel-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
         {activeTab === 'models' ? (
           <ModelsListContent
             models={models}

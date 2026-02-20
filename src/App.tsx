@@ -147,7 +147,7 @@ function AppContent() {
   return (
     <SettingsProvider showToast={showToast}>
       <VoiceModeProvider>
-      <div className="app">
+      <div className="flex flex-col h-screen overflow-hidden">
         <Header
           onOpenSettings={() => setIsSettingsOpen(true)}
           servers={servers}
@@ -155,7 +155,7 @@ function AppContent() {
           onSelectModel={handleSelectModelFromHeader}
           onRefreshServers={loadServers}
         />
-        <div className="app-body">
+        <div className="flex-1 min-h-0 overflow-hidden flex">
           <ModelControlCenterPage
             servers={servers}
             loadServers={loadServers}

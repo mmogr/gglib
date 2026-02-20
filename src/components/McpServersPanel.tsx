@@ -17,7 +17,12 @@ import {
 import type { McpServerInfo } from "../services/clients/mcp";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
-import styles from "./McpServersPanel.module.css";
+import { Stack } from './primitives';
+import { cn } from "../utils/cn";
+
+const statusBadge = "inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full";
+
+const errorBox = "p-md bg-[rgba(239,68,68,0.15)] text-[#ef4444] rounded-base text-sm";
 
 interface McpServersPanelProps {
   onAddServer?: () => void;
@@ -144,36 +149,36 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
 
   const getStatusBadge = (info: McpServerInfo) => {
     if (isServerRunning(info)) {
-      return <span className={`${styles.badge} ${styles.badgeRunning}`}>Running</span>;
+      return <span className={cn(statusBadge, "bg-[rgba(16,185,129,0.15)] text-[#10b981]")}>Running</span>;
     }
     if (hasServerError(info)) {
-      return <span className={`${styles.badge} ${styles.badgeError}`}>Error</span>;
+      return <span className={cn(statusBadge, "bg-[rgba(239,68,68,0.15)] text-[#ef4444]")}>Error</span>;
     }
     if (info.status === "starting") {
-      return <span className={`${styles.badge} ${styles.badgeStarting}`}>Starting...</span>;
+      return <span className={cn(statusBadge, "bg-[rgba(245,158,11,0.15)] text-[#f59e0b]")}>Starting...</span>;
     }
-    return <span className={`${styles.badge} ${styles.badgeStopped}`}>Stopped</span>;
+    return <span className={cn(statusBadge, "bg-background-tertiary text-text-secondary")}>Stopped</span>;
   };
 
   if (loading) {
     return (
-      <div className={styles.loading}>
-        <div className={styles.spinner} />
+      <div className="flex items-center justify-center gap-sm p-xl text-text-secondary">
+        <div className="w-5 h-5 border-2 border-border border-t-primary rounded-full animate-spin-360" />
         <span>Loading MCP servers...</span>
       </div>
     );
   }
 
   return (
-    <div className={styles.panel}>
-      <div className={styles.header}>
-        <div className={styles.headerTitle}>
-          <h3>MCP Servers</h3>
-          <span className={styles.headerCount}>
+    <div className="flex flex-col gap-md">
+      <div className="flex justify-between items-center gap-md">
+        <div className="flex items-center gap-sm">
+          <h3 className="m-0 text-base font-semibold text-text">MCP Servers</h3>
+          <span className="text-sm text-text-secondary">
             {servers.length} server{servers.length !== 1 ? "s" : ""}
           </span>
         </div>
-        <div className={styles.headerActions}>
+        <div className="flex gap-sm">
           <Button
             type="button"
             variant="secondary"
@@ -196,21 +201,21 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
       </div>
 
       {error && (
-        <div className={styles.error} role="alert">
+        <div className={errorBox} role="alert">
           {error}
         </div>
       )}
 
       {actionError && (
-        <div className={styles.error} role="alert">
+        <div className={errorBox} role="alert">
           {actionError}
         </div>
       )}
 
       {servers.length === 0 ? (
-        <div className={styles.emptyState}>
-          <p>No MCP servers configured.</p>
-          <p className={styles.emptyHint}>
+        <div className="text-center p-xl text-text-secondary">
+          <p className="m-0 mb-sm">No MCP servers configured.</p>
+          <p className="text-sm mb-md">
             MCP servers provide tools that can be called by the LLM during chat.
             Add servers for web search, file access, and more.
           </p>
@@ -225,66 +230,66 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
           )}
         </div>
       ) : (
-        <div className={styles.serverList}>
+        <div className="flex flex-col gap-md">
           {servers.map((info) => {
             const id = info.server.id;
             const isLoading = actionLoading === id;
             const isRunning = isServerRunning(info);
 
             return (
-              <div key={id} className={styles.serverCard}>
-                <div className={styles.serverInfo}>
-                  <div className={styles.serverHeader}>
-                    <span className={styles.serverName}>{info.server.name}</span>
+              <div key={id} className="flex justify-between items-start gap-md p-md bg-background-secondary border border-border rounded-base">
+                <Stack gap="xs" className="flex-1 min-w-0">
+                  <div className="flex items-center gap-sm">
+                    <span className="font-semibold text-text">{info.server.name}</span>
                     {getStatusBadge(info)}
                   </div>
-                  <div className={styles.serverDetails}>
-                    <span className={styles.serverType}>
+                  <div className="flex items-center gap-sm text-sm text-text-secondary">
+                    <span className="px-sm py-0.5 bg-background-tertiary rounded-sm text-xs font-semibold text-text-secondary">
                       {info.server.server_type === "stdio" ? "Stdio" : "SSE"}
                     </span>
                     {!info.server.is_valid && (
-                      <span className={styles.invalidBadge} title={info.server.last_error || "Invalid configuration"}>
+                      <span className="inline-flex items-center gap-1 px-sm py-0.5 bg-[#fef3c7] text-[#d97706] text-xs font-medium rounded-sm cursor-help" title={info.server.last_error || "Invalid configuration"}>
                         <Icon icon={AlertTriangle} size={14} />
                         <span className="ml-1.5">Needs relink</span>
                       </span>
                     )}
                     {info.server.server_type === "stdio" && info.server.config.command && (
-                      <code className={styles.serverCommand}>
+                      <code className="font-mono text-xs text-text-secondary overflow-hidden text-ellipsis whitespace-nowrap">
                         {info.server.config.command}
                         {info.server.config.args?.length ? ` ${info.server.config.args.join(" ")}` : ""}
                       </code>
                     )}
                     {info.server.config.url && (
-                      <code className={styles.serverCommand}>{info.server.config.url}</code>
+                      <code className="font-mono text-xs text-text-secondary overflow-hidden text-ellipsis whitespace-nowrap">{info.server.config.url}</code>
                     )}
                     {!info.server.is_valid && info.server.last_error && (
-                      <div className={styles.validationError}>
+                      <div className="text-xs text-[#dc2626] mt-xs p-xs bg-[#fef2f2] rounded-sm border-l-2 border-[#dc2626]">
                         {info.server.last_error}
                       </div>
                     )}
                   </div>
                   {isRunning && info.tools.length > 0 && (
-                    <div className={styles.serverTools}>
-                      <span className={styles.toolsLabel}>Tools:</span>
+                    <div className="flex flex-wrap items-center gap-xs mt-xs">
+                      <span className="text-xs text-text-secondary">Tools:</span>
                       {info.tools.slice(0, 5).map((tool) => (
-                        <span key={tool.name} className={styles.toolChip}>
+                        <span key={tool.name} className="inline-flex px-sm py-0.5 bg-[rgba(99,102,241,0.15)] text-primary text-xs rounded-sm">
                           {tool.name}
                         </span>
                       ))}
                       {info.tools.length > 5 && (
-                        <span className={styles.toolChip}>
+                        <span className="inline-flex px-sm py-0.5 bg-[rgba(99,102,241,0.15)] text-primary text-xs rounded-sm">
                           +{info.tools.length - 5} more
                         </span>
                       )}
                     </div>
                   )}
                   {hasServerError(info) && (
-                    <div className={styles.serverError}>
+                    <div className="text-xs text-[#ef4444] mt-xs">
                       {getServerErrorMessage(info)}
                     </div>
                   )}
-                </div>
-                <div className={styles.serverActions}>
+                </Stack>
+                <div className="flex gap-xs shrink-0">
                   {!info.server.is_valid && info.server.server_type === "stdio" && (
                     <Button
                       type="button"
@@ -346,13 +351,14 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
         </div>
       )}
 
-      <div className={styles.footer}>
-        <p className={styles.footerHelp}>
+      <div className="mt-sm pt-md border-t border-border">
+        <p className="text-xs text-text-secondary m-0">
           Learn more about{" "}
           <a
             href="https://modelcontextprotocol.io/introduction"
             target="_blank"
             rel="noopener noreferrer"
+            className="text-primary no-underline hover:underline"
           >
             Model Context Protocol
           </a>

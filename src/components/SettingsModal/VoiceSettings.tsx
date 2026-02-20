@@ -15,7 +15,7 @@ import { Select } from "../ui/Select";
 import { useVoiceModeContext } from "../../contexts/VoiceModeContext";
 import { useSettingsContext } from "../../contexts/SettingsContext";
 import type { VoiceInteractionMode } from "../../services/clients/voice";
-import styles from "../SettingsModal.module.css";
+import { Stack, Label } from '../primitives';
 
 interface VoiceSettingsProps {
   onClose: () => void;
@@ -154,11 +154,11 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
 
   if (!voice || !voice.isSupported) {
     return (
-      <div className={styles.section}>
-        <p className={styles.description}>
+      <Stack gap="xs">
+        <p className="text-sm text-text-secondary">
           Voice mode is only available in the desktop application.
         </p>
-      </div>
+      </Stack>
     );
   }
 
@@ -181,31 +181,31 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
   })();
 
   return (
-    <div className={styles.form}>
+    <div className="flex flex-col gap-md">
       {/* Error display */}
       {voice?.error && (
-        <div className={styles.error}>
+        <div className="text-[#ef4444] text-sm">
           {voice.error}
-          <button onClick={() => voice?.clearError()} style={{ marginLeft: 8, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit' }}>✕</button>
+          <button onClick={() => voice?.clearError()} className="ml-2 cursor-pointer bg-transparent border-none text-inherit">✕</button>
         </div>
       )}
 
       {/* ── STT Model Section ──────────────────────────────────── */}
-      <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>Speech-to-Text</h3>
-        <p className={styles.description}>
+      <Stack gap="xs">
+        <h3 className="font-semibold text-text">Speech-to-Text</h3>
+        <p className="text-sm text-text-secondary">
           Choose an STT model for speech recognition. Larger models are more
           accurate but slower and use more memory.
         </p>
 
         {/* Download row: pick any catalog model and download it */}
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>Download a Model</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <Stack gap="xs">
+          <Label>Download a Model</Label>
+          <div className="flex gap-2 items-center">
             <Select
               value={downloadTarget}
               onChange={(e) => setDownloadTarget(e.target.value)}
-              style={{ flex: 1 }}
+              className="flex-1"
             >
               {voice?.models?.sttModels?.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -223,11 +223,11 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               {sttButtonLabel}
             </Button>
           </div>
-        </div>
+        </Stack>
 
         {/* Default model selector: only downloaded models */}
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>Default STT Model</label>
+        <Stack gap="xs">
+          <Label>Default STT Model</Label>
           {downloadedSttModels.length > 0 ? (
             <Select
               value={defaultSttModel ?? ''}
@@ -243,24 +243,24 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               ))}
             </Select>
           ) : (
-            <p className={styles.description} style={{ fontStyle: 'italic' }}>
+            <p className="text-sm text-text-secondary italic">
               Download a model above to set a default.
             </p>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* ── TTS Section ────────────────────────────────────────── */}
-      <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>Text-to-Speech</h3>
-        <p className={styles.description}>
+      <Stack gap="xs">
+        <h3 className="font-semibold text-text">Text-to-Speech</h3>
+        <p className="text-sm text-text-secondary">
           High-quality local TTS. The model will be downloaded on first use (~300 MB).
         </p>
 
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>TTS Model</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+        <Stack gap="xs">
+          <Label>TTS Model</Label>
+          <div className="flex gap-2 items-center">
+            <span className="flex-1 text-sm text-text-secondary">
               {voice?.models?.ttsModel?.name ?? 'TTS Model'}
             </span>
             <Button
@@ -272,10 +272,10 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               {ttsButtonLabel}
             </Button>
           </div>
-        </div>
+        </Stack>
 
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>Default Voice</label>
+        <Stack gap="xs">
+          <Label>Default Voice</Label>
           <Select
             value={selectedVoice}
             onChange={(e) => handleVoiceChange(e.target.value)}
@@ -286,10 +286,10 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               </option>
             )) ?? <option>Loading...</option>}
           </Select>
-        </div>
+        </Stack>
 
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>Speed ({speedInput.toFixed(1)}x)</label>
+        <Stack gap="xs">
+          <Label>Speed ({speedInput.toFixed(1)}x)</Label>
           <input
             type="range"
             min="0.5"
@@ -297,17 +297,17 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             step="0.1"
             value={speedInput}
             onChange={handleSpeedChange}
-            style={{ width: '100%' }}
+            className="w-full"
           />
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* ── Interaction Mode ───────────────────────────────────── */}
-      <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>Interaction Mode</h3>
+      <Stack gap="xs">
+        <h3 className="font-semibold text-text">Interaction Mode</h3>
 
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>Mode</label>
+        <Stack gap="xs">
+          <Label>Mode</Label>
           <Select
             value={voice?.mode ?? 'ptt'}
             onChange={(e) => handleModeChange(e.target.value)}
@@ -315,18 +315,18 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             <option value="ptt">Push to Talk (Space bar)</option>
             <option value="vad">Voice Activity Detection (hands-free)</option>
           </Select>
-        </div>
+        </Stack>
 
         {/* VAD model download — shown when VAD mode is selected */}
         {voice?.mode === 'vad' && (
-          <div className={styles.fieldGroup}>
-            <label className={styles.label}>Silero VAD Model</label>
-            <p className={styles.description}>
+          <Stack gap="xs">
+            <Label>Silero VAD Model</Label>
+            <p className="text-sm text-text-secondary">
               Neural-network voice detection for more accurate hands-free mode.
               Falls back to energy-based detection if not downloaded.
             </p>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+            <div className="flex gap-2 items-center">
+              <span className="flex-1 text-sm text-text-secondary">
                 Silero VAD v5 (~2 MB)
               </span>
               <Button
@@ -338,11 +338,11 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
                 {downloading === 'vad' ? 'Downloading…' : vadDownloaded ? '✓ Downloaded' : 'Download'}
               </Button>
             </div>
-          </div>
+          </Stack>
         )}
 
-        <div className={styles.fieldGroup}>
-          <label className={styles.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Stack gap="xs">
+          <label className="font-semibold text-text flex items-center gap-2">
             <input
               type="checkbox"
               checked={voice?.autoSpeak ?? false}
@@ -350,18 +350,18 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             />
             Auto-speak responses
           </label>
-          <p className={styles.description}>
+          <p className="text-sm text-text-secondary">
             Automatically read LLM responses aloud using TTS.
           </p>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* ── Audio Devices ──────────────────────────────────────── */}
       {(voice?.devices?.length ?? 0) > 0 && (
-        <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>Audio Devices</h3>
-          <div className={styles.fieldGroup}>
-            <label className={styles.label}>Input Device</label>
+        <Stack gap="xs">
+          <h3 className="font-semibold text-text">Audio Devices</h3>
+          <Stack gap="xs">
+            <Label>Input Device</Label>
             <Select value="" onChange={() => {}}>
               {voice?.devices?.map((d) => (
                 <option key={d.name} value={d.name}>
@@ -369,39 +369,30 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
                 </option>
               ))}
             </Select>
-          </div>
-        </div>
+          </Stack>
+        </Stack>
       )}
 
       {/* ── Download Progress ──────────────────────────────────── */}
       {voice?.downloadProgress && (
-        <div className={styles.section}>
-          <p className={styles.description}>
+        <Stack gap="xs">
+          <p className="text-sm text-text-secondary">
             Downloading {voice.downloadProgress.modelId}…{' '}
             {voice.downloadProgress.percent.toFixed(0)}%
           </p>
-          <div style={{
-            width: '100%',
-            height: 4,
-            background: 'var(--color-border)',
-            borderRadius: 2,
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              width: `${voice?.downloadProgress?.percent ?? 0}%`,
-              height: '100%',
-              background: 'var(--color-accent)',
-              borderRadius: 2,
-              transition: 'width 200ms ease',
-            }} />
+          <div className="w-full h-1 bg-border rounded-sm overflow-hidden">
+            <div
+              className="h-full bg-accent rounded-sm transition-[width] duration-200 ease-in-out"
+              style={{ width: `${voice?.downloadProgress?.percent ?? 0}%` }}
+            />
           </div>
-        </div>
+        </Stack>
       )}
 
       {/* ── Status ─────────────────────────────────────────────── */}
-      <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>Status</h3>
-        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+      <Stack gap="xs">
+        <h3 className="font-semibold text-text">Status</h3>
+        <div className="text-sm text-text-secondary">
           <div>Pipeline: {voice?.isActive ? '🟢 Active' : '⚪ Inactive'}</div>
           <div>STT Engine: {voice?.sttLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
           <div>TTS Engine: {voice?.ttsLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
@@ -409,10 +400,10 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           <div>Default Voice: {selectedVoice}</div>
           <div>State: {voice?.voiceState}</div>
         </div>
-      </div>
+      </Stack>
 
       {/* ── Actions ────────────────────────────────────────────── */}
-      <div className={styles.actions}>
+      <div className="flex gap-sm pt-md">
         <Button onClick={onClose} variant="secondary" size="sm">
           Close
         </Button>

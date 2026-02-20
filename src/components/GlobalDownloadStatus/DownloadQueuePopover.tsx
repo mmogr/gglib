@@ -9,7 +9,6 @@ import {
 } from '../../services/clients/downloads';
 import type { DownloadQueueItem } from '../../services/transport/types/downloads';
 import { Icon } from '../ui/Icon';
-import styles from './DownloadQueuePopover.module.css';
 
 /**
  * Grouped queue item for display - sharded downloads are collapsed into one entry
@@ -156,21 +155,24 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
   }
 
   return (
-    <div className={styles.popover} ref={popoverRef}>
-      <div className={styles.header}>
-        <span className={styles.title}>Download Queue</span>
-        <span className={styles.count}>{groupedItems.length} {groupedItems.length === 1 ? 'item' : 'items'}</span>
+    <div
+      className="absolute top-full left-0 mt-xs bg-surface border border-border rounded-md shadow-[0_4px_16px_rgba(0,0,0,0.3)] min-w-[280px] max-w-[360px] z-popover overflow-hidden"
+      ref={popoverRef}
+    >
+      <div className="flex items-center justify-between px-md py-sm border-b border-border bg-surface-elevated">
+        <span className="text-sm font-semibold text-text-primary">Download Queue</span>
+        <span className="text-xs text-text-secondary bg-surface px-2 py-[2px] rounded-sm">{groupedItems.length} {groupedItems.length === 1 ? 'item' : 'items'}</span>
       </div>
-      <div className={styles.content}>
+      <div className="max-h-[300px] overflow-y-auto scrollbar-thin">
         {groupedItems.map((item, index) => (
           <div
             key={item.group_id || item.id}
-            className={styles.queueItem}
+            className="flex items-center gap-sm px-md py-sm border-b border-border last:border-b-0 hover:bg-surface-hover transition-colors duration-150"
           >
             {/* Reorder buttons */}
-            <div className={styles.reorderButtons}>
+            <div className="flex flex-col gap-[2px] shrink-0">
               <button
-                className={styles.reorderBtn}
+                className="flex items-center justify-center w-[20px] h-[14px] bg-transparent border border-border rounded-[3px] text-text-secondary cursor-pointer text-[8px] leading-none p-0 transition-all duration-150 hover:not-disabled:bg-surface-hover hover:not-disabled:text-text-primary hover:not-disabled:border-border-hover active:not-disabled:bg-primary active:not-disabled:text-surface active:not-disabled:border-primary disabled:opacity-30 disabled:cursor-not-allowed"
                 onClick={() => handleMoveUp(index)}
                 disabled={isProcessing || index === 0}
                 title="Move up"
@@ -179,7 +181,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
                 <Icon icon={ChevronUp} size={16} />
               </button>
               <button
-                className={styles.reorderBtn}
+                className="flex items-center justify-center w-[20px] h-[14px] bg-transparent border border-border rounded-[3px] text-text-secondary cursor-pointer text-[8px] leading-none p-0 transition-all duration-150 hover:not-disabled:bg-surface-hover hover:not-disabled:text-text-primary hover:not-disabled:border-border-hover active:not-disabled:bg-primary active:not-disabled:text-surface active:not-disabled:border-primary disabled:opacity-30 disabled:cursor-not-allowed"
                 onClick={() => handleMoveDown(index)}
                 disabled={isProcessing || index === groupedItems.length - 1}
                 title="Move down"
@@ -190,13 +192,13 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             </div>
             
             {/* Item info */}
-            <div className={styles.itemInfo}>
-              <div className={styles.modelName} title={item.id}>
+            <div className="flex-1 min-w-0 flex flex-col gap-[2px]">
+              <div className="text-sm font-medium text-text-primary overflow-hidden text-ellipsis whitespace-nowrap" title={item.id}>
                 {item.display_name}
               </div>
-              <div className={styles.itemMeta}>
+              <div className="flex items-center gap-xs flex-wrap">
                 {item.shard_count > 1 && (
-                  <span className={styles.shardBadge}>
+                  <span className="text-xs bg-[rgba(139,92,246,0.15)] text-[#a78bfa] px-[6px] py-[1px] rounded-sm font-medium">
                     {item.shard_count} parts
                   </span>
                 )}
@@ -205,7 +207,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             
             {/* Cancel button */}
             <button
-              className={styles.cancelBtn}
+              className="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-sm text-text-secondary cursor-pointer opacity-60 shrink-0 text-[12px] transition-all duration-150 hover:not-disabled:bg-[rgba(248,113,113,0.15)] hover:not-disabled:text-[#f87171] hover:not-disabled:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
               onClick={() => handleCancel(item)}
               disabled={isProcessing}
               title="Remove from queue"

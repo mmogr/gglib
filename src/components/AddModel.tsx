@@ -4,7 +4,6 @@ import { addModel } from "../services/clients/models";
 import { pickGgufFile, isDesktop } from "../services/platform";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
-import styles from './AddModel.module.css';
 
 interface AddModelProps {
   onModelAdded: () => void;
@@ -52,32 +51,32 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
   };
 
   return (
-    <div className="add-model-container">
+    <div className="bg-surface rounded-lg p-xl max-w-[800px] shadow-md border border-border">
       <h2>Add New Model</h2>
 
       <form onSubmit={handleSubmit} className="add-model-form">
-        <div className="form-group">
+        <div className="mb-lg">
           <label htmlFor="filePath">Model File Path:</label>
-          <div className={styles.fileInputGroup}>
+          <div className="flex flex-wrap gap-sm tablet:flex-col tablet:items-stretch">
             <Input
               type="text"
               id="filePath"
               value={filePath}
               onChange={(e) => setFilePath(e.target.value)}
               placeholder="/path/to/your/model.gguf"
-              className={styles.formInput}
+              className="flex-[1_1_200px] min-w-0"
             />
             <button
               type="button"
               onClick={handleBrowse}
-              className={styles.browseButton}
+              className="px-base py-sm bg-primary text-white border-none rounded-base cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:bg-primary-hover hover:-translate-y-px active:translate-y-0 tablet:w-full tablet:text-center"
             >
               📁 Browse
             </button>
           </div>
         </div>
 
-        {error && <div className="error-message">{error}</div>}
+        {error && <div className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-md p-base text-danger flex items-start gap-sm">{error}</div>}
 
         <div className="form-actions">
           <Button

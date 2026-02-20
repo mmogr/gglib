@@ -19,10 +19,10 @@ export const TagAddInput: FC<TagAddInputProps> = ({ value, onChange, onAdd }) =>
   };
 
   return (
-    <div className="tag-add-dropdown">
+    <div className="mt-sm flex items-center gap-sm">
       <Input
         type="text"
-        className="tag-select"
+        className="py-sm px-md bg-background-input border border-border rounded-base text-text text-sm cursor-pointer w-full flex-1 transition duration-200 focus:outline-none focus:border-border-focus"
         placeholder="Add tag..."
         value={value}
         onChange={(e) => onChange(e.target.value)}

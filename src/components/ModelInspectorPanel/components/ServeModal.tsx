@@ -56,22 +56,49 @@ export const ServeModal: FC<ServeModalProps> = ({
   const hasInferenceOverrides = inferenceParams && Object.values(inferenceParams).some(v => v != null);
 
   return (
-    <Modal open={true} onClose={onClose} title="Start model server" size="md" preventClose={isServing}>
-      <div className="modal-body">
-        <div className="model-info">
+    <Modal
+      open={true}
+      onClose={onClose}
+      title="Start model server"
+      size="md"
+      preventClose={isServing}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={isServing}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={onStart}
+            disabled={isServing}
+            leftIcon={!isServing ? <Icon icon={Play} size={14} /> : undefined}
+          >
+            {isServing ? (
+              <>
+                <Loader2 className="spinner" />
+                Loading model...
+              </>
+            ) : (
+              'Start Server'
+            )}
+          </Button>
+        </>
+      }
+    >
+        <div className="flex justify-between items-center mb-lg p-base bg-background rounded-md border border-border">
           <strong>{model.name}</strong>
-          <span className="model-size">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
+          <span className="text-text-secondary text-sm">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="context-input">
+        <div className="mb-lg">
+          <label htmlFor="context-input" className="block mb-sm font-medium text-text">
             Context Length
-            <span className="label-hint"> (optional)</span>
+            <span className="font-normal text-text-secondary text-sm"> (optional)</span>
           </label>
           <Input
             id="context-input"
             type="number"
-            className="context-input"
+            className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
             placeholder={
               settings?.defaultContextSize
                 ? `Default: ${settings.defaultContextSize.toLocaleString()}`
@@ -84,22 +111,22 @@ export const ServeModal: FC<ServeModalProps> = ({
             disabled={isServing}
             min="1"
           />
-          <p className="input-help">
+          <p className="mt-sm text-sm text-text-secondary">
             {model.contextLength
               ? `Model's maximum: ${model.contextLength.toLocaleString()} tokens`
               : 'No model context metadata available'}
           </p>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="port-input">
+        <div className="mb-lg">
+          <label htmlFor="port-input" className="block mb-sm font-medium text-text">
             Port
-            <span className="label-hint"> (optional)</span>
+            <span className="font-normal text-text-secondary text-sm"> (optional)</span>
           </label>
           <Input
             id="port-input"
             type="number"
-            className="context-input"
+            className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
             placeholder={
               settings?.llamaBasePort
                 ? `Auto (from ${settings.llamaBasePort})`
@@ -111,14 +138,14 @@ export const ServeModal: FC<ServeModalProps> = ({
             min="1024"
             max="65535"
           />
-          <p className="input-help">
+          <p className="mt-sm text-sm text-text-secondary">
             Leave empty to auto-allocate from base port
           </p>
         </div>
 
         {hasAgentTag && (
-          <div className="jinja-alert" role="status">
-            <div className="jinja-alert-title">Agent tag detected</div>
+          <div className="flex flex-col gap-sm py-sm px-md rounded-md border border-border bg-[rgba(59,130,246,0.08)] text-text text-sm mb-md" role="status">
+            <div className="font-semibold">Agent tag detected</div>
             <p>
               Jinja templates {jinjaOverride === false 
                 ? 'would normally be auto-enabled for agent-tagged models, but you have disabled them for this launch.' 
@@ -138,10 +165,10 @@ export const ServeModal: FC<ServeModalProps> = ({
           </div>
         )}
 
-        <div className="form-group">
-          <div className="form-label-row">
-            <label htmlFor="jinja-toggle">Jinja Templates</label>
-            <span className="jinja-mode-label">
+        <div className="mb-lg">
+          <div className="flex items-center justify-between gap-sm">
+            <label htmlFor="jinja-toggle" className="block mb-0 font-medium text-text">Jinja Templates</label>
+            <span className="text-sm text-text-muted">
               {isAutoJinja
                 ? 'Auto (agent tag)'
                 : (jinjaOverride === null
@@ -149,7 +176,7 @@ export const ServeModal: FC<ServeModalProps> = ({
                   : (jinjaOverride ? 'Enabled manually' : 'Disabled manually'))}
             </span>
           </div>
-          <div className="jinja-toggle-row">
+          <div className="flex gap-md items-start">
             <input
               id="jinja-toggle"
               type="checkbox"
@@ -157,8 +184,8 @@ export const ServeModal: FC<ServeModalProps> = ({
               onChange={(e) => onJinjaChange(e.target.checked)}
               disabled={isServing}
             />
-            <div className="jinja-toggle-copy">
-              <p>
+            <div className="flex-1 text-sm text-text-secondary">
+              <p className="m-0">
                 Enable llama.cpp's Jinja templating for instruction/agent models. Leave off for plain chat models.
               </p>
             </div>
@@ -166,7 +193,7 @@ export const ServeModal: FC<ServeModalProps> = ({
         </div>
 
         {/* Advanced: Inference Parameters */}
-        <div className="form-group">
+        <div className="mb-lg">
           <button 
             type="button"
             className="advanced-toggle"
@@ -179,7 +206,7 @@ export const ServeModal: FC<ServeModalProps> = ({
           </button>
           {showAdvanced && (
             <div className="advanced-section">
-              <p className="input-help" style={{ marginBottom: '12px' }}>
+              <p className="mt-sm text-sm text-text-secondary" style={{ marginBottom: '12px' }}>
                 Override sampling parameters for this session. Leave empty to use model or global defaults.
               </p>
               <InferenceParametersForm
@@ -190,28 +217,6 @@ export const ServeModal: FC<ServeModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-
-      <div className="modal-footer">
-        <Button variant="ghost" onClick={onClose} disabled={isServing}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          onClick={onStart}
-          disabled={isServing}
-          leftIcon={!isServing ? <Icon icon={Play} size={14} /> : undefined}
-        >
-          {isServing ? (
-            <>
-              <Loader2 className="spinner" />
-              Loading model...
-            </>
-          ) : (
-            'Start Server'
-          )}
-        </Button>
-      </div>
     </Modal>
   );
 };

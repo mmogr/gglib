@@ -3,7 +3,6 @@ import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
-import styles from './ConfirmDeleteModal.module.css';
 
 interface ConfirmDeleteModalProps {
   isOpen: boolean;
@@ -28,7 +27,7 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
 
   const deleteLabel = isDeleting ? (
     <>
-      <Loader2 className={styles.spinnerIcon} />
+      <Loader2 className="w-4 h-4 animate-spin" />
       Deleting...
     </>
   ) : (
@@ -42,21 +41,31 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
       title="Delete message"
       size="sm"
       preventClose={isDeleting}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={onConfirm} disabled={isDeleting} leftIcon={isDeleting ? undefined : <Icon icon={Trash2} size={14} />}>
+            {deleteLabel}
+          </Button>
+        </>
+      }
     >
-      <div className={styles.content}>
-        <div className={styles.lede}>
-          <span className={styles.iconCircle}>
+      <div className="flex flex-col gap-md">
+        <div className="flex items-start gap-sm">
+          <span className="w-9 h-9 rounded-full inline-flex items-center justify-center bg-background-secondary border border-border text-primary">
             <Icon icon={Trash2} size={18} />
           </span>
           <div>
-            <h2 className={styles.title}>Delete this message?</h2>
-            <p className={styles.description}>This action is permanent.</p>
+            <h2 className="m-0 text-base font-semibold text-text">Delete this message?</h2>
+            <p className="mt-[0.15rem] mb-0 text-text-secondary text-[0.95rem]">This action is permanent.</p>
           </div>
         </div>
 
         {messageCount > 1 && (
-          <div className={styles.warning}>
-            <Icon icon={AlertTriangle} size={16} className={styles.warningIcon} />
+          <div className="flex gap-sm items-start p-3 rounded-lg bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] text-text text-[0.95rem]">
+            <Icon icon={AlertTriangle} size={16} className="text-danger" />
             <span>
               This will also delete <strong>{messageCount - 1}</strong> subsequent{' '}
               {messageCount - 1 === 1 ? 'message' : 'messages'} to maintain conversation flow.
@@ -64,14 +73,6 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
           </div>
         )}
 
-        <div className={styles.actions}>
-          <Button variant="ghost" onClick={onCancel} disabled={isDeleting}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={onConfirm} disabled={isDeleting} leftIcon={isDeleting ? undefined : <Icon icon={Trash2} size={14} />}>
-            {deleteLabel}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

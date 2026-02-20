@@ -20,36 +20,36 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
   };
 
   return (
-    <section className="inspector-section">
-      <h3>Model Information</h3>
-      <div className="metadata-grid">
-        <div className="metadata-row">
-          <span className="metadata-label">Size:</span>
-          <span className="metadata-value">
+    <section className="mb-xl">
+      <h3 className="m-0 mb-base text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Model Information</h3>
+      <div className="flex flex-col gap-md">
+        <div className="flex justify-between items-start gap-base">
+          <span className="text-text-muted text-sm shrink-0">Size:</span>
+          <span className="text-text text-sm text-right break-words">
             {formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}
           </span>
         </div>
         {model.architecture && (
-          <div className="metadata-row">
-            <span className="metadata-label">Architecture:</span>
-            <span className="metadata-value">{model.architecture}</span>
+          <div className="flex justify-between items-start gap-base">
+            <span className="text-text-muted text-sm shrink-0">Architecture:</span>
+            <span className="text-text text-sm text-right break-words">{model.architecture}</span>
           </div>
         )}
         {model.quantization && (
-          <div className="metadata-row">
-            <span className="metadata-label">Quantization:</span>
-            <span className="metadata-value quantization">{model.quantization}</span>
+          <div className="flex justify-between items-start gap-base">
+            <span className="text-text-muted text-sm shrink-0">Quantization:</span>
+            <span className="text-text text-sm text-right break-words font-semibold text-primary">{model.quantization}</span>
           </div>
         )}
         {model.contextLength && (
-          <div className="metadata-row">
-            <span className="metadata-label">Context Length:</span>
-            <span className="metadata-value">{model.contextLength.toLocaleString()}</span>
+          <div className="flex justify-between items-start gap-base">
+            <span className="text-text-muted text-sm shrink-0">Context Length:</span>
+            <span className="text-text text-sm text-right break-words">{model.contextLength.toLocaleString()}</span>
           </div>
         )}
-        <div className="metadata-row">
-          <span className="metadata-label">Path:</span>
-          <span className="metadata-value path">
+        <div className="flex justify-between items-start gap-base">
+          <span className="text-text-muted text-sm shrink-0">Path:</span>
+          <span className="text-text text-sm text-right break-words font-mono text-xs flex items-center gap-sm">
             {model.filePath}
             <Button
               variant="ghost"
@@ -63,12 +63,12 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
           </span>
         </div>
         {model.hfRepoId && (
-          <div className="metadata-row">
-            <span className="metadata-label">HuggingFace:</span>
-            <span className="metadata-value hf-link-container">
-              <span className="hf-repo-id">{model.hfRepoId}</span>
+          <div className="flex justify-between items-start gap-base">
+            <span className="text-text-muted text-sm shrink-0">HuggingFace:</span>
+            <span className="text-text text-sm text-right break-words flex items-center gap-sm">
+              <span className="font-mono text-sm text-text">{model.hfRepoId}</span>
               <button
-                className="hf-link-button"
+                className="bg-transparent border-none cursor-pointer text-[1rem] p-[2px_4px] rounded-sm opacity-70 transition-all duration-200 shrink-0 hover:opacity-100 hover:bg-background-hover hover:scale-110 active:scale-95"
                 onClick={() => {
                   const url = getHuggingFaceUrl(model.hfRepoId);
                   if (url) openUrl(url);
@@ -86,36 +86,36 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
       {/* Show inference defaults if any are set */}
       {model.inferenceDefaults && Object.values(model.inferenceDefaults).some(v => v != null) && (
         <>
-          <h3>Inference Defaults</h3>
-          <div className="metadata-grid">
+          <h3 className="m-0 mb-base text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Inference Defaults</h3>
+          <div className="flex flex-col gap-md">
             {model.inferenceDefaults.temperature != null && (
-              <div className="metadata-row">
-                <span className="metadata-label">Temperature:</span>
-                <span className="metadata-value">{model.inferenceDefaults.temperature}</span>
+              <div className="flex justify-between items-start gap-base">
+                <span className="text-text-muted text-sm shrink-0">Temperature:</span>
+                <span className="text-text text-sm text-right break-words">{model.inferenceDefaults.temperature}</span>
               </div>
             )}
             {model.inferenceDefaults.topP != null && (
-              <div className="metadata-row">
-                <span className="metadata-label">Top P:</span>
-                <span className="metadata-value">{model.inferenceDefaults.topP}</span>
+              <div className="flex justify-between items-start gap-base">
+                <span className="text-text-muted text-sm shrink-0">Top P:</span>
+                <span className="text-text text-sm text-right break-words">{model.inferenceDefaults.topP}</span>
               </div>
             )}
             {model.inferenceDefaults.topK != null && (
-              <div className="metadata-row">
-                <span className="metadata-label">Top K:</span>
-                <span className="metadata-value">{model.inferenceDefaults.topK}</span>
+              <div className="flex justify-between items-start gap-base">
+                <span className="text-text-muted text-sm shrink-0">Top K:</span>
+                <span className="text-text text-sm text-right break-words">{model.inferenceDefaults.topK}</span>
               </div>
             )}
             {model.inferenceDefaults.maxTokens != null && (
-              <div className="metadata-row">
-                <span className="metadata-label">Max Tokens:</span>
-                <span className="metadata-value">{model.inferenceDefaults.maxTokens.toLocaleString()}</span>
+              <div className="flex justify-between items-start gap-base">
+                <span className="text-text-muted text-sm shrink-0">Max Tokens:</span>
+                <span className="text-text text-sm text-right break-words">{model.inferenceDefaults.maxTokens.toLocaleString()}</span>
               </div>
             )}
             {model.inferenceDefaults.repeatPenalty != null && (
-              <div className="metadata-row">
-                <span className="metadata-label">Repeat Penalty:</span>
-                <span className="metadata-value">{model.inferenceDefaults.repeatPenalty}</span>
+              <div className="flex justify-between items-start gap-base">
+                <span className="text-text-muted text-sm shrink-0">Repeat Penalty:</span>
+                <span className="text-text text-sm text-right break-words">{model.inferenceDefaults.repeatPenalty}</span>
               </div>
             )}
           </div>

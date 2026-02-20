@@ -5,13 +5,13 @@
 import { FC, useState, useCallback, useEffect, FormEvent } from "react";
 import type { NewMcpServer, McpServerInfo, McpEnvEntry } from "../services/clients/mcp";
 import type { McpServerType } from "../services/transport/types/mcp";
-import styles from "./AddMcpServerModal.module.css";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { ServerTemplatePicker, type ServerTemplate } from "./AddMcpServerModal/ServerTemplatePicker";
 import { ServerTypeConfig } from "./AddMcpServerModal/ServerTypeConfig";
 import { EnvVarManager } from "./AddMcpServerModal/EnvVarManager";
+import { Stack } from './primitives';
 
 interface AddMcpServerModalProps {
   isOpen: boolean;
@@ -177,14 +177,34 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
       title={isEditing ? "Edit MCP Server" : "Add MCP Server"}
       size="lg"
       preventClose={saving}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="add-mcp-server-form"
+            variant="primary"
+            disabled={saving}
+          >
+            {saving ? "Saving..." : isEditing ? "Update" : "Add Server"}
+          </Button>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit} className={styles.form}>
+      <form id="add-mcp-server-form" onSubmit={handleSubmit} className="flex flex-col gap-md">
             {/* Templates (only for new servers) */}
             {!isEditing && <ServerTemplatePicker onSelectTemplate={applyTemplate} />}
 
             {/* Basic Info */}
-            <div className={styles.section}>
-              <label className={styles.label} htmlFor="mcp-name">
+            <Stack gap="xs">
+              <label className="text-sm font-semibold text-text" htmlFor="mcp-name">
                 Server Name *
               </label>
               <Input
@@ -196,7 +216,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 disabled={saving}
                 required
               />
-            </div>
+            </Stack>
 
             <ServerTypeConfig
               serverType={serverType}
@@ -230,8 +250,8 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             />
 
             {/* Options */}
-            <div className={styles.section}>
-              <label className={styles.checkboxLabel}>
+            <Stack gap="xs">
+              <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:w-4 [&>input]:h-4 [&>input]:accent-primary">
                 <input
                   type="checkbox"
                   checked={autoStart}
@@ -240,7 +260,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 />
                 <span>Auto-start when app launches</span>
               </label>
-              <label className={styles.checkboxLabel}>
+              <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:w-4 [&>input]:h-4 [&>input]:accent-primary">
                 <input
                   type="checkbox"
                   checked={enabled}
@@ -249,31 +269,14 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 />
                 <span>Enabled (tools included in chat)</span>
               </label>
-            </div>
+            </Stack>
 
             {error && (
-              <div className={styles.error} role="alert">
+              <div className="p-md bg-[rgba(239,68,68,0.15)] text-[#ef4444] rounded-base text-sm" role="alert">
                 {error}
               </div>
             )}
 
-            <div className="modal-footer">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={onClose}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={saving}
-              >
-                {saving ? "Saving..." : isEditing ? "Update" : "Add Server"}
-              </Button>
-            </div>
       </form>
     </Modal>
   );

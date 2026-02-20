@@ -2,7 +2,7 @@ import { FC, useState } from 'react';
 import AddModel from '../AddModel';
 import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
 import { HfModelSummary } from '../../types';
-import './AddDownloadContent.css';
+import { cn } from '../../utils/cn';
 
 export type AddDownloadSubTab = 'add' | 'browse';
 
@@ -42,29 +42,35 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
   };
 
   return (
-    <div className="add-download-content">
+    <div className="flex flex-col h-full min-h-0">
       {downloadSystemError && (
-        <div style={{ padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', marginBottom: 10 }}>
+        <div className="px-2.5 py-2 border border-border rounded-md mb-2.5">
           <strong>Downloads unavailable.</strong>
-          <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>{downloadSystemError}</div>
+          <div className="mt-1 whitespace-pre-wrap">{downloadSystemError}</div>
         </div>
       )}
-      <div className="add-download-subtabs">
+      <div className="flex flex-wrap gap-sm py-sm border-b border-border shrink-0 max-mobile:flex-col max-mobile:flex-nowrap">
         <button
-          className={`add-download-subtab ${activeSubTab === 'browse' ? 'active' : ''}`}
+          className={cn(
+            'flex-auto min-w-0 bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis whitespace-nowrap px-xs py-sm hover:bg-background-hover max-mobile:w-full max-mobile:text-center max-mobile:whitespace-normal',
+            activeSubTab === 'browse' && 'bg-primary text-white border-primary',
+          )}
           onClick={() => handleSubTabChange('browse')}
         >
           🔍 Browse HF
         </button>
         <button
-          className={`add-download-subtab ${activeSubTab === 'add' ? 'active' : ''}`}
+          className={cn(
+            'flex-auto min-w-0 bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis whitespace-nowrap px-xs py-sm hover:bg-background-hover max-mobile:w-full max-mobile:text-center max-mobile:whitespace-normal',
+            activeSubTab === 'add' && 'bg-primary text-white border-primary',
+          )}
           onClick={() => handleSubTabChange('add')}
         >
           📁 Local File
         </button>
       </div>
 
-      <div className="add-download-panel">
+      <div className="flex-1 overflow-y-auto py-base min-h-0">
         {activeSubTab === 'browse' && (
           <HuggingFaceBrowser 
             onSelectModel={onSelectHfModel}

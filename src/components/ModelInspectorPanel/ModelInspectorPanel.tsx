@@ -1,5 +1,6 @@
 import { FC, useCallback, useState, useEffect } from 'react';
 import { Shield, CloudSync } from 'lucide-react';
+import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
 import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
 import { queueDownload } from '../../services/clients/downloads';
@@ -27,7 +28,10 @@ import {
   InspectorActions,
 } from './components';
 import { Input } from '../ui/Input';
-import './ModelInspectorPanel.css';
+
+const panelContainer = "flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface";
+
+const circleIconBtn = "flex items-center justify-center w-button-height-base h-button-height-base p-0 rounded-full border border-border bg-background-elevated cursor-pointer transition-all hover:enabled:border-border-hover hover:enabled:bg-background-hover disabled:opacity-50 disabled:cursor-not-allowed";
 
 interface ModelInspectorPanelProps {
   model: GgufModel | null;
@@ -165,7 +169,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // If HuggingFace model is selected, show HF model preview
   if (selectedHfModel) {
     return (
-      <div className="mcc-panel inspector-panel hf-preview-panel">
+      <div className={cn(panelContainer, "overflow-hidden")}>
         <HfModelPreview
           model={selectedHfModel}
           onDownload={handleHfDownload}
@@ -179,11 +183,11 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // Empty state
   if (!model) {
     return (
-      <div className="mcc-panel inspector-panel">
-        <div className="mcc-panel-content">
-          <div className="inspector-empty">
-            <div className="empty-icon">👈</div>
-            <p>Select a model to view details</p>
+      <div className={panelContainer}>
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
+          <div className="flex flex-col items-center justify-center min-h-[300px] py-3xl px-xl text-center">
+            <div className="text-4xl mb-base opacity-50 text-text-disabled">👈</div>
+            <p className="text-text-secondary m-0">Select a model to view details</p>
           </div>
         </div>
       </div>
@@ -191,48 +195,48 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   }
 
   return (
-    <div className="mcc-panel inspector-panel">
-      <div className="mcc-panel-header">
-        <div className="inspector-header-content">
+    <div className={panelContainer}>
+      <div className="p-base border-b border-border bg-background shrink-0">
+        <div className="flex items-center justify-between gap-base w-full">
           {editMode.isEditMode ? (
             <Input
               type="text"
-              className="inspector-title-edit"
+              className="w-full m-0 py-sm px-md text-xl font-semibold bg-background-input border-2 border-border-focus rounded-base text-text transition duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
               value={editMode.editedName}
               onChange={(e) => editMode.setEditedName(e.target.value)}
               placeholder="Model name"
             />
           ) : (
-            <h2 className="inspector-title">{model.name}</h2>
+            <h2 className="m-0 text-xl font-semibold">{model.name}</h2>
           )}
           {!editMode.isEditMode && (
-            <div className="inspector-header-actions">
+            <div className="flex items-center gap-xs">
               <button
                 type="button"
-                className="inspector-action-button"
+                className={circleIconBtn}
                 onClick={() => setShowVerifyModal(true)}
                 title="Verify model integrity"
                 aria-label="Verify model integrity"
               >
-                <Shield className="inspector-action-icon" size={16} />
+                <Shield className="shrink-0" size={16} />
               </button>
               <button
                 type="button"
-                className="inspector-action-button"
+                className={circleIconBtn}
                 onClick={() => setShowUpdateModal(true)}
                 disabled={!model.hfRepoId}
                 title={model.hfRepoId ? "Check for updates on HuggingFace" : "No HuggingFace repo linked"}
                 aria-label="Check for updates"
               >
-                <CloudSync className="inspector-action-icon" size={16} />
+                <CloudSync className="shrink-0" size={16} />
               </button>
             </div>
           )}
         </div>
       </div>
 
-      <div className="mcc-panel-content">
-        <div className="inspector-content">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
+        <div className="p-base">
           {/* Metadata Section */}
           {editMode.isEditMode ? (
             <ModelEditForm
@@ -249,9 +253,9 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           )}
 
           {/* Tags Section */}
-          <section className="inspector-section">
-            <h3>Tags</h3>
-            <div className="tags-container">
+          <section className="mb-xl">
+            <h3 className="m-0 mb-base text-sm font-semibold text-text-secondary uppercase tracking-[0.05em]">Tags</h3>
+            <div className="flex flex-col gap-base">
               <TagChips 
                 tags={tags.modelTags} 
                 onRemoveTag={tags.handleRemoveTag} 

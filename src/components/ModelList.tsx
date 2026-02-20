@@ -13,7 +13,6 @@ import { useIsServerRunning } from "../services/serverRegistry";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Row } from "./primitives";
-import styles from "./ModelList.module.css";
 import { Input } from "./ui/Input";
 
 interface ModelListProps {
@@ -48,38 +47,38 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVer
   const isRunning = useIsServerRunning(model.id ?? 0);
 
   return (
-    <div className="table-row">
-      <div className="cell model-name">
-        <Row gap="sm" align="center" className="name-primary">
+    <div className="group contents">
+      <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover font-medium text-base gap-sm w-full break-words">
+        <Row gap="sm" align="center" className="font-semibold text-text">
           {model.name}
           {isRunning && <ServerHealthIndicator modelId={model.id ?? 0} />}
         </Row>
         {model.hfRepoId && (
-          <Row gap="xs" align="center" className="name-secondary">
+          <Row gap="xs" align="center" className="text-xs text-text-muted mt-xs">
             <Icon icon={Package} size={14} className="shrink-0" />
             <span>{model.hfRepoId}</span>
           </Row>
         )}
       </div>
-      <div className="cell">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</div>
-      <div className="cell">{model.architecture || "—"}</div>
-      <div className="cell">
-        <span className="quantization-badge">
+      <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</div>
+      <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover">{model.architecture || "—"}</div>
+      <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover">
+        <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-primary border border-[rgba(59,130,246,0.3)]">
           {model.quantization || "—"}
         </span>
       </div>
-      <div className="cell">{new Date(model.addedAt).toLocaleDateString()}</div>
-      <div className="cell actions">
+      <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover">{new Date(model.addedAt).toLocaleDateString()}</div>
+      <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover gap-sm">
         <button
           onClick={() => onVerify(model)}
-          className="action-button"
+          className="p-sm border-none rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center"
           title="Verify model integrity"
         >
           <Icon icon={Shield} size={16} />
         </button>
         <button
           onClick={() => onCheckUpdates(model)}
-          className="action-button"
+          className="p-sm border-none rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center"
           title="Check for updates on HuggingFace"
           disabled={!model.hfRepoId}
         >
@@ -87,14 +86,14 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVer
         </button>
         <button
           onClick={() => onServe(model)}
-          className="action-button serve-button"
+          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center bg-[rgba(34,197,94,0.15)] text-success border border-[rgba(34,197,94,0.3)] hover:bg-[rgba(34,197,94,0.25)] hover:shadow-[0_2px_10px_rgba(34,197,94,0.2)]"
           title="Serve model"
         >
           <Icon icon={Rocket} size={16} />
         </button>
         <button
           onClick={() => onRemove(model)}
-          className="action-button remove-button"
+          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center bg-[rgba(239,68,68,0.15)] text-danger border border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.25)] hover:shadow-[0_2px_10px_rgba(239,68,68,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={removing === model.id}
           title="Remove model"
         >
@@ -209,9 +208,9 @@ const ModelList: FC<ModelListProps> = ({
 
   if (error) {
     return (
-      <div className="error-container">
-        <p className="error-message">Error: {error}</p>
-        <button onClick={onRefresh} className="retry-button">
+      <div className="flex flex-col items-center justify-center p-xl gap-md">
+        <p className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-md p-base text-danger flex items-start gap-sm">Error: {error}</p>
+        <button onClick={onRefresh} className="px-md py-sm bg-transparent border border-border rounded-base text-text cursor-pointer text-sm hover:border-primary transition-colors duration-200">
           Retry
         </button>
       </div>
@@ -219,10 +218,10 @@ const ModelList: FC<ModelListProps> = ({
   }
 
   return (
-    <div className="model-list-container">
-      <div className="list-header">
+    <div className="bg-surface rounded-lg p-lg shadow-md border border-border">
+      <div className="flex justify-between items-center mb-lg pb-base border-b border-border">
         <h2>Your Models ({models.length})</h2>
-        <button onClick={onRefresh} className="refresh-button" disabled={loading}>
+        <button onClick={onRefresh} className="text-lg" disabled={loading}>
           {loading ? "Loading..." : (
             <span className="inline-flex items-center gap-2">
               <Icon icon={RotateCcw} size={16} />
@@ -235,18 +234,18 @@ const ModelList: FC<ModelListProps> = ({
       {loading && models.length === 0 ? (
         <div className="loading">Loading models...</div>
       ) : models.length === 0 ? (
-        <div className="empty-state">
+        <div className="flex flex-col items-center justify-center py-3xl px-xl text-center min-h-[300px]">
           <p>No models found. Add your first model to get started!</p>
         </div>
       ) : (
-        <div className="model-table">
-          <div className="table-header">
-            <div className="header-cell">Name</div>
-            <div className="header-cell">Size</div>
-            <div className="header-cell">Architecture</div>
-            <div className="header-cell">Quantization</div>
-            <div className="header-cell">Added</div>
-            <div className="header-cell">Actions</div>
+        <div className="flex flex-col w-full">
+          <div className="contents">
+            <div className="py-md font-semibold text-text-muted text-xs uppercase tracking-[0.5px] border-b-2 border-border">Name</div>
+            <div className="py-md font-semibold text-text-muted text-xs uppercase tracking-[0.5px] border-b-2 border-border">Size</div>
+            <div className="py-md font-semibold text-text-muted text-xs uppercase tracking-[0.5px] border-b-2 border-border">Architecture</div>
+            <div className="py-md font-semibold text-text-muted text-xs uppercase tracking-[0.5px] border-b-2 border-border">Quantization</div>
+            <div className="py-md font-semibold text-text-muted text-xs uppercase tracking-[0.5px] border-b-2 border-border">Added</div>
+            <div className="py-md font-semibold text-text-muted text-xs uppercase tracking-[0.5px] border-b-2 border-border">Actions</div>
           </div>
           {models.map((model) => (
             <ModelRow
@@ -264,12 +263,12 @@ const ModelList: FC<ModelListProps> = ({
 
       {/* Serve Configuration Modal */}
       {servingModel && (
-        <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && !isServing && setServingModel(null)}>
-          <div className="modal modal-md">
-            <div className="modal-header">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-modal-backdrop p-base overflow-y-auto" onMouseDown={(e) => e.target === e.currentTarget && !isServing && setServingModel(null)}>
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-background-elevated rounded-lg shadow-2xl w-full max-w-[600px] max-h-[90vh] flex flex-col z-modal animate-modal-slide-in">
+            <div className="flex items-center justify-between p-lg border-b border-border shrink-0">
               <h3>Start Model Server</h3>
               <button 
-                className="modal-close" 
+                className="w-[32px] h-[32px] rounded-base flex items-center justify-center bg-transparent text-text-secondary transition-all duration-200 cursor-pointer border-none shrink-0 hover:bg-background-hover hover:text-text" 
                 onClick={() => setServingModel(null)}
                 disabled={isServing}
               >
@@ -277,10 +276,10 @@ const ModelList: FC<ModelListProps> = ({
               </button>
             </div>
             
-            <div className="modal-body">
-              <div className="model-info">
+            <div className="p-lg overflow-y-auto flex-1 min-h-0">
+              <div className="flex justify-between items-center mb-lg p-base bg-background rounded-md border border-border">
                 <strong>{servingModel.name}</strong>
-                <span className="model-size">{formatParamCount(servingModel.paramCountB, servingModel.expertUsedCount, servingModel.expertCount)}</span>
+                <span className="text-text-secondary text-sm">{formatParamCount(servingModel.paramCountB, servingModel.expertUsedCount, servingModel.expertCount)}</span>
               </div>
               
               {/* Capability Badges */}
@@ -288,7 +287,7 @@ const ModelList: FC<ModelListProps> = ({
                 <Row gap="sm" className="capability-badges mb-4">
                   {hasTag(servingModel, 'reasoning') && (
                     <span 
-                      className={`${styles.capabilityBadge} ${styles.reasoning}`}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-[#f3e8ff] text-[#7c3aed]"
                       title="Model supports chain-of-thought reasoning with thinking tags"
                     >
                       <Icon icon={Brain} size={14} />
@@ -297,7 +296,7 @@ const ModelList: FC<ModelListProps> = ({
                   )}
                   {hasTag(servingModel, 'agent') && (
                     <span 
-                      className={`${styles.capabilityBadge} ${styles.agent}`}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-[#dbeafe] text-[#2563eb]"
                       title="Model supports tool/function calling for agentic workflows"
                     >
                       <Icon icon={Wrench} size={14} />
@@ -307,22 +306,22 @@ const ModelList: FC<ModelListProps> = ({
                 </Row>
               )}
               
-              <div className="form-group">
-                <label htmlFor="context-input">
+              <div className="mb-lg">
+                <label htmlFor="context-input" className="block mb-sm font-medium text-text">
                   Context Length
-                  <span className="label-hint"> (optional)</span>
+                  <span className="font-normal text-text-secondary text-sm"> (optional)</span>
                 </label>
                 <Input
                   id="context-input"
                   type="number"
-                  className="context-input"
+                  className="w-full p-md bg-background-input border border-border rounded-base text-text text-base transition duration-200 focus:outline-none focus:border-border-focus focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
                   placeholder={servingModel.contextLength ? `Default: ${servingModel.contextLength.toLocaleString()}` : 'Use model default'}
                   value={customContext}
                   onChange={(e) => setCustomContext(e.target.value)}
                   disabled={isServing}
                   min="1"
                 />
-                <p className="input-help">
+                <p className="mt-sm text-sm text-text-secondary">
                   {servingModel.contextLength 
                     ? `Model's maximum: ${servingModel.contextLength.toLocaleString()} tokens`
                     : 'Leave empty to use model default'}
@@ -330,7 +329,7 @@ const ModelList: FC<ModelListProps> = ({
               </div>
 
               {/* Jinja Templates Toggle */}
-              <div className="form-group mt-4">
+              <div className="mb-lg mt-4">
                 <label 
                   htmlFor="jinja-toggle" 
                   className="flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
@@ -350,13 +349,13 @@ const ModelList: FC<ModelListProps> = ({
                     </span>
                   )}
                 </label>
-                <p className="input-help mt-1">
+                <p className="mt-sm text-sm text-text-secondary mt-1">
                   Required for tool calling and advanced chat templates. {jinjaAutoEnabled ? 'Automatically enabled for agent/reasoning models.' : 'Enable if using function calling.'}
                 </p>
               </div>
             </div>
             
-            <div className="modal-footer">
+            <div className="flex items-center justify-end gap-md p-lg border-t border-border shrink-0">
               <Button 
                 variant="secondary" 
                 onClick={() => setServingModel(null)}

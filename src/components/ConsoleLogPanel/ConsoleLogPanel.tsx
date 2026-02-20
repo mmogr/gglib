@@ -72,11 +72,11 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
   }, [isAutoScroll, setIsAutoScroll]);
 
   return (
-    <div className="mcc-panel console-log-panel">
-      <div className="mcc-panel-header">
-        <div className="console-log-header">
-          <h3 className="console-log-title">Server Output</h3>
-          <div className="console-log-controls">
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface">
+      <div className="p-base border-b border-border bg-background shrink-0">
+        <div className="flex items-center justify-between gap-md">
+          <h3 className="m-0 text-base font-semibold text-text">Server Output</h3>
+          <div className="flex gap-xs">
             <Button
               variant={isAutoScroll ? 'primary' : 'secondary'}
               size="sm"
@@ -110,21 +110,21 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
 
       <div 
         ref={scrollContainerRef}
-        className="console-log-content"
+        className="console-log-content flex-1 overflow-y-auto overflow-x-auto bg-[#1e1e1e] rounded-sm font-mono text-[12px] leading-[1.5] p-sm"
         onScroll={handleScroll}
       >
         {logs.length === 0 ? (
-          <div className="console-log-empty">
-            <span className="console-log-empty-icon" aria-hidden>
+          <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-[#808080] text-center gap-sm">
+            <span className="text-[48px] opacity-50" aria-hidden>
               <Icon icon={Monitor} size={28} />
             </span>
-            <p>Waiting for server output...</p>
-            <p className="console-log-empty-hint">
+            <p className="m-0">Waiting for server output...</p>
+            <p className="m-0 text-xs opacity-70">
               Logs will appear here as the server processes requests
             </p>
           </div>
         ) : (
-          <div className="console-log-lines">
+          <div className="whitespace-pre-wrap break-all">
             {logs.map((entry, index) => (
               <LogLine key={`${entry.timestamp}-${index}`} entry={entry} />
             ))}

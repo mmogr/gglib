@@ -22,8 +22,11 @@ import type { ResearchState } from '../../../hooks/useDeepResearch/types';
 import { useVoiceContextOptional } from '../context/VoiceContext';
 import { stripThinkingBlocks } from '../../../utils/stripThinkingBlocks';
 
-const cx = (...classes: Array<string | false | undefined>) =>
-  classes.filter(Boolean).join(' ');
+import { cn } from '../../../utils/cn';
+
+/** Shared styling for small action buttons in message bubble footers. */
+const ACTION_BTN =
+  'bg-transparent border-none cursor-pointer py-[4px] px-[8px] rounded-sm text-[14px] opacity-70 transition-all duration-150 hover:opacity-100 hover:bg-[var(--color-surface-hover,rgba(255,255,255,0.1))]';
 
 /**
  * Extract research state from message metadata (if present).
@@ -89,7 +92,7 @@ const SpeakButton: React.FC<{ message: ReturnType<typeof useMessage> }> = ({ mes
 
   return (
     <button
-      className="chat-action-btn chat-speak-btn"
+      className={cn(ACTION_BTN, 'hover:text-[var(--color-accent,#89b4fa)] disabled:opacity-35 disabled:cursor-not-allowed')}
       onClick={handleSpeak}
       disabled={busy}
       title={busy ? 'TTS is busy' : 'Read aloud'}
@@ -98,7 +101,7 @@ const SpeakButton: React.FC<{ message: ReturnType<typeof useMessage> }> = ({ mes
       <Icon
         icon={voiceCtx.isTtsGenerating ? Loader2 : Volume2}
         size={14}
-        className={voiceCtx.isTtsGenerating ? 'chat-action-spin' : undefined}
+        className={voiceCtx.isTtsGenerating ? 'animate-spin-360' : undefined}
       />
     </button>
   );
@@ -139,17 +142,17 @@ export const AssistantMessageBubble: React.FC = () => {
     const isResearchRunning = researchState.phase !== 'complete' && researchState.phase !== 'error';
     
     return (
-      <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-assistant-message', 'chat-research-message')}>
-        <div className="chat-message-meta">
-          <div className="chat-message-avatar" aria-hidden>
+      <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border mr-xl max-tablet:mr-0">
+        <div className="flex items-center gap-sm">
+          <div className="text-lg" aria-hidden>
             <Icon icon={Bot} size={18} />
           </div>
           <div>
-            <div className="chat-message-author">Assistant</div>
-            <div className="chat-message-timestamp">{timestamp}</div>
+            <div className="font-medium text-sm">Assistant</div>
+            <div className="text-xs text-text-muted">{timestamp}</div>
           </div>
         </div>
-        <div className="chat-message-content">
+        <div className="leading-[1.6]">
           <ResearchArtifact
             state={researchState}
             isRunning={isResearchRunning}
@@ -163,7 +166,7 @@ export const AssistantMessageBubble: React.FC = () => {
             defaultExpanded={true}
           />
         </div>
-        <ActionBarPrimitive.Root className="chat-message-actions">
+        <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <ActionBarPrimitive.Copy />
         </ActionBarPrimitive.Root>
       </MessagePrimitive.Root>
@@ -172,20 +175,20 @@ export const AssistantMessageBubble: React.FC = () => {
 
   // Standard assistant message rendering
   return (
-    <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-assistant-message')}>
-      <div className="chat-message-meta">
-        <div className="chat-message-avatar" aria-hidden>
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border mr-xl max-tablet:mr-0">
+      <div className="flex items-center gap-sm">
+        <div className="text-lg" aria-hidden>
           <Icon icon={isVoice ? Volume2 : Bot} size={18} />
         </div>
         <div>
-          <div className="chat-message-author">Assistant</div>
-          <div className="chat-message-timestamp">
+          <div className="font-medium text-sm">Assistant</div>
+          <div className="text-xs text-text-muted">
             {timestamp}
             <ToolUsageBadge />
           </div>
         </div>
       </div>
-      <div className="chat-message-content">
+      <div className="leading-[1.6]">
         {parsed.thinking && (
           <ThinkingBlock
             messageId={message.id}
@@ -199,10 +202,10 @@ export const AssistantMessageBubble: React.FC = () => {
           <MarkdownMessageContent text={parsed.content} />
         )}
         {!parsed.thinking && !parsed.content && isStreaming && (
-          <span className="chat-streaming-placeholder">…</span>
+          <span className="text-text-muted animate-blink">…</span>
         )}
       </div>
-      <ActionBarPrimitive.Root className="chat-message-actions">
+      <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <SpeakButton message={message} />
         <ActionBarPrimitive.Copy />
       </ActionBarPrimitive.Root>
@@ -230,30 +233,30 @@ export const UserMessageBubble: React.FC = () => {
   };
 
   return (
-    <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-user-message')}>
-      <div className="chat-message-meta">
-        <div className="chat-message-avatar" aria-hidden>
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base ml-xl bg-primary/10 border border-primary max-tablet:ml-0">
+      <div className="flex items-center gap-sm">
+        <div className="text-lg" aria-hidden>
           <Icon icon={isVoice ? Mic : UserIcon} size={18} />
         </div>
         <div>
-          <div className="chat-message-author">{isVoice ? 'You (voice)' : 'You'}</div>
-          <div className="chat-message-timestamp">{timestamp}</div>
+          <div className="font-medium text-sm">{isVoice ? 'You (voice)' : 'You'}</div>
+          <div className="text-xs text-text-muted">{timestamp}</div>
         </div>
       </div>
-      <div className="chat-message-content">
+      <div className="leading-[1.6]">
         <MarkdownMessageContent />
       </div>
-      <ActionBarPrimitive.Root className="chat-message-actions">
-        <ActionBarPrimitive.Copy className="chat-action-btn" title="Copy message" aria-label="Copy message">
+      <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
           <Icon icon={Copy} size={14} />
         </ActionBarPrimitive.Copy>
-        <ActionBarPrimitive.Edit className="chat-action-btn chat-edit-btn" title="Edit message" aria-label="Edit message">
+        <ActionBarPrimitive.Edit className={ACTION_BTN} title="Edit message" aria-label="Edit message">
           <Icon icon={Pencil} size={14} />
         </ActionBarPrimitive.Edit>
         <Button
           variant="ghost"
           size="sm"
-          className="chat-action-btn chat-delete-btn"
+          className={cn(ACTION_BTN, 'hover:!bg-[rgba(243,139,168,0.2)]')}
           onClick={handleDelete}
           title="Delete message"
           aria-label="Delete message"
@@ -282,23 +285,23 @@ export const EditComposer: React.FC = () => {
   }).format(message.createdAt ?? new Date());
 
   return (
-    <MessagePrimitive.Root className={cx('chat-message-bubble', 'chat-user-message', 'chat-edit-mode')}>
-      <div className="chat-message-meta">
-        <div className="chat-message-avatar" aria-hidden>
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md ml-xl bg-primary/10 border-2 border-primary max-tablet:ml-0">
+      <div className="flex items-center gap-sm">
+        <div className="text-lg" aria-hidden>
           <Icon icon={UserIcon} size={18} />
         </div>
         <div>
-          <div className="chat-message-author">You</div>
-          <div className="chat-message-timestamp">{timestamp}</div>
+          <div className="font-medium text-sm">You</div>
+          <div className="text-xs text-text-muted">{timestamp}</div>
         </div>
       </div>
-      <ComposerPrimitive.Root className="chat-edit-composer">
-        <ComposerPrimitive.Input className="chat-edit-input" />
-        <div className="chat-edit-actions">
-          <ComposerPrimitive.Cancel className="chat-edit-cancel">
+      <ComposerPrimitive.Root className="flex flex-col gap-sm w-full">
+        <ComposerPrimitive.Input className="w-full min-h-[60px] p-sm bg-background border border-border rounded-sm text-text font-[inherit] text-sm resize-y focus:outline-none focus:border-primary" />
+        <div className="flex justify-end gap-sm">
+          <ComposerPrimitive.Cancel className="py-xs px-md rounded-sm text-sm cursor-pointer transition-all duration-150 bg-transparent border border-border text-text-muted hover:bg-surface-hover hover:text-text">
             Cancel
           </ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send className="chat-edit-send">
+          <ComposerPrimitive.Send className="py-xs px-md rounded-sm text-sm cursor-pointer transition-all duration-150 bg-primary border-none text-text font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
             Save & Regenerate
           </ComposerPrimitive.Send>
         </div>

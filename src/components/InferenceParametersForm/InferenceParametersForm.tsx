@@ -53,9 +53,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
     const isSet = currentValue !== undefined && currentValue !== null;
 
     return (
-      <div className="inference-param-row">
-        <label className="inference-param-label">{label}</label>
-        <div className="inference-param-input-group">
+      <div className="flex flex-col gap-[0.4rem]">
+        <label className="text-[0.85rem] font-medium text-text">{label}</label>
+        <div className="flex items-center gap-[0.5rem]">
           <Input
             type="number"
             value={isSet ? currentValue : ''}
@@ -69,12 +69,12 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             step={step}
             disabled={disabled}
             size="sm"
-            className="inference-param-input"
+            className="flex-1 max-w-[150px]"
           />
           {isSet && !disabled && (
             <button
               type="button"
-              className="inference-param-reset"
+              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-[4px] bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
               onClick={() => updateField(field, undefined)}
               title="Reset to default"
               aria-label={`Reset ${label} to default`}
@@ -84,7 +84,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
           )}
         </div>
         {!isSet && (
-          <span className="inference-param-hint">
+          <span className="text-[0.75rem] text-text-muted italic">
             Using default ({defaultHint})
           </span>
         )}
@@ -105,9 +105,9 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
     const displayValue = isSet ? currentValue : parseFloat(defaultHint);
 
     return (
-      <div className="inference-param-row">
-        <label className="inference-param-label">{label}</label>
-        <div className="inference-param-slider-group">
+      <div className="flex flex-col gap-[0.4rem]">
+        <label className="text-[0.85rem] font-medium text-text">{label}</label>
+        <div className="flex items-center gap-[0.75rem]">
           <input
             type="range"
             value={displayValue}
@@ -120,13 +120,13 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             disabled={disabled}
             className={`inference-param-slider ${!isSet ? 'is-default' : ''}`}
           />
-          <span className="inference-param-value">
+          <span className="min-w-[100px] text-[0.85rem] text-text tabular-nums">
             {isSet ? currentValue.toFixed(2) : `${displayValue.toFixed(2)} (default)`}
           </span>
           {isSet && !disabled && (
             <button
               type="button"
-              className="inference-param-reset"
+              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-[4px] bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
               onClick={() => updateField(field, undefined)}
               title="Reset to default"
               aria-label={`Reset ${label} to default`}
@@ -140,13 +140,13 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   };
 
   return (
-    <div className="inference-parameters-form">
-      <h4 className="inference-parameters-title">Inference Parameters</h4>
-      <p className="inference-parameters-description">
+    <div className="my-[1.5rem] p-[1rem] border border-border rounded-[6px] bg-background-secondary">
+      <h4 className="m-0 mb-[0.5rem] text-[0.95rem] font-semibold text-text">Inference Parameters</h4>
+      <p className="m-0 mb-[1rem] text-[0.85rem] text-text-muted leading-[1.4]">
         Configure default sampling parameters. Leave blank to inherit from global defaults.
       </p>
 
-      <div className="inference-parameters-grid">
+      <div className="flex flex-col gap-[1rem]">
         {renderSlider('temperature', 'Temperature', 0, 2, 0.05, '0.7')}
         {renderSlider('topP', 'Top P', 0, 1, 0.05, '0.95')}
         {renderNumberInput('topK', 'Top K', 1, 200, 1, '40')}

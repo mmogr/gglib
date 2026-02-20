@@ -3,12 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { cn } from '../../utils/cn';
 import { formatThinkingDuration } from '../../utils/thinkingParser';
 import { useThinkingTiming } from './context/ThinkingTimingContext';
-import './ThinkingBlock.css';
-
-const cx = (...classes: Array<string | false | undefined>) =>
-  classes.filter(Boolean).join(' ');
 
 interface ThinkingBlockProps {
   /** Message ID for timing tracker lookup */
@@ -98,13 +95,13 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
       };
       if (inline) {
         return (
-          <code className={cx('thinking-inline-code', className)} {...rest}>
+          <code className={cn('py-[0.125rem] px-[0.375rem] text-[0.75rem] font-mono bg-[#0d1117] rounded-[4px]', className)} {...rest}>
             {children}
           </code>
         );
       }
       return (
-        <pre className="thinking-code-block">
+        <pre className="my-[0.5rem] p-[0.625rem] text-[0.75rem] font-mono bg-[#0d1117] rounded-[6px] overflow-x-auto [&_code]:bg-transparent [&_code]:p-0">
           <code className={className} {...rest}>
             {children}
           </code>
@@ -114,26 +111,26 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   };
 
   return (
-    <div className={cx('thinking-block', isStreaming && 'thinking-block-streaming')}>
+    <div className={cn('mb-[0.75rem] border border-[#30363d] rounded-[8px] bg-[#161b22] overflow-hidden', isStreaming && 'border-[#388bfd33]')}>
       <div
-        className="thinking-header"
+        className="flex items-center gap-[0.5rem] py-[0.625rem] px-[0.875rem] cursor-pointer select-none transition-colors duration-150 hover:bg-[#21262d] focus-visible:outline-2 focus-visible:outline-[#58a6ff] focus-visible:outline-offset-[-2px]"
         role="button"
         tabIndex={0}
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
         aria-expanded={isExpanded}
       >
-        <span className={cx('thinking-chevron', isExpanded && 'thinking-chevron-expanded')}>
+        <span className={cn('text-[0.625rem] text-[#8b949e] transition-transform duration-200 shrink-0', isExpanded && 'rotate-90')}>
           ▶
         </span>
-        <span className="thinking-icon">💭</span>
-        <span className="thinking-label">{getLabel()}</span>
-        {isStreaming && <span className="thinking-spinner" />}
+        <span className="text-[1rem] shrink-0">💭</span>
+        <span className="text-[0.8125rem] font-medium text-[#8b949e]">{getLabel()}</span>
+        {isStreaming && <span className="w-[12px] h-[12px] border-2 border-[#8b949e] border-t-transparent rounded-full animate-spin-360 ml-auto shrink-0" />}
       </div>
       
-      <div className={cx('thinking-content', isExpanded && 'thinking-content-expanded')}>
-        <div className="thinking-content-inner">
-          <div className="thinking-markdown">
+      <div className={cn('max-h-0 overflow-hidden transition-[max-height] duration-[0.25s] ease-out', isExpanded && 'max-h-[500px] overflow-y-auto scrollbar-thin')}>
+        <div className="px-[0.875rem] pb-[0.75rem] border-t border-[#30363d]">
+          <div className="text-[0.8125rem] leading-[1.5] text-[#8b949e] [&_p]:my-[0.5rem] [&_p:first-child]:mt-[0.75rem] [&_p:last-child]:mb-0 [&_ul]:my-[0.5rem] [&_ul]:pl-[1.25rem] [&_ol]:my-[0.5rem] [&_ol]:pl-[1.25rem] [&_li]:my-[0.25rem]">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeHighlight]}

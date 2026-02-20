@@ -3,7 +3,8 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import { RangeSlider } from '../RangeSlider';
 import { ModelFilterOptions } from '../../types';
 import { Button } from '../ui/Button';
-import './FilterPopover.css';
+import { Stack } from '../primitives';
+import { cn } from '../../utils/cn';
 
 export interface FilterState {
   paramRange: [number, number] | null;
@@ -146,14 +147,14 @@ const FilterPopover: FC<FilterPopoverProps> = ({
   const currentContextMax = filters.contextRange?.[1] ?? filterOptions?.context_range?.max ?? 128000;
 
   return (
-    <div className="filter-popover" ref={popoverRef}>
-      <div className="filter-popover-header">
-        <span className="filter-popover-title">Filter Models</span>
+    <div className="absolute top-full right-0 mt-xs bg-surface border border-border rounded-md shadow-[0_4px_16px_rgba(0,0,0,0.3)] min-w-[280px] max-w-[320px] z-[1000] overflow-hidden" ref={popoverRef}>
+      <div className="flex items-center justify-between py-sm px-md border-b border-border bg-surface-elevated">
+        <span className="text-sm font-semibold text-text">Filter Models</span>
         {hasActiveFilters && (
           <Button
             variant="ghost"
             size="sm"
-            className="filter-clear-btn"
+            className="py-[4px] px-[8px] text-xs font-medium text-primary border border-primary rounded-sm hover:bg-primary hover:text-white"
             onClick={onClearFilters}
             title="Clear all filters"
           >
@@ -162,10 +163,10 @@ const FilterPopover: FC<FilterPopoverProps> = ({
         )}
       </div>
 
-      <div className="filter-popover-content">
+      <div className="max-h-[400px] overflow-y-auto py-sm px-md scrollbar-thin">
         {/* Parameters Range Slider */}
         {hasParamRange && (
-          <div className={`filter-section ${!paramRangeHasVariety ? 'filter-section-disabled' : ''}`}>
+          <div className={cn("py-sm border-b border-border last:border-b-0", !paramRangeHasVariety && "opacity-50")}>
             <RangeSlider
               label="Parameters"
               min={filterOptions!.param_range!.min}
@@ -178,14 +179,14 @@ const FilterPopover: FC<FilterPopoverProps> = ({
               disabled={!paramRangeHasVariety}
             />
             {!paramRangeHasVariety && (
-              <span className="filter-section-hint">All models have same size</span>
+              <span className="block text-xs text-text-muted italic mt-xs">All models have same size</span>
             )}
           </div>
         )}
 
         {/* Context Length Range Slider */}
         {hasContextRange && (
-          <div className={`filter-section ${!contextRangeHasVariety ? 'filter-section-disabled' : ''}`}>
+          <div className={cn("py-sm border-b border-border last:border-b-0", !contextRangeHasVariety && "opacity-50")}>
             <RangeSlider
               label="Context Length"
               min={filterOptions!.context_range!.min}
@@ -198,44 +199,47 @@ const FilterPopover: FC<FilterPopoverProps> = ({
               disabled={!contextRangeHasVariety}
             />
             {!contextRangeHasVariety && (
-              <span className="filter-section-hint">All models have same context</span>
+              <span className="block text-xs text-text-muted italic mt-xs">All models have same context</span>
             )}
           </div>
         )}
 
         {/* Quantizations */}
         {hasQuantizations && (
-          <div className={`filter-section ${!quantizationsHaveVariety ? 'filter-section-disabled' : ''}`}>
-            <span className="filter-section-label">Quantization</span>
+          <div className={cn("py-sm border-b border-border last:border-b-0", !quantizationsHaveVariety && "opacity-50")}>
+            <span className="block text-sm font-medium text-text mb-xs">Quantization</span>
             {quantizationsHaveVariety ? (
-              <div className="filter-checkbox-list">
+              <Stack gap="xs" className="mt-xs">
                 {filterOptions!.quantizations.map(quant => (
-                  <label key={quant} className="filter-checkbox-item">
+                  <label key={quant} className="flex items-center gap-sm cursor-pointer py-[4px] hover:bg-surface-elevated hover:rounded-sm hover:mx-[-4px] hover:px-[4px]">
                     <input
                       type="checkbox"
                       checked={filters.selectedQuantizations.includes(quant)}
                       onChange={() => handleQuantizationToggle(quant)}
-                      className="filter-checkbox"
+                      className="w-[16px] h-[16px] accent-primary cursor-pointer"
                     />
-                    <span className="filter-checkbox-label">{quant}</span>
+                    <span className="text-sm text-text">{quant}</span>
                   </label>
                 ))}
-              </div>
+              </Stack>
             ) : (
-              <span className="filter-section-hint">All models same quantization</span>
+              <span className="block text-xs text-text-muted italic mt-xs">All models same quantization</span>
             )}
           </div>
         )}
 
         {/* Tags */}
         {hasTags && (
-          <div className="filter-section">
-            <span className="filter-section-label">Tags</span>
-            <div className="filter-tag-list">
+          <div className="py-sm border-b border-border last:border-b-0">
+            <span className="block text-sm font-medium text-text mb-xs">Tags</span>
+            <div className="flex flex-wrap gap-xs mt-xs">
               {tags.map(tag => (
                 <button
                   key={tag}
-                  className={`filter-tag-chip ${filters.selectedTags.includes(tag) ? 'active' : ''}`}
+                  className={cn(
+                    "py-[4px] px-[10px] text-xs font-medium text-text-secondary bg-surface-elevated border border-border rounded-lg cursor-pointer transition-all duration-150 hover:border-primary hover:text-text",
+                    filters.selectedTags.includes(tag) && "bg-primary border-primary text-white"
+                  )}
                   onClick={() => handleTagToggle(tag)}
                 >
                   {tag}
@@ -247,9 +251,9 @@ const FilterPopover: FC<FilterPopoverProps> = ({
 
         {/* Empty state */}
         {!hasParamRange && !hasContextRange && !hasQuantizations && !hasTags && (
-          <div className="filter-empty-state">
-            <span>No filter options available</span>
-            <span className="filter-empty-hint">Add models to enable filtering</span>
+          <div className="flex flex-col items-center justify-center p-lg text-center">
+            <span className="text-sm text-text-secondary">No filter options available</span>
+            <span className="text-xs text-text-muted mt-xs">Add models to enable filtering</span>
           </div>
         )}
       </div>
