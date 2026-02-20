@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 import type { LucideIcon } from "lucide-react";
+import { cn } from "../../utils/cn";
 
 interface IconProps extends ComponentPropsWithoutRef<"span"> {
   icon: LucideIcon;
@@ -9,11 +10,11 @@ interface IconProps extends ComponentPropsWithoutRef<"span"> {
 }
 
 export const Icon = forwardRef<HTMLSpanElement, IconProps>(
-  ({ icon: IconComponent, size = 16, strokeWidth = 1.6, className = "", ...props }, ref) => {
+  ({ icon: IconComponent, size = 16, strokeWidth = 1.6, className, ...props }, ref) => {
     return (
       <span
         ref={ref}
-        className={`inline-flex items-center justify-center ${className}`}
+        className={cn("inline-flex items-center justify-center", className)}
         aria-hidden="true"
         {...props}
       >

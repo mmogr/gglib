@@ -1,5 +1,6 @@
 import { FC, useCallback, useState, useEffect } from 'react';
 import { Shield, CloudSync } from 'lucide-react';
+import { cn } from '../../utils/cn';
 import { appLogger } from '../../services/platform';
 import { GgufModel, ServerInfo, HfModelSummary } from '../../types';
 import { queueDownload } from '../../services/clients/downloads';
@@ -27,6 +28,10 @@ import {
   InspectorActions,
 } from './components';
 import { Input } from '../ui/Input';
+
+const panelContainer = "flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface";
+
+const circleIconBtn = "flex items-center justify-center w-button-height-base h-button-height-base p-0 rounded-full border border-border bg-background-elevated cursor-pointer transition-all hover:enabled:border-border-hover hover:enabled:bg-background-hover disabled:opacity-50 disabled:cursor-not-allowed";
 
 interface ModelInspectorPanelProps {
   model: GgufModel | null;
@@ -164,7 +169,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // If HuggingFace model is selected, show HF model preview
   if (selectedHfModel) {
     return (
-      <div className="flex flex-col h-full min-h-0 overflow-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface">
+      <div className={cn(panelContainer, "overflow-hidden")}>
         <HfModelPreview
           model={selectedHfModel}
           onDownload={handleHfDownload}
@@ -178,7 +183,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // Empty state
   if (!model) {
     return (
-      <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface">
+      <div className={panelContainer}>
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
           <div className="flex flex-col items-center justify-center min-h-[300px] py-3xl px-xl text-center">
             <div className="text-4xl mb-base opacity-50 text-text-disabled">👈</div>
@@ -190,7 +195,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface">
+    <div className={panelContainer}>
       <div className="p-base border-b border-border bg-background shrink-0">
         <div className="flex items-center justify-between gap-base w-full">
           {editMode.isEditMode ? (
@@ -208,7 +213,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
             <div className="flex items-center gap-xs">
               <button
                 type="button"
-                className="flex items-center justify-center w-button-height-base h-button-height-base p-0 rounded-full border border-border bg-background-elevated cursor-pointer transition-all hover:enabled:border-border-hover hover:enabled:bg-background-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                className={circleIconBtn}
                 onClick={() => setShowVerifyModal(true)}
                 title="Verify model integrity"
                 aria-label="Verify model integrity"
@@ -217,7 +222,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
               </button>
               <button
                 type="button"
-                className="flex items-center justify-center w-button-height-base h-button-height-base p-0 rounded-full border border-border bg-background-elevated cursor-pointer transition-all hover:enabled:border-border-hover hover:enabled:bg-background-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                className={circleIconBtn}
                 onClick={() => setShowUpdateModal(true)}
                 disabled={!model.hfRepoId}
                 title={model.hfRepoId ? "Check for updates on HuggingFace" : "No HuggingFace repo linked"}
