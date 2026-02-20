@@ -34,32 +34,30 @@ pub fn check_libcurl() -> Option<String> {
 #[cfg(target_os = "linux")]
 pub fn check_libclang() -> Option<String> {
     // Method 1: Try llvm-config
-    if let Ok(output) = Command::new("llvm-config").arg("--libdir").output() {
-        if output.status.success() {
-            let libdir = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            let libdir_path = std::path::Path::new(&libdir);
-            if libdir_path.exists() {
-                // Check for libclang.so in that directory
-                if let Ok(entries) = std::fs::read_dir(libdir_path) {
-                    for entry in entries.flatten() {
-                        let name = entry.file_name();
-                        let name_str = name.to_string_lossy();
-                        if name_str.starts_with("libclang") && name_str.contains(".so") {
-                            // Get LLVM version for display
-                            if let Ok(ver_output) =
-                                Command::new("llvm-config").arg("--version").output()
-                            {
-                                if ver_output.status.success() {
-                                    return Some(
-                                        String::from_utf8_lossy(&ver_output.stdout)
-                                            .trim()
-                                            .to_string(),
-                                    );
-                                }
-                            }
-                            return Some("installed".to_string());
-                        }
+    if let Ok(output) = Command::new("llvm-config").arg("--libdir").output()
+        && output.status.success()
+    {
+        let libdir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let libdir_path = std::path::Path::new(&libdir);
+        if libdir_path.exists()
+            && let Ok(entries) = std::fs::read_dir(libdir_path)
+        {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("libclang") && name_str.contains(".so") {
+                    // Get LLVM version for display
+                    if let Ok(ver_output) =
+                        Command::new("llvm-config").arg("--version").output()
+                        && ver_output.status.success()
+                    {
+                        return Some(
+                            String::from_utf8_lossy(&ver_output.stdout)
+                                .trim()
+                                .to_string(),
+                        );
                     }
+                    return Some("installed".to_string());
                 }
             }
         }
@@ -70,14 +68,14 @@ pub fn check_libclang() -> Option<String> {
 
     for dir in &search_patterns {
         let path = std::path::Path::new(dir);
-        if path.exists() {
-            if let Ok(entries) = std::fs::read_dir(path) {
-                for entry in entries.flatten() {
-                    let name = entry.file_name();
-                    let name_str = name.to_string_lossy();
-                    if name_str.starts_with("libclang") && name_str.contains(".so") {
-                        return Some("installed".to_string());
-                    }
+        if path.exists()
+            && let Ok(entries) = std::fs::read_dir(path)
+        {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("libclang") && name_str.contains(".so") {
+                    return Some("installed".to_string());
                 }
             }
         }
@@ -87,14 +85,14 @@ pub fn check_libclang() -> Option<String> {
     for major in (11..=20).rev() {
         let llvm_lib = format!("/usr/lib/llvm-{}/lib", major);
         let path = std::path::Path::new(&llvm_lib);
-        if path.exists() {
-            if let Ok(entries) = std::fs::read_dir(path) {
-                for entry in entries.flatten() {
-                    let name = entry.file_name();
-                    let name_str = name.to_string_lossy();
-                    if name_str.starts_with("libclang") && name_str.contains(".so") {
-                        return Some(format!("{}", major));
-                    }
+        if path.exists()
+            && let Ok(entries) = std::fs::read_dir(path)
+        {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("libclang") && name_str.contains(".so") {
+                    return Some(major.to_string());
                 }
             }
         }
