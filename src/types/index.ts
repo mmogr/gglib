@@ -364,3 +364,9 @@ export interface ModelFilterOptions {
   /** Minimum and maximum context lengths */
   context_range: RangeValues | null;
 }
+
+// ============================================================================
+// Voice Types
+// ============================================================================
+
+export * from './voice';

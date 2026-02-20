@@ -714,17 +714,24 @@ impl VoicePipeline {
 
     // ── Test helpers ───────────────────────────────────────────────
 
-    /// Inject a mock STT backend (available with the `test-helpers` feature only).
+    /// Inject a mock STT backend for testing without loading real model files.
     ///
     /// Allows integration tests to drive the pipeline with a canned backend
     /// without loading real model files.
-    #[cfg(any(test, feature = "test-helpers"))]
+    ///
+    /// # Test helper
+    /// This method is intended for unit and integration tests only.
+    /// It is available unconditionally because this crate is `publish = false`
+    /// and integration tests in `tests/` cannot access `#[cfg(test)]`-gated items.
+    #[doc(hidden)]
     pub fn inject_stt(&mut self, stt: Box<dyn SttBackend>) {
         self.stt = Some(stt);
     }
 
-    /// Inject a mock TTS backend (available with the `test-helpers` feature only).
-    #[cfg(any(test, feature = "test-helpers"))]
+    /// Inject a mock TTS backend for testing without loading real model files.
+    ///
+    /// # Test helper
+    #[doc(hidden)]
     pub fn inject_tts(&mut self, tts: Box<dyn TtsBackend>) {
         self.tts = Some(tts);
     }
@@ -734,7 +741,9 @@ impl VoicePipeline {
     /// Used by tests that need `is_active() == true` to exercise guards that
     /// require an active pipeline (e.g. `ptt_start`), but only test state
     /// transitions — not actual audio I/O.
-    #[cfg(any(test, feature = "test-helpers"))]
+    ///
+    /// # Test helper
+    #[doc(hidden)]
     pub fn set_active_for_test(&mut self) {
         self.is_active.store(true, Ordering::SeqCst);
         self.set_state(VoiceState::Listening);

@@ -51,10 +51,10 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
 
   // ── Downloaded model lists (derived from model catalog) ────────
   const downloadedSttIds = useMemo(
-    () => new Set(voice?.models?.sttDownloaded ?? []),
-    [voice?.models?.sttDownloaded],
+    () => new Set((voice?.models?.sttModels ?? []).filter((m) => m.isDownloaded).map((m) => m.id)),
+    [voice?.models?.sttModels],
   );
-  const ttsDownloaded = voice?.models?.ttsDownloaded ?? false;
+  const ttsDownloaded = voice?.models?.ttsModel?.isDownloaded ?? false;
   const vadDownloaded = voice?.models?.vadDownloaded ?? false;
 
   // If the persisted default points to a model no longer on disk, clear it

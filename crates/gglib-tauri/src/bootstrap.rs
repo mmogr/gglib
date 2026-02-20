@@ -32,6 +32,7 @@ use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
+use gglib_voice::VoiceService;
 use tauri::AppHandle;
 
 use crate::event_emitter::TauriEventEmitter;
@@ -93,6 +94,12 @@ pub struct TauriContext {
     /// Optional to support test/bootstrap_early paths.
     /// Production bootstrap MUST pass Some(app_handle) via the main bootstrap() function.
     app_handle: Option<AppHandle>,
+    /// Voice service — shared between `GuiBackend` (HTTP ops) and the remaining
+    /// Tauri audio commands that haven't been migrated to HTTP yet.
+    ///
+    /// The inner `Arc<RwLock<Option<VoicePipeline>>>` is shared via
+    /// `VoiceService::pipeline()` so both layers always see the same pipeline.
+    pub voice_service: Arc<VoiceService>,
 }
 
 impl TauriContext {
@@ -167,6 +174,7 @@ impl TauriContext {
             self.model_repo.clone(),
             system_probe,
             gguf_parser,
+            self.voice_service.clone() as Arc<dyn gglib_core::ports::VoicePipelinePort>,
         );
         GuiBackend::new(deps)
     }
@@ -294,10 +302,13 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         hf_client,
         models,
         settings,
-        event_emitter: tauri_emitter,
+        event_emitter: tauri_emitter.clone(),
         proxy_supervisor,
         model_repo,
         app_handle: Some(app_handle),
+        voice_service: Arc::new(VoiceService::new(
+            tauri_emitter as Arc<dyn gglib_core::ports::AppEventEmitter>,
+        )),
     })
 }
 
@@ -335,6 +346,7 @@ pub fn bootstrap_with(
         proxy_supervisor,
         model_repo,
         app_handle,
+        voice_service: Arc::new(VoiceService::new(Arc::new(NoopEmitter))),
     }
 }
 
@@ -446,6 +458,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         proxy_supervisor,
         model_repo,
         app_handle: None,
+        voice_service: Arc::new(VoiceService::new(Arc::new(NoopEmitter))),
     })
 }
 /// Adapter to implement DownloadTriggerPort for DownloadManagerPort.

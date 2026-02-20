@@ -15,6 +15,7 @@ pub mod gate;
 pub mod models;
 pub mod pipeline;
 pub mod playback;
+pub mod service;
 pub mod stt;
 pub mod text_utils;
 pub mod tts;
@@ -26,6 +27,7 @@ pub use gate::EchoGate;
 pub use models::VadModelInfo;
 pub use models::{SttModelInfo, TtsModelInfo, VoiceModelCatalog, VoiceModelId};
 pub use pipeline::{VoiceEvent, VoicePipeline, VoicePipelineConfig, VoiceState};
+pub use service::VoiceService;
 
 // Re-export backend trait types at crate root for ergonomic imports
 pub use backend::{SttBackend, SttConfig, TtsAudio, TtsBackend, TtsConfig, VoiceGender, VoiceInfo};

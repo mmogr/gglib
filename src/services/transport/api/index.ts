@@ -12,6 +12,7 @@ import * as downloads from './downloads';
 import * as mcp from './mcp';
 import * as chat from './chat';
 import * as verification from './verification';
+import * as voice from './voice';
 
 /**
  * Create unified API transport.
@@ -28,5 +29,6 @@ export function createApiTransport() {
     ...mcp,
     ...chat,
     ...verification,
+    ...voice,
   };
 }

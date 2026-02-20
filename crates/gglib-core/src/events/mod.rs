@@ -206,6 +206,27 @@ pub enum AppEvent {
         /// User-safe error information.
         error: McpErrorInfo,
     },
+
+    // ========== Voice Events ==========
+    /// Download progress for a voice model (STT / TTS / VAD).
+    ///
+    /// Emitted by `VoiceService` during `download_stt_model`,
+    /// `download_tts_model`, and `download_vad_model` calls so that
+    /// SSE subscribers receive live progress without Tauri's `app.emit()`.
+    VoiceModelDownloadProgress {
+        /// Identifier of the model being downloaded (e.g. `"base.en"`).
+        #[serde(rename = "modelId")]
+        model_id: String,
+        /// Bytes downloaded so far.
+        #[serde(rename = "bytesDownloaded")]
+        bytes_downloaded: u64,
+        /// Total bytes to download (`0` if the server did not send
+        /// `Content-Length`).
+        #[serde(rename = "totalBytes")]
+        total_bytes: u64,
+        /// Progress percentage (`0.0`–`100.0`; `0.0` when total is unknown).
+        percent: f64,
+    },
 }
 
 impl AppEvent {
@@ -230,6 +251,7 @@ impl AppEvent {
             Self::McpServerStarted { .. } => "mcp:started",
             Self::McpServerStopped { .. } => "mcp:stopped",
             Self::McpServerError { .. } => "mcp:error",
+            Self::VoiceModelDownloadProgress { .. } => "voice:model-download-progress",
         }
     }
 }

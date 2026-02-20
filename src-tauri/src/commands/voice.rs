@@ -1,20 +1,18 @@
 //! Voice mode Tauri commands.
 //!
-//! OS-specific commands for voice mode — microphone access, audio playback,
-//! and voice pipeline management require native OS APIs that cannot go
-//! through the HTTP transport.
+//! Retains only the 6 audio I/O commands that require direct OS audio hardware
+//! access.  The 13 data/config operations (status, model listing/download/load,
+//! configuration, device listing) are now served by the Axum HTTP API — see
+//! `crates/gglib-axum/src/handlers/voice.rs`.
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tracing::{error, info};
 
-use gglib_voice::capture::AudioDeviceInfo;
-use gglib_voice::models::{self, SttModelInfo, TtsModelInfo, VoiceModelCatalog};
+use gglib_voice::models::VoiceModelCatalog;
 use gglib_voice::pipeline::{
     VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
 };
-use gglib_voice::tts::TtsEngine;
-use gglib_voice::tts::VoiceInfo;
 
 use crate::app::state::AppState;
 
@@ -27,7 +25,6 @@ pub mod event_names {
     pub const VOICE_SPEAKING_FINISHED: &str = "voice:speaking-finished";
     pub const VOICE_AUDIO_LEVEL: &str = "voice:audio-level";
     pub const VOICE_ERROR: &str = "voice:error";
-    pub const VOICE_MODEL_DOWNLOAD_PROGRESS: &str = "voice:model-download-progress";
 }
 
 // ── Event payloads ─────────────────────────────────────────────────
@@ -57,41 +54,6 @@ pub struct VoiceErrorPayload {
     pub message: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelDownloadProgressPayload {
-    pub model_id: String,
-    pub bytes_downloaded: u64,
-    pub total_bytes: u64,
-    pub percent: f64,
-}
-
-// ── Status / info types ────────────────────────────────────────────
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VoiceStatusResponse {
-    pub is_active: bool,
-    pub state: String,
-    pub mode: String,
-    pub stt_loaded: bool,
-    pub tts_loaded: bool,
-    pub stt_model_id: Option<String>,
-    pub tts_voice: Option<String>,
-    pub auto_speak: bool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VoiceModelsResponse {
-    pub stt_models: Vec<SttModelInfo>,
-    pub stt_downloaded: Vec<String>,
-    pub tts_model: TtsModelInfo,
-    pub tts_downloaded: bool,
-    pub voices: Vec<VoiceInfo>,
-    pub vad_downloaded: bool,
-}
-
 // ── Helper ─────────────────────────────────────────────────────────
 
 fn emit_or_log<T: Serialize + Clone>(app: &AppHandle, event: &str, payload: T) {
@@ -109,14 +71,6 @@ fn voice_state_string(state: VoiceState) -> String {
         VoiceState::Thinking => "thinking",
         VoiceState::Speaking => "speaking",
         VoiceState::Error => "error",
-    }
-    .to_string()
-}
-
-fn mode_string(mode: VoiceInteractionMode) -> String {
-    match mode {
-        VoiceInteractionMode::PushToTalk => "ptt",
-        VoiceInteractionMode::VoiceActivityDetection => "vad",
     }
     .to_string()
 }
@@ -190,7 +144,8 @@ pub async fn voice_start(
         _ => VoiceInteractionMode::PushToTalk,
     };
 
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
 
     if let Some(ref mut pipeline) = *voice {
         // Pipeline already exists (models may be preloaded) — just start audio
@@ -232,7 +187,8 @@ pub async fn voice_start(
 /// To also free the model memory, call [`voice_unload`] instead.
 #[tauri::command]
 pub async fn voice_stop(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.stop();
     }
@@ -242,64 +198,13 @@ pub async fn voice_stop(state: tauri::State<'_, AppState>) -> Result<(), String>
     Ok(())
 }
 
-/// Fully unload the voice pipeline, freeing all model memory (STT + TTS weights).
-///
-/// Use this for explicit "unload" actions (e.g. switching models, low-memory
-/// situations, or app shutdown). After this call [`voice_status`] will report
-/// `sttLoaded: false` and `ttsLoaded: false`.
-///
-/// For simply pausing voice mode while keeping models warm, use [`voice_stop`].
-#[tauri::command]
-pub async fn voice_unload(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
-    if let Some(ref mut pipeline) = *voice {
-        // Ensure audio is stopped and mic released before dropping.
-        if pipeline.is_active() {
-            pipeline.stop();
-        }
-    }
-    *voice = None;
-
-    info!("Voice pipeline unloaded (models freed)");
-    Ok(())
-}
-
-/// Get current voice pipeline status.
-#[tauri::command]
-pub async fn voice_status(
-    state: tauri::State<'_, AppState>,
-) -> Result<VoiceStatusResponse, String> {
-    let voice = state.voice_pipeline.read().await;
-    match voice.as_ref() {
-        Some(pipeline) => Ok(VoiceStatusResponse {
-            is_active: pipeline.is_active(),
-            state: voice_state_string(pipeline.state()),
-            mode: mode_string(pipeline.mode()),
-            stt_loaded: pipeline.is_stt_loaded(),
-            tts_loaded: pipeline.is_tts_loaded(),
-            stt_model_id: pipeline.stt_model_id().map(str::to_owned),
-            tts_voice: Some(pipeline.tts_voice().to_owned()),
-            auto_speak: pipeline.auto_speak(),
-        }),
-        None => Ok(VoiceStatusResponse {
-            is_active: false,
-            state: "idle".to_string(),
-            mode: "ptt".to_string(),
-            stt_loaded: false,
-            tts_loaded: false,
-            stt_model_id: None,
-            tts_voice: None,
-            auto_speak: true,
-        }),
-    }
-}
-
 // ── Commands: Push-to-Talk ─────────────────────────────────────────
 
 /// Begin PTT recording (user pressed talk button).
 #[tauri::command]
 pub async fn voice_ptt_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
     pipeline.ptt_start().map_err(|e| format!("{e}"))
 }
@@ -309,7 +214,8 @@ pub async fn voice_ptt_start(state: tauri::State<'_, AppState>) -> Result<(), St
 /// Returns the transcribed text.
 #[tauri::command]
 pub async fn voice_ptt_stop(state: tauri::State<'_, AppState>) -> Result<String, String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
     pipeline.ptt_stop().await.map_err(|e| format!("{e}"))
 }
@@ -319,7 +225,8 @@ pub async fn voice_ptt_stop(state: tauri::State<'_, AppState>) -> Result<String,
 /// Speak text through TTS.
 #[tauri::command]
 pub async fn voice_speak(text: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     let pipeline = voice.as_mut().ok_or("Voice pipeline not active")?;
     pipeline.speak(&text).await.map_err(|e| format!("{e}"))
 }
@@ -327,261 +234,10 @@ pub async fn voice_speak(text: String, state: tauri::State<'_, AppState>) -> Res
 /// Stop active TTS playback.
 #[tauri::command]
 pub async fn voice_stop_speaking(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
+    let _pipeline = state.voice_service.pipeline();
+    let mut voice = _pipeline.write().await;
     if let Some(ref mut pipeline) = *voice {
         pipeline.stop_speaking();
     }
     Ok(())
-}
-
-// ── Commands: Model management ─────────────────────────────────────
-
-/// List available voice models and their download status.
-#[tauri::command]
-pub async fn voice_list_models() -> Result<VoiceModelsResponse, String> {
-    let stt_models = VoiceModelCatalog::stt_models();
-    let downloaded = VoiceModelCatalog::downloaded_stt_models().map_err(|e| format!("{e}"))?;
-    let downloaded_ids: Vec<String> = downloaded.iter().map(|m| m.id.0.clone()).collect();
-
-    let tts_model = VoiceModelCatalog::tts_model();
-    let tts_downloaded = VoiceModelCatalog::is_tts_downloaded().unwrap_or(false);
-
-    let voices = TtsEngine::available_voices();
-
-    Ok(VoiceModelsResponse {
-        stt_models,
-        stt_downloaded: downloaded_ids,
-        tts_model,
-        tts_downloaded,
-        voices,
-        vad_downloaded: VoiceModelCatalog::is_vad_downloaded().unwrap_or(false),
-    })
-}
-
-/// Download an STT model.
-#[tauri::command]
-pub async fn voice_download_stt_model(model_id: String, app: AppHandle) -> Result<(), String> {
-    let model_id_clone = model_id.clone();
-    let app_clone = app.clone();
-
-    let path = models::ensure_stt_model(&model_id, move |downloaded, total| {
-        let percent = if total > 0 {
-            (downloaded as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
-        emit_or_log(
-            &app_clone,
-            event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
-            ModelDownloadProgressPayload {
-                model_id: model_id_clone.clone(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            },
-        );
-    })
-    .await
-    .map_err(|e| format!("{e}"))?;
-
-    info!(model_id = %model_id, path = %path.display(), "STT model downloaded");
-    Ok(())
-}
-
-/// Download the TTS model.
-#[tauri::command]
-pub async fn voice_download_tts_model(app: AppHandle) -> Result<(), String> {
-    let tts_model = VoiceModelCatalog::tts_model();
-    let model_id = tts_model.id.0.clone();
-    let app_clone = app.clone();
-
-    let model_id_clone = model_id.clone();
-    let path = models::ensure_tts_model(move |downloaded, total| {
-        let percent = if total > 0 {
-            (downloaded as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
-        emit_or_log(
-            &app_clone,
-            event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
-            ModelDownloadProgressPayload {
-                model_id: model_id_clone.clone(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            },
-        );
-    })
-    .await
-    .map_err(|e| format!("{e}"))?;
-
-    info!(model_id = %model_id, path = %path.display(), "TTS model downloaded");
-
-    Ok(())
-}
-
-/// Download the VAD model (Silero).
-#[tauri::command]
-pub async fn voice_download_vad_model(app: AppHandle) -> Result<(), String> {
-    let app_clone = app.clone();
-
-    let path = models::ensure_vad_model(move |downloaded, total| {
-        let percent = if total > 0 {
-            (downloaded as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
-        emit_or_log(
-            &app_clone,
-            event_names::VOICE_MODEL_DOWNLOAD_PROGRESS,
-            ModelDownloadProgressPayload {
-                model_id: "silero-vad".to_string(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            },
-        );
-    })
-    .await
-    .map_err(|e| format!("{e}"))?;
-
-    info!(path = %path.display(), "VAD model downloaded");
-    Ok(())
-}
-
-/// Load an STT model into the pipeline (auto-creates an idle pipeline if needed).
-///
-/// If the pipeline is currently active (mic open / transcribing), it is
-/// automatically paused first to prevent a hot-swap race with an in-flight
-/// transcription. Audio resources are released and the pipeline can be
-/// restarted with [`voice_start`] after loading completes.
-#[tauri::command]
-pub async fn voice_load_stt(
-    model_id: String,
-    app: AppHandle,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    // Resolve catalog metadata and path *before* acquiring the write lock,
-    // so we hold the lock for as short a time as possible.
-    let model = VoiceModelCatalog::find_stt_model(&model_id)
-        .ok_or_else(|| format!("Unknown STT model: {model_id}"))?;
-
-    let path = VoiceModelCatalog::stt_model_path(&model).map_err(|e| format!("{e}"))?;
-
-    if !path.exists() {
-        return Err(format!("STT model not downloaded: {model_id}"));
-    }
-
-    let mut voice = state.voice_pipeline.write().await;
-    if voice.is_none() {
-        let config = VoicePipelineConfig::default();
-        let (pipeline, event_rx) = VoicePipeline::new(config);
-        spawn_event_forwarder(app, event_rx);
-        *voice = Some(pipeline);
-        info!("Created idle voice pipeline for model preloading");
-    }
-    let pipeline = voice.as_mut().unwrap();
-
-    // Safety: pause the pipeline before swapping the STT engine.
-    // ptt_stop / vad_process_frame hold this same write lock during transcription,
-    // so the lock itself serialises access — but an explicit stop here ensures
-    // the audio thread is also quiesced and the mic is released.
-    if pipeline.is_active() {
-        info!(model_id = %model_id, "Pausing active pipeline before STT model hot-swap");
-        pipeline.stop();
-    }
-
-    pipeline
-        .load_stt(&path, &model_id)
-        .map_err(|e| format!("{e}"))
-}
-
-/// Load the TTS model into the pipeline (auto-creates an idle pipeline if needed).
-#[tauri::command]
-pub async fn voice_load_tts(
-    app: AppHandle,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let tts_dir = VoiceModelCatalog::tts_model_path().map_err(|e| format!("{e}"))?;
-
-    if !tts_dir.exists() {
-        return Err("TTS model not downloaded".to_string());
-    }
-
-    let mut voice = state.voice_pipeline.write().await;
-    if voice.is_none() {
-        let config = VoicePipelineConfig::default();
-        let (pipeline, event_rx) = VoicePipeline::new(config);
-        spawn_event_forwarder(app, event_rx);
-        *voice = Some(pipeline);
-        info!("Created idle voice pipeline for model preloading");
-    }
-    let pipeline = voice.as_mut().unwrap();
-    pipeline
-        .load_tts(&tts_dir)
-        .await
-        .map_err(|e| format!("{e}"))
-}
-
-// ── Commands: Configuration ────────────────────────────────────────
-
-/// Set the interaction mode (PTT or VAD).
-#[tauri::command]
-pub async fn voice_set_mode(mode: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let interaction_mode = match mode.as_str() {
-        "vad" => VoiceInteractionMode::VoiceActivityDetection,
-        "ptt" => VoiceInteractionMode::PushToTalk,
-        _ => return Err(format!("Unknown voice mode: {mode}")),
-    };
-
-    let mut voice = state.voice_pipeline.write().await;
-    if let Some(ref mut pipeline) = *voice {
-        pipeline.set_mode(interaction_mode);
-    }
-    Ok(())
-}
-
-/// Set the TTS voice.
-#[tauri::command]
-pub async fn voice_set_voice(
-    voice_id: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
-    if let Some(ref mut pipeline) = *voice {
-        pipeline.set_voice(&voice_id);
-    }
-    Ok(())
-}
-
-/// Set the TTS playback speed.
-#[tauri::command]
-pub async fn voice_set_speed(speed: f32, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
-    if let Some(ref mut pipeline) = *voice {
-        pipeline.set_speed(speed);
-    }
-    Ok(())
-}
-
-/// Set whether LLM responses are automatically spoken.
-#[tauri::command]
-pub async fn voice_set_auto_speak(
-    auto_speak: bool,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let mut voice = state.voice_pipeline.write().await;
-    if let Some(ref mut pipeline) = *voice {
-        pipeline.set_auto_speak(auto_speak);
-    }
-    Ok(())
-}
-
-// ── Commands: Device enumeration ───────────────────────────────────
-
-/// List available audio input devices.
-#[tauri::command]
-pub fn voice_list_devices() -> Result<Vec<AudioDeviceInfo>, String> {
-    gglib_voice::capture::AudioCapture::list_devices().map_err(|e| format!("{e}"))
 }

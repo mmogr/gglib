@@ -81,6 +81,29 @@ impl std::error::Error for GuiError {}
 // Conversions from core errors
 // ============================================================================
 
+impl From<gglib_core::ports::VoicePortError> for GuiError {
+    fn from(err: gglib_core::ports::VoicePortError) -> Self {
+        use gglib_core::ports::VoicePortError;
+        match err {
+            VoicePortError::NotFound(msg) => Self::NotFound {
+                entity: "voice",
+                id: msg,
+            },
+            VoicePortError::AlreadyActive => {
+                Self::Conflict("voice pipeline already active".to_string())
+            }
+            VoicePortError::NotInitialised => {
+                Self::Unavailable("voice pipeline not initialised".to_string())
+            }
+            VoicePortError::LoadError(msg) => Self::Internal(format!("voice load error: {msg}")),
+            VoicePortError::DownloadError(msg) => {
+                Self::Internal(format!("voice download error: {msg}"))
+            }
+            VoicePortError::Internal(msg) => Self::Internal(msg),
+        }
+    }
+}
+
 impl From<gglib_core::download::DownloadError> for GuiError {
     fn from(err: gglib_core::download::DownloadError) -> Self {
         use gglib_core::download::DownloadError;
