@@ -336,12 +336,11 @@ fn build_project(build_dir: &Path, acceleration: Acceleration) -> Result<()> {
 /// Respects `CMAKE_BUILD_PARALLEL_LEVEL` environment variable as an override.
 fn build_parallelism(acceleration: Acceleration) -> usize {
     // Allow explicit override via environment variable
-    if let Ok(val) = std::env::var("CMAKE_BUILD_PARALLEL_LEVEL") {
-        if let Ok(n) = val.parse::<usize>() {
-            if n > 0 {
-                return n;
-            }
-        }
+    if let Ok(val) = std::env::var("CMAKE_BUILD_PARALLEL_LEVEL")
+        && let Ok(n) = val.parse::<usize>()
+        && n > 0
+    {
+        return n;
     }
 
     let cores = get_num_cores();

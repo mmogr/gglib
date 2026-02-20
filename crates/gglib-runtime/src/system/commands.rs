@@ -146,21 +146,19 @@ pub fn get_pkgconfig_version() -> Option<String> {
 /// Tries `python3` first, then `python` (checking it's Python 3).
 pub fn get_python3_version() -> Option<String> {
     // Try python3 first
-    if let Some(output) = get_command_version("python3", "--version") {
+    if let Some(output) = get_command_version("python3", "--version")
         // "Python 3.12.1" -> "3.12.1"
-        if let Some(version) = output.split_whitespace().nth(1) {
-            if version.starts_with('3') {
-                return Some(version.to_string());
-            }
-        }
+        && let Some(version) = output.split_whitespace().nth(1)
+        && version.starts_with('3')
+    {
+        return Some(version.to_string());
     }
     // Fallback to python (might be python3 on some systems)
-    if let Some(output) = get_command_version("python", "--version") {
-        if let Some(version) = output.split_whitespace().nth(1) {
-            if version.starts_with('3') {
-                return Some(version.to_string());
-            }
-        }
+    if let Some(output) = get_command_version("python", "--version")
+        && let Some(version) = output.split_whitespace().nth(1)
+        && version.starts_with('3')
+    {
+        return Some(version.to_string());
     }
     None
 }
