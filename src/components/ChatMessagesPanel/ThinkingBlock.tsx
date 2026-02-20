@@ -125,7 +125,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
         </span>
         <span className="text-[1rem] shrink-0">💭</span>
         <span className="text-[0.8125rem] font-medium text-[#8b949e]">{getLabel()}</span>
-        {isStreaming && <span className="w-[12px] h-[12px] border-2 border-[#8b949e] border-t-transparent rounded-full animate-thinking-spin ml-auto shrink-0" />}
+        {isStreaming && <span className="w-[12px] h-[12px] border-2 border-[#8b949e] border-t-transparent rounded-full animate-spin-360 ml-auto shrink-0" />}
       </div>
       
       <div className={cn('max-h-0 overflow-hidden transition-[max-height] duration-[0.25s] ease-out', isExpanded && 'max-h-[500px] overflow-y-auto scrollbar-thin')}>

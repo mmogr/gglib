@@ -151,10 +151,7 @@
   --animate-slide-down: slide-down 0.2s ease-out;
   --animate-indeterminate: indeterminate 1.5s infinite ease-in-out;
   --animate-blink: blink 1s ease-in-out infinite;
-  --animate-thinking-spin: thinking-spin 0.8s linear infinite;
-  --animate-voice-spin: voice-spin 1s linear infinite;
-  --animate-icon-btn-spin: icon-btn-spin 0.8s linear infinite;
-  --animate-chat-action-spin: chat-action-spin 0.7s linear infinite;
+  --animate-spin-360: spin-360 0.8s linear infinite;
   --animate-research-pulse: research-pulse 1.5s ease-in-out infinite;
 }
 
@@ -273,25 +270,7 @@
   }
 }
 
-@keyframes thinking-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes voice-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes icon-btn-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes chat-action-spin {
+@keyframes spin-360 {
   to {
     transform: rotate(360deg);
   }

@@ -101,7 +101,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-2xl gap-base min-h-[200px]">
-        <div className="w-[40px] h-[40px] border-[3px] border-border border-t-primary rounded-full animate-icon-btn-spin" aria-hidden />
+        <div className="w-[40px] h-[40px] border-[3px] border-border border-t-primary rounded-full animate-spin-360" aria-hidden />
         <p className="text-text-secondary text-sm">Loading current settings…</p>
       </div>
     );

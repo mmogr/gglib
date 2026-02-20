@@ -160,7 +160,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {/* TTS generating indicator */}
       {isTtsGenerating && !isSpeaking && (
         <span className="flex items-center gap-1.5 text-xs text-[var(--color-accent,#89b4fa)] whitespace-nowrap">
-          <span className="inline-block w-3 h-3 border-2 border-border border-t-[var(--color-accent,#89b4fa)] rounded-full animate-voice-spin shrink-0" />
+          <span className="inline-block w-3 h-3 border-2 border-border border-t-[var(--color-accent,#89b4fa)] rounded-full animate-spin-360 shrink-0" />
           Generating speech…
         </span>
       )}
@@ -168,7 +168,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {/* Models auto-loading indicator (animated) */}
       {showAutoLoading && (
         <span className="flex items-center gap-1.5 text-xs text-[var(--color-accent,#89b4fa)] whitespace-nowrap">
-          <span className="inline-block w-3 h-3 border-2 border-border border-t-[var(--color-accent,#89b4fa)] rounded-full animate-voice-spin shrink-0" />
+          <span className="inline-block w-3 h-3 border-2 border-border border-t-[var(--color-accent,#89b4fa)] rounded-full animate-spin-360 shrink-0" />
           Loading models…
         </span>
       )}

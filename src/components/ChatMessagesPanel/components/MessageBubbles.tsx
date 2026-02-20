@@ -101,7 +101,7 @@ const SpeakButton: React.FC<{ message: ReturnType<typeof useMessage> }> = ({ mes
       <Icon
         icon={voiceCtx.isTtsGenerating ? Loader2 : Volume2}
         size={14}
-        className={voiceCtx.isTtsGenerating ? 'animate-chat-action-spin' : undefined}
+        className={voiceCtx.isTtsGenerating ? 'animate-spin-360' : undefined}
       />
     </button>
   );

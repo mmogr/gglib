@@ -152,7 +152,7 @@ export const GenericToolUI = makeAssistantToolUI<
           {/* Show spinner when running */}
           {status.type === 'running' && (
             <div className="flex items-center gap-2 py-2 text-text-secondary">
-              <span className="w-4 h-4 border-2 border-border border-t-primary rounded-full animate-thinking-spin"></span>
+              <span className="w-4 h-4 border-2 border-border border-t-primary rounded-full animate-spin-360"></span>
               <span>Executing...</span>
             </div>
           )}
@@ -233,7 +233,7 @@ export const TimeToolUI = makeAssistantToolUI<
           {/* Show spinner when running */}
           {status.type === 'running' && (
             <div className="flex items-center gap-2 py-2 text-text-secondary">
-              <span className="w-4 h-4 border-2 border-border border-t-primary rounded-full animate-thinking-spin"></span>
+              <span className="w-4 h-4 border-2 border-border border-t-primary rounded-full animate-spin-360"></span>
               <span>Fetching time...</span>
             </div>
           )}
