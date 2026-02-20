@@ -15,6 +15,7 @@ pub mod gate;
 pub mod models;
 pub mod pipeline;
 pub mod playback;
+pub mod service;
 pub mod stt;
 pub mod text_utils;
 pub mod tts;
@@ -22,6 +23,7 @@ pub mod vad;
 
 // Re-export key types for convenience
 pub use error::VoiceError;
+pub use service::VoiceService;
 pub use gate::EchoGate;
 pub use models::VadModelInfo;
 pub use models::{SttModelInfo, TtsModelInfo, VoiceModelCatalog, VoiceModelId};
