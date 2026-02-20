@@ -251,7 +251,7 @@ impl AppEvent {
             Self::McpServerStarted { .. } => "mcp:started",
             Self::McpServerStopped { .. } => "mcp:stopped",
             Self::McpServerError { .. } => "mcp:error",
-            Self::VoiceModelDownloadProgress { .. } => "voice:model_download_progress",
+            Self::VoiceModelDownloadProgress { .. } => "voice:model-download-progress",
         }
     }
 }
