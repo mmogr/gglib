@@ -593,7 +593,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
               <Icon icon={Sparkles} size={14} />
             )}
           </Button>
-          <span className={cn('text-xs py-xs px-sm rounded-full bg-background text-text-muted shrink-0', isThreadRunning && 'bg-primary-alpha text-primary animate-research-pulse')}>
+          <span className={cn('text-xs py-xs px-sm rounded-full bg-background text-text-muted shrink-0', isThreadRunning && 'bg-primary/10 text-primary animate-research-pulse')}>
             {isThreadRunning ? 'Responding…' : 'Idle'}
           </span>
         </div>
@@ -695,7 +695,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         </section>
 
         {/* Error banner */}
-        {chatError && <div className="py-sm px-md bg-danger-alpha border border-danger rounded-sm text-danger text-sm shrink-0">{chatError}</div>}
+        {chatError && <div className="py-sm px-md bg-danger/10 border border-danger rounded-sm text-danger text-sm shrink-0">{chatError}</div>}
 
         {/* Server stopped banner */}
         {!isServerConnected && (

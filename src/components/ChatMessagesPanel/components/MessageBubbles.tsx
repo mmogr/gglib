@@ -233,7 +233,7 @@ export const UserMessageBubble: React.FC = () => {
   };
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base ml-xl bg-primary-alpha border border-primary max-tablet:ml-0">
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base ml-xl bg-primary/10 border border-primary max-tablet:ml-0">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
           <Icon icon={isVoice ? Mic : UserIcon} size={18} />
@@ -285,7 +285,7 @@ export const EditComposer: React.FC = () => {
   }).format(message.createdAt ?? new Date());
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md ml-xl bg-primary-alpha border-2 border-primary max-tablet:ml-0">
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md ml-xl bg-primary/10 border-2 border-primary max-tablet:ml-0">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
           <Icon icon={UserIcon} size={18} />

@@ -115,7 +115,7 @@ const ServerList: FC<ServerListProps> = ({
               </Button>
             </div>
             {expandedServerId === server.modelId && onSelectModel && (
-              <div className="border-t border-border bg-background-alt">
+              <div className="border-t border-border bg-background-secondary">
                 <SidebarTabs<ChatPageTabId>
                   tabs={CHAT_PAGE_TABS}
                   activeTab="chat"

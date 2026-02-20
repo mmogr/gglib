@@ -127,7 +127,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
                 type="button"
                 className={cn(
                   "group/item flex justify-between items-center py-md px-base border border-border rounded-base bg-transparent text-inherit text-left cursor-pointer transition-all duration-200 hover:border-primary hover:bg-background-hover",
-                  conversation.id === activeConversationId && "border-primary bg-primary-alpha"
+                  conversation.id === activeConversationId && "border-primary bg-primary/10"
                 )}
                 onClick={() => onSelectConversation(conversation.id)}
               >
@@ -139,7 +139,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
                 </div>
                 <button
                   type="button"
-                  className="opacity-0 group-hover/item:opacity-100 border-0 bg-transparent text-text-muted cursor-pointer p-xs rounded-sm transition-all duration-200 shrink-0 hover:bg-danger-alpha hover:text-danger"
+                  className="opacity-0 group-hover/item:opacity-100 border-0 bg-transparent text-text-muted cursor-pointer p-xs rounded-sm transition-all duration-200 shrink-0 hover:bg-danger/10 hover:text-danger"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteConversation(conversation.id);

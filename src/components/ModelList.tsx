@@ -208,9 +208,9 @@ const ModelList: FC<ModelListProps> = ({
 
   if (error) {
     return (
-      <div className="error-container">
+      <div className="flex flex-col items-center justify-center p-xl gap-md">
         <p className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-md p-base text-danger flex items-start gap-sm">Error: {error}</p>
-        <button onClick={onRefresh} className="retry-button">
+        <button onClick={onRefresh} className="px-md py-sm bg-transparent border border-border rounded-base text-text cursor-pointer text-sm hover:border-primary transition-colors duration-200">
           Retry
         </button>
       </div>
