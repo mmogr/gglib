@@ -49,16 +49,12 @@ pub struct SetAutoSpeakRequest {
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
 /// `GET /api/voice/status`
-pub async fn status(
-    State(state): State<AppState>,
-) -> Result<Json<VoiceStatusDto>, HttpError> {
+pub async fn status(State(state): State<AppState>) -> Result<Json<VoiceStatusDto>, HttpError> {
     Ok(Json(state.gui.voice_status().await?))
 }
 
 /// `GET /api/voice/models`
-pub async fn list_models(
-    State(state): State<AppState>,
-) -> Result<Json<VoiceModelsDto>, HttpError> {
+pub async fn list_models(State(state): State<AppState>) -> Result<Json<VoiceModelsDto>, HttpError> {
     Ok(Json(state.gui.voice_list_models().await?))
 }
 
@@ -72,17 +68,13 @@ pub async fn download_stt_model(
 }
 
 /// `POST /api/voice/models/tts/download`
-pub async fn download_tts_model(
-    State(state): State<AppState>,
-) -> Result<Json<()>, HttpError> {
+pub async fn download_tts_model(State(state): State<AppState>) -> Result<Json<()>, HttpError> {
     state.gui.voice_download_tts_model().await?;
     Ok(Json(()))
 }
 
 /// `POST /api/voice/models/vad/download`
-pub async fn download_vad_model(
-    State(state): State<AppState>,
-) -> Result<Json<()>, HttpError> {
+pub async fn download_vad_model(State(state): State<AppState>) -> Result<Json<()>, HttpError> {
     state.gui.voice_download_vad_model().await?;
     Ok(Json(()))
 }
@@ -97,9 +89,7 @@ pub async fn load_stt(
 }
 
 /// `POST /api/voice/tts/load`
-pub async fn load_tts(
-    State(state): State<AppState>,
-) -> Result<Json<()>, HttpError> {
+pub async fn load_tts(State(state): State<AppState>) -> Result<Json<()>, HttpError> {
     state.gui.voice_load_tts().await?;
     Ok(Json(()))
 }
@@ -141,9 +131,7 @@ pub async fn set_auto_speak(
 }
 
 /// `POST /api/voice/unload`
-pub async fn unload(
-    State(state): State<AppState>,
-) -> Result<Json<()>, HttpError> {
+pub async fn unload(State(state): State<AppState>) -> Result<Json<()>, HttpError> {
     state.gui.voice_unload().await?;
     Ok(Json(()))
 }

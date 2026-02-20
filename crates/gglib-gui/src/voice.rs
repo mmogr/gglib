@@ -2,9 +2,7 @@
 
 use std::sync::Arc;
 
-use gglib_core::ports::{
-    AudioDeviceDto, VoiceModelsDto, VoicePipelinePort, VoiceStatusDto,
-};
+use gglib_core::ports::{AudioDeviceDto, VoiceModelsDto, VoicePipelinePort, VoiceStatusDto};
 
 use crate::deps::GuiDeps;
 use crate::error::GuiError;
@@ -37,18 +35,21 @@ impl<'a> VoiceOps<'a> {
     }
 
     pub async fn download_tts_model(&self) -> Result<(), GuiError> {
-        self.voice.download_tts_model().await.map_err(GuiError::from)
+        self.voice
+            .download_tts_model()
+            .await
+            .map_err(GuiError::from)
     }
 
     pub async fn download_vad_model(&self) -> Result<(), GuiError> {
-        self.voice.download_vad_model().await.map_err(GuiError::from)
+        self.voice
+            .download_vad_model()
+            .await
+            .map_err(GuiError::from)
     }
 
     pub async fn load_stt(&self, model_id: &str) -> Result<(), GuiError> {
-        self.voice
-            .load_stt(model_id)
-            .await
-            .map_err(GuiError::from)
+        self.voice.load_stt(model_id).await.map_err(GuiError::from)
     }
 
     pub async fn load_tts(&self) -> Result<(), GuiError> {

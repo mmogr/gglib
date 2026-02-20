@@ -20,8 +20,8 @@ mod models;
 mod proxy;
 mod servers;
 mod settings;
-mod voice;
 pub mod types;
+mod voice;
 
 // Primary exports
 pub use backend::GuiBackend;

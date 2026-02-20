@@ -13,8 +13,8 @@ use crate::models::ModelOps;
 use crate::proxy::ProxyOps;
 use crate::servers::ServerOps;
 use crate::settings::SettingsOps;
-use crate::voice::VoiceOps;
 use crate::types::*;
+use crate::voice::VoiceOps;
 
 use gglib_core::ModelFilterOptions;
 use gglib_core::download::QueueSnapshot;

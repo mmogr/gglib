@@ -221,10 +221,9 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // 9a. Voice service — implements VoicePipelinePort for the 13 data/config ops.
     // Shares the SSE broadcaster as its event emitter so download progress
     // events reach SSE subscribers without any Tauri dependency.
-    let voice_service: Arc<dyn gglib_core::ports::VoicePipelinePort> =
-        Arc::new(VoiceService::new(
-            sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>,
-        ));
+    let voice_service: Arc<dyn gglib_core::ports::VoicePipelinePort> = Arc::new(VoiceService::new(
+        sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>,
+    ));
 
     let deps = GuiDeps::new(
         Arc::clone(&core),

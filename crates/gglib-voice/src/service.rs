@@ -359,7 +359,9 @@ impl VoicePipelinePort for VoiceService {
     async fn load_tts(&self) -> Result<(), VoicePortError> {
         let tts_dir = VoiceModelCatalog::tts_model_path().map_err(to_port_err)?;
         if !tts_dir.exists() {
-            return Err(VoicePortError::NotFound("TTS model not downloaded".to_owned()));
+            return Err(VoicePortError::NotFound(
+                "TTS model not downloaded".to_owned(),
+            ));
         }
 
         let mut guard = self.pipeline.write().await;
