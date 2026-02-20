@@ -17,6 +17,7 @@ import {
 import type { McpServerInfo } from "../services/clients/mcp";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
+import { Stack } from './primitives';
 import { cn } from "../utils/cn";
 
 const statusBadge = "inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full";
@@ -237,7 +238,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
 
             return (
               <div key={id} className="flex justify-between items-start gap-md p-md bg-background-secondary border border-border rounded-base">
-                <div className="flex-1 min-w-0 flex flex-col gap-xs">
+                <Stack gap="xs" className="flex-1 min-w-0">
                   <div className="flex items-center gap-sm">
                     <span className="font-semibold text-text">{info.server.name}</span>
                     {getStatusBadge(info)}
@@ -287,7 +288,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       {getServerErrorMessage(info)}
                     </div>
                   )}
-                </div>
+                </Stack>
                 <div className="flex gap-xs shrink-0">
                   {!info.server.is_valid && info.server.server_type === "stdio" && (
                     <Button

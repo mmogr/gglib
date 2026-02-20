@@ -6,6 +6,7 @@ import { safeStopServer } from "../services/server/safeActions";
 import type { ServerInfo } from "../types";
 import type { ProxyStatus } from "../services/transport/types/proxy";
 import { Icon } from "./ui/Icon";
+import { Stack } from './primitives';
 import { cn } from "../utils/cn";
 
 interface ServerStatusProps {
@@ -73,7 +74,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
           <span className="text-xl leading-none" aria-hidden>
             <Icon icon={RotateCcw} size={16} />
           </span>
-          <div className="flex flex-col gap-xs text-white text-sm">
+          <Stack gap="xs" className="text-white text-sm">
             <strong className="font-semibold">Proxy Active</strong>
             <span className="text-xs opacity-90">
               Port {proxyStatus.port}
@@ -81,7 +82,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
                 <> • {proxyStatus.current_model} on port {proxyStatus.model_port}</>
               )}
             </span>
-          </div>
+          </Stack>
         </div>
       )}
 
@@ -91,10 +92,10 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
           <span className={cn('text-xl leading-none', isServerHealthy(server) && 'animate-pulse')} aria-hidden>
             <Icon icon={Circle} size={14} />
           </span>
-          <div className="flex flex-col gap-xs text-white text-sm">
+          <Stack gap="xs" className="text-white text-sm">
             <strong className="font-semibold">{server.modelName}</strong>
             <span className="text-xs opacity-90">Port {server.port}</span>
-          </div>
+          </Stack>
           {isServerHealthy(server) && onOpenChat && (
             <button
               className="bg-white/20 border-none rounded-base px-sm py-xs cursor-pointer text-base transition-all text-white flex items-center justify-center hover:bg-white/30 hover:-translate-y-px active:translate-y-0"

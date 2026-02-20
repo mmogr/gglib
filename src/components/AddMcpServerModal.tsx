@@ -11,6 +11,7 @@ import { Input } from "./ui/Input";
 import { ServerTemplatePicker, type ServerTemplate } from "./AddMcpServerModal/ServerTemplatePicker";
 import { ServerTypeConfig } from "./AddMcpServerModal/ServerTypeConfig";
 import { EnvVarManager } from "./AddMcpServerModal/EnvVarManager";
+import { Stack } from './primitives';
 
 interface AddMcpServerModalProps {
   isOpen: boolean;
@@ -202,7 +203,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             {!isEditing && <ServerTemplatePicker onSelectTemplate={applyTemplate} />}
 
             {/* Basic Info */}
-            <div className="flex flex-col gap-xs">
+            <Stack gap="xs">
               <label className="text-sm font-semibold text-text" htmlFor="mcp-name">
                 Server Name *
               </label>
@@ -215,7 +216,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 disabled={saving}
                 required
               />
-            </div>
+            </Stack>
 
             <ServerTypeConfig
               serverType={serverType}
@@ -249,7 +250,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             />
 
             {/* Options */}
-            <div className="flex flex-col gap-xs">
+            <Stack gap="xs">
               <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:w-4 [&>input]:h-4 [&>input]:accent-primary">
                 <input
                   type="checkbox"
@@ -268,7 +269,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 />
                 <span>Enabled (tools included in chat)</span>
               </label>
-            </div>
+            </Stack>
 
             {error && (
               <div className="p-md bg-[rgba(239,68,68,0.15)] text-[#ef4444] rounded-base text-sm" role="alert">

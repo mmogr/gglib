@@ -6,6 +6,7 @@ import SidebarTabs from '../ModelLibraryPanel/SidebarTabs';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Stack } from '../primitives';
 import { cn } from '../../utils/cn';
 
 interface ConversationListPanelProps {
@@ -74,10 +75,10 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
         </div>
 
         <div className="flex justify-between items-start gap-md max-mobile:flex-col max-mobile:gap-sm">
-          <div className="flex flex-col gap-xs min-w-0">
+          <Stack gap="xs" className="min-w-0">
             <span className="text-xs uppercase tracking-[1px] text-text-muted">Chatting with</span>
             <h2 className="text-lg font-semibold m-0 text-text overflow-hidden text-ellipsis whitespace-nowrap">{modelName}</h2>
-          </div>
+          </Stack>
           <div className="flex gap-sm items-center shrink-0 max-mobile:w-full max-mobile:justify-between">
             <Button
               variant="primary"
@@ -131,12 +132,12 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
                 )}
                 onClick={() => onSelectConversation(conversation.id)}
               >
-                <div className="flex flex-col gap-xs min-w-0 flex-1">
+                <Stack gap="xs" className="min-w-0 flex-1">
                   <span className="font-medium text-text overflow-hidden text-ellipsis whitespace-nowrap">{conversation.title}</span>
                   <span className="text-sm text-text-muted">
                     {formatRelativeTime(conversation.updated_at)}
                   </span>
-                </div>
+                </Stack>
                 <button
                   type="button"
                   className="opacity-0 group-hover/item:opacity-100 border-0 bg-transparent text-text-muted cursor-pointer p-xs rounded-sm transition-all duration-200 shrink-0 hover:bg-danger/10 hover:text-danger"

@@ -6,6 +6,7 @@ import { useServerState } from '../../services/serverEvents';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
+import { Stack } from '../primitives';
 
 interface ConsoleInfoPanelProps {
   modelId: number;
@@ -175,10 +176,10 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
         </div>
 
         <div className="flex items-start justify-between gap-md">
-          <div className="flex flex-col gap-xs">
+          <Stack gap="xs">
             <span className="text-xs text-text-muted uppercase tracking-[0.05em]">Server running</span>
             <h2 className="m-0 text-lg font-semibold text-text break-words">{modelName}</h2>
-          </div>
+          </Stack>
         </div>
       </div>
 
@@ -187,7 +188,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
           {/* Server Info Section */}
           <section className="flex flex-col gap-sm">
             <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Server Info</h3>
-            <div className="flex flex-col gap-xs">
+            <Stack gap="xs">
               <div className="flex justify-between items-center gap-sm py-xs">
                 <span className="text-sm text-text-muted">Port</span>
                 <span className="text-sm text-text flex items-center gap-xs [&_code]:bg-background [&_code]:py-[2px] [&_code]:px-[6px] [&_code]:rounded-xs [&_code]:font-mono [&_code]:text-xs">
@@ -213,14 +214,14 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
                   <span className="text-sm text-text">{contextLength.toLocaleString()} tokens</span>
                 </div>
               )}
-            </div>
+            </Stack>
           </section>
 
           {/* Context Usage Section */}
           <section className="flex flex-col gap-sm">
             <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Context Usage</h3>
             {contextUsagePercent !== null ? (
-              <div className="flex flex-col gap-xs">
+              <Stack gap="xs">
                 <div className="h-[8px] bg-background rounded-sm overflow-hidden">
                   <div 
                     className={cn(
@@ -238,7 +239,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
                     </span>
                   )}
                 </div>
-              </div>
+              </Stack>
             ) : (
               <p className="text-xs text-text-muted m-0">
                 No usage yet
@@ -250,7 +251,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
           {metrics && (
             <section className="flex flex-col gap-sm">
               <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">Statistics</h3>
-              <div className="flex flex-col gap-xs">
+              <Stack gap="xs">
                 <div className="flex justify-between items-center gap-sm py-xs">
                   <span className="text-sm text-text-muted">Prompt Tokens</span>
                   <span className="text-sm text-text">{metrics.promptTokensTotal.toLocaleString()}</span>
@@ -263,14 +264,14 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
                   <span className="text-sm text-text-muted">Active Requests</span>
                   <span className="text-sm text-text">{metrics.requestsProcessing}</span>
                 </div>
-              </div>
+              </Stack>
             </section>
           )}
 
           {/* API Endpoints Section */}
           <section className="flex flex-col gap-sm">
             <h3 className="m-0 text-sm font-semibold text-text-muted uppercase tracking-[0.05em]">API Endpoints</h3>
-            <div className="flex flex-col gap-xs">
+            <Stack gap="xs">
               <div className="flex flex-col gap-[2px] py-xs px-sm bg-background rounded-sm [&_code]:font-mono [&_code]:text-xs [&_code]:text-text">
                 <code>POST /v1/chat/completions</code>
                 <span className="text-[10px] text-text-muted">OpenAI-compatible chat</span>
@@ -283,7 +284,7 @@ const ConsoleInfoPanel: FC<ConsoleInfoPanelProps> = ({
                 <code>GET /health</code>
                 <span className="text-[10px] text-text-muted">Health check</span>
               </div>
-            </div>
+            </Stack>
           </section>
 
           {/* Stop Server Button */}

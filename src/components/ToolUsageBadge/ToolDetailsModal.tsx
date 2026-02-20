@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
 import { cn } from '../../utils/cn';
+import { Stack } from '../primitives';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
@@ -116,7 +117,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                 <span className="text-[0.85rem] text-text-secondary font-mono">({call.toolName})</span>
               </div>
 
-              <div className="flex flex-col gap-xs">
+              <Stack gap="xs">
                 <div className="flex items-center gap-xs w-full bg-background border border-border rounded-lg py-2 px-3 cursor-pointer transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary" onClick={() => toggleSection(argsId)} role="button" tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -142,9 +143,9 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                   </Button>
                 </div>
                 {argsExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-[0.9rem] leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedArgs}</pre>}
-              </div>
+              </Stack>
 
-              <div className="flex flex-col gap-xs">
+              <Stack gap="xs">
                 <div className="flex items-center gap-xs w-full bg-background border border-border rounded-lg py-2 px-3 cursor-pointer transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary" onClick={() => toggleSection(resultId)} role="button" tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -170,7 +171,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                   </Button>
                 </div>
                 {resultExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-[0.9rem] leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedResult}</pre>}
-              </div>
+              </Stack>
             </div>
           );
         })}

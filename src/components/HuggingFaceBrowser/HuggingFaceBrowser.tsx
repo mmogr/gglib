@@ -7,6 +7,13 @@ import { Select } from "../ui/Select";
 import { Stack, Row, EmptyState } from "../primitives";
 import { cn } from '../../utils/cn';
 
+/** Glass-effect form label */
+const glassLabel = "block text-[0.8rem] font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]";
+/** Glass-effect input override (small) */
+const glassInput = "w-full px-3 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-[6px] text-text text-[0.85rem] transition-all duration-200 ease-linear focus:outline-none focus:border-[rgba(34,211,238,0.5)] focus:bg-[rgba(255,255,255,0.07)] placeholder:text-[#64748b]";
+/** Glass-effect input override (search box) */
+const glassInputLg = "w-full px-[0.9rem] py-[0.6rem] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg text-text text-[0.95rem] transition-all duration-200 ease-linear focus:outline-none focus:border-[rgba(34,211,238,0.5)] focus:bg-[rgba(255,255,255,0.07)] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.1)] placeholder:text-text-muted";
+
 interface HuggingFaceBrowserProps {
   /** Callback when a model is selected (clicked) for preview */
   onSelectModel?: (model: HfModelSummary | null) => void;
@@ -58,15 +65,15 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
   } = useHuggingFaceSearch({ onSelectModel });
 
   return (
-    <Stack gap="base" className="flex flex-col h-full overflow-hidden">
+    <Stack gap="base" className="h-full overflow-hidden">
       {/* Search Section */}
       <Stack gap="sm" className="p-4 bg-[rgba(255,255,255,0.02)] border-b border-[rgba(255,255,255,0.08)]">
-        <Row gap="sm" className="flex gap-3 items-end" align="end">
+        <Row gap="sm" align="end">
           <Stack gap="xs" className="flex-1">
-            <label className="block text-[0.8rem] font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]">Search Models</label>
+            <label className={glassLabel}>Search Models</label>
             <Input
               type="text"
-              className="w-full px-[0.9rem] py-[0.6rem] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg text-text text-[0.95rem] transition-all duration-200 ease-linear focus:outline-none focus:border-[rgba(34,211,238,0.5)] focus:bg-[rgba(255,255,255,0.07)] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.1)] placeholder:text-text-muted"
+              className={glassInputLg}
               variant={searchError ? "error" : "default"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -92,12 +99,12 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
           </button>
         </Row>
 
-        <Row gap="base" className="flex gap-3 mt-3 items-end flex-wrap" wrap>
+        <Row gap="base" className="mt-3" align="end" wrap>
           <Stack gap="xs" className="flex-1 min-w-[120px] max-w-[180px]">
-            <label className="block text-[0.8rem] font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]">Min Params (B)</label>
+            <label className={glassLabel}>Min Params (B)</label>
             <Input
               type="number"
-              className="w-full px-3 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-[6px] text-text text-[0.85rem] transition-all duration-200 ease-linear focus:outline-none focus:border-[rgba(34,211,238,0.5)] focus:bg-[rgba(255,255,255,0.07)] placeholder:text-[#64748b]"
+              className={glassInput}
               value={minParams}
               onChange={(e) => setMinParams(e.target.value)}
               placeholder="e.g. 3"
@@ -106,10 +113,10 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             />
           </Stack>
           <Stack gap="xs" className="flex-1 min-w-[120px] max-w-[180px]">
-            <label className="block text-[0.8rem] font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]">Max Params (B)</label>
+            <label className={glassLabel}>Max Params (B)</label>
             <Input
               type="number"
-              className="w-full px-3 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-[6px] text-text text-[0.85rem] transition-all duration-200 ease-linear focus:outline-none focus:border-[rgba(34,211,238,0.5)] focus:bg-[rgba(255,255,255,0.07)] placeholder:text-[#64748b]"
+              className={glassInput}
               value={maxParams}
               onChange={(e) => setMaxParams(e.target.value)}
               placeholder="e.g. 13"
@@ -118,8 +125,8 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
             />
           </Stack>
           <Stack gap="xs" className="flex-1 min-w-[120px] max-w-[180px]">
-            <label className="block text-[0.8rem] font-medium text-text-secondary mb-[0.35rem] uppercase tracking-[0.03em]">Sort By</label>
-            <Row gap="xs" className="flex gap-1 min-w-0">
+            <label className={glassLabel}>Sort By</label>
+            <Row gap="xs" className="min-w-0">
               <Select
                 className="flex-1 min-w-0 px-3 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-[6px] text-[#f1f5f9] text-[0.85rem] cursor-pointer transition-all duration-200 ease-linear appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns=\x27http://www.w3.org/2000/svg\x27%20width=\x2712\x27%20height=\x2712\x27%20viewBox=\x270%200%2024%2024\x27%20fill=\x27none\x27%20stroke=\x27%2394a3b8\x27%20stroke-width=\x272\x27%3E%3Cpath%20d=\x27M6%209l6%206%206-6\x27/%3E%3C/svg%3E')] bg-no-repeat bg-[right_0.5rem_center] pr-7 focus:outline-none focus:border-[rgba(34,211,238,0.5)] focus:bg-[rgba(255,255,255,0.07)]"
                 value={sortBy}
