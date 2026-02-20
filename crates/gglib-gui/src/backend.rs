@@ -13,6 +13,7 @@ use crate::models::ModelOps;
 use crate::proxy::ProxyOps;
 use crate::servers::ServerOps;
 use crate::settings::SettingsOps;
+use crate::voice::VoiceOps;
 use crate::types::*;
 
 use gglib_core::ModelFilterOptions;
@@ -71,6 +72,10 @@ impl GuiBackend {
             self.deps.proxy_supervisor.clone(),
             self.deps.model_repo.clone(),
         )
+    }
+
+    fn voice_ops(&self) -> VoiceOps<'_> {
+        VoiceOps::new(&self.deps)
     }
 
     // =========================================================================
@@ -456,5 +461,76 @@ impl GuiBackend {
     /// Get the current proxy status.
     pub async fn proxy_status(&self) -> ProxyStatus {
         self.proxy_ops().status().await
+    }
+
+    // =========================================================================
+    // Voice operations (Phase 1: data & config, no audio hardware)
+    // =========================================================================
+
+    /// Get the current voice pipeline status.
+    pub async fn voice_status(&self) -> Result<gglib_core::ports::VoiceStatusDto, GuiError> {
+        self.voice_ops().status().await
+    }
+
+    /// List all voice models with their download status.
+    pub async fn voice_list_models(&self) -> Result<gglib_core::ports::VoiceModelsDto, GuiError> {
+        self.voice_ops().list_models().await
+    }
+
+    /// Download an STT model by ID.
+    pub async fn voice_download_stt_model(&self, model_id: &str) -> Result<(), GuiError> {
+        self.voice_ops().download_stt_model(model_id).await
+    }
+
+    /// Download the TTS model bundle.
+    pub async fn voice_download_tts_model(&self) -> Result<(), GuiError> {
+        self.voice_ops().download_tts_model().await
+    }
+
+    /// Download the Silero VAD model.
+    pub async fn voice_download_vad_model(&self) -> Result<(), GuiError> {
+        self.voice_ops().download_vad_model().await
+    }
+
+    /// Load a downloaded STT model into the pipeline.
+    pub async fn voice_load_stt(&self, model_id: &str) -> Result<(), GuiError> {
+        self.voice_ops().load_stt(model_id).await
+    }
+
+    /// Load the downloaded TTS model into the pipeline.
+    pub async fn voice_load_tts(&self) -> Result<(), GuiError> {
+        self.voice_ops().load_tts().await
+    }
+
+    /// Set the voice interaction mode (`"ptt"` | `"vad"`).
+    pub async fn voice_set_mode(&self, mode: &str) -> Result<(), GuiError> {
+        self.voice_ops().set_mode(mode).await
+    }
+
+    /// Set the active TTS voice by ID.
+    pub async fn voice_set_voice(&self, voice_id: &str) -> Result<(), GuiError> {
+        self.voice_ops().set_voice(voice_id).await
+    }
+
+    /// Set the TTS playback speed.
+    pub async fn voice_set_speed(&self, speed: f32) -> Result<(), GuiError> {
+        self.voice_ops().set_speed(speed).await
+    }
+
+    /// Enable or disable automatic TTS for LLM responses.
+    pub async fn voice_set_auto_speak(&self, enabled: bool) -> Result<(), GuiError> {
+        self.voice_ops().set_auto_speak(enabled).await
+    }
+
+    /// Unload the voice pipeline, releasing model memory.
+    pub async fn voice_unload(&self) -> Result<(), GuiError> {
+        self.voice_ops().unload().await
+    }
+
+    /// List available audio input devices.
+    pub async fn voice_list_devices(
+        &self,
+    ) -> Result<Vec<gglib_core::ports::AudioDeviceDto>, GuiError> {
+        self.voice_ops().list_devices().await
     }
 }
