@@ -256,7 +256,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
         
         {loadingQuants && (
           <div className="p-lg text-center text-text-secondary bg-surface-elevated rounded-lg">
-            <span className="inline-block w-4 h-4 border-2 border-border border-t-primary rounded-full animate-thinking-spin mr-sm"></span>
+            <span className="inline-block w-4 h-4 border-2 border-border border-t-primary rounded-full animate-spin-360 mr-sm"></span>
             Loading quantizations...
           </div>
         )}

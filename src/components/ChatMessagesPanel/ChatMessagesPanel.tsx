@@ -588,7 +588,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             iconOnly
           >
             {isGeneratingTitle ? (
-              <span className="inline-block w-[14px] h-[14px] border-2 border-text-muted border-t-primary rounded-full animate-icon-btn-spin" aria-label="Generating title…" />
+              <span className="inline-block w-[14px] h-[14px] border-2 border-text-muted border-t-primary rounded-full animate-spin-360" aria-label="Generating title…" />
             ) : (
               <Icon icon={Sparkles} size={14} />
             )}

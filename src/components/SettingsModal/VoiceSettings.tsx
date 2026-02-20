@@ -185,7 +185,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
       {voice?.error && (
         <div className="text-[#ef4444] text-sm">
           {voice.error}
-          <button onClick={() => voice?.clearError()} style={{ marginLeft: 8, cursor: 'pointer', background: 'none', border: 'none', color: 'inherit' }}>✕</button>
+          <button onClick={() => voice?.clearError()} className="ml-2 cursor-pointer bg-transparent border-none text-inherit">✕</button>
         </div>
       )}
 
@@ -200,11 +200,11 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         {/* Download row: pick any catalog model and download it */}
         <div className="flex flex-col gap-xs">
           <label className="font-semibold text-text">Download a Model</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="flex gap-2 items-center">
             <Select
               value={downloadTarget}
               onChange={(e) => setDownloadTarget(e.target.value)}
-              style={{ flex: 1 }}
+              className="flex-1"
             >
               {voice?.models?.sttModels?.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -242,7 +242,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               ))}
             </Select>
           ) : (
-            <p className="text-sm text-text-secondary" style={{ fontStyle: 'italic' }}>
+            <p className="text-sm text-text-secondary italic">
               Download a model above to set a default.
             </p>
           )}
@@ -258,8 +258,8 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
 
         <div className="flex flex-col gap-xs">
           <label className="font-semibold text-text">TTS Model</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+          <div className="flex gap-2 items-center">
+            <span className="flex-1 text-sm text-text-secondary">
               {voice?.models?.ttsModel?.name ?? 'TTS Model'}
             </span>
             <Button
@@ -296,7 +296,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             step="0.1"
             value={speedInput}
             onChange={handleSpeedChange}
-            style={{ width: '100%' }}
+            className="w-full"
           />
         </div>
       </div>
@@ -324,8 +324,8 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               Neural-network voice detection for more accurate hands-free mode.
               Falls back to energy-based detection if not downloaded.
             </p>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+            <div className="flex gap-2 items-center">
+              <span className="flex-1 text-sm text-text-secondary">
                 Silero VAD v5 (~2 MB)
               </span>
               <Button
@@ -341,7 +341,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         )}
 
         <div className="flex flex-col gap-xs">
-          <label className="font-semibold text-text" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label className="font-semibold text-text flex items-center gap-2">
             <input
               type="checkbox"
               checked={voice?.autoSpeak ?? false}
@@ -379,20 +379,11 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             Downloading {voice.downloadProgress.modelId}…{' '}
             {voice.downloadProgress.percent.toFixed(0)}%
           </p>
-          <div style={{
-            width: '100%',
-            height: 4,
-            background: 'var(--color-border)',
-            borderRadius: 2,
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              width: `${voice?.downloadProgress?.percent ?? 0}%`,
-              height: '100%',
-              background: 'var(--color-accent)',
-              borderRadius: 2,
-              transition: 'width 200ms ease',
-            }} />
+          <div className="w-full h-1 bg-border rounded-sm overflow-hidden">
+            <div
+              className="h-full bg-accent rounded-sm transition-[width] duration-200 ease-in-out"
+              style={{ width: `${voice?.downloadProgress?.percent ?? 0}%` }}
+            />
           </div>
         </div>
       )}
@@ -400,7 +391,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
       {/* ── Status ─────────────────────────────────────────────── */}
       <div className="flex flex-col gap-xs">
         <h3 className="font-semibold text-text">Status</h3>
-        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+        <div className="text-sm text-text-secondary">
           <div>Pipeline: {voice?.isActive ? '🟢 Active' : '⚪ Inactive'}</div>
           <div>STT Engine: {voice?.sttLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>
           <div>TTS Engine: {voice?.ttsLoaded ? '✓ Loaded' : '✗ Not loaded'}</div>

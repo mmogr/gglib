@@ -157,7 +157,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-sm p-xl text-text-secondary">
-        <div className="w-5 h-5 border-2 border-border border-t-primary rounded-full animate-thinking-spin" />
+        <div className="w-5 h-5 border-2 border-border border-t-primary rounded-full animate-spin-360" />
         <span>Loading MCP servers...</span>
       </div>
     );
