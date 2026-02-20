@@ -104,10 +104,6 @@ impl From<gglib_core::ports::VoicePortError> for GuiError {
     }
 }
 
-// ============================================================================
-// Conversions from core errors
-// ============================================================================
-
 impl From<gglib_core::download::DownloadError> for GuiError {
     fn from(err: gglib_core::download::DownloadError) -> Self {
         use gglib_core::download::DownloadError;
