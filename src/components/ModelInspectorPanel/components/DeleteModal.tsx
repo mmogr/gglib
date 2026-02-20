@@ -31,27 +31,32 @@ export const DeleteModal: FC<DeleteModalProps> = ({
   );
 
   return (
-    <Modal open={true} onClose={onClose} title="Delete model" size="sm" preventClose={isDeleting}>
-      <div className="p-lg overflow-y-auto flex-1 min-h-0">
-        <p>Are you sure you want to remove <strong>"{model.name}"</strong> from the database?</p>
-        <p className="text-text-muted text-sm mt-4">
-          Note: The model file will remain on disk and won't be deleted.
-        </p>
-      </div>
-
-      <div className="flex items-center justify-end gap-md p-lg border-t border-border shrink-0">
-        <Button variant="ghost" onClick={onClose} disabled={isDeleting}>
-          Cancel
-        </Button>
-        <Button
-          variant="danger"
-          onClick={onConfirm}
-          disabled={isDeleting}
-          leftIcon={!isDeleting ? <Icon icon={Trash2} size={14} /> : undefined}
-        >
-          {deleteLabel}
-        </Button>
-      </div>
+    <Modal
+      open={true}
+      onClose={onClose}
+      title="Delete model"
+      size="sm"
+      preventClose={isDeleting}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={onConfirm}
+            disabled={isDeleting}
+            leftIcon={!isDeleting ? <Icon icon={Trash2} size={14} /> : undefined}
+          >
+            {deleteLabel}
+          </Button>
+        </>
+      }
+    >
+      <p>Are you sure you want to remove <strong>"{model.name}"</strong> from the database?</p>
+      <p className="text-text-muted text-sm mt-4">
+        Note: The model file will remain on disk and won't be deleted.
+      </p>
     </Modal>
   );
 };

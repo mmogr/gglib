@@ -146,6 +146,18 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
 
   const modalTitle = mode === 'verify' ? `Verify: ${modelName}` : `Check Updates: ${modelName}`;
 
+  const footerAction =
+    !report && !verifying && mode === 'verify' ? (
+      <Button onClick={handleVerify} className="w-full" disabled={verifying}>
+        Start Verification
+      </Button>
+    ) : !updateResult && !checkingUpdates && mode === 'update' ? (
+      <Button onClick={handleCheckUpdates} className="w-full" disabled={checkingUpdates}>
+        <Icon icon={RefreshCw} size={16} />
+        Check for Updates
+      </Button>
+    ) : null;
+
   return (
     <Modal
       open={open}
@@ -153,6 +165,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
       title={modalTitle}
       size="md"
       preventClose={verifying || repairing || checkingUpdates}
+      footer={footerAction ?? undefined}
     >
       <div className="flex flex-col gap-4">
         {error && (
@@ -313,19 +326,6 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
           </div>
         )}
 
-        {/* Initial Action Buttons */}
-        {!report && !verifying && mode === 'verify' && (
-          <Button onClick={handleVerify} className="w-full" disabled={verifying}>
-            Start Verification
-          </Button>
-        )}
-
-        {!updateResult && !checkingUpdates && mode === 'update' && (
-          <Button onClick={handleCheckUpdates} className="w-full" disabled={checkingUpdates}>
-            <Icon icon={RefreshCw} size={16} />
-            Check for Updates
-          </Button>
-        )}
       </div>
     </Modal>
   );

@@ -98,7 +98,42 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       </div>
     );
   };
-
+  const renderFooterContent = () => {
+    if (metadata) {
+      return (
+        <>
+          <Button onClick={handleErrorModeInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
+            Install now
+          </Button>
+          <Button variant="ghost" onClick={onClose} disabled={installing}>
+            Cancel
+          </Button>
+        </>
+      );
+    }
+    if (!installing && !isCompleted && canDownload) {
+      return (
+        <>
+          <Button onClick={onInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
+            Install llama.cpp
+          </Button>
+          {onSkip ? (
+            <Button variant="ghost" onClick={onSkip} disabled={installing}>
+              Skip for now
+            </Button>
+          ) : null}
+        </>
+      );
+    }
+    if (!installing && !isCompleted && !canDownload && onSkip) {
+      return (
+        <Button variant="ghost" onClick={onSkip}>
+          I understand
+        </Button>
+      );
+    }
+    return null;
+  };
   const renderMetadataContent = () => (
     <>
       <div className="flex gap-3 items-center">
@@ -124,15 +159,6 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       </div>
 
       {error ? <div className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
-
-      <div className="flex gap-2 flex-wrap justify-end">
-        <Button onClick={handleErrorModeInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
-          Install now
-        </Button>
-        <Button variant="ghost" onClick={onClose} disabled={installing}>
-          Cancel
-        </Button>
-      </div>
 
       {installing ? renderProgress() : null}
     </>
@@ -168,26 +194,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
         <p className="text-success font-semibold">llama.cpp is ready! You can now serve models.</p>
       ) : null}
 
-      {!installing && !isCompleted && canDownload ? (
-        <div className="flex gap-2 flex-wrap justify-end">
-          <Button onClick={onInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
-            Install llama.cpp
-          </Button>
-          {onSkip ? (
-            <Button variant="ghost" onClick={onSkip} disabled={installing}>
-              Skip for now
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
 
-      {!installing && !isCompleted && !canDownload && onSkip ? (
-        <div className="flex gap-2 flex-wrap justify-end">
-          <Button variant="ghost" onClick={onSkip}>
-            I understand
-          </Button>
-        </div>
-      ) : null}
     </>
   );
 
@@ -198,6 +205,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       title="Llama installation"
       size="md"
       preventClose={installing}
+      footer={renderFooterContent() ?? undefined}
     >
       <div className="flex flex-col gap-4">{metadata ? renderMetadataContent() : renderStandardContent()}</div>
     </Modal>

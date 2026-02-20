@@ -56,8 +56,35 @@ export const ServeModal: FC<ServeModalProps> = ({
   const hasInferenceOverrides = inferenceParams && Object.values(inferenceParams).some(v => v != null);
 
   return (
-    <Modal open={true} onClose={onClose} title="Start model server" size="md" preventClose={isServing}>
-      <div className="p-lg overflow-y-auto flex-1 min-h-0">
+    <Modal
+      open={true}
+      onClose={onClose}
+      title="Start model server"
+      size="md"
+      preventClose={isServing}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={isServing}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={onStart}
+            disabled={isServing}
+            leftIcon={!isServing ? <Icon icon={Play} size={14} /> : undefined}
+          >
+            {isServing ? (
+              <>
+                <Loader2 className="spinner" />
+                Loading model...
+              </>
+            ) : (
+              'Start Server'
+            )}
+          </Button>
+        </>
+      }
+    >
         <div className="flex justify-between items-center mb-lg p-base bg-background rounded-md border border-border">
           <strong>{model.name}</strong>
           <span className="text-text-secondary text-sm">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</span>
@@ -190,28 +217,6 @@ export const ServeModal: FC<ServeModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-
-      <div className="flex items-center justify-end gap-md p-lg border-t border-border shrink-0">
-        <Button variant="ghost" onClick={onClose} disabled={isServing}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          onClick={onStart}
-          disabled={isServing}
-          leftIcon={!isServing ? <Icon icon={Play} size={14} /> : undefined}
-        >
-          {isServing ? (
-            <>
-              <Loader2 className="spinner" />
-              Loading model...
-            </>
-          ) : (
-            'Start Server'
-          )}
-        </Button>
-      </div>
     </Modal>
   );
 };

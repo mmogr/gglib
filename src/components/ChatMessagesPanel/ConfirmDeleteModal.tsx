@@ -41,6 +41,16 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
       title="Delete message"
       size="sm"
       preventClose={isDeleting}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={onConfirm} disabled={isDeleting} leftIcon={isDeleting ? undefined : <Icon icon={Trash2} size={14} />}>
+            {deleteLabel}
+          </Button>
+        </>
+      }
     >
       <div className="flex flex-col gap-spacing-md">
         <div className="flex items-start gap-spacing-sm">
@@ -63,14 +73,6 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
           </div>
         )}
 
-        <div className="flex justify-end gap-spacing-sm">
-          <Button variant="ghost" onClick={onCancel} disabled={isDeleting}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={onConfirm} disabled={isDeleting} leftIcon={isDeleting ? undefined : <Icon icon={Trash2} size={14} />}>
-            {deleteLabel}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

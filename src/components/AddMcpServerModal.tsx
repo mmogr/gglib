@@ -176,8 +176,28 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
       title={isEditing ? "Edit MCP Server" : "Add MCP Server"}
       size="lg"
       preventClose={saving}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="add-mcp-server-form"
+            variant="primary"
+            disabled={saving}
+          >
+            {saving ? "Saving..." : isEditing ? "Update" : "Add Server"}
+          </Button>
+        </>
+      }
     >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-md">
+      <form id="add-mcp-server-form" onSubmit={handleSubmit} className="flex flex-col gap-md">
             {/* Templates (only for new servers) */}
             {!isEditing && <ServerTemplatePicker onSelectTemplate={applyTemplate} />}
 
@@ -256,23 +276,6 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-md p-lg border-t border-border shrink-0">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={onClose}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={saving}
-              >
-                {saving ? "Saving..." : isEditing ? "Update" : "Add Server"}
-              </Button>
-            </div>
       </form>
     </Modal>
   );

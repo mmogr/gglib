@@ -23,6 +23,12 @@ interface ModalProps {
   title: string;
   description?: ReactNode;
   children: ReactNode;
+  /** Content pinned below the scroll area, outside overflow-y-auto. Rendered inside a flex row with border-t. */
+  footer?: ReactNode;
+  /** Extra classes merged onto the body wrapper (e.g. "p-0" to remove default padding). Uses tailwind-merge so "p-0" correctly overrides "p-lg". */
+  bodyClassName?: string;
+  /** Extra classes merged onto the footer wrapper (e.g. "justify-center" to override default "justify-end"). */
+  footerClassName?: string;
   size?: "sm" | "md" | "lg";
   preventClose?: boolean;
 }
@@ -39,6 +45,9 @@ export const Modal: FC<ModalProps> = ({
   title,
   description,
   children,
+  footer,
+  bodyClassName,
+  footerClassName,
   size = "md",
   preventClose = false,
 }) => {
@@ -89,7 +98,12 @@ export const Modal: FC<ModalProps> = ({
               Dialog content
             </DialogPrimitive.Description>
           )}
-          <div className="p-lg overflow-y-auto flex-1 min-h-0">{children}</div>
+          <div className={cn("p-lg overflow-y-auto flex-1 min-h-0", bodyClassName)}>{children}</div>
+          {footer != null && (
+            <div className={cn("flex items-center justify-end gap-md p-lg border-t border-border shrink-0", footerClassName)}>
+              {footer}
+            </div>
+          )}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
