@@ -114,9 +114,9 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
   const showAutoLoading = isAutoLoading;
 
   return (
-    <div className="fixed bottom-spacing-lg left-1/2 -translate-x-1/2 flex items-center gap-spacing-sm px-spacing-md py-spacing-sm bg-surface border border-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] z-[1000] min-w-[320px] max-w-[600px] backdrop-blur-[8px]">
+    <div className="fixed bottom-lg left-1/2 -translate-x-1/2 flex items-center gap-sm px-md py-sm bg-surface border border-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] z-[1000] min-w-[320px] max-w-[600px] backdrop-blur-[8px]">
       {/* Status indicator */}
-      <div className="flex items-center gap-spacing-xs shrink-0">
+      <div className="flex items-center gap-xs shrink-0">
         <span className="text-[1.1em]">{stateIcon}</span>
         <span className="text-sm text-text-secondary whitespace-nowrap">{stateLabel}</span>
       </div>
@@ -133,7 +133,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {mode === 'ptt' && modelsReady && (
         <button
           className={cn(
-            'px-spacing-sm py-spacing-xs border border-border rounded-md bg-[var(--color-surface-elevated,#2a2a3e)] text-text cursor-pointer text-sm whitespace-nowrap transition-all duration-100 select-none',
+            'px-sm py-xs border border-border rounded-md bg-[var(--color-surface-elevated,#2a2a3e)] text-text cursor-pointer text-sm whitespace-nowrap transition-all duration-100 select-none',
             'hover:bg-[var(--color-surface-hover,#353550)]',
             isPttHeld && 'bg-[rgba(243,139,168,0.2)] border-[var(--color-error,#f38ba8)] shadow-[0_0_8px_rgba(243,139,168,0.3)]',
           )}
@@ -149,7 +149,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {/* Stop speaking button */}
       {isSpeaking && (
         <button
-          className="px-spacing-sm py-spacing-xs border border-border rounded-md bg-[var(--color-surface-elevated,#2a2a3e)] text-text cursor-pointer text-sm whitespace-nowrap hover:bg-[var(--color-surface-hover,#353550)]"
+          className="px-sm py-xs border border-border rounded-md bg-[var(--color-surface-elevated,#2a2a3e)] text-text cursor-pointer text-sm whitespace-nowrap hover:bg-[var(--color-surface-hover,#353550)]"
           onClick={() => stopSpeaking?.()}
           title="Stop speaking"
         >
@@ -182,7 +182,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
 
       {/* Error display */}
       {error && (
-        <div className="flex items-center gap-spacing-xs text-xs text-[var(--color-error,#f38ba8)] max-w-[200px]">
+        <div className="flex items-center gap-xs text-xs text-[var(--color-error,#f38ba8)] max-w-[200px]">
           <span className="overflow-hidden text-ellipsis whitespace-nowrap">{error}</span>
           <button className="bg-transparent border-none text-[var(--color-error,#f38ba8)] cursor-pointer p-[2px] text-[0.7rem] shrink-0" onClick={() => clearError?.()}>✕</button>
         </div>

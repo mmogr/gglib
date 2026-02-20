@@ -52,8 +52,8 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
         </>
       }
     >
-      <div className="flex flex-col gap-spacing-md">
-        <div className="flex items-start gap-spacing-sm">
+      <div className="flex flex-col gap-md">
+        <div className="flex items-start gap-sm">
           <span className="w-9 h-9 rounded-full inline-flex items-center justify-center bg-background-secondary border border-border text-primary">
             <Icon icon={Trash2} size={18} />
           </span>
@@ -64,7 +64,7 @@ export const ConfirmDeleteModal: FC<ConfirmDeleteModalProps> = ({
         </div>
 
         {messageCount > 1 && (
-          <div className="flex gap-spacing-sm items-start p-3 rounded-lg bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] text-text text-[0.95rem]">
+          <div className="flex gap-sm items-start p-3 rounded-lg bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] text-text text-[0.95rem]">
             <Icon icon={AlertTriangle} size={16} className="text-danger" />
             <span>
               This will also delete <strong>{messageCount - 1}</strong> subsequent{' '}

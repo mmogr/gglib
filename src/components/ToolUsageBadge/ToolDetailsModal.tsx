@@ -78,7 +78,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
 
   return (
     <Modal open={isOpen} onClose={onClose} title="Tool execution details" size="lg">
-      <div className="flex gap-spacing-sm items-start mb-spacing-md">
+      <div className="flex gap-sm items-start mb-md">
         <span className="w-9 h-9 rounded-full inline-flex items-center justify-center bg-background-tertiary text-primary border border-border">
           <Icon icon={Wrench} size={16} />
         </span>
@@ -88,7 +88,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
         </div>
       </div>
 
-      <div className="flex flex-col gap-spacing-sm max-h-[55vh] overflow-auto pr-[2px]">
+      <div className="flex flex-col gap-sm max-h-[55vh] overflow-auto pr-[2px]">
         {toolCalls.map((call, index) => {
           const argsId = `args-${index}`;
           const resultId = `result-${index}`;
@@ -102,8 +102,8 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
           const StatusIcon = getStatusIcon(call);
 
           return (
-            <div key={call.toolCallId || index} className="bg-background-secondary border border-border rounded-[10px] p-spacing-md flex flex-col gap-spacing-sm">
-              <div className="flex items-center gap-spacing-sm">
+            <div key={call.toolCallId || index} className="bg-background-secondary border border-border rounded-[10px] p-md flex flex-col gap-sm">
+              <div className="flex items-center gap-sm">
                 <span className={cn(
                   'w-5 h-5 inline-flex items-center justify-center rounded-full bg-background-tertiary border border-border text-text',
                   StatusIcon === XCircle && 'text-[#ef4444] border-[rgba(239,68,68,0.35)]',
@@ -116,8 +116,8 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                 <span className="text-[0.85rem] text-text-secondary font-mono">({call.toolName})</span>
               </div>
 
-              <div className="flex flex-col gap-spacing-xs">
-                <div className="flex items-center gap-spacing-xs w-full bg-background border border-border rounded-lg py-2 px-3 cursor-pointer transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary" onClick={() => toggleSection(argsId)} role="button" tabIndex={0}
+              <div className="flex flex-col gap-xs">
+                <div className="flex items-center gap-xs w-full bg-background border border-border rounded-lg py-2 px-3 cursor-pointer transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary" onClick={() => toggleSection(argsId)} role="button" tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -144,8 +144,8 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                 {argsExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-[0.9rem] leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedArgs}</pre>}
               </div>
 
-              <div className="flex flex-col gap-spacing-xs">
-                <div className="flex items-center gap-spacing-xs w-full bg-background border border-border rounded-lg py-2 px-3 cursor-pointer transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary" onClick={() => toggleSection(resultId)} role="button" tabIndex={0}
+              <div className="flex flex-col gap-xs">
+                <div className="flex items-center gap-xs w-full bg-background border border-border rounded-lg py-2 px-3 cursor-pointer transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary" onClick={() => toggleSection(resultId)} role="button" tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -176,7 +176,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
         })}
       </div>
 
-      <div className="mt-spacing-md flex justify-end">
+      <div className="mt-md flex justify-end">
         <Button variant="ghost" onClick={onClose} rightIcon={<Icon icon={X} size={14} />}>
           Close
         </Button>

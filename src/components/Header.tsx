@@ -45,22 +45,22 @@ const Header: FC<HeaderProps> = ({
   return (
     <header className="bg-[linear-gradient(135deg,var(--color-background-elevated)_0%,var(--color-surface-elevated)_100%)] text-text py-sm px-xl border-b border-border shadow-md shrink-0">
       <div className="flex justify-between items-center w-full">
-        <div className="flex flex-row items-center gap-spacing-sm">
+        <div className="flex flex-row items-center gap-sm">
           <h1 className="flex items-center gap-sm text-xl font-bold m-0">
             <Library className="w-5 h-5" aria-hidden />
             <span>GGLib</span>
           </h1>
         </div>
-        <div className="flex items-center gap-spacing-base tablet:relative" ref={menuRef}>
+        <div className="flex items-center gap-base tablet:relative" ref={menuRef}>
           {/* Desktop navigation */}
-          <div className="flex items-center gap-spacing-base tablet:hidden">
+          <div className="flex items-center gap-base tablet:hidden">
             {/* Server status button with popover */}
             <div className="relative">
               <button
                 ref={runsButtonRef}
                 type="button"
                 className={cn(
-                  'flex items-center justify-center gap-spacing-sm px-[calc(var(--spacing-lg)+var(--spacing-xs))] h-[var(--button-height-base)] rounded-full border border-border bg-background-elevated text-inherit font-medium text-sm leading-none cursor-pointer transition-all',
+                  'flex items-center justify-center gap-sm px-[calc(var(--spacing-lg)+var(--spacing-xs))] h-[var(--button-height-base)] rounded-full border border-border bg-background-elevated text-inherit font-medium text-sm leading-none cursor-pointer transition-all',
                   'hover:not-disabled:border-border-hover hover:not-disabled:bg-background-hover',
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                   'w-[var(--button-height-base)] p-0 relative',
@@ -88,7 +88,7 @@ const Header: FC<HeaderProps> = ({
             <button
               type="button"
               className={cn(
-                'flex items-center justify-center gap-spacing-sm px-[calc(var(--spacing-lg)+var(--spacing-xs))] h-[var(--button-height-base)] rounded-full border border-border bg-background-elevated text-inherit font-medium text-sm leading-none cursor-pointer transition-all',
+                'flex items-center justify-center gap-sm px-[calc(var(--spacing-lg)+var(--spacing-xs))] h-[var(--button-height-base)] rounded-full border border-border bg-background-elevated text-inherit font-medium text-sm leading-none cursor-pointer transition-all',
                 'hover:not-disabled:border-border-hover hover:not-disabled:bg-background-hover',
                 'w-[var(--button-height-base)] p-0 relative',
               )}
@@ -117,13 +117,13 @@ const Header: FC<HeaderProps> = ({
 
           {/* Mobile dropdown menu */}
           <div className={cn(
-            'hidden absolute top-full right-spacing-base min-w-[180px] p-spacing-sm bg-surface border border-border rounded-base shadow-lg z-[100]',
-            isMobileMenuOpen && 'flex flex-col gap-spacing-xs',
+            'hidden absolute top-full right-base min-w-[180px] p-sm bg-surface border border-border rounded-base shadow-lg z-[100]',
+            isMobileMenuOpen && 'flex flex-col gap-xs',
           )}>
             <button
               type="button"
               className={cn(
-                'flex items-center gap-spacing-sm w-full px-spacing-base py-spacing-sm border-none rounded-sm bg-transparent text-inherit text-sm font-medium text-left cursor-pointer transition-all hover:bg-background-hover',
+                'flex items-center gap-sm w-full px-base py-sm border-none rounded-sm bg-transparent text-inherit text-sm font-medium text-left cursor-pointer transition-all hover:bg-background-hover',
                 hasRunningServers && 'bg-primary text-white',
               )}
               onClick={() => hasRunningServers && handleMobileMenuAction(() => setIsRunsPopoverOpen(true))}
@@ -134,7 +134,7 @@ const Header: FC<HeaderProps> = ({
             </button>
             <button
               type="button"
-              className="flex items-center gap-spacing-sm w-full px-spacing-base py-spacing-sm border-none rounded-sm bg-transparent text-inherit text-sm font-medium text-left cursor-pointer transition-all hover:bg-background-hover"
+              className="flex items-center gap-sm w-full px-base py-sm border-none rounded-sm bg-transparent text-inherit text-sm font-medium text-left cursor-pointer transition-all hover:bg-background-hover"
               onClick={() => handleMobileMenuAction(onOpenSettings)}
             >
               <Settings className="w-[18px] h-[18px]" aria-hidden />

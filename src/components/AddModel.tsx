@@ -57,7 +57,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
       <form onSubmit={handleSubmit} className="add-model-form">
         <div className="mb-lg">
           <label htmlFor="filePath">Model File Path:</label>
-          <div className="flex flex-wrap gap-spacing-sm tablet:flex-col tablet:items-stretch">
+          <div className="flex flex-wrap gap-sm tablet:flex-col tablet:items-stretch">
             <Input
               type="text"
               id="filePath"
@@ -69,7 +69,7 @@ const AddModel: FC<AddModelProps> = ({ onModelAdded }) => {
             <button
               type="button"
               onClick={handleBrowse}
-              className="px-spacing-base py-spacing-sm bg-primary text-white border-none rounded-base cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:bg-primary-hover hover:-translate-y-px active:translate-y-0 tablet:w-full tablet:text-center"
+              className="px-base py-sm bg-primary text-white border-none rounded-base cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:bg-primary-hover hover:-translate-y-px active:translate-y-0 tablet:w-full tablet:text-center"
             >
               📁 Browse
             </button>
