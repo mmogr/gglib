@@ -25,7 +25,6 @@ pub mod event_names {
     pub const VOICE_SPEAKING_FINISHED: &str = "voice:speaking-finished";
     pub const VOICE_AUDIO_LEVEL: &str = "voice:audio-level";
     pub const VOICE_ERROR: &str = "voice:error";
-    pub const VOICE_MODEL_DOWNLOAD_PROGRESS: &str = "voice:model-download-progress";
 }
 
 // ── Event payloads ─────────────────────────────────────────────────
@@ -55,15 +54,6 @@ pub struct VoiceErrorPayload {
     pub message: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelDownloadProgressPayload {
-    pub model_id: String,
-    pub bytes_downloaded: u64,
-    pub total_bytes: u64,
-    pub percent: f64,
-}
-
 // ── Helper ─────────────────────────────────────────────────────────
 
 fn emit_or_log<T: Serialize + Clone>(app: &AppHandle, event: &str, payload: T) {
@@ -81,14 +71,6 @@ fn voice_state_string(state: VoiceState) -> String {
         VoiceState::Thinking => "thinking",
         VoiceState::Speaking => "speaking",
         VoiceState::Error => "error",
-    }
-    .to_string()
-}
-
-fn mode_string(mode: VoiceInteractionMode) -> String {
-    match mode {
-        VoiceInteractionMode::PushToTalk => "ptt",
-        VoiceInteractionMode::VoiceActivityDetection => "vad",
     }
     .to_string()
 }
