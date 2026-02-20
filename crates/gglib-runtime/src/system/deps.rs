@@ -47,8 +47,7 @@ pub fn check_libclang() -> Option<String> {
                 let name_str = name.to_string_lossy();
                 if name_str.starts_with("libclang") && name_str.contains(".so") {
                     // Get LLVM version for display
-                    if let Ok(ver_output) =
-                        Command::new("llvm-config").arg("--version").output()
+                    if let Ok(ver_output) = Command::new("llvm-config").arg("--version").output()
                         && ver_output.status.success()
                     {
                         return Some(
