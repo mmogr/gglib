@@ -15,7 +15,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import {
-  isTauriEnvironment,
   voiceStart,
   voiceStop,
   voiceUnload,
@@ -71,8 +70,10 @@ export interface VoiceDefaults {
 // ── Hook return type ───────────────────────────────────────────────
 
 export interface UseVoiceModeReturn {
-  /** Whether voice mode is supported (Tauri environment) */
+  /** Whether voice mode is supported for data/config operations (always true — served via HTTP). */
   isSupported: boolean;
+  /** Whether audio I/O is supported (Tauri desktop only until Phase 3). */
+  isAudioSupported: boolean;
   /** Whether voice mode is currently active */
   isActive: boolean;
   /** Current voice pipeline state */
@@ -156,8 +157,16 @@ export interface UseVoiceModeReturn {
 
 // ── Hook implementation ────────────────────────────────────────────
 
+/** Returns true when running inside a Tauri desktop app. */
+function isTauriEnvironment(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
 export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
-  const isSupported = isTauriEnvironment();
+  // Data/config ops (status, models, config) work everywhere via HTTP.
+  const isSupported = true;
+  // Audio I/O (start/stop/ptt/speak) still requires Tauri until Phase 3.
+  const isAudioSupported = isTauriEnvironment();
 
   // Pipeline state
   const [isActive, setIsActive] = useState(false);
@@ -596,6 +605,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
 
   return {
     isSupported,
+    isAudioSupported,
     isActive,
     voiceState,
     mode,
