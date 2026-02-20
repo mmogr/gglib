@@ -15,6 +15,11 @@ use thiserror::Error;
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
 /// Current state of the voice pipeline.
+// Wire-shape DTO: the four bools represent distinct pipeline state flags
+// (is_active, stt_loaded, tts_loaded, auto_speak) that have clear, independent
+// meanings. There is no sensible state-machine or enum grouping that would
+// improve clarity for callers reading the JSON payload.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VoiceStatusDto {
