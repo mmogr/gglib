@@ -15,6 +15,7 @@ import { Select } from "../ui/Select";
 import { useVoiceModeContext } from "../../contexts/VoiceModeContext";
 import { useSettingsContext } from "../../contexts/SettingsContext";
 import type { VoiceInteractionMode } from "../../services/clients/voice";
+import { Stack, Label } from '../primitives';
 
 interface VoiceSettingsProps {
   onClose: () => void;
@@ -153,11 +154,11 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
 
   if (!voice || !voice.isSupported) {
     return (
-      <div className="flex flex-col gap-xs">
+      <Stack gap="xs">
         <p className="text-sm text-text-secondary">
           Voice mode is only available in the desktop application.
         </p>
-      </div>
+      </Stack>
     );
   }
 
@@ -190,7 +191,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
       )}
 
       {/* ── STT Model Section ──────────────────────────────────── */}
-      <div className="flex flex-col gap-xs">
+      <Stack gap="xs">
         <h3 className="font-semibold text-text">Speech-to-Text</h3>
         <p className="text-sm text-text-secondary">
           Choose an STT model for speech recognition. Larger models are more
@@ -198,8 +199,8 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
         </p>
 
         {/* Download row: pick any catalog model and download it */}
-        <div className="flex flex-col gap-xs">
-          <label className="font-semibold text-text">Download a Model</label>
+        <Stack gap="xs">
+          <Label>Download a Model</Label>
           <div className="flex gap-2 items-center">
             <Select
               value={downloadTarget}
@@ -222,11 +223,11 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               {sttButtonLabel}
             </Button>
           </div>
-        </div>
+        </Stack>
 
         {/* Default model selector: only downloaded models */}
-        <div className="flex flex-col gap-xs">
-          <label className="font-semibold text-text">Default STT Model</label>
+        <Stack gap="xs">
+          <Label>Default STT Model</Label>
           {downloadedSttModels.length > 0 ? (
             <Select
               value={defaultSttModel ?? ''}
@@ -246,18 +247,18 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               Download a model above to set a default.
             </p>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* ── TTS Section ────────────────────────────────────────── */}
-      <div className="flex flex-col gap-xs">
+      <Stack gap="xs">
         <h3 className="font-semibold text-text">Text-to-Speech</h3>
         <p className="text-sm text-text-secondary">
           High-quality local TTS. The model will be downloaded on first use (~300 MB).
         </p>
 
-        <div className="flex flex-col gap-xs">
-          <label className="font-semibold text-text">TTS Model</label>
+        <Stack gap="xs">
+          <Label>TTS Model</Label>
           <div className="flex gap-2 items-center">
             <span className="flex-1 text-sm text-text-secondary">
               {voice?.models?.ttsModel?.name ?? 'TTS Model'}
@@ -271,10 +272,10 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               {ttsButtonLabel}
             </Button>
           </div>
-        </div>
+        </Stack>
 
-        <div className="flex flex-col gap-xs">
-          <label className="font-semibold text-text">Default Voice</label>
+        <Stack gap="xs">
+          <Label>Default Voice</Label>
           <Select
             value={selectedVoice}
             onChange={(e) => handleVoiceChange(e.target.value)}
@@ -285,10 +286,10 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               </option>
             )) ?? <option>Loading...</option>}
           </Select>
-        </div>
+        </Stack>
 
-        <div className="flex flex-col gap-xs">
-          <label className="font-semibold text-text">Speed ({speedInput.toFixed(1)}x)</label>
+        <Stack gap="xs">
+          <Label>Speed ({speedInput.toFixed(1)}x)</Label>
           <input
             type="range"
             min="0.5"
@@ -298,15 +299,15 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             onChange={handleSpeedChange}
             className="w-full"
           />
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* ── Interaction Mode ───────────────────────────────────── */}
-      <div className="flex flex-col gap-xs">
+      <Stack gap="xs">
         <h3 className="font-semibold text-text">Interaction Mode</h3>
 
-        <div className="flex flex-col gap-xs">
-          <label className="font-semibold text-text">Mode</label>
+        <Stack gap="xs">
+          <Label>Mode</Label>
           <Select
             value={voice?.mode ?? 'ptt'}
             onChange={(e) => handleModeChange(e.target.value)}
@@ -314,12 +315,12 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
             <option value="ptt">Push to Talk (Space bar)</option>
             <option value="vad">Voice Activity Detection (hands-free)</option>
           </Select>
-        </div>
+        </Stack>
 
         {/* VAD model download — shown when VAD mode is selected */}
         {voice?.mode === 'vad' && (
-          <div className="flex flex-col gap-xs">
-            <label className="font-semibold text-text">Silero VAD Model</label>
+          <Stack gap="xs">
+            <Label>Silero VAD Model</Label>
             <p className="text-sm text-text-secondary">
               Neural-network voice detection for more accurate hands-free mode.
               Falls back to energy-based detection if not downloaded.
@@ -337,10 +338,10 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
                 {downloading === 'vad' ? 'Downloading…' : vadDownloaded ? '✓ Downloaded' : 'Download'}
               </Button>
             </div>
-          </div>
+          </Stack>
         )}
 
-        <div className="flex flex-col gap-xs">
+        <Stack gap="xs">
           <label className="font-semibold text-text flex items-center gap-2">
             <input
               type="checkbox"
@@ -352,15 +353,15 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           <p className="text-sm text-text-secondary">
             Automatically read LLM responses aloud using TTS.
           </p>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* ── Audio Devices ──────────────────────────────────────── */}
       {(voice?.devices?.length ?? 0) > 0 && (
-        <div className="flex flex-col gap-xs">
+        <Stack gap="xs">
           <h3 className="font-semibold text-text">Audio Devices</h3>
-          <div className="flex flex-col gap-xs">
-            <label className="font-semibold text-text">Input Device</label>
+          <Stack gap="xs">
+            <Label>Input Device</Label>
             <Select value="" onChange={() => {}}>
               {voice?.devices?.map((d) => (
                 <option key={d.name} value={d.name}>
@@ -368,13 +369,13 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
                 </option>
               ))}
             </Select>
-          </div>
-        </div>
+          </Stack>
+        </Stack>
       )}
 
       {/* ── Download Progress ──────────────────────────────────── */}
       {voice?.downloadProgress && (
-        <div className="flex flex-col gap-xs">
+        <Stack gap="xs">
           <p className="text-sm text-text-secondary">
             Downloading {voice.downloadProgress.modelId}…{' '}
             {voice.downloadProgress.percent.toFixed(0)}%
@@ -385,11 +386,11 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
               style={{ width: `${voice?.downloadProgress?.percent ?? 0}%` }}
             />
           </div>
-        </div>
+        </Stack>
       )}
 
       {/* ── Status ─────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-xs">
+      <Stack gap="xs">
         <h3 className="font-semibold text-text">Status</h3>
         <div className="text-sm text-text-secondary">
           <div>Pipeline: {voice?.isActive ? '🟢 Active' : '⚪ Inactive'}</div>
@@ -399,7 +400,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
           <div>Default Voice: {selectedVoice}</div>
           <div>State: {voice?.voiceState}</div>
         </div>
-      </div>
+      </Stack>
 
       {/* ── Actions ────────────────────────────────────────────── */}
       <div className="flex gap-sm pt-md">

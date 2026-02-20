@@ -7,6 +7,7 @@ import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { cn } from '../utils/cn';
+import { Stack, Label } from './primitives';
 
 interface ProxyStatus {
   running: boolean;
@@ -135,8 +136,8 @@ const ProxyControl: FC<ProxyControlProps> = ({
           {status.running ? (
             <>
               <div className="mb-base">
-                <div className="flex flex-col gap-xs mb-sm">
-                  <label className="text-xs font-semibold text-text-secondary uppercase">URL:</label>
+                <Stack gap="xs" className="mb-sm">
+                  <Label size="xs" muted>URL:</Label>
                   <div className="flex gap-sm items-center">
                     <code className="flex-1 bg-surface-elevated p-sm rounded-base text-sm border border-border font-mono">http://{config.host}:{status.port}/v1</code>
                     <Button 
@@ -150,12 +151,12 @@ const ProxyControl: FC<ProxyControlProps> = ({
                       <Icon icon={ClipboardCopy} size={14} />
                     </Button>
                   </div>
-                </div>
+                </Stack>
                 {status.current_model && (
-                  <div className="flex flex-col gap-xs">
-                    <label className="text-xs font-semibold text-text-secondary uppercase">Current Model:</label>
+                  <Stack gap="xs">
+                    <Label size="xs" muted>Current Model:</Label>
                     <span>{status.current_model}</span>
-                  </div>
+                  </Stack>
                 )}
               </div>
 

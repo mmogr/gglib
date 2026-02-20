@@ -7,6 +7,7 @@ import { InferenceParametersForm } from "../InferenceParametersForm";
 import { DEFAULT_TITLE_GENERATION_PROMPT } from "../../services/clients/chat";
 import type { ModelsDirectoryInfo, GgufModel, InferenceConfig } from "../../types";
 import { cn } from '../../utils/cn';
+import { Row, Label } from '../primitives';
 
 interface GeneralSettingsProps {
   // Directory state
@@ -109,9 +110,9 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
 
   return (
     <form className="flex flex-col gap-md" onSubmit={onSubmit}>
-      <label className="font-semibold text-text" htmlFor="models-dir-input">
+      <Label htmlFor="models-dir-input">
         Default Download Path
-      </label>
+      </Label>
       <Input
         id="models-dir-input"
         value={pathInput}
@@ -119,14 +120,14 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         placeholder="/path/to/models"
         disabled={saving}
       />
-      <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
         {sourceDescription && <span>{sourceDescription}</span>}
         {info?.defaultPath && (
           <button type="button" className="bg-none border-none text-primary cursor-pointer text-sm underline p-0" onClick={onReset}>
             Reset to defaults
           </button>
         )}
-      </div>
+      </Row>
 
       {info && (
         <div className="flex gap-sm flex-wrap" role="status" aria-live="polite">
@@ -153,9 +154,9 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
 
       <div className="border-t border-border my-md" />
 
-      <label className="font-semibold text-text" htmlFor="context-size-input">
+      <Label htmlFor="context-size-input">
         Default Context Size
-      </label>
+      </Label>
       <Input
         id="context-size-input"
         type="number"
@@ -166,13 +167,13 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         max="1000000"
         disabled={saving}
       />
-      <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
         <span>Default context size for models (e.g., 4096, 8192, 16384)</span>
-      </div>
+      </Row>
 
-      <label className="font-semibold text-text" htmlFor="default-model-select">
+      <Label htmlFor="default-model-select">
         Default Model
-      </label>
+      </Label>
       <Select
         id="default-model-select"
         value={defaultModelInput}
@@ -186,13 +187,13 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
           </option>
         ))}
       </Select>
-      <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
         <span>Model to use for quick commands like <code>gglib question</code></span>
-      </div>
+      </Row>
 
-      <label className="font-semibold text-text" htmlFor="proxy-port-input">
+      <Label htmlFor="proxy-port-input">
         Proxy Server Port
-      </label>
+      </Label>
       <Input
         id="proxy-port-input"
         type="number"
@@ -203,13 +204,13 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         max="65535"
         disabled={saving}
       />
-      <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
         <span>Port for the OpenAI-compatible proxy server</span>
-      </div>
+      </Row>
 
-      <label className="font-semibold text-text" htmlFor="server-port-input">
+      <Label htmlFor="server-port-input">
         Base Server Port
-      </label>
+      </Label>
       <Input
         id="server-port-input"
         type="number"
@@ -220,13 +221,13 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         max="65535"
         disabled={saving}
       />
-      <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
         <span>Starting port for llama-server instances</span>
-      </div>
+      </Row>
 
-      <label className="font-semibold text-text" htmlFor="max-queue-size-input">
+      <Label htmlFor="max-queue-size-input">
         Max Download Queue Size
-      </label>
+      </Label>
       <Input
         id="max-queue-size-input"
         type="number"
@@ -237,9 +238,9 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         max="50"
         disabled={saving}
       />
-      <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+      <Row justify="between" gap="sm" className="text-text-secondary text-sm">
         <span>Maximum number of models that can be queued for download (1-50)</span>
-      </div>
+      </Row>
 
       <div className="border-t border-border my-md" />
 
@@ -254,9 +255,9 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
           />
           <span className="font-semibold text-text">Show memory fit indicators</span>
         </label>
-        <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+        <Row justify="between" gap="sm" className="text-text-secondary text-sm">
           <span>Display fit status indicators in the HuggingFace browser showing if models fit in your system memory</span>
-        </div>
+        </Row>
       </div>
 
       {/* Advanced Settings Section */}
@@ -273,9 +274,9 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
 
       {isAdvancedOpen && (
         <div className="flex flex-col gap-md pl-md border-l-2 border-l-border mt-sm animate-slide-down">
-          <label className="font-semibold text-text" htmlFor="max-tool-iterations-input">
+          <Label htmlFor="max-tool-iterations-input">
             Max Tool Iterations
-          </label>
+          </Label>
           <Input
             id="max-tool-iterations-input"
             type="number"
@@ -286,13 +287,13 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
             max="100"
             disabled={saving}
           />
-          <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+          <Row justify="between" gap="sm" className="text-text-secondary text-sm">
             <span>Maximum iterations for tool calling in agentic loop (default: 25)</span>
-          </div>
+          </Row>
 
-          <label className="font-semibold text-text" htmlFor="max-stagnation-steps-input">
+          <Label htmlFor="max-stagnation-steps-input">
             Max Stagnation Steps
-          </label>
+          </Label>
           <Input
             id="max-stagnation-steps-input"
             type="number"
@@ -303,13 +304,13 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
             max="20"
             disabled={saving}
           />
-          <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+          <Row justify="between" gap="sm" className="text-text-secondary text-sm">
             <span>Maximum repeated outputs before stopping (prevents infinite loops, default: 5)</span>
-          </div>
+          </Row>
 
-          <label className="font-semibold text-text" htmlFor="title-prompt-input">
+          <Label htmlFor="title-prompt-input">
             Chat Title Generation Prompt
-          </label>
+          </Label>
           <Textarea
             id="title-prompt-input"
             value={titlePromptInput}
@@ -318,7 +319,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
             rows={3}
             disabled={saving}
           />
-          <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+          <Row justify="between" gap="sm" className="text-text-secondary text-sm">
             <span>Prompt used when AI generates chat titles. Leave empty to use the default.</span>
             <button
               type="button"
@@ -327,20 +328,20 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
             >
               Reset to default
             </button>
-          </div>
+          </Row>
 
           <div className="border-t border-border my-md" />
-          <label className="font-semibold text-text">
+          <Label>
             Global Inference Parameter Defaults
-          </label>
+          </Label>
           <InferenceParametersForm
             value={inferenceDefaultsInput}
             onChange={setInferenceDefaultsInput}
             disabled={saving}
           />
-          <div className="flex justify-between items-center gap-sm text-text-secondary text-sm">
+          <Row justify="between" gap="sm" className="text-text-secondary text-sm">
             <span>Default inference parameters for all models. Can be overridden per-model in the model inspector.</span>
-          </div>
+          </Row>
         </div>
       )}
 

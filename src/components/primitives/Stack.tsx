@@ -4,18 +4,19 @@ import { cn } from '../../utils/cn';
 interface StackProps {
   children: React.ReactNode;
   className?: string;
-  gap?: 'none' | 'xs' | 'sm' | 'base' | 'lg' | 'xl';
+  gap?: 'none' | 'xs' | 'sm' | 'md' | 'base' | 'lg' | 'xl';
   align?: 'start' | 'center' | 'end' | 'stretch';
   justify?: 'start' | 'center' | 'end' | 'between' | 'around';
 }
 
 const gapClasses = {
   none: 'gap-0',
-  xs: 'gap-1',
-  sm: 'gap-2',
-  base: 'gap-4',
-  lg: 'gap-6',
-  xl: 'gap-8',
+  xs: 'gap-xs',
+  sm: 'gap-sm',
+  md: 'gap-md',
+  base: 'gap-base',
+  lg: 'gap-lg',
+  xl: 'gap-xl',
 } as const;
 
 const alignClasses = {

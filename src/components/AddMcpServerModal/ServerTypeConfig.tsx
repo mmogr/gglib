@@ -1,6 +1,7 @@
 import { FC } from "react";
 import type { McpServerType } from "../../services/transport/types/mcp";
 import { Input } from "../ui/Input";
+import { Stack, Label } from '../primitives';
 
 interface StdioConfigFieldsProps {
   command: string;
@@ -37,8 +38,8 @@ export const ServerTypeConfig: FC<ServerTypeConfigProps> = ({
 }) => {
   return (
     <>
-      <div className="flex flex-col gap-xs">
-        <label className="text-sm font-semibold text-text">Connection Type</label>
+      <Stack gap="xs">
+        <Label size="sm">Connection Type</Label>
         <div className="flex gap-lg">
           <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:accent-primary">
             <input
@@ -61,7 +62,7 @@ export const ServerTypeConfig: FC<ServerTypeConfigProps> = ({
             <span>SSE (connect to URL)</span>
           </label>
         </div>
-      </div>
+      </Stack>
 
       {serverType === "stdio" && <StdioConfigFields {...stdioProps} />}
       {serverType === "sse" && <SseConfigFields {...sseProps} />}
@@ -82,10 +83,10 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
 }) => {
   return (
     <>
-      <div className="flex flex-col gap-xs">
-        <label className="text-sm font-semibold text-text" htmlFor="mcp-command">
+      <Stack gap="xs">
+        <Label size="sm" htmlFor="mcp-command">
           Command *
-        </label>
+        </Label>
         <Input
           id="mcp-command"
           type="text"
@@ -97,12 +98,12 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
         <span className="text-xs text-text-secondary">
           Single executable name or path (no arguments). Will be resolved via PATH.
         </span>
-      </div>
+      </Stack>
 
-      <div className="flex flex-col gap-xs">
-        <label className="text-sm font-semibold text-text" htmlFor="mcp-args">
+      <Stack gap="xs">
+        <Label size="sm" htmlFor="mcp-args">
           Arguments
-        </label>
+        </Label>
         <Input
           id="mcp-args"
           type="text"
@@ -112,12 +113,12 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
           disabled={disabled}
         />
         <span className="text-xs text-text-secondary">Space-separated arguments</span>
-      </div>
+      </Stack>
 
-      <div className="flex flex-col gap-xs">
-        <label className="text-sm font-semibold text-text" htmlFor="mcp-working-dir">
+      <Stack gap="xs">
+        <Label size="sm" htmlFor="mcp-working-dir">
           Working Directory
-        </label>
+        </Label>
         <Input
           id="mcp-working-dir"
           type="text"
@@ -127,12 +128,12 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
           disabled={disabled}
         />
         <span className="text-xs text-text-secondary">Must be absolute if specified</span>
-      </div>
+      </Stack>
 
-      <div className="flex flex-col gap-xs">
-        <label className="text-sm font-semibold text-text" htmlFor="mcp-path-extra">
+      <Stack gap="xs">
+        <Label size="sm" htmlFor="mcp-path-extra">
           Additional PATH Entries
-        </label>
+        </Label>
         <Input
           id="mcp-path-extra"
           type="text"
@@ -142,17 +143,17 @@ const StdioConfigFields: FC<StdioConfigFieldsProps> = ({
           disabled={disabled}
         />
         <span className="text-xs text-text-secondary">Colon-separated paths added to child process PATH</span>
-      </div>
+      </Stack>
     </>
   );
 };
 
 const SseConfigFields: FC<SseConfigFieldsProps> = ({ url, setUrl, disabled }) => {
   return (
-    <div className="flex flex-col gap-xs">
-      <label className="text-sm font-semibold text-text" htmlFor="mcp-url">
+    <Stack gap="xs">
+      <Label size="sm" htmlFor="mcp-url">
         Server URL *
-      </label>
+      </Label>
       <Input
         id="mcp-url"
         type="url"
@@ -161,6 +162,6 @@ const SseConfigFields: FC<SseConfigFieldsProps> = ({ url, setUrl, disabled }) =>
         placeholder="http://localhost:3001/sse"
         disabled={disabled}
       />
-    </div>
+    </Stack>
   );
 };
