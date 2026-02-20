@@ -17,6 +17,11 @@ import {
 import type { McpServerInfo } from "../services/clients/mcp";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
+import { cn } from "../utils/cn";
+
+const statusBadge = "inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full";
+
+const errorBox = "p-md bg-[rgba(239,68,68,0.15)] text-[#ef4444] rounded-base text-sm";
 
 interface McpServersPanelProps {
   onAddServer?: () => void;
@@ -143,15 +148,15 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
 
   const getStatusBadge = (info: McpServerInfo) => {
     if (isServerRunning(info)) {
-      return <span className="inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full bg-[rgba(16,185,129,0.15)] text-[#10b981]">Running</span>;
+      return <span className={cn(statusBadge, "bg-[rgba(16,185,129,0.15)] text-[#10b981]")}>Running</span>;
     }
     if (hasServerError(info)) {
-      return <span className="inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full bg-[rgba(239,68,68,0.15)] text-[#ef4444]">Error</span>;
+      return <span className={cn(statusBadge, "bg-[rgba(239,68,68,0.15)] text-[#ef4444]")}>Error</span>;
     }
     if (info.status === "starting") {
-      return <span className="inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full bg-[rgba(245,158,11,0.15)] text-[#f59e0b]">Starting...</span>;
+      return <span className={cn(statusBadge, "bg-[rgba(245,158,11,0.15)] text-[#f59e0b]")}>Starting...</span>;
     }
-    return <span className="inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full bg-background-tertiary text-text-secondary">Stopped</span>;
+    return <span className={cn(statusBadge, "bg-background-tertiary text-text-secondary")}>Stopped</span>;
   };
 
   if (loading) {
@@ -195,13 +200,13 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
       </div>
 
       {error && (
-        <div className="p-md bg-[rgba(239,68,68,0.15)] text-[#ef4444] rounded-base text-sm" role="alert">
+        <div className={errorBox} role="alert">
           {error}
         </div>
       )}
 
       {actionError && (
-        <div className="p-md bg-[rgba(239,68,68,0.15)] text-[#ef4444] rounded-base text-sm" role="alert">
+        <div className={errorBox} role="alert">
           {actionError}
         </div>
       )}
