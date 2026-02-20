@@ -156,6 +156,29 @@ pub(crate) fn api_routes() -> Router<AppState> {
         )
         // Events (SSE)
         .route("/events", get(handlers::events::stream))
+        // Voice API
+        .route("/voice/status", get(handlers::voice::status))
+        .route("/voice/models", get(handlers::voice::list_models))
+        .route(
+            "/voice/models/stt/{id}/download",
+            post(handlers::voice::download_stt_model),
+        )
+        .route(
+            "/voice/models/tts/download",
+            post(handlers::voice::download_tts_model),
+        )
+        .route(
+            "/voice/models/vad/download",
+            post(handlers::voice::download_vad_model),
+        )
+        .route("/voice/stt/load", post(handlers::voice::load_stt))
+        .route("/voice/tts/load", post(handlers::voice::load_tts))
+        .route("/voice/mode", put(handlers::voice::set_mode))
+        .route("/voice/voice", put(handlers::voice::set_voice))
+        .route("/voice/speed", put(handlers::voice::set_speed))
+        .route("/voice/auto-speak", put(handlers::voice::set_auto_speak))
+        .route("/voice/unload", post(handlers::voice::unload))
+        .route("/voice/devices", get(handlers::voice::list_devices))
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }

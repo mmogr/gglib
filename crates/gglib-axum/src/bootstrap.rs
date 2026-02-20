@@ -24,6 +24,7 @@ use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
+use gglib_voice::VoiceService;
 
 use crate::sse::SseBroadcaster;
 
@@ -217,6 +218,14 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // GGUF parser for model metadata extraction
     let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
 
+    // 9a. Voice service — implements VoicePipelinePort for the 13 data/config ops.
+    // Shares the SSE broadcaster as its event emitter so download progress
+    // events reach SSE subscribers without any Tauri dependency.
+    let voice_service: Arc<dyn gglib_core::ports::VoicePipelinePort> =
+        Arc::new(VoiceService::new(
+            sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>,
+        ));
+
     let deps = GuiDeps::new(
         Arc::clone(&core),
         downloads.clone(),
@@ -230,6 +239,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         model_repo,
         system_probe,
         gguf_parser,
+        voice_service,
     );
     let gui = Arc::new(GuiBackend::new(deps));
 
