@@ -273,7 +273,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
           });
       }
     };
-  }, [subscribeToEvents]);
+  }, [subscribeToEvents, isAudioSupported]);
 
   // ── Sync status on mount ───────────────────────────────────────
 
