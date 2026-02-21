@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::info;
 
 use gglib_core::events::AppEvent;
@@ -70,6 +70,12 @@ pub struct VoiceService {
     /// Uses a std (non-async) lock because it is only accessed in sync
     /// context — never across an `.await` point.
     config: std::sync::RwLock<PendingConfig>,
+    /// Serialises concurrent `speak` calls so two synthesis loops never
+    /// overlap.  The guard is held for the full duration of synthesis.
+    speak_op_lock: Mutex<()>,
+    /// Serialises PTT start/stop pairs so a late `ptt_start` cannot arrive
+    /// while a `ptt_stop` transcription is still in flight.
+    ptt_op_lock: Mutex<()>,
 }
 
 impl VoiceService {
@@ -82,6 +88,8 @@ impl VoiceService {
             pipeline: Arc::new(RwLock::new(None)),
             emitter,
             config: std::sync::RwLock::new(PendingConfig::default()),
+            speak_op_lock: Mutex::new(()),
+            ptt_op_lock: Mutex::new(()),
         }
     }
 
@@ -97,6 +105,8 @@ impl VoiceService {
             pipeline,
             emitter,
             config: std::sync::RwLock::new(PendingConfig::default()),
+            speak_op_lock: Mutex::new(()),
+            ptt_op_lock: Mutex::new(()),
         }
     }
 
@@ -187,6 +197,7 @@ fn to_port_err(e: crate::error::VoiceError) -> VoicePortError {
     match e {
         VoiceError::ModelNotFound(p) => VoicePortError::NotFound(p.display().to_string()),
         VoiceError::AlreadyActive => VoicePortError::AlreadyActive,
+        VoiceError::NotActive => VoicePortError::NotInitialised,
         VoiceError::ModelLoadError(s) => VoicePortError::LoadError(s),
         VoiceError::DownloadError { name, source } => {
             VoicePortError::DownloadError(format!("{name}: {source}"))
@@ -537,5 +548,83 @@ impl VoicePipelinePort for VoiceService {
             })
             .collect();
         Ok(dtos)
+    }
+
+    // ── Audio I/O ──────────────────────────────────────────────────────────────────
+
+    async fn start(&self, mode: Option<String>) -> Result<(), VoicePortError> {
+        // Write lock: start() mutates source/sink fields on the pipeline.
+        let mut guard = self.pipeline.write().await;
+        let pipeline = guard.as_mut().ok_or(VoicePortError::NotInitialised)?;
+        if pipeline.is_active() {
+            return Err(VoicePortError::AlreadyActive);
+        }
+        if let Some(ref mode_str) = mode {
+            let interaction_mode = match mode_str.as_str() {
+                "vad" => VoiceInteractionMode::VoiceActivityDetection,
+                "ptt" => VoiceInteractionMode::PushToTalk,
+                other => {
+                    return Err(VoicePortError::NotFound(format!(
+                        "Unknown voice mode: {other}"
+                    )));
+                }
+            };
+            pipeline.set_mode(interaction_mode);
+        }
+        pipeline.start().map_err(to_port_err)?;
+        info!("Voice pipeline started via HTTP");
+        Ok(())
+    }
+
+    async fn stop(&self) -> Result<(), VoicePortError> {
+        // Write lock: stop() drops source/sink fields.
+        let mut guard = self.pipeline.write().await;
+        if let Some(ref mut p) = *guard {
+            p.stop();
+        }
+        // Intentionally keep *guard = Some(pipeline) so loaded models stay warm.
+        info!("Voice pipeline stopped via HTTP (models retained)");
+        Ok(())
+    }
+
+    async fn ptt_start(&self) -> Result<(), VoicePortError> {
+        // Serialise PTT pairs; read lock is enough since ptt_start takes &self.
+        let _op = self.ptt_op_lock.lock().await;
+        let guard = self.pipeline.read().await;
+        let pipeline = guard.as_ref().ok_or(VoicePortError::NotInitialised)?;
+        pipeline.ptt_start().map_err(to_port_err)
+    }
+
+    async fn ptt_stop(&self) -> Result<String, VoicePortError> {
+        // Hold ptt_op_lock across transcription so a concurrent ptt_start
+        // cannot arrive mid-transcription.  Read lock is sufficient because
+        // ptt_stop takes &self on the pipeline.
+        let _op = self.ptt_op_lock.lock().await;
+        let guard = self.pipeline.read().await;
+        let pipeline = guard.as_ref().ok_or(VoicePortError::NotInitialised)?;
+        let text = pipeline.ptt_stop().await.map_err(to_port_err)?;
+        info!("PTT stop: transcription complete");
+        Ok(text)
+    }
+
+    async fn speak(&self, text: &str) -> Result<(), VoicePortError> {
+        // speak_op_lock prevents two synthesis loops running in parallel.
+        // The read lock allows stop_speaking to concurrently acquire a read
+        // guard and set speak_cancel, interrupting the synthesis loop.
+        let _op = self.speak_op_lock.lock().await;
+        let guard = self.pipeline.read().await;
+        let pipeline = guard.as_ref().ok_or(VoicePortError::NotInitialised)?;
+        pipeline.speak(text).await.map_err(to_port_err)
+    }
+
+    async fn stop_speaking(&self) -> Result<(), VoicePortError> {
+        // Read lock: stop_speaking takes &self (sets speak_cancel + sink.stop).
+        // Acquiring a read lock while speak() holds one is intentional — this
+        // is the mechanism that allows concurrent interruption.
+        let guard = self.pipeline.read().await;
+        if let Some(ref p) = *guard {
+            p.stop_speaking();
+        }
+        Ok(())
     }
 }
