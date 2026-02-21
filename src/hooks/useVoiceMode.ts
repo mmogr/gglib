@@ -13,7 +13,6 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { UnlistenFn } from '@tauri-apps/api/event';
 import {
   voiceStart,
   voiceStop,
@@ -34,13 +33,7 @@ import {
   voiceDownloadVadModel,
   voiceLoadStt,
   voiceLoadTts,
-  onVoiceStateChanged,
-  onVoiceTranscript,
-  onVoiceSpeakingStarted,
-  onVoiceSpeakingFinished,
-  onVoiceAudioLevel,
-  onVoiceError,
-  onModelDownloadProgress,
+  subscribeVoiceEvents,
 } from '../services/clients/voice';
 import type {
   VoiceState,
@@ -192,8 +185,6 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const [isAutoLoading, setIsAutoLoading] = useState(false);
 
   // Cleanup refs
-  const unlistenRefs = useRef<UnlistenFn[]>([]);
-
   // Race-condition guard: monotonically increasing load generation.
   // When a new load is requested, the generation advances; any
   // in-flight load with an older generation bails out before
@@ -205,56 +196,54 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const defaultsRef = useRef(defaults);
   defaultsRef.current = defaults;
 
+  // Timeout id for auto-clearing download progress after completion.
+  // Stored in a ref so it can be cancelled on unmount without triggering re-renders.
+  const downloadClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Event subscriptions ────────────────────────────────────────
 
-  const subscribeToEvents = useCallback(async () => {
-    // All voice events are emitted by the Tauri audio pipeline — not available
-    // in a plain web browser until Phase 3 (WebSocket audio bridge).
-    if (!isAudioSupported) return;
-
-    const unlisteners = await Promise.all([
-      onVoiceStateChanged(({ state }) => {
-        setVoiceState(state);
-      }),
-      onVoiceTranscript(({ text, isFinal }) => {
-        if (isFinal) {
-          setLastTranscript(text);
-        }
-      }),
-      onVoiceSpeakingStarted(() => {
-        setIsTtsGenerating(false);
-        setIsSpeaking(true);
-      }),
-      onVoiceSpeakingFinished(() => {
-        setIsSpeaking(false);
-        setIsTtsGenerating(false);
-      }),
-      onVoiceAudioLevel(({ level }) => {
-        setAudioLevel(level);
-      }),
-      onVoiceError(({ message }) => {
-        setError(message);
-      }),
-      onModelDownloadProgress((progress) => {
-        setDownloadProgress(progress);
-        // Clear progress when complete
-        if (progress.totalBytes && progress.bytesDownloaded >= progress.totalBytes) {
-          setTimeout(() => setDownloadProgress(null), 1000);
-        }
-      }),
-    ]);
-
-    unlistenRefs.current = unlisteners;
-  }, [isAudioSupported]);
-  // Subscribe on mount, cleanup on unmount
+  // Subscribe on mount, cleanup on unmount.
+  // Events are delivered via SSE in WebUI and Tauri IPC on desktop —
+  // no platform guard needed; the transport layer handles routing.
   useEffect(() => {
-    subscribeToEvents();
+    const unsub = subscribeVoiceEvents((event) => {
+      switch (event.type) {
+        case 'voice_state_changed':
+          setVoiceState(event.state);
+          break;
+        case 'voice_transcript':
+          if (event.isFinal) setLastTranscript(event.text);
+          break;
+        case 'voice_speaking_started':
+          setIsTtsGenerating(false);
+          setIsSpeaking(true);
+          break;
+        case 'voice_speaking_finished':
+          setIsSpeaking(false);
+          setIsTtsGenerating(false);
+          break;
+        case 'voice_audio_level':
+          setAudioLevel(event.level);
+          break;
+        case 'voice_error':
+          setError(event.message);
+          break;
+        case 'voice_model_download_progress': {
+          const { modelId, bytesDownloaded, totalBytes, percent } = event;
+          const progress: ModelDownloadProgressPayload = { modelId, bytesDownloaded, totalBytes, percent };
+          setDownloadProgress(progress);
+          if (totalBytes && bytesDownloaded >= totalBytes) {
+            clearTimeout(downloadClearTimeoutRef.current ?? undefined);
+            downloadClearTimeoutRef.current = setTimeout(() => setDownloadProgress(null), 1000);
+          }
+          break;
+        }
+      }
+    });
 
     return () => {
-      for (const unlisten of unlistenRefs.current) {
-        unlisten();
-      }
-      unlistenRefs.current = [];
+      clearTimeout(downloadClearTimeoutRef.current ?? undefined);
+      unsub();
 
       // Release the microphone if voice is still active when this component
       // unmounts (e.g. user navigates away). voiceStop pauses the pipeline
@@ -273,7 +262,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
           });
       }
     };
-  }, [subscribeToEvents, isAudioSupported]);
+  }, [isAudioSupported]);
 
   // ── Sync status on mount ───────────────────────────────────────
 

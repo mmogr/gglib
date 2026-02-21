@@ -10,7 +10,8 @@
  * @module services/clients/voice
  */
 
-import type { UnlistenFn } from '@tauri-apps/api/event';
+import type { Unsubscribe } from '../transport/types/common';
+import type { VoiceEvent } from '../transport/types/events';
 import { getTransport } from '../transport';
 import type {
   VoiceState,
@@ -21,10 +22,6 @@ import type {
   VoiceInfo,
   VoiceModelsResponse,
   AudioDeviceInfo,
-  VoiceStatePayload,
-  VoiceTranscriptPayload,
-  VoiceAudioLevelPayload,
-  VoiceErrorPayload,
   ModelDownloadProgressPayload,
 } from '../../types/voice';
 
@@ -38,12 +35,10 @@ export type {
   VoiceInfo,
   VoiceModelsResponse,
   AudioDeviceInfo,
-  VoiceStatePayload,
-  VoiceTranscriptPayload,
-  VoiceAudioLevelPayload,
-  VoiceErrorPayload,
   ModelDownloadProgressPayload,
 };
+// Re-export VoiceEvent so hooks can use it without reaching into transport internals.
+export type { VoiceEvent };
 
 // ── Tauri IPC helper (audio I/O only) ─────────────────────────────
 
@@ -150,40 +145,17 @@ export async function voiceListDevices(): Promise<AudioDeviceInfo[]> {
 
 // ── Event subscriptions ────────────────────────────────────────────
 
-type VoiceEventHandler<T> = (payload: T) => void;
-
-async function listenToVoiceEvent<T>(
-  eventName: string,
-  handler: VoiceEventHandler<T>,
-): Promise<UnlistenFn> {
-  const { listen } = await import('@tauri-apps/api/event');
-  return listen<T>(eventName, (event) => handler(event.payload));
-}
-
-export function onVoiceStateChanged(handler: VoiceEventHandler<VoiceStatePayload>): Promise<UnlistenFn> {
-  return listenToVoiceEvent('voice:state-changed', handler);
-}
-
-export function onVoiceTranscript(handler: VoiceEventHandler<VoiceTranscriptPayload>): Promise<UnlistenFn> {
-  return listenToVoiceEvent('voice:transcript', handler);
-}
-
-export function onVoiceSpeakingStarted(handler: VoiceEventHandler<void>): Promise<UnlistenFn> {
-  return listenToVoiceEvent('voice:speaking-started', handler);
-}
-
-export function onVoiceSpeakingFinished(handler: VoiceEventHandler<void>): Promise<UnlistenFn> {
-  return listenToVoiceEvent('voice:speaking-finished', handler);
-}
-
-export function onVoiceAudioLevel(handler: VoiceEventHandler<VoiceAudioLevelPayload>): Promise<UnlistenFn> {
-  return listenToVoiceEvent('voice:audio-level', handler);
-}
-
-export function onVoiceError(handler: VoiceEventHandler<VoiceErrorPayload>): Promise<UnlistenFn> {
-  return listenToVoiceEvent('voice:error', handler);
-}
-
-export function onModelDownloadProgress(handler: VoiceEventHandler<ModelDownloadProgressPayload>): Promise<UnlistenFn> {
-  return listenToVoiceEvent('voice:model-download-progress', handler);
+/**
+ * Subscribe to all voice pipeline events via the transport layer.
+ *
+ * Routes through SSE in the WebUI and through Tauri IPC on desktop.
+ * No platform branching required — `getTransport().subscribe('voice', …)`
+ * dispatches to the correct adapter automatically.
+ *
+ * @returns An unsubscribe function; call it to remove the listener.
+ */
+export function subscribeVoiceEvents(
+  handler: (event: VoiceEvent) => void,
+): Unsubscribe {
+  return getTransport().subscribe('voice', handler);
 }
