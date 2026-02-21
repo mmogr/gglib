@@ -235,7 +235,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     //   • Arc<dyn VoicePipelinePort>    → injected into GuiDeps
     //   • Arc<dyn RemoteAudioRegistry>  → stored on AxumContext for WS handler
     let voice_concrete = Arc::new(VoiceService::new(
-        sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>,
+        sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>
     ));
     let voice_service: Arc<dyn gglib_core::ports::VoicePipelinePort> =
         Arc::clone(&voice_concrete) as Arc<dyn gglib_core::ports::VoicePipelinePort>;

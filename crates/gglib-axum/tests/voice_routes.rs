@@ -715,8 +715,16 @@ async fn voice_start_route_exists() {
         .await
         .unwrap();
 
-    assert_ne!(response.status(), StatusCode::NOT_FOUND, "POST /api/voice/start must be routed");
-    assert_ne!(response.status(), StatusCode::METHOD_NOT_ALLOWED, "POST must be the correct method");
+    assert_ne!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "POST /api/voice/start must be routed"
+    );
+    assert_ne!(
+        response.status(),
+        StatusCode::METHOD_NOT_ALLOWED,
+        "POST must be the correct method"
+    );
 }
 
 /// A null body (from the frontend when no mode is passed) must NOT return 422.
@@ -801,7 +809,11 @@ async fn voice_ptt_start_route_exists() {
         .await
         .unwrap();
 
-    assert_ne!(response.status(), StatusCode::NOT_FOUND, "POST /api/voice/ptt-start must be routed");
+    assert_ne!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "POST /api/voice/ptt-start must be routed"
+    );
     assert_ne!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 }
 
@@ -827,7 +839,11 @@ async fn voice_ptt_stop_route_exists() {
         .await
         .unwrap();
 
-    assert_ne!(response.status(), StatusCode::NOT_FOUND, "POST /api/voice/ptt-stop must be routed");
+    assert_ne!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "POST /api/voice/ptt-stop must be routed"
+    );
     assert_ne!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 }
 

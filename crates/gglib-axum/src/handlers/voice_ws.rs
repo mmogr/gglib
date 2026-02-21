@@ -51,10 +51,7 @@ use crate::ws_audio::{WebSocketAudioSink, WebSocketAudioSource};
 /// If `POST /api/voice/start` is called without an open WebSocket the
 /// pipeline falls back to `LocalAudioSource`/`LocalAudioSink` (server
 /// machine's mic and speakers — correct for the desktop app).
-pub async fn audio_ws(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn audio_ws(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_audio_ws(socket, state))
 }
 

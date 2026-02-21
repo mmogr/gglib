@@ -92,9 +92,9 @@ impl From<gglib_core::ports::VoicePortError> for GuiError {
             VoicePortError::AlreadyActive => {
                 Self::Conflict("voice pipeline already active".to_string())
             }
-            VoicePortError::NotActive => {
-                Self::Conflict("voice pipeline not active — call /api/voice/start first".to_string())
-            }
+            VoicePortError::NotActive => Self::Conflict(
+                "voice pipeline not active — call /api/voice/start first".to_string(),
+            ),
             VoicePortError::NotInitialised => {
                 Self::Unavailable("voice pipeline not initialised".to_string())
             }

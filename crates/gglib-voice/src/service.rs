@@ -50,11 +50,7 @@ use crate::tts::TtsEngine;
 /// back to `LocalAudioSource`/`LocalAudioSink`.
 pub trait RemoteAudioRegistry: Send + Sync {
     /// Stash a remote source/sink for the next `start()` call.
-    fn register_remote_audio(
-        &self,
-        source: Box<dyn AudioSource>,
-        sink: Box<dyn AudioSink>,
-    );
+    fn register_remote_audio(&self, source: Box<dyn AudioSource>, sink: Box<dyn AudioSink>);
 
     /// Clear any pending remote registration.
     ///
@@ -238,7 +234,7 @@ fn to_port_err(e: crate::error::VoiceError) -> VoicePortError {
     match e {
         VoiceError::ModelNotFound(p) => VoicePortError::NotFound(p.display().to_string()),
         VoiceError::AlreadyActive => VoicePortError::AlreadyActive,
-        VoiceError::NotActive         => VoicePortError::NotActive,
+        VoiceError::NotActive => VoicePortError::NotActive,
         VoiceError::ModelLoadError(s) => VoicePortError::LoadError(s),
         VoiceError::DownloadError { name, source } => {
             VoicePortError::DownloadError(format!("{name}: {source}"))
@@ -271,11 +267,7 @@ fn mode_label(m: VoiceInteractionMode) -> String {
 // ── RemoteAudioRegistry implementation ───────────────────────────────────────
 
 impl RemoteAudioRegistry for VoiceService {
-    fn register_remote_audio(
-        &self,
-        source: Box<dyn AudioSource>,
-        sink: Box<dyn AudioSink>,
-    ) {
+    fn register_remote_audio(&self, source: Box<dyn AudioSource>, sink: Box<dyn AudioSink>) {
         *self.pending_remote.lock().unwrap() = Some((source, sink));
         tracing::debug!("Remote audio source/sink registered for next start()");
     }
