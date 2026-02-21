@@ -132,42 +132,6 @@ impl VoiceService {
             pending_remote: std::sync::Mutex::new(None),
         }
     }
-
-    /// Create a service that shares an existing pipeline `Arc`.
-    ///
-    /// Used in Tauri bootstrap so that the HTTP layer and the remaining
-    /// Tauri audio commands share the same `VoicePipeline` instance.
-    pub fn from_arc(
-        pipeline: Arc<RwLock<Option<VoicePipeline>>>,
-        emitter: Arc<dyn AppEventEmitter>,
-    ) -> Self {
-        Self {
-            pipeline,
-            emitter,
-            config: std::sync::RwLock::new(PendingConfig::default()),
-            speak_op_lock: Mutex::new(()),
-            ptt_op_lock: Mutex::new(()),
-            pending_remote: std::sync::Mutex::new(None),
-        }
-    }
-
-    /// Return a clone of the underlying pipeline `Arc`.
-    ///
-    /// Tauri audio commands (`voice_start`, `voice_stop`, `voice_ptt_start`,
-    /// `voice_ptt_stop`, `voice_speak`, `voice_stop_speaking`) call this to
-    /// obtain the same shared lock they previously accessed via
-    /// `AppState.voice_pipeline`.
-    pub fn pipeline(&self) -> Arc<RwLock<Option<VoicePipeline>>> {
-        Arc::clone(&self.pipeline)
-    }
-
-    /// Return a clone of the event emitter.
-    ///
-    /// Used by Tauri audio commands to pass the emitter to
-    /// [`spawn_event_bridge`] when creating a new pipeline.
-    pub fn emitter(&self) -> Arc<dyn AppEventEmitter> {
-        Arc::clone(&self.emitter)
-    }
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
