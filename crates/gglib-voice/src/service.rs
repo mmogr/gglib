@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use tracing::info;
 
 use gglib_core::events::AppEvent;
@@ -29,7 +29,9 @@ use gglib_core::ports::voice::{
 
 use crate::capture::AudioCapture;
 use crate::models::{self, VoiceModelCatalog};
-use crate::pipeline::{VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState};
+use crate::pipeline::{
+    VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
+};
 use crate::tts::TtsEngine;
 
 // ── Pending config ────────────────────────────────────────────────────────────

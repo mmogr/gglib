@@ -190,9 +190,7 @@ pub struct PttStopResponse {
 }
 
 /// `POST /api/voice/ptt-stop`
-pub async fn ptt_stop(
-    State(state): State<AppState>,
-) -> Result<Json<PttStopResponse>, HttpError> {
+pub async fn ptt_stop(State(state): State<AppState>) -> Result<Json<PttStopResponse>, HttpError> {
     let transcript = state.gui.voice_ptt_stop().await?;
     Ok(Json(PttStopResponse { transcript }))
 }

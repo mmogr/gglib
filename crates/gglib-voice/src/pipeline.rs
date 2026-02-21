@@ -13,8 +13,8 @@
 //! - **Voice Activity Detection (VAD)**: Audio is continuously monitored;
 //!   speech boundaries are detected automatically.
 
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -528,7 +528,8 @@ impl VoicePipeline {
     /// appended so that `SpeakingFinished` is emitted when playback
     /// naturally drains (rather than only on explicit `stop_speaking()`).
     #[allow(clippy::cognitive_complexity)]
-    pub async fn speak(&self, text: &str) -> Result<(), VoiceError> {        // Reset cancellation flag from any previous stop_speaking() call.
+    pub async fn speak(&self, text: &str) -> Result<(), VoiceError> {
+        // Reset cancellation flag from any previous stop_speaking() call.
         self.speak_cancel.store(false, Ordering::SeqCst);
         if text.trim().is_empty() {
             return Ok(());
@@ -668,9 +669,7 @@ impl VoicePipeline {
     /// Check if TTS playback is currently active.
     #[must_use]
     pub fn is_speaking(&self) -> bool {
-        self.sink
-            .as_ref()
-            .is_some_and(|s| s.is_playing())
+        self.sink.as_ref().is_some_and(|s| s.is_playing())
     }
 
     // ── Configuration ──────────────────────────────────────────────

@@ -41,8 +41,7 @@ fn test_config() -> ServerConfig {
 /// Assert the response body is valid JSON and return the parsed value.
 async fn parse_json(response: axum::response::Response) -> serde_json::Value {
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    serde_json::from_slice(&body)
-        .unwrap_or_else(|e| panic!("Expected valid JSON body: {e}"))
+    serde_json::from_slice(&body).unwrap_or_else(|e| panic!("Expected valid JSON body: {e}"))
 }
 
 /// Assert a response has `application/json` content-type.
@@ -109,7 +108,12 @@ async fn voice_status_json_shape_matches_frontend_type() {
 
     // All fields required by the TS VoiceStatusResponse interface must be present.
     for field in &[
-        "isActive", "state", "mode", "sttLoaded", "ttsLoaded", "autoSpeak",
+        "isActive",
+        "state",
+        "mode",
+        "sttLoaded",
+        "ttsLoaded",
+        "autoSpeak",
     ] {
         assert!(
             json.get(field).is_some(),
@@ -225,7 +229,15 @@ async fn voice_models_json_shape_matches_frontend_type() {
                 "sttModels[{i}] missing 'isDownloaded'. Got: {model}"
             );
             // Other required fields.
-            for field in &["id", "name", "sizeBytes", "sizeDisplay", "quality", "speed", "isDefault"] {
+            for field in &[
+                "id",
+                "name",
+                "sizeBytes",
+                "sizeDisplay",
+                "quality",
+                "speed",
+                "isDefault",
+            ] {
                 assert!(
                     model.get(*field).is_some(),
                     "sttModels[{i}] missing '{field}'. Got: {model}"
@@ -655,15 +667,14 @@ async fn voice_routes_not_intercepted_by_spa_fallback() {
 
     let app = create_spa_router(ctx, temp_dir.path(), &CorsConfig::AllowAll);
 
-    for uri in &["/api/voice/status", "/api/voice/models", "/api/voice/devices"] {
+    for uri in &[
+        "/api/voice/status",
+        "/api/voice/models",
+        "/api/voice/devices",
+    ] {
         let response = app
             .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(*uri)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri(*uri).body(Body::empty()).unwrap())
             .await
             .unwrap();
 

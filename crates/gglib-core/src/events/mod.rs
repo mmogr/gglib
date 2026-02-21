@@ -301,12 +301,17 @@ impl AppEvent {
 impl AppEvent {
     /// Create a [`VoiceStateChanged`] event.
     pub fn voice_state_changed(state: impl Into<String>) -> Self {
-        Self::VoiceStateChanged { state: state.into() }
+        Self::VoiceStateChanged {
+            state: state.into(),
+        }
     }
 
     /// Create a [`VoiceTranscript`] event.
     pub fn voice_transcript(text: impl Into<String>, is_final: bool) -> Self {
-        Self::VoiceTranscript { text: text.into(), is_final }
+        Self::VoiceTranscript {
+            text: text.into(),
+            is_final,
+        }
     }
 
     /// Create a [`VoiceSpeakingStarted`] event.
@@ -326,7 +331,9 @@ impl AppEvent {
 
     /// Create a [`VoiceError`] event.
     pub fn voice_error(message: impl Into<String>) -> Self {
-        Self::VoiceError { message: message.into() }
+        Self::VoiceError {
+            message: message.into(),
+        }
     }
 }
 
@@ -396,9 +403,15 @@ mod tests {
     fn voice_event_names_are_stable() {
         let cases = vec![
             (AppEvent::voice_state_changed("idle"), "voice:state-changed"),
-            (AppEvent::voice_transcript("hello", true), "voice:transcript"),
+            (
+                AppEvent::voice_transcript("hello", true),
+                "voice:transcript",
+            ),
             (AppEvent::voice_speaking_started(), "voice:speaking-started"),
-            (AppEvent::voice_speaking_finished(), "voice:speaking-finished"),
+            (
+                AppEvent::voice_speaking_finished(),
+                "voice:speaking-finished",
+            ),
             (AppEvent::voice_audio_level(0.5), "voice:audio-level"),
             (AppEvent::voice_error("oops"), "voice:error"),
         ];
@@ -407,16 +420,22 @@ mod tests {
         }
 
         // Also assert Serde type tags match the frontend SSE routing prefix.
-        let json =
-            serde_json::to_string(&AppEvent::voice_state_changed("idle")).unwrap();
-        assert!(json.contains("\"type\":\"voice_state_changed\""), "bad serde tag: {json}");
+        let json = serde_json::to_string(&AppEvent::voice_state_changed("idle")).unwrap();
+        assert!(
+            json.contains("\"type\":\"voice_state_changed\""),
+            "bad serde tag: {json}"
+        );
 
-        let json =
-            serde_json::to_string(&AppEvent::voice_audio_level(0.5)).unwrap();
-        assert!(json.contains("\"type\":\"voice_audio_level\""), "bad serde tag: {json}");
+        let json = serde_json::to_string(&AppEvent::voice_audio_level(0.5)).unwrap();
+        assert!(
+            json.contains("\"type\":\"voice_audio_level\""),
+            "bad serde tag: {json}"
+        );
 
-        let json =
-            serde_json::to_string(&AppEvent::voice_error("oops")).unwrap();
-        assert!(json.contains("\"type\":\"voice_error\""), "bad serde tag: {json}");
+        let json = serde_json::to_string(&AppEvent::voice_error("oops")).unwrap();
+        assert!(
+            json.contains("\"type\":\"voice_error\""),
+            "bad serde tag: {json}"
+        );
     }
 }
