@@ -218,13 +218,6 @@ fn main() {
             commands::research_logs::list_research_logs,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
-            // Voice mode: OS audio I/O (data/config ops now served via HTTP)
-            commands::voice::voice_start,
-            commands::voice::voice_stop,
-            commands::voice::voice_ptt_start,
-            commands::voice::voice_ptt_stop,
-            commands::voice::voice_speak,
-            commands::voice::voice_stop_speaking,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
