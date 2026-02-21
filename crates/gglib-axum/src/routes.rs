@@ -179,6 +179,13 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/voice/auto-speak", put(handlers::voice::set_auto_speak))
         .route("/voice/unload", post(handlers::voice::unload))
         .route("/voice/devices", get(handlers::voice::list_devices))
+        // Audio I/O control (Phase 3 / PR 2)
+        .route("/voice/start", post(handlers::voice::start))
+        .route("/voice/stop", post(handlers::voice::stop))
+        .route("/voice/ptt-start", post(handlers::voice::ptt_start))
+        .route("/voice/ptt-stop", post(handlers::voice::ptt_stop))
+        .route("/voice/speak", post(handlers::voice::speak))
+        .route("/voice/stop-speaking", post(handlers::voice::stop_speaking))
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }
