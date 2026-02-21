@@ -5,6 +5,7 @@
 
 import type { Unsubscribe, EventHandler } from './common';
 import type { DownloadId } from './ids';
+import type { VoiceState } from '../../../types/voice';
 
 // ============================================================================
 // Server Events
@@ -163,23 +164,13 @@ export type VerificationEvent = VerificationProgressEvent | VerificationComplete
 // ============================================================================
 
 /**
- * Voice pipeline state — mirrors the Rust `VoiceState` enum.
- * Inlined here so the transport layer has no dependency on src/types/voice.ts.
- */
-export type VoiceState =
-  | 'idle'
-  | 'listening'
-  | 'recording'
-  | 'transcribing'
-  | 'thinking'
-  | 'speaking'
-  | 'error';
-
-/**
  * Voice events received from the SSE bus (or Tauri IPC on desktop).
  *
  * The `type` discriminator values are the Serde snake_case tag emitted by
  * the Rust `AppEvent` enum (e.g. `"voice_state_changed"`).
+ *
+ * `VoiceState` is imported from `src/types/voice.ts` (canonical definition)
+ * to avoid a duplicate named-export collision in the transport/types barrel.
  */
 export type VoiceEvent =
   | { type: 'voice_state_changed'; state: VoiceState }
