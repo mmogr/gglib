@@ -1,9 +1,7 @@
 /**
  * Voice transport sub-interface.
- * Handles voice pipeline data/config operations (13 HTTP-backed methods).
- *
- * Audio I/O operations (start, stop, ptt, speak, stop-speaking) are NOT
- * included here — they remain Tauri-only until Phase 3.
+ * Covers all 19 voice operations: 13 data/config + 6 audio I/O control.
+ * Every method is backed by an HTTP endpoint in gglib-axum.
  */
 
 import type {
@@ -31,9 +29,9 @@ export type {
 } from '../../../types/voice';
 
 /**
- * Voice transport operations (data/config — no audio I/O).
+ * Voice transport operations.
  *
- * All methods map 1-to-1 to the 13 HTTP endpoints exposed by `gglib-axum`.
+ * All 19 methods map 1-to-1 to HTTP endpoints exposed by `gglib-axum`.
  */
 export interface VoiceTransport {
   /** GET /api/voice/status — current pipeline state. */
@@ -74,4 +72,29 @@ export interface VoiceTransport {
 
   /** GET /api/voice/devices — list available audio input/output devices. */
   voiceListDevices(): Promise<AudioDeviceInfo[]>;
+
+  // ── Audio I/O control (Phase 3 / PR 2) ───────────────────────────────────
+
+  /** POST /api/voice/start — activate the audio pipeline (optional mode override). */
+  voiceStart(mode?: VoiceInteractionMode): Promise<void>;
+
+  /** POST /api/voice/stop — pause the pipeline, keeping models loaded. */
+  voiceStop(): Promise<void>;
+
+  /** POST /api/voice/ptt-start — open the microphone for push-to-talk recording. */
+  voicePttStart(): Promise<void>;
+
+  /** POST /api/voice/ptt-stop — close PTT and return the transcript. */
+  voicePttStop(): Promise<string>;
+
+  /**
+   * POST /api/voice/speak — synthesise and play back the given text.
+   *
+   * The server returns 202 Accepted immediately; listen for
+   * `SpeakingStarted` / `SpeakingFinished` events on the SSE stream.
+   */
+  voiceSpeak(text: string): Promise<void>;
+
+  /** POST /api/voice/stop-speaking — cancel in-progress TTS playback. */
+  voiceStopSpeaking(): Promise<void>;
 }
