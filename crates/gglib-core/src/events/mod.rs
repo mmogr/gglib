@@ -315,17 +315,17 @@ impl AppEvent {
     }
 
     /// Create a [`VoiceSpeakingStarted`] event.
-    pub fn voice_speaking_started() -> Self {
+    pub const fn voice_speaking_started() -> Self {
         Self::VoiceSpeakingStarted
     }
 
     /// Create a [`VoiceSpeakingFinished`] event.
-    pub fn voice_speaking_finished() -> Self {
+    pub const fn voice_speaking_finished() -> Self {
         Self::VoiceSpeakingFinished
     }
 
     /// Create a [`VoiceAudioLevel`] event.
-    pub fn voice_audio_level(level: f32) -> Self {
+    pub const fn voice_audio_level(level: f32) -> Self {
         Self::VoiceAudioLevel { level }
     }
 
