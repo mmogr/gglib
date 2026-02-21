@@ -268,6 +268,33 @@ fn mode_label(m: VoiceInteractionMode) -> String {
     .to_owned()
 }
 
+/// Build a progress callback for use with `models::ensure_*` download functions.
+///
+/// Returns a `move` closure that takes `(downloaded, total)` byte counts and
+/// emits an [`AppEvent::VoiceModelDownloadProgress`] through `emitter`.
+///
+/// Centralising the `#[allow(clippy::cast_precision_loss)]` here means each
+/// individual download method does not need its own per-site suppression.
+#[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
+fn progress_callback(
+    emitter: Arc<dyn AppEventEmitter>,
+    model_id: String,
+) -> impl FnMut(u64, u64) {
+    move |downloaded, total| {
+        let percent = if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        emitter.emit(AppEvent::VoiceModelDownloadProgress {
+            model_id: model_id.clone(),
+            bytes_downloaded: downloaded,
+            total_bytes: total,
+            percent,
+        });
+    }
+}
+
 // ── RemoteAudioRegistry implementation ───────────────────────────────────────
 
 impl RemoteAudioRegistry for VoiceService {
@@ -376,26 +403,12 @@ impl VoicePipelinePort for VoiceService {
         })
     }
 
-    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_stt_model(&self, model_id: &str) -> Result<(), VoicePortError> {
-        // Clone the emitter and model_id before entering the download so
-        // the closure is 'static and the pipeline lock is never held.
-        let emitter = Arc::clone(&self.emitter);
         let model_id_owned = model_id.to_owned();
-
-        let path = models::ensure_stt_model(model_id, move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emitter.emit(AppEvent::VoiceModelDownloadProgress {
-                model_id: model_id_owned.clone(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            });
-        })
+        let path = models::ensure_stt_model(
+            model_id,
+            progress_callback(Arc::clone(&self.emitter), model_id_owned.clone()),
+        )
         .await
         .map_err(to_port_err)?;
 
@@ -403,25 +416,11 @@ impl VoicePipelinePort for VoiceService {
         Ok(())
     }
 
-    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_tts_model(&self) -> Result<(), VoicePortError> {
-        let emitter = Arc::clone(&self.emitter);
         let model_id = VoiceModelCatalog::tts_model().id.0;
-        let model_id_clone = model_id.clone();
-
-        let path = models::ensure_tts_model(move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emitter.emit(AppEvent::VoiceModelDownloadProgress {
-                model_id: model_id_clone.clone(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            });
-        })
+        let path = models::ensure_tts_model(
+            progress_callback(Arc::clone(&self.emitter), model_id.clone()),
+        )
         .await
         .map_err(to_port_err)?;
 
@@ -429,23 +428,10 @@ impl VoicePipelinePort for VoiceService {
         Ok(())
     }
 
-    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_vad_model(&self) -> Result<(), VoicePortError> {
-        let emitter = Arc::clone(&self.emitter);
-
-        let path = models::ensure_vad_model(move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emitter.emit(AppEvent::VoiceModelDownloadProgress {
-                model_id: "silero-vad".to_owned(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            });
-        })
+        let path = models::ensure_vad_model(
+            progress_callback(Arc::clone(&self.emitter), "silero-vad".to_owned()),
+        )
         .await
         .map_err(to_port_err)?;
 
