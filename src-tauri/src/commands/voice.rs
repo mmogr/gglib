@@ -5,126 +5,13 @@
 //! configuration, device listing) are now served by the Axum HTTP API — see
 //! `crates/gglib-axum/src/handlers/voice.rs`.
 
-use serde::Serialize;
-use tauri::{AppHandle, Emitter};
-use tracing::{error, info};
+use tracing::info;
 
 use gglib_voice::models::VoiceModelCatalog;
-use gglib_voice::pipeline::{
-    VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
-};
+use gglib_voice::pipeline::{VoiceInteractionMode, VoicePipeline, VoicePipelineConfig};
+use gglib_voice::service::spawn_event_bridge;
 
 use crate::app::state::AppState;
-
-// ── Event names ────────────────────────────────────────────────────
-
-pub mod event_names {
-    pub const VOICE_STATE_CHANGED: &str = "voice:state-changed";
-    pub const VOICE_TRANSCRIPT: &str = "voice:transcript";
-    pub const VOICE_SPEAKING_STARTED: &str = "voice:speaking-started";
-    pub const VOICE_SPEAKING_FINISHED: &str = "voice:speaking-finished";
-    pub const VOICE_AUDIO_LEVEL: &str = "voice:audio-level";
-    pub const VOICE_ERROR: &str = "voice:error";
-}
-
-// ── Event payloads ─────────────────────────────────────────────────
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VoiceStatePayload {
-    pub state: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VoiceTranscriptPayload {
-    pub text: String,
-    pub is_final: bool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VoiceAudioLevelPayload {
-    pub level: f32,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VoiceErrorPayload {
-    pub message: String,
-}
-
-// ── Helper ─────────────────────────────────────────────────────────
-
-fn emit_or_log<T: Serialize + Clone>(app: &AppHandle, event: &str, payload: T) {
-    if let Err(e) = app.emit(event, payload) {
-        error!(error = %e, event, "Failed to emit voice event");
-    }
-}
-
-fn voice_state_string(state: VoiceState) -> String {
-    match state {
-        VoiceState::Idle => "idle",
-        VoiceState::Listening => "listening",
-        VoiceState::Recording => "recording",
-        VoiceState::Transcribing => "transcribing",
-        VoiceState::Thinking => "thinking",
-        VoiceState::Speaking => "speaking",
-        VoiceState::Error => "error",
-    }
-    .to_string()
-}
-
-// ── Event forwarding ───────────────────────────────────────────────
-
-/// Spawn a background task that forwards VoicePipeline events to the Tauri frontend.
-fn spawn_event_forwarder(
-    app: AppHandle,
-    mut event_rx: tokio::sync::mpsc::UnboundedReceiver<VoiceEvent>,
-) {
-    tokio::spawn(async move {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                VoiceEvent::StateChanged(state) => {
-                    emit_or_log(
-                        &app,
-                        event_names::VOICE_STATE_CHANGED,
-                        VoiceStatePayload {
-                            state: voice_state_string(state),
-                        },
-                    );
-                }
-                VoiceEvent::Transcript { text, is_final } => {
-                    emit_or_log(
-                        &app,
-                        event_names::VOICE_TRANSCRIPT,
-                        VoiceTranscriptPayload { text, is_final },
-                    );
-                }
-                VoiceEvent::SpeakingStarted => {
-                    emit_or_log(&app, event_names::VOICE_SPEAKING_STARTED, ());
-                }
-                VoiceEvent::SpeakingFinished => {
-                    emit_or_log(&app, event_names::VOICE_SPEAKING_FINISHED, ());
-                }
-                VoiceEvent::AudioLevel(level) => {
-                    emit_or_log(
-                        &app,
-                        event_names::VOICE_AUDIO_LEVEL,
-                        VoiceAudioLevelPayload { level },
-                    );
-                }
-                VoiceEvent::Error(msg) => {
-                    emit_or_log(
-                        &app,
-                        event_names::VOICE_ERROR,
-                        VoiceErrorPayload { message: msg },
-                    );
-                }
-            }
-        }
-    });
-}
 
 // ── Commands: Pipeline lifecycle ───────────────────────────────────
 
@@ -136,7 +23,6 @@ fn spawn_event_forwarder(
 #[tauri::command]
 pub async fn voice_start(
     mode: Option<String>,
-    app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let interaction_mode = match mode.as_deref() {
@@ -169,7 +55,7 @@ pub async fn voice_start(
 
         let (mut pipeline, event_rx) = VoicePipeline::new(config);
         pipeline.start().map_err(|e| format!("{e}"))?;
-        spawn_event_forwarder(app, event_rx);
+        spawn_event_bridge(event_rx, state.voice_service.emitter());
         *voice = Some(pipeline);
         info!(mode = ?interaction_mode, "Voice pipeline started (new)");
     }
