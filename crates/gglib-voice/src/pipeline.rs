@@ -753,10 +753,14 @@ impl VoicePipeline {
 
     /// Transition to a new state and emit a state-change event.
     fn set_state(&self, new_state: VoiceState) {
-        let old_state = *self.state.lock().unwrap();
+        let mut state_guard = self.state.lock().unwrap();
+        let old_state = *state_guard;
         if old_state != new_state {
+            *state_guard = new_state;
+            // Release the lock before emitting events to avoid holding
+            // the mutex during potentially re-entrant or blocking operations.
+            drop(state_guard);
             tracing::debug!(old = ?old_state, new = ?new_state, "Voice state transition");
-            *self.state.lock().unwrap() = new_state;
             self.emit(VoiceEvent::StateChanged(new_state));
         }
     }

@@ -199,7 +199,7 @@ fn to_port_err(e: crate::error::VoiceError) -> VoicePortError {
     match e {
         VoiceError::ModelNotFound(p) => VoicePortError::NotFound(p.display().to_string()),
         VoiceError::AlreadyActive => VoicePortError::AlreadyActive,
-        VoiceError::NotActive => VoicePortError::NotInitialised,
+        VoiceError::NotActive         => VoicePortError::NotActive,
         VoiceError::ModelLoadError(s) => VoicePortError::LoadError(s),
         VoiceError::DownloadError { name, source } => {
             VoicePortError::DownloadError(format!("{name}: {source}"))

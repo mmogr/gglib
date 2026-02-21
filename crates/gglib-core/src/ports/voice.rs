@@ -135,6 +135,13 @@ pub enum VoicePortError {
     #[error("Voice pipeline is already active")]
     AlreadyActive,
 
+    /// The pipeline is initialised (models loaded) but has not been started.
+    ///
+    /// The caller should POST to `/api/voice/start` before calling audio I/O
+    /// operations.  Maps to HTTP 409 Conflict.
+    #[error("Voice pipeline is not active — call /api/voice/start first")]
+    NotActive,
+
     /// A requested resource (model, device) was not found.
     #[error("Not found: {0}")]
     NotFound(String),
@@ -236,9 +243,11 @@ pub trait VoicePipelinePort: Send + Sync {
 
     /// Synthesize `text` via TTS and stream the audio to the speaker.
     ///
-    /// This call **returns immediately** after dispatch; actual synthesis
-    /// and playback run asynchronously.  `VoiceEvent::SpeakingStarted` /
-    /// `SpeakingFinished` are emitted via the SSE event bus.
+    /// This is an asynchronous operation: implementations may perform
+    /// synthesis and playback work while this future is pending.  Callers
+    /// MUST NOT assume that it returns immediately after dispatch.
+    /// `VoiceEvent::SpeakingStarted` / `SpeakingFinished` are emitted via
+    /// the SSE event bus to report speaking lifecycle events.
     async fn speak(&self, text: &str) -> Result<(), VoicePortError>;
 
     /// Interrupt any active TTS playback immediately.
