@@ -13,6 +13,7 @@ use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
 use gglib_download::cli_exec::preflight_fast_helper;
 use gglib_runtime::process::get_log_manager;
 use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
+use gglib_voice::RemoteAudioRegistry;
 #[cfg(target_os = "macos")]
 use menu::state_sync::sync_menu_state_or_log;
 use std::sync::Arc;
@@ -113,6 +114,11 @@ fn main() {
                 hf_client: ctx.hf_client.clone(),
                 runner: ctx.runner.clone(),
                 sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
+                // Desktop app: voice_registry is present but unused — the
+                // browser opens the WS audio endpoint only in web/embedded
+                // mode.  For Tauri, cpal/rodio audio is handled by the Tauri
+                // audio commands (or the HTTP control plane via LocalAudio*).
+                voice_registry: ctx.voice_service.clone() as Arc<dyn RemoteAudioRegistry>,
             };
 
             // Start embedded API server with auth and ephemeral port
