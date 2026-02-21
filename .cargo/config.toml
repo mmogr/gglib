@@ -1,0 +1,16 @@
+# Workspace-level Cargo configuration.
+#
+# Since Rust 1.73, rustflags here are MERGED with the RUSTFLAGS environment
+# variable rather than overriding it, so CI can still set RUSTFLAGS without
+# losing these flags.
+
+# ── Windows: sherpa-onnx-sys / ONNX Runtime ETW telemetry ────────────────────
+#
+# sherpa-onnx-sys bundles ONNX Runtime C++ code that uses Windows ETW telemetry
+# (EventWriteTransfer / EventRegister / EventUnregister / EventSetInformation
+# / RegOpenKeyExA / RegQueryValueExA).  The sherpa-onnx-sys build script does
+# not emit the Advapi32 link directive for its cdylib artifact, so we add it
+# here as a workspace-wide rustflag so that rustc can resolve these symbols when
+# linking the sherpa_rs DLL.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=Advapi32.lib"]
