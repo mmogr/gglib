@@ -31,4 +31,18 @@ export function createAudioBridge(): WebAudioBridge | null {
   return new WebAudioBridge();
 }
 
+/**
+ * Returns `true` when the current platform supports the audio I/O required
+ * for voice mode.
+ *
+ * - **Tauri desktop**: always `true` — the native cpal/rodio stack is always
+ *   available.
+ * - **Browser**: delegates to {@link WebAudioBridge.isSupported}, which checks
+ *   for a secure context, `AudioWorkletNode`, and `getUserMedia`.
+ */
+export function isAudioSupported(): boolean {
+  if (isTauri()) return true; // native audio stack — always available
+  return WebAudioBridge.isSupported();
+}
+
 export type { WebAudioBridge };

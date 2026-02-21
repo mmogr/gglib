@@ -170,6 +170,42 @@ impl VoiceService {
     }
 }
 
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+impl VoiceService {
+    /// Ensure a pipeline exists in `slot`, creating one lazily if `None`.
+    ///
+    /// Accepts `&mut Option<VoicePipeline>` so callers can pass `&mut guard`
+    /// for a write-lock guard: Rust auto-derefs through `DerefMut` without
+    /// coupling this helper to any particular `RwLockWriteGuard` type.
+    ///
+    /// When a new pipeline is created its event channel is bridged to the
+    /// service's emitter via [`spawn_event_bridge`].
+    fn ensure_pipeline(&self, slot: &mut Option<VoicePipeline>) {
+        if slot.is_none() {
+            let (pipeline, event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
+            spawn_event_bridge(event_rx, Arc::clone(&self.emitter));
+            *slot = Some(pipeline);
+            info!("Created idle voice pipeline for model preloading");
+        }
+    }
+
+    /// Apply the persisted [`PendingConfig`] to a live pipeline.
+    ///
+    /// Called at the end of `load_stt` and `load_tts` to propagate any
+    /// mode / voice / speed / auto-speak settings that were written before
+    /// the pipeline existed.
+    fn apply_pending_config(&self, pipeline: &mut VoicePipeline) {
+        let cfg = self.config.read().unwrap();
+        pipeline.set_mode(cfg.mode);
+        if let Some(ref v) = cfg.voice_id {
+            pipeline.set_voice(v);
+        }
+        pipeline.set_speed(cfg.speed);
+        pipeline.set_auto_speak(cfg.auto_speak);
+    }
+}
+
 // ── Event bridge ─────────────────────────────────────────────────────────────
 
 /// Minimum interval between `VoiceAudioLevel` events forwarded to the SSE bus.
@@ -266,6 +302,33 @@ fn mode_label(m: VoiceInteractionMode) -> String {
         VoiceInteractionMode::VoiceActivityDetection => "vad",
     }
     .to_owned()
+}
+
+/// Build a progress callback for use with `models::ensure_*` download functions.
+///
+/// Returns a `move` closure that takes `(downloaded, total)` byte counts and
+/// emits an [`AppEvent::VoiceModelDownloadProgress`] through `emitter`.
+///
+/// Centralising the `#[allow(clippy::cast_precision_loss)]` here means each
+/// individual download method does not need its own per-site suppression.
+#[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
+fn progress_callback(
+    emitter: Arc<dyn AppEventEmitter>,
+    model_id: String,
+) -> impl Fn(u64, u64) {
+    move |downloaded, total| {
+        let percent = if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        emitter.emit(AppEvent::VoiceModelDownloadProgress {
+            model_id: model_id.clone(),
+            bytes_downloaded: downloaded,
+            total_bytes: total,
+            percent,
+        });
+    }
 }
 
 // ── RemoteAudioRegistry implementation ───────────────────────────────────────
@@ -376,26 +439,12 @@ impl VoicePipelinePort for VoiceService {
         })
     }
 
-    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_stt_model(&self, model_id: &str) -> Result<(), VoicePortError> {
-        // Clone the emitter and model_id before entering the download so
-        // the closure is 'static and the pipeline lock is never held.
-        let emitter = Arc::clone(&self.emitter);
         let model_id_owned = model_id.to_owned();
-
-        let path = models::ensure_stt_model(model_id, move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emitter.emit(AppEvent::VoiceModelDownloadProgress {
-                model_id: model_id_owned.clone(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            });
-        })
+        let path = models::ensure_stt_model(
+            model_id,
+            progress_callback(Arc::clone(&self.emitter), model_id_owned.clone()),
+        )
         .await
         .map_err(to_port_err)?;
 
@@ -403,25 +452,11 @@ impl VoicePipelinePort for VoiceService {
         Ok(())
     }
 
-    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_tts_model(&self) -> Result<(), VoicePortError> {
-        let emitter = Arc::clone(&self.emitter);
         let model_id = VoiceModelCatalog::tts_model().id.0;
-        let model_id_clone = model_id.clone();
-
-        let path = models::ensure_tts_model(move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emitter.emit(AppEvent::VoiceModelDownloadProgress {
-                model_id: model_id_clone.clone(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            });
-        })
+        let path = models::ensure_tts_model(
+            progress_callback(Arc::clone(&self.emitter), model_id.clone()),
+        )
         .await
         .map_err(to_port_err)?;
 
@@ -429,23 +464,10 @@ impl VoicePipelinePort for VoiceService {
         Ok(())
     }
 
-    #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
     async fn download_vad_model(&self) -> Result<(), VoicePortError> {
-        let emitter = Arc::clone(&self.emitter);
-
-        let path = models::ensure_vad_model(move |downloaded, total| {
-            let percent = if total > 0 {
-                (downloaded as f64 / total as f64) * 100.0
-            } else {
-                0.0
-            };
-            emitter.emit(AppEvent::VoiceModelDownloadProgress {
-                model_id: "silero-vad".to_owned(),
-                bytes_downloaded: downloaded,
-                total_bytes: total,
-                percent,
-            });
-        })
+        let path = models::ensure_vad_model(
+            progress_callback(Arc::clone(&self.emitter), "silero-vad".to_owned()),
+        )
         .await
         .map_err(to_port_err)?;
 
@@ -469,28 +491,13 @@ impl VoicePipelinePort for VoiceService {
         }
 
         let mut guard = self.pipeline.write().await;
-        if guard.is_none() {
-            let (pipeline, event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
-            spawn_event_bridge(event_rx, Arc::clone(&self.emitter));
-            *guard = Some(pipeline);
-            info!("Created idle voice pipeline for STT preloading");
-        }
-        let pipeline = guard.as_mut().expect("just set above");
+        self.ensure_pipeline(&mut guard);
+        let pipeline = guard.as_mut().expect("ensure_pipeline guarantees Some");
         if pipeline.is_active() {
             pipeline.stop();
         }
         pipeline.load_stt(&path, model_id).map_err(to_port_err)?;
-
-        // Apply any pending config that was written before the pipeline existed.
-        {
-            let cfg = self.config.read().unwrap();
-            pipeline.set_mode(cfg.mode);
-            if let Some(ref v) = cfg.voice_id {
-                pipeline.set_voice(v);
-            }
-            pipeline.set_speed(cfg.speed);
-            pipeline.set_auto_speak(cfg.auto_speak);
-        }
+        self.apply_pending_config(pipeline);
         info!(model_id, "STT model loaded via HTTP");
         Ok(())
     }
@@ -507,25 +514,10 @@ impl VoicePipelinePort for VoiceService {
         }
 
         let mut guard = self.pipeline.write().await;
-        if guard.is_none() {
-            let (pipeline, event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
-            spawn_event_bridge(event_rx, Arc::clone(&self.emitter));
-            *guard = Some(pipeline);
-            info!("Created idle voice pipeline for TTS preloading");
-        }
-        let pipeline = guard.as_mut().expect("just set above");
+        self.ensure_pipeline(&mut guard);
+        let pipeline = guard.as_mut().expect("ensure_pipeline guarantees Some");
         pipeline.load_tts(&tts_dir).await.map_err(to_port_err)?;
-
-        // Apply any pending config that was written before the pipeline existed.
-        {
-            let cfg = self.config.read().unwrap();
-            pipeline.set_mode(cfg.mode);
-            if let Some(ref v) = cfg.voice_id {
-                pipeline.set_voice(v);
-            }
-            pipeline.set_speed(cfg.speed);
-            pipeline.set_auto_speak(cfg.auto_speak);
-        }
+        self.apply_pending_config(pipeline);
         info!("TTS model loaded via HTTP");
         Ok(())
     }

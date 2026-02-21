@@ -195,6 +195,31 @@ export class WebAudioBridge {
   private captureBlobUrl: string | null = null;
   private playbackBlobUrl: string | null = null;
 
+  // ── Static capability check ────────────────────────────────────────────────
+
+  /**
+   * Returns `true` when the browser environment supports the Web Audio API
+   * features required by this bridge.
+   *
+   * Checks:
+   * - Running in a **secure context** (HTTPS or localhost)
+   * - `AudioWorkletNode` is available
+   * - `navigator.mediaDevices.getUserMedia` is available (microphone access)
+   *
+   * This is intentionally a static check that does **not** request permissions;
+   * it only tests API availability.
+   */
+  static isSupported(): boolean {
+    return (
+      typeof window !== 'undefined' &&
+      window.isSecureContext === true &&
+      typeof AudioWorkletNode !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      typeof navigator.mediaDevices !== 'undefined' &&
+      typeof navigator.mediaDevices.getUserMedia === 'function'
+    );
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /**
