@@ -160,13 +160,13 @@ pub async fn list_devices(
 
 /// `POST /api/voice/start`
 ///
-/// Optional body: `{ "mode": "ptt" | "vad" }`.  Omit the body to reuse the
-/// current mode.
+/// Optional body: `{ "mode": "ptt" | "vad" }`.  Omit the body (or send
+/// `null`) to reuse the current mode.
 pub async fn start(
     State(state): State<AppState>,
-    body: Option<Json<StartRequest>>,
+    Json(body): Json<Option<StartRequest>>,
 ) -> Result<StatusCode, HttpError> {
-    let mode = body.map(|Json(r)| r.mode);
+    let mode = body.map(|r| r.mode);
     state.gui.voice_start(mode).await?;
     Ok(StatusCode::NO_CONTENT)
 }
