@@ -285,26 +285,9 @@ impl VoicePipeline {
         self.source = Some(source);
         self.sink = Some(sink);
 
-        // In VAD mode, initialise the detector
+        // In VAD mode, initialise the detector.
         if self.mode == VoiceInteractionMode::VoiceActivityDetection {
-            let mut vad = VoiceActivityDetector::new(
-                self.config.vad.clone(),
-                self.echo_gate.clone(),
-                crate::capture::TARGET_SAMPLE_RATE,
-            );
-
-            // Load Silero VAD model if a path was configured.
-            if let Some(ref model_path) = self.config.vad_model_path {
-                if let Err(e) = vad.load_silero_model(model_path) {
-                    tracing::warn!(
-                        error = %e,
-                        "Failed to load Silero VAD model — falling back to energy-based VAD"
-                    );
-                }
-            }
-
-            vad.start();
-            self.vad = Some(vad);
+            self.vad = Some(self.create_and_start_vad());
         }
 
         self.is_active.store(true, Ordering::SeqCst);
@@ -692,6 +675,33 @@ impl VoicePipeline {
         self.sink.as_ref().is_some_and(|s| s.is_playing())
     }
 
+    /// Create, configure, and start a [`VoiceActivityDetector`].
+    ///
+    /// Encapsulates the repeated pattern used in both `start_with_audio` (when
+    /// the pipeline is started in VAD mode) and `set_mode` (when the mode is
+    /// switched to VAD on a live pipeline).
+    ///
+    /// Attempts to load the Silero ONNX model when `vad_model_path` is
+    /// configured; falls back to energy-based VAD on load failure, logging a
+    /// warning.
+    fn create_and_start_vad(&self) -> VoiceActivityDetector {
+        let mut vad = VoiceActivityDetector::new(
+            self.config.vad.clone(),
+            self.echo_gate.clone(),
+            crate::capture::TARGET_SAMPLE_RATE,
+        );
+        if let Some(ref model_path) = self.config.vad_model_path {
+            if let Err(e) = vad.load_silero_model(model_path) {
+                tracing::warn!(
+                    error = %e,
+                    "Failed to load Silero VAD model — falling back to energy-based VAD"
+                );
+            }
+        }
+        vad.start();
+        vad
+    }
+
     // ── Configuration ──────────────────────────────────────────────
 
     /// Update the interaction mode.
@@ -707,23 +717,7 @@ impl VoicePipeline {
         match mode {
             VoiceInteractionMode::VoiceActivityDetection => {
                 if self.vad.is_none() && self.is_active() {
-                    let mut vad = VoiceActivityDetector::new(
-                        self.config.vad.clone(),
-                        self.echo_gate.clone(),
-                        crate::capture::TARGET_SAMPLE_RATE,
-                    );
-
-                    if let Some(ref model_path) = self.config.vad_model_path {
-                        if let Err(e) = vad.load_silero_model(model_path) {
-                            tracing::warn!(
-                                error = %e,
-                                "Failed to load Silero VAD — falling back to energy-based VAD"
-                            );
-                        }
-                    }
-
-                    vad.start();
-                    self.vad = Some(vad);
+                    self.vad = Some(self.create_and_start_vad());
                 }
             }
             VoiceInteractionMode::PushToTalk => {
