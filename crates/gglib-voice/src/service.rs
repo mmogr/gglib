@@ -110,8 +110,12 @@ pub struct VoiceService {
     /// of creating local cpal/rodio devices.
     ///
     /// Uses a std Mutex — never held across an `.await` point.
-    pending_remote: std::sync::Mutex<Option<(Box<dyn AudioSource>, Box<dyn AudioSink>)>>,
+    pending_remote: std::sync::Mutex<Option<PendingRemoteAudio>>,
 }
+
+/// Boxed audio source/sink pair stashed by the WebSocket handler for the next
+/// `start()` call.  Named to keep the `Mutex<Option<…>>` field readable.
+type PendingRemoteAudio = (Box<dyn AudioSource>, Box<dyn AudioSink>);
 
 impl VoiceService {
     /// Create a new service with no pipeline loaded.
@@ -626,7 +630,10 @@ impl VoicePipelinePort for VoiceService {
         }
         // If a remote audio session (WebSocket) is registered, use it;
         // otherwise fall back to local cpal/rodio devices.
-        let result = match self.pending_remote.lock().unwrap().take() {
+        // The lock guard is dropped before entering the match to avoid holding
+        // it across the branch bodies (clippy::significant_drop_in_scrutinee).
+        let pending = self.pending_remote.lock().unwrap().take();
+        let result = match pending {
             Some((source, sink)) => {
                 tracing::info!("Voice pipeline starting with remote (WebSocket) audio");
                 pipeline.start_with_audio(source, sink).map_err(to_port_err)
