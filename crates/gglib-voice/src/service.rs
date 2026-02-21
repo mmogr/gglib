@@ -27,12 +27,41 @@ use gglib_core::ports::voice::{
     VoicePipelinePort, VoicePortError, VoiceStatusDto,
 };
 
+use crate::audio_io::{AudioSink, AudioSource};
 use crate::capture::AudioCapture;
 use crate::models::{self, VoiceModelCatalog};
 use crate::pipeline::{
     VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
 };
 use crate::tts::TtsEngine;
+
+// ── Remote audio registry ─────────────────────────────────────────────────────
+
+/// A narrow capability interface for registering a remote audio session.
+///
+/// Implemented by [`VoiceService`] and added to `AxumContext` directly so
+/// that the Axum WebSocket handler can inject a browser-backed audio source
+/// and sink without routing through [`GuiBackend`] (keeping network-transport
+/// concerns out of the GUI facade).
+///
+/// The registered pair is consumed exactly once by the next call to
+/// [`VoicePipelinePort::start`]. If `deregister_remote_audio` is called
+/// before `start`, the registration is cleared and the next `start` falls
+/// back to `LocalAudioSource`/`LocalAudioSink`.
+pub trait RemoteAudioRegistry: Send + Sync {
+    /// Stash a remote source/sink for the next `start()` call.
+    fn register_remote_audio(
+        &self,
+        source: Box<dyn AudioSource>,
+        sink: Box<dyn AudioSink>,
+    );
+
+    /// Clear any pending remote registration.
+    ///
+    /// Called when the WebSocket connection closes, ensuring a stale
+    /// channel pair is never used by a subsequent `start()` call.
+    fn deregister_remote_audio(&self);
+}
 
 // ── Pending config ────────────────────────────────────────────────────────────
 
@@ -78,6 +107,14 @@ pub struct VoiceService {
     /// Serialises PTT start/stop pairs so a late `ptt_start` cannot arrive
     /// while a `ptt_stop` transcription is still in flight.
     ptt_op_lock: Mutex<()>,
+    /// Pending remote audio source/sink registered by the WebSocket handler.
+    ///
+    /// A `Some` value is consumed (taken) exactly once by the next `start()`
+    /// call, which then calls `pipeline.start_with_audio(source, sink)` instead
+    /// of creating local cpal/rodio devices.
+    ///
+    /// Uses a std Mutex — never held across an `.await` point.
+    pending_remote: std::sync::Mutex<Option<(Box<dyn AudioSource>, Box<dyn AudioSink>)>>,
 }
 
 impl VoiceService {
@@ -92,6 +129,7 @@ impl VoiceService {
             config: std::sync::RwLock::new(PendingConfig::default()),
             speak_op_lock: Mutex::new(()),
             ptt_op_lock: Mutex::new(()),
+            pending_remote: std::sync::Mutex::new(None),
         }
     }
 
@@ -109,6 +147,7 @@ impl VoiceService {
             config: std::sync::RwLock::new(PendingConfig::default()),
             speak_op_lock: Mutex::new(()),
             ptt_op_lock: Mutex::new(()),
+            pending_remote: std::sync::Mutex::new(None),
         }
     }
 
@@ -227,6 +266,26 @@ fn mode_label(m: VoiceInteractionMode) -> String {
         VoiceInteractionMode::VoiceActivityDetection => "vad",
     }
     .to_owned()
+}
+
+// ── RemoteAudioRegistry implementation ───────────────────────────────────────
+
+impl RemoteAudioRegistry for VoiceService {
+    fn register_remote_audio(
+        &self,
+        source: Box<dyn AudioSource>,
+        sink: Box<dyn AudioSink>,
+    ) {
+        *self.pending_remote.lock().unwrap() = Some((source, sink));
+        tracing::debug!("Remote audio source/sink registered for next start()");
+    }
+
+    fn deregister_remote_audio(&self) {
+        let prev = self.pending_remote.lock().unwrap().take();
+        if prev.is_some() {
+            tracing::debug!("Remote audio registration cleared (WS session closed before start)");
+        }
+    }
 }
 
 // ── VoicePipelinePort implementation ─────────────────────────────────────────
@@ -573,7 +632,15 @@ impl VoicePipelinePort for VoiceService {
             };
             pipeline.set_mode(interaction_mode);
         }
-        let result = pipeline.start().map_err(to_port_err); // last use of pipeline
+        // If a remote audio session (WebSocket) is registered, use it;
+        // otherwise fall back to local cpal/rodio devices.
+        let result = match self.pending_remote.lock().unwrap().take() {
+            Some((source, sink)) => {
+                tracing::info!("Voice pipeline starting with remote (WebSocket) audio");
+                pipeline.start_with_audio(source, sink).map_err(to_port_err)
+            }
+            None => pipeline.start().map_err(to_port_err),
+        };
         drop(guard); // release write lock before logging
         result?;
         info!("Voice pipeline started via HTTP");
