@@ -871,7 +871,7 @@ mod tests {
 
     #[test]
     fn ptt_start_requires_active_pipeline() {
-        let (mut pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
+        let (pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
         let result = pipeline.ptt_start();
         assert!(result.is_err());
     }

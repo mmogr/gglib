@@ -159,7 +159,7 @@ pub fn spawn_event_bridge(
         while let Some(event) = event_rx.recv().await {
             match event {
                 VoiceEvent::AudioLevel(level) => {
-                    if last_level_emit.map_or(true, |t| t.elapsed() >= AUDIO_LEVEL_THROTTLE) {
+                    if last_level_emit.is_none_or(|t| t.elapsed() >= AUDIO_LEVEL_THROTTLE) {
                         emitter.emit(AppEvent::VoiceAudioLevel { level });
                         last_level_emit = Some(Instant::now());
                     }
@@ -573,7 +573,9 @@ impl VoicePipelinePort for VoiceService {
             };
             pipeline.set_mode(interaction_mode);
         }
-        pipeline.start().map_err(to_port_err)?;
+        let result = pipeline.start().map_err(to_port_err); // last use of pipeline
+        drop(guard); // release write lock before logging
+        result?;
         info!("Voice pipeline started via HTTP");
         Ok(())
     }
@@ -585,6 +587,7 @@ impl VoicePipelinePort for VoiceService {
             p.stop();
         }
         // Intentionally keep *guard = Some(pipeline) so loaded models stay warm.
+        drop(guard); // release write lock before logging
         info!("Voice pipeline stopped via HTTP (models retained)");
         Ok(())
     }
@@ -594,9 +597,14 @@ impl VoicePipelinePort for VoiceService {
         let _op = self.ptt_op_lock.lock().await;
         let guard = self.pipeline.read().await;
         let pipeline = guard.as_ref().ok_or(VoicePortError::NotInitialised)?;
-        pipeline.ptt_start().map_err(to_port_err)
+        let result = pipeline.ptt_start().map_err(to_port_err); // last use of pipeline
+        drop(guard);
+        result
     }
 
+    // Read lock is intentionally held across ptt_stop().await (transcription).
+    // Dropping it early is not possible because pipeline borrows from guard.
+    #[allow(clippy::significant_drop_tightening)]
     async fn ptt_stop(&self) -> Result<String, VoicePortError> {
         // Hold ptt_op_lock across transcription so a concurrent ptt_start
         // cannot arrive mid-transcription.  Read lock is sufficient because
@@ -609,6 +617,10 @@ impl VoicePipelinePort for VoiceService {
         Ok(text)
     }
 
+    // Read lock is intentionally held across speak().await (synthesis loop).
+    // stop_speaking() concurrently acquires a read guard to set speak_cancel —
+    // this is the designed interruption mechanism.
+    #[allow(clippy::significant_drop_tightening)]
     async fn speak(&self, text: &str) -> Result<(), VoicePortError> {
         // speak_op_lock prevents two synthesis loops running in parallel.
         // The read lock allows stop_speaking to concurrently acquire a read
@@ -627,6 +639,7 @@ impl VoicePipelinePort for VoiceService {
         if let Some(ref p) = *guard {
             p.stop_speaking();
         }
+        drop(guard);
         Ok(())
     }
 }
