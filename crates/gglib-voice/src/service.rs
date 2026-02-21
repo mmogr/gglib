@@ -312,10 +312,7 @@ fn mode_label(m: VoiceInteractionMode) -> String {
 /// Centralising the `#[allow(clippy::cast_precision_loss)]` here means each
 /// individual download method does not need its own per-site suppression.
 #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
-fn progress_callback(
-    emitter: Arc<dyn AppEventEmitter>,
-    model_id: String,
-) -> impl Fn(u64, u64) {
+fn progress_callback(emitter: Arc<dyn AppEventEmitter>, model_id: String) -> impl Fn(u64, u64) {
     move |downloaded, total| {
         let percent = if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
@@ -454,9 +451,10 @@ impl VoicePipelinePort for VoiceService {
 
     async fn download_tts_model(&self) -> Result<(), VoicePortError> {
         let model_id = VoiceModelCatalog::tts_model().id.0;
-        let path = models::ensure_tts_model(
-            progress_callback(Arc::clone(&self.emitter), model_id.clone()),
-        )
+        let path = models::ensure_tts_model(progress_callback(
+            Arc::clone(&self.emitter),
+            model_id.clone(),
+        ))
         .await
         .map_err(to_port_err)?;
 
@@ -465,9 +463,10 @@ impl VoicePipelinePort for VoiceService {
     }
 
     async fn download_vad_model(&self) -> Result<(), VoicePortError> {
-        let path = models::ensure_vad_model(
-            progress_callback(Arc::clone(&self.emitter), "silero-vad".to_owned()),
-        )
+        let path = models::ensure_vad_model(progress_callback(
+            Arc::clone(&self.emitter),
+            "silero-vad".to_owned(),
+        ))
         .await
         .map_err(to_port_err)?;
 
