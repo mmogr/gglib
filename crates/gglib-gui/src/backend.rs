@@ -464,7 +464,7 @@ impl GuiBackend {
     }
 
     // =========================================================================
-    // Voice operations (Phase 1: data & config, no audio hardware)
+    // Voice operations
     // =========================================================================
 
     /// Get the current voice pipeline status.
@@ -532,5 +532,37 @@ impl GuiBackend {
         &self,
     ) -> Result<Vec<gglib_core::ports::AudioDeviceDto>, GuiError> {
         self.voice_ops().list_devices().await
+    }
+
+    // ── Voice: Audio I/O (Phase 3 / PR 2) ──────────────────────────────────
+
+    /// Start audio I/O (mic capture + playback).
+    pub async fn voice_start(&self, mode: Option<String>) -> Result<(), GuiError> {
+        self.voice_ops().start(mode).await
+    }
+
+    /// Stop audio I/O, keeping models warm.
+    pub async fn voice_stop(&self) -> Result<(), GuiError> {
+        self.voice_ops().stop().await
+    }
+
+    /// Begin PTT recording.
+    pub async fn voice_ptt_start(&self) -> Result<(), GuiError> {
+        self.voice_ops().ptt_start().await
+    }
+
+    /// End PTT recording and transcribe.  Returns the transcript text.
+    pub async fn voice_ptt_stop(&self) -> Result<String, GuiError> {
+        self.voice_ops().ptt_stop().await
+    }
+
+    /// Synthesize `text` via TTS and stream to the speaker.
+    pub async fn voice_speak(&self, text: &str) -> Result<(), GuiError> {
+        self.voice_ops().speak(text).await
+    }
+
+    /// Interrupt any active TTS playback immediately.
+    pub async fn voice_stop_speaking(&self) -> Result<(), GuiError> {
+        self.voice_ops().stop_speaking().await
     }
 }

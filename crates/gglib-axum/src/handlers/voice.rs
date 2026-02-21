@@ -7,7 +7,8 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use serde::Deserialize;
+use axum::http::StatusCode;
+use serde::{Deserialize, Serialize};
 
 use gglib_core::ports::{AudioDeviceDto, VoiceModelsDto, VoiceStatusDto};
 
@@ -44,6 +45,18 @@ pub struct SetSpeedRequest {
 #[serde(rename_all = "camelCase")]
 pub struct SetAutoSpeakRequest {
     pub auto_speak: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartRequest {
+    pub mode: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeakRequest {
+    pub text: String,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -141,4 +154,69 @@ pub async fn list_devices(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<AudioDeviceDto>>, HttpError> {
     Ok(Json(state.gui.voice_list_devices().await?))
+}
+
+// ── Audio I/O handlers (Phase 3 / PR 2) ──────────────────────────────────────
+
+/// `POST /api/voice/start`
+///
+/// Optional body: `{ "mode": "ptt" | "vad" }`.  Omit the body (or send
+/// `null`) to reuse the current mode.
+pub async fn start(
+    State(state): State<AppState>,
+    Json(body): Json<Option<StartRequest>>,
+) -> Result<StatusCode, HttpError> {
+    let mode = body.map(|r| r.mode);
+    state.gui.voice_start(mode).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /api/voice/stop`
+pub async fn stop(State(state): State<AppState>) -> Result<StatusCode, HttpError> {
+    state.gui.voice_stop().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /api/voice/ptt-start`
+pub async fn ptt_start(State(state): State<AppState>) -> Result<StatusCode, HttpError> {
+    state.gui.voice_ptt_start().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PttStopResponse {
+    pub transcript: String,
+}
+
+/// `POST /api/voice/ptt-stop`
+pub async fn ptt_stop(State(state): State<AppState>) -> Result<Json<PttStopResponse>, HttpError> {
+    let transcript = state.gui.voice_ptt_stop().await?;
+    Ok(Json(PttStopResponse { transcript }))
+}
+
+/// `POST /api/voice/speak`
+///
+/// Returns `202 Accepted` immediately.  Synthesis runs in a background task;
+/// the frontend receives `SpeakingStarted` / `SpeakingFinished` events via
+/// the SSE stream when audio begins and finishes playing.
+pub async fn speak(
+    State(state): State<AppState>,
+    Json(req): Json<SpeakRequest>,
+) -> Result<StatusCode, HttpError> {
+    // Clone the Arc so the spawned task owns its reference.
+    let gui = state.gui.clone();
+    let text = req.text;
+    tokio::spawn(async move {
+        if let Err(e) = gui.voice_speak(&text).await {
+            tracing::warn!(error = %e, "voice_speak background task failed");
+        }
+    });
+    Ok(StatusCode::ACCEPTED)
+}
+
+/// `POST /api/voice/stop-speaking`
+pub async fn stop_speaking(State(state): State<AppState>) -> Result<StatusCode, HttpError> {
+    state.gui.voice_stop_speaking().await?;
+    Ok(StatusCode::NO_CONTENT)
 }

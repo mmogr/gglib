@@ -135,6 +135,13 @@ pub enum VoicePortError {
     #[error("Voice pipeline is already active")]
     AlreadyActive,
 
+    /// The pipeline is initialised (models loaded) but has not been started.
+    ///
+    /// The caller should POST to `/api/voice/start` before calling audio I/O
+    /// operations.  Maps to HTTP 409 Conflict.
+    #[error("Voice pipeline is not active — call /api/voice/start first")]
+    NotActive,
+
     /// A requested resource (model, device) was not found.
     #[error("Not found: {0}")]
     NotFound(String),
@@ -154,17 +161,17 @@ pub enum VoicePortError {
 
 // ── Port trait ────────────────────────────────────────────────────────────────
 
-/// Port trait for voice data & configuration operations.
+/// Port trait for voice data, configuration, and audio I/O operations.
 ///
 /// Implemented by `VoiceService` in `gglib-voice`.
 /// Consumed by `VoiceOps` in `gglib-gui` and delegated to by Axum handlers.
 ///
 /// # Scope
 ///
-/// This trait covers the 13 **data/config** operations that have no audio
-/// hardware dependency and can be exercised via `curl` without a microphone.
-/// The 6 audio I/O commands (`start`, `stop`, `ptt-start`, etc.) are not
-/// included here and are migrated in Phase 3.
+/// This trait covers all 19 voice operations:
+/// - **13 data/config** endpoints (no audio hardware required, curl-testable)
+/// - **6 audio I/O** endpoints (`start`, `stop`, `ptt-start`, `ptt-stop`,
+///   `speak`, `stop-speaking`)
 #[async_trait]
 pub trait VoicePipelinePort: Send + Sync {
     /// Return the current pipeline status (state machine, loaded models, etc.).
@@ -205,4 +212,44 @@ pub trait VoicePipelinePort: Send + Sync {
 
     /// List available audio input devices.
     async fn list_devices(&self) -> Result<Vec<AudioDeviceDto>, VoicePortError>;
+
+    // ── Audio I/O (Phase 3 / PR 2) ────────────────────────────────────────────
+
+    /// Start the voice pipeline audio I/O.
+    ///
+    /// `mode` overrides the current interaction mode for this session
+    /// (`"ptt"` | `"vad"`).  When `None`, the previously configured mode
+    /// is used.
+    ///
+    /// Returns [`VoicePortError::NotInitialised`] if no STT model is loaded.
+    /// Returns [`VoicePortError::AlreadyActive`] if the pipeline is already
+    /// running.
+    async fn start(&self, mode: Option<String>) -> Result<(), VoicePortError>;
+
+    /// Stop audio I/O, releasing mic + playback resources, but keep STT/TTS
+    /// models warm so the user can restart without a reload delay.
+    async fn stop(&self) -> Result<(), VoicePortError>;
+
+    /// Begin PTT recording (user pressed the talk button).
+    ///
+    /// Returns [`VoicePortError::NotInitialised`] if the pipeline is not
+    /// active.
+    async fn ptt_start(&self) -> Result<(), VoicePortError>;
+
+    /// End PTT recording and transcribe the captured audio.
+    ///
+    /// Returns the transcript text (empty string if no speech was detected).
+    async fn ptt_stop(&self) -> Result<String, VoicePortError>;
+
+    /// Synthesize `text` via TTS and stream the audio to the speaker.
+    ///
+    /// This is an asynchronous operation: implementations may perform
+    /// synthesis and playback work while this future is pending.  Callers
+    /// MUST NOT assume that it returns immediately after dispatch.
+    /// `VoiceEvent::SpeakingStarted` / `SpeakingFinished` are emitted via
+    /// the SSE event bus to report speaking lifecycle events.
+    async fn speak(&self, text: &str) -> Result<(), VoicePortError>;
+
+    /// Interrupt any active TTS playback immediately.
+    async fn stop_speaking(&self) -> Result<(), VoicePortError>;
 }

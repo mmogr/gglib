@@ -109,15 +109,27 @@ struct MockAudioSource {
 impl MockAudioSource {
     fn new() -> (Self, std::sync::Arc<std::sync::Mutex<MockSourceState>>) {
         let state = std::sync::Arc::new(std::sync::Mutex::new(MockSourceState::default()));
-        (Self { state: std::sync::Arc::clone(&state) }, state)
+        (
+            Self {
+                state: std::sync::Arc::clone(&state),
+            },
+            state,
+        )
     }
 
-    fn with_samples(samples: Vec<f32>) -> (Self, std::sync::Arc<std::sync::Mutex<MockSourceState>>) {
+    fn with_samples(
+        samples: Vec<f32>,
+    ) -> (Self, std::sync::Arc<std::sync::Mutex<MockSourceState>>) {
         let state = std::sync::Arc::new(std::sync::Mutex::new(MockSourceState {
             samples_to_return: samples,
             ..Default::default()
         }));
-        (Self { state: std::sync::Arc::clone(&state) }, state)
+        (
+            Self {
+                state: std::sync::Arc::clone(&state),
+            },
+            state,
+        )
     }
 }
 
@@ -168,7 +180,12 @@ struct MockAudioSink {
 impl MockAudioSink {
     fn new() -> (Self, std::sync::Arc<std::sync::Mutex<MockSinkState>>) {
         let state = std::sync::Arc::new(std::sync::Mutex::new(MockSinkState::default()));
-        (Self { state: std::sync::Arc::clone(&state) }, state)
+        (
+            Self {
+                state: std::sync::Arc::clone(&state),
+            },
+            state,
+        )
     }
 }
 
@@ -382,7 +399,10 @@ fn start_with_audio_activates_pipeline() {
         .inject_audio(Box::new(src), Box::new(snk))
         .expect("inject_audio should succeed with mock backends");
 
-    assert!(pipeline.is_active(), "pipeline should be active after inject_audio");
+    assert!(
+        pipeline.is_active(),
+        "pipeline should be active after inject_audio"
+    );
     assert_eq!(pipeline.state(), VoiceState::Listening);
 
     let states = states_from(&drain_events(&mut rx));
@@ -406,11 +426,19 @@ fn ptt_start_with_mock_audio_transitions_to_recording() {
     let (snk, snk_state) = MockAudioSink::new();
 
     pipeline.inject_audio(Box::new(src), Box::new(snk)).unwrap();
-    pipeline.ptt_start().expect("ptt_start should succeed with mock backends");
+    pipeline
+        .ptt_start()
+        .expect("ptt_start should succeed with mock backends");
 
     assert_eq!(pipeline.state(), VoiceState::Recording);
-    assert!(src_state.lock().unwrap().capture_started, "start_capture should have been called");
-    assert!(snk_state.lock().unwrap().stop_called, "sink.stop() should have been called before capture");
+    assert!(
+        src_state.lock().unwrap().capture_started,
+        "start_capture should have been called"
+    );
+    assert!(
+        snk_state.lock().unwrap().stop_called,
+        "sink.stop() should have been called before capture"
+    );
 }
 
 /// Full PTT round-trip with mock audio and mock STT.
