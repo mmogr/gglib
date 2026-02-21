@@ -54,6 +54,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
   const stop = voice?.stop;
   const stopSpeaking = voice?.stopSpeaking;
   const clearError = voice?.clearError;
+  const isAudioSupported = voice?.isAudioSupported ?? true;
 
   // Forward transcripts to chat
   useEffect(() => {
@@ -105,6 +106,25 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
   // Don't render when voice is inactive and not auto-loading.
   const isAutoLoading = voice?.isAutoLoading ?? false;
   if (!isActive && !isAutoLoading) return null;
+
+  // Show an unsupported-platform warning banner when audio I/O is unavailable.
+  if (!isAudioSupported) {
+    return (
+      <div className="fixed bottom-lg left-1/2 -translate-x-1/2 flex items-center gap-sm px-md py-sm bg-surface border border-[var(--color-warning,#f9e2af)] rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] z-[1000] min-w-[320px] max-w-[600px] backdrop-blur-[8px]">
+        <span className="text-[1.1em]">⚠️</span>
+        <span className="text-sm text-text-secondary flex-1">
+          Voice mode requires HTTPS and microphone access (<code>getUserMedia</code>).
+        </span>
+        <button
+          className="bg-transparent border-none text-[var(--color-error,#f38ba8)] cursor-pointer p-[2px] text-[0.7rem] shrink-0"
+          onClick={() => stop?.()}
+          title="Close voice mode"
+        >
+          ✕
+        </button>
+      </div>
+    );
+  }
 
   const stateLabel = STATE_LABELS[voiceState] ?? voiceState;
   const stateIcon = STATE_ICONS[voiceState] ?? '🎙️';

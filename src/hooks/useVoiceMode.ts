@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createAudioBridge } from '../services/transport/audio';
+import { createAudioBridge, isAudioSupported as checkAudioSupported } from '../services/transport/audio';
 import type { WebAudioBridge } from '../services/transport/audio';
 import {
   voiceStart,
@@ -67,6 +67,8 @@ export interface VoiceDefaults {
 export interface UseVoiceModeReturn {
   /** Whether voice mode is supported for data/config operations (always true — served via HTTP). */
   isSupported: boolean;
+  /** Whether the current platform supports the audio I/O required for voice mode. */
+  isAudioSupported: boolean;
   /** Whether voice mode is currently active */
   isActive: boolean;
   /** Current voice pipeline state */
@@ -153,6 +155,8 @@ export interface UseVoiceModeReturn {
 export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   // All ops (data, config, audio) are served via HTTP — works everywhere.
   const isSupported = true;
+  // Whether the current platform can play/capture audio for voice mode.
+  const isAudioSupported = checkAudioSupported();
 
   // Pipeline state
   const [isActive, setIsActive] = useState(false);
@@ -283,6 +287,15 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const start = useCallback(async (startMode?: VoiceInteractionMode) => {
     try {
       setError(null);
+
+      // Bail out early if the platform cannot handle audio I/O.
+      if (!isAudioSupported) {
+        setError(
+          'Voice audio requires a secure connection (HTTPS) and microphone access (getUserMedia). ' +
+            'Please use a supported browser over HTTPS.',
+        );
+        return;
+      }
 
       // Bump load generation so any in-flight load can detect staleness.
       const gen = ++loadGenRef.current;
@@ -616,6 +629,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
 
   return {
     isSupported,
+    isAudioSupported,
     isActive,
     voiceState,
     mode,
