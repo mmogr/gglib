@@ -157,6 +157,14 @@ pub enum VoicePortError {
     /// Unexpected internal error.
     #[error("Internal voice error: {0}")]
     Internal(String),
+
+    /// Feature not yet implemented.
+    ///
+    /// Maps to HTTP 501 Not Implemented.  Used to surface partial-implementation
+    /// gaps (e.g. VAD mode frame-polling loop) as actionable API errors rather
+    /// than silent no-ops.
+    #[error("Not implemented: {0}")]
+    Unimplemented(String),
 }
 
 // ── Port trait ────────────────────────────────────────────────────────────────

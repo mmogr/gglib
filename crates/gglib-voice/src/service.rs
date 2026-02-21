@@ -580,6 +580,20 @@ impl VoicePipelinePort for VoiceService {
         if let Some(ref mode_str) = mode {
             pipeline.set_mode(parse_interaction_mode(mode_str)?);
         }
+        // VAD mode requires a server-side polling loop (calling
+        // `source.read_vad_frame()` → `pipeline.vad_process_frame()`) that
+        // is not yet implemented.  Guard here so callers receive a clear 501,
+        // not a silent no-op where the mic opens but speech is never detected.
+        // Tracked in: https://github.com/mmogr/gglib/issues — file as
+        // "feat(voice): implement VAD frame-polling loop in VoiceService".
+        if pipeline.mode() == VoiceInteractionMode::VoiceActivityDetection {
+            return Err(VoicePortError::Unimplemented(
+                "VAD (voice-activity-detection) mode requires a server-side \
+                 audio-frame polling loop that has not yet been implemented. \
+                 Use PTT mode instead: POST /api/voice/mode with {\"mode\":\"ptt\"}."
+                    .to_owned(),
+            ));
+        }
         // If a remote audio session (WebSocket) is registered, use it;
         // otherwise fall back to local cpal/rodio devices.
         // The lock guard is dropped before entering the match to avoid holding
