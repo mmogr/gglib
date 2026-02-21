@@ -235,7 +235,13 @@ export async function readData<T>(response: Response): Promise<T> {
     
     const body = JSON.parse(text) as ApiResponse<T>;
     appLogger.debug('transport.error', '[readData] parsed body', { body });
-    
+
+    // Guard against endpoints that return JSON `null` (unit responses serialised
+    // by Axum's Json(()) before 204 migration). Treat as a successful void.
+    if (body === null || body === undefined) {
+      return undefined as T;
+    }
+
     if (!body.success && body.error) {
       throw new TransportError('INTERNAL', body.error);
     }
