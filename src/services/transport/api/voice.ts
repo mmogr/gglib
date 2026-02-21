@@ -1,9 +1,6 @@
 /**
  * Voice HTTP API module.
- * Implements the 13 data/config voice operations via REST endpoints.
- *
- * Audio I/O operations (start, stop, ptt, speak) are NOT here — those
- * remain Tauri-only until Phase 3 (WebSocket audio bridge).
+ * Implements all 19 voice operations via REST endpoints.
  *
  * @module services/transport/api/voice
  */
@@ -66,4 +63,31 @@ export async function voiceUnload(): Promise<void> {
 
 export async function voiceListDevices(): Promise<AudioDeviceInfo[]> {
   return get<AudioDeviceInfo[]>('/api/voice/devices');
+}
+
+// ── Audio I/O control (Phase 3 / PR 2) ───────────────────────────────────────
+
+export async function voiceStart(mode?: VoiceInteractionMode): Promise<void> {
+  return post<void>('/api/voice/start', mode ? { mode } : undefined);
+}
+
+export async function voiceStop(): Promise<void> {
+  return post<void>('/api/voice/stop');
+}
+
+export async function voicePttStart(): Promise<void> {
+  return post<void>('/api/voice/ptt-start');
+}
+
+export async function voicePttStop(): Promise<string> {
+  const data = await post<{ transcript: string }>('/api/voice/ptt-stop');
+  return data.transcript;
+}
+
+export async function voiceSpeak(text: string): Promise<void> {
+  return post<void>('/api/voice/speak', { text });
+}
+
+export async function voiceStopSpeaking(): Promise<void> {
+  return post<void>('/api/voice/stop-speaking');
 }

@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use tracing::info;
 
 use gglib_core::events::AppEvent;
@@ -27,10 +27,37 @@ use gglib_core::ports::voice::{
     VoicePipelinePort, VoicePortError, VoiceStatusDto,
 };
 
+use crate::audio_io::{AudioSink, AudioSource};
 use crate::capture::AudioCapture;
 use crate::models::{self, VoiceModelCatalog};
-use crate::pipeline::{VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState};
+use crate::pipeline::{
+    VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState,
+};
 use crate::tts::TtsEngine;
+
+// ── Remote audio registry ─────────────────────────────────────────────────────
+
+/// A narrow capability interface for registering a remote audio session.
+///
+/// Implemented by [`VoiceService`] and added to `AxumContext` directly so
+/// that the Axum WebSocket handler can inject a browser-backed audio source
+/// and sink without routing through [`GuiBackend`] (keeping network-transport
+/// concerns out of the GUI facade).
+///
+/// The registered pair is consumed exactly once by the next call to
+/// [`VoicePipelinePort::start`]. If `deregister_remote_audio` is called
+/// before `start`, the registration is cleared and the next `start` falls
+/// back to `LocalAudioSource`/`LocalAudioSink`.
+pub trait RemoteAudioRegistry: Send + Sync {
+    /// Stash a remote source/sink for the next `start()` call.
+    fn register_remote_audio(&self, source: Box<dyn AudioSource>, sink: Box<dyn AudioSink>);
+
+    /// Clear any pending remote registration.
+    ///
+    /// Called when the WebSocket connection closes, ensuring a stale
+    /// channel pair is never used by a subsequent `start()` call.
+    fn deregister_remote_audio(&self);
+}
 
 // ── Pending config ────────────────────────────────────────────────────────────
 
@@ -70,7 +97,25 @@ pub struct VoiceService {
     /// Uses a std (non-async) lock because it is only accessed in sync
     /// context — never across an `.await` point.
     config: std::sync::RwLock<PendingConfig>,
+    /// Serialises concurrent `speak` calls so two synthesis loops never
+    /// overlap.  The guard is held for the full duration of synthesis.
+    speak_op_lock: Mutex<()>,
+    /// Serialises PTT start/stop pairs so a late `ptt_start` cannot arrive
+    /// while a `ptt_stop` transcription is still in flight.
+    ptt_op_lock: Mutex<()>,
+    /// Pending remote audio source/sink registered by the WebSocket handler.
+    ///
+    /// A `Some` value is consumed (taken) exactly once by the next `start()`
+    /// call, which then calls `pipeline.start_with_audio(source, sink)` instead
+    /// of creating local cpal/rodio devices.
+    ///
+    /// Uses a std Mutex — never held across an `.await` point.
+    pending_remote: std::sync::Mutex<Option<PendingRemoteAudio>>,
 }
+
+/// Boxed audio source/sink pair stashed by the WebSocket handler for the next
+/// `start()` call.  Named to keep the `Mutex<Option<…>>` field readable.
+type PendingRemoteAudio = (Box<dyn AudioSource>, Box<dyn AudioSink>);
 
 impl VoiceService {
     /// Create a new service with no pipeline loaded.
@@ -82,6 +127,9 @@ impl VoiceService {
             pipeline: Arc::new(RwLock::new(None)),
             emitter,
             config: std::sync::RwLock::new(PendingConfig::default()),
+            speak_op_lock: Mutex::new(()),
+            ptt_op_lock: Mutex::new(()),
+            pending_remote: std::sync::Mutex::new(None),
         }
     }
 
@@ -97,6 +145,9 @@ impl VoiceService {
             pipeline,
             emitter,
             config: std::sync::RwLock::new(PendingConfig::default()),
+            speak_op_lock: Mutex::new(()),
+            ptt_op_lock: Mutex::new(()),
+            pending_remote: std::sync::Mutex::new(None),
         }
     }
 
@@ -147,7 +198,7 @@ pub fn spawn_event_bridge(
         while let Some(event) = event_rx.recv().await {
             match event {
                 VoiceEvent::AudioLevel(level) => {
-                    if last_level_emit.map_or(true, |t| t.elapsed() >= AUDIO_LEVEL_THROTTLE) {
+                    if last_level_emit.is_none_or(|t| t.elapsed() >= AUDIO_LEVEL_THROTTLE) {
                         emitter.emit(AppEvent::VoiceAudioLevel { level });
                         last_level_emit = Some(Instant::now());
                     }
@@ -187,6 +238,7 @@ fn to_port_err(e: crate::error::VoiceError) -> VoicePortError {
     match e {
         VoiceError::ModelNotFound(p) => VoicePortError::NotFound(p.display().to_string()),
         VoiceError::AlreadyActive => VoicePortError::AlreadyActive,
+        VoiceError::NotActive => VoicePortError::NotActive,
         VoiceError::ModelLoadError(s) => VoicePortError::LoadError(s),
         VoiceError::DownloadError { name, source } => {
             VoicePortError::DownloadError(format!("{name}: {source}"))
@@ -214,6 +266,22 @@ fn mode_label(m: VoiceInteractionMode) -> String {
         VoiceInteractionMode::VoiceActivityDetection => "vad",
     }
     .to_owned()
+}
+
+// ── RemoteAudioRegistry implementation ───────────────────────────────────────
+
+impl RemoteAudioRegistry for VoiceService {
+    fn register_remote_audio(&self, source: Box<dyn AudioSource>, sink: Box<dyn AudioSink>) {
+        *self.pending_remote.lock().unwrap() = Some((source, sink));
+        tracing::debug!("Remote audio source/sink registered for next start()");
+    }
+
+    fn deregister_remote_audio(&self) {
+        let prev = self.pending_remote.lock().unwrap().take();
+        if prev.is_some() {
+            tracing::debug!("Remote audio registration cleared (WS session closed before start)");
+        }
+    }
 }
 
 // ── VoicePipelinePort implementation ─────────────────────────────────────────
@@ -537,5 +605,107 @@ impl VoicePipelinePort for VoiceService {
             })
             .collect();
         Ok(dtos)
+    }
+
+    // ── Audio I/O ──────────────────────────────────────────────────────────────────
+
+    async fn start(&self, mode: Option<String>) -> Result<(), VoicePortError> {
+        // Write lock: start() mutates source/sink fields on the pipeline.
+        let mut guard = self.pipeline.write().await;
+        let pipeline = guard.as_mut().ok_or(VoicePortError::NotInitialised)?;
+        if pipeline.is_active() {
+            return Err(VoicePortError::AlreadyActive);
+        }
+        if let Some(ref mode_str) = mode {
+            let interaction_mode = match mode_str.as_str() {
+                "vad" => VoiceInteractionMode::VoiceActivityDetection,
+                "ptt" => VoiceInteractionMode::PushToTalk,
+                other => {
+                    return Err(VoicePortError::NotFound(format!(
+                        "Unknown voice mode: {other}"
+                    )));
+                }
+            };
+            pipeline.set_mode(interaction_mode);
+        }
+        // If a remote audio session (WebSocket) is registered, use it;
+        // otherwise fall back to local cpal/rodio devices.
+        // The lock guard is dropped before entering the match to avoid holding
+        // it across the branch bodies (clippy::significant_drop_in_scrutinee).
+        let pending = self.pending_remote.lock().unwrap().take();
+        let result = match pending {
+            Some((source, sink)) => {
+                tracing::info!("Voice pipeline starting with remote (WebSocket) audio");
+                pipeline.start_with_audio(source, sink).map_err(to_port_err)
+            }
+            None => pipeline.start().map_err(to_port_err),
+        };
+        drop(guard); // release write lock before logging
+        result?;
+        info!("Voice pipeline started via HTTP");
+        Ok(())
+    }
+
+    async fn stop(&self) -> Result<(), VoicePortError> {
+        // Write lock: stop() drops source/sink fields.
+        let mut guard = self.pipeline.write().await;
+        if let Some(ref mut p) = *guard {
+            p.stop();
+        }
+        // Intentionally keep *guard = Some(pipeline) so loaded models stay warm.
+        drop(guard); // release write lock before logging
+        info!("Voice pipeline stopped via HTTP (models retained)");
+        Ok(())
+    }
+
+    async fn ptt_start(&self) -> Result<(), VoicePortError> {
+        // Serialise PTT pairs; read lock is enough since ptt_start takes &self.
+        let _op = self.ptt_op_lock.lock().await;
+        let guard = self.pipeline.read().await;
+        let pipeline = guard.as_ref().ok_or(VoicePortError::NotInitialised)?;
+        let result = pipeline.ptt_start().map_err(to_port_err); // last use of pipeline
+        drop(guard);
+        result
+    }
+
+    // Read lock is intentionally held across ptt_stop().await (transcription).
+    // Dropping it early is not possible because pipeline borrows from guard.
+    #[allow(clippy::significant_drop_tightening)]
+    async fn ptt_stop(&self) -> Result<String, VoicePortError> {
+        // Hold ptt_op_lock across transcription so a concurrent ptt_start
+        // cannot arrive mid-transcription.  Read lock is sufficient because
+        // ptt_stop takes &self on the pipeline.
+        let _op = self.ptt_op_lock.lock().await;
+        let guard = self.pipeline.read().await;
+        let pipeline = guard.as_ref().ok_or(VoicePortError::NotInitialised)?;
+        let text = pipeline.ptt_stop().await.map_err(to_port_err)?;
+        info!("PTT stop: transcription complete");
+        Ok(text)
+    }
+
+    // Read lock is intentionally held across speak().await (synthesis loop).
+    // stop_speaking() concurrently acquires a read guard to set speak_cancel —
+    // this is the designed interruption mechanism.
+    #[allow(clippy::significant_drop_tightening)]
+    async fn speak(&self, text: &str) -> Result<(), VoicePortError> {
+        // speak_op_lock prevents two synthesis loops running in parallel.
+        // The read lock allows stop_speaking to concurrently acquire a read
+        // guard and set speak_cancel, interrupting the synthesis loop.
+        let _op = self.speak_op_lock.lock().await;
+        let guard = self.pipeline.read().await;
+        let pipeline = guard.as_ref().ok_or(VoicePortError::NotInitialised)?;
+        pipeline.speak(text).await.map_err(to_port_err)
+    }
+
+    async fn stop_speaking(&self) -> Result<(), VoicePortError> {
+        // Read lock: stop_speaking takes &self (sets speak_cancel + sink.stop).
+        // Acquiring a read lock while speak() holds one is intentional — this
+        // is the mechanism that allows concurrent interruption.
+        let guard = self.pipeline.read().await;
+        if let Some(ref p) = *guard {
+            p.stop_speaking();
+        }
+        drop(guard);
+        Ok(())
     }
 }

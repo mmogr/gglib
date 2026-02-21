@@ -1,11 +1,8 @@
 /**
  * Voice mode client.
  *
- * Data/config operations (status, model management, configuration) delegate
- * to the transport layer via getTransport() and work in both desktop and WebUI.
- *
- * Audio I/O operations (start, stop, ptt, speak) still call Tauri IPC directly
- * and remain desktop-only until Phase 3 (WebSocket audio bridge).
+ * All operations delegate to the transport layer via getTransport() and
+ * work in both desktop and WebUI.  No platform branching required.
  *
  * @module services/clients/voice
  */
@@ -40,22 +37,14 @@ export type {
 // Re-export VoiceEvent so hooks can use it without reaching into transport internals.
 export type { VoiceEvent };
 
-// ── Tauri IPC helper (audio I/O only) ─────────────────────────────
-
-async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  // @ts-expect-error - Tauri API injected at runtime
-  const { invoke } = window.__TAURI_INTERNALS__;
-  return invoke(cmd, args);
-}
-
 // ── Pipeline lifecycle ─────────────────────────────────────────────
 
 export async function voiceStart(mode?: VoiceInteractionMode): Promise<void> {
-  await invokeTauri('voice_start', mode ? { mode } : undefined);
+  return getTransport().voiceStart(mode);
 }
 
 export async function voiceStop(): Promise<void> {
-  await invokeTauri('voice_stop');
+  return getTransport().voiceStop();
 }
 
 /**
@@ -76,21 +65,21 @@ export async function voiceStatus(): Promise<VoiceStatusResponse> {
 // ── Push-to-talk ───────────────────────────────────────────────────
 
 export async function voicePttStart(): Promise<void> {
-  await invokeTauri('voice_ptt_start');
+  return getTransport().voicePttStart();
 }
 
 export async function voicePttStop(): Promise<string> {
-  return invokeTauri('voice_ptt_stop');
+  return getTransport().voicePttStop();
 }
 
 // ── TTS ────────────────────────────────────────────────────────────
 
 export async function voiceSpeak(text: string): Promise<void> {
-  await invokeTauri('voice_speak', { text });
+  return getTransport().voiceSpeak(text);
 }
 
 export async function voiceStopSpeaking(): Promise<void> {
-  await invokeTauri('voice_stop_speaking');
+  return getTransport().voiceStopSpeaking();
 }
 
 // ── Model management ───────────────────────────────────────────────

@@ -13,4 +13,3 @@ pub mod app_logs;
 pub mod llama;
 pub mod research_logs;
 pub mod util;
-pub mod voice;

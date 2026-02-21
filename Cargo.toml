@@ -62,7 +62,7 @@ hf-hub = "0.4"
 # HTTP/Networking
 reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
 indicatif = "0.18"
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 uuid = { version = "1.10", features = ["v4"] }
 

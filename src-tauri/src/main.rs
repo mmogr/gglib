@@ -13,6 +13,7 @@ use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
 use gglib_download::cli_exec::preflight_fast_helper;
 use gglib_runtime::process::get_log_manager;
 use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
+use gglib_voice::RemoteAudioRegistry;
 #[cfg(target_os = "macos")]
 use menu::state_sync::sync_menu_state_or_log;
 use std::sync::Arc;
@@ -113,6 +114,11 @@ fn main() {
                 hf_client: ctx.hf_client.clone(),
                 runner: ctx.runner.clone(),
                 sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
+                // Desktop app: voice_registry is provided so the HTTP control
+                // plane can drive audio via LocalAudioSource/LocalAudioSink.
+                // The browser opens the WS audio endpoint only in web/embedded
+                // mode; there are no Tauri-specific voice command handlers anymore.
+                voice_registry: ctx.voice_service.clone() as Arc<dyn RemoteAudioRegistry>,
             };
 
             // Start embedded API server with auth and ephemeral port
@@ -218,13 +224,6 @@ fn main() {
             commands::research_logs::list_research_logs,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
-            // Voice mode: OS audio I/O (data/config ops now served via HTTP)
-            commands::voice::voice_start,
-            commands::voice::voice_stop,
-            commands::voice::voice_ptt_start,
-            commands::voice::voice_ptt_stop,
-            commands::voice::voice_speak,
-            commands::voice::voice_stop_speaking,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

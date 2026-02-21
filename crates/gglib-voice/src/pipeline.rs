@@ -13,13 +13,13 @@
 //! - **Voice Activity Detection (VAD)**: Audio is continuously monitored;
 //!   speech boundaries are detected automatically.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use crate::audio_thread::AudioThreadHandle;
+use crate::audio_io::{AudioSink, AudioSource};
 use crate::backend::{SttBackend, SttConfig, TtsBackend, TtsConfig};
 use crate::error::VoiceError;
 use crate::gate::EchoGate;
@@ -144,8 +144,10 @@ impl Default for VoicePipelineConfig {
 /// voice conversation loop. Emits [`VoiceEvent`]s via a channel for the
 /// UI layer to consume.
 pub struct VoicePipeline {
-    /// Current state.
-    state: VoiceState,
+    /// Current state — behind a `Mutex` so that `ptt_start`, `ptt_stop`,
+    /// `speak`, and `stop_speaking` can take `&self` (enabling concurrent
+    /// readers on the `tokio::sync::RwLock` in `VoiceService`).
+    state: Mutex<VoiceState>,
 
     /// Interaction mode.
     mode: VoiceInteractionMode,
@@ -153,8 +155,11 @@ pub struct VoicePipeline {
     /// Shared echo gate.
     echo_gate: EchoGate,
 
-    /// Audio I/O actor — owns capture + playback on a dedicated OS thread.
-    audio: Option<AudioThreadHandle>,
+    /// Audio input source — mic capture via cpal (local) or WebSocket stream (web).
+    source: Option<Box<dyn AudioSource>>,
+
+    /// Audio output sink — TTS playback via rodio (local) or WebSocket stream (web).
+    sink: Option<Box<dyn AudioSink>>,
 
     /// Speech-to-text engine (loaded lazily).
     stt: Option<Box<dyn SttBackend>>,
@@ -170,6 +175,17 @@ pub struct VoicePipeline {
 
     /// Whether the pipeline is active.
     is_active: Arc<AtomicBool>,
+
+    /// Cancellation flag for in-progress `speak()` calls.
+    ///
+    /// `stop_speaking()` sets this to `true`; `speak()` checks it after
+    /// each synthesised chunk and aborts early.  Reset to `false` at the
+    /// start of every `speak()` call.
+    ///
+    /// Wrapped in `Arc` so the `on_playback_complete` closure in `speak()`
+    /// can read it and skip its own `SpeakingFinished` emission when
+    /// `stop_speaking()` has already fired it.
+    speak_cancel: Arc<AtomicBool>,
 
     /// Pipeline configuration.
     config: VoicePipelineConfig,
@@ -192,15 +208,17 @@ impl VoicePipeline {
         let echo_gate = EchoGate::new();
 
         let pipeline = Self {
-            state: VoiceState::Idle,
+            state: Mutex::new(VoiceState::Idle),
             mode: config.mode,
             echo_gate,
-            audio: None,
+            source: None,
+            sink: None,
             stt: None,
             tts: None,
             vad: None,
             event_tx,
             is_active: Arc::new(AtomicBool::new(false)),
+            speak_cancel: Arc::new(AtomicBool::new(false)),
             config,
             loaded_stt_model_id: None,
         };
@@ -210,8 +228,8 @@ impl VoicePipeline {
 
     /// Get the current pipeline state.
     #[must_use]
-    pub const fn state(&self) -> VoiceState {
-        self.state
+    pub fn state(&self) -> VoiceState {
+        *self.state.lock().unwrap()
     }
 
     /// Get the interaction mode.
@@ -240,20 +258,32 @@ impl VoicePipeline {
 
     // ── Lifecycle ──────────────────────────────────────────────────
 
-    /// Start the voice pipeline.
+    /// Start the voice pipeline with explicitly provided audio I/O backends.
     ///
-    /// Initialises audio capture and playback. STT and TTS engines are
-    /// loaded lazily on first use.
-    pub fn start(&mut self) -> Result<(), VoiceError> {
+    /// This is the primary lifecycle entry-point. Separating backend
+    /// construction from injection makes the pipeline testable with mock
+    /// audio without real hardware, and enables the WebSocket audio path
+    /// (Phase 3) to supply a different backend at runtime.
+    ///
+    /// STT and TTS engines are loaded lazily on first use.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VoiceError::AlreadyActive`] if the pipeline is already
+    /// running.
+    pub fn start_with_audio(
+        &mut self,
+        source: Box<dyn AudioSource>,
+        sink: Box<dyn AudioSink>,
+    ) -> Result<(), VoiceError> {
         if self.is_active() {
             return Err(VoiceError::AlreadyActive);
         }
 
         tracing::info!(mode = ?self.mode, "Starting voice pipeline");
 
-        // Initialise audio I/O on a dedicated OS thread.
-        let audio = AudioThreadHandle::spawn(&self.echo_gate)?;
-        self.audio = Some(audio);
+        self.source = Some(source);
+        self.sink = Some(sink);
 
         // In VAD mode, initialise the detector
         if self.mode == VoiceInteractionMode::VoiceActivityDetection {
@@ -284,19 +314,42 @@ impl VoicePipeline {
         Ok(())
     }
 
+    /// Start the voice pipeline using the local cpal/rodio audio backends.
+    ///
+    /// Convenience wrapper around
+    /// [`start_with_audio`](VoicePipeline::start_with_audio) that creates a
+    /// [`LocalAudioSource`](crate::audio_local::LocalAudioSource) /
+    /// [`LocalAudioSink`](crate::audio_local::LocalAudioSink) pair backed by
+    /// a single [`AudioThreadHandle`](crate::audio_thread::AudioThreadHandle).
+    ///
+    /// Preserved for backward compatibility with existing tests and the CLI.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VoiceError`] if the audio thread fails to start or the
+    /// pipeline is already active.
+    pub fn start(&mut self) -> Result<(), VoiceError> {
+        let (source, sink) = crate::audio_local::new_pair(&self.echo_gate)?;
+        self.start_with_audio(Box::new(source), Box::new(sink))
+    }
+
     /// Stop the voice pipeline and release all resources.
     pub fn stop(&mut self) {
         tracing::info!("Stopping voice pipeline");
 
-        // Stop any active recording / playback and join the audio thread.
-        if let Some(ref audio) = self.audio {
-            if audio.is_recording() {
-                let _ = audio.stop_capture();
+        // Stop any active recording.
+        if let Some(ref source) = self.source {
+            if source.is_capturing() {
+                let _ = source.stop_capture();
             }
-            audio.stop_playback();
         }
-        // Drop the handle — sends Shutdown and joins the thread.
-        self.audio.take();
+        // Stop any active playback.
+        if let Some(ref sink) = self.sink {
+            let _ = sink.stop();
+        }
+        // Drop both handles — for LocalAudio* this joins the audio OS thread.
+        self.source.take();
+        self.sink.take();
 
         // Stop VAD
         if let Some(ref mut vad) = self.vad {
@@ -372,15 +425,16 @@ impl VoicePipeline {
     // ── Push-to-Talk flow ──────────────────────────────────────────
 
     /// Begin recording (PTT mode: user pressed the talk button).
-    pub fn ptt_start(&mut self) -> Result<(), VoiceError> {
+    pub fn ptt_start(&self) -> Result<(), VoiceError> {
         if !self.is_active() {
             return Err(VoiceError::NotActive);
         }
 
-        // Stop any active playback first
-        let audio = self.audio.as_ref().ok_or(VoiceError::NotActive)?;
-        audio.stop_playback();
-        audio.start_capture()?;
+        // Stop any active playback first, then start capture.
+        let sink = self.sink.as_ref().ok_or(VoiceError::NotActive)?;
+        sink.stop()?;
+        let source = self.source.as_ref().ok_or(VoiceError::NotActive)?;
+        source.start_capture()?;
         self.set_state(VoiceState::Recording);
 
         Ok(())
@@ -389,13 +443,13 @@ impl VoicePipeline {
     /// Finish recording and transcribe (PTT mode: user released the talk button).
     ///
     /// Returns the transcribed text. Also emits a `VoiceEvent::Transcript`.
-    pub async fn ptt_stop(&mut self) -> Result<String, VoiceError> {
+    pub async fn ptt_stop(&self) -> Result<String, VoiceError> {
         if !self.is_active() {
             return Err(VoiceError::NotActive);
         }
 
-        let audio_handle = self.audio.as_ref().ok_or(VoiceError::NotActive)?;
-        let audio = audio_handle.stop_capture()?;
+        let source = self.source.as_ref().ok_or(VoiceError::NotActive)?;
+        let audio = source.stop_capture()?;
 
         if audio.is_empty() {
             self.set_state(VoiceState::Listening);
@@ -478,7 +532,9 @@ impl VoicePipeline {
     /// appended so that `SpeakingFinished` is emitted when playback
     /// naturally drains (rather than only on explicit `stop_speaking()`).
     #[allow(clippy::cognitive_complexity)]
-    pub async fn speak(&mut self, text: &str) -> Result<(), VoiceError> {
+    pub async fn speak(&self, text: &str) -> Result<(), VoiceError> {
+        // Reset cancellation flag from any previous stop_speaking() call.
+        self.speak_cancel.store(false, Ordering::SeqCst);
         if text.trim().is_empty() {
             return Ok(());
         }
@@ -501,11 +557,11 @@ impl VoicePipeline {
         let tts = self.tts.as_ref().ok_or(VoiceError::TtsModelNotLoaded)?;
 
         // Prepare a streaming playback sink before synthesis begins.
-        let audio = self
-            .audio
+        let sink = self
+            .sink
             .as_ref()
             .ok_or_else(|| VoiceError::OutputStreamError("Audio thread not running".to_string()))?;
-        audio.start_streaming()?;
+        sink.start_streaming()?;
 
         let mut any_audio = false;
         let mut total_duration = std::time::Duration::ZERO;
@@ -527,18 +583,21 @@ impl VoicePipeline {
                     // so the frontend knows audio is about to play.
                     if !any_audio {
                         any_audio = true;
-                        // Can't use self.set_state/emit here because `tts`
-                        // holds an immutable borrow on self.tts.
-                        self.state = VoiceState::Speaking;
-                        let _ = self
-                            .event_tx
-                            .send(VoiceEvent::StateChanged(VoiceState::Speaking));
-                        let _ = self.event_tx.send(VoiceEvent::SpeakingStarted);
+                        // `set_state` and `emit` both take `&self` — no borrow
+                        // conflict with `tts` holding `&self.tts`.
+                        self.set_state(VoiceState::Speaking);
+                        self.emit(VoiceEvent::SpeakingStarted);
                     }
 
-                    // audio_thread methods take &self, so no re-borrow needed.
-                    let a = self.audio.as_ref().expect("audio thread started above");
-                    a.append(audio.samples, audio.sample_rate)?;
+                    // Check for cancellation (stop_speaking called concurrently).
+                    if self.speak_cancel.load(Ordering::SeqCst) {
+                        tracing::debug!("speak() interrupted by stop_speaking");
+                        break;
+                    }
+
+                    // AudioSink methods take &self, so no re-borrow needed.
+                    let s = self.sink.as_ref().expect("audio sink started above");
+                    s.append(audio.samples, audio.sample_rate)?;
                     total_duration += audio.duration;
                 }
                 Err(e) => {
@@ -564,8 +623,8 @@ impl VoicePipeline {
 
         if !any_audio {
             // Every chunk failed — tear down the empty sink and report error.
-            if let Some(ref a) = self.audio {
-                a.stop_playback();
+            if let Some(ref s) = self.sink {
+                let _ = s.stop();
             }
             return Err(VoiceError::SynthesisError(
                 "all chunks failed to synthesize".to_string(),
@@ -579,42 +638,58 @@ impl VoicePipeline {
 
         // Spawn a background thread that fires SpeakingFinished when the
         // sink drains naturally (all appended audio has been played).
+        // Guard against stop_speaking() having already emitted SpeakingFinished:
+        // if the cancel flag was set, skip the completion emissions so the
+        // frontend does not see a duplicate SpeakingFinished event.
         let event_tx = self.event_tx.clone();
         let is_active = Arc::clone(&self.is_active);
+        let speak_cancel = Arc::clone(&self.speak_cancel);
         let on_done = Box::new(move || {
-            let _ = event_tx.send(VoiceEvent::SpeakingFinished);
-            let _ = event_tx.send(VoiceEvent::StateChanged(
-                if is_active.load(Ordering::SeqCst) {
-                    VoiceState::Listening
-                } else {
-                    VoiceState::Idle
-                },
-            ));
+            if !speak_cancel.load(Ordering::SeqCst) {
+                let _ = event_tx.send(VoiceEvent::SpeakingFinished);
+                let _ = event_tx.send(VoiceEvent::StateChanged(
+                    if is_active.load(Ordering::SeqCst) {
+                        VoiceState::Listening
+                    } else {
+                        VoiceState::Idle
+                    },
+                ));
+            }
         });
 
-        let audio = self.audio.as_ref().expect("audio thread started above");
-        audio.spawn_completion_watcher(Some(on_done));
+        let sink = self.sink.as_ref().expect("audio sink started above");
+        sink.on_playback_complete(on_done);
 
         Ok(())
     }
 
     /// Stop any active TTS playback immediately.
-    pub fn stop_speaking(&mut self) {
-        if let Some(ref audio) = self.audio {
-            audio.stop_playback();
+    ///
+    /// Idempotent: emits `SpeakingFinished` and transitions state only when
+    /// the pipeline is actually in the `Speaking` state, preventing duplicate
+    /// events when called concurrently with the `speak()` completion callback.
+    pub fn stop_speaking(&self) {
+        // Signal any in-progress speak() loop to abort after its current chunk.
+        // The on_playback_complete closure checks this flag and skips its own
+        // SpeakingFinished emission, so only one emission occurs in total.
+        self.speak_cancel.store(true, Ordering::SeqCst);
+        if let Some(ref sink) = self.sink {
+            let _ = sink.stop();
         }
-        self.emit(VoiceEvent::SpeakingFinished);
-        if self.is_active() {
-            self.set_state(VoiceState::Listening);
+        if self.state() == VoiceState::Speaking {
+            self.emit(VoiceEvent::SpeakingFinished);
+            self.set_state(if self.is_active() {
+                VoiceState::Listening
+            } else {
+                VoiceState::Idle
+            });
         }
     }
 
     /// Check if TTS playback is currently active.
     #[must_use]
     pub fn is_speaking(&self) -> bool {
-        self.audio
-            .as_ref()
-            .is_some_and(AudioThreadHandle::is_playing)
+        self.sink.as_ref().is_some_and(|s| s.is_playing())
     }
 
     // ── Configuration ──────────────────────────────────────────────
@@ -697,10 +772,15 @@ impl VoicePipeline {
     // ── Internal helpers ───────────────────────────────────────────
 
     /// Transition to a new state and emit a state-change event.
-    fn set_state(&mut self, new_state: VoiceState) {
-        if self.state != new_state {
-            tracing::debug!(old = ?self.state, new = ?new_state, "Voice state transition");
-            self.state = new_state;
+    fn set_state(&self, new_state: VoiceState) {
+        let mut state_guard = self.state.lock().unwrap();
+        let old_state = *state_guard;
+        if old_state != new_state {
+            *state_guard = new_state;
+            // Release the lock before emitting events to avoid holding
+            // the mutex during potentially re-entrant or blocking operations.
+            drop(state_guard);
+            tracing::debug!(old = ?old_state, new = ?new_state, "Voice state transition");
             self.emit(VoiceEvent::StateChanged(new_state));
         }
     }
@@ -742,11 +822,33 @@ impl VoicePipeline {
     /// require an active pipeline (e.g. `ptt_start`), but only test state
     /// transitions — not actual audio I/O.
     ///
+    /// For tests that also need audio call sites to succeed, prefer calling
+    /// [`start_with_audio`](VoicePipeline::start_with_audio) directly with
+    /// `MockAudioSource`/`MockAudioSink` — that is the replacement for this
+    /// helper.
+    ///
     /// # Test helper
     #[doc(hidden)]
     pub fn set_active_for_test(&mut self) {
         self.is_active.store(true, Ordering::SeqCst);
         self.set_state(VoiceState::Listening);
+    }
+
+    /// Inject mock audio backends and activate the pipeline, bypassing real
+    /// hardware initialisation.
+    ///
+    /// Equivalent to calling
+    /// [`start_with_audio`](VoicePipeline::start_with_audio); provided as a
+    /// named helper so test code reads intention-first.
+    ///
+    /// # Test helper
+    #[doc(hidden)]
+    pub fn inject_audio(
+        &mut self,
+        source: Box<dyn AudioSource>,
+        sink: Box<dyn AudioSink>,
+    ) -> Result<(), VoiceError> {
+        self.start_with_audio(source, sink)
     }
 }
 
@@ -793,7 +895,7 @@ mod tests {
 
     #[test]
     fn ptt_start_requires_active_pipeline() {
-        let (mut pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
+        let (pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
         let result = pipeline.ptt_start();
         assert!(result.is_err());
     }

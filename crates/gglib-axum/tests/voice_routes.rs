@@ -41,8 +41,7 @@ fn test_config() -> ServerConfig {
 /// Assert the response body is valid JSON and return the parsed value.
 async fn parse_json(response: axum::response::Response) -> serde_json::Value {
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    serde_json::from_slice(&body)
-        .unwrap_or_else(|e| panic!("Expected valid JSON body: {e}"))
+    serde_json::from_slice(&body).unwrap_or_else(|e| panic!("Expected valid JSON body: {e}"))
 }
 
 /// Assert a response has `application/json` content-type.
@@ -109,7 +108,12 @@ async fn voice_status_json_shape_matches_frontend_type() {
 
     // All fields required by the TS VoiceStatusResponse interface must be present.
     for field in &[
-        "isActive", "state", "mode", "sttLoaded", "ttsLoaded", "autoSpeak",
+        "isActive",
+        "state",
+        "mode",
+        "sttLoaded",
+        "ttsLoaded",
+        "autoSpeak",
     ] {
         assert!(
             json.get(field).is_some(),
@@ -225,7 +229,15 @@ async fn voice_models_json_shape_matches_frontend_type() {
                 "sttModels[{i}] missing 'isDownloaded'. Got: {model}"
             );
             // Other required fields.
-            for field in &["id", "name", "sizeBytes", "sizeDisplay", "quality", "speed", "isDefault"] {
+            for field in &[
+                "id",
+                "name",
+                "sizeBytes",
+                "sizeDisplay",
+                "quality",
+                "speed",
+                "isDefault",
+            ] {
                 assert!(
                     model.get(*field).is_some(),
                     "sttModels[{i}] missing '{field}'. Got: {model}"
@@ -655,15 +667,14 @@ async fn voice_routes_not_intercepted_by_spa_fallback() {
 
     let app = create_spa_router(ctx, temp_dir.path(), &CorsConfig::AllowAll);
 
-    for uri in &["/api/voice/status", "/api/voice/models", "/api/voice/devices"] {
+    for uri in &[
+        "/api/voice/status",
+        "/api/voice/models",
+        "/api/voice/devices",
+    ] {
         let response = app
             .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(*uri)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri(*uri).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
@@ -679,4 +690,219 @@ async fn voice_routes_not_intercepted_by_spa_fallback() {
              Voice API routes must be matched before the SPA fallback."
         );
     }
+}
+
+// ── POST /api/voice/start ─────────────────────────────────────────────────────
+
+/// Route exists and is wired to POST (not 404 / 405).
+#[tokio::test]
+async fn voice_start_route_exists() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/voice/start")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"mode":"ptt"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_ne!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "POST /api/voice/start must be routed"
+    );
+    assert_ne!(
+        response.status(),
+        StatusCode::METHOD_NOT_ALLOWED,
+        "POST must be the correct method"
+    );
+}
+
+/// A null body (from the frontend when no mode is passed) must NOT return 422.
+/// Verifies that the extractor is Json<Option<StartRequest>>, not Option<Json<StartRequest>>.
+#[tokio::test]
+async fn voice_start_null_body_is_not_unprocessable() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/voice/start")
+                .header("content-type", "application/json")
+                .body(Body::from("null"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_ne!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "null body must not return 422 — frontend sends null when no mode is passed"
+    );
+    assert_ne!(response.status(), StatusCode::NOT_FOUND);
+    assert_ne!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
+
+// ── POST /api/voice/stop ──────────────────────────────────────────────────────
+
+/// stop is idempotent when no pipeline is active — must return 204.
+#[tokio::test]
+async fn voice_stop_is_idempotent_returns_204() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/voice/stop")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::NO_CONTENT,
+        "POST /api/voice/stop should be idempotent (204 with no active pipeline)"
+    );
+}
+
+// ── POST /api/voice/ptt-start ─────────────────────────────────────────────────
+
+/// Route exists and is wired to POST (not 404 / 405).
+#[tokio::test]
+async fn voice_ptt_start_route_exists() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/voice/ptt-start")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_ne!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "POST /api/voice/ptt-start must be routed"
+    );
+    assert_ne!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
+
+// ── POST /api/voice/ptt-stop ──────────────────────────────────────────────────
+
+/// Route exists; returns JSON (the transcript body) or an error, but never 404/405.
+#[tokio::test]
+async fn voice_ptt_stop_route_exists() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/voice/ptt-stop")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_ne!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "POST /api/voice/ptt-stop must be routed"
+    );
+    assert_ne!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
+
+// ── POST /api/voice/speak ─────────────────────────────────────────────────────
+
+/// speak always returns 202 Accepted (fire-and-forget at the HTTP layer).
+/// The handler spawns a background task and returns immediately.
+#[tokio::test]
+async fn voice_speak_returns_202_accepted() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/voice/speak")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"text":"hello"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::ACCEPTED,
+        "POST /api/voice/speak must always return 202 Accepted (synthesis is fire-and-forget)"
+    );
+}
+
+// ── POST /api/voice/stop-speaking ────────────────────────────────────────────
+
+/// stop-speaking is idempotent when nothing is playing — must return 204.
+#[tokio::test]
+async fn voice_stop_speaking_is_idempotent_returns_204() {
+    let ctx = match bootstrap(test_config()).await {
+        Ok(ctx) => ctx,
+        Err(_) => return,
+    };
+    let app = create_router(ctx, &CorsConfig::AllowAll);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/voice/stop-speaking")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::NO_CONTENT,
+        "POST /api/voice/stop-speaking should be idempotent (204 when nothing is playing)"
+    );
 }
