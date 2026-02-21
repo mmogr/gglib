@@ -170,6 +170,42 @@ impl VoiceService {
     }
 }
 
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+impl VoiceService {
+    /// Ensure a pipeline exists in `slot`, creating one lazily if `None`.
+    ///
+    /// Accepts `&mut Option<VoicePipeline>` so callers can pass `&mut *guard`
+    /// for a write-lock guard without coupling this helper to any particular
+    /// `RwLockWriteGuard` type.
+    ///
+    /// When a new pipeline is created its event channel is bridged to the
+    /// service's emitter via [`spawn_event_bridge`].
+    fn ensure_pipeline(&self, slot: &mut Option<VoicePipeline>) {
+        if slot.is_none() {
+            let (pipeline, event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
+            spawn_event_bridge(event_rx, Arc::clone(&self.emitter));
+            *slot = Some(pipeline);
+            info!("Created idle voice pipeline for model preloading");
+        }
+    }
+
+    /// Apply the persisted [`PendingConfig`] to a live pipeline.
+    ///
+    /// Called at the end of `load_stt` and `load_tts` to propagate any
+    /// mode / voice / speed / auto-speak settings that were written before
+    /// the pipeline existed.
+    fn apply_pending_config(&self, pipeline: &mut VoicePipeline) {
+        let cfg = self.config.read().unwrap();
+        pipeline.set_mode(cfg.mode);
+        if let Some(ref v) = cfg.voice_id {
+            pipeline.set_voice(v);
+        }
+        pipeline.set_speed(cfg.speed);
+        pipeline.set_auto_speak(cfg.auto_speak);
+    }
+}
+
 // ── Event bridge ─────────────────────────────────────────────────────────────
 
 /// Minimum interval between `VoiceAudioLevel` events forwarded to the SSE bus.
@@ -455,28 +491,13 @@ impl VoicePipelinePort for VoiceService {
         }
 
         let mut guard = self.pipeline.write().await;
-        if guard.is_none() {
-            let (pipeline, event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
-            spawn_event_bridge(event_rx, Arc::clone(&self.emitter));
-            *guard = Some(pipeline);
-            info!("Created idle voice pipeline for STT preloading");
-        }
-        let pipeline = guard.as_mut().expect("just set above");
+        self.ensure_pipeline(&mut *guard);
+        let pipeline = guard.as_mut().expect("ensure_pipeline guarantees Some");
         if pipeline.is_active() {
             pipeline.stop();
         }
         pipeline.load_stt(&path, model_id).map_err(to_port_err)?;
-
-        // Apply any pending config that was written before the pipeline existed.
-        {
-            let cfg = self.config.read().unwrap();
-            pipeline.set_mode(cfg.mode);
-            if let Some(ref v) = cfg.voice_id {
-                pipeline.set_voice(v);
-            }
-            pipeline.set_speed(cfg.speed);
-            pipeline.set_auto_speak(cfg.auto_speak);
-        }
+        self.apply_pending_config(pipeline);
         info!(model_id, "STT model loaded via HTTP");
         Ok(())
     }
@@ -493,25 +514,10 @@ impl VoicePipelinePort for VoiceService {
         }
 
         let mut guard = self.pipeline.write().await;
-        if guard.is_none() {
-            let (pipeline, event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
-            spawn_event_bridge(event_rx, Arc::clone(&self.emitter));
-            *guard = Some(pipeline);
-            info!("Created idle voice pipeline for TTS preloading");
-        }
-        let pipeline = guard.as_mut().expect("just set above");
+        self.ensure_pipeline(&mut *guard);
+        let pipeline = guard.as_mut().expect("ensure_pipeline guarantees Some");
         pipeline.load_tts(&tts_dir).await.map_err(to_port_err)?;
-
-        // Apply any pending config that was written before the pipeline existed.
-        {
-            let cfg = self.config.read().unwrap();
-            pipeline.set_mode(cfg.mode);
-            if let Some(ref v) = cfg.voice_id {
-                pipeline.set_voice(v);
-            }
-            pipeline.set_speed(cfg.speed);
-            pipeline.set_auto_speak(cfg.auto_speak);
-        }
+        self.apply_pending_config(pipeline);
         info!("TTS model loaded via HTTP");
         Ok(())
     }
