@@ -156,16 +156,32 @@ pub struct WebSocketAudioSink {
     /// `on_playback_complete`, because there is no in-process notification
     /// boundary once bytes have left via the network channel.  The
     /// consequence is that `VoiceSpeakingFinished` reaches the frontend
-    /// slightly before the browser finishes playing the last frame.  This is
-    /// acceptable for Phase 3 because:
+    /// slightly before the browser finishes playing the last frame.
+    ///
+    /// ## Timing gap
+    /// The gap has two components:
+    ///   1. **Network latency**: propagation + TCP send-buffer delay for the
+    ///      last WS frame (~1–20 ms on LAN, larger on WAN).
+    ///   2. **Browser ring-buffer drain**: the playback `AudioWorklet` uses a
+    ///      2-second ring buffer; if TTS output was long the buffer may hold
+    ///      up to ~2 s of audio that the browser has not yet rendered.
+    ///
+    /// In practice the combined gap is small for short responses, but can
+    /// reach several hundred milliseconds (or more) for long TTS utterances.
+    ///
+    /// ## Why this is acceptable for now
     ///   1. PTT flow: the user triggers the next action (press-to-talk),
     ///      which calls `sink.stop()` anyway — state is consistent.
     ///   2. Auto-speak flow: the pipeline transitions to `Listening` a few
     ///      hundred milliseconds early; browsers with echo-cancellation
     ///      on `getUserMedia` suppress TTS bleed-through regardless.
     ///
-    /// TODO(#230): add a client→server "playback_drained" signal so that
-    /// `SpeakingFinished` can be deferred until the browser confirms.
+    /// ## Required fix (GitHub issue #230)
+    /// Add a client→server "playback_drained" signal — a text WebSocket frame
+    /// sent by the `AudioWorklet`'s main-thread message handler when its ring
+    /// buffer drains to zero — and defer the `SpeakingFinished` SSE event
+    /// until that acknowledgement arrives (with a server-side timeout fallback
+    /// so a stalled browser does not freeze the pipeline indefinitely).
     on_complete: Mutex<Option<Box<dyn FnOnce() + Send + 'static>>>,
 }
 

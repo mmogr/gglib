@@ -270,8 +270,9 @@ export class WebAudioBridge {
     // Validate that the browser honoured the requested sample rate.
     // Some browsers (notably Safari on iOS/macOS) may ignore sampleRate and
     // use the hardware native rate (44.1 kHz or 48 kHz instead).
-    // TODO: implement a software resampler (e.g. a WebAssembly module or a
-    //   dedicated AudioWorklet) to support these browsers without distortion.
+    // TODO(#230): implement a software resampler (e.g. a WebAssembly resampler
+    //   AudioWorklet) so Safari and other non-compliant browsers can be
+    //   re-enabled.  Until then isSupported() returns false on Safari.
     if (this.captureCtx.sampleRate !== CAPTURE_SAMPLE_RATE) {
       const actual = this.captureCtx.sampleRate;
       await this.captureCtx.close();
@@ -290,7 +291,7 @@ export class WebAudioBridge {
     }
     // Same validation for playback: a mismatched rate causes TTS audio to play
     // at the wrong speed/pitch.
-    // TODO: implement a software resampler for browsers that ignore sampleRate.
+    // TODO(#230): software resampler needed (same as capture above).
     if (this.playbackCtx.sampleRate !== PLAYBACK_SAMPLE_RATE) {
       const actual = this.playbackCtx.sampleRate;
       await this.playbackCtx.close();
