@@ -213,7 +213,7 @@ pub trait VoicePipelinePort: Send + Sync {
     /// List available audio input devices.
     async fn list_devices(&self) -> Result<Vec<AudioDeviceDto>, VoicePortError>;
 
-    // ── Audio I/O (Phase 3 / PR 2) ────────────────────────────────────────────
+    // ── Audio I/O ────────────────────────────────────────────────────────────
 
     /// Start the voice pipeline audio I/O.
     ///

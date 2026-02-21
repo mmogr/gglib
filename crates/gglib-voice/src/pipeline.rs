@@ -263,7 +263,7 @@ impl VoicePipeline {
     /// This is the primary lifecycle entry-point. Separating backend
     /// construction from injection makes the pipeline testable with mock
     /// audio without real hardware, and enables the WebSocket audio path
-    /// (Phase 3) to supply a different backend at runtime.
+    /// to supply a browser-backed source/sink at runtime.
     ///
     /// STT and TTS engines are loaded lazily on first use.
     ///

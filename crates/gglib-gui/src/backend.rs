@@ -534,7 +534,7 @@ impl GuiBackend {
         self.voice_ops().list_devices().await
     }
 
-    // ── Voice: Audio I/O (Phase 3 / PR 2) ──────────────────────────────────
+    // ── Voice: Audio I/O ────────────────────────────────────────────────────
 
     /// Start audio I/O (mic capture + playback).
     pub async fn voice_start(&self, mode: Option<String>) -> Result<(), GuiError> {

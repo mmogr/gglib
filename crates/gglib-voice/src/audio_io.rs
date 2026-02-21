@@ -7,7 +7,7 @@
 //! | Implementor | Where used |
 //! |---|---|
 //! | [`LocalAudioSource`](crate::audio_local::LocalAudioSource) / [`LocalAudioSink`](crate::audio_local::LocalAudioSink) | Desktop / CLI — cpal capture + rodio playback on the local machine |
-//! | `WebSocketAudioSource` / `WebSocketAudioSink` *(Phase 3)* | WebUI — PCM16 LE streaming via browser WebSocket |
+//! | `WebSocketAudioSource` / `WebSocketAudioSink` | WebUI — PCM16 LE streaming via browser WebSocket |
 //!
 //! Both traits are **object-safe** (`Box<dyn AudioSource>` / `Box<dyn AudioSink>`).
 //! All methods take `&self` to satisfy the object-safety requirement; interior
@@ -28,7 +28,7 @@ use crate::error::VoiceError;
 /// # Implementations
 /// - [`LocalAudioSource`](crate::audio_local::LocalAudioSource) — wraps
 ///   [`AudioThreadHandle`](crate::audio_thread::AudioThreadHandle) → cpal
-/// - `WebSocketAudioSource` *(Phase 3)* — receives PCM from the browser via WS
+/// - `WebSocketAudioSource` — receives PCM from the browser via WS
 pub trait AudioSource: Send + Sync {
     /// Begin capturing audio from the source.
     ///
@@ -49,7 +49,7 @@ pub trait AudioSource: Send + Sync {
     ///
     /// The local adapter always returns `Ok(None)` because the cpal audio
     /// thread does not expose a frame-by-frame polling API.  The primary
-    /// consumer of this method is `WebSocketAudioSource` (Phase 3).
+    /// consumer of this method is `WebSocketAudioSource`.
     fn read_vad_frame(&self) -> Result<Option<Vec<f32>>, VoiceError>;
 
     /// Whether audio is currently being captured.
@@ -78,7 +78,7 @@ pub trait AudioSource: Send + Sync {
 /// # Implementations
 /// - [`LocalAudioSink`](crate::audio_local::LocalAudioSink) — wraps
 ///   [`AudioThreadHandle`](crate::audio_thread::AudioThreadHandle) → rodio
-/// - `WebSocketAudioSink` *(Phase 3)* — encodes f32 → PCM16 LE and sends to
+/// - `WebSocketAudioSink` — encodes f32 → PCM16 LE and sends to
 ///   the browser via WebSocket
 pub trait AudioSink: Send + Sync {
     /// Prepare the sink for streaming playback.

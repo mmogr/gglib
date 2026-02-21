@@ -55,7 +55,7 @@ impl AudioSource for LocalAudioSource {
     /// [`AudioThreadHandle`] does not expose a frame-by-frame polling API —
     /// the cpal stream drains into an internal buffer that is returned in one
     /// shot by [`stop_capture`](AudioSource::stop_capture).  The primary
-    /// consumer of `read_vad_frame` is `WebSocketAudioSource` (Phase 3 PR 3).
+    /// consumer of `read_vad_frame` is `WebSocketAudioSource`.
     fn read_vad_frame(&self) -> Result<Option<Vec<f32>>, VoiceError> {
         Ok(None)
     }
