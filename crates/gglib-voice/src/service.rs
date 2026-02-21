@@ -265,6 +265,20 @@ pub fn spawn_event_bridge(
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+/// Parse a mode string (`"ptt"` | `"vad"`) into a [`VoiceInteractionMode`].
+///
+/// Centralising the parsing here avoids duplicating the match arm in every
+/// method that accepts a mode string (`set_mode`, `start`, …).
+fn parse_interaction_mode(s: &str) -> Result<VoiceInteractionMode, VoicePortError> {
+    match s {
+        "vad" => Ok(VoiceInteractionMode::VoiceActivityDetection),
+        "ptt" => Ok(VoiceInteractionMode::PushToTalk),
+        other => Err(VoicePortError::NotFound(format!(
+            "Unknown voice mode: {other}"
+        ))),
+    }
+}
+
 /// Convert a `VoiceError` into its closest `VoicePortError` equivalent.
 ///
 /// This conversion lives here, in `gglib-voice`, so that `gglib-core` never
@@ -522,15 +536,7 @@ impl VoicePipelinePort for VoiceService {
     }
 
     async fn set_mode(&self, mode: &str) -> Result<(), VoicePortError> {
-        let interaction_mode = match mode {
-            "vad" => VoiceInteractionMode::VoiceActivityDetection,
-            "ptt" => VoiceInteractionMode::PushToTalk,
-            other => {
-                return Err(VoicePortError::NotFound(format!(
-                    "Unknown voice mode: {other}"
-                )));
-            }
-        };
+        let interaction_mode = parse_interaction_mode(mode)?;
         // Always persist — survives pipeline being None.
         self.config.write().unwrap().mode = interaction_mode;
         // Also apply to the live pipeline if one exists.
@@ -608,16 +614,7 @@ impl VoicePipelinePort for VoiceService {
             return Err(VoicePortError::AlreadyActive);
         }
         if let Some(ref mode_str) = mode {
-            let interaction_mode = match mode_str.as_str() {
-                "vad" => VoiceInteractionMode::VoiceActivityDetection,
-                "ptt" => VoiceInteractionMode::PushToTalk,
-                other => {
-                    return Err(VoicePortError::NotFound(format!(
-                        "Unknown voice mode: {other}"
-                    )));
-                }
-            };
-            pipeline.set_mode(interaction_mode);
+            pipeline.set_mode(parse_interaction_mode(mode_str)?);
         }
         // If a remote audio session (WebSocket) is registered, use it;
         // otherwise fall back to local cpal/rodio devices.
