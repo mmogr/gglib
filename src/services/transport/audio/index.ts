@@ -1,0 +1,34 @@
+/**
+ * Audio transport factory.
+ *
+ * Returns a `WebAudioBridge` on browser (web UI) and `null` on Tauri desktop,
+ * where the native cpal/rodio audio stack is used instead via the local
+ * `AudioSource` / `AudioSink` implementations.
+ *
+ * **This module is the sole permitted location for platform branching on audio
+ * I/O.**  All callers should import `createAudioBridge` from here rather than
+ * constructing `WebAudioBridge` directly, so that the native path is
+ * automatically skipped without scattered `isTauri()` guards.
+ *
+ * @module services/transport/audio
+ */
+
+import { WebAudioBridge } from './WebAudioBridge';
+
+/** Returns `true` when running inside a Tauri desktop application. */
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+/**
+ * Create the audio bridge appropriate for the current platform.
+ *
+ * @returns A new `WebAudioBridge` instance on browser, or `null` on Tauri
+ *   desktop (where the Rust audio stack handles I/O directly).
+ */
+export function createAudioBridge(): WebAudioBridge | null {
+  if (isTauri()) return null;
+  return new WebAudioBridge();
+}
+
+export type { WebAudioBridge };

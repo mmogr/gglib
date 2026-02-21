@@ -13,6 +13,8 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createAudioBridge } from '../services/transport/audio';
+import type { WebAudioBridge } from '../services/transport/audio';
 import {
   voiceStart,
   voiceStop,
@@ -65,8 +67,6 @@ export interface VoiceDefaults {
 export interface UseVoiceModeReturn {
   /** Whether voice mode is supported for data/config operations (always true — served via HTTP). */
   isSupported: boolean;
-  /** Whether audio I/O is supported (Tauri desktop only until Phase 3). */
-  isAudioSupported: boolean;
   /** Whether voice mode is currently active */
   isActive: boolean;
   /** Current voice pipeline state */
@@ -150,16 +150,9 @@ export interface UseVoiceModeReturn {
 
 // ── Hook implementation ────────────────────────────────────────────
 
-/** Returns true when running inside a Tauri desktop app. */
-function isTauriEnvironment(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
-
 export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
-  // Data/config ops (status, models, config) work everywhere via HTTP.
+  // All ops (data, config, audio) are served via HTTP — works everywhere.
   const isSupported = true;
-  // Audio I/O (start/stop/ptt/speak) still requires Tauri until Phase 3.
-  const isAudioSupported = isTauriEnvironment();
 
   // Pipeline state
   const [isActive, setIsActive] = useState(false);
@@ -199,6 +192,9 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   // Timeout id for auto-clearing download progress after completion.
   // Stored in a ref so it can be cancelled on unmount without triggering re-renders.
   const downloadClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Audio bridge: WebAudioBridge on web UI, null on Tauri desktop (native audio).
+  const bridgeRef = useRef<WebAudioBridge | null>(createAudioBridge());
 
   // ── Event subscriptions ────────────────────────────────────────
 
@@ -249,20 +245,20 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       // unmounts (e.g. user navigates away). voiceStop pauses the pipeline
       // and drops the audio thread (OS mic indicator off) but keeps loaded
       // models warm so the next start() is instant.
-      // Guard: voiceStop() calls Tauri IPC — only safe in desktop context.
-      if (isAudioSupported) {
-        voiceStatus()
-          .then((status) => {
-            if (status.isActive) {
-              return voiceStop();
-            }
-          })
-          .catch(() => {
-            // Best-effort: ignore errors during unmount cleanup.
-          });
-      }
+      // voiceStop() is served via HTTP — safe in both Tauri and web UI.
+      // Disconnect the audio bridge first to release the microphone.
+      bridgeRef.current?.disconnect();
+      voiceStatus()
+        .then((status) => {
+          if (status.isActive) {
+            return voiceStop();
+          }
+        })
+        .catch(() => {
+          // Best-effort: ignore errors during unmount cleanup.
+        });
     };
-  }, [isAudioSupported]);
+  }, []);
 
   // ── Sync status on mount ───────────────────────────────────────
 
@@ -391,6 +387,17 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       // Bail out again after async gap.
       if (loadGenRef.current !== gen) return;
 
+      // Connect the browser audio bridge (WebUI) before starting the pipeline.
+      // On Tauri desktop bridgeRef.current is null — the native cpal/rodio
+      // stack handles audio I/O directly.
+      try {
+        await bridgeRef.current?.connect();
+      } catch (e) {
+        setError(`Audio: ${String(e)}`);
+        setIsAutoLoading(false);
+        return;
+      }
+
       // Actually start the pipeline (audio I/O).
       await voiceStart(startMode);
 
@@ -411,6 +418,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const stop = useCallback(async () => {
     try {
       await voiceStop();
+      bridgeRef.current?.disconnect();
       setIsActive(false);
       setVoiceState('idle');
       setAudioLevel(0);
@@ -597,7 +605,6 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
 
   return {
     isSupported,
-    isAudioSupported,
     isActive,
     voiceState,
     mode,
