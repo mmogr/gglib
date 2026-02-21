@@ -257,7 +257,7 @@ fn default_mode_is_ptt() {
 
 #[test]
 fn ptt_start_requires_active_pipeline() {
-    let (mut pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
+    let (pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
     let err = pipeline.ptt_start().unwrap_err();
     assert!(
         matches!(err, VoiceError::NotActive),
@@ -273,7 +273,7 @@ fn ptt_stop_requires_active_pipeline() {
         .build()
         .unwrap();
     rt.block_on(async {
-        let (mut pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
+        let (pipeline, _rx) = VoicePipeline::new(VoicePipelineConfig::default());
         let err = pipeline.ptt_stop().await.unwrap_err();
         assert!(matches!(err, VoiceError::NotActive));
     });
@@ -387,7 +387,7 @@ fn idle_pipeline_mode_is_ptt_by_default() {
 // set_active_for_test(). They demonstrate the path towards deprecating
 // set_active_for_test() for tests that exercise audio call sites.
 
-/// start_with_audio activates the pipeline and transitions to Listening
+/// `start_with_audio` activates the pipeline and transitions to Listening
 /// without any real audio hardware.
 #[test]
 fn start_with_audio_activates_pipeline() {
@@ -412,12 +412,12 @@ fn start_with_audio_activates_pipeline() {
     );
 }
 
-/// ptt_start succeeds and transitions to Recording when mock audio is injected.
+/// `ptt_start` succeeds and transitions to Recording when mock audio is injected.
 ///
 /// Verifies that:
-/// - the pipeline advances past the is_active() guard
-/// - sink.stop() is called before capture (to clear any active playback)
-/// - source.start_capture() is called
+/// - the pipeline advances past the `is_active()` guard
+/// - `sink.stop()` is called before capture (to clear any active playback)
+/// - `source.start_capture()` is called
 /// - state transitions to Recording
 #[test]
 fn ptt_start_with_mock_audio_transitions_to_recording() {
@@ -443,7 +443,7 @@ fn ptt_start_with_mock_audio_transitions_to_recording() {
 
 /// Full PTT round-trip with mock audio and mock STT.
 ///
-/// Verifies that stop_capture is called, the samples are forwarded to the
+/// Verifies that `stop_capture` is called, the samples are forwarded to the
 /// STT engine, and the resulting transcript is returned.
 #[test]
 fn ptt_stop_with_mock_audio_returns_transcript() {
