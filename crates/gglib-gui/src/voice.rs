@@ -82,4 +82,30 @@ impl<'a> VoiceOps<'a> {
     pub async fn list_devices(&self) -> Result<Vec<AudioDeviceDto>, GuiError> {
         self.voice.list_devices().await.map_err(GuiError::from)
     }
+
+    // ── Audio I/O (Phase 3 / PR 2) ─────────────────────────────────────────
+
+    pub async fn start(&self, mode: Option<String>) -> Result<(), GuiError> {
+        self.voice.start(mode).await.map_err(GuiError::from)
+    }
+
+    pub async fn stop(&self) -> Result<(), GuiError> {
+        self.voice.stop().await.map_err(GuiError::from)
+    }
+
+    pub async fn ptt_start(&self) -> Result<(), GuiError> {
+        self.voice.ptt_start().await.map_err(GuiError::from)
+    }
+
+    pub async fn ptt_stop(&self) -> Result<String, GuiError> {
+        self.voice.ptt_stop().await.map_err(GuiError::from)
+    }
+
+    pub async fn speak(&self, text: &str) -> Result<(), GuiError> {
+        self.voice.speak(text).await.map_err(GuiError::from)
+    }
+
+    pub async fn stop_speaking(&self) -> Result<(), GuiError> {
+        self.voice.stop_speaking().await.map_err(GuiError::from)
+    }
 }
