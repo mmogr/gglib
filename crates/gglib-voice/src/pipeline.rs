@@ -181,7 +181,11 @@ pub struct VoicePipeline {
     /// `stop_speaking()` sets this to `true`; `speak()` checks it after
     /// each synthesised chunk and aborts early.  Reset to `false` at the
     /// start of every `speak()` call.
-    speak_cancel: AtomicBool,
+    ///
+    /// Wrapped in `Arc` so the `on_playback_complete` closure in `speak()`
+    /// can read it and skip its own `SpeakingFinished` emission when
+    /// `stop_speaking()` has already fired it.
+    speak_cancel: Arc<AtomicBool>,
 
     /// Pipeline configuration.
     config: VoicePipelineConfig,
@@ -214,7 +218,7 @@ impl VoicePipeline {
             vad: None,
             event_tx,
             is_active: Arc::new(AtomicBool::new(false)),
-            speak_cancel: AtomicBool::new(false),
+            speak_cancel: Arc::new(AtomicBool::new(false)),
             config,
             loaded_stt_model_id: None,
         };
@@ -634,17 +638,23 @@ impl VoicePipeline {
 
         // Spawn a background thread that fires SpeakingFinished when the
         // sink drains naturally (all appended audio has been played).
+        // Guard against stop_speaking() having already emitted SpeakingFinished:
+        // if the cancel flag was set, skip the completion emissions so the
+        // frontend does not see a duplicate SpeakingFinished event.
         let event_tx = self.event_tx.clone();
         let is_active = Arc::clone(&self.is_active);
+        let speak_cancel = Arc::clone(&self.speak_cancel);
         let on_done = Box::new(move || {
-            let _ = event_tx.send(VoiceEvent::SpeakingFinished);
-            let _ = event_tx.send(VoiceEvent::StateChanged(
-                if is_active.load(Ordering::SeqCst) {
-                    VoiceState::Listening
-                } else {
-                    VoiceState::Idle
-                },
-            ));
+            if !speak_cancel.load(Ordering::SeqCst) {
+                let _ = event_tx.send(VoiceEvent::SpeakingFinished);
+                let _ = event_tx.send(VoiceEvent::StateChanged(
+                    if is_active.load(Ordering::SeqCst) {
+                        VoiceState::Listening
+                    } else {
+                        VoiceState::Idle
+                    },
+                ));
+            }
         });
 
         let sink = self.sink.as_ref().expect("audio sink started above");
@@ -654,15 +664,25 @@ impl VoicePipeline {
     }
 
     /// Stop any active TTS playback immediately.
+    ///
+    /// Idempotent: emits `SpeakingFinished` and transitions state only when
+    /// the pipeline is actually in the `Speaking` state, preventing duplicate
+    /// events when called concurrently with the `speak()` completion callback.
     pub fn stop_speaking(&self) {
         // Signal any in-progress speak() loop to abort after its current chunk.
+        // The on_playback_complete closure checks this flag and skips its own
+        // SpeakingFinished emission, so only one emission occurs in total.
         self.speak_cancel.store(true, Ordering::SeqCst);
         if let Some(ref sink) = self.sink {
             let _ = sink.stop();
         }
-        self.emit(VoiceEvent::SpeakingFinished);
-        if self.is_active() {
-            self.set_state(VoiceState::Listening);
+        if self.state() == VoiceState::Speaking {
+            self.emit(VoiceEvent::SpeakingFinished);
+            self.set_state(if self.is_active() {
+                VoiceState::Listening
+            } else {
+                VoiceState::Idle
+            });
         }
     }
 
