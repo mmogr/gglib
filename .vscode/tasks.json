@@ -200,6 +200,9 @@
 			"command": "cargo",
 			"args": [
 				"clippy",
+				"--workspace",
+				"--exclude",
+				"gglib-app",
 				"--all-targets",
 				"--all-features"
 			],
@@ -220,6 +223,9 @@
 			"command": "cargo",
 			"args": [
 				"clippy",
+				"--workspace",
+				"--exclude",
+				"gglib-app",
 				"--all-targets",
 				"--all-features",
 				"--",
