@@ -13,7 +13,7 @@
 //! - **Voice Activity Detection (VAD)**: Audio is continuously monitored;
 //!   speech boundaries are detected automatically.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
@@ -144,8 +144,10 @@ impl Default for VoicePipelineConfig {
 /// voice conversation loop. Emits [`VoiceEvent`]s via a channel for the
 /// UI layer to consume.
 pub struct VoicePipeline {
-    /// Current state.
-    state: VoiceState,
+    /// Current state — behind a `Mutex` so that `ptt_start`, `ptt_stop`,
+    /// `speak`, and `stop_speaking` can take `&self` (enabling concurrent
+    /// readers on the `tokio::sync::RwLock` in `VoiceService`).
+    state: Mutex<VoiceState>,
 
     /// Interaction mode.
     mode: VoiceInteractionMode,
@@ -174,6 +176,13 @@ pub struct VoicePipeline {
     /// Whether the pipeline is active.
     is_active: Arc<AtomicBool>,
 
+    /// Cancellation flag for in-progress `speak()` calls.
+    ///
+    /// `stop_speaking()` sets this to `true`; `speak()` checks it after
+    /// each synthesised chunk and aborts early.  Reset to `false` at the
+    /// start of every `speak()` call.
+    speak_cancel: AtomicBool,
+
     /// Pipeline configuration.
     config: VoicePipelineConfig,
 
@@ -195,7 +204,7 @@ impl VoicePipeline {
         let echo_gate = EchoGate::new();
 
         let pipeline = Self {
-            state: VoiceState::Idle,
+            state: Mutex::new(VoiceState::Idle),
             mode: config.mode,
             echo_gate,
             source: None,
@@ -205,6 +214,7 @@ impl VoicePipeline {
             vad: None,
             event_tx,
             is_active: Arc::new(AtomicBool::new(false)),
+            speak_cancel: AtomicBool::new(false),
             config,
             loaded_stt_model_id: None,
         };
@@ -214,8 +224,8 @@ impl VoicePipeline {
 
     /// Get the current pipeline state.
     #[must_use]
-    pub const fn state(&self) -> VoiceState {
-        self.state
+    pub fn state(&self) -> VoiceState {
+        *self.state.lock().unwrap()
     }
 
     /// Get the interaction mode.
@@ -411,7 +421,7 @@ impl VoicePipeline {
     // ── Push-to-Talk flow ──────────────────────────────────────────
 
     /// Begin recording (PTT mode: user pressed the talk button).
-    pub fn ptt_start(&mut self) -> Result<(), VoiceError> {
+    pub fn ptt_start(&self) -> Result<(), VoiceError> {
         if !self.is_active() {
             return Err(VoiceError::NotActive);
         }
@@ -429,7 +439,7 @@ impl VoicePipeline {
     /// Finish recording and transcribe (PTT mode: user released the talk button).
     ///
     /// Returns the transcribed text. Also emits a `VoiceEvent::Transcript`.
-    pub async fn ptt_stop(&mut self) -> Result<String, VoiceError> {
+    pub async fn ptt_stop(&self) -> Result<String, VoiceError> {
         if !self.is_active() {
             return Err(VoiceError::NotActive);
         }
@@ -518,7 +528,8 @@ impl VoicePipeline {
     /// appended so that `SpeakingFinished` is emitted when playback
     /// naturally drains (rather than only on explicit `stop_speaking()`).
     #[allow(clippy::cognitive_complexity)]
-    pub async fn speak(&mut self, text: &str) -> Result<(), VoiceError> {
+    pub async fn speak(&self, text: &str) -> Result<(), VoiceError> {        // Reset cancellation flag from any previous stop_speaking() call.
+        self.speak_cancel.store(false, Ordering::SeqCst);
         if text.trim().is_empty() {
             return Ok(());
         }
@@ -567,13 +578,16 @@ impl VoicePipeline {
                     // so the frontend knows audio is about to play.
                     if !any_audio {
                         any_audio = true;
-                        // Can't use self.set_state/emit here because `tts`
-                        // holds an immutable borrow on self.tts.
-                        self.state = VoiceState::Speaking;
-                        let _ = self
-                            .event_tx
-                            .send(VoiceEvent::StateChanged(VoiceState::Speaking));
-                        let _ = self.event_tx.send(VoiceEvent::SpeakingStarted);
+                        // `set_state` and `emit` both take `&self` — no borrow
+                        // conflict with `tts` holding `&self.tts`.
+                        self.set_state(VoiceState::Speaking);
+                        self.emit(VoiceEvent::SpeakingStarted);
+                    }
+
+                    // Check for cancellation (stop_speaking called concurrently).
+                    if self.speak_cancel.load(Ordering::SeqCst) {
+                        tracing::debug!("speak() interrupted by stop_speaking");
+                        break;
                     }
 
                     // AudioSink methods take &self, so no re-borrow needed.
@@ -639,7 +653,9 @@ impl VoicePipeline {
     }
 
     /// Stop any active TTS playback immediately.
-    pub fn stop_speaking(&mut self) {
+    pub fn stop_speaking(&self) {
+        // Signal any in-progress speak() loop to abort after its current chunk.
+        self.speak_cancel.store(true, Ordering::SeqCst);
         if let Some(ref sink) = self.sink {
             let _ = sink.stop();
         }
@@ -737,10 +753,11 @@ impl VoicePipeline {
     // ── Internal helpers ───────────────────────────────────────────
 
     /// Transition to a new state and emit a state-change event.
-    fn set_state(&mut self, new_state: VoiceState) {
-        if self.state != new_state {
-            tracing::debug!(old = ?self.state, new = ?new_state, "Voice state transition");
-            self.state = new_state;
+    fn set_state(&self, new_state: VoiceState) {
+        let old_state = *self.state.lock().unwrap();
+        if old_state != new_state {
+            tracing::debug!(old = ?old_state, new = ?new_state, "Voice state transition");
+            *self.state.lock().unwrap() = new_state;
             self.emit(VoiceEvent::StateChanged(new_state));
         }
     }
