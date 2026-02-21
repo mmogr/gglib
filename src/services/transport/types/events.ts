@@ -159,6 +159,44 @@ export interface VerificationCompleteEvent {
 export type VerificationEvent = VerificationProgressEvent | VerificationCompleteEvent;
 
 // ============================================================================
+// Voice Events
+// ============================================================================
+
+/**
+ * Voice pipeline state — mirrors the Rust `VoiceState` enum.
+ * Inlined here so the transport layer has no dependency on src/types/voice.ts.
+ */
+export type VoiceState =
+  | 'idle'
+  | 'listening'
+  | 'recording'
+  | 'transcribing'
+  | 'thinking'
+  | 'speaking'
+  | 'error';
+
+/**
+ * Voice events received from the SSE bus (or Tauri IPC on desktop).
+ *
+ * The `type` discriminator values are the Serde snake_case tag emitted by
+ * the Rust `AppEvent` enum (e.g. `"voice_state_changed"`).
+ */
+export type VoiceEvent =
+  | { type: 'voice_state_changed'; state: VoiceState }
+  | { type: 'voice_transcript'; text: string; isFinal: boolean }
+  | { type: 'voice_speaking_started' }
+  | { type: 'voice_speaking_finished' }
+  | { type: 'voice_audio_level'; level: number }
+  | { type: 'voice_error'; message: string }
+  | {
+      type: 'voice_model_download_progress';
+      modelId: string;
+      bytesDownloaded: number;
+      totalBytes: number;
+      percent: number;
+    };
+
+// ============================================================================
 // App Event Map
 // ============================================================================
 
@@ -174,6 +212,7 @@ export interface AppEventMap {
   'download': { type: 'download'; event: DownloadEvent };
   'log': LogEvent;
   'verification': VerificationEvent;
+  'voice': VoiceEvent;
 }
 
 export type AppEventType = keyof AppEventMap;

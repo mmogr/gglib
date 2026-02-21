@@ -274,6 +274,8 @@ class SseConnection<T> {
     if (outerType === 'log' || outerType.startsWith('log_')) return 'log';
     // Verification events
     if (outerType.startsWith('verification_') || outerType.startsWith('verification:')) return 'verification';
+    // Voice events — all Serde type tags start with 'voice_'
+    if (outerType.startsWith('voice_')) return 'voice';
     return null;
   }
 
