@@ -14,3 +14,4 @@ pub mod servers;
 pub mod settings;
 pub mod verification;
 pub mod voice;
+pub mod voice_ws;

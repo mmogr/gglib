@@ -29,7 +29,7 @@ pub use gate::EchoGate;
 pub use models::VadModelInfo;
 pub use models::{SttModelInfo, TtsModelInfo, VoiceModelCatalog, VoiceModelId};
 pub use pipeline::{VoiceEvent, VoicePipeline, VoicePipelineConfig, VoiceState};
-pub use service::VoiceService;
+pub use service::{RemoteAudioRegistry, VoiceService};
 
 // Re-export backend trait types at crate root for ergonomic imports
 pub use backend::{SttBackend, SttConfig, TtsAudio, TtsBackend, TtsConfig, VoiceGender, VoiceInfo};

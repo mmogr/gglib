@@ -38,7 +38,6 @@ const STATE_ICONS: Record<string, string> = {
 };
 
 export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => {
-  const isAudioSupported = voice?.isAudioSupported ?? false;
   const isActive = voice?.isActive ?? false;
   const voiceState = voice?.voiceState ?? 'idle';
   const mode = voice?.mode ?? 'ptt';
@@ -103,10 +102,9 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
     pttStop?.();
   }, [pttStop]);
 
-  // Don't render anything outside Tauri or when voice is unavailable.
-  // Render during auto-loading even before the pipeline is fully active.
+  // Don't render when voice is inactive and not auto-loading.
   const isAutoLoading = voice?.isAutoLoading ?? false;
-  if (!isAudioSupported || (!isActive && !isAutoLoading)) return null;
+  if (!isActive && !isAutoLoading) return null;
 
   const stateLabel = STATE_LABELS[voiceState] ?? voiceState;
   const stateIcon = STATE_ICONS[voiceState] ?? '🎙️';

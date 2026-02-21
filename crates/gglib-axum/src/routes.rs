@@ -186,6 +186,11 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/voice/ptt-stop", post(handlers::voice::ptt_stop))
         .route("/voice/speak", post(handlers::voice::speak))
         .route("/voice/stop-speaking", post(handlers::voice::stop_speaking))
+        // WebSocket audio data plane (Phase 3 / PR 3)
+        // Browser opens this WS *before* POST /voice/start to register remote
+        // audio; the pipeline then uses WebSocketAudioSource/Sink instead of
+        // local cpal/rodio.  Desktop callers skip this endpoint entirely.
+        .route("/voice/audio", get(handlers::voice_ws::audio_ws))
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }
