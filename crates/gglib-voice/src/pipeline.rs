@@ -782,11 +782,33 @@ impl VoicePipeline {
     /// require an active pipeline (e.g. `ptt_start`), but only test state
     /// transitions — not actual audio I/O.
     ///
+    /// For tests that also need audio call sites to succeed, prefer calling
+    /// [`start_with_audio`](VoicePipeline::start_with_audio) directly with
+    /// `MockAudioSource`/`MockAudioSink` — that is the replacement for this
+    /// helper.
+    ///
     /// # Test helper
     #[doc(hidden)]
     pub fn set_active_for_test(&mut self) {
         self.is_active.store(true, Ordering::SeqCst);
         self.set_state(VoiceState::Listening);
+    }
+
+    /// Inject mock audio backends and activate the pipeline, bypassing real
+    /// hardware initialisation.
+    ///
+    /// Equivalent to calling
+    /// [`start_with_audio`](VoicePipeline::start_with_audio); provided as a
+    /// named helper so test code reads intention-first.
+    ///
+    /// # Test helper
+    #[doc(hidden)]
+    pub fn inject_audio(
+        &mut self,
+        source: Box<dyn AudioSource>,
+        sink: Box<dyn AudioSink>,
+    ) -> Result<(), VoiceError> {
+        self.start_with_audio(source, sink)
     }
 }
 
