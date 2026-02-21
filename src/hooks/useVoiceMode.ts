@@ -198,7 +198,18 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const downloadClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Audio bridge: WebAudioBridge on web UI, null on Tauri desktop (native audio).
-  const bridgeRef = useRef<WebAudioBridge | null>(createAudioBridge());
+  //
+  // Lazy-init: `createAudioBridge()` must not be called on every render —
+  // React evaluates the `useRef(initialValue)` argument every time but only
+  // uses it on the first render, so the object would be silently discarded on
+  // re-renders.  We use `undefined` as the "not yet initialised" sentinel
+  // (distinct from `null` which means "Tauri — no web bridge needed") and
+  // assign once on first render.  All call sites already use optional chaining
+  // (`bridgeRef.current?.method()`), so `undefined` is handled transparently.
+  const bridgeRef = useRef<WebAudioBridge | null | undefined>(undefined);
+  if (bridgeRef.current === undefined) {
+    bridgeRef.current = createAudioBridge();
+  }
 
   // ── Event subscriptions ────────────────────────────────────────
 
