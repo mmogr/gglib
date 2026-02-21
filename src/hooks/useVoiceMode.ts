@@ -196,6 +196,10 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const defaultsRef = useRef(defaults);
   defaultsRef.current = defaults;
 
+  // Timeout id for auto-clearing download progress after completion.
+  // Stored in a ref so it can be cancelled on unmount without triggering re-renders.
+  const downloadClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Event subscriptions ────────────────────────────────────────
 
   // Subscribe on mount, cleanup on unmount.
@@ -229,7 +233,8 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
           const progress: ModelDownloadProgressPayload = { modelId, bytesDownloaded, totalBytes, percent };
           setDownloadProgress(progress);
           if (totalBytes && bytesDownloaded >= totalBytes) {
-            setTimeout(() => setDownloadProgress(null), 1000);
+            clearTimeout(downloadClearTimeoutRef.current ?? undefined);
+            downloadClearTimeoutRef.current = setTimeout(() => setDownloadProgress(null), 1000);
           }
           break;
         }
@@ -237,6 +242,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
     });
 
     return () => {
+      clearTimeout(downloadClearTimeoutRef.current ?? undefined);
       unsub();
 
       // Release the microphone if voice is still active when this component

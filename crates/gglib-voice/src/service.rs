@@ -142,14 +142,14 @@ pub fn spawn_event_bridge(
     emitter: Arc<dyn AppEventEmitter>,
 ) {
     tokio::spawn(async move {
-        let mut last_level_emit = Instant::now();
+        let mut last_level_emit: Option<Instant> = None;
 
         while let Some(event) = event_rx.recv().await {
             match event {
                 VoiceEvent::AudioLevel(level) => {
-                    if last_level_emit.elapsed() >= AUDIO_LEVEL_THROTTLE {
+                    if last_level_emit.map_or(true, |t| t.elapsed() >= AUDIO_LEVEL_THROTTLE) {
                         emitter.emit(AppEvent::VoiceAudioLevel { level });
-                        last_level_emit = Instant::now();
+                        last_level_emit = Some(Instant::now());
                     }
                     // else: drop — never queue, never delay
                 }
