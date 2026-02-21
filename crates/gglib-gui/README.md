@@ -122,6 +122,7 @@ use std::sync::Arc;
 #     model_repo: Arc<dyn gglib_core::ports::ModelRepository>,
 #     system_probe: Arc<dyn gglib_core::ports::SystemProbePort>,
 #     gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
+#     voice: Arc<dyn gglib_core::ports::VoicePipelinePort>,
 # ) {
 // Construct backend with dependency injection
 let deps = GuiDeps::new(
@@ -137,6 +138,7 @@ let deps = GuiDeps::new(
     model_repo,
     system_probe,
     gguf_parser,
+    voice,
 );
 
 let backend = GuiBackend::new(deps);
