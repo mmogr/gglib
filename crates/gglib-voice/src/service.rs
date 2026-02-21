@@ -14,9 +14,10 @@
 //! prevents any deadlock with the event emitter.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tracing::info;
 
 use gglib_core::events::AppEvent;
@@ -28,7 +29,7 @@ use gglib_core::ports::voice::{
 
 use crate::capture::AudioCapture;
 use crate::models::{self, VoiceModelCatalog};
-use crate::pipeline::{VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState};
+use crate::pipeline::{VoiceEvent, VoiceInteractionMode, VoicePipeline, VoicePipelineConfig, VoiceState};
 use crate::tts::TtsEngine;
 
 // ── Pending config ────────────────────────────────────────────────────────────
@@ -108,6 +109,71 @@ impl VoiceService {
     pub fn pipeline(&self) -> Arc<RwLock<Option<VoicePipeline>>> {
         Arc::clone(&self.pipeline)
     }
+
+    /// Return a clone of the event emitter.
+    ///
+    /// Used by Tauri audio commands to pass the emitter to
+    /// [`spawn_event_bridge`] when creating a new pipeline.
+    pub fn emitter(&self) -> Arc<dyn AppEventEmitter> {
+        Arc::clone(&self.emitter)
+    }
+}
+
+// ── Event bridge ─────────────────────────────────────────────────────────────
+
+/// Minimum interval between `VoiceAudioLevel` events forwarded to the SSE bus.
+///
+/// The VAD loop produces ~533 events/sec; throttling to 20 fps keeps SSE
+/// overhead at ~800 bytes/sec. Excess events are **dropped** — never queued —
+/// so the `UnboundedReceiver` cannot accumulate lag behind real-time.
+const AUDIO_LEVEL_THROTTLE: Duration = Duration::from_millis(50);
+
+/// Bridge `VoiceEvent` → `AppEvent`, forwarding each event to `emitter`.
+///
+/// `AudioLevel` events are load-shed: any event arriving before
+/// `AUDIO_LEVEL_THROTTLE` has elapsed since the last emission is silently
+/// dropped without sleeping or queuing.
+///
+/// The spawned task self-terminates when the pipeline's sender is dropped
+/// (i.e. when [`VoicePipeline`] is destroyed): `recv()` returns `None` and
+/// the `while let` loop exits.
+pub fn spawn_event_bridge(
+    mut event_rx: mpsc::UnboundedReceiver<VoiceEvent>,
+    emitter: Arc<dyn AppEventEmitter>,
+) {
+    tokio::spawn(async move {
+        let mut last_level_emit = Instant::now();
+
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                VoiceEvent::AudioLevel(level) => {
+                    if last_level_emit.elapsed() >= AUDIO_LEVEL_THROTTLE {
+                        emitter.emit(AppEvent::VoiceAudioLevel { level });
+                        last_level_emit = Instant::now();
+                    }
+                    // else: drop — never queue, never delay
+                }
+                VoiceEvent::StateChanged(state) => {
+                    emitter.emit(AppEvent::VoiceStateChanged {
+                        state: state_label(state),
+                    });
+                }
+                VoiceEvent::Transcript { text, is_final } => {
+                    emitter.emit(AppEvent::VoiceTranscript { text, is_final });
+                }
+                VoiceEvent::SpeakingStarted => {
+                    emitter.emit(AppEvent::VoiceSpeakingStarted);
+                }
+                VoiceEvent::SpeakingFinished => {
+                    emitter.emit(AppEvent::VoiceSpeakingFinished);
+                }
+                VoiceEvent::Error(message) => {
+                    emitter.emit(AppEvent::VoiceError { message });
+                }
+            }
+        }
+        // event_rx returned None: pipeline sender dropped — task exits.
+    });
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -336,10 +402,8 @@ impl VoicePipelinePort for VoiceService {
 
         let mut guard = self.pipeline.write().await;
         if guard.is_none() {
-            // Create an idle pipeline for model preloading.
-            // The event channel receiver is dropped intentionally;
-            // Phase 2 will wire it to the SSE broadcaster.
-            let (pipeline, _event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
+            let (pipeline, event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
+            spawn_event_bridge(event_rx, Arc::clone(&self.emitter));
             *guard = Some(pipeline);
             info!("Created idle voice pipeline for STT preloading");
         }
@@ -376,7 +440,8 @@ impl VoicePipelinePort for VoiceService {
 
         let mut guard = self.pipeline.write().await;
         if guard.is_none() {
-            let (pipeline, _event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
+            let (pipeline, event_rx) = VoicePipeline::new(VoicePipelineConfig::default());
+            spawn_event_bridge(event_rx, Arc::clone(&self.emitter));
             *guard = Some(pipeline);
             info!("Created idle voice pipeline for TTS preloading");
         }
