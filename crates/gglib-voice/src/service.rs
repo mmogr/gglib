@@ -175,9 +175,9 @@ impl VoiceService {
 impl VoiceService {
     /// Ensure a pipeline exists in `slot`, creating one lazily if `None`.
     ///
-    /// Accepts `&mut Option<VoicePipeline>` so callers can pass `&mut *guard`
-    /// for a write-lock guard without coupling this helper to any particular
-    /// `RwLockWriteGuard` type.
+    /// Accepts `&mut Option<VoicePipeline>` so callers can pass `&mut guard`
+    /// for a write-lock guard: Rust auto-derefs through `DerefMut` without
+    /// coupling this helper to any particular `RwLockWriteGuard` type.
     ///
     /// When a new pipeline is created its event channel is bridged to the
     /// service's emitter via [`spawn_event_bridge`].
@@ -315,7 +315,7 @@ fn mode_label(m: VoiceInteractionMode) -> String {
 fn progress_callback(
     emitter: Arc<dyn AppEventEmitter>,
     model_id: String,
-) -> impl FnMut(u64, u64) {
+) -> impl Fn(u64, u64) {
     move |downloaded, total| {
         let percent = if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
@@ -491,7 +491,7 @@ impl VoicePipelinePort for VoiceService {
         }
 
         let mut guard = self.pipeline.write().await;
-        self.ensure_pipeline(&mut *guard);
+        self.ensure_pipeline(&mut guard);
         let pipeline = guard.as_mut().expect("ensure_pipeline guarantees Some");
         if pipeline.is_active() {
             pipeline.stop();
@@ -514,7 +514,7 @@ impl VoicePipelinePort for VoiceService {
         }
 
         let mut guard = self.pipeline.write().await;
-        self.ensure_pipeline(&mut *guard);
+        self.ensure_pipeline(&mut guard);
         let pipeline = guard.as_mut().expect("ensure_pipeline guarantees Some");
         pipeline.load_tts(&tts_dir).await.map_err(to_port_err)?;
         self.apply_pending_config(pipeline);
