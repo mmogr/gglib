@@ -399,16 +399,23 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       }
 
       // Actually start the pipeline (audio I/O).
-      await voiceStart(startMode);
+      // Inner try/catch: if the HTTP start or status refresh fails, disconnect
+      // the audio bridge first so the mic and WebSocket are not left open.
+      try {
+        await voiceStart(startMode);
 
-      // Refresh full status from backend (models may have been preloaded)
-      const finalStatus = await voiceStatus();
-      setIsActive(finalStatus.isActive);
-      setVoiceState(finalStatus.state as VoiceState);
-      setModeState(finalStatus.mode as VoiceInteractionMode);
-      setSttLoaded(finalStatus.sttLoaded);
-      setTtsLoaded(finalStatus.ttsLoaded);
-      setAutoSpeakState(finalStatus.autoSpeak);
+        // Refresh full status from backend (models may have been preloaded)
+        const finalStatus = await voiceStatus();
+        setIsActive(finalStatus.isActive);
+        setVoiceState(finalStatus.state as VoiceState);
+        setModeState(finalStatus.mode as VoiceInteractionMode);
+        setSttLoaded(finalStatus.sttLoaded);
+        setTtsLoaded(finalStatus.ttsLoaded);
+        setAutoSpeakState(finalStatus.autoSpeak);
+      } catch (startError) {
+        bridgeRef.current?.disconnect();
+        throw startError; // re-throw so the outer catch surfaces the error
+      }
     } catch (e) {
       setIsAutoLoading(false);
       setError(String(e));
@@ -418,7 +425,6 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const stop = useCallback(async () => {
     try {
       await voiceStop();
-      bridgeRef.current?.disconnect();
       setIsActive(false);
       setVoiceState('idle');
       setAudioLevel(0);
@@ -427,6 +433,11 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       setIsTtsGenerating(false);
     } catch (e) {
       setError(String(e));
+    } finally {
+      // Always release hardware resources (mic + WebSocket) regardless of
+      // whether the HTTP stop call succeeded. Prevents the mic indicator
+      // remaining active after a network timeout or server error.
+      bridgeRef.current?.disconnect();
     }
   }, []);
 

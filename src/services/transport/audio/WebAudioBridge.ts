@@ -222,11 +222,39 @@ export class WebAudioBridge {
     if (this.captureCtx.state === 'suspended') {
       await this.captureCtx.resume();
     }
+    // Validate that the browser honoured the requested sample rate.
+    // Some browsers (notably Safari on iOS/macOS) may ignore sampleRate and
+    // use the hardware native rate (44.1 kHz or 48 kHz instead).
+    // TODO: implement a software resampler (e.g. a WebAssembly module or a
+    //   dedicated AudioWorklet) to support these browsers without distortion.
+    if (this.captureCtx.sampleRate !== CAPTURE_SAMPLE_RATE) {
+      const actual = this.captureCtx.sampleRate;
+      await this.captureCtx.close();
+      throw new Error(
+        `WebAudioBridge capture AudioContext sample rate mismatch: ` +
+          `expected ${CAPTURE_SAMPLE_RATE} Hz but got ${actual} Hz. ` +
+          `Your browser does not honor AudioContext({ sampleRate }); ` +
+          `mic audio would be captured at the wrong rate and STT quality would be degraded.`,
+      );
+    }
 
     // 2. Playback AudioContext — 24 kHz for kokoro TTS output
     this.playbackCtx = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE });
     if (this.playbackCtx.state === 'suspended') {
       await this.playbackCtx.resume();
+    }
+    // Same validation for playback: a mismatched rate causes TTS audio to play
+    // at the wrong speed/pitch.
+    // TODO: implement a software resampler for browsers that ignore sampleRate.
+    if (this.playbackCtx.sampleRate !== PLAYBACK_SAMPLE_RATE) {
+      const actual = this.playbackCtx.sampleRate;
+      await this.playbackCtx.close();
+      throw new Error(
+        `WebAudioBridge playback AudioContext sample rate mismatch: ` +
+          `expected ${PLAYBACK_SAMPLE_RATE} Hz but got ${actual} Hz. ` +
+          `Your browser does not honor AudioContext({ sampleRate }), ` +
+          `so 24 kHz PCM from the server would play at the wrong speed/pitch.`,
+      );
     }
 
     // 3. Load AudioWorklet processors from inline Blob URLs

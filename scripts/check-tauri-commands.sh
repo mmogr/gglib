@@ -64,7 +64,7 @@ while IFS= read -r line; do
             ;;
         *)
             echo -e "  ${RED}✗${NC} UNAUTHORIZED COMMAND: $line"
-            echo -e "      Commands must be in util.rs or llama.rs only"
+            echo -e "      Commands must be in util.rs, llama.rs, app_logs.rs, or research_logs.rs only"
             ERRORS=$((ERRORS + 1))
             ;;
     esac
