@@ -178,7 +178,7 @@ function resolveWsUrl(): string {
 // ── WebAudioBridge ────────────────────────────────────────────────────────────
 
 /**
- * Browser-side audio bridge for the WebSocket voice data plane (Phase 3).
+ * Browser-side audio bridge for the WebSocket voice data plane.
  *
  * Lifecycle:
  * 1. Call `connect()` from a user-gesture handler.

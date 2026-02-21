@@ -133,7 +133,7 @@ fn main() {
             });
 
             // Create and manage app state
-            let app_state = AppState::new(gui.clone(), embedded_api, ctx.voice_service.clone());
+            let app_state = AppState::new(gui.clone(), embedded_api);
 
             // Store the embedded server handle for cleanup
             {

@@ -156,7 +156,7 @@ pub async fn list_devices(
     Ok(Json(state.gui.voice_list_devices().await?))
 }
 
-// ── Audio I/O handlers (Phase 3 / PR 2) ──────────────────────────────────────
+// ── Audio I/O handlers ──────────────────────────────────────────────────────
 
 /// `POST /api/voice/start`
 ///

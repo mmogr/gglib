@@ -2,7 +2,6 @@
 
 use gglib_axum::EmbeddedApiInfo;
 use gglib_tauri::gui_backend::GuiBackend;
-use gglib_voice::VoiceService;
 use std::sync::Arc;
 use tauri::async_runtime::JoinHandle;
 use tokio::sync::RwLock;
@@ -28,10 +27,6 @@ pub struct AppState {
     pub proxy_port: Arc<RwLock<Option<u16>>>,
     /// Background task handles for proper cleanup
     pub background_tasks: Arc<RwLock<BackgroundTasks>>,
-    /// Voice service — shared with GuiBackend (HTTP ops) and the remaining
-    /// Tauri audio commands that access the underlying pipeline via
-    /// `voice_service.pipeline()`.
-    pub voice_service: Arc<VoiceService>,
 }
 
 /// Background task handles that need to be aborted on shutdown.
@@ -44,11 +39,7 @@ pub struct BackgroundTasks {
 
 impl AppState {
     /// Create a new application state.
-    pub fn new(
-        gui: Arc<GuiBackend>,
-        embedded_api: EmbeddedApiInfo,
-        voice_service: Arc<VoiceService>,
-    ) -> Self {
+    pub fn new(gui: Arc<GuiBackend>, embedded_api: EmbeddedApiInfo) -> Self {
         Self {
             gui,
             embedded_api,
@@ -60,7 +51,6 @@ impl AppState {
                 embedded_server: None,
                 log_emitter: None,
             })),
-            voice_service,
         }
     }
 }

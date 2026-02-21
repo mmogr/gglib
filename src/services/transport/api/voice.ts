@@ -65,7 +65,7 @@ export async function voiceListDevices(): Promise<AudioDeviceInfo[]> {
   return get<AudioDeviceInfo[]>('/api/voice/devices');
 }
 
-// ── Audio I/O control (Phase 3 / PR 2) ───────────────────────────────────────
+// ── Audio I/O control ─────────────────────────────────────────────────────────
 
 export async function voiceStart(mode?: VoiceInteractionMode): Promise<void> {
   return post<void>('/api/voice/start', mode ? { mode } : undefined);

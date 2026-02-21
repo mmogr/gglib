@@ -164,8 +164,8 @@ pub struct WebSocketAudioSink {
     ///      hundred milliseconds early; browsers with echo-cancellation
     ///      on `getUserMedia` suppress TTS bleed-through regardless.
     ///
-    /// TODO: add a client→server "playback_drained" signal in a future PR
-    /// so that `SpeakingFinished` can be deferred until the browser confirms.
+    /// TODO(#230): add a client→server "playback_drained" signal so that
+    /// `SpeakingFinished` can be deferred until the browser confirms.
     on_complete: Mutex<Option<Box<dyn FnOnce() + Send + 'static>>>,
 }
 

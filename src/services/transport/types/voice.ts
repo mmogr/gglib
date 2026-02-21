@@ -73,7 +73,7 @@ export interface VoiceTransport {
   /** GET /api/voice/devices — list available audio input/output devices. */
   voiceListDevices(): Promise<AudioDeviceInfo[]>;
 
-  // ── Audio I/O control (Phase 3 / PR 2) ───────────────────────────────────
+  // ── Audio I/O control ──────────────────────────────────────────────────────
 
   /** POST /api/voice/start — activate the audio pipeline (optional mode override). */
   voiceStart(mode?: VoiceInteractionMode): Promise<void>;

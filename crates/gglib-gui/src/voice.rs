@@ -83,7 +83,7 @@ impl<'a> VoiceOps<'a> {
         self.voice.list_devices().await.map_err(GuiError::from)
     }
 
-    // ── Audio I/O (Phase 3 / PR 2) ─────────────────────────────────────────
+    // ── Audio I/O ───────────────────────────────────────────────────────────
 
     pub async fn start(&self, mode: Option<String>) -> Result<(), GuiError> {
         self.voice.start(mode).await.map_err(GuiError::from)

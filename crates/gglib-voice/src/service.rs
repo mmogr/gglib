@@ -132,42 +132,6 @@ impl VoiceService {
             pending_remote: std::sync::Mutex::new(None),
         }
     }
-
-    /// Create a service that shares an existing pipeline `Arc`.
-    ///
-    /// Used in Tauri bootstrap so that the HTTP layer and the remaining
-    /// Tauri audio commands share the same `VoicePipeline` instance.
-    pub fn from_arc(
-        pipeline: Arc<RwLock<Option<VoicePipeline>>>,
-        emitter: Arc<dyn AppEventEmitter>,
-    ) -> Self {
-        Self {
-            pipeline,
-            emitter,
-            config: std::sync::RwLock::new(PendingConfig::default()),
-            speak_op_lock: Mutex::new(()),
-            ptt_op_lock: Mutex::new(()),
-            pending_remote: std::sync::Mutex::new(None),
-        }
-    }
-
-    /// Return a clone of the underlying pipeline `Arc`.
-    ///
-    /// Tauri audio commands (`voice_start`, `voice_stop`, `voice_ptt_start`,
-    /// `voice_ptt_stop`, `voice_speak`, `voice_stop_speaking`) call this to
-    /// obtain the same shared lock they previously accessed via
-    /// `AppState.voice_pipeline`.
-    pub fn pipeline(&self) -> Arc<RwLock<Option<VoicePipeline>>> {
-        Arc::clone(&self.pipeline)
-    }
-
-    /// Return a clone of the event emitter.
-    ///
-    /// Used by Tauri audio commands to pass the emitter to
-    /// [`spawn_event_bridge`] when creating a new pipeline.
-    pub fn emitter(&self) -> Arc<dyn AppEventEmitter> {
-        Arc::clone(&self.emitter)
-    }
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
@@ -264,6 +228,20 @@ pub fn spawn_event_bridge(
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+/// Parse a mode string (`"ptt"` | `"vad"`) into a [`VoiceInteractionMode`].
+///
+/// Centralising the parsing here avoids duplicating the match arm in every
+/// method that accepts a mode string (`set_mode`, `start`, …).
+fn parse_interaction_mode(s: &str) -> Result<VoiceInteractionMode, VoicePortError> {
+    match s {
+        "vad" => Ok(VoiceInteractionMode::VoiceActivityDetection),
+        "ptt" => Ok(VoiceInteractionMode::PushToTalk),
+        other => Err(VoicePortError::NotFound(format!(
+            "Unknown voice mode: {other}"
+        ))),
+    }
+}
 
 /// Convert a `VoiceError` into its closest `VoicePortError` equivalent.
 ///
@@ -522,15 +500,7 @@ impl VoicePipelinePort for VoiceService {
     }
 
     async fn set_mode(&self, mode: &str) -> Result<(), VoicePortError> {
-        let interaction_mode = match mode {
-            "vad" => VoiceInteractionMode::VoiceActivityDetection,
-            "ptt" => VoiceInteractionMode::PushToTalk,
-            other => {
-                return Err(VoicePortError::NotFound(format!(
-                    "Unknown voice mode: {other}"
-                )));
-            }
-        };
+        let interaction_mode = parse_interaction_mode(mode)?;
         // Always persist — survives pipeline being None.
         self.config.write().unwrap().mode = interaction_mode;
         // Also apply to the live pipeline if one exists.
@@ -608,16 +578,7 @@ impl VoicePipelinePort for VoiceService {
             return Err(VoicePortError::AlreadyActive);
         }
         if let Some(ref mode_str) = mode {
-            let interaction_mode = match mode_str.as_str() {
-                "vad" => VoiceInteractionMode::VoiceActivityDetection,
-                "ptt" => VoiceInteractionMode::PushToTalk,
-                other => {
-                    return Err(VoicePortError::NotFound(format!(
-                        "Unknown voice mode: {other}"
-                    )));
-                }
-            };
-            pipeline.set_mode(interaction_mode);
+            pipeline.set_mode(parse_interaction_mode(mode_str)?);
         }
         // If a remote audio session (WebSocket) is registered, use it;
         // otherwise fall back to local cpal/rodio devices.
