@@ -210,14 +210,34 @@ export class WebAudioBridge {
    * it only tests API availability.
    */
   static isSupported(): boolean {
-    return (
-      typeof window !== 'undefined' &&
-      window.isSecureContext === true &&
-      typeof AudioWorkletNode !== 'undefined' &&
-      typeof navigator !== 'undefined' &&
-      typeof navigator.mediaDevices !== 'undefined' &&
-      typeof navigator.mediaDevices.getUserMedia === 'function'
-    );
+    if (typeof window === 'undefined') return false;
+    if (!window.isSecureContext) return false;
+    if (typeof AudioWorkletNode === 'undefined') return false;
+    if (
+      typeof navigator === 'undefined' ||
+      typeof navigator.mediaDevices === 'undefined' ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function'
+    ) return false;
+
+    // Safari (non-Chromium) does not honour the `sampleRate` option passed to
+    // `new AudioContext({ sampleRate })`.  It silently uses the hardware
+    // native rate (44.1 kHz or 48 kHz), which causes both capture and
+    // playback to operate at the wrong rate — STT quality is degraded and TTS
+    // audio plays at the wrong speed/pitch.
+    //
+    // A software resampler is tracked in TODO(#230).  Until it lands, Safari
+    // is explicitly unsupported so the UI can show a graceful "not supported"
+    // state rather than letting the user start voice and hit an error mid-call.
+    //
+    // Detection: UA contains "Safari" but not "Chrome", "Chromium", "CriOS",
+    // or "FxiOS" (all of which are Chromium-based or Firefox and do honour
+    // the sampleRate constraint).
+    const ua = navigator.userAgent;
+    if (/Safari/i.test(ua) && !/Chrome|Chromium|CriOS|FxiOS/i.test(ua)) {
+      return false;
+    }
+
+    return true;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────

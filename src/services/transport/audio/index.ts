@@ -38,7 +38,13 @@ export function createAudioBridge(): WebAudioBridge | null {
  * - **Tauri desktop**: always `true` — the native cpal/rodio stack is always
  *   available.
  * - **Browser**: delegates to {@link WebAudioBridge.isSupported}, which checks
- *   for a secure context, `AudioWorkletNode`, and `getUserMedia`.
+ *   for a secure context, `AudioWorkletNode`, `getUserMedia`, and the absence
+ *   of a Safari UA.  Safari (non-Chromium) does not honour the `sampleRate`
+ *   option passed to `new AudioContext({ sampleRate })`, which would cause STT
+ *   capture and TTS playback to operate at the wrong sample rate.  Safari
+ *   support requires a software resampler (tracked in TODO #230) and is
+ *   currently disabled so callers receive `false` and can show a graceful
+ *   "not supported" UI rather than an in-call error.
  */
 export function isAudioSupported(): boolean {
   if (isTauri()) return true; // native audio stack — always available
