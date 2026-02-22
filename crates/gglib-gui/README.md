@@ -54,10 +54,10 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 │  │DownloadOps  │  │  ModelOps   │  │ ServerOps   │  │ SettingsOps │                 │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
 │                                                                                     │
-│                         ┌─────────────┐                                             │
-│                         │     mcp     │                                             │
-│                         │   McpOps    │                                             │
-│                         └─────────────┘                                             │
+│              ┌─────────────┐   ┌─────────────┐                                      │
+│              │     mcp     │   │    voice    │                                      │
+│              │   McpOps    │   │  VoiceOps   │                                      │
+│              └─────────────┘   └─────────────┘                                      │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -78,6 +78,7 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 | [`servers.rs`](src/servers.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-servers-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-servers-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-servers-coverage.json) |
 | [`settings.rs`](src/settings.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-settings-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-settings-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-settings-coverage.json) |
 | [`types.rs`](src/types.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-types-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-types-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-types-coverage.json) |
+| [`voice.rs`](src/voice.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-voice-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-voice-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-voice-coverage.json) |
 <!-- module-table:end -->
 
 </details>
@@ -92,6 +93,7 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 - **`settings.rs`** — `SettingsOps` application settings persistence
 - **`mcp.rs`** — `McpOps` MCP server configuration and management
 - **`types.rs`** — Shared DTOs and type definitions for GUI layer
+- **`voice.rs`** — `VoiceOps` voice pipeline operations — 19 thin delegates to `VoicePipelinePort` (status, models, devices, load/unload, mode, PTT, speak, audio control)
 
 ## Design Principles
 
