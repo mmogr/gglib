@@ -253,9 +253,9 @@ make setup   # check deps → build frontend → install CLI → offer llama.cpp
 
 ### Prerequisites
 
-- **Rust** 1.70+ — [rustup.rs](https://rustup.rs/)
+- **Rust** 1.70+ (MSRV). Tooling/CI currently pins Rust **1.91.0** via `rust-toolchain.toml` — using that version is recommended. — [rustup.rs](https://rustup.rs/)
 - **Python 3 via Miniconda** — [miniconda](https://docs.conda.io/en/latest/miniconda.html) (for hf_xet fast downloads)
-- **Node.js** 18+ — [nodejs.org](https://nodejs.org/) (for web UI)
+- **Node.js** 20.19+ (matches the `package.json` `engines` field) — [nodejs.org](https://nodejs.org/) (for web UI)
 - **SQLite** 3.x
 - **Build tools**: macOS `xcode-select --install` + `brew install cmake` · Ubuntu `build-essential cmake git` · Windows VS 2022 C++ + CMake
 
