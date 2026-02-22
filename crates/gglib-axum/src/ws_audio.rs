@@ -37,6 +37,13 @@ use gglib_voice::VoiceError;
 use gglib_voice::audio_io::{AudioSink, AudioSource};
 use gglib_voice::capture::AudioDeviceInfo;
 
+/// Shared slot for the sink's one-shot completion callback.
+///
+/// The `Arc` is cloned into the WS ingest task so it can fire the callback
+/// when the browser sends `playback_drained`, and into the timeout task as a
+/// fallback.  The `Option` is consumed by whichever fires first.
+pub type PendingCompletion = Arc<Mutex<Option<Box<dyn FnOnce() + Send + 'static>>>>;
+
 // ── WebSocketAudioSource ───────────────────────────────────────────────────────
 
 /// Audio source backed by binary WebSocket frames from a browser.
@@ -197,7 +204,7 @@ pub struct WebSocketAudioSink {
     ///
     /// Shared with the WS ingest task — the third value returned by
     /// [`WebSocketAudioSink::new`] is a clone of this `Arc`.
-    pending_completion: Arc<Mutex<Option<Box<dyn FnOnce() + Send + 'static>>>>,
+    pending_completion: PendingCompletion,
 }
 
 impl WebSocketAudioSink {
@@ -217,11 +224,7 @@ impl WebSocketAudioSink {
     /// 3. An `Arc` of the pending-completion slot — pass this to the WS
     ///    ingest task so it can fire the callback on `playback_drained`.
     #[must_use]
-    pub fn new() -> (
-        Self,
-        mpsc::Receiver<Vec<u8>>,
-        Arc<Mutex<Option<Box<dyn FnOnce() + Send + 'static>>>>,
-    ) {
+    pub fn new() -> (Self, mpsc::Receiver<Vec<u8>>, PendingCompletion) {
         let (tx, rx) = mpsc::channel(64);
         let pending = Arc::new(Mutex::new(None::<Box<dyn FnOnce() + Send + 'static>>));
         let sink = Self {
