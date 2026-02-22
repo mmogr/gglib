@@ -1,6 +1,6 @@
 {
   "productName": "GGLib GUI",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "identifier": "com.gglib.gui",
   "build": {
     "beforeBuildCommand": "npm run build:tauri",
