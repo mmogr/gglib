@@ -123,9 +123,7 @@ async fn handle_audio_ws(socket: WebSocket, state: AppState) {
                     // Fire the pending completion callback so the pipeline emits
                     // VoiceSpeakingFinished at the correct moment.
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if json.get("type").and_then(|v| v.as_str())
-                            == Some("playback_drained")
-                        {
+                        if json.get("type").and_then(|v| v.as_str()) == Some("playback_drained") {
                             if let Some(cb) = drain_callbacks.lock().unwrap().take() {
                                 cb();
                             }

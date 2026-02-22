@@ -26,8 +26,8 @@
 //!   cleanly.  Overflow (buffer full) is silently dropped rather than
 //!   back-pressuring the pipeline, to prevent stale audio buildup.
 
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tokio::sync::mpsc;

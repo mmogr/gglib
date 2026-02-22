@@ -103,9 +103,9 @@ impl From<gglib_core::ports::VoicePortError> for GuiError {
                 Self::Internal(format!("voice download error: {msg}"))
             }
             VoicePortError::Internal(msg) => Self::Internal(msg),
-        // 400 Bad Request: caller should change the request (switch to PTT mode)
-        // rather than retry. 503 Unavailable would imply a transient failure.
-        VoicePortError::Unimplemented(msg) => Self::ValidationFailed(msg),
+            // 400 Bad Request: caller should change the request (switch to PTT mode)
+            // rather than retry. 503 Unavailable would imply a transient failure.
+            VoicePortError::Unimplemented(msg) => Self::ValidationFailed(msg),
         }
     }
 }
