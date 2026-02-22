@@ -160,9 +160,10 @@ pub enum VoicePortError {
 
     /// Feature not yet implemented.
     ///
-    /// Maps to HTTP 501 Not Implemented.  Used to surface partial-implementation
-    /// gaps (e.g. VAD mode frame-polling loop) as actionable API errors rather
-    /// than silent no-ops.
+    /// Maps to HTTP 400 Bad Request via `GuiError::ValidationFailed`.  400 is
+    /// intentionally preferred over 501 here because the error is *actionable*
+    /// — the caller should change the request (e.g. switch from VAD to PTT
+    /// mode) rather than interpret it as a transient server-side gap.
     #[error("Not implemented: {0}")]
     Unimplemented(String),
 }

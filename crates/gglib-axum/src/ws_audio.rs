@@ -102,9 +102,13 @@ impl AudioSource for WebSocketAudioSource {
         // Drain any frames already queued in the channel.  If the channel is
         // disconnected we simply stop draining — whatever was accumulated is
         // still valid audio.
-        let mut rx = self.frame_rx.lock().unwrap();
-        while let Ok(frame) = rx.try_recv() {
-            self.buffer.lock().unwrap().extend(frame);
+        {
+            let mut rx = self.frame_rx.lock().unwrap();
+            while let Ok(frame) = rx.try_recv() {
+                self.buffer.lock().unwrap().extend(frame);
+            }
+            // `rx` (frame_rx guard) is released here, before the final buffer
+            // take below, keeping the two lock hold windows non-overlapping.
         }
         Ok(std::mem::take(&mut *self.buffer.lock().unwrap()))
     }

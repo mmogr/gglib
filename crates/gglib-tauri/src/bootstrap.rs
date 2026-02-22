@@ -94,11 +94,13 @@ pub struct TauriContext {
     /// Optional to support test/bootstrap_early paths.
     /// Production bootstrap MUST pass Some(app_handle) via the main bootstrap() function.
     app_handle: Option<AppHandle>,
-    /// Voice service — shared between `GuiBackend` (HTTP ops) and the remaining
-    /// Tauri audio commands that haven't been migrated to HTTP yet.
+    /// Voice service — implements `VoicePipelinePort` for all voice operations.
     ///
-    /// The inner `Arc<RwLock<Option<VoicePipeline>>>` is shared via
-    /// `VoiceService::pipeline()` so both layers always see the same pipeline.
+    /// Stored as a concrete `Arc<VoiceService>` (rather than a trait object)
+    /// so it can be upcast to `Arc<dyn VoicePipelinePort>` inside
+    /// [`build_gui_backend`](TauriContext::build_gui_backend).  All voice
+    /// operations are routed through the HTTP control plane; no Tauri IPC
+    /// commands for voice remain.
     pub voice_service: Arc<VoiceService>,
 }
 

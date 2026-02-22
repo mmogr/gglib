@@ -582,10 +582,10 @@ impl VoicePipelinePort for VoiceService {
         }
         // VAD mode requires a server-side polling loop (calling
         // `source.read_vad_frame()` → `pipeline.vad_process_frame()`) that
-        // is not yet implemented.  Guard here so callers receive a clear 501,
+        // is not yet implemented.  Guard here so callers receive a clear 400,
         // not a silent no-op where the mic opens but speech is never detected.
-        // Tracked in: https://github.com/mmogr/gglib/issues — file as
-        // "feat(voice): implement VAD frame-polling loop in VoiceService".
+        // Tracked: https://github.com/mmogr/gglib/issues/181
+        //   feat(voice): Implement continuous VAD capture loop for hands-free mode
         if pipeline.mode() == VoiceInteractionMode::VoiceActivityDetection {
             return Err(VoicePortError::Unimplemented(
                 "VAD (voice-activity-detection) mode requires a server-side \
