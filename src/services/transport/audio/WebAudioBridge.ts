@@ -116,6 +116,10 @@ class PlaybackProcessor extends AudioWorkletProcessor {
     this._write = 0;
     this._read  = 0;
     this._fill  = 0;
+    // True from the first received audio frame until the ring buffer drains
+    // to zero.  Gates the 'drained' notification so it fires only after real
+    // audio data has been rendered, not during pre-playback silence.
+    this._hasAudio = false;
 
     this.port.onmessage = (e) => {
       const frame = new Float32Array(e.data);
@@ -131,6 +135,7 @@ class PlaybackProcessor extends AudioWorkletProcessor {
         this._write = (this._write + 1) % CAPACITY;
       }
       this._fill += frame.length;
+      this._hasAudio = true;
 
       if (this._fill > OVERFLOW_THRESHOLD) {
         this.port.postMessage({ type: 'overflow' });
@@ -152,6 +157,15 @@ class PlaybackProcessor extends AudioWorkletProcessor {
         out[i] = 0; // silence when starved
       }
     }
+
+    // Detect ring-buffer drain: when queued audio has been fully rendered,
+    // post 'drained' so the main thread can notify the server.  The server
+    // defers VoiceSpeakingFinished until this acknowledgement arrives.
+    if (this._hasAudio && this._fill === 0) {
+      this.port.postMessage({ type: 'drained' });
+      this._hasAudio = false;
+    }
+
     return true;
   }
 }
@@ -350,6 +364,13 @@ export class WebAudioBridge {
         console.warn(
           '[WebAudioBridge] Playback ring buffer overflow — frame dropped.',
         );
+      } else if (e.data.type === 'drained') {
+        // The AudioWorklet ring buffer has fully drained: all TTS PCM frames
+        // have been rendered by the browser.  Send a playback_drained signal
+        // to the server so it can emit VoiceSpeakingFinished at the right time.
+        if (this.isConnected()) {
+          this.ws!.send(JSON.stringify({ type: 'playback_drained' }));
+        }
       }
     };
     this.playbackWorklet.connect(this.playbackCtx.destination);
