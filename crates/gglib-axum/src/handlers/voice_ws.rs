@@ -11,9 +11,23 @@
 //! | Client → Server | PCM16 LE | 16 000 Hz | 1 (mono) | 960 bytes (30 ms) |
 //! | Server → Client | PCM16 LE | 24 000 Hz | 1 (mono) | Variable |
 //!
-//! The WebSocket carries **only** binary frames — no text, no control commands.
-//! All voice lifecycle commands (`start`, `stop`, `ptt-start`, …) continue to
-//! use the HTTP control-plane endpoints.
+//! The WebSocket carries binary PCM frames for audio data and a single text
+//! frame type for the playback-drained acknowledgement:
+//!
+//! | Direction | Type | Content |
+//! |---|---|---|
+//! | Client → Server | Binary, 960 bytes | PCM16 LE capture frame (30 ms) |
+//! | Server → Client | Binary, variable | PCM16 LE playback frame |
+//! | Client → Server | Text | `{"type":"playback_drained"}` |
+//!
+//! The `playback_drained` text frame is sent by the browser's `AudioWorklet`
+//! main-thread handler when its ring buffer transitions from non-empty to
+//! empty — i.e. all TTS PCM frames have been rendered.  The ingest task
+//! recognises this sentinel and fires the pending completion callback stored
+//! in [`WebSocketAudioSink`], causing the pipeline to emit the
+//! `VoiceSpeakingFinished` SSE event at the precise moment the browser has
+//! finished playing.  All voice lifecycle commands (`start`, `stop`,
+//! `ptt-start`, …) continue to use the HTTP control-plane endpoints.
 //!
 //! ## Lifecycle
 //!
@@ -60,7 +74,7 @@ async fn handle_audio_ws(socket: WebSocket, state: AppState) {
     // signals AudioThreadDied to the pipeline's VAD loop (clean shutdown).
     // The egress task holds sink_rx; the sink's frame_tx feeds it.
     let (source, source_tx) = WebSocketAudioSource::new();
-    let (sink, sink_rx) = WebSocketAudioSink::new();
+    let (sink, sink_rx, drain_callbacks) = WebSocketAudioSink::new();
 
     // Register the pair — next VoicePipelinePort::start() will consume it.
     state
@@ -103,9 +117,24 @@ async fn handle_audio_ws(socket: WebSocket, state: AppState) {
                         break;
                     }
                 }
+                Ok(Message::Text(text)) => {
+                    // `playback_drained`: the browser's AudioWorklet ring buffer
+                    // has fully drained — all TTS PCM frames have been rendered.
+                    // Fire the pending completion callback so the pipeline emits
+                    // VoiceSpeakingFinished at the correct moment.
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if json.get("type").and_then(|v| v.as_str()) == Some("playback_drained") {
+                            if let Some(cb) = drain_callbacks.lock().unwrap().take() {
+                                cb();
+                            }
+                        } else {
+                            warn!(msg = %text, "WS audio ingest: unexpected text frame");
+                        }
+                    }
+                }
                 // Graceful close or protocol error — stop ingest loop.
                 Ok(Message::Close(_)) | Err(_) => break,
-                // Ignore text/ping/pong frames.
+                // Ignore ping/pong frames.
                 Ok(_) => {}
             }
         }

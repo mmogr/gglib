@@ -26,8 +26,9 @@
 //!   cleanly.  Overflow (buffer full) is silently dropped rather than
 //!   back-pressuring the pipeline, to prevent stale audio buildup.
 
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -35,6 +36,13 @@ use tracing::warn;
 use gglib_voice::VoiceError;
 use gglib_voice::audio_io::{AudioSink, AudioSource};
 use gglib_voice::capture::AudioDeviceInfo;
+
+/// Shared slot for the sink's one-shot completion callback.
+///
+/// The `Arc` is cloned into the WS ingest task so it can fire the callback
+/// when the browser sends `playback_drained`, and into the timeout task as a
+/// fallback.  The `Option` is consumed by whichever fires first.
+pub type PendingCompletion = Arc<Mutex<Option<Box<dyn FnOnce() + Send + 'static>>>>;
 
 // ── WebSocketAudioSource ───────────────────────────────────────────────────────
 
@@ -129,6 +137,15 @@ impl AudioSource for WebSocketAudioSource {
 
 // ── WebSocketAudioSink ────────────────────────────────────────────────────────
 
+/// Server-side timeout for the `playback_drained` acknowledgement.
+///
+/// If the browser does not send `playback_drained` within this many seconds
+/// after the last TTS chunk has been queued, the completion callback is fired
+/// unconditionally so the pipeline is never left waiting indefinitely.
+/// 8 s is generous enough for long TTS utterances while still providing a
+/// reliable safety net for disconnected or stalled browsers.
+const DRAIN_TIMEOUT_SECS: u64 = 8;
+
 /// Audio sink that delivers TTS output to a browser as binary WebSocket frames.
 ///
 /// f32 samples (any sample rate) are encoded to PCM16 LE and queued in a
@@ -156,17 +173,38 @@ pub struct WebSocketAudioSink {
     /// `on_playback_complete`, because there is no in-process notification
     /// boundary once bytes have left via the network channel.  The
     /// consequence is that `VoiceSpeakingFinished` reaches the frontend
-    /// slightly before the browser finishes playing the last frame.  This is
-    /// acceptable for Phase 3 because:
+    /// slightly before the browser finishes playing the last frame.
+    ///
+    /// ## Timing gap
+    /// The gap has two components:
+    ///   1. **Network latency**: propagation + TCP send-buffer delay for the
+    ///      last WS frame (~1–20 ms on LAN, larger on WAN).
+    ///   2. **Browser ring-buffer drain**: the playback `AudioWorklet` uses a
+    ///      2-second ring buffer; if TTS output was long the buffer may hold
+    ///      up to ~2 s of audio that the browser has not yet rendered.
+    ///
+    /// In practice the combined gap is small for short responses, but can
+    /// reach several hundred milliseconds (or more) for long TTS utterances.
+    ///
+    /// ## Why this is acceptable for now
     ///   1. PTT flow: the user triggers the next action (press-to-talk),
     ///      which calls `sink.stop()` anyway — state is consistent.
     ///   2. Auto-speak flow: the pipeline transitions to `Listening` a few
     ///      hundred milliseconds early; browsers with echo-cancellation
     ///      on `getUserMedia` suppress TTS bleed-through regardless.
     ///
-    /// TODO(#230): add a client→server "playback_drained" signal so that
-    /// `SpeakingFinished` can be deferred until the browser confirms.
-    on_complete: Mutex<Option<Box<dyn FnOnce() + Send + 'static>>>,
+    /// ## Fix (GitHub issue #230)
+    /// The callback is now deferred: `on_playback_complete` stores it and the
+    /// WS ingest task fires it when the browser sends a `playback_drained`
+    /// text frame confirming the AudioWorklet ring buffer has drained.  A
+    /// server-side timeout fires it after [`DRAIN_TIMEOUT_SECS`] so a stalled
+    /// or disconnected browser cannot freeze the pipeline.
+    /// `stop()` fires it immediately as the fallback for PTT and explicit
+    /// stop_speaking() paths.
+    ///
+    /// Shared with the WS ingest task — the third value returned by
+    /// [`WebSocketAudioSink::new`] is a clone of this `Arc`.
+    pending_completion: PendingCompletion,
 }
 
 impl WebSocketAudioSink {
@@ -179,15 +217,22 @@ impl WebSocketAudioSink {
     /// # Channel capacity
     /// Up to 64 chunks are buffered, providing ~1–2 s of headroom
     /// for typical TTS synthesis bursts before overflow policy kicks in.
+    ///
+    /// # Return values
+    /// 1. The sink (implements [`AudioSink`]).
+    /// 2. The `Receiver` the WS egress task drains.
+    /// 3. An `Arc` of the pending-completion slot — pass this to the WS
+    ///    ingest task so it can fire the callback on `playback_drained`.
     #[must_use]
-    pub fn new() -> (Self, mpsc::Receiver<Vec<u8>>) {
+    pub fn new() -> (Self, mpsc::Receiver<Vec<u8>>, PendingCompletion) {
         let (tx, rx) = mpsc::channel(64);
+        let pending = Arc::new(Mutex::new(None::<Box<dyn FnOnce() + Send + 'static>>));
         let sink = Self {
             frame_tx: tx,
             playing: AtomicBool::new(false),
-            on_complete: Mutex::new(None),
+            pending_completion: Arc::clone(&pending),
         };
-        (sink, rx)
+        (sink, rx, pending)
     }
 
     /// Encode f32 samples (range −1.0 … 1.0) to PCM16 LE bytes.
@@ -231,10 +276,11 @@ impl AudioSink for WebSocketAudioSink {
 
     fn stop(&self) -> Result<(), VoiceError> {
         self.playing.store(false, Ordering::SeqCst);
-        // Fire the completion callback if one is pending.  Covers both the
-        // explicit stop_speaking() path and the PTT ptt_start() path (which
-        // calls sink.stop() before starting capture).
-        if let Some(cb) = self.on_complete.lock().unwrap().take() {
+        // Fire immediately.  Covers both the explicit stop_speaking() path and
+        // the PTT ptt_start() path (which calls sink.stop() before starting
+        // capture).  `.take()` ensures the timeout task is a no-op if it fires
+        // after this.
+        if let Some(cb) = self.pending_completion.lock().unwrap().take() {
             cb();
         }
         Ok(())
@@ -245,14 +291,27 @@ impl AudioSink for WebSocketAudioSink {
     }
 
     fn on_playback_complete(&self, callback: Box<dyn FnOnce() + Send + 'static>) {
-        // See the doc comment on `on_complete` for why we fire immediately.
-        // Store first, then fire — this ordering ensures the callback is
-        // registered even if stop() races with on_playback_complete().
-        *self.on_complete.lock().unwrap() = Some(callback);
-        // Fire immediately: all TTS chunks are in the channel ready to be
-        // sent; the egress task will deliver them to the browser asynchronously.
-        if let Some(cb) = self.on_complete.lock().unwrap().take() {
-            cb();
+        // Store the callback — it will be fired by whichever wins the race:
+        //   1. The WS ingest task, when the browser sends `playback_drained`,
+        //      confirming the AudioWorklet ring buffer has fully drained.
+        //   2. `stop()`, for PTT and explicit stop_speaking() paths.
+        //   3. The server-side timeout task below, so a stalled or disconnected
+        //      browser cannot freeze the pipeline indefinitely.
+        *self.pending_completion.lock().unwrap() = Some(callback);
+
+        let pending = Arc::clone(&self.pending_completion);
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                tokio::time::sleep(Duration::from_secs(DRAIN_TIMEOUT_SECS)).await;
+                if let Some(cb) = pending.lock().unwrap().take() {
+                    warn!(
+                        timeout_secs = DRAIN_TIMEOUT_SECS,
+                        "WebSocketAudioSink: playback_drained not received within \
+                         timeout — firing completion callback"
+                    );
+                    cb();
+                }
+            });
         }
     }
 }

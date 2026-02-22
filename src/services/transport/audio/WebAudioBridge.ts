@@ -116,6 +116,10 @@ class PlaybackProcessor extends AudioWorkletProcessor {
     this._write = 0;
     this._read  = 0;
     this._fill  = 0;
+    // True from the first received audio frame until the ring buffer drains
+    // to zero.  Gates the 'drained' notification so it fires only after real
+    // audio data has been rendered, not during pre-playback silence.
+    this._hasAudio = false;
 
     this.port.onmessage = (e) => {
       const frame = new Float32Array(e.data);
@@ -131,6 +135,7 @@ class PlaybackProcessor extends AudioWorkletProcessor {
         this._write = (this._write + 1) % CAPACITY;
       }
       this._fill += frame.length;
+      this._hasAudio = true;
 
       if (this._fill > OVERFLOW_THRESHOLD) {
         this.port.postMessage({ type: 'overflow' });
@@ -152,6 +157,15 @@ class PlaybackProcessor extends AudioWorkletProcessor {
         out[i] = 0; // silence when starved
       }
     }
+
+    // Detect ring-buffer drain: when queued audio has been fully rendered,
+    // post 'drained' so the main thread can notify the server.  The server
+    // defers VoiceSpeakingFinished until this acknowledgement arrives.
+    if (this._hasAudio && this._fill === 0) {
+      this.port.postMessage({ type: 'drained' });
+      this._hasAudio = false;
+    }
+
     return true;
   }
 }
@@ -210,14 +224,34 @@ export class WebAudioBridge {
    * it only tests API availability.
    */
   static isSupported(): boolean {
-    return (
-      typeof window !== 'undefined' &&
-      window.isSecureContext === true &&
-      typeof AudioWorkletNode !== 'undefined' &&
-      typeof navigator !== 'undefined' &&
-      typeof navigator.mediaDevices !== 'undefined' &&
-      typeof navigator.mediaDevices.getUserMedia === 'function'
-    );
+    if (typeof window === 'undefined') return false;
+    if (!window.isSecureContext) return false;
+    if (typeof AudioWorkletNode === 'undefined') return false;
+    if (
+      typeof navigator === 'undefined' ||
+      typeof navigator.mediaDevices === 'undefined' ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function'
+    ) return false;
+
+    // Safari (non-Chromium) does not honour the `sampleRate` option passed to
+    // `new AudioContext({ sampleRate })`.  It silently uses the hardware
+    // native rate (44.1 kHz or 48 kHz), which causes both capture and
+    // playback to operate at the wrong rate — STT quality is degraded and TTS
+    // audio plays at the wrong speed/pitch.
+    //
+    // A software resampler is tracked in TODO(#230).  Until it lands, Safari
+    // is explicitly unsupported so the UI can show a graceful "not supported"
+    // state rather than letting the user start voice and hit an error mid-call.
+    //
+    // Detection: UA contains "Safari" but not "Chrome", "Chromium", "CriOS",
+    // or "FxiOS" (all of which are Chromium-based or Firefox and do honour
+    // the sampleRate constraint).
+    const ua = navigator.userAgent;
+    if (/Safari/i.test(ua) && !/Chrome|Chromium|CriOS|FxiOS/i.test(ua)) {
+      return false;
+    }
+
+    return true;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -250,8 +284,9 @@ export class WebAudioBridge {
     // Validate that the browser honoured the requested sample rate.
     // Some browsers (notably Safari on iOS/macOS) may ignore sampleRate and
     // use the hardware native rate (44.1 kHz or 48 kHz instead).
-    // TODO: implement a software resampler (e.g. a WebAssembly module or a
-    //   dedicated AudioWorklet) to support these browsers without distortion.
+    // TODO(#230): implement a software resampler (e.g. a WebAssembly resampler
+    //   AudioWorklet) so Safari and other non-compliant browsers can be
+    //   re-enabled.  Until then isSupported() returns false on Safari.
     if (this.captureCtx.sampleRate !== CAPTURE_SAMPLE_RATE) {
       const actual = this.captureCtx.sampleRate;
       await this.captureCtx.close();
@@ -270,7 +305,7 @@ export class WebAudioBridge {
     }
     // Same validation for playback: a mismatched rate causes TTS audio to play
     // at the wrong speed/pitch.
-    // TODO: implement a software resampler for browsers that ignore sampleRate.
+    // TODO(#230): software resampler needed (same as capture above).
     if (this.playbackCtx.sampleRate !== PLAYBACK_SAMPLE_RATE) {
       const actual = this.playbackCtx.sampleRate;
       await this.playbackCtx.close();
@@ -329,6 +364,13 @@ export class WebAudioBridge {
         console.warn(
           '[WebAudioBridge] Playback ring buffer overflow — frame dropped.',
         );
+      } else if (e.data.type === 'drained') {
+        // The AudioWorklet ring buffer has fully drained: all TTS PCM frames
+        // have been rendered by the browser.  Send a playback_drained signal
+        // to the server so it can emit VoiceSpeakingFinished at the right time.
+        if (this.isConnected()) {
+          this.ws!.send(JSON.stringify({ type: 'playback_drained' }));
+        }
       }
     };
     this.playbackWorklet.connect(this.playbackCtx.destination);
