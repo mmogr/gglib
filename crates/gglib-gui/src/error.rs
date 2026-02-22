@@ -81,6 +81,35 @@ impl std::error::Error for GuiError {}
 // Conversions from core errors
 // ============================================================================
 
+impl From<gglib_core::ports::VoicePortError> for GuiError {
+    fn from(err: gglib_core::ports::VoicePortError) -> Self {
+        use gglib_core::ports::VoicePortError;
+        match err {
+            VoicePortError::NotFound(msg) => Self::NotFound {
+                entity: "voice",
+                id: msg,
+            },
+            VoicePortError::AlreadyActive => {
+                Self::Conflict("voice pipeline already active".to_string())
+            }
+            VoicePortError::NotActive => Self::Conflict(
+                "voice pipeline not active — call /api/voice/start first".to_string(),
+            ),
+            VoicePortError::NotInitialised => {
+                Self::Unavailable("voice pipeline not initialised".to_string())
+            }
+            VoicePortError::LoadError(msg) => Self::Internal(format!("voice load error: {msg}")),
+            VoicePortError::DownloadError(msg) => {
+                Self::Internal(format!("voice download error: {msg}"))
+            }
+            VoicePortError::Internal(msg) => Self::Internal(msg),
+            // 400 Bad Request: caller should change the request (switch to PTT mode)
+            // rather than retry. 503 Unavailable would imply a transient failure.
+            VoicePortError::Unimplemented(msg) => Self::ValidationFailed(msg),
+        }
+    }
+}
+
 impl From<gglib_core::download::DownloadError> for GuiError {
     fn from(err: gglib_core::download::DownloadError) -> Self {
         use gglib_core::download::DownloadError;

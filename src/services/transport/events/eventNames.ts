@@ -66,6 +66,24 @@ export const VERIFICATION_EVENT_NAMES = [
 ] as const;
 
 /**
+ * Voice-related event names.
+ *
+ * These are the colon-kebab strings returned by `AppEvent::event_name()` in
+ * Rust and used as Tauri IPC event names by `TauriEventEmitter`.
+ * The SSE path uses the snake_case Serde `type` tag (e.g. `voice_state_changed`)
+ * — see `getEventCategory()` in sse.ts.
+ */
+export const VOICE_EVENT_NAMES = [
+  'voice:state-changed',
+  'voice:transcript',
+  'voice:speaking-started',
+  'voice:speaking-finished',
+  'voice:audio-level',
+  'voice:error',
+  'voice:model-download-progress',
+] as const;
+
+/**
  * Type helper to extract event name literals.
  */
 export type DownloadEventName = typeof DOWNLOAD_EVENT_NAMES[number];
@@ -74,3 +92,4 @@ export type LogEventName = typeof LOG_EVENT_NAMES[number];
 export type McpEventName = typeof MCP_EVENT_NAMES[number];
 export type ModelEventName = typeof MODEL_EVENT_NAMES[number];
 export type VerificationEventName = typeof VERIFICATION_EVENT_NAMES[number];
+export type VoiceEventName = typeof VOICE_EVENT_NAMES[number];

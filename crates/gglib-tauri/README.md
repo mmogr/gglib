@@ -26,11 +26,11 @@ This crate is in the **Adapter Layer** — it provides the Tauri backend that br
           │   src/components │   IPC Commands     │  (this crate)    │
           └──────────────────┘                    └────────┬─────────┘
                                                            │
-         ┌─────────────┬───────────────┬───────────────────┼───────────┐
-         ▼             ▼               ▼                   ▼           ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│  gglib-db   │ │gglib-download│ │gglib-runtime│ │  gglib-hf   │ │  gglib-mcp  │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+         ┌─────────────┬───────────────┬───────────────────┼───────────┬─────────────┐
+         ▼             ▼               ▼                   ▼           ▼             ▼
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│  gglib-db   │ │gglib-download│ │gglib-runtime│ │  gglib-hf   │ │  gglib-mcp  │ │gglib-voice  │
+└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
 ```
 
 See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
@@ -74,7 +74,7 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 </details>
 
 **Module Descriptions:**
-- **`bootstrap.rs`** — Dependency injection and service wiring (includes `ModelVerificationService` initialization)
+- **`bootstrap.rs`** — Dependency injection and service wiring (includes `ModelVerificationService` and `VoiceService` initialization)
 - **`error.rs`** — IPC-compatible error types
 - **`event_emitter.rs`** — `TauriEmitter` implementation of `AppEventEmitter`
 - **`events.rs`** — Event type definitions and serialization

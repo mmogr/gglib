@@ -31,6 +31,7 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `/api/proxy` - Proxy management
    - `/api/downloads` - Download queue management
    - `/api/mcp` - MCP server configuration
+   - `/api/voice/*` - Voice pipeline: models, devices, audio control, WebSocket audio data plane
    - `/api/events` - Server-Sent Events for real-time updates
 
 4. **Tauri Commands (OS Integration Only)**: Tauri IPC commands are **limited to 6 OS integration functions**:
@@ -43,6 +44,12 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `server:*` events - Server lifecycle updates
    - `download:*` events - Download progress
    - `log:*` events - Server console output
+   - `voice:state-changed` - Pipeline state transitions
+   - `voice:transcript` - STT transcription results
+   - `voice:speaking-started` / `voice:speaking-finished` - TTS playback lifecycle
+   - `voice:audio-level` - Microphone input level for UI indicators
+   - `voice:error` - Pipeline error notifications
+   - `voice:model-download-progress` - Voice model download progress
 
 This architecture means:
 - **Security**: All API access requires Bearer token, no unauthorized access to embedded server

@@ -74,21 +74,14 @@ async fn parallel_cleanup(state: &AppState) -> Result<(), String> {
         }
     }
 
-    // Explicitly unload the voice pipeline so the microphone is released and
-    // model memory is freed in a deterministic order rather than relying on
-    // the process-exit Drop path.
-    {
-        let mut voice = state.voice_pipeline.write().await;
-        if voice.is_some() {
-            info!("Unloading voice pipeline during shutdown");
-            if let Some(ref mut pipeline) = *voice
-                && pipeline.is_active()
-            {
-                pipeline.stop();
-            }
-            *voice = None;
-        }
-    }
+    // Explicitly stop then unload the voice pipeline so the microphone is
+    // released and model memory is freed in deterministic order rather than
+    // relying on the process-exit Drop path.
+    // Both operations are best-effort: if the pipeline is not active / not
+    // initialised the calls are no-ops (VoicePortError::NotActive / NotInitialised).
+    info!("Unloading voice pipeline during shutdown");
+    let _ = state.gui.voice_stop().await;
+    let _ = state.gui.voice_unload().await;
 
     // Run server stop and download cancel in parallel
     let (servers_result, _) = tokio::join!(

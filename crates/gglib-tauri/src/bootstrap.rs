@@ -32,6 +32,7 @@ use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
+use gglib_voice::VoiceService;
 use tauri::AppHandle;
 
 use crate::event_emitter::TauriEventEmitter;
@@ -93,6 +94,14 @@ pub struct TauriContext {
     /// Optional to support test/bootstrap_early paths.
     /// Production bootstrap MUST pass Some(app_handle) via the main bootstrap() function.
     app_handle: Option<AppHandle>,
+    /// Voice service — implements `VoicePipelinePort` for all voice operations.
+    ///
+    /// Stored as a concrete `Arc<VoiceService>` (rather than a trait object)
+    /// so it can be upcast to `Arc<dyn VoicePipelinePort>` inside
+    /// [`build_gui_backend`](TauriContext::build_gui_backend).  All voice
+    /// operations are routed through the HTTP control plane; no Tauri IPC
+    /// commands for voice remain.
+    pub voice_service: Arc<VoiceService>,
 }
 
 impl TauriContext {
@@ -167,6 +176,7 @@ impl TauriContext {
             self.model_repo.clone(),
             system_probe,
             gguf_parser,
+            self.voice_service.clone() as Arc<dyn gglib_core::ports::VoicePipelinePort>,
         );
         GuiBackend::new(deps)
     }
@@ -294,10 +304,13 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         hf_client,
         models,
         settings,
-        event_emitter: tauri_emitter,
+        event_emitter: tauri_emitter.clone(),
         proxy_supervisor,
         model_repo,
         app_handle: Some(app_handle),
+        voice_service: Arc::new(VoiceService::new(
+            tauri_emitter as Arc<dyn gglib_core::ports::AppEventEmitter>,
+        )),
     })
 }
 
@@ -335,6 +348,7 @@ pub fn bootstrap_with(
         proxy_supervisor,
         model_repo,
         app_handle,
+        voice_service: Arc::new(VoiceService::new(Arc::new(NoopEmitter))),
     }
 }
 
@@ -446,6 +460,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         proxy_supervisor,
         model_repo,
         app_handle: None,
+        voice_service: Arc::new(VoiceService::new(Arc::new(NoopEmitter))),
     })
 }
 /// Adapter to implement DownloadTriggerPort for DownloadManagerPort.

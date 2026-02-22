@@ -9,13 +9,15 @@
 # Run this in CI to prevent architectural regression.
 # Policy: Only OS integration commands should be invoked from frontend.
 #
-# Allowlist (5 commands):
+# Allowlist (8 commands):
 #   - get_embedded_api_info (API discovery)
 #   - check_llama_status (binary management)
 #   - install_llama (binary management)
 #   - open_url (shell integration)
 #   - set_selected_model (menu sync)
 #   - sync_menu_state (menu sync)
+#   - set_proxy_state (proxy/menu state)
+#   - log_from_frontend (frontend log ingestion)
 
 set -euo pipefail
 
@@ -42,6 +44,8 @@ ALLOWED_COMMANDS=(
     "open_url"
     "set_selected_model"
     "sync_menu_state"
+    "set_proxy_state"
+    "log_from_frontend"
 )
 
 # =============================================================================

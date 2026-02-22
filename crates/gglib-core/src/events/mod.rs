@@ -206,6 +206,63 @@ pub enum AppEvent {
         /// User-safe error information.
         error: McpErrorInfo,
     },
+
+    // ========== Voice Events ==========
+    /// Voice pipeline state changed (idle → listening → recording → …).
+    VoiceStateChanged {
+        /// Lowercase state label: `"idle"`, `"listening"`, `"recording"`,
+        /// `"transcribing"`, `"thinking"`, `"speaking"`, or `"error"`.
+        state: String,
+    },
+
+    /// Speech transcript produced by the STT engine.
+    VoiceTranscript {
+        /// Transcript text.
+        text: String,
+        /// Whether this is a final (committed) transcript.
+        #[serde(rename = "isFinal")]
+        is_final: bool,
+    },
+
+    /// TTS playback has started.
+    VoiceSpeakingStarted,
+
+    /// TTS playback has finished.
+    VoiceSpeakingFinished,
+
+    /// Microphone audio level sample (0.0 – 1.0) for UI visualisation.
+    ///
+    /// Throttled to ≤ 20 fps at the SSE bridge before entering the bus.
+    VoiceAudioLevel {
+        /// Normalised audio level in `[0.0, 1.0]`.
+        level: f32,
+    },
+
+    /// Voice pipeline encountered a non-fatal error.
+    VoiceError {
+        /// Human-readable error message.
+        message: String,
+    },
+
+    /// Download progress for a voice model (STT / TTS / VAD).
+    ///
+    /// Emitted by `VoiceService` during `download_stt_model`,
+    /// `download_tts_model`, and `download_vad_model` calls so that
+    /// SSE subscribers receive live progress without Tauri's `app.emit()`.
+    VoiceModelDownloadProgress {
+        /// Identifier of the model being downloaded (e.g. `"base.en"`).
+        #[serde(rename = "modelId")]
+        model_id: String,
+        /// Bytes downloaded so far.
+        #[serde(rename = "bytesDownloaded")]
+        bytes_downloaded: u64,
+        /// Total bytes to download (`0` if the server did not send
+        /// `Content-Length`).
+        #[serde(rename = "totalBytes")]
+        total_bytes: u64,
+        /// Progress percentage (`0.0`–`100.0`; `0.0` when total is unknown).
+        percent: f64,
+    },
 }
 
 impl AppEvent {
@@ -230,6 +287,52 @@ impl AppEvent {
             Self::McpServerStarted { .. } => "mcp:started",
             Self::McpServerStopped { .. } => "mcp:stopped",
             Self::McpServerError { .. } => "mcp:error",
+            Self::VoiceStateChanged { .. } => "voice:state-changed",
+            Self::VoiceTranscript { .. } => "voice:transcript",
+            Self::VoiceSpeakingStarted => "voice:speaking-started",
+            Self::VoiceSpeakingFinished => "voice:speaking-finished",
+            Self::VoiceAudioLevel { .. } => "voice:audio-level",
+            Self::VoiceError { .. } => "voice:error",
+            Self::VoiceModelDownloadProgress { .. } => "voice:model-download-progress",
+        }
+    }
+}
+
+impl AppEvent {
+    /// Create a [`VoiceStateChanged`] event.
+    pub fn voice_state_changed(state: impl Into<String>) -> Self {
+        Self::VoiceStateChanged {
+            state: state.into(),
+        }
+    }
+
+    /// Create a [`VoiceTranscript`] event.
+    pub fn voice_transcript(text: impl Into<String>, is_final: bool) -> Self {
+        Self::VoiceTranscript {
+            text: text.into(),
+            is_final,
+        }
+    }
+
+    /// Create a [`VoiceSpeakingStarted`] event.
+    pub const fn voice_speaking_started() -> Self {
+        Self::VoiceSpeakingStarted
+    }
+
+    /// Create a [`VoiceSpeakingFinished`] event.
+    pub const fn voice_speaking_finished() -> Self {
+        Self::VoiceSpeakingFinished
+    }
+
+    /// Create a [`VoiceAudioLevel`] event.
+    pub const fn voice_audio_level(level: f32) -> Self {
+        Self::VoiceAudioLevel { level }
+    }
+
+    /// Create a [`VoiceError`] event.
+    pub fn voice_error(message: impl Into<String>) -> Self {
+        Self::VoiceError {
+            message: message.into(),
         }
     }
 }
@@ -287,5 +390,52 @@ mod tests {
         for (event, expected_name) in cases {
             assert_eq!(event.event_name(), expected_name);
         }
+    }
+
+    /// Lock down voice event names to prevent frontend subscription mismatches.
+    ///
+    /// Both the Serde `type` tag (SSE/WebUI path) and the `event_name()` return
+    /// (Tauri IPC path) are validated here.
+    ///
+    /// If this test fails, update `VOICE_EVENT_NAMES` in
+    /// `src/services/transport/events/eventNames.ts` to match.
+    #[test]
+    fn voice_event_names_are_stable() {
+        let cases = vec![
+            (AppEvent::voice_state_changed("idle"), "voice:state-changed"),
+            (
+                AppEvent::voice_transcript("hello", true),
+                "voice:transcript",
+            ),
+            (AppEvent::voice_speaking_started(), "voice:speaking-started"),
+            (
+                AppEvent::voice_speaking_finished(),
+                "voice:speaking-finished",
+            ),
+            (AppEvent::voice_audio_level(0.5), "voice:audio-level"),
+            (AppEvent::voice_error("oops"), "voice:error"),
+        ];
+        for (event, expected_name) in cases {
+            assert_eq!(event.event_name(), expected_name);
+        }
+
+        // Also assert Serde type tags match the frontend SSE routing prefix.
+        let json = serde_json::to_string(&AppEvent::voice_state_changed("idle")).unwrap();
+        assert!(
+            json.contains("\"type\":\"voice_state_changed\""),
+            "bad serde tag: {json}"
+        );
+
+        let json = serde_json::to_string(&AppEvent::voice_audio_level(0.5)).unwrap();
+        assert!(
+            json.contains("\"type\":\"voice_audio_level\""),
+            "bad serde tag: {json}"
+        );
+
+        let json = serde_json::to_string(&AppEvent::voice_error("oops")).unwrap();
+        assert!(
+            json.contains("\"type\":\"voice_error\""),
+            "bad serde tag: {json}"
+        );
     }
 }

@@ -13,9 +13,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { UnlistenFn } from '@tauri-apps/api/event';
+import { createAudioBridge, isAudioSupported as checkAudioSupported } from '../services/transport/audio';
+import type { WebAudioBridge } from '../services/transport/audio';
 import {
-  isTauriEnvironment,
   voiceStart,
   voiceStop,
   voiceUnload,
@@ -35,13 +35,7 @@ import {
   voiceDownloadVadModel,
   voiceLoadStt,
   voiceLoadTts,
-  onVoiceStateChanged,
-  onVoiceTranscript,
-  onVoiceSpeakingStarted,
-  onVoiceSpeakingFinished,
-  onVoiceAudioLevel,
-  onVoiceError,
-  onModelDownloadProgress,
+  subscribeVoiceEvents,
 } from '../services/clients/voice';
 import type {
   VoiceState,
@@ -71,8 +65,10 @@ export interface VoiceDefaults {
 // ── Hook return type ───────────────────────────────────────────────
 
 export interface UseVoiceModeReturn {
-  /** Whether voice mode is supported (Tauri environment) */
+  /** Whether voice mode is supported for data/config operations (always true — served via HTTP). */
   isSupported: boolean;
+  /** Whether the current platform supports the audio I/O required for voice mode. */
+  isAudioSupported: boolean;
   /** Whether voice mode is currently active */
   isActive: boolean;
   /** Current voice pipeline state */
@@ -157,7 +153,10 @@ export interface UseVoiceModeReturn {
 // ── Hook implementation ────────────────────────────────────────────
 
 export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
-  const isSupported = isTauriEnvironment();
+  // All ops (data, config, audio) are served via HTTP — works everywhere.
+  const isSupported = true;
+  // Whether the current platform can play/capture audio for voice mode.
+  const isAudioSupported = checkAudioSupported();
 
   // Pipeline state
   const [isActive, setIsActive] = useState(false);
@@ -183,8 +182,6 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const [isAutoLoading, setIsAutoLoading] = useState(false);
 
   // Cleanup refs
-  const unlistenRefs = useRef<UnlistenFn[]>([]);
-
   // Race-condition guard: monotonically increasing load generation.
   // When a new load is requested, the generation advances; any
   // in-flight load with an older generation bails out before
@@ -196,60 +193,76 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   const defaultsRef = useRef(defaults);
   defaultsRef.current = defaults;
 
+  // Timeout id for auto-clearing download progress after completion.
+  // Stored in a ref so it can be cancelled on unmount without triggering re-renders.
+  const downloadClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Audio bridge: WebAudioBridge on web UI, null on Tauri desktop (native audio).
+  //
+  // Lazy-init: `createAudioBridge()` must not be called on every render —
+  // React evaluates the `useRef(initialValue)` argument every time but only
+  // uses it on the first render, so the object would be silently discarded on
+  // re-renders.  We use `undefined` as the "not yet initialised" sentinel
+  // (distinct from `null` which means "Tauri — no web bridge needed") and
+  // assign once on first render.  All call sites already use optional chaining
+  // (`bridgeRef.current?.method()`), so `undefined` is handled transparently.
+  const bridgeRef = useRef<WebAudioBridge | null | undefined>(undefined);
+  if (bridgeRef.current === undefined) {
+    bridgeRef.current = createAudioBridge();
+  }
+
   // ── Event subscriptions ────────────────────────────────────────
 
-  const subscribeToEvents = useCallback(async () => {
-    if (!isSupported) return;
-
-    const unlisteners = await Promise.all([
-      onVoiceStateChanged(({ state }) => {
-        setVoiceState(state);
-      }),
-      onVoiceTranscript(({ text, isFinal }) => {
-        if (isFinal) {
-          setLastTranscript(text);
-        }
-      }),
-      onVoiceSpeakingStarted(() => {
-        setIsTtsGenerating(false);
-        setIsSpeaking(true);
-      }),
-      onVoiceSpeakingFinished(() => {
-        setIsSpeaking(false);
-        setIsTtsGenerating(false);
-      }),
-      onVoiceAudioLevel(({ level }) => {
-        setAudioLevel(level);
-      }),
-      onVoiceError(({ message }) => {
-        setError(message);
-      }),
-      onModelDownloadProgress((progress) => {
-        setDownloadProgress(progress);
-        // Clear progress when complete
-        if (progress.totalBytes && progress.bytesDownloaded >= progress.totalBytes) {
-          setTimeout(() => setDownloadProgress(null), 1000);
-        }
-      }),
-    ]);
-
-    unlistenRefs.current = unlisteners;
-  }, [isSupported]);
-
-  // Subscribe on mount, cleanup on unmount
+  // Subscribe on mount, cleanup on unmount.
+  // Events are delivered via SSE in WebUI and Tauri IPC on desktop —
+  // no platform guard needed; the transport layer handles routing.
   useEffect(() => {
-    subscribeToEvents();
+    const unsub = subscribeVoiceEvents((event) => {
+      switch (event.type) {
+        case 'voice_state_changed':
+          setVoiceState(event.state);
+          break;
+        case 'voice_transcript':
+          if (event.isFinal) setLastTranscript(event.text);
+          break;
+        case 'voice_speaking_started':
+          setIsTtsGenerating(false);
+          setIsSpeaking(true);
+          break;
+        case 'voice_speaking_finished':
+          setIsSpeaking(false);
+          setIsTtsGenerating(false);
+          break;
+        case 'voice_audio_level':
+          setAudioLevel(event.level);
+          break;
+        case 'voice_error':
+          setError(event.message);
+          break;
+        case 'voice_model_download_progress': {
+          const { modelId, bytesDownloaded, totalBytes, percent } = event;
+          const progress: ModelDownloadProgressPayload = { modelId, bytesDownloaded, totalBytes, percent };
+          setDownloadProgress(progress);
+          if (totalBytes && bytesDownloaded >= totalBytes) {
+            clearTimeout(downloadClearTimeoutRef.current ?? undefined);
+            downloadClearTimeoutRef.current = setTimeout(() => setDownloadProgress(null), 1000);
+          }
+          break;
+        }
+      }
+    });
 
     return () => {
-      for (const unlisten of unlistenRefs.current) {
-        unlisten();
-      }
-      unlistenRefs.current = [];
+      clearTimeout(downloadClearTimeoutRef.current ?? undefined);
+      unsub();
 
       // Release the microphone if voice is still active when this component
       // unmounts (e.g. user navigates away). voiceStop pauses the pipeline
       // and drops the audio thread (OS mic indicator off) but keeps loaded
       // models warm so the next start() is instant.
+      // voiceStop() is served via HTTP — safe in both Tauri and web UI.
+      // Disconnect the audio bridge first to release the microphone.
+      bridgeRef.current?.disconnect();
       voiceStatus()
         .then((status) => {
           if (status.isActive) {
@@ -260,13 +273,12 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
           // Best-effort: ignore errors during unmount cleanup.
         });
     };
-  }, [subscribeToEvents]);
+  }, []);
 
   // ── Sync status on mount ───────────────────────────────────────
 
   useEffect(() => {
-    if (!isSupported) return;
-
+    // voiceStatus() is served via HTTP — works in both Tauri and web UI.
     voiceStatus()
       .then((status: VoiceStatusResponse) => {
         setIsActive(status.isActive);
@@ -277,15 +289,24 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
         setAutoSpeakState(status.autoSpeak);
       })
       .catch(() => {
-        // Voice commands may not be available yet
+        // Voice service may not be reachable yet — ignore on mount.
       });
-  }, [isSupported]);
+  }, []);
 
   // ── Actions ────────────────────────────────────────────────────
 
   const start = useCallback(async (startMode?: VoiceInteractionMode) => {
     try {
       setError(null);
+
+      // Bail out early if the platform cannot handle audio I/O.
+      if (!isAudioSupported) {
+        setError(
+          'Voice audio requires a secure connection (HTTPS) and microphone access (getUserMedia). ' +
+            'Please use a supported browser over HTTPS.',
+        );
+        return;
+      }
 
       // Bump load generation so any in-flight load can detect staleness.
       const gen = ++loadGenRef.current;
@@ -316,7 +337,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       let ttsDownloaded = false;
       try {
         const catalog = await voiceListModels();
-        ttsDownloaded = catalog.ttsDownloaded;
+        ttsDownloaded = catalog.ttsModel.isDownloaded;
       } catch { /* fall through — skip TTS auto-load */ }
       const needTts = !status.ttsLoaded && ttsDownloaded;
 
@@ -390,17 +411,35 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       // Bail out again after async gap.
       if (loadGenRef.current !== gen) return;
 
-      // Actually start the pipeline (audio I/O).
-      await voiceStart(startMode);
+      // Connect the browser audio bridge (WebUI) before starting the pipeline.
+      // On Tauri desktop bridgeRef.current is null — the native cpal/rodio
+      // stack handles audio I/O directly.
+      try {
+        await bridgeRef.current?.connect();
+      } catch (e) {
+        setError(`Audio: ${String(e)}`);
+        setIsAutoLoading(false);
+        return;
+      }
 
-      // Refresh full status from backend (models may have been preloaded)
-      const finalStatus = await voiceStatus();
-      setIsActive(finalStatus.isActive);
-      setVoiceState(finalStatus.state as VoiceState);
-      setModeState(finalStatus.mode as VoiceInteractionMode);
-      setSttLoaded(finalStatus.sttLoaded);
-      setTtsLoaded(finalStatus.ttsLoaded);
-      setAutoSpeakState(finalStatus.autoSpeak);
+      // Actually start the pipeline (audio I/O).
+      // Inner try/catch: if the HTTP start or status refresh fails, disconnect
+      // the audio bridge first so the mic and WebSocket are not left open.
+      try {
+        await voiceStart(startMode);
+
+        // Refresh full status from backend (models may have been preloaded)
+        const finalStatus = await voiceStatus();
+        setIsActive(finalStatus.isActive);
+        setVoiceState(finalStatus.state as VoiceState);
+        setModeState(finalStatus.mode as VoiceInteractionMode);
+        setSttLoaded(finalStatus.sttLoaded);
+        setTtsLoaded(finalStatus.ttsLoaded);
+        setAutoSpeakState(finalStatus.autoSpeak);
+      } catch (startError) {
+        bridgeRef.current?.disconnect();
+        throw startError; // re-throw so the outer catch surfaces the error
+      }
     } catch (e) {
       setIsAutoLoading(false);
       setError(String(e));
@@ -418,6 +457,11 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
       setIsTtsGenerating(false);
     } catch (e) {
       setError(String(e));
+    } finally {
+      // Always release hardware resources (mic + WebSocket) regardless of
+      // whether the HTTP stop call succeeded. Prevents the mic indicator
+      // remaining active after a network timeout or server error.
+      bridgeRef.current?.disconnect();
     }
   }, []);
 
@@ -560,7 +604,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
   }, []);
 
   const refreshModels = useCallback(async () => {
-    if (!isSupported) return;
+    // voiceListModels / voiceListDevices are served via HTTP — always available.
     try {
       setModelsLoading(true);
       const [modelsData, devicesData] = await Promise.all([
@@ -574,7 +618,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
     } finally {
       setModelsLoading(false);
     }
-  }, [isSupported]);
+  }, []);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -596,6 +640,7 @@ export function useVoiceMode(defaults?: VoiceDefaults): UseVoiceModeReturn {
 
   return {
     isSupported,
+    isAudioSupported,
     isActive,
     voiceState,
     mode,

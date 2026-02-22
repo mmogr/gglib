@@ -59,13 +59,15 @@ Enforces Tauri `invoke()` allowlist in frontend code:
 - Only OS integration commands should be invoked from frontend
 - Prevents dynamic command string construction (security risk)
 
-**Allowlist** (6 commands):
+**Allowlist** (8 commands):
 - `get_embedded_api_info` (API discovery)
 - `check_llama_status` (binary management)
 - `install_llama` (binary management)
 - `open_url` (shell integration)
 - `set_selected_model` (menu sync)
 - `sync_menu_state` (menu sync)
+- `set_proxy_state` (proxy OS integration)
+- `log_from_frontend` (frontend log forwarding)
 
 ```bash
 ./scripts/check-frontend-ipc.sh
@@ -74,7 +76,7 @@ Enforces Tauri `invoke()` allowlist in frontend code:
 ### `check-tauri-commands.sh`
 
 Enforces "HTTP-first, OS-glue-only" Tauri command policy:
-1. `#[tauri::command]` only in `{util,llama}.rs`
+1. `#[tauri::command]` only in `{util,llama,app_logs,research_logs}.rs`
 2. No extra `.rs` files in `src-tauri/src/commands/`
 3. No deprecated `get_gui_api_port` anywhere
 
@@ -249,6 +251,6 @@ The main CI workflows that use these scripts:
 
 | Workflow | Scripts Used |
 |----------|--------------|
-| `ci.yml` | `check_boundaries.sh` |
+| `ci.yml` | `check_boundaries.sh`, `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh` |
 | `badges.yml` | `generate_badges_for_crate.sh`, `discover_modules.sh` |
 | `release.yml` | `sync_versions.py`, bundles `macos-install.command` |

@@ -156,6 +156,41 @@ pub(crate) fn api_routes() -> Router<AppState> {
         )
         // Events (SSE)
         .route("/events", get(handlers::events::stream))
+        // Voice API
+        .route("/voice/status", get(handlers::voice::status))
+        .route("/voice/models", get(handlers::voice::list_models))
+        .route(
+            "/voice/models/stt/{id}/download",
+            post(handlers::voice::download_stt_model),
+        )
+        .route(
+            "/voice/models/tts/download",
+            post(handlers::voice::download_tts_model),
+        )
+        .route(
+            "/voice/models/vad/download",
+            post(handlers::voice::download_vad_model),
+        )
+        .route("/voice/stt/load", post(handlers::voice::load_stt))
+        .route("/voice/tts/load", post(handlers::voice::load_tts))
+        .route("/voice/mode", put(handlers::voice::set_mode))
+        .route("/voice/voice", put(handlers::voice::set_voice))
+        .route("/voice/speed", put(handlers::voice::set_speed))
+        .route("/voice/auto-speak", put(handlers::voice::set_auto_speak))
+        .route("/voice/unload", post(handlers::voice::unload))
+        .route("/voice/devices", get(handlers::voice::list_devices))
+        // Audio I/O control
+        .route("/voice/start", post(handlers::voice::start))
+        .route("/voice/stop", post(handlers::voice::stop))
+        .route("/voice/ptt-start", post(handlers::voice::ptt_start))
+        .route("/voice/ptt-stop", post(handlers::voice::ptt_stop))
+        .route("/voice/speak", post(handlers::voice::speak))
+        .route("/voice/stop-speaking", post(handlers::voice::stop_speaking))
+        // WebSocket audio data plane
+        // Browser opens this WS *before* POST /voice/start to register remote
+        // audio; the pipeline then uses WebSocketAudioSource/Sink instead of
+        // local cpal/rodio.  Desktop callers skip this endpoint entirely.
+        .route("/voice/audio", get(handlers::voice_ws::audio_ws))
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }
