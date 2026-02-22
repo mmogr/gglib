@@ -259,7 +259,7 @@ gglib web --api-only --port 9887
 gglib web --port 9887 --base-port 9000
 ```
 
-The web server binds to `0.0.0.0` by default, making it accessible from your LAN. See the [LAN Server Mode documentation](../README.md#running-gglib-as-a-lan-llm-server) for details.
+The web server binds to `0.0.0.0` by default, making it accessible from your LAN. See [Interfaces & Modes](../README.md#interfaces--modes) for details.
 
 ### llama.cpp Management
 
@@ -410,7 +410,6 @@ gglib config settings reset
 - [Main README](../README.md) - Overview and getting started
 - [Interfaces & Modes](../README.md#interfaces--modes) - Understanding CLI, Desktop GUI, and Web UI
 - [Architecture Overview](../README.md#architecture-overview) - How GGLib is structured
-- [LAN Server Mode](../README.md#running-gglib-as-a-lan-llm-server) - Running GGLib as a network server
 - [Desktop GUI Documentation](../src-tauri/README.md) - Tauri app details
 
 <!-- module-docs:end -->

@@ -112,7 +112,6 @@ The output binary will be located in `target/release/bundle/`.
 For more details on the architecture and how all interfaces work together, see:
 - [Interfaces & Modes](../README.md#interfaces--modes) in the main README
 - [Architecture Overview](../README.md#architecture-overview) for backend details
-- [LAN Server Mode](../README.md#running-gglib-as-a-lan-llm-server) for remote access options
 
 ## Project Structure
 
