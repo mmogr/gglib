@@ -715,10 +715,19 @@ main() {
             # npm install with "Fatal JavaScript invalid size error" (crbug.com/1201626).
             # V8 pointer compression requires a 4 GB-aligned 4 GB contiguous VA window;
             # with rnd_bits=32 the allocator can rarely find one.  28 bits is the fix.
+            #
+            # /proc/sys/vm/mmap_rnd_bits may be permission-denied for non-root on some
+            # WSL2 kernels, so try sudo sysctl as a fallback.
             local mmap_rnd_bits
-            mmap_rnd_bits=$(sysctl -n vm.mmap_rnd_bits 2>/dev/null || cat /proc/sys/vm/mmap_rnd_bits 2>/dev/null || echo "unknown")
+            mmap_rnd_bits=$(sysctl -n vm.mmap_rnd_bits 2>/dev/null \
+                || cat /proc/sys/vm/mmap_rnd_bits 2>/dev/null \
+                || sudo sysctl -n vm.mmap_rnd_bits 2>/dev/null \
+                || echo "unknown")
             if [ "$mmap_rnd_bits" = "unknown" ]; then
-                printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "vm.mmap_rnd_bits" "?" "unknown" "WSL2: could not read (npm may crash)"
+                # Can't read even with sudo — emit a warning but don't block the build.
+                # The user may have already applied the fix or be running a kernel that
+                # doesn't expose this knob.
+                printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "vm.mmap_rnd_bits" "?" "unknown" "WSL2: unreadable — if npm crashes, run: sudo sysctl -w vm.mmap_rnd_bits=28"
             elif [ "$mmap_rnd_bits" -gt 28 ] 2>/dev/null; then
                 printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "vm.mmap_rnd_bits" "✗" "$mmap_rnd_bits" "WSL2: must be ≤28 or npm/Node.js will crash (V8 crbug.com/1201626)"
                 MISSING_REQUIRED+=("vm.mmap_rnd_bits")
