@@ -7,6 +7,7 @@ export RUST_MIN_STACK := 33554432
 
 # Platform specific configuration
 UNAME_S := $(shell uname -s)
+IS_WSL  := $(shell grep -qi microsoft /proc/version 2>/dev/null && echo 1 || echo 0)
 ifeq ($(UNAME_S),Linux)
     export LIBSQLITE3_SYS_USE_PKG_CONFIG := 1
     # Fix Node.js/npm segfault on WSL2 (io_uring not fully supported by WSL2 kernel)
@@ -14,7 +15,31 @@ ifeq ($(UNAME_S),Linux)
     # Cap cmake parallelism for sherpa-onnx / heavy C++ deps — GCC 13 ICEs
     # under high parallelism with openfst template-heavy code.
     export CMAKE_BUILD_PARALLEL_LEVEL := 4
+    ifeq ($(IS_WSL),1)
+        # sherpa-rs-sys v0.6 unconditionally overwrites CMAKE_BUILD_PARALLEL_LEVEL
+        # with available_parallelism() (= nproc) inside its build.rs, bypassing
+        # the export above.  On WSL2 this triggers -j32 onnxruntime cmake builds;
+        # each worker peaks at ~2-4 GB, so -j32 can hit 64-128 GB and crash the VM.
+        #
+        # Fix: wrap cargo with taskset, which constrains sched_getaffinity() so
+        # available_parallelism() inside the build script sees WSL_BUILD_JOBS
+        # cores instead of nproc.  macOS never reaches this branch.
+        #
+        # WSL_BUILD_JOBS = min(nproc, floor(MemAvailable_GB / WSL_GB_PER_JOB))
+        # Override WSL_GB_PER_JOB at the command line if your profile differs:
+        #   WSL_GB_PER_JOB=2 make setup
+        WSL_GB_PER_JOB ?= 4
+        WSL_BUILD_JOBS  := $(shell awk -v cores=$$(nproc) -v gb_per_job=$(WSL_GB_PER_JOB) \
+            '/MemAvailable/ { mem_gb = int($$2 / 1024 / 1024); \
+             jobs = int(mem_gb / gb_per_job); \
+             if (jobs < 1) jobs = 1; \
+             if (jobs > cores) jobs = cores; \
+             print jobs }' /proc/meminfo)
+        TASKSET := taskset -c 0-$(shell expr $(WSL_BUILD_JOBS) - 1)
+    endif
 endif
+# Non-WSL / macOS: TASKSET is empty — cargo invocations are unchanged
+TASKSET ?=
 
 # Define cargo command that sources Rust environment if needed (for non-interactive shells like VS Code tasks)
 # This is a portable solution that works on Linux/macOS/Windows
@@ -133,7 +158,7 @@ uninstall:
 
 build:
 	@echo "Building release binary..."
-	$(CARGO) build --release
+	$(TASKSET) $(CARGO) build --release
 
 build-dev:
 	@echo "Building debug binary..."
@@ -283,7 +308,7 @@ build-tauri:
 	# Step A: Build frontend
 	UV_USE_IO_URING=0 npm run build:tauri
 	# Step B: Unified cargo build - both CLI and Tauri app share dependency compilation
-	$(CARGO) build --release -p gglib-cli -p gglib-app
+	$(TASKSET) $(CARGO) build --release -p gglib-cli -p gglib-app
 	# Step C: Bundle the already-built binary into platform installers
 	# On Linux: use --bundles deb,rpm to avoid AppImage issues on Arch.
 	# linuxdeploy's embedded strip fails on Arch due to RELR relocations (linuxdeploy#272).
