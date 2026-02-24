@@ -195,7 +195,7 @@ Voice mode pipeline:
 - Pipeline state machine orchestrating the full conversation loop
 - Safe audio threading via actor pattern (no unsafe code)
 
-### Presentation Layer
+### Adapter Layer
 
 #### gglib-cli
 Command-line interface:
@@ -252,7 +252,7 @@ Desktop application backend:
 ## Further Reading
 
 - [Main README](../README.md) - Project overview and getting started
-- [Architecture Overview](../README.md#architecture-overview) - Detailed architecture explanation
+- [Architecture Overview](../README.md#architecture) - Detailed architecture explanation
 - Individual crate READMEs linked in table above
 
 ## Badge Information

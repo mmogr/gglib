@@ -11,7 +11,7 @@ MCP (Model Context Protocol) server management for gglib.
 
 This crate is in the **Infrastructure Layer** — it manages MCP server lifecycle and protocol handling.
 
-See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
+See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Overview
 

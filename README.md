@@ -1,4 +1,4 @@
-# GGLib - Rust GGUF Library Management Tool
+# GGLib
 
 [![CI](https://github.com/mmogr/gglib/actions/workflows/ci.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/ci.yml)
 [![Coverage](https://github.com/mmogr/gglib/actions/workflows/coverage.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/coverage.yml)
@@ -8,9 +8,36 @@
 
 <!-- crate-docs:start -->
 
-A multi-interface platform for managing and serving GGUF model files locally — catalog, serve, and chat via CLI, desktop GUI, web UI, or OpenAI-compatible proxy, all sharing one layered Rust backend.
+Manage your local GGUF models without remembering file paths or llama.cpp commands.
 
-## Architecture Overview
+GGLib keeps a catalog of your GGUFs, handles downloading from HuggingFace, and starts llama-server for you. Use it from the terminal, a desktop app, a web UI, or as an OpenAI-compatible API — they all share the same database and model directory.
+
+## Quick look
+
+```bash
+# Download a model from HuggingFace
+gglib download bartowski/Qwen2.5-7B-Instruct-GGUF
+
+# List what you have
+gglib list
+
+# Start chatting (launches llama-server automatically)
+gglib chat qwen2.5
+
+# Serve a model and use it from any OpenAI client
+gglib serve qwen2.5
+
+# Pipe anything into a question
+cat error.log | gglib question "what went wrong?"
+git diff | gglib question "review this for bugs"
+man rsync | gglib question "how do I sync only .rs files?"
+
+# Or skip the CLI — open the desktop app or web UI
+gglib gui
+gglib web
+```
+
+## Architecture
 
 Cargo workspace with compile-time enforced boundaries. Adapters → infrastructure → core — never the reverse.
 
@@ -121,17 +148,7 @@ Cargo workspace with compile-time enforced boundaries. Adapters → infrastructu
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Architecture Principles:**
-
-- **Unified access**: All adapters call through infrastructure layer—never directly to external systems
-- **External gateways**: Only `gglib-runtime` and `gglib-download` touch external systems
-- **Tauri architecture**: Embeds both React UI assets AND Axum HTTP server internally
-- **React UI as artifact**: Static files in Axum, bundled assets in Tauri, unused in CLI
-- **Python hf_xet**: Internal subprocess within `gglib-download`, not an architectural boundary
-
-**Frontend Architecture:**
-
-- **Styling & UI Contracts**: See [src/styles/README.md](src/styles/README.md) for Tailwind-first architecture, design token system, platform parity requirements, and component migration roadmap
+Only `gglib-runtime` spawns llama-server processes; only `gglib-download` talks to HuggingFace. Everything else goes through the infrastructure layer.
 
 ### Crate Metrics
 
@@ -192,31 +209,28 @@ Each crate has its own README with architecture diagrams, module breakdowns, and
 
 ### Module Reference
 
-#### Rust Crates
-- **[`models`](src/models/README.md)** – GGUF model metadata, GUI/API DTOs, and data structures
-- **[`services`](src/services/README.md)** – TypeScript client layer for GUI frontends
-- **[`commands`](src/commands/README.md)** – CLI command handlers and web API endpoints
-- **[`utils`](src/utils/README.md)** – Lower-level helpers for parsing and utilities
-
 #### TypeScript Frontend
 - **[`components`](src/components/README.md)** – React UI components
 - **[`contexts`](src/contexts/README.md)** – React Context providers
 - **[`hooks`](src/hooks/README.md)** – Custom React hooks
 - **[`pages`](src/pages/README.md)** – Top-level page components
 - **[`types`](src/types/README.md)** – Shared TypeScript type definitions
+- **[`utils`](src/utils/README.md)** – Shared helpers (formatting, SSE, platform detection)
+- **[`services`](src/services/README.md)** – API client layer (HTTP and Tauri IPC)
+- **[`commands`](src/commands/README.md)** – CLI command reference (download, llama management)
 
 <!-- crate-docs:end -->
 
-## Interfaces & Modes
+## Interfaces
 
-All interfaces share the same backend (database, services, process manager, proxy). See each crate README for technical details.
+All interfaces share the same database and model directory. Pick whichever fits your workflow — or use several.
 
 | Interface | Launch | Details |
 |-----------|--------|---------|
 | **CLI** | `gglib <command>` | [gglib-cli](crates/gglib-cli/README.md) |
 | **Desktop GUI** | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md), [src-tauri](src-tauri/README.md) |
 | **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `0.0.0.0:9887` |
-| **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — default `127.0.0.1:8080` |
+| **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — works with OpenWebUI, any OpenAI SDK |
 
 <details>
 <summary><strong>Security notes</strong></summary>
@@ -228,8 +242,6 @@ All interfaces share the same backend (database, services, process manager, prox
 </details>
 
 ## Installation
-
-### Pre-built Releases
 
 Download from the [Releases page](https://github.com/mmogr/gglib/releases):
 

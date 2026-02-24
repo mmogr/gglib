@@ -33,7 +33,7 @@ This crate is in the **Adapter Layer** — it provides the Tauri backend that br
 └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
 ```
 
-See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
+See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Internal Structure
 
@@ -90,29 +90,36 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 
 ## IPC Commands
 
-| Command | Description |
-|---------|-------------|
-| `list_models` | Get all models |
-| `add_model` | Add a GGUF file |
-| `remove_model` | Delete a model |
-| `serve_model` | Start llama-server |
-| `stop_server` | Stop a running server |
-| `search_hf` | Search HuggingFace |
-| `download_model` | Queue a download |
-| `get_download_status` | Poll download progress |
-| `list_mcp_servers` | Get MCP server configs |
-| `start_mcp_server` | Start an MCP server |
+The desktop app uses an **HTTP-first architecture** — model operations, chat, downloads, and proxy management all go through the embedded Axum API server. Tauri IPC commands are limited to OS integration:
+
+| Command | Module | Description |
+|---------|--------|-------------|
+| `get_embedded_api_info` | util | Discover API port and auth token |
+| `get_server_logs` | util | Fetch server log buffer |
+| `open_url` | util | Open URL in system browser |
+| `set_selected_model` | util | Sync native menu selection |
+| `sync_menu_state` | util | Update native menu item states |
+| `set_proxy_state` | util | Update proxy menu toggle |
+| `check_llama_status` | llama | Check llama.cpp installation |
+| `install_llama` | llama | Install/build llama.cpp |
+| `log_from_frontend` | app_logs | Forward frontend logs to Rust logger |
+| `init_research_logs` | research_logs | Initialize research log directory |
+| `append_research_log` | research_logs | Append line to research session log |
+| `get_research_log_path` | research_logs | Get filesystem path for a session |
+| `list_research_logs` | research_logs | List available research sessions |
+
+See [src-tauri/README.md](../../src-tauri/README.md) for the full architecture explanation.
 
 ## Events
 
-Events are emitted to the frontend via Tauri's event system:
+Real-time events are delivered via SSE (`/api/events`) with Bearer auth, not Tauri emit:
 
-| Event | Payload |
-|-------|---------|
-| `download:progress` | `{ id, progress, speed, eta }` |
-| `download:complete` | `{ id, path }` |
-| `server:status` | `{ id, status, port }` |
-| `mcp:tool_result` | `{ server_id, tool, result }` |
+| Event | Description |
+|-------|-------------|
+| `server:*` | Server lifecycle (start, ready, stop, error) |
+| `download:*` | Download progress and completion |
+| `log:*` | Server console output |
+| `voice:*` | Voice pipeline state, transcripts, audio levels |
 
 ## Usage
 

@@ -5,17 +5,13 @@
 ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-loc.json)
 ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-complexity.json)
 
-`HuggingFace` Hub client implementation for gglib.
+HuggingFace Hub client for gglib — searching, browsing, and resolving GGUF models on the Hub. Implements `HfClientPort` from `gglib-core`.
 
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it implements the `HfClientPort` trait from `gglib-core`.
 
-See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
-
-## Overview
-
-This crate provides a complete `HuggingFace` Hub API client for searching, browsing, and downloading GGUF models. It implements the `HfClientPort` trait from `gglib-core`, following the Hexagonal Architecture pattern.
+See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Internal Structure
 

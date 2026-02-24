@@ -26,7 +26,7 @@ gglib-core (ports)          gglib-runtime                   External
                             └──────────────────┘
 ```
 
-See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
+See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Internal Structure
 
@@ -96,7 +96,6 @@ See the [Architecture Overview](../../README.md#architecture-overview) for the c
 - **`system/`** — System probes (GPU detection, memory info)
 - **`assistant_ui/`** — Terminal-based interactive chat UI for llama-cli
 - **`ports_impl/`** — Port trait implementations for runtime
-- **`command.rs`** — Command-line argument builder for llama binaries
 
 ## Features
 
