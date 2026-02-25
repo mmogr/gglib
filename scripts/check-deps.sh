@@ -708,6 +708,38 @@ main() {
         check_lib "libsqlite3-dev" "Required for database support" "true" "sqlite3"
         # libclang-dev: no pkg-config file, check for library files directly
         check_libclang
+
+        # WSL2-specific checks
+        if grep -qi microsoft /proc/version 2>/dev/null; then
+            # vm.mmap_rnd_bits=32 (WSL2 default) causes Node.js/V8 to crash during
+            # npm install with "Fatal JavaScript invalid size error" (crbug.com/1201626).
+            # V8 pointer compression requires a 4 GB-aligned 4 GB contiguous VA window;
+            # with rnd_bits=32 the allocator can rarely find one.  28 bits is the fix.
+            #
+            # /proc/sys/vm/mmap_rnd_bits may be permission-denied for non-root on some
+            # WSL2 kernels, so try sudo sysctl as a fallback.
+            local mmap_rnd_bits
+            mmap_rnd_bits=$(sysctl -n vm.mmap_rnd_bits 2>/dev/null \
+                || cat /proc/sys/vm/mmap_rnd_bits 2>/dev/null \
+                || sudo sysctl -n vm.mmap_rnd_bits 2>/dev/null \
+                || echo "unknown")
+            if [ "$mmap_rnd_bits" = "unknown" ]; then
+                # Can't read even with sudo — emit a warning but don't block the build.
+                # The user may have already applied the fix or be running a kernel that
+                # doesn't expose this knob.
+                printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "vm.mmap_rnd_bits" "?" "unknown" "WSL2: unreadable — if npm crashes, run: sudo sysctl -w vm.mmap_rnd_bits=28"
+            elif [ "$mmap_rnd_bits" -gt 28 ] 2>/dev/null; then
+                printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "vm.mmap_rnd_bits" "✗" "$mmap_rnd_bits" "WSL2: must be ≤28 or npm/Node.js will crash (V8 crbug.com/1201626)"
+                MISSING_REQUIRED+=("vm.mmap_rnd_bits")
+                echo ""
+                echo -e "  ${RED}▶ Fix Node.js/V8 crash on WSL2:${RESET}"
+                echo -e "    ${BOLD}sudo sysctl -w vm.mmap_rnd_bits=28${RESET}   ${YELLOW}# immediate (current session)${RESET}"
+                echo -e "    ${BOLD}echo 'vm.mmap_rnd_bits=28' | sudo tee /etc/sysctl.d/99-wsl-node.conf${RESET}   ${YELLOW}# persistent${RESET}"
+                echo ""
+            else
+                printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "vm.mmap_rnd_bits" "✓" "$mmap_rnd_bits" "WSL2: Node.js/V8 VA layout safe"
+            fi
+        fi
     fi
     
     # GPU acceleration check (required - CPU-only not supported)
