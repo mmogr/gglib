@@ -54,9 +54,7 @@ export {
 // Agent loop utilities (exported for testing and configuration)
 export {
   DEFAULT_MAX_TOOL_ITERS,
-  TOOL_ENABLED_SYSTEM_PROMPT,
   DEFAULT_SYSTEM_PROMPT,
-  getSystemPrompt,
   type AgentLoopState,
   type ToolDigest,
   type ChatMessage,
@@ -69,3 +67,12 @@ export {
   pruneForBudget,
   summarizeToolResult,
 } from './agentLoop';
+
+// Prompt composition (exported for testing and reuse)
+export {
+  buildSystemPrompt,
+  TOOL_INSTRUCTIONS_LAYER,
+  FORMAT_REMINDER,
+  FORMAT_REMINDER_LAYER,
+  type PromptLayer,
+} from './promptBuilder';
