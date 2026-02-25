@@ -19,6 +19,7 @@ mod mcp;
 mod models;
 mod proxy;
 mod servers;
+pub mod setup;
 mod settings;
 pub mod types;
 mod voice;
@@ -35,6 +36,7 @@ pub use mcp::McpOps;
 pub use models::ModelOps;
 pub use servers::ServerOps;
 pub use settings::SettingsOps;
+pub use setup::SetupOps;
 pub use voice::VoiceOps;
 
 // Re-export commonly used types from gglib-core for convenience

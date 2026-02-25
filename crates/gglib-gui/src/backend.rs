@@ -12,6 +12,7 @@ use crate::mcp::McpOps;
 use crate::models::ModelOps;
 use crate::proxy::ProxyOps;
 use crate::servers::ServerOps;
+use crate::setup::SetupOps;
 use crate::settings::SettingsOps;
 use crate::types::*;
 use crate::voice::VoiceOps;
@@ -76,6 +77,10 @@ impl GuiBackend {
 
     fn voice_ops(&self) -> VoiceOps<'_> {
         VoiceOps::new(&self.deps)
+    }
+
+    fn setup_ops(&self) -> SetupOps<'_> {
+        SetupOps::new(&self.deps)
     }
 
     // =========================================================================
@@ -564,5 +569,29 @@ impl GuiBackend {
     /// Interrupt any active TTS playback immediately.
     pub async fn voice_stop_speaking(&self) -> Result<(), GuiError> {
         self.voice_ops().stop_speaking().await
+    }
+
+    // =========================================================================
+    // Setup wizard operations
+    // =========================================================================
+
+    /// Get the full system setup status for the first-run wizard.
+    pub async fn get_setup_status(
+        &self,
+    ) -> Result<crate::setup::SetupStatus, GuiError> {
+        self.setup_ops().get_status().await
+    }
+
+    /// Install llama.cpp pre-built binaries with a progress callback.
+    pub async fn install_llama(
+        &self,
+        progress_callback: gglib_runtime::llama::LlamaProgressCallbackBoxed,
+    ) -> Result<(), GuiError> {
+        self.setup_ops().install_llama(progress_callback).await
+    }
+
+    /// Set up the Python fast-download helper environment.
+    pub async fn setup_python_env(&self) -> Result<(), GuiError> {
+        self.setup_ops().setup_python_env().await
     }
 }

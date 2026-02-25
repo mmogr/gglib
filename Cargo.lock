@@ -1998,6 +1998,7 @@ dependencies = [
  "dirs",
  "futures-util",
  "gglib-core",
+ "gglib-download",
  "gglib-hf",
  "gglib-mcp",
  "gglib-runtime",
