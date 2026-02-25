@@ -214,6 +214,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
                 voice_vad_silence_ms: None,
                 voice_auto_speak: None,
                 voice_input_device: None,
+                setup_completed: None,
             };
 
             // Get current settings and apply updates for validation
