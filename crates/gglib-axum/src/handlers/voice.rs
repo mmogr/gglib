@@ -96,57 +96,57 @@ pub async fn download_vad_model(State(state): State<AppState>) -> Result<StatusC
 pub async fn load_stt(
     State(state): State<AppState>,
     Json(req): Json<LoadSttRequest>,
-) -> Result<StatusCode, HttpError> {
+) -> Result<Json<VoiceStatusDto>, HttpError> {
     state.gui.voice_load_stt(&req.model_id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(state.gui.voice_status().await?))
 }
 
 /// `POST /api/voice/tts/load`
-pub async fn load_tts(State(state): State<AppState>) -> Result<StatusCode, HttpError> {
+pub async fn load_tts(State(state): State<AppState>) -> Result<Json<VoiceStatusDto>, HttpError> {
     state.gui.voice_load_tts().await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(state.gui.voice_status().await?))
 }
 
 /// `PUT /api/voice/mode`
 pub async fn set_mode(
     State(state): State<AppState>,
     Json(req): Json<SetModeRequest>,
-) -> Result<StatusCode, HttpError> {
+) -> Result<Json<VoiceStatusDto>, HttpError> {
     state.gui.voice_set_mode(&req.mode).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(state.gui.voice_status().await?))
 }
 
 /// `PUT /api/voice/voice`
 pub async fn set_voice(
     State(state): State<AppState>,
     Json(req): Json<SetVoiceRequest>,
-) -> Result<StatusCode, HttpError> {
+) -> Result<Json<VoiceStatusDto>, HttpError> {
     state.gui.voice_set_voice(&req.voice_id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(state.gui.voice_status().await?))
 }
 
 /// `PUT /api/voice/speed`
 pub async fn set_speed(
     State(state): State<AppState>,
     Json(req): Json<SetSpeedRequest>,
-) -> Result<StatusCode, HttpError> {
+) -> Result<Json<VoiceStatusDto>, HttpError> {
     state.gui.voice_set_speed(req.speed).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(state.gui.voice_status().await?))
 }
 
 /// `PUT /api/voice/auto-speak`
 pub async fn set_auto_speak(
     State(state): State<AppState>,
     Json(req): Json<SetAutoSpeakRequest>,
-) -> Result<StatusCode, HttpError> {
+) -> Result<Json<VoiceStatusDto>, HttpError> {
     state.gui.voice_set_auto_speak(req.auto_speak).await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(state.gui.voice_status().await?))
 }
 
 /// `POST /api/voice/unload`
-pub async fn unload(State(state): State<AppState>) -> Result<StatusCode, HttpError> {
+pub async fn unload(State(state): State<AppState>) -> Result<Json<VoiceStatusDto>, HttpError> {
     state.gui.voice_unload().await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(state.gui.voice_status().await?))
 }
 
 /// `GET /api/voice/devices`
