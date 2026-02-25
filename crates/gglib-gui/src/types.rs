@@ -297,6 +297,8 @@ pub struct AppSettings {
     pub voice_vad_silence_ms: Option<u32>,
     pub voice_auto_speak: Option<bool>,
     pub voice_input_device: Option<String>,
+    // Setup wizard
+    pub setup_completed: Option<bool>,
 }
 
 /// Request body for updating application settings.
@@ -324,6 +326,8 @@ pub struct UpdateSettingsRequest {
     pub voice_vad_silence_ms: Option<Option<u32>>,
     pub voice_auto_speak: Option<Option<bool>>,
     pub voice_input_device: Option<Option<String>>,
+    // Setup wizard
+    pub setup_completed: Option<Option<bool>>,
 }
 
 // ============================================================================
