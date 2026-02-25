@@ -7,7 +7,7 @@
 //! - macOS ARM64: Metal-enabled pre-built binaries
 //! - macOS x64: Metal-enabled pre-built binaries
 //! - Windows x64: CUDA-enabled pre-built binaries
-//! - Linux: No pre-built (must build from source for CUDA support)
+//! - Linux x64: CPU pre-built binaries (CUDA requires building from source)
 
 #[cfg(feature = "prebuilt")]
 use anyhow::{Context, Result, bail};
@@ -141,11 +141,18 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
 
     #[cfg(target_os = "linux")]
     {
-        // Linux pre-built binaries don't include CUDA support,
-        // and gglib only supports CUDA for GPU acceleration on Linux.
-        // Users must build from source to get CUDA support.
-        PrebuiltAvailability::NotAvailable {
-            reason: "Linux pre-built binaries don't include CUDA support. Building from source is required for GPU acceleration.".to_string(),
+        #[cfg(target_arch = "x86_64")]
+        {
+            PrebuiltAvailability::Available {
+                asset_pattern: "bin-ubuntu-x64.zip".to_string(),
+                description: "Linux x64 (CPU)".to_string(),
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            PrebuiltAvailability::NotAvailable {
+                reason: "Unsupported Linux architecture. Pre-built binaries are only available for x86_64.".to_string(),
+            }
         }
     }
 
