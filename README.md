@@ -29,13 +29,46 @@ gglib serve qwen2.5
 
 # Pipe anything into a question
 cat error.log | gglib question "what went wrong?"
-git diff | gglib question "review this for bugs"
-man rsync | gglib question "how do I sync only .rs files?"
 
 # Or skip the CLI — open the desktop app or web UI
 gglib gui
 gglib web
 ```
+
+## Pipe anything, ask anything
+
+GGLib treats your local model like a Unix tool. Pipe in any text and ask a question — no API keys, no cloud, no context window gymnastics. Use `gglib question` (or `gglib q` for short).
+
+```bash
+# Code review a PR diff
+git diff main | gglib q "review this for bugs and suggest improvements"
+
+# Understand an error log
+journalctl -u myapp --since "1 hour ago" | gglib q "what caused this crash?"
+
+# Summarize a man page
+man rsync | gglib q "how do I sync only .rs files, excluding target/?"
+
+# Explain unfamiliar config
+cat nginx.conf | gglib q "explain the proxy_pass rules"
+
+# Quick code explanation
+cat src/main.rs | gglib q "what does this program do?"
+
+# Get a commit message from staged changes
+git diff --cached | gglib q "write a concise commit message for these changes"
+
+# Translate a file
+cat README_ja.md | gglib q "translate this to English"
+
+# Use {} as a placeholder to control where input goes
+echo "segfault at 0x0" | gglib q "I got this error: {}. What does it mean?"
+
+# Read context from a file instead of stdin
+gglib q --file Cargo.toml "what dependencies does this project use?"
+```
+
+Works with any command that produces text. If you can `cat` it, you can ask a local model about it.
 
 ## Architecture
 

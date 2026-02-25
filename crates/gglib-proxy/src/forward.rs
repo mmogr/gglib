@@ -173,4 +173,88 @@ mod tests {
         assert!(!should_forward_header("authorization"));
         assert!(!should_forward_header("transfer-encoding"));
     }
+
+    #[test]
+    fn hop_by_hop_headers_are_case_insensitive() {
+        assert!(!should_forward_header("Connection"));
+        assert!(!should_forward_header("HOST"));
+        assert!(!should_forward_header("Transfer-Encoding"));
+        assert!(!should_forward_header("Keep-Alive"));
+        assert!(!should_forward_header("PROXY-AUTHORIZATION"));
+    }
+
+    #[test]
+    fn all_hop_by_hop_headers_are_blocked() {
+        for header in HOP_BY_HOP_HEADERS {
+            assert!(
+                !should_forward_header(header),
+                "hop-by-hop header '{header}' should be blocked"
+            );
+        }
+    }
+
+    #[test]
+    fn common_request_headers_are_forwarded() {
+        let forward_headers = [
+            "accept",
+            "accept-encoding",
+            "accept-language",
+            "user-agent",
+            "content-type",
+            "x-request-id",
+            "x-forwarded-for",
+            "cache-control",
+        ];
+        for header in forward_headers {
+            assert!(
+                should_forward_header(header),
+                "request header '{header}' should be forwarded"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn forward_to_unreachable_server_returns_bad_gateway() {
+        let client = Client::new();
+        let headers = HeaderMap::new();
+        let body = Bytes::from(r#"{"model":"test","messages":[]}"#);
+
+        // Use a port that's almost certainly not listening
+        let response = forward_chat_completion(
+            &client,
+            "http://127.0.0.1:1/v1/chat/completions",
+            &headers,
+            body,
+            false,
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[tokio::test]
+    async fn forward_to_unreachable_server_returns_json_error() {
+        let client = Client::new();
+        let headers = HeaderMap::new();
+        let body = Bytes::from(r#"{"model":"test","messages":[]}"#);
+
+        let response = forward_chat_completion(
+            &client,
+            "http://127.0.0.1:1/v1/chat/completions",
+            &headers,
+            body,
+            true, // streaming mode should also get a proper error
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+        // Body should be valid JSON with OpenAI error format
+        let body_bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert!(json.get("error").is_some(), "response must have 'error' key");
+        assert_eq!(json["error"]["code"], "upstream_error");
+    }
 }
