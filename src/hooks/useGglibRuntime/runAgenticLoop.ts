@@ -19,7 +19,6 @@ import {
   DEFAULT_MAX_TOOL_ITERS,
   MAX_STAGNATION_STEPS,
   toolSignature,
-  tryParseFinalEnvelope,
   recordAssistantProgress,
   checkToolLoop,
   buildWorkingMemory,
@@ -135,7 +134,6 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
   // Initialize agent state
   let agentState: AgentLoopState = {
     iter: 0,
-    protocolStrikes: 0,
     stagnation: 0,
     sigHits: new Map(),
     toolDigests: [],
@@ -247,69 +245,16 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     // Track progress for stagnation detection
     agentState = recordAssistantProgress(agentState, streamResult.textContent);
 
-    // Check if we have a final envelope (no tool calls expected)
+    // Model finished — streamed content is already committed to the message.
+    // finish_reason is the authoritative termination signal; no envelope parsing needed.
     if (
       streamResult.finishReason !== 'tool_calls' ||
       streamResult.toolCalls.length === 0
     ) {
-      const finalEnvelope = tryParseFinalEnvelope(streamResult.textContent);
-      
-      if (!finalEnvelope) {
-        // Model didn't produce a final envelope - check if this is first iteration
-        // On first iteration with no tools called, accept as plain response (model may not support tools)
-        if (iteration === 1) {
-          appLogger.info('hook.runtime', 'Model responded without tools or final envelope - accepting as plain response');
-          // Keep the response as-is (already set by streaming)
-          break;
-        }
-        
-        // In subsequent iterations, this is a protocol violation
-        agentState.protocolStrikes++;
-        appLogger.warn('hook.runtime', 'Protocol violation: expected final envelope', { 
-          strikes: agentState.protocolStrikes 
-        });
-        
-        if (agentState.protocolStrikes > 2) {
-          // Add error message
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === assistantMessageId
-                ? {
-                    ...m,
-                    content: [
-                      ...(Array.isArray(m.content) ? m.content : []),
-                      {
-                        type: 'text',
-                        text: '\n\n[Stopped: protocol violations]',
-                      },
-                    ] as GglibContent,
-                  }
-                : m
-            )
-          );
-          break;
-        }
-        // Continue - maybe next iteration will comply
-        continue;
-      }
-      
-      // Success - update with final result
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantMessageId
-            ? {
-                ...m,
-                content: [
-                  {
-                    type: 'text',
-                    text: finalEnvelope.result,
-                  },
-                ] as GglibContent,
-              }
-            : m
-        )
-      );
-      appLogger.info('hook.runtime', 'Final envelope received - conversation complete');
+      appLogger.info('hook.runtime', 'Model finished', {
+        finishReason: streamResult.finishReason,
+        iteration,
+      });
       break;
     }
 
