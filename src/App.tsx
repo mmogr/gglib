@@ -3,6 +3,7 @@ import ModelControlCenterPage from "./pages/ModelControlCenterPage";
 import Header from "./components/Header";
 import SettingsModal from "./components/SettingsModal";
 import LlamaInstallModal from "./components/LlamaInstallModal";
+import SetupWizard from "./components/SetupWizard";
 import { ToastContainer } from "./components/Toast";
 import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
@@ -12,6 +13,7 @@ import { VoiceModeProvider } from "./contexts/VoiceModeContext";
 import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
+import { getSetupStatus } from "./services/transport/api/setup";
 
 /**
  * Inner app component that consumes ToastContext.
@@ -184,8 +186,38 @@ function AppContent() {
 
 /**
  * Root App component - wraps everything in providers.
+ * Shows setup wizard on first run before main app.
  */
 function App() {
+  const [setupDone, setSetupDone] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getSetupStatus()
+      .then((status) => setSetupDone(status.setupCompleted))
+      .catch(() => {
+        // If we can't check, assume setup is done to avoid blocking
+        setSetupDone(true);
+      });
+  }, []);
+
+  // Still checking setup status
+  if (setupDone === null) {
+    return (
+      <div className="fixed inset-0 bg-background flex items-center justify-center">
+        <div className="text-text-secondary text-sm">Loading...</div>
+      </div>
+    );
+  }
+
+  // First run: show wizard
+  if (!setupDone) {
+    return (
+      <ToastProvider>
+        <SetupWizard onComplete={() => setSetupDone(true)} />
+      </ToastProvider>
+    );
+  }
+
   return (
     <ToastProvider>
       <AppContent />
