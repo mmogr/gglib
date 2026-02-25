@@ -80,32 +80,8 @@ impl SherpaSttBackend {
         // `base.en-tokens.txt`.  We find the encoder and derive the prefix.
         let prefix = find_file_prefix(model_dir, "-encoder.onnx")?;
 
-        let encoder_path = model_dir.join(format!("{prefix}-encoder.onnx"));
-
-        // Prefer int8-quantised decoder if available (smaller + faster).
-        let decoder_int8 = model_dir.join(format!("{prefix}-decoder.int8.onnx"));
-        let decoder_path = if decoder_int8.exists() {
-            decoder_int8
-        } else {
-            model_dir.join(format!("{prefix}-decoder.onnx"))
-        };
-
-        let tokens_path = model_dir.join(format!("{prefix}-tokens.txt"));
-
-        for (path, desc) in [
-            (&encoder_path, "encoder"),
-            (&decoder_path, "decoder"),
-            (&tokens_path, "tokens"),
-        ] {
-            if !path.exists() {
-                return Err(VoiceError::ModelNotFound(path.clone()));
-            }
-            tracing::debug!(path = %path.display(), "Found STT {desc}");
-        }
-
-        let encoder_str = util::path_to_string(&encoder_path, VoiceError::ModelLoadError)?;
-        let decoder_str = util::path_to_string(&decoder_path, VoiceError::ModelLoadError)?;
-        let tokens_str = util::path_to_string(&tokens_path, VoiceError::ModelLoadError)?;
+        // Resolve, validate, and stringify all three model file paths.
+        let (encoder_str, decoder_str, tokens_str) = resolve_model_paths(model_dir, &prefix)?;
 
         tracing::info!(
             dir = %model_dir.display(),
@@ -219,6 +195,46 @@ impl SttBackend for SherpaSttBackend {
     fn language(&self) -> &str {
         &self.language
     }
+}
+
+/// Resolve the encoder, decoder (int8-preferred), and tokens file paths for a
+/// Whisper model directory, validate that each file exists, and return them as
+/// owned `String` values ready for use in `WhisperConfig`.
+///
+/// Returning owned `String`s (rather than `PathBuf` or `&str`) avoids lifetime
+/// entanglement when the values are moved into `WhisperConfig`.
+fn resolve_model_paths(
+    model_dir: &Path,
+    prefix: &str,
+) -> Result<(String, String, String), VoiceError> {
+    let encoder_path = model_dir.join(format!("{prefix}-encoder.onnx"));
+
+    // Prefer int8-quantised decoder if available (smaller + faster).
+    let decoder_int8 = model_dir.join(format!("{prefix}-decoder.int8.onnx"));
+    let decoder_path = if decoder_int8.exists() {
+        decoder_int8
+    } else {
+        model_dir.join(format!("{prefix}-decoder.onnx"))
+    };
+
+    let tokens_path = model_dir.join(format!("{prefix}-tokens.txt"));
+
+    for (path, desc) in [
+        (&encoder_path, "encoder"),
+        (&decoder_path, "decoder"),
+        (&tokens_path, "tokens"),
+    ] {
+        if !path.exists() {
+            return Err(VoiceError::ModelNotFound(path.clone()));
+        }
+        tracing::debug!(path = %path.display(), "Found STT {desc}");
+    }
+
+    let encoder_str = util::path_to_string(&encoder_path, VoiceError::ModelLoadError)?;
+    let decoder_str = util::path_to_string(&decoder_path, VoiceError::ModelLoadError)?;
+    let tokens_str = util::path_to_string(&tokens_path, VoiceError::ModelLoadError)?;
+
+    Ok((encoder_str, decoder_str, tokens_str))
 }
 
 /// Scan `dir` for a file whose name ends with `suffix` and return the prefix.

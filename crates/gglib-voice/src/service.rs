@@ -290,7 +290,10 @@ fn mode_label(m: VoiceInteractionMode) -> String {
 /// Centralising the `#[allow(clippy::cast_precision_loss)]` here means each
 /// individual download method does not need its own per-site suppression.
 #[allow(clippy::cast_precision_loss)] // progress % — sub-ulp precision not needed
-fn progress_callback(emitter: Arc<dyn AppEventEmitter>, model_id: String) -> impl Fn(u64, u64) {
+fn progress_callback(
+    emitter: Arc<dyn AppEventEmitter>,
+    model_id: String,
+) -> impl Fn(u64, u64) + Send {
     move |downloaded, total| {
         let percent = if total > 0 {
             (downloaded as f64 / total as f64) * 100.0

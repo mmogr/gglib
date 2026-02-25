@@ -345,39 +345,42 @@ fn has_file_ending(dir: &Path, suffix: &str) -> bool {
 
 // ── Download helpers ───────────────────────────────────────────────
 
-/// Download a single file from a URL to a destination path.
+/// Send a GET request to `url`, check for an HTTP success status, and return
+/// the response.
 ///
-/// Creates parent directories as needed. Reports progress via the callback.
-pub async fn download_voice_model(
-    url: &str,
-    dest: &Path,
-    on_progress: impl Fn(u64, u64), // (bytes_downloaded, total_bytes)
-) -> Result<(), crate::error::VoiceError> {
-    // Create parent directories
-    if let Some(parent) = dest.parent() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
-
-    tracing::info!(url, dest = %dest.display(), "Downloading voice model");
-
-    let client = reqwest::Client::new();
-    let response =
-        client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| crate::error::VoiceError::DownloadError {
-                name: url.to_string(),
-                source: e.into(),
-            })?;
-
+/// Network errors and non-2xx responses are mapped to [`VoiceError::DownloadError`]
+/// so that `?` works cleanly at the call site.
+async fn fetch_url(url: &str) -> Result<reqwest::Response, crate::error::VoiceError> {
+    let response = reqwest::Client::new().get(url).send().await.map_err(|e| {
+        crate::error::VoiceError::DownloadError {
+            name: url.to_string(),
+            source: e.into(),
+        }
+    })?;
     if !response.status().is_success() {
         return Err(crate::error::VoiceError::DownloadError {
             name: url.to_string(),
             source: anyhow::anyhow!("HTTP {}", response.status()),
         });
     }
+    Ok(response)
+}
 
+/// Stream an HTTP response body to a file at `dest`, reporting progress.
+///
+/// Progress is reported via `on_progress(bytes_downloaded, total_bytes)` at
+/// most once per ~100 KB, plus a final call at completion.
+///
+/// `on_progress` requires [`Send`] because it is held across `.await` points
+/// inside the streaming loop; this requirement propagates to callers.
+///
+/// Returns the total number of bytes written.
+async fn stream_response_to_file(
+    response: reqwest::Response,
+    dest: &Path,
+    url: &str,
+    on_progress: impl Fn(u64, u64) + Send,
+) -> Result<u64, crate::error::VoiceError> {
     // Content-Length may be absent; treat 0 as "unknown size".
     let total_size = response.content_length().unwrap_or(0);
 
@@ -400,101 +403,27 @@ pub async fn download_voice_model(
         }
     }
 
-    // Flush the buffer to disk and guarantee the final 100% event is emitted.
-    writer.flush().await?;
-    on_progress(downloaded, total_size.max(downloaded));
-
-    tracing::info!(
-        size_mb = downloaded / 1_048_576,
-        dest = %dest.display(),
-        "Voice model download complete"
-    );
-
-    Ok(())
-}
-
-/// Download a `.tar.bz2` archive and extract it into `dest_dir`.
-///
-/// The archive is downloaded into memory, then extracted in a blocking
-/// thread. Returns the path to the extracted directory.
-pub async fn download_and_extract_archive(
-    url: &str,
-    dest_dir: &Path,
-    dir_name: &str,
-    on_progress: impl Fn(u64, u64),
-) -> Result<PathBuf, crate::error::VoiceError> {
-    let extract_path = dest_dir.join(dir_name);
-
-    // Already extracted?
-    if extract_path.exists() {
-        tracing::debug!(path = %extract_path.display(), "Archive already extracted");
-        return Ok(extract_path);
-    }
-
-    tokio::fs::create_dir_all(dest_dir).await?;
-
-    tracing::info!(url, dest = %extract_path.display(), "Downloading archive");
-
-    let client = reqwest::Client::new();
-    let response =
-        client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| crate::error::VoiceError::DownloadError {
-                name: url.to_string(),
-                source: e.into(),
-            })?;
-
-    if !response.status().is_success() {
-        return Err(crate::error::VoiceError::DownloadError {
-            name: url.to_string(),
-            source: anyhow::anyhow!("HTTP {}", response.status()),
-        });
-    }
-
-    // Content-Length may be absent; treat 0 as "unknown size".
-    let total_size = response.content_length().unwrap_or(0);
-
-    // Stream the archive to a temp file instead of buffering it in memory.
-    // For large models (e.g. small.en ~610 MB) this avoids potential OOM.
-    let tmp_path = dest_dir.join(format!(".{dir_name}.tar.bz2.tmp"));
-    let file = tokio::fs::File::create(&tmp_path).await?;
-    let mut writer = BufWriter::new(file);
-    let mut stream = response.bytes_stream();
-    let mut downloaded: u64 = 0;
-    let mut last_reported: u64 = 0;
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| crate::error::VoiceError::DownloadError {
-            name: url.to_string(),
-            source: e.into(),
-        })?;
-        writer.write_all(&chunk).await?;
-        downloaded += chunk.len() as u64;
-        if downloaded - last_reported >= 100_000 {
-            on_progress(downloaded, total_size);
-            last_reported = downloaded;
-        }
-    }
-
-    // Flush the BufWriter and drop it explicitly so the file handle is fully
-    // released before the blocking thread opens the same path for extraction.
+    // Flush and drop the writer explicitly before the caller uses the file
+    // path (e.g. opening it from a blocking thread for tar extraction).
     writer.flush().await?;
     drop(writer);
     on_progress(downloaded, total_size.max(downloaded));
 
-    tracing::info!(
-        size_mb = downloaded / 1_048_576,
-        "Archive downloaded, extracting"
-    );
+    Ok(downloaded)
+}
 
-    // Extract in a blocking thread to avoid blocking the async runtime.
-    // Open the temp file from disk rather than using an in-memory Cursor.
-    let dest_owned = dest_dir.to_path_buf();
-    let tmp_path_owned = tmp_path.clone();
+/// Extract a `.tar.bz2` file at `tmp_path` into `dest_dir`, then delete it.
+///
+/// Extraction runs in a `spawn_blocking` thread to avoid stalling the Tokio
+/// runtime. Standard I/O errors and join errors are mapped to
+/// [`VoiceError::DownloadError`] so that `?` works at the call site.
+async fn extract_tar_bz2(
+    tmp_path: PathBuf,
+    dest_dir: PathBuf,
+) -> Result<(), crate::error::VoiceError> {
+    let tmp_for_blocking = tmp_path.clone();
     tokio::task::spawn_blocking(move || {
-        let file = std::fs::File::open(&tmp_path_owned).map_err(|e| {
+        let file = std::fs::File::open(&tmp_for_blocking).map_err(|e| {
             crate::error::VoiceError::DownloadError {
                 name: "archive".to_string(),
                 source: anyhow::anyhow!("Failed to open temp archive: {e}"),
@@ -503,23 +432,75 @@ pub async fn download_and_extract_archive(
         let decompressor = bzip2::read::BzDecoder::new(file);
         let mut archive = tar::Archive::new(decompressor);
         archive
-            .unpack(&dest_owned)
+            .unpack(&dest_dir)
             .map_err(|e| crate::error::VoiceError::DownloadError {
                 name: "archive".to_string(),
                 source: anyhow::anyhow!("Failed to extract archive: {e}"),
             })?;
+        tracing::info!("Archive extracted successfully");
         Ok::<(), crate::error::VoiceError>(())
     })
     .await
     .map_err(|e| crate::error::VoiceError::DownloadError {
-        name: url.to_string(),
+        name: "archive".to_string(),
         source: anyhow::anyhow!("Join error: {e}"),
     })??;
 
-    // Remove the temp archive now that extraction is complete.
+    // Remove the temp file now that extraction is complete.
     let _ = tokio::fs::remove_file(&tmp_path).await;
 
-    tracing::info!(path = %extract_path.display(), "Archive extracted successfully");
+    Ok(())
+}
+
+/// Download a single file from a URL to a destination path.
+///
+/// Creates parent directories as needed. Reports progress via the callback.
+///
+/// `on_progress` requires [`Send`] because it is held across `.await` points
+/// in the streaming loop.
+pub async fn download_voice_model(
+    url: &str,
+    dest: &Path,
+    on_progress: impl Fn(u64, u64) + Send,
+) -> Result<(), crate::error::VoiceError> {
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    tracing::info!(url, dest = %dest.display(), "Downloading voice model");
+    let response = fetch_url(url).await?;
+    let downloaded = stream_response_to_file(response, dest, url, on_progress).await?;
+    tracing::info!(size_mb = downloaded / 1_048_576, dest = %dest.display(), "Voice model download complete");
+    Ok(())
+}
+
+/// Download a `.tar.bz2` archive and extract it into `dest_dir`.
+///
+/// The archive is streamed to a temp file via [`stream_response_to_file`],
+/// then extracted by [`extract_tar_bz2`] in a blocking thread.
+/// Returns the path to the extracted directory.
+///
+/// `on_progress` requires [`Send`] because it is held across `.await` points
+/// in the streaming loop.
+pub async fn download_and_extract_archive(
+    url: &str,
+    dest_dir: &Path,
+    dir_name: &str,
+    on_progress: impl Fn(u64, u64) + Send,
+) -> Result<PathBuf, crate::error::VoiceError> {
+    let extract_path = dest_dir.join(dir_name);
+    if extract_path.exists() {
+        tracing::debug!(path = %extract_path.display(), "Archive already extracted");
+        return Ok(extract_path);
+    }
+    tokio::fs::create_dir_all(dest_dir).await?;
+    let response = fetch_url(url).await?;
+    let tmp_path = dest_dir.join(format!(".{dir_name}.tar.bz2.tmp"));
+    let downloaded = stream_response_to_file(response, &tmp_path, url, on_progress).await?;
+    tracing::debug!(
+        size_mb = downloaded / 1_048_576,
+        "Archive downloaded, extracting"
+    );
+    extract_tar_bz2(tmp_path, dest_dir.to_path_buf()).await?;
     Ok(extract_path)
 }
 
@@ -530,7 +511,7 @@ pub async fn download_and_extract_archive(
 /// Returns the path to the extracted model directory.
 pub async fn ensure_stt_model(
     model_id: &str,
-    on_progress: impl Fn(u64, u64),
+    on_progress: impl Fn(u64, u64) + Send,
 ) -> Result<PathBuf, crate::error::VoiceError> {
     let model = VoiceModelCatalog::find_stt_model(model_id)
         .ok_or_else(|| crate::error::VoiceError::ModelNotFound(PathBuf::from(model_id)))?;
@@ -550,7 +531,7 @@ pub async fn ensure_stt_model(
 ///
 /// Returns the directory containing the extracted model files.
 pub async fn ensure_tts_model(
-    on_progress: impl Fn(u64, u64),
+    on_progress: impl Fn(u64, u64) + Send,
 ) -> Result<PathBuf, crate::error::VoiceError> {
     let tts = VoiceModelCatalog::tts_model();
     let tts_dir = VoiceModelCatalog::voice_models_dir()?.join("tts");
@@ -559,7 +540,7 @@ pub async fn ensure_tts_model(
 
 /// Download the Silero VAD model if not already present.
 pub async fn ensure_vad_model(
-    on_progress: impl Fn(u64, u64),
+    on_progress: impl Fn(u64, u64) + Send,
 ) -> Result<PathBuf, crate::error::VoiceError> {
     let vad = VoiceModelCatalog::vad_model();
     let path = VoiceModelCatalog::vad_model_path()?;
