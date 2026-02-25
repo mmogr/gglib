@@ -6,7 +6,7 @@ This directory contains the Tauri-based desktop application for GGLib.
 
 The GGLib Desktop GUI is one of three complementary interfaces for managing GGUF models (along with the CLI and Web UI). All interfaces share the same backend architecture, ensuring consistent functionality and behavior.
 
-For a complete overview of all interfaces and the shared architecture, see the main [README.md](../README.md#interfaces--modes).
+For a complete overview of all interfaces and the shared architecture, see the main [README.md](../README.md#interfaces).
 
 ## Architecture
 
@@ -110,8 +110,8 @@ The output binary will be located in `target/release/bundle/`.
 - **No resource leaks**: Proper cleanup prevents thread exhaustion and zombie processes
 
 For more details on the architecture and how all interfaces work together, see:
-- [Interfaces & Modes](../README.md#interfaces--modes) in the main README
-- [Architecture Overview](../README.md#architecture-overview) for backend details
+- [Interfaces](../README.md#interfaces) in the main README
+- [Architecture Overview](../README.md#architecture) for backend details
 
 ## Project Structure
 

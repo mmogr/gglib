@@ -7,7 +7,7 @@
 
 This document provides a detailed reference for all available CLI commands.
 
-For an overview of all interfaces (CLI, Desktop GUI, Web UI), see the main [README](../README.md#interfaces--modes).
+For an overview of all interfaces (CLI, Desktop GUI, Web UI), see the main [README](../README.md#interfaces).
 
 ## Global Options
 
@@ -259,7 +259,7 @@ gglib web --api-only --port 9887
 gglib web --port 9887 --base-port 9000
 ```
 
-The web server binds to `0.0.0.0` by default, making it accessible from your LAN. See [Interfaces & Modes](../README.md#interfaces--modes) for details.
+The web server binds to `0.0.0.0` by default, making it accessible from your LAN. See [Interfaces](../README.md#interfaces) for details.
 
 ### llama.cpp Management
 
@@ -405,11 +405,10 @@ gglib config settings reset
 
 ## See Also
 
-> Changing this configuration only affects future downloads; it does **not** move GGUF files that are already on disk. Move any existing models yourself if you want them to live in the new directory.
-
-- [Main README](../README.md) - Overview and getting started
-- [Interfaces & Modes](../README.md#interfaces--modes) - Understanding CLI, Desktop GUI, and Web UI
-- [Architecture Overview](../README.md#architecture-overview) - How GGLib is structured
-- [Desktop GUI Documentation](../src-tauri/README.md) - Tauri app details
+- [Main README](../README.md) — Overview and getting started
+- [Interfaces](../README.md#interfaces) — CLI, Desktop GUI, Web UI, and Proxy
+- [Architecture](../README.md#architecture) — How GGLib is structured
+- [gglib-cli crate](../../crates/gglib-cli/README.md) — Rust source for the CLI
+- [Desktop GUI](../src-tauri/README.md) — Tauri app details
 
 <!-- module-docs:end -->

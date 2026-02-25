@@ -7,7 +7,7 @@
 //! - macOS ARM64: Metal-enabled pre-built binaries
 //! - macOS x64: Metal-enabled pre-built binaries
 //! - Windows x64: CUDA-enabled pre-built binaries
-//! - Linux: No pre-built (must build from source for CUDA support)
+//! - Linux x64: CPU pre-built binaries (CUDA requires building from source)
 
 #[cfg(feature = "prebuilt")]
 use anyhow::{Context, Result, bail};
@@ -103,14 +103,14 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
         #[cfg(target_arch = "aarch64")]
         {
             PrebuiltAvailability::Available {
-                asset_pattern: "bin-macos-arm64.zip".to_string(),
+                asset_pattern: "bin-macos-arm64.tar.gz".to_string(),
                 description: "macOS ARM64 (Metal)".to_string(),
             }
         }
         #[cfg(target_arch = "x86_64")]
         {
             PrebuiltAvailability::Available {
-                asset_pattern: "bin-macos-x64.zip".to_string(),
+                asset_pattern: "bin-macos-x64.tar.gz".to_string(),
                 description: "macOS x64 (Metal)".to_string(),
             }
         }
@@ -141,11 +141,18 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
 
     #[cfg(target_os = "linux")]
     {
-        // Linux pre-built binaries don't include CUDA support,
-        // and gglib only supports CUDA for GPU acceleration on Linux.
-        // Users must build from source to get CUDA support.
-        PrebuiltAvailability::NotAvailable {
-            reason: "Linux pre-built binaries don't include CUDA support. Building from source is required for GPU acceleration.".to_string(),
+        #[cfg(target_arch = "x86_64")]
+        {
+            PrebuiltAvailability::Available {
+                asset_pattern: "bin-ubuntu-x64.tar.gz".to_string(),
+                description: "Linux x64 (CPU)".to_string(),
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            PrebuiltAvailability::NotAvailable {
+                reason: "Unsupported Linux architecture. Pre-built binaries are only available for x86_64.".to_string(),
+            }
         }
     }
 
@@ -331,15 +338,106 @@ async fn download_with_boxed_callback(
     Ok(())
 }
 
-/// Extract all files from the zip archive.
+/// Extract all files from the archive (zip or tar.gz).
 ///
-/// For macOS: extracts from build/bin/ directory
-/// For Windows: extracts from root level (Windows packages have flat structure)
+/// For macOS/Linux: tar.gz archives with binaries in build/bin/
+/// For Windows: zip archives with binaries at root level
 ///
 /// This includes the main binaries (llama-server, llama-cli) and all required
 /// shared libraries (.dylib on macOS, .dll on Windows, .so on Linux).
 #[cfg(feature = "prebuilt")]
-fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
+fn extract_binaries(archive_path: &Path, bin_dir: &Path) -> Result<()> {
+    let name = archive_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    if name.ends_with(".tar.gz") || name.ends_with(".tgz") {
+        extract_binaries_tar_gz(archive_path, bin_dir)
+    } else {
+        extract_binaries_zip(archive_path, bin_dir)
+    }
+}
+
+/// Extract binaries from a tar.gz archive (macOS and Linux).
+#[cfg(feature = "prebuilt")]
+fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
+    use flate2::read::GzDecoder;
+    use tar::Archive;
+
+    println!("Extracting binaries and libraries...");
+
+    let file = File::open(archive_path).context("Failed to open downloaded archive")?;
+    let gz = GzDecoder::new(file);
+    let mut archive = Archive::new(gz);
+
+    fs::create_dir_all(bin_dir).context("Failed to create bin directory")?;
+
+    let required_binaries = ["llama-server", "llama-cli"];
+    let mut extracted_binaries = 0;
+    let mut extracted_libs = 0;
+
+    for entry in archive.entries().context("Failed to read tar archive")? {
+        let mut entry = entry.context("Failed to read archive entry")?;
+        let path = entry
+            .path()
+            .context("Failed to get entry path")?
+            .into_owned();
+        let entry_name = path.to_string_lossy();
+
+        // Binaries live in build/bin/ inside the archive
+        if !entry_name.contains("build/bin/") {
+            continue;
+        }
+
+        let file_name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(name) if !name.is_empty() => name.to_string(),
+            _ => continue,
+        };
+
+        if file_name.starts_with("LICENSE")
+            || file_name.ends_with(".h")
+            || file_name.ends_with(".metal")
+        {
+            continue;
+        }
+
+        let dest_path = bin_dir.join(&file_name);
+        entry
+            .unpack(&dest_path)
+            .with_context(|| format!("Failed to extract: {}", file_name))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&dest_path)?.permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&dest_path, perms)?;
+        }
+
+        if required_binaries.contains(&file_name.as_str()) {
+            println!("  ✓ Extracted {}", file_name);
+            extracted_binaries += 1;
+        } else {
+            extracted_libs += 1;
+        }
+    }
+
+    if extracted_binaries != required_binaries.len() {
+        bail!(
+            "Failed to extract all required binaries. Found {} of {}",
+            extracted_binaries,
+            required_binaries.len()
+        );
+    }
+
+    println!("  ✓ Extracted {} shared libraries", extracted_libs);
+
+    Ok(())
+}
+
+/// Extract binaries from a zip archive (Windows).
+#[cfg(feature = "prebuilt")]
+fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
     println!("Extracting binaries and libraries...");
 
     let file = File::open(zip_path).context("Failed to open downloaded archive")?;
@@ -361,26 +459,17 @@ fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
             .context("Failed to read archive entry")?;
         let entry_name = entry.name().to_string();
 
-        // Skip directories
         if entry.is_dir() {
             continue;
         }
 
-        // Platform-specific path filtering:
-        // - macOS packages have binaries in build/bin/
-        // - Windows packages have binaries at root level
-        #[cfg(not(target_os = "windows"))]
-        if !entry_name.contains("build/bin/") {
-            continue;
-        }
-
+        // Windows packages have binaries at root level
         // Get the filename (last component of path)
         let file_name = match entry_name.rsplit('/').next() {
             Some(name) if !name.is_empty() => name,
             _ => continue,
         };
 
-        // Skip license files and source/header files
         if file_name.starts_with("LICENSE")
             || file_name.ends_with(".h")
             || file_name.ends_with(".metal")
@@ -395,7 +484,6 @@ fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
         io::copy(&mut entry, &mut dest_file)
             .with_context(|| format!("Failed to extract: {}", file_name))?;
 
-        // Set executable permission on Unix for binaries and libraries
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -404,7 +492,6 @@ fn extract_binaries(zip_path: &Path, bin_dir: &Path) -> Result<()> {
             fs::set_permissions(&dest_path, perms)?;
         }
 
-        // Track what we extracted
         if required_binaries.contains(&file_name) {
             println!("  ✓ Extracted {}", file_name);
             extracted_binaries += 1;
