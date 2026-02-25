@@ -254,7 +254,10 @@ mod tests {
             .await
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
-        assert!(json.get("error").is_some(), "response must have 'error' key");
+        assert!(
+            json.get("error").is_some(),
+            "response must have 'error' key"
+        );
         assert_eq!(json["error"]["code"], "upstream_error");
     }
 }

@@ -388,7 +388,10 @@ mod tests {
         let json = serde_json::to_value(&err).unwrap();
 
         // OpenAI format: { "error": { "message": ..., "type": ..., "code": ... } }
-        assert!(json.get("error").is_some(), "must have top-level 'error' key");
+        assert!(
+            json.get("error").is_some(),
+            "must have top-level 'error' key"
+        );
         let inner = &json["error"];
         assert!(inner.get("message").is_some());
         assert!(inner.get("type").is_some());
@@ -557,7 +560,10 @@ mod tests {
         };
         let info = ModelInfo::from(summary);
         let desc = info.description.unwrap();
-        assert!(desc.contains("unknown"), "missing fields should show 'unknown'");
+        assert!(
+            desc.contains("unknown"),
+            "missing fields should show 'unknown'"
+        );
     }
 
     // =========================================================================
