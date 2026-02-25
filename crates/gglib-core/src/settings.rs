@@ -81,6 +81,10 @@ pub struct Settings {
 
     /// Preferred audio input device name (None = system default).
     pub voice_input_device: Option<String>,
+
+    // ── Setup wizard ────────────────────────────────────────────────
+    /// Whether the first-run setup wizard has been completed.
+    pub setup_completed: Option<bool>,
 }
 
 impl Settings {
@@ -107,6 +111,7 @@ impl Settings {
             voice_vad_silence_ms: None,
             voice_auto_speak: Some(true),
             voice_input_device: None,
+            setup_completed: None,
         }
     }
 
@@ -187,6 +192,9 @@ impl Settings {
         if let Some(ref v) = other.voice_input_device {
             self.voice_input_device.clone_from(v);
         }
+        if let Some(ref v) = other.setup_completed {
+            self.setup_completed = *v;
+        }
     }
 }
 
@@ -217,6 +225,7 @@ pub struct SettingsUpdate {
     pub voice_vad_silence_ms: Option<Option<u32>>,
     pub voice_auto_speak: Option<Option<bool>>,
     pub voice_input_device: Option<Option<String>>,
+    pub setup_completed: Option<Option<bool>>,
 }
 
 /// Settings validation error.
