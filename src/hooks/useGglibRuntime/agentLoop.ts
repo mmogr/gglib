@@ -16,7 +16,6 @@ import type { ToolResult } from '../../services/tools';
 
 /** Agent policy knobs */
 export const DEFAULT_MAX_TOOL_ITERS = 25;
-export const MAX_PROTOCOL_STRIKES = 2;
 export const MAX_SAME_SIGNATURE_HITS = 2;
 export const MAX_STAGNATION_STEPS = 5;
 
@@ -40,12 +39,6 @@ export interface ChatMessage {
   }>;
 }
 
-export interface FinalEnvelope {
-  type: 'final';
-  result: string;
-  checks?: string[];
-}
-
 export interface ToolDigest {
   sig: string;
   name: string;
@@ -55,7 +48,6 @@ export interface ToolDigest {
 
 export interface AgentLoopState {
   iter: number;
-  protocolStrikes: number;
   stagnation: number;
   sigHits: Map<string, number>;
   lastAssistantHash?: string;
@@ -106,34 +98,6 @@ function hashString(s: string): string {
 export function toolSignature(tc: AccumulatedToolCall): string {
   const argStr = tc.function.arguments ?? '';
   return `${tc.function.name}:${hashString(argStr)}`;
-}
-
-// =============================================================================
-// Final Envelope Parsing
-// =============================================================================
-
-/**
- * Try to parse final envelope from assistant content.
- * Returns null if content is not a valid final envelope.
- */
-export function tryParseFinalEnvelope(content: string): FinalEnvelope | null {
-  const trimmed = content.trim();
-  if (!trimmed.startsWith('{')) return null;
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (parsed?.type === 'final' && typeof parsed.result === 'string') {
-      return {
-        type: 'final',
-        result: parsed.result,
-        checks: Array.isArray(parsed.checks)
-          ? parsed.checks.filter((x: unknown) => typeof x === 'string')
-          : [],
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 // =============================================================================
@@ -318,24 +282,14 @@ export function checkToolLoop(
 }
 
 // =============================================================================
-// Protocol
+// Prompts
 // =============================================================================
 
-export const FORMAT_REMINDER = `You must respond in ONE of these ways:
-1) If you need tools: return tool_calls (no long narrative).
-2) If finished: output ONLY this JSON:
-{"type":"final","result":"...","checks":["..."]}`;
-
 /** System prompt for tool-enabled models (agent/reasoning with Jinja) */
-export const TOOL_ENABLED_SYSTEM_PROMPT = `You are an assistant with tools.
+export const TOOL_ENABLED_SYSTEM_PROMPT = `You are a helpful assistant with access to tools.
 
-Rules:
-- If you need information or actions, use tool_calls. Do not guess.
-- Keep explanations brief while working; prefer tool use.
-- When you are done, respond ONLY with JSON:
-  {"type":"final","result":"...","checks":["verified ...","not verified ..."]}
-
-Do not output chain-of-thought.`;
+When you need information or actions, use the available tools rather than guessing.
+Keep working explanations concise. When you have enough information, provide your final answer directly.`;
 
 /** System prompt for non-tool models (plain chat) */
 export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful assistant.';
