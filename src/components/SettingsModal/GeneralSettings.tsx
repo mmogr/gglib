@@ -348,6 +348,31 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
       {error && <p className="text-[#ef4444] text-sm" role="alert">{error}</p>}
       {successMessage && <p className="text-[#10b981] text-sm" role="status" aria-live="polite">{successMessage}</p>}
 
+      {/* Setup Wizard */}
+      <div className="border-t border-border my-md" />
+      <Row justify="between" gap="sm" className="items-center">
+        <div>
+          <Label>Setup Wizard</Label>
+          <p className="text-text-secondary text-sm mt-1">Re-run the first-run system configuration wizard</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            // Reset setup_completed to false and reload page to trigger wizard
+            import('../../services/transport/api/settings').then(({ updateSettings: update }) => {
+              update({ setupCompleted: false }).then(() => {
+                window.location.reload();
+              });
+            });
+          }}
+          disabled={saving}
+        >
+          Re-run Wizard
+        </Button>
+      </Row>
+
       <div className="flex items-center justify-between gap-md p-lg border-t border-border shrink-0">
         <Button type="button" variant="secondary" onClick={onRefresh} disabled={loading || saving}>
           Refresh

@@ -112,6 +112,7 @@ impl<'a> SettingsOps<'a> {
             voice_vad_silence_ms: settings.voice_vad_silence_ms,
             voice_auto_speak: settings.voice_auto_speak,
             voice_input_device: settings.voice_input_device,
+            setup_completed: settings.setup_completed,
         })
     }
 
@@ -137,6 +138,7 @@ impl<'a> SettingsOps<'a> {
             voice_vad_silence_ms: request.voice_vad_silence_ms,
             voice_auto_speak: request.voice_auto_speak,
             voice_input_device: request.voice_input_device,
+            setup_completed: request.setup_completed,
         };
 
         let settings = self
@@ -170,6 +172,7 @@ impl<'a> SettingsOps<'a> {
             voice_vad_silence_ms: settings.voice_vad_silence_ms,
             voice_auto_speak: settings.voice_auto_speak,
             voice_input_device: settings.voice_input_device,
+            setup_completed: settings.setup_completed,
         })
     }
 

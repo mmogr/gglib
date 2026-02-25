@@ -14,6 +14,7 @@ path = "src/lib.rs"
 [dependencies]
 # Core domain and ports only - no adapter crates
 gglib-core = { path = "../gglib-core" }
+gglib-download = { path = "../gglib-download" }
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }

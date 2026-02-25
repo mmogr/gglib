@@ -110,6 +110,8 @@ export interface AppSettings {
   voiceVadSilenceMs?: number | null;
   voiceAutoSpeak?: boolean | null;
   voiceInputDevice?: string | null;
+  /** Whether the setup wizard has been completed */
+  setupCompleted?: boolean | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -138,6 +140,8 @@ export interface UpdateSettingsRequest {
   voiceVadSilenceMs?: number | null | undefined;
   voiceAutoSpeak?: boolean | null | undefined;
   voiceInputDevice?: string | null | undefined;
+  /** Whether the setup wizard has been completed */
+  setupCompleted?: boolean | null | undefined;
 }
 
 // ============================================================================

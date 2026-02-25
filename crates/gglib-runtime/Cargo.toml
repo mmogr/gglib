@@ -43,6 +43,9 @@ sysinfo = { workspace = true }
 # Archive extraction (used by prebuilt downloads)
 # Disable lzma/xz features to avoid crc version conflicts with sqlx
 zip = { version = "7.1", default-features = false, features = ["aes-crypto", "bzip2", "deflate64", "deflate", "time", "zstd"] }
+# tar.gz extraction for macOS and Linux prebuilt archives
+flate2 = "1"
+tar = "0.4"
 
 # CLI progress (used by cli feature)
 indicatif = { workspace = true }
