@@ -181,7 +181,7 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
 
 const WizardShell: FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="fixed inset-0 bg-background z-50 flex items-center justify-center">
-    <div className="w-full max-w-2xl max-h-[90vh] bg-surface rounded-xl border border-border shadow-2xl flex flex-col overflow-hidden">
+    <div className="w-full max-w-[42rem] max-h-[90vh] bg-surface rounded-xl border border-border shadow-2xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="px-8 pt-6 pb-4 border-b border-border">
         <div className="flex items-center gap-3">
