@@ -35,7 +35,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
                               └──────────────────┘
 ```
 
-See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
+See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Internal Structure
 

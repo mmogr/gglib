@@ -11,7 +11,7 @@ Voice mode pipeline for gglib — fully local speech-to-text, text-to-speech, an
 
 This crate is in the **Infrastructure Layer** — it manages audio I/O, speech recognition, and speech synthesis using native OS audio APIs and on-device ML models.
 
-See the [Architecture Overview](../../README.md#architecture-overview) for the complete diagram.
+See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Overview
 
