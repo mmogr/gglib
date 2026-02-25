@@ -378,7 +378,10 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
 
     for entry in archive.entries().context("Failed to read tar archive")? {
         let mut entry = entry.context("Failed to read archive entry")?;
-        let path = entry.path().context("Failed to get entry path")?.into_owned();
+        let path = entry
+            .path()
+            .context("Failed to get entry path")?
+            .into_owned();
         let entry_name = path.to_string_lossy();
 
         // Binaries live in build/bin/ inside the archive
