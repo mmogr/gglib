@@ -19,8 +19,8 @@ mod mcp;
 mod models;
 mod proxy;
 mod servers;
-pub mod setup;
 mod settings;
+pub mod setup;
 pub mod types;
 mod voice;
 

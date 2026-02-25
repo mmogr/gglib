@@ -5,8 +5,8 @@ use std::convert::Infallible;
 use axum::Json;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
-use futures_util::stream::Stream;
 use futures_util::StreamExt;
+use futures_util::stream::Stream;
 use serde::Serialize;
 
 use crate::error::HttpError;
@@ -35,10 +35,7 @@ pub async fn install_llama(
         let callback: Box<dyn Fn(u64, u64) + Send + Sync> =
             Box::new(move |downloaded: u64, total: u64| {
                 // Best-effort send; if the receiver dropped, ignore
-                let _ = tx_progress.try_send(LlamaProgressEvent::Progress {
-                    downloaded,
-                    total,
-                });
+                let _ = tx_progress.try_send(LlamaProgressEvent::Progress { downloaded, total });
             });
 
         match gui.install_llama(callback).await {
@@ -57,12 +54,11 @@ pub async fn install_llama(
 
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|event| {
         let (event_type, data) = match &event {
-            LlamaProgressEvent::Progress { .. } => {
-                ("progress", serde_json::to_string(&event).unwrap_or_default())
-            }
-            LlamaProgressEvent::Complete => {
-                ("complete", "{}".to_string())
-            }
+            LlamaProgressEvent::Progress { .. } => (
+                "progress",
+                serde_json::to_string(&event).unwrap_or_default(),
+            ),
+            LlamaProgressEvent::Complete => ("complete", "{}".to_string()),
             LlamaProgressEvent::Error { .. } => {
                 ("error", serde_json::to_string(&event).unwrap_or_default())
             }
@@ -84,8 +80,13 @@ pub async fn setup_python(State(state): State<AppState>) -> Result<Json<()>, Htt
 #[serde(tag = "type", rename_all = "camelCase")]
 enum LlamaProgressEvent {
     #[serde(rename_all = "camelCase")]
-    Progress { downloaded: u64, total: u64 },
+    Progress {
+        downloaded: u64,
+        total: u64,
+    },
     Complete,
     #[serde(rename_all = "camelCase")]
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }

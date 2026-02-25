@@ -88,10 +88,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/system/install-llama",
             post(handlers::setup::install_llama),
         )
-        .route(
-            "/system/setup-python",
-            post(handlers::setup::setup_python),
-        )
+        .route("/system/setup-python", post(handlers::setup::setup_python))
         .route(
             "/system/models-directory",
             get(handlers::settings::models_directory)

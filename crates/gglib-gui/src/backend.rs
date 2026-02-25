@@ -12,8 +12,8 @@ use crate::mcp::McpOps;
 use crate::models::ModelOps;
 use crate::proxy::ProxyOps;
 use crate::servers::ServerOps;
-use crate::setup::SetupOps;
 use crate::settings::SettingsOps;
+use crate::setup::SetupOps;
 use crate::types::*;
 use crate::voice::VoiceOps;
 
@@ -576,9 +576,7 @@ impl GuiBackend {
     // =========================================================================
 
     /// Get the full system setup status for the first-run wizard.
-    pub async fn get_setup_status(
-        &self,
-    ) -> Result<crate::setup::SetupStatus, GuiError> {
+    pub async fn get_setup_status(&self) -> Result<crate::setup::SetupStatus, GuiError> {
         self.setup_ops().get_status().await
     }
 

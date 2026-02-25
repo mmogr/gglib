@@ -87,13 +87,9 @@ impl<'a> SetupOps<'a> {
 
         // Check prebuilt availability
         let (llama_can_download, llama_platform_description) = {
-            use gglib_runtime::llama::{
-                PrebuiltAvailability, check_prebuilt_availability,
-            };
+            use gglib_runtime::llama::{PrebuiltAvailability, check_prebuilt_availability};
             match check_prebuilt_availability() {
-                PrebuiltAvailability::Available { description, .. } => {
-                    (true, Some(description))
-                }
+                PrebuiltAvailability::Available { description, .. } => (true, Some(description)),
                 PrebuiltAvailability::NotAvailable { .. } => (false, None),
             }
         };
@@ -166,11 +162,9 @@ impl<'a> SetupOps<'a> {
         &self,
         progress_callback: gglib_runtime::llama::LlamaProgressCallbackBoxed,
     ) -> Result<(), GuiError> {
-        gglib_runtime::llama::download_prebuilt_binaries_with_boxed_callback(
-            progress_callback,
-        )
-        .await
-        .map_err(|e| GuiError::Internal(format!("Failed to install llama.cpp: {e}")))
+        gglib_runtime::llama::download_prebuilt_binaries_with_boxed_callback(progress_callback)
+            .await
+            .map_err(|e| GuiError::Internal(format!("Failed to install llama.cpp: {e}")))
     }
 
     /// Provision the Python fast-download helper environment.
