@@ -18,7 +18,7 @@ use gglib_core::ports::{ProcessHandle, ServerConfig, ServerHealthStatus};
 
 use crate::deps::GuiDeps;
 use crate::error::GuiError;
-use crate::types::{ServerInfo, StartServerRequest, StartServerResponse};
+use crate::types::{ServerInfo, ServerLogEntry, StartServerRequest, StartServerResponse, ToolSupportResponse};
 
 /// Handle for a running health monitor task.
 struct MonitorHandle {
@@ -476,6 +476,44 @@ impl<'a> ServerOps<'a> {
     /// Clear logs for a specific server port.
     pub fn clear_logs(&self, port: u16) {
         gglib_runtime::get_log_manager().clear_logs(port);
+    }
+
+    /// Get tool support detection for a running server's model.
+    ///
+    /// Sources `supports_tool_calls` from the model's `ModelCapabilities` bitflags
+    /// stored in the database (same path used by the chat proxy on every request).
+    /// `confidence` and `detected_format` are derived by running the detector with
+    /// the chat template already stored in `model.metadata` — no disk I/O required.
+    pub async fn get_server_tool_support(
+        &self,
+        model_id: i64,
+    ) -> Result<ToolSupportResponse, GuiError> {
+        use gglib_core::domain::ModelCapabilities;
+        use gglib_core::ports::{ModelSource, ToolSupportDetectionInput};
+
+        let model = self.resolve_model(model_id).await?;
+
+        // Primary boolean comes from the authoritative DB capabilities bitflag.
+        let supports_tool_calls =
+            model.capabilities.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS);
+
+        // Chat template is already in model.metadata (loaded by the same DB query).
+        // Passing it to the detector ensures accurate format/confidence values even
+        // for custom-named models where filename heuristics would otherwise fail.
+        let chat_template = model.metadata.get("tokenizer.chat_template").map(String::as_str);
+
+        let detection = self.deps.tool_detector.detect(ToolSupportDetectionInput {
+            model_id: model.file_path.to_str().unwrap_or(""),
+            chat_template,
+            tags: &[],
+            source: ModelSource::LocalGguf,
+        });
+
+        Ok(ToolSupportResponse {
+            supports_tool_calls,
+            confidence: detection.confidence,
+            detected_format: detection.detected_format.map(|f| f.to_string()),
+        })
     }
 }
 

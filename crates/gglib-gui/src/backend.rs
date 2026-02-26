@@ -339,6 +339,17 @@ impl GuiBackend {
         self.download_ops().get_hf_tool_support(model_id).await
     }
 
+    /// Get tool support detection for a running model server.
+    ///
+    /// Fast path: reads capabilities bitflag and chat template from the database
+    /// model record — no GGUF file parsing required.
+    pub async fn get_server_tool_support(
+        &self,
+        model_id: i64,
+    ) -> Result<ToolSupportResponse, GuiError> {
+        self.server_ops().get_server_tool_support(model_id).await
+    }
+
     // =========================================================================
     // Settings operations
     // =========================================================================
