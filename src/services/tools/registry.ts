@@ -239,7 +239,17 @@ export class ToolRegistry {
 
   /**
    * Execute a raw ToolCall from the LLM.
-   * Parses arguments JSON and executes.
+   *
+   * For MCP tools the name arriving here is the **sanitized** registry key
+   * (e.g. `mcp_my_server_get_data`).  No extra name-resolution is required at
+   * this level: the executor stored under that key was created via
+   * `createMcpExecutor` in `mcpIntegration.ts`, which closes over the raw
+   * original MCP tool name and server ID.  When the executor runs it calls
+   * `callMcpTool(serverId, originalName, args)` — the MCP server therefore
+   * always receives its own naming scheme, never the sanitized key.
+   *
+   * This keeps the registry fully agnostic about the MCP protocol: it knows
+   * only about sanitized names and generic executors.
    */
   async executeRawCall(toolCall: ToolCall): Promise<ToolResult> {
     const parsed = parseToolCall(toolCall);
