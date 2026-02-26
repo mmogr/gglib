@@ -8,6 +8,7 @@ import { DEFAULT_TITLE_GENERATION_PROMPT } from "../../services/clients/chat";
 import type { ModelsDirectoryInfo, GgufModel, InferenceConfig } from "../../types";
 import { cn } from '../../utils/cn';
 import { Row, Label } from '../primitives';
+import { updateSettings } from '../../services/transport/api/settings';
 
 interface GeneralSettingsProps {
   // Directory state
@@ -361,10 +362,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
           size="sm"
           onClick={() => {
             // Reset setup_completed to false and reload page to trigger wizard
-            import('../../services/transport/api/settings').then(({ updateSettings: update }) => {
-              update({ setupCompleted: false }).then(() => {
-                window.location.reload();
-              });
+            updateSettings({ setupCompleted: false }).then(() => {
+              window.location.reload();
             });
           }}
           disabled={saving}
