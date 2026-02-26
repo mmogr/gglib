@@ -639,3 +639,54 @@ pub async fn proxy_chat(
         Ok(Json(completion).into_response())
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unit tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gglib_core::domain::ModelCapabilities;
+
+    #[test]
+    fn test_tools_stripped_when_not_supported() {
+        let tools = Some(vec![serde_json::json!({"type": "function", "function": {"name": "get_weather"}})]);
+        let tool_choice = Some(serde_json::json!("auto"));
+        let mut body = serde_json::json!({});
+        apply_tools_to_body(&mut body, &tools, &tool_choice, ModelCapabilities::empty());
+
+        assert!(body.get("tools").is_none(), "tools should be stripped");
+        assert!(body.get("tool_choice").is_none(), "tool_choice should be stripped");
+    }
+
+    #[test]
+    fn test_tools_forwarded_when_supported() {
+        let tool = serde_json::json!({"type": "function", "function": {"name": "get_weather"}});
+        let tools = Some(vec![tool.clone()]);
+        let tool_choice = Some(serde_json::json!("auto"));
+        let mut body = serde_json::json!({});
+        apply_tools_to_body(&mut body, &tools, &tool_choice, ModelCapabilities::SUPPORTS_TOOL_CALLS);
+
+        let tools_in_body = body.get("tools").expect("tools should be present");
+        assert_eq!(tools_in_body, &serde_json::json!([tool]), "tools should match");
+
+        let tc_in_body = body.get("tool_choice").expect("tool_choice should be present");
+        assert_eq!(tc_in_body, &serde_json::json!("auto"), "tool_choice should match");
+    }
+
+    #[test]
+    fn test_no_op_when_no_tools_sent() {
+        // tools: None, tool_choice: None — body should stay empty regardless of capability
+        let mut body_no_cap = serde_json::json!({});
+        apply_tools_to_body(&mut body_no_cap, &None, &None, ModelCapabilities::empty());
+
+        let mut body_with_cap = serde_json::json!({});
+        apply_tools_to_body(&mut body_with_cap, &None, &None, ModelCapabilities::SUPPORTS_TOOL_CALLS);
+
+        assert!(body_no_cap.get("tools").is_none());
+        assert!(body_no_cap.get("tool_choice").is_none());
+        assert!(body_with_cap.get("tools").is_none());
+        assert!(body_with_cap.get("tool_choice").is_none());
+    }
+}
