@@ -334,10 +334,12 @@ export interface HfQuantizationsResponse {
 
 /**
  * Response for tool/function calling support detection.
+ *
+ * Used for both HuggingFace model metadata and local running server queries.
  */
-export interface HfToolSupportResponse {
+export interface ToolSupportResponse {
   /** Whether the model supports tool/function calling */
-  supports_tool_calling: boolean;
+  supports_tool_calls: boolean;
   /** Confidence level of the detection (0.0 to 1.0) */
   confidence: number;
   /** Detected tool calling format (e.g., "hermes", "llama3", "mistral") */

@@ -11,7 +11,7 @@ use crate::deps::GuiDeps;
 use crate::error::GuiError;
 use crate::types::{
     HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    HfSortField, HfToolSupportResponse,
+    HfSortField, ToolSupportResponse,
 };
 
 /// Download and HuggingFace operations handler.
@@ -222,7 +222,7 @@ impl<'a> DownloadOps<'a> {
     pub async fn get_hf_tool_support(
         &self,
         model_id: &str,
-    ) -> Result<HfToolSupportResponse, GuiError> {
+    ) -> Result<ToolSupportResponse, GuiError> {
         use gglib_core::ports::{ModelSource, ToolSupportDetectionInput};
 
         // Fetch model info from HuggingFace
@@ -240,7 +240,7 @@ impl<'a> DownloadOps<'a> {
             source: ModelSource::HuggingFace,
         });
 
-        Ok(HfToolSupportResponse::from(detection))
+        Ok(ToolSupportResponse::from(detection))
     }
 
     /// Get model summary by exact repo ID (direct API lookup).

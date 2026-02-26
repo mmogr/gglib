@@ -14,7 +14,7 @@ import type {
   HfSearchRequest,
   HfSearchResponse,
   HfQuantizationsResponse,
-  HfToolSupportResponse,
+  ToolSupportResponse,
 } from '../../types';
 
 /**
@@ -44,6 +44,6 @@ export async function getHfQuantizations(modelId: HfModelId): Promise<HfQuantiza
 /**
  * Get tool support information for a HuggingFace model.
  */
-export async function getHfToolSupport(modelId: HfModelId): Promise<HfToolSupportResponse> {
+export async function getHfToolSupport(modelId: HfModelId): Promise<ToolSupportResponse> {
   return getTransport().getHfToolSupport(modelId);
 }

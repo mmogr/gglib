@@ -5,11 +5,24 @@ use axum::extract::{Path, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_gui::types::{ServerInfo, StartServerRequest, StartServerResponse};
+use gglib_gui::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
 
 /// List all running servers.
 pub async fn list(State(state): State<AppState>) -> Json<Vec<ServerInfo>> {
     Json(state.gui.list_servers().await)
+}
+
+/// Get tool support status for a running server's model.
+///
+/// Sources `supports_tool_calls` from the model's `ModelCapabilities`
+/// bitflag in the database. `confidence` and `detected_format` are
+/// derived from the chat template stored in model metadata — no GGUF
+/// file parsing required.
+pub async fn tool_support(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<ToolSupportResponse>, HttpError> {
+    Ok(Json(state.gui.get_server_tool_support(id).await?))
 }
 
 // ============================================================================
