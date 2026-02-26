@@ -316,7 +316,10 @@ build-tauri:
 	# Step A: Build frontend
 	UV_USE_IO_URING=0 npm run build:tauri
 	# Step B: Unified cargo build - both CLI and Tauri app share dependency compilation
-	$(TASKSET) $(CARGO) build --release -p gglib-cli -p gglib-app
+	# custom-protocol is required for Tauri to serve bundled frontend assets via
+	# its asset protocol.  Without it the WebView falls back to devUrl and shows
+	# a blank white screen in production.
+	$(TASKSET) $(CARGO) build --release -p gglib-cli -p gglib-app --features gglib-app/custom-protocol
 	# Step C: Bundle the already-built binary into platform installers
 	# On Linux: use --bundles deb,rpm to avoid AppImage issues on Arch.
 	# linuxdeploy's embedded strip fails on Arch due to RELR relocations (linuxdeploy#272).
