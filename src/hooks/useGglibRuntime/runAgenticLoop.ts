@@ -23,8 +23,8 @@ import {
   checkToolLoop,
   pruneForBudget,
   summarizeToolResult,
-  withRetry,
 } from './agentLoop';
+import { executeToolBatch } from './toolBatchExecution';
 import {
   type PromptLayer,
   injectPromptLayers,
@@ -322,78 +322,61 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
       break;
     }
 
-    // Execute tools and UPDATE tool-call parts with results
+    // Execute tools in parallel and UPDATE tool-call parts as each one settles
     appLogger.debug('hook.runtime', 'Executing tools', { toolCount: streamResult.toolCalls.length });
-    
-    const toolCallsForApiHistory: any[] = [];
-    const toolResultsForApiHistory: any[] = [];
-    
-    for (const toolCall of streamResult.toolCalls) {
-      // Execute tool
-      const registry = getToolRegistry();
-      const result = await withRetry(
-        () =>
-          registry.executeRawCall({
-            id: toolCall.id,
-            type: 'function',
-            function: toolCall.function,
-          }),
-        { maxRetries: 2, baseDelayMs: 250 }
-      ).catch((e) => ({
-        success: false as const,
-        error: String((e as { message?: string })?.message ?? e ?? 'Unknown error'),
-      }));
 
-      appLogger.debug('hook.runtime', 'Tool executed', { toolName: toolCall.function.name, result });
+    const toolResults = await executeToolBatch(
+      streamResult.toolCalls,
+      (_index, toolCall, result) => {
+        appLogger.debug('hook.runtime', 'Tool executed', { toolName: toolCall.function.name, result });
 
-      // Create digest for working memory
-      const digest: ToolDigest = {
-        sig: toolSignature(toolCall),
-        name: toolCall.function.name,
-        ok: result.success,
-        summary: summarizeToolResult(toolCall.function.name, result),
-      };
-      agentState.toolDigests.push(digest);
-
-      // Update the tool-call part with result
-      setMessages(prev =>
-        prev.map(m => {
-          if (m.id !== assistantMessageId) return m;
-          
-          const updatedContent = Array.isArray(m.content)
-            ? m.content.map((p: any) =>
-                p.type === 'tool-call' && p.toolCallId === toolCall.id
-                  ? {
-                      ...p,
-                      result: result.success ? result.data : { error: result.error },
-                      isError: !result.success,
-                    }
-                  : p
-              )
-            : m.content;
-          
-          return { ...m, content: updatedContent as GglibContent };
-        })
-      );
-
-      // Add to API messages for next iteration (OpenAI format requires tool results)
-      toolCallsForApiHistory.push({
-        id: toolCall.id,
-        type: 'function',
-        function: {
+        // Accumulate digest for working memory
+        const digest: ToolDigest = {
+          sig: toolSignature(toolCall),
           name: toolCall.function.name,
-          arguments: toolCall.function.arguments,
-        },
-      });
+          ok: result.success,
+          summary: summarizeToolResult(toolCall.function.name, result),
+        };
+        agentState.toolDigests.push(digest);
 
-      toolResultsForApiHistory.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(result.success ? result.data : { error: result.error }),
-      });
-    }
+        // Update the tool-call part immediately as this tool completes.
+        // Functional updater avoids stale-closure overwrites from concurrent callbacks.
+        setMessages(prev =>
+          prev.map(m => {
+            if (m.id !== assistantMessageId) return m;
 
-    // Add to API messages for next iteration
+            const updatedContent = Array.isArray(m.content)
+              ? m.content.map((p: any) =>
+                  p.type === 'tool-call' && p.toolCallId === toolCall.id
+                    ? {
+                        ...p,
+                        result: result.success ? result.data : { error: result.error },
+                        isError: !result.success,
+                      }
+                    : p
+                )
+              : m.content;
+
+            return { ...m, content: updatedContent as GglibContent };
+          })
+        );
+      },
+    );
+
+    // Build API history in original toolCalls order (required by OpenAI protocol)
+    const toolCallsForApiHistory = streamResult.toolCalls.map(tc => ({
+      id: tc.id,
+      type: 'function',
+      function: { name: tc.function.name, arguments: tc.function.arguments },
+    }));
+
+    const toolResultsForApiHistory = toolResults.map((result, i) => ({
+      role: 'tool',
+      tool_call_id: streamResult.toolCalls[i].id,
+      content: JSON.stringify(result.success ? result.data : { error: result.error }),
+    }));
+
+    // Add assistant turn + tool results to API messages for next iteration
     apiMessages.push({
       role: 'assistant',
       content: streamResult.textContent || null,
