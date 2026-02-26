@@ -15,6 +15,7 @@ import {
 import type { McpTool, McpServerId } from '../clients/mcp';
 import { getToolRegistry, ToolSource } from './registry';
 import type { ToolDefinition, ToolExecutor, ToolResult } from './types';
+import { sanitizeToolName, detectCollisions } from './nameUtils';
 import { appLogger } from '../platform';
 
 /**
@@ -33,6 +34,9 @@ function mcpToolToDefinition(tool: McpTool): ToolDefinition {
 
 /**
  * Create an executor that calls an MCP tool.
+ * IMPORTANT: The executor must always call the MCP server with the original
+ * raw tool name, never the sanitized registry key. The MCP server only knows
+ * its own naming scheme.
  */
 function createMcpExecutor(serverId: McpServerId, toolName: string): ToolExecutor {
   return async (args: Record<string, unknown>): Promise<ToolResult> => {
@@ -79,29 +83,66 @@ export function registerMcpTools(serverId: McpServerId, tools: McpTool[]): numbe
   const source = getMcpSource(serverId);
   let count = 0;
 
+  // ── Collision detection ───────────────────────────────────────────────────
+  // Build the fully-namespaced raw names for the entire batch first, so that
+  // any two tools that sanitize to the same string (e.g. due to the 64-char
+  // truncation or special-char normalisation) are caught before registration.
+  const namespacedRawNames = tools.map((t) => `mcp_${serverId}_${t.name}`);
+  const collisions = detectCollisions(namespacedRawNames);
+
+  if (collisions.size > 0) {
+    for (const [sanitized, originals] of collisions) {
+      appLogger.warn('service.mcp', 'MCP tool name collision detected — skipping affected tools', {
+        serverId,
+        sanitizedName: sanitized,
+        collidingRawNames: originals,
+      });
+    }
+  }
+
+  // Flatten colliding raw names into a Set for O(1) skip checks in the loop.
+  const toSkip = new Set<string>([...collisions.values()].flat());
+
+  // ── Registration loop ─────────────────────────────────────────────────────
   for (const tool of tools) {
+    const namespacedRaw = `mcp_${serverId}_${tool.name}`;
+
+    if (toSkip.has(namespacedRaw)) {
+      // Already warned above; skip silently.
+      continue;
+    }
+
+    const sanitizedName = sanitizeToolName(namespacedRaw);
+
+    if (sanitizedName !== namespacedRaw) {
+      appLogger.warn('service.mcp', 'MCP tool name was sanitized', {
+        serverId,
+        original: namespacedRaw,
+        sanitized: sanitizedName,
+      });
+    }
+
     const definition = mcpToolToDefinition(tool);
+    // The executor closes over tool.name (raw) — it must never receive the
+    // sanitized name because the MCP server only understands its own naming.
     const executor = createMcpExecutor(serverId, tool.name);
 
     try {
-      // Use a namespaced name to avoid collisions: mcp_serverId_toolName
-      const namespacedName = `mcp_${serverId}_${tool.name}`;
       const namespacedDef: ToolDefinition = {
         ...definition,
         function: {
           ...definition.function,
-          name: namespacedName,
-          // Keep original description but add server context
-          description: definition.function.description 
+          name: sanitizedName,
+          description: definition.function.description
             ? `[MCP:${serverId}] ${definition.function.description}`
             : `MCP tool from server ${serverId}`,
         },
       };
 
-      registry.register(namespacedDef, executor, source);
+      registry.registerWithNameMapping(tool.name, serverId, sanitizedName, namespacedDef, executor, source);
       count++;
     } catch (err) {
-      // Tool might already exist from another source - log and continue
+      // Tool might already exist from another source — log and continue.
       appLogger.warn('service.mcp', 'Failed to register MCP tool', { toolName: tool.name, error: err });
     }
   }
