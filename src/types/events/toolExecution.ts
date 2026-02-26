@@ -21,8 +21,8 @@ export interface ToolCompleteEvent {
   toolCallId: string;
   toolName: string;
   timestamp: number;
-  /** Stringified result payload. */
-  result: string;
+  /** Raw result payload — not serialised. */
+  data: unknown;
   /** Elapsed wall-clock time measured with performance.now(), in milliseconds. */
   durationMs: number;
 }

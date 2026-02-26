@@ -18,7 +18,6 @@ import {
   type ToolDigest,
   DEFAULT_MAX_TOOL_ITERS,
   MAX_STAGNATION_STEPS,
-  toolSignature,
   recordAssistantProgress,
   checkToolLoop,
   pruneForBudget,
@@ -337,7 +336,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
         // Both 'tool-complete' and 'tool-error' settle a tool call.
         const isSuccess = event.type === 'tool-complete';
         const result = isSuccess
-          ? { success: true as const, data: JSON.parse(event.result) }
+          ? { success: true as const, data: event.data }
           : { success: false as const, error: event.error };
 
         appLogger.debug('hook.runtime', 'Tool settled', {
@@ -348,7 +347,6 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
 
         // Accumulate digest for working memory.
         const digest: ToolDigest = {
-          sig: toolSignature({ id: event.toolCallId, type: 'function', function: { name: event.toolName, arguments: '' } }),
           name: event.toolName,
           ok: isSuccess,
           summary: summarizeToolResult(event.toolName, result),

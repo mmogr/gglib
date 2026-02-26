@@ -44,7 +44,6 @@ export interface ChatMessage {
 }
 
 export interface ToolDigest {
-  sig: string;
   name: string;
   ok: boolean;
   summary: string;

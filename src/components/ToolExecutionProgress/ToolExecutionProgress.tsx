@@ -21,6 +21,18 @@ import { Icon } from '../ui/Icon';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
+/**
+ * Extends the base ToolCallPart with runtime fields stamped by runAgenticLoop
+ * as each tool settles. These fields are not part of the @assistant-ui/react
+ * type surface because they are added dynamically.
+ */
+type AugmentedToolCallPart = ToolCallPart & {
+  /** Elapsed wall-clock time in milliseconds (present once the tool has settled). */
+  durationMs?: number;
+  /** True when the tool result represents an error condition. */
+  isError?: boolean;
+};
+
 type ToolRowState = 'running' | 'complete' | 'error';
 
 interface ToolRowData {
@@ -56,19 +68,22 @@ function formatDuration(ms: number): string {
 
 /**
  * Map a tool-call content part to display data.
- * `durationMs` is a custom field stamped by runAgenticLoop when each tool settles.
+ * `durationMs` and `isError` are custom fields stamped by runAgenticLoop when each tool settles.
  */
 function classifyPart(part: ToolCallPart): ToolRowData {
-  const durationMs =
-    'durationMs' in part ? (part as any).durationMs as number : undefined;
+  const augmented = part as AugmentedToolCallPart;
+  const durationMs = augmented.durationMs;
 
   if (!('result' in part)) {
     return { toolCallId: part.toolCallId, toolName: part.toolName, state: 'running' };
   }
 
-  if ((part as any).isError === true) {
-    const raw = part.result as any;
-    const errorSummary = (raw?.error ?? String(raw) ?? '').slice(0, 80);
+  if (augmented.isError === true) {
+    const raw = part.result as { error?: string } | string | null;
+    const errorSummary = (typeof raw === 'object' && raw !== null
+      ? (raw.error ?? String(raw))
+      : String(raw ?? '')
+    ).slice(0, 80);
     return {
       toolCallId: part.toolCallId,
       toolName: part.toolName,

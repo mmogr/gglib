@@ -156,7 +156,7 @@ export async function executeToolBatch(
               toolCallId: toolCall.id,
               toolName: toolCall.function.name,
               timestamp: Date.now(),
-              result: result.success ? JSON.stringify(result.data) : '{}',
+              data: result.success ? result.data : {},
               durationMs,
             });
           },

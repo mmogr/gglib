@@ -9,6 +9,16 @@ import { Stack } from '../primitives';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
+/**
+ * Extends the base ToolCallPart with runtime fields stamped by runAgenticLoop
+ * as each tool settles. These fields are not part of the @assistant-ui/react
+ * type surface because they are added dynamically.
+ */
+type AugmentedToolCallPart = ToolCallPart & {
+  /** Elapsed wall-clock time in milliseconds (present once the tool has settled). */
+  durationMs?: number;
+};
+
 interface ToolDetailsModalProps {
   toolCalls: ToolCallPart[];
   isOpen?: boolean;
@@ -99,7 +109,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
           const formattedArgs = JSON.stringify(call.args, null, 2);
           const result = 'result' in call ? call.result : null;
           const formattedResult = result ? JSON.stringify(result, null, 2) : 'No result';
-          const durationMs = 'durationMs' in call ? (call as any).durationMs as number : undefined;
+          const durationMs = (call as AugmentedToolCallPart).durationMs;
 
           const StatusIcon = getStatusIcon(call);
 
