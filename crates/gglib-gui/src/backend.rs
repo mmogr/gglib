@@ -335,7 +335,7 @@ impl GuiBackend {
     pub async fn get_hf_tool_support(
         &self,
         model_id: &str,
-    ) -> Result<HfToolSupportResponse, GuiError> {
+    ) -> Result<ToolSupportResponse, GuiError> {
         self.download_ops().get_hf_tool_support(model_id).await
     }
 

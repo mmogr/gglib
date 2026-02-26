@@ -15,7 +15,7 @@ import type {
   HfSearchResponse,
   HfQuantization,
   HfQuantizationsResponse,
-  HfToolSupportResponse,
+  ToolSupportResponse,
   HfSortField,
   ModelFilterOptions,
   RangeValues,
@@ -33,7 +33,7 @@ export type {
   HfSearchResponse,
   HfQuantization,
   HfQuantizationsResponse,
-  HfToolSupportResponse,
+  ToolSupportResponse,
   HfSortField,
   ModelFilterOptions,
   RangeValues,
@@ -88,7 +88,7 @@ export interface ModelsTransport {
   browseHfModels(params: HfSearchRequest): Promise<HfSearchResponse>;
   getHfModelSummary(modelId: HfModelId): Promise<HfModelSummary>;
   getHfQuantizations(modelId: HfModelId): Promise<HfQuantizationsResponse>;
-  getHfToolSupport(modelId: HfModelId): Promise<HfToolSupportResponse>;
+  getHfToolSupport(modelId: HfModelId): Promise<ToolSupportResponse>;
 
   // System info
   getSystemMemory(): Promise<SystemMemoryInfo | null>;

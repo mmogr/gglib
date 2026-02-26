@@ -104,17 +104,19 @@ pub struct HfQuantizationsResponse {
 }
 
 /// Response for tool/function calling support detection.
+///
+/// Used for both HuggingFace model metadata and local running server queries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HfToolSupportResponse {
-    pub supports_tool_calling: bool,
+pub struct ToolSupportResponse {
+    pub supports_tool_calls: bool,
     pub confidence: f32,
     pub detected_format: Option<String>,
 }
 
-impl From<gglib_core::ports::ToolSupportDetection> for HfToolSupportResponse {
+impl From<gglib_core::ports::ToolSupportDetection> for ToolSupportResponse {
     fn from(detection: gglib_core::ports::ToolSupportDetection) -> Self {
         Self {
-            supports_tool_calling: detection.supports_tool_calling,
+            supports_tool_calls: detection.supports_tool_calling,
             confidence: detection.confidence,
             detected_format: detection.detected_format.map(|f| f.to_string()),
         }

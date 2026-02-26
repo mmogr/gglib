@@ -11,7 +11,7 @@ import {
   getHfToolSupport,
 } from '../../../../src/services/clients/huggingface';
 import { getTransport, _resetTransport } from '../../../../src/services/transport';
-import type { HfSearchResponse, HfQuantizationsResponse, HfToolSupportResponse } from '../../../../src/types';
+import type { HfSearchResponse, HfQuantizationsResponse, ToolSupportResponse } from '../../../../src/types';
 
 // Mock the transport module
 vi.mock('../../../../src/services/transport', () => {
@@ -76,9 +76,10 @@ describe('services/clients/huggingface', () => {
   describe('getHfToolSupport', () => {
     it('delegates to transport.getHfToolSupport()', async () => {
       const modelId = 'TheBloke/Llama-2-7B-GGUF';
-      const mockResponse: HfToolSupportResponse = {
-        supports_tools: true,
-        tool_format: 'chatml',
+      const mockResponse: ToolSupportResponse = {
+        supports_tool_calls: true,
+        confidence: 0.95,
+        detected_format: 'chatml',
       };
       vi.mocked(mockTransport.getHfToolSupport).mockResolvedValue(mockResponse);
 
