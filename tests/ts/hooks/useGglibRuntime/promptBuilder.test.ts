@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildSystemPrompt,
+  injectPromptLayers,
   TOOL_INSTRUCTIONS_LAYER,
   FORMAT_REMINDER_LAYER,
   FORMAT_REMINDER,
@@ -188,4 +189,93 @@ describe('tool injection regression (any base prompt)', () => {
       expect(result.indexOf(base)).toBeLessThan(result.indexOf(TOOL_INSTRUCTIONS_LAYER.content));
     },
   );
+});
+
+// =============================================================================
+// injectPromptLayers
+// =============================================================================
+
+describe('injectPromptLayers', () => {
+  const toolLayer = layer({ id: 'tool', content: 'Use tools.' });
+
+  describe('finds and modifies the first system message', () => {
+    it('composes layers into the existing system message content', () => {
+      const messages = [
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user',   content: 'Hello!' },
+      ];
+      const result = injectPromptLayers(messages, [toolLayer]);
+      expect(result[0].content).toBe('You are helpful.\n\nUse tools.');
+    });
+
+    it('leaves all non-system messages completely unchanged', () => {
+      const messages = [
+        { role: 'system',    content: 'Base.' },
+        { role: 'user',      content: 'Hello!' },
+        { role: 'assistant', content: 'Hi there.' },
+      ];
+      const result = injectPromptLayers(messages, [toolLayer]);
+      // Structural identity for non-system messages.
+      expect(result[1]).toEqual({ role: 'user',      content: 'Hello!' });
+      expect(result[2]).toEqual({ role: 'assistant', content: 'Hi there.' });
+      expect(result).toHaveLength(3);
+    });
+  });
+
+  describe('creates a system message when none exists', () => {
+    it('prepends a new system message built from the layers alone', () => {
+      const messages = [
+        { role: 'user',      content: 'Hello!' },
+        { role: 'assistant', content: 'Hi.' },
+      ];
+      const result = injectPromptLayers(messages, [toolLayer]);
+      expect(result).toHaveLength(3);
+      expect(result[0]).toEqual({ role: 'system', content: 'Use tools.' });
+      expect(result[1]).toEqual({ role: 'user',   content: 'Hello!' });
+      expect(result[2]).toEqual({ role: 'assistant', content: 'Hi.' });
+    });
+  });
+
+  describe('immutability', () => {
+    it('always returns a new array', () => {
+      const messages = [{ role: 'system', content: 'Base.' }];
+      const result = injectPromptLayers(messages, [toolLayer]);
+      expect(result).not.toBe(messages);
+    });
+
+    it('does not mutate the original system message object', () => {
+      const original = { role: 'system', content: 'Original.' };
+      const messages = [original, { role: 'user', content: 'Hi.' }];
+      injectPromptLayers(messages, [toolLayer]);
+      // The original object reference must be untouched.
+      expect(original.content).toBe('Original.');
+    });
+
+    it('returns a defensive clone when layers array is empty', () => {
+      const messages = [{ role: 'system', content: 'Base.' }];
+      const result = injectPromptLayers(messages, []);
+      expect(result).not.toBe(messages);
+      // Content unchanged with no layers.
+      expect(result[0].content).toBe('Base.');
+    });
+  });
+
+  describe('multiple system messages (edge case)', () => {
+    it('targets only the first system message', () => {
+      const sys1 = { role: 'system', content: 'First system.' };
+      const sys2 = { role: 'system', content: 'Second system.' };
+      const user = { role: 'user',   content: 'Hello.' };
+      const messages = [sys1, sys2, user];
+
+      const result = injectPromptLayers(messages, [toolLayer]);
+
+      // First system message gets the injected layer.
+      expect(result[0].content).toBe('First system.\n\nUse tools.');
+      // Second system message is completely untouched — same content, same shape.
+      expect(result[1].content).toBe('Second system.');
+      expect(result[1]).toEqual({ role: 'system', content: 'Second system.' });
+      // Non-system message is untouched too.
+      expect(result[2]).toEqual({ role: 'user', content: 'Hello.' });
+    });
+  });
 });
