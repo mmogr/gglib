@@ -4,7 +4,7 @@
  */
 
 import type { ModelId } from './ids';
-import type { ServeConfig, ServerInfo } from '../../../types';
+import type { ServeConfig, ServerInfo, ToolSupportResponse } from '../../../types';
 
 // Re-export existing types
 export type { ServeConfig, ServerInfo };
@@ -29,4 +29,7 @@ export interface ServersTransport {
 
   /** List all running servers. */
   listServers(): Promise<ServerInfo[]>;
+
+  /** Retrieve tool-calling capability for a running server's model. */
+  getServerToolSupport(modelId: ModelId): Promise<ToolSupportResponse>;
 }

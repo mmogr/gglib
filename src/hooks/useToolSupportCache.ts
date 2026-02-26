@@ -88,7 +88,7 @@ export function useToolSupportCache(modelId: string | null): UseToolSupportResul
 
     const fetchPromise = getHfToolSupport(modelId)
       .then((response) => {
-        const supports = response.supports_tool_calling;
+        const supports = response.supports_tool_calls;
         toolSupportCache.set(modelId, { supports, loading: false });
         setResult({ supports, loading: false });
         return supports;

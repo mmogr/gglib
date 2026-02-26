@@ -17,6 +17,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useVoiceModeContext } from '../contexts/VoiceModeContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { useServerState } from '../services/serverEvents';
+import { getServerToolSupport } from '../services/clients/servers';
 import {
   listConversations,
   createConversation,
@@ -82,6 +83,26 @@ export default function ChatPage({
   const maxToolIterations = settings?.maxToolIterations ?? undefined;
   const maxStagnationSteps = settings?.maxStagnationSteps ?? undefined;
 
+  // Tool support capability for the active model.
+  // Fetched once on mount (model identity is fixed for the lifetime of ChatPage).
+  // null = unknown (permissive fallback - never gates tools when status is uncertain).
+  const [supportsToolCalls, setSupportsToolCalls] = useState<boolean | null>(null);
+  const [toolFormat, setToolFormat] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getServerToolSupport(modelId)
+      .then((data) => {
+        if (!cancelled) {
+          setSupportsToolCalls(data.supports_tool_calls);
+          setToolFormat(data.detected_format ?? null);
+        }
+      })
+      .catch(() => {
+        // Permissive fallback: leave supportsToolCalls as null (unknown)
+      });
+    return () => { cancelled = true; };
+  }, [modelId]);
+
   // Runtime - now with external message state
   const { runtime, messages, setMessages, isRunning, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
@@ -89,6 +110,7 @@ export default function ChatPage({
     onError: (error) => setChatError(error.message),
     maxToolIterations,
     maxStagnationSteps,
+    supportsToolCalls,
   });
 
   // Server state from registry - derives isServerRunning reactively
@@ -461,6 +483,8 @@ export default function ChatPage({
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
               voice={voice ?? undefined}
+              supportsToolCalls={supportsToolCalls}
+              toolFormat={toolFormat}
             />
           </div>
         </div>
