@@ -6,6 +6,8 @@ import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
 import { cn } from '../../utils/cn';
 import { Stack } from '../primitives';
+import { getToolRegistry } from '../../services/tools/registry';
+import { formatToolDisplayName } from '../../services/tools/nameUtils';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
@@ -64,12 +66,11 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
   };
 
   const formatToolName = (name: string): string => {
-    // Remove mcp_ prefix and format
-    const cleaned = name.replace(/^mcp_\d+_/, '');
-    return cleaned
-      .split(/[-_]/)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    // Resolve sanitized registry key to the original raw MCP tool name so that
+    // tools with dots, spaces, or other special characters display correctly.
+    // Falls back to the name itself for built-in tools with no mapping.
+    const raw = getToolRegistry().getOriginalName(name) ?? name;
+    return formatToolDisplayName(raw);
   };
 
   const getStatusIcon = (call: ToolCallPart): typeof CheckCircle2 => {

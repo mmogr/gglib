@@ -31,12 +31,28 @@ interface RegisteredToolWithSource extends RegisteredTool {
  * Registry for managing tools available to the LLM.
  * Handles tool registration, lookup, and execution.
  */
+/**
+ * Metadata stored in the reverse name map for each sanitized MCP tool name.
+ */
+export interface NameMapEntry {
+  /** The original raw tool name from the MCP server (e.g. 'get data!'). */
+  originalName: string;
+  /** The MCP server ID that owns this tool. */
+  serverId: string;
+}
+
 export class ToolRegistry {
   private tools = new Map<string, RegisteredToolWithSource>();
   // Secure-by-default: tools are disabled unless explicitly enabled.
   // We keep an allowlist instead of a denylist so registration cannot
   // accidentally re-enable tools (e.g., during MCP resync).
   private enabledTools = new Set<string>();
+
+  /**
+   * Reverse map: sanitized tool name → { originalName, serverId }.
+   * Populated only for MCP tools registered via registerWithNameMapping().
+   */
+  private _nameMap = new Map<string, NameMapEntry>();
 
   /**
    * Register a tool with its definition and executor.
@@ -54,6 +70,48 @@ export class ToolRegistry {
     // Newly registered tools are disabled by default.
     // Intentionally do not mutate enable-state here so that if a tool is
     // re-registered after being enabled (e.g., MCP resync), it stays enabled.
+  }
+
+  /**
+   * Register an MCP tool and record the sanitized → original name mapping.
+   *
+   * Use this instead of register() for all MCP tools so that UI components
+   * and routing logic can retrieve the original MCP name and owning server
+   * from a sanitized name.
+   *
+   * @param originalName - Raw tool name from the MCP server (e.g. 'get data!')
+   * @param serverId     - MCP server ID that owns this tool
+   * @param sanitizedName - Sanitized name used as the registry key
+   * @param definition   - ToolDefinition whose function.name must equal sanitizedName
+   * @param execute      - Executor (must call MCP with originalName, not sanitizedName)
+   * @param source       - Tool source (e.g. 'mcp:server-id')
+   */
+  registerWithNameMapping(
+    originalName: string,
+    serverId: string,
+    sanitizedName: string,
+    definition: ToolDefinition,
+    execute: ToolExecutor,
+    source: ToolSource,
+  ): void {
+    this._nameMap.set(sanitizedName, { originalName, serverId });
+    this.register(definition, execute, source);
+  }
+
+  /**
+   * Look up the original MCP tool name for a sanitized registry key.
+   * @returns Original raw name, or undefined if no mapping exists.
+   */
+  getOriginalName(sanitizedName: string): string | undefined {
+    return this._nameMap.get(sanitizedName)?.originalName;
+  }
+
+  /**
+   * Look up the MCP server ID that owns a sanitized tool name.
+   * @returns Server ID string, or undefined if no mapping exists.
+   */
+  getServerId(sanitizedName: string): string | undefined {
+    return this._nameMap.get(sanitizedName)?.serverId;
   }
 
   /**
@@ -209,16 +267,18 @@ export class ToolRegistry {
   }
 
   /**
-   * Clear all registered tools.
+   * Clear all registered tools and the reverse name map.
    */
   clear(): void {
     this.tools.clear();
     this.enabledTools.clear();
+    this._nameMap.clear();
   }
 
   /**
    * Unregister all tools from a specific source.
    * Useful for removing all tools when an MCP server disconnects.
+   * Also removes any reverse name-map entries owned by the same server.
    * @param source - Source identifier (e.g., 'mcp:server-1')
    * @returns Number of tools removed
    */
@@ -230,6 +290,18 @@ export class ToolRegistry {
         count++;
       }
     }
+
+    // Clean up reverse name-map entries for this server.
+    // Extract serverId from 'mcp:${serverId}' source string.
+    if (source.startsWith('mcp:')) {
+      const serverId = source.slice('mcp:'.length);
+      for (const [key, value] of this._nameMap.entries()) {
+        if (value.serverId === serverId) {
+          this._nameMap.delete(key);
+        }
+      }
+    }
+
     return count;
   }
 

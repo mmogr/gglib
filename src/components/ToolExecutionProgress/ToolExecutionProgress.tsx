@@ -14,6 +14,8 @@ import type { ThreadMessage } from '@assistant-ui/react';
 import { CheckCircle2, ChevronDown, ChevronRight, Loader2, XCircle } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { Icon } from '../ui/Icon';
+import { getToolRegistry } from '../../services/tools/registry';
+import { formatToolDisplayName } from '../../services/tools/nameUtils';
 
 // =============================================================================
 // Types
@@ -49,14 +51,15 @@ interface ToolRowData {
 // =============================================================================
 
 /**
- * Strip mcp_ prefix and convert snake_case / kebab-case to Title Case.
+ * Resolve a (possibly sanitized) tool registry key to a human-readable label.
+ *
+ * Looks up the original raw MCP tool name via the reverse name map so that
+ * tools with special characters (dots, spaces, unicode) display correctly.
+ * Falls back to the sanitized name itself for non-MCP / built-in tools.
  */
 function formatToolName(name: string): string {
-  const cleaned = name.replace(/^mcp_\d+_/, '');
-  return cleaned
-    .split(/[-_]/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  const raw = getToolRegistry().getOriginalName(name) ?? name;
+  return formatToolDisplayName(raw);
 }
 
 /**
