@@ -15,6 +15,7 @@ import { threadMessageToTranscriptMarkdown } from '../../../utils/messages';
 import { MessageActionsContext } from './MessageActionsContext';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
+import { ToolExecutionProgress } from '../../ToolExecutionProgress';
 import { useDeepResearchContext } from '../context/DeepResearchContext';
 import { ResearchArtifact } from '../../DeepResearch';
 import type { GglibMessageCustom } from '../../../types/messages';
@@ -205,6 +206,7 @@ export const AssistantMessageBubble: React.FC = () => {
           <span className="text-text-muted animate-blink">…</span>
         )}
       </div>
+      <ToolExecutionProgress />
       <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <SpeakButton message={message} />
         <ActionBarPrimitive.Copy />
