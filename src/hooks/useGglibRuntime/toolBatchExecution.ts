@@ -3,8 +3,9 @@
  *
  * Houses the concurrency limiter, per-tool timeout wrapper, and the batch
  * runner. Intentionally decoupled from React — callers supply an
- * onToolSettled callback to handle UI updates and digest accumulation as each
- * tool completes, without waiting for the full batch to finish.
+ * onToolEvent callback that receives lifecycle events ('tool-start',
+ * 'tool-complete', 'tool-error') as each tool progresses, enabling live UI
+ * updates and telemetry without waiting for the full batch to finish.
  *
  * @module toolBatchExecution
  */
@@ -14,6 +15,7 @@ import type { AccumulatedToolCall } from './accumulateToolCalls';
 import type { ToolResult } from '../../services/tools';
 import { getToolRegistry } from '../../services/tools';
 import { withRetry, MAX_PARALLEL_TOOLS, TOOL_TIMEOUT_MS } from './agentLoop';
+import type { OnToolEvent } from '../../types/events/toolExecution';
 
 // =============================================================================
 // Concurrency limiter
@@ -82,53 +84,40 @@ export function withToolTimeout<T>(fn: () => Promise<T>, ms: number): Promise<T>
 // Batch executor
 // =============================================================================
 
-/**
- * Callback invoked immediately as each individual tool settles.
- *
- * @param index    The original position in the toolCalls array.
- * @param toolCall The tool call that settled.
- * @param result   Normalised ToolResult (success or failure).
- */
-export type OnToolSettled = (
-  index: number,
-  toolCall: AccumulatedToolCall,
-  result: ToolResult,
-) => void;
+// OnToolSettled is superseded by OnToolEvent (re-exported for any legacy callers).
+export type { OnToolEvent } from '../../types/events/toolExecution';
 
 /**
  * Execute all tool calls concurrently with a concurrency cap and per-tool
  * timeout, streaming results to the caller as each tool finishes.
  *
  * Guarantees:
- * - `onToolSettled` is called as soon as each individual tool settles, so the
- *   UI can reflect completed tools without waiting for the whole batch.
- * - The original array `index` is preserved in `onToolSettled`, regardless of
- *   which promise resolves first, so order-sensitive data structures stay
- *   consistent.
- * - Synchronous errors thrown by `onToolSettled` are caught and logged so a
+ * - `onToolEvent` is called for each lifecycle stage ('tool-start',
+ *   'tool-complete', 'tool-error') so callers can update UI and telemetry
+ *   without waiting for the whole batch to finish.
+ * - `performance.now()` is used for duration measurement — immune to system
+ *   clock adjustments and higher-precision than `Date.now()`.
+ * - The original array `index` is preserved in results, regardless of which
+ *   promise resolves first, so order-sensitive data structures stay consistent.
+ * - Synchronous errors thrown by `onToolEvent` are caught and logged so a
  *   UI rendering failure cannot crash the rest of the batch.
  * - Returns `ToolResult[]` in the same order as the input array, ready for
  *   inclusion in the API message history.
  */
 export async function executeToolBatch(
   toolCalls: AccumulatedToolCall[],
-  onToolSettled: OnToolSettled,
+  onToolEvent: OnToolEvent,
 ): Promise<ToolResult[]> {
   const limit = createConcurrencyLimiter(MAX_PARALLEL_TOOLS);
   const results: ToolResult[] = new Array(toolCalls.length);
 
-  const notifySettled = (
-    index: number,
-    toolCall: AccumulatedToolCall,
-    result: ToolResult,
-  ): void => {
-    results[index] = result;
+  const safeEmit = (event: Parameters<OnToolEvent>[0]): void => {
     try {
-      onToolSettled(index, toolCall, result);
+      onToolEvent(event);
     } catch (cbErr) {
-      appLogger.warn('hook.runtime', 'onToolSettled callback threw', {
-        index,
-        toolName: toolCall.function.name,
+      appLogger.warn('hook.runtime', 'onToolEvent callback threw', {
+        type: event.type,
+        toolName: event.toolName,
         error: String(cbErr),
       });
     }
@@ -136,8 +125,17 @@ export async function executeToolBatch(
 
   await Promise.allSettled(
     toolCalls.map((toolCall, index) =>
-      limit(() =>
-        withToolTimeout(
+      limit(() => {
+        // Record start time before invoking the tool; emit 'tool-start'.
+        const startPerf = performance.now();
+        safeEmit({
+          type: 'tool-start',
+          toolCallId: toolCall.id,
+          toolName: toolCall.function.name,
+          timestamp: Date.now(),
+        });
+
+        return withToolTimeout(
           () =>
             withRetry(
               () =>
@@ -149,18 +147,36 @@ export async function executeToolBatch(
               { maxRetries: 2, baseDelayMs: 250 },
             ),
           TOOL_TIMEOUT_MS,
-        ),
-      ).then(
-        (result) => {
-          notifySettled(index, toolCall, result);
-        },
-        (err: unknown) => {
-          const error = `[${toolCall.function.name}] ${String(
-            (err as { message?: string })?.message ?? err ?? 'Unknown error',
-          )}`;
-          notifySettled(index, toolCall, { success: false, error });
-        },
-      ),
+        ).then(
+          (result) => {
+            const durationMs = performance.now() - startPerf;
+            results[index] = result;
+            safeEmit({
+              type: 'tool-complete',
+              toolCallId: toolCall.id,
+              toolName: toolCall.function.name,
+              timestamp: Date.now(),
+              result: result.success ? JSON.stringify(result.data) : '{}',
+              durationMs,
+            });
+          },
+          (err: unknown) => {
+            const durationMs = performance.now() - startPerf;
+            const error = `[${toolCall.function.name}] ${String(
+              (err as { message?: string })?.message ?? err ?? 'Unknown error',
+            )}`;
+            results[index] = { success: false, error };
+            safeEmit({
+              type: 'tool-error',
+              toolCallId: toolCall.id,
+              toolName: toolCall.function.name,
+              timestamp: Date.now(),
+              error,
+              durationMs,
+            });
+          },
+        );
+      }),
     ),
   );
 

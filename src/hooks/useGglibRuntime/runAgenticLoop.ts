@@ -25,6 +25,7 @@ import {
   summarizeToolResult,
 } from './agentLoop';
 import { executeToolBatch } from './toolBatchExecution';
+import type { ToolExecutionEvent } from '../../types/events/toolExecution';
 import {
   type PromptLayer,
   injectPromptLayers,
@@ -327,19 +328,35 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
 
     const toolResults = await executeToolBatch(
       streamResult.toolCalls,
-      (_index, toolCall, result) => {
-        appLogger.debug('hook.runtime', 'Tool executed', { toolName: toolCall.function.name, result });
+      (event: ToolExecutionEvent) => {
+        if (event.type === 'tool-start') {
+          appLogger.debug('hook.runtime', 'Tool started', { toolName: event.toolName });
+          return;
+        }
 
-        // Accumulate digest for working memory
+        // Both 'tool-complete' and 'tool-error' settle a tool call.
+        const isSuccess = event.type === 'tool-complete';
+        const result = isSuccess
+          ? { success: true as const, data: JSON.parse(event.result) }
+          : { success: false as const, error: event.error };
+
+        appLogger.debug('hook.runtime', 'Tool settled', {
+          toolName: event.toolName,
+          type: event.type,
+          durationMs: event.durationMs,
+        });
+
+        // Accumulate digest for working memory.
         const digest: ToolDigest = {
-          sig: toolSignature(toolCall),
-          name: toolCall.function.name,
-          ok: result.success,
-          summary: summarizeToolResult(toolCall.function.name, result),
+          sig: toolSignature({ id: event.toolCallId, type: 'function', function: { name: event.toolName, arguments: '' } }),
+          name: event.toolName,
+          ok: isSuccess,
+          summary: summarizeToolResult(event.toolName, result),
         };
         agentState.toolDigests.push(digest);
 
-        // Update the tool-call part immediately as this tool completes.
+        // Update the tool-call part immediately as this tool settles.
+        // Stamp durationMs alongside result so UI can show per-tool timing.
         // Functional updater avoids stale-closure overwrites from concurrent callbacks.
         setMessages(prev =>
           prev.map(m => {
@@ -347,11 +364,12 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
 
             const updatedContent = Array.isArray(m.content)
               ? m.content.map((p: any) =>
-                  p.type === 'tool-call' && p.toolCallId === toolCall.id
+                  p.type === 'tool-call' && p.toolCallId === event.toolCallId
                     ? {
                         ...p,
-                        result: result.success ? result.data : { error: result.error },
-                        isError: !result.success,
+                        result: isSuccess ? result.data : { error: event.error },
+                        isError: !isSuccess,
+                        durationMs: event.durationMs,
                       }
                     : p
                 )
