@@ -11,7 +11,7 @@ import { VoiceOverlay } from '../components/VoiceOverlay';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
-import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT as RUNTIME_DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
+import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
 import { useVoiceModeContext } from '../contexts/VoiceModeContext';
@@ -29,9 +29,6 @@ import type { ConversationSummary } from '../services/clients/chat';
 import { cn } from '../utils/cn';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
-// Base prompt stored on the conversation by default.
-// Tool availability is handled dynamically at request-time.
-const DEFAULT_SYSTEM_PROMPT = RUNTIME_DEFAULT_SYSTEM_PROMPT;
 
 interface ChatPageProps {
   serverPort: number;
