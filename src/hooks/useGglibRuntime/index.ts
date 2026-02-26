@@ -62,8 +62,6 @@ export {
   withRetry,
   recordAssistantProgress,
   checkToolLoop,
-  buildWorkingMemory,
-  upsertWorkingMemory,
   pruneForBudget,
   summarizeToolResult,
 } from './agentLoop';
@@ -71,6 +69,8 @@ export {
 // Prompt composition (exported for testing and reuse)
 export {
   buildSystemPrompt,
+  injectPromptLayers,
+  createWorkingMemoryLayer,
   TOOL_INSTRUCTIONS_LAYER,
   FORMAT_REMINDER,
   FORMAT_REMINDER_LAYER,
