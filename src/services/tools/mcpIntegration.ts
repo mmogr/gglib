@@ -139,7 +139,7 @@ export function registerMcpTools(serverId: McpServerId, tools: McpTool[]): numbe
         },
       };
 
-      registry.registerWithNameMapping(tool.name, serverId, sanitizedName, namespacedDef, executor, source);
+      registry.registerWithNameMapping(tool.name, String(serverId), sanitizedName, namespacedDef, executor, source);
       count++;
     } catch (err) {
       // Tool might already exist from another source — log and continue.
