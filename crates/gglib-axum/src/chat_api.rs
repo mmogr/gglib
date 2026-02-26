@@ -372,10 +372,10 @@ fn apply_tools_to_body(
     capabilities: gglib_core::domain::ModelCapabilities,
 ) {
     if capabilities.contains(gglib_core::domain::ModelCapabilities::SUPPORTS_TOOL_CALLS) {
-        if let Some(tools) = tools {
-            if !tools.is_empty() {
-                body["tools"] = serde_json::json!(tools);
-            }
+        if let Some(tools) = tools
+            && !tools.is_empty()
+        {
+            body["tools"] = serde_json::json!(tools);
         }
         if let Some(tc) = tool_choice {
             body["tool_choice"] = serde_json::json!(tc);
