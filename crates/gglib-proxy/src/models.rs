@@ -171,7 +171,8 @@ pub struct ChatCompletionChunk {
 pub struct ChatChunkChoice {
     pub index: u32,
     pub delta: ChatDelta,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // finish_reason must serialize as `null` for intermediate chunks per the
+    // OpenAI streaming spec — intentionally NOT using skip_serializing_if here.
     pub finish_reason: Option<String>,
 }
 
