@@ -19,6 +19,10 @@ export const DEFAULT_MAX_TOOL_ITERS = 25;
 export const MAX_SAME_SIGNATURE_HITS = 2;
 export const MAX_STAGNATION_STEPS = 5;
 
+/** Parallel tool execution */
+export const MAX_PARALLEL_TOOLS = 5;
+export const TOOL_TIMEOUT_MS = 30_000;
+
 /** Memory management */
 export const MAX_CONTEXT_CHARS = 180_000;
 export const KEEP_LAST_TOOL_MESSAGES = 10;
@@ -40,7 +44,6 @@ export interface ChatMessage {
 }
 
 export interface ToolDigest {
-  sig: string;
   name: string;
   ok: boolean;
   summary: string;
