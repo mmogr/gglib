@@ -91,6 +91,13 @@ export interface RunAgenticLoopOptions {
   mkAssistantMessage: (custom?: any) => GglibMessage;
   timingTracker?: ReasoningTimingTracker;
   setCurrentStreamingAssistantMessageId?: (id: string | null) => void;
+  /**
+   * Whether the active model supports tool/function calling.
+   * - `true`  → tools sent normally
+   * - `false` → tools stripped (client-side defense-in-depth alongside backend gating)
+   * - `null` / `undefined` → unknown; treated as supported (permissive fallback)
+   */
+  supportsToolCalls?: boolean | null;
 }
 
 /**
@@ -115,23 +122,36 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     mkAssistantMessage: mkAssistant,
     timingTracker,
     setCurrentStreamingAssistantMessageId,
+    supportsToolCalls,
   } = options;
 
   let iteration = 0;
 
   // Get tool definitions
   const toolDefinitions = getToolDefinitions();
-  const hasTools = toolDefinitions.length > 0;
+
+  // Client-side gating: if model is known to NOT support tools, strip them.
+  // null/undefined (unknown) → permissive; only explicit false triggers stripping.
+  const effectiveToolDefs =
+    supportsToolCalls === false ? [] : toolDefinitions;
+
+  if (supportsToolCalls === false && toolDefinitions.length > 0) {
+    appLogger.info('hook.runtime', 'Tool calls suppressed: model does not support tools', {
+      skippedTools: toolDefinitions.length,
+    });
+  }
+
+  const hasTools = effectiveToolDefs.length > 0;
 
   appLogger.debug('hook.runtime', 'Starting agentic loop', {
     maxIterations: maxToolIterations,
     maxStagnation: maxStagnationSteps,
-    tools: hasTools ? toolDefinitions.length : 0,
+    tools: hasTools ? effectiveToolDefs.length : 0,
   });
   
   // Log available tool names for debugging
   if (hasTools) {
-    appLogger.debug('hook.runtime', 'Available tools', { toolNames: toolDefinitions.map(t => t.function.name) });
+    appLogger.debug('hook.runtime', 'Available tools', { toolNames: effectiveToolDefs.map(t => t.function.name) });
   }
 
   // Initialize agent state
@@ -214,7 +234,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     const streamResult = await streamModelResponse({
       serverPort: selectedServerPort,
       messages: messagesForLLM,
-      toolDefinitions,
+      toolDefinitions: effectiveToolDefs,
       abortSignal,
       
       // Update THIS message's content by ID

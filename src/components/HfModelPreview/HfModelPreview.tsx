@@ -12,7 +12,7 @@ import {
   Wrench,
   XCircle,
 } from 'lucide-react';
-import { HfModelSummary, HfQuantization, HfQuantizationsResponse, HfToolSupportResponse, FitStatus } from '../../types';
+import { HfModelSummary, HfQuantization, HfQuantizationsResponse, ToolSupportResponse, FitStatus } from '../../types';
 import { getHfQuantizations, getHfToolSupport } from '../../services/clients/huggingface';
 import { openUrl } from '../../services/platform';
 import { formatBytes, formatNumber, getHuggingFaceModelUrl } from '../../utils/format';
@@ -79,7 +79,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
   const [quantError, setQuantError] = useState<string | null>(null);
   
   // Tool support detection state
-  const [toolSupport, setToolSupport] = useState<HfToolSupportResponse | null>(null);
+  const [toolSupport, setToolSupport] = useState<ToolSupportResponse | null>(null);
   const [loadingToolSupport, setLoadingToolSupport] = useState(true);
 
   // Memory fit checking
@@ -213,7 +213,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
             </span>
           )}
           {/* Tool support badge - only show when loaded and supported */}
-          {!loadingToolSupport && toolSupport?.supports_tool_calling && (
+          {!loadingToolSupport && toolSupport?.supports_tool_calls && (
             <span 
               className="inline-flex items-center gap-1 px-sm py-xs bg-[rgba(37,99,235,0.15)] text-primary-light rounded-base text-xs font-medium cursor-help transition-colors duration-150 ease-linear hover:bg-[rgba(37,99,235,0.25)]"
               title={getToolSupportTooltip()}

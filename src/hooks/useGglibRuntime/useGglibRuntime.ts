@@ -26,6 +26,13 @@ export interface UseGglibRuntimeOptions {
   maxToolIterations?: number;
   maxStagnationSteps?: number;
   onError?: (error: Error) => void;
+  /**
+   * Whether the active model supports tool/function calling.
+   * - `true`  → tools sent normally
+   * - `false` → tools stripped (defense-in-depth)
+   * - `null` / `undefined` → unknown; treated as supported (permissive fallback)
+   */
+  supportsToolCalls?: boolean | null;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -52,6 +59,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     maxToolIterations,
     maxStagnationSteps,
     onError,
+    supportsToolCalls,
   } = options;
 
   // Message state managed externally
@@ -148,6 +156,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         mkAssistantMessage: (custom) => mkAssistantMessage({ ...custom, ...extraMeta }),
         timingTracker,
         setCurrentStreamingAssistantMessageId,
+        supportsToolCalls,
       });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

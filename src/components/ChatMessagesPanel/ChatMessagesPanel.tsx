@@ -40,6 +40,8 @@ import { useDeepResearch } from '../../hooks/useDeepResearch';
 import type { ResearchState } from '../../hooks/useDeepResearch/types';
 import { cn } from '../../utils/cn';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
+import { ToolSupportIndicator } from '../ToolSupportIndicator';
+import { getToolRegistry } from '../../services/tools';
 
 
 interface ChatMessagesPanelProps {
@@ -62,6 +64,13 @@ interface ChatMessagesPanelProps {
   currentStreamingAssistantMessageId: string | null;
   /** Voice mode hook return (optional — only in Tauri) */
   voice?: UseVoiceModeReturn;
+  /**
+   * Whether the active model supports tool/function calling.
+   * null = unknown (capability status not yet resolved).
+   */
+  supportsToolCalls?: boolean | null;
+  /** Detected tool-calling format, e.g. "hermes" or "llama3". */
+  toolFormat?: string | null;
 }
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
@@ -83,6 +92,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   timingTracker,
   currentStreamingAssistantMessageId,
   voice,
+  supportsToolCalls,
+  toolFormat,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const composerRuntime = useComposerRuntime({ optional: true });
@@ -594,6 +605,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           <span className={cn('text-xs py-xs px-sm rounded-full bg-background text-text-muted shrink-0', isThreadRunning && 'bg-primary/10 text-primary animate-research-pulse')}>
             {isThreadRunning ? 'Responding…' : 'Idle'}
           </span>
+          <ToolSupportIndicator
+            supports={supportsToolCalls ?? null}
+            hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
+            toolFormat={toolFormat}
+          />
         </div>
         <div className="flex gap-sm shrink-0">
           <ToolsPopover />

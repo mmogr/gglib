@@ -9,7 +9,7 @@
 
 import { getTransport } from '../transport';
 import type { ModelId } from '../transport/types/ids';
-import type { ServeConfig, ServerInfo } from '../../types';
+import type { ServeConfig, ServerInfo, ToolSupportResponse } from '../../types';
 import type { ServeResponse } from '../transport/types/servers';
 import type { ProxyConfig, ProxyStatus } from '../transport/types/proxy';
 
@@ -57,4 +57,8 @@ export async function startProxy(config?: Partial<ProxyConfig>): Promise<ProxySt
  */
 export async function stopProxy(): Promise<void> {
   return getTransport().stopProxy();
+}
+
+export async function getServerToolSupport(modelId: ModelId): Promise<ToolSupportResponse> {
+  return getTransport().getServerToolSupport(modelId);
 }

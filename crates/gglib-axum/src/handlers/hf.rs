@@ -6,8 +6,7 @@ use axum::extract::{Path, State};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_gui::types::{
-    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    HfToolSupportResponse,
+    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, ToolSupportResponse,
 };
 
 /// Search HuggingFace for GGUF models.
@@ -30,7 +29,7 @@ pub async fn quantizations(
 pub async fn tool_support(
     State(state): State<AppState>,
     Path(model_id): Path<String>,
-) -> Result<Json<HfToolSupportResponse>, HttpError> {
+) -> Result<Json<ToolSupportResponse>, HttpError> {
     Ok(Json(state.gui.get_hf_tool_support(&model_id).await?))
 }
 

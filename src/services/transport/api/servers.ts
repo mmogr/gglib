@@ -6,6 +6,7 @@
 import { post, get } from './client';
 import type { ModelId } from '../types/ids';
 import type { ServeConfig, ServeResponse, ServerInfo } from '../types/servers';
+import type { ToolSupportResponse } from '../../../types';
 import { toStartServerRequest } from '../mappers';
 
 /**
@@ -28,4 +29,11 @@ export async function stopServer(modelId: ModelId): Promise<void> {
  */
 export async function listServers(): Promise<ServerInfo[]> {
   return get<ServerInfo[]>('/api/servers');
+}
+
+/**
+ * Retrieve tool-calling capability for a running server's model.
+ */
+export async function getServerToolSupport(modelId: ModelId): Promise<ToolSupportResponse> {
+  return get<ToolSupportResponse>(`/api/servers/${modelId}/tool-support`);
 }
