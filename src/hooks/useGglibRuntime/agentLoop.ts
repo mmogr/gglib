@@ -285,18 +285,5 @@ export function checkToolLoop(
 // Prompts
 // =============================================================================
 
-/** System prompt for tool-enabled models (agent/reasoning with Jinja) */
-export const TOOL_ENABLED_SYSTEM_PROMPT = `You are a helpful assistant with access to tools.
-
-When you need information or actions, use the available tools rather than guessing.
-Keep working explanations concise. When you have enough information, provide your final answer directly.`;
-
-/** System prompt for non-tool models (plain chat) */
+/** Default system prompt for plain chat (no tools). */
 export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful assistant.';
-
-/**
- * Get appropriate system prompt based on tool availability.
- */
-export function getSystemPrompt(hasTools: boolean): string {
-  return hasTools ? TOOL_ENABLED_SYSTEM_PROMPT : DEFAULT_SYSTEM_PROMPT;
-}
