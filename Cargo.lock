@@ -1069,9 +1069,9 @@ checksum = "d7a1e2f27636f116493b8b860f5546edb47c8d8f8ea73e1d2a20be88e28d1fea"
 
 [[package]]
 name = "deflate64"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26bf8fc351c5ed29b5c2f0cbbac1b209b74f60ecd62e675a998df72c49af5204"
+checksum = "807800ff3288b621186fe0a8f3392c4652068257302709c24efd918c3dffcdc2"
 
 [[package]]
 name = "der"
@@ -1815,7 +1815,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -1843,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1878,14 +1878,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1912,7 +1912,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1934,7 +1934,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1954,7 +1954,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1980,7 +1980,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gui"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "async-trait",
  "dirs",
@@ -2013,7 +2013,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2030,7 +2030,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2044,7 +2044,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2063,7 +2063,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2092,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2116,7 +2116,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-voice"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "async-trait",
