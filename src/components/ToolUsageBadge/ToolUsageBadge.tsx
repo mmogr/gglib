@@ -28,25 +28,23 @@ const ToolUsageBadge: React.FC = () => {
   }
 
   // Determine badge status based on tool call results
-  const getToolStatus = (): 'success' | 'error' | 'mixed' => {
+  const getToolStatus = (): 'running' | 'success' | 'error' | 'mixed' => {
     let hasSuccess = false;
     let hasError = false;
 
     for (const call of toolCalls) {
-      // Check if tool call has result
-      if ('result' in call) {
-        const result = call.result as any;
-        if (result && typeof result === 'object') {
-          if ('error' in result || result.success === false) {
-            hasError = true;
-          } else {
-            hasSuccess = true;
-          }
+      if (!('result' in call)) {
+        // At least one tool has no result yet — batch is still in flight.
+        return 'running';
+      }
+      const result = call.result as any;
+      if (result && typeof result === 'object') {
+        if ('error' in result || result.success === false) {
+          hasError = true;
         } else {
           hasSuccess = true;
         }
       } else {
-        // No result yet, treat as success
         hasSuccess = true;
       }
     }
@@ -65,17 +63,26 @@ const ToolUsageBadge: React.FC = () => {
       ? toolNames.join(', ')
       : `${toolNames.slice(0, 2).join(', ')} & ${toolNames.length - 2} more`;
 
+  const runningCount = toolCalls.filter(c => !('result' in c)).length;
+  const ariaLabel =
+    status === 'running'
+      ? `${runningCount} of ${toolCalls.length} tool${toolCalls.length === 1 ? '' : 's'} running`
+      : `${toolCalls.length} tool${toolCalls.length === 1 ? '' : 's'} ${status}`;
+
   return (
     <>
       <button
         className={cn(
           'inline-flex items-center gap-1 py-[2px] px-2 text-[11px] font-medium border-none rounded-[10px] cursor-pointer transition-all duration-150 ml-2 hover:scale-105 hover:shadow-[0_2px_4px_rgba(0,0,0,0.1)] active:scale-[0.98]',
+          status === 'running' && 'bg-[#3b82f6] text-white hover:bg-[#2563eb] animate-pulse',
           status === 'success' && 'bg-[#10b981] text-white hover:bg-[#059669]',
           status === 'error' && 'bg-[#ef4444] text-white hover:bg-[#dc2626]',
           status === 'mixed' && 'bg-[#f59e0b] text-white hover:bg-[#d97706]',
         )}
         onClick={() => setIsModalOpen(true)}
         title="Click to view tool execution details"
+        aria-live="polite"
+        aria-label={ariaLabel}
       >
         <span className="text-[12px] leading-none" aria-hidden="true">
           <Icon icon={Wrench} size={14} />
