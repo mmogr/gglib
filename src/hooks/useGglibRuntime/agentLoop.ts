@@ -238,9 +238,3 @@ export function checkToolLoop(
   };
 }
 
-// =============================================================================
-// Prompts
-// =============================================================================
-
-/** Default system prompt for plain chat (no tools). */
-export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful assistant.';

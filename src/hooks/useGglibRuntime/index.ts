@@ -51,10 +51,12 @@ export {
   type ThinkingContentHandler,
 } from './thinkingContentHandler';
 
+// UI / conversation defaults
+export { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
+
 // Agent loop utilities (exported for testing and configuration)
 export {
   DEFAULT_MAX_TOOL_ITERS,
-  DEFAULT_SYSTEM_PROMPT,
   type AgentLoopState,
   type ToolDigest,
   type ChatMessage,
