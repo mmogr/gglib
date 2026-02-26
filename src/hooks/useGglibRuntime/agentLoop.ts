@@ -163,45 +163,6 @@ export function summarizeToolResult(_name: string, res: ToolResult): string {
 }
 
 /**
- * Build working memory system message from tool digests.
- */
-export function buildWorkingMemory(digests: ToolDigest[]): string {
-  const lines: string[] = ['WORKING_MEMORY:'];
-  for (const d of digests.slice(-KEEP_LAST_TOOL_MESSAGES)) {
-    lines.push(`- ${d.name} (${d.ok ? 'ok' : 'fail'}): ${d.summary}`);
-  }
-  return lines.join('\n');
-}
-
-/**
- * Upsert working memory system message in conversation.
- */
-export function upsertWorkingMemory(
-  messages: ChatMessage[],
-  memory: string
-): ChatMessage[] {
-  const idx = messages.findIndex(
-    (m) => m.role === 'system' && m.content?.startsWith('WORKING_MEMORY:')
-  );
-  const memMsg: ChatMessage = { role: 'system', content: memory };
-
-  if (idx === -1) {
-    // Insert after first system message if present, else at top
-    const firstSys = messages.findIndex((m) => m.role === 'system');
-    if (firstSys >= 0) {
-      const out = messages.slice();
-      out.splice(firstSys + 1, 0, memMsg);
-      return out;
-    }
-    return [memMsg, ...messages];
-  }
-
-  const out = messages.slice();
-  out[idx] = memMsg;
-  return out;
-}
-
-/**
  * Calculate total character count of messages.
  */
 function totalChars(messages: ChatMessage[]): number {
@@ -214,16 +175,12 @@ function totalChars(messages: ChatMessage[]): number {
 export function pruneForBudget(messages: ChatMessage[]): ChatMessage[] {
   if (totalChars(messages) <= MAX_CONTEXT_CHARS) return messages;
 
-  const isWorkingMemory = (m: ChatMessage) =>
-    m.role === 'system' && m.content?.startsWith('WORKING_MEMORY:');
-
   const toolMsgs = messages.filter((m) => m.role === 'tool');
   const keepToolIds = new Set(
     toolMsgs.slice(-KEEP_LAST_TOOL_MESSAGES).map((m) => m.tool_call_id)
   );
 
   let out = messages.filter((m) => {
-    if (isWorkingMemory(m)) return true;
     if (m.role !== 'tool') return true;
     return keepToolIds.has(m.tool_call_id);
   });
@@ -281,22 +238,3 @@ export function checkToolLoop(
   };
 }
 
-// =============================================================================
-// Prompts
-// =============================================================================
-
-/** System prompt for tool-enabled models (agent/reasoning with Jinja) */
-export const TOOL_ENABLED_SYSTEM_PROMPT = `You are a helpful assistant with access to tools.
-
-When you need information or actions, use the available tools rather than guessing.
-Keep working explanations concise. When you have enough information, provide your final answer directly.`;
-
-/** System prompt for non-tool models (plain chat) */
-export const DEFAULT_SYSTEM_PROMPT = 'You are a helpful assistant.';
-
-/**
- * Get appropriate system prompt based on tool availability.
- */
-export function getSystemPrompt(hasTools: boolean): string {
-  return hasTools ? TOOL_ENABLED_SYSTEM_PROMPT : DEFAULT_SYSTEM_PROMPT;
-}

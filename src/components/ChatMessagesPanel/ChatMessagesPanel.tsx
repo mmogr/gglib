@@ -41,8 +41,6 @@ import type { ResearchState } from '../../hooks/useDeepResearch/types';
 import { cn } from '../../utils/cn';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
 
-// Use the same prompts as the runtime for consistency
-const FALLBACK_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT;
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -368,7 +366,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Sync system prompt draft
   useEffect(() => {
     if (!isEditingPrompt) {
-      setSystemPromptDraft(activeConversation?.system_prompt ?? FALLBACK_SYSTEM_PROMPT);
+      setSystemPromptDraft(activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT);
     }
   }, [activeConversation?.system_prompt, isEditingPrompt]);
 
@@ -386,7 +384,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   }, [activeConversationId]);
 
   const promptPreview = useMemo(
-    () => activeConversation?.system_prompt?.trim() || FALLBACK_SYSTEM_PROMPT,
+    () => activeConversation?.system_prompt?.trim() || DEFAULT_SYSTEM_PROMPT,
     [activeConversation?.system_prompt],
   );
 

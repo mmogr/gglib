@@ -21,12 +21,15 @@ import {
   toolSignature,
   recordAssistantProgress,
   checkToolLoop,
-  buildWorkingMemory,
-  upsertWorkingMemory,
   pruneForBudget,
   summarizeToolResult,
   withRetry,
 } from './agentLoop';
+import {
+  type PromptLayer,
+  injectPromptLayers,
+  createWorkingMemoryLayer,
+} from './promptBuilder';
 
 /**
  * Convert GglibMessage[] to API message format for LLM
@@ -157,8 +160,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     }))
   });
   
-  // Initialize working memory
-  apiMessages = upsertWorkingMemory(apiMessages, buildWorkingMemory(agentState.toolDigests));
+  // Prune initial context to budget before the loop starts.
   apiMessages = pruneForBudget(apiMessages);
 
   // AGENTIC LOOP - one iteration = one assistant message
@@ -194,10 +196,24 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
     // Mark this message as currently streaming (for live timer)
     setCurrentStreamingAssistantMessageId?.(assistantMessageId);
 
+    // Compose working memory as a transient layer for this iteration only.
+    // apiMessages is NEVER modified — injectPromptLayers returns a fresh array
+    // and replaces the system-message object via spread, so no object references
+    // from apiMessages bleed through.
+    const iterLayers: PromptLayer[] = [];
+    if (agentState.toolDigests.length > 0) {
+      iterLayers.push(
+        createWorkingMemoryLayer(
+          agentState.toolDigests.map(d => `- ${d.name} (${d.ok ? 'ok' : 'fail'}): ${d.summary}`),
+        ),
+      );
+    }
+    const messagesForLLM = injectPromptLayers(apiMessages, iterLayers);
+
     // Stream LLM response INTO this specific message
     const streamResult = await streamModelResponse({
       serverPort: selectedServerPort,
-      messages: apiMessages,
+      messages: messagesForLLM,
       toolDefinitions,
       abortSignal,
       
@@ -366,8 +382,7 @@ export async function runAgenticLoop(options: RunAgenticLoopOptions): Promise<vo
 
     apiMessages.push(...toolResultsForApiHistory);
 
-    // Update working memory and prune for next iteration
-    apiMessages = upsertWorkingMemory(apiMessages, buildWorkingMemory(agentState.toolDigests));
+    // Prune context budget; working memory is injected transiently above, never stored here.
     apiMessages = pruneForBudget(apiMessages);
 
     appLogger.debug('hook.runtime', 'Continuing to next iteration');

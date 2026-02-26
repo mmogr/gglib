@@ -15,25 +15,10 @@ import { createToolCallAccumulator, type AccumulatedToolCall } from './accumulat
 import { createThinkingContentHandler } from './thinkingContentHandler';
 import { PartsAccumulator } from './partsAccumulator';
 import type { GglibContent } from '../../types/messages';
-import { DEFAULT_SYSTEM_PROMPT, TOOL_ENABLED_SYSTEM_PROMPT, withRetry } from './agentLoop';
+import { withRetry } from './agentLoop';
+import { injectPromptLayers, TOOL_INSTRUCTIONS_LAYER, FORMAT_REMINDER_LAYER } from './promptBuilder';
+import type { PromptLayer } from './promptBuilder';
 import type { ReasoningTimingTracker } from './reasoningTiming';
-
-function hotSwapDefaultSystemPrompt(messages: any[], hasTools: boolean): any[] {
-  if (!hasTools) return messages;
-
-  // Only swap when the stored system prompt is *exactly* the default prompt.
-  // This preserves user customizations (even minor edits/whitespace changes).
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-    if (msg?.role === 'system' && typeof msg.content === 'string' && msg.content === DEFAULT_SYSTEM_PROMPT) {
-      const cloned = messages.slice();
-      cloned[i] = { ...msg, content: TOOL_ENABLED_SYSTEM_PROMPT };
-      return cloned;
-    }
-  }
-
-  return messages;
-}
 
 export interface StreamModelResponseOptions {
   serverPort: number;
@@ -65,7 +50,11 @@ export async function streamModelResponse(
   const { serverPort, messages, toolDefinitions, abortSignal, onContentUpdate, messageId, timingTracker } = options;
 
   const hasTools = toolDefinitions.length > 0;
-  const effectiveMessages = hotSwapDefaultSystemPrompt(messages, hasTools);
+  // FORMAT_REMINDER_LAYER is always active; TOOL_INSTRUCTIONS_LAYER only when tools are present.
+  // Priority ordering guarantees: tool-instructions (100) → format-reminder (200).
+  const activeLayers: PromptLayer[] = [FORMAT_REMINDER_LAYER];
+  if (hasTools) activeLayers.push(TOOL_INSTRUCTIONS_LAYER);
+  const effectiveMessages = injectPromptLayers(messages, activeLayers);
 
   const requestBody = {
     port: serverPort,

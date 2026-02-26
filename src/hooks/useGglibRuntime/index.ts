@@ -51,12 +51,12 @@ export {
   type ThinkingContentHandler,
 } from './thinkingContentHandler';
 
+// UI / conversation defaults
+export { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
+
 // Agent loop utilities (exported for testing and configuration)
 export {
   DEFAULT_MAX_TOOL_ITERS,
-  TOOL_ENABLED_SYSTEM_PROMPT,
-  DEFAULT_SYSTEM_PROMPT,
-  getSystemPrompt,
   type AgentLoopState,
   type ToolDigest,
   type ChatMessage,
@@ -64,8 +64,17 @@ export {
   withRetry,
   recordAssistantProgress,
   checkToolLoop,
-  buildWorkingMemory,
-  upsertWorkingMemory,
   pruneForBudget,
   summarizeToolResult,
 } from './agentLoop';
+
+// Prompt composition (exported for testing and reuse)
+export {
+  buildSystemPrompt,
+  injectPromptLayers,
+  createWorkingMemoryLayer,
+  TOOL_INSTRUCTIONS_LAYER,
+  FORMAT_REMINDER,
+  FORMAT_REMINDER_LAYER,
+  type PromptLayer,
+} from './promptBuilder';
