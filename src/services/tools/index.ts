@@ -37,6 +37,7 @@ export {
   getToolRegistry,
   resetToolRegistry,
   type ToolSource,
+  type NameMapEntry,
 } from './registry';
 
 // Re-export MCP integration
@@ -56,3 +57,10 @@ registerBuiltinTools();
 
 // Re-export builtin tools for direct access
 export { registerBuiltinTools } from './builtin';
+
+// Re-export name utilities
+export {
+  sanitizeToolName,
+  detectCollisions,
+  formatToolDisplayName,
+} from './nameUtils';
