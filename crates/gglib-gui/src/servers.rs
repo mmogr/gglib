@@ -494,13 +494,17 @@ impl<'a> ServerOps<'a> {
         let model = self.resolve_model(model_id).await?;
 
         // Primary boolean comes from the authoritative DB capabilities bitflag.
-        let supports_tool_calls =
-            model.capabilities.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS);
+        let supports_tool_calls = model
+            .capabilities
+            .contains(ModelCapabilities::SUPPORTS_TOOL_CALLS);
 
         // Chat template is already in model.metadata (loaded by the same DB query).
         // Passing it to the detector ensures accurate format/confidence values even
         // for custom-named models where filename heuristics would otherwise fail.
-        let chat_template = model.metadata.get("tokenizer.chat_template").map(String::as_str);
+        let chat_template = model
+            .metadata
+            .get("tokenizer.chat_template")
+            .map(String::as_str);
 
         let detection = self.deps.tool_detector.detect(ToolSupportDetectionInput {
             model_id: model.file_path.to_str().unwrap_or(""),

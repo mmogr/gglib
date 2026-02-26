@@ -6,8 +6,7 @@ use axum::extract::{Path, State};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_gui::types::{
-    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
-    ToolSupportResponse,
+    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, ToolSupportResponse,
 };
 
 /// Search HuggingFace for GGUF models.

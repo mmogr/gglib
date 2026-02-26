@@ -384,9 +384,7 @@ fn apply_tools_to_body(
         let has_tools = tools.as_ref().is_some_and(|t| !t.is_empty());
         let has_tool_choice = tool_choice.is_some();
         if has_tools || has_tool_choice {
-            tracing::debug!(
-                "Stripping tools from request — model does not support tool calling"
-            );
+            tracing::debug!("Stripping tools from request — model does not support tool calling");
         }
     }
 }
@@ -567,7 +565,12 @@ pub async fn proxy_chat(
 
     // Inject tools only when the model supports them.
     // Note: request.messages was consumed above, so we pass fields individually.
-    apply_tools_to_body(&mut forward_body, &request.tools, &request.tool_choice, capabilities);
+    apply_tools_to_body(
+        &mut forward_body,
+        &request.tools,
+        &request.tool_choice,
+        capabilities,
+    );
 
     // DEBUG: Log the exact payload sent to llama-server
     let log_path = std::env::var("HOME")
@@ -651,13 +654,18 @@ mod tests {
 
     #[test]
     fn test_tools_stripped_when_not_supported() {
-        let tools = Some(vec![serde_json::json!({"type": "function", "function": {"name": "get_weather"}})]);
+        let tools = Some(vec![
+            serde_json::json!({"type": "function", "function": {"name": "get_weather"}}),
+        ]);
         let tool_choice = Some(serde_json::json!("auto"));
         let mut body = serde_json::json!({});
         apply_tools_to_body(&mut body, &tools, &tool_choice, ModelCapabilities::empty());
 
         assert!(body.get("tools").is_none(), "tools should be stripped");
-        assert!(body.get("tool_choice").is_none(), "tool_choice should be stripped");
+        assert!(
+            body.get("tool_choice").is_none(),
+            "tool_choice should be stripped"
+        );
     }
 
     #[test]
@@ -666,13 +674,28 @@ mod tests {
         let tools = Some(vec![tool.clone()]);
         let tool_choice = Some(serde_json::json!("auto"));
         let mut body = serde_json::json!({});
-        apply_tools_to_body(&mut body, &tools, &tool_choice, ModelCapabilities::SUPPORTS_TOOL_CALLS);
+        apply_tools_to_body(
+            &mut body,
+            &tools,
+            &tool_choice,
+            ModelCapabilities::SUPPORTS_TOOL_CALLS,
+        );
 
         let tools_in_body = body.get("tools").expect("tools should be present");
-        assert_eq!(tools_in_body, &serde_json::json!([tool]), "tools should match");
+        assert_eq!(
+            tools_in_body,
+            &serde_json::json!([tool]),
+            "tools should match"
+        );
 
-        let tc_in_body = body.get("tool_choice").expect("tool_choice should be present");
-        assert_eq!(tc_in_body, &serde_json::json!("auto"), "tool_choice should match");
+        let tc_in_body = body
+            .get("tool_choice")
+            .expect("tool_choice should be present");
+        assert_eq!(
+            tc_in_body,
+            &serde_json::json!("auto"),
+            "tool_choice should match"
+        );
     }
 
     #[test]
@@ -682,7 +705,12 @@ mod tests {
         apply_tools_to_body(&mut body_no_cap, &None, &None, ModelCapabilities::empty());
 
         let mut body_with_cap = serde_json::json!({});
-        apply_tools_to_body(&mut body_with_cap, &None, &None, ModelCapabilities::SUPPORTS_TOOL_CALLS);
+        apply_tools_to_body(
+            &mut body_with_cap,
+            &None,
+            &None,
+            ModelCapabilities::SUPPORTS_TOOL_CALLS,
+        );
 
         assert!(body_no_cap.get("tools").is_none());
         assert!(body_no_cap.get("tool_choice").is_none());
