@@ -16,37 +16,9 @@ import { createThinkingContentHandler } from './thinkingContentHandler';
 import { PartsAccumulator } from './partsAccumulator';
 import type { GglibContent } from '../../types/messages';
 import { withRetry } from './agentLoop';
-import { buildSystemPrompt, TOOL_INSTRUCTIONS_LAYER } from './promptBuilder';
+import { injectPromptLayers, TOOL_INSTRUCTIONS_LAYER, FORMAT_REMINDER_LAYER } from './promptBuilder';
+import type { PromptLayer } from './promptBuilder';
 import type { ReasoningTimingTracker } from './reasoningTiming';
-
-/**
- * Additively inject tool instructions into the system message.
- *
- * Unlike the old `hotSwapDefaultSystemPrompt`, this function:
- * - Never performs an exact-string match on the base prompt
- * - Always appends tool guidance when tools are present, regardless of
- *   whether the user customised the system prompt
- * - Composes via string join rather than array splicing
- */
-function injectToolInstructions(messages: any[], hasTools: boolean): any[] {
-  if (!hasTools) return messages;
-
-  const sysIdx = messages.findIndex(
-    (m: any) => m?.role === 'system' && typeof m.content === 'string',
-  );
-
-  if (sysIdx >= 0) {
-    const cloned = messages.slice();
-    cloned[sysIdx] = {
-      ...cloned[sysIdx],
-      content: buildSystemPrompt(cloned[sysIdx].content as string, [TOOL_INSTRUCTIONS_LAYER]),
-    };
-    return cloned;
-  }
-
-  // No existing system message — prepend a composed one.
-  return [{ role: 'system', content: buildSystemPrompt('', [TOOL_INSTRUCTIONS_LAYER]) }, ...messages];
-}
 
 export interface StreamModelResponseOptions {
   serverPort: number;
@@ -78,7 +50,11 @@ export async function streamModelResponse(
   const { serverPort, messages, toolDefinitions, abortSignal, onContentUpdate, messageId, timingTracker } = options;
 
   const hasTools = toolDefinitions.length > 0;
-  const effectiveMessages = injectToolInstructions(messages, hasTools);
+  // FORMAT_REMINDER_LAYER is always active; TOOL_INSTRUCTIONS_LAYER only when tools are present.
+  // Priority ordering guarantees: tool-instructions (100) → format-reminder (200).
+  const activeLayers: PromptLayer[] = [FORMAT_REMINDER_LAYER];
+  if (hasTools) activeLayers.push(TOOL_INSTRUCTIONS_LAYER);
+  const effectiveMessages = injectPromptLayers(messages, activeLayers);
 
   const requestBody = {
     port: serverPort,
