@@ -18,7 +18,7 @@ use gglib_core::ports::{ProcessHandle, ServerConfig, ServerHealthStatus};
 
 use crate::deps::GuiDeps;
 use crate::error::GuiError;
-use crate::types::{ServerInfo, ServerLogEntry, StartServerRequest, StartServerResponse, ToolSupportResponse};
+use crate::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
 
 /// Handle for a running health monitor task.
 struct MonitorHandle {

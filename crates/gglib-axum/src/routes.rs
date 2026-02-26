@@ -101,6 +101,10 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/servers/{id}/start", post(handlers::servers::start))
         .route("/servers/{id}/stop", post(handlers::servers::stop))
         .route(
+            "/servers/{id}/tool-support",
+            get(handlers::servers::tool_support),
+        )
+        .route(
             "/servers/{port}/logs",
             get(handlers::servers::get_logs).delete(handlers::servers::clear_logs),
         )
