@@ -46,6 +46,14 @@ TASKSET ?=
 CARGO_ENV := $(shell if [ -f "$$HOME/.cargo/env" ]; then echo ". $$HOME/.cargo/env &&"; fi)
 CARGO := $(CARGO_ENV) cargo
 
+# On WSL2, TASKSET is non-empty but CARGO may start with shell built-ins (e.g. ". ~/.cargo/env &&")
+# which taskset cannot exec directly.  Wrap CARGO in `sh -c '...' --` so taskset gets a real
+# executable, then pass build args via positional parameters ($$@).
+ifneq ($(TASKSET),)
+CARGO := $(TASKSET) sh -c '$(CARGO_ENV) cargo "$$@"' --
+TASKSET :=
+endif
+
 # Cargo Optimization Flags
 export CARGO_PROFILE_RELEASE_LTO := thin
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS := 16
