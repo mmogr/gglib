@@ -3,7 +3,7 @@
 //! This module defines the infrastructure contract that the agent loop uses to
 //! drive an LLM.  The port is intentionally narrow: it speaks **domain types**
 //! ([`AgentMessage`], [`ToolDefinition`], [`LlmStreamEvent`]) and hides all
-//! vendor wire-format details (OpenAI JSON schemas, SSE framing, HTTP headers,
+//! vendor wire-format details (`OpenAI` JSON schemas, SSE framing, HTTP headers,
 //! etc.) behind the trait boundary.
 //!
 //! # Adapter responsibility
