@@ -332,7 +332,9 @@ mod tests {
 
     #[test]
     fn agent_event_serde_tag_matches_wire_format() {
-        let evt = AgentEvent::FinalAnswer { content: "done".into() };
+        let evt = AgentEvent::FinalAnswer {
+            content: "done".into(),
+        };
         let json = serde_json::to_value(&evt).unwrap();
         assert_eq!(json["type"], "final_answer");
         assert_eq!(json["content"], "done");

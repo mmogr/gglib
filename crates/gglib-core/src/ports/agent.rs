@@ -28,8 +28,9 @@ use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
-use crate::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition,
-    ToolResult};
+use crate::domain::agent::{
+    AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult,
+};
 
 // =============================================================================
 // Error type — fatal loop-level failures only
