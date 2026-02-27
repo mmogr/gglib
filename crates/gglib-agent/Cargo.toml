@@ -23,7 +23,13 @@ tracing      = { workspace = true }
 serde_json   = { workspace = true }
 
 [dev-dependencies]
-tokio      = { workspace = true, features = ["macros", "rt-multi-thread"] }
+gglib-core    = { path = "../gglib-core" }
+tokio         = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde_json    = { workspace = true }
+futures-util  = "0.3"
+futures-core  = "0.3"
+async-trait   = { workspace = true }
+anyhow        = { workspace = true }
 
 [lints]
 workspace = true
