@@ -33,7 +33,7 @@ pub struct MockLlmResponse {
     pub content: Option<String>,
     /// Tool invocations the model "requests".
     pub tool_calls: Vec<ToolCall>,
-    /// The OpenAI finish reason (`"stop"`, `"tool_calls"`, etc.).
+    /// The `OpenAI` finish reason (`"stop"`, `"tool_calls"`, etc.).
     pub finish_reason: String,
 }
 

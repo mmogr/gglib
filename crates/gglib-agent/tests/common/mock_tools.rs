@@ -159,7 +159,7 @@ impl ToolExecutorPort for MockToolExecutorPort {
             self.behaviors
                 .get(&call.name)
                 .cloned()
-                .unwrap_or(MockToolBehavior::Immediate {
+                .unwrap_or_else(|| MockToolBehavior::Immediate {
                     content: "ok".into(),
                 });
 
@@ -168,7 +168,7 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 tool_call_id: call.id.clone(),
                 content,
                 success: true,
-                duration_ms: start.elapsed().as_millis() as u64,
+                duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
             }),
             MockToolBehavior::Delayed { millis, content } => {
                 tokio::time::sleep(std::time::Duration::from_millis(millis)).await;
@@ -176,14 +176,14 @@ impl ToolExecutorPort for MockToolExecutorPort {
                     tool_call_id: call.id.clone(),
                     content,
                     success: true,
-                    duration_ms: start.elapsed().as_millis() as u64,
+                    duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
                 })
             }
             MockToolBehavior::Fail { message } => Ok(ToolResult {
                 tool_call_id: call.id.clone(),
                 content: message,
                 success: false,
-                duration_ms: start.elapsed().as_millis() as u64,
+                duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
             }),
             MockToolBehavior::Error { message } => Err(anyhow::anyhow!(message)),
         }
