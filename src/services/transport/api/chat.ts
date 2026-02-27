@@ -3,7 +3,7 @@
  * Handles conversations and messages for the chat feature.
  */
 
-import { get, post, put, del } from './client';
+import { get, post, put, del, getAuthenticatedFetchConfig } from './client';
 import { sanitizeMessagesForLlamaServer } from '../sanitizeMessages';
 import { parseGeneratedTitle } from '../parseTitleResponse';
 import type { ConversationId, MessageId } from '../types/ids';
@@ -129,13 +129,16 @@ export async function generateChatTitle(params: GenerateTitleParams): Promise<st
     },
   ];
 
-  const response = await fetch(`http://127.0.0.1:${serverPort}/v1/chat/completions`, {
+  const { baseUrl, headers: authHeaders } = await getAuthenticatedFetchConfig();
+  const response = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({
+      port: serverPort,
       messages: llamaMessages,
       temperature: 0.7,
       max_tokens: 20,
+      stream: false,
     }),
   });
 
