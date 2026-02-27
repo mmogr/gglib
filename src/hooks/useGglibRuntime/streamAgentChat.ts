@@ -51,6 +51,25 @@ interface AgentWireToolCall {
 // Public options
 // ---------------------------------------------------------------------------
 
+/**
+ * Partial `AgentConfig` forwarded to the backend.  All fields are optional;
+ * omitted fields use the backend's `AgentConfig::default()` values.
+ */
+export interface PartialAgentConfig {
+  /** Maps to `AgentConfig::max_iterations` (default 25). */
+  max_iterations?: number;
+  /** Maps to `AgentConfig::max_stagnation_steps` (default 5). */
+  max_stagnation_steps?: number;
+  /** Maps to `AgentConfig::tool_timeout_ms` (default 30 000). */
+  tool_timeout_ms?: number;
+  /** Maps to `AgentConfig::context_budget_chars` (default 180 000). */
+  context_budget_chars?: number;
+  /** Maps to `AgentConfig::max_protocol_strikes` (default 2). */
+  max_protocol_strikes?: number;
+  /** Maps to `AgentConfig::max_parallel_tools` (default 5). */
+  max_parallel_tools?: number;
+}
+
 export interface StreamAgentChatOptions {
   turnId: string;
   getMessages: () => GglibMessage[];
@@ -62,6 +81,17 @@ export interface StreamAgentChatOptions {
   mkAssistantMessage: (custom?: any) => GglibMessage;
   timingTracker?: ReasoningTimingTracker;
   setCurrentStreamingAssistantMessageId?: (id: string | null) => void;
+  /**
+   * Optional partial `AgentConfig` overrides forwarded to the backend.
+   * Any omitted fields fall back to `AgentConfig::default()`.
+   */
+  config?: PartialAgentConfig;
+  /**
+   * When `false`, no tools are exposed to the model.
+   * Forwarded to the backend as an empty `tool_filter`.
+   * `null` / `undefined` → permissive (all tools available).
+   */
+  supportsToolCalls?: boolean | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +381,18 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     mkAssistantMessage,
     timingTracker,
     setCurrentStreamingAssistantMessageId,
+    config,
+    supportsToolCalls,
   } = options;
+
+  // Build agent config: use null to let the backend apply defaults unless
+  // the caller has overridden at least one field.
+  const agentConfig: Record<string, unknown> | null =
+    config && Object.keys(config).length > 0 ? { ...config } : null;
+
+  // Tool filter: empty array strips all tools when model is known to not
+  // support tool-calling (explicit false only — null/undefined is permissive).
+  const toolFilter: string[] | null = supportsToolCalls === false ? [] : null;
 
   // ── Authenticate and resolve backend base URL ─────────────────────────────
   const { baseUrl, headers: authHeaders } = await getAuthenticatedFetchConfig();
@@ -376,8 +417,8 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
       body: JSON.stringify({
         port: selectedServerPort,
         messages: wireMessages,
-        config: null,    // backend uses AgentConfig::default()
-        tool_filter: null,
+        config: agentConfig,
+        tool_filter: toolFilter,
       }),
       signal: abortSignal,
     });
