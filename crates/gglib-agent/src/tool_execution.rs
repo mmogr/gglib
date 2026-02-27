@@ -43,8 +43,8 @@ pub async fn execute_tools_parallel(
 
     let handles: Vec<_> = calls
         .iter()
-        .cloned()
         .map(|tc| {
+            let tc = tc.clone();
             let sem = Arc::clone(&semaphore);
             let executor = Arc::clone(executor);
             let tx = tx.clone();
@@ -63,7 +63,7 @@ pub async fn execute_tools_parallel(
                 let result =
                     tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc))
                         .await;
-                let duration_ms = start.elapsed().as_millis() as u64;
+                let duration_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
                 let tool_result = match result {
                     Ok(Ok(r)) => r,

@@ -178,7 +178,7 @@ mod tests {
         let parts: Vec<&str> = sig.split('|').collect();
         assert_eq!(parts.len(), 2);
         let mut sorted = parts.clone();
-        sorted.sort();
+        sorted.sort_unstable();
         assert_eq!(
             parts, sorted,
             "batch signature parts should be lexicographically sorted"

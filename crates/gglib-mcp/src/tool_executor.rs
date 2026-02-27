@@ -41,7 +41,7 @@ use crate::service::McpService;
 /// # Tool-name → server-id resolution
 ///
 /// `McpService::list_all_tools` returns `Vec<(server_id, Vec<McpTool>)>`.  On
-/// each `execute` call the adapter performs a linear scan to find the server_id
+/// each `execute` call the adapter performs a linear scan to find the `server_id`
 /// associated with the requested tool name.  This is deliberately simple: MCP
 /// tool lists are small (typically tens of entries) and `list_all_tools` is an
 /// in-memory `RwLock` read — nanosecond cost.
@@ -52,7 +52,7 @@ pub struct McpToolExecutorAdapter {
 
 impl McpToolExecutorAdapter {
     /// Wrap an existing `McpService` handle.
-    pub fn new(mcp: Arc<McpService>) -> Self {
+    pub const fn new(mcp: Arc<McpService>) -> Self {
         Self { mcp }
     }
 }
@@ -122,14 +122,14 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             .call_tool(server_id, &call.name, arguments)
             .await
             .map_err(|e| anyhow!("MCP call_tool failed: {e}"))?;
-        let duration_ms = start.elapsed().as_millis() as u64;
+        let duration_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         // ---- Convert McpToolResult → ToolResult ------------------------------
         let (content, success) = if result.success {
             let text = result
                 .data
                 .as_ref()
-                .map_or_else(|| "null".to_owned(), |v| v.to_string());
+                .map_or_else(|| "null".to_owned(), std::string::ToString::to_string);
             (text, true)
         } else {
             let text = result
@@ -159,14 +159,14 @@ mod tests {
     use super::*;
 
     /// Minimal smoke-test: verify the argument conversion from `Value::Object`
-    /// to `HashMap` without needing a real McpService.
+    /// to `HashMap` without needing a real `McpService`.
     #[test]
     fn arguments_object_round_trips() {
         let args = json!({ "path": "/tmp/foo", "recursive": true });
         let call = ToolCall {
             id: "c1".into(),
             name: "fs_list".into(),
-            arguments: args.clone(),
+            arguments: args,
         };
 
         // Extract the same conversion logic used in execute()
@@ -206,7 +206,7 @@ mod tests {
         let def = ToolDefinition {
             name: mcp_tool.name.clone(),
             description: mcp_tool.description.clone(),
-            input_schema: mcp_tool.input_schema.clone(),
+            input_schema: mcp_tool.input_schema,
         };
         assert_eq!(def.name, "search");
         assert!(def.input_schema.is_some());

@@ -111,16 +111,9 @@ pub fn prune_for_budget(
     // Keep all System messages at their original positions and the last
     // KEEP_TAIL_MESSAGES non-system messages.
 
-    let system: Vec<AgentMessage> = messages
-        .iter()
-        .filter(|m| matches!(m, AgentMessage::System { .. }))
-        .cloned()
-        .collect();
-
-    let non_system: Vec<AgentMessage> = messages
+    let (system, non_system): (Vec<AgentMessage>, Vec<AgentMessage>) = messages
         .into_iter()
-        .filter(|m| !matches!(m, AgentMessage::System { .. }))
-        .collect();
+        .partition(|m| matches!(m, AgentMessage::System { .. }));
 
     let tail_start = non_system.len().saturating_sub(KEEP_TAIL_MESSAGES);
     system
@@ -180,7 +173,7 @@ mod tests {
             ..Default::default()
         };
         let msgs = vec![system("sys"), user("hi")];
-        let result = prune_for_budget(msgs.clone(), &cfg);
+        let result = prune_for_budget(msgs, &cfg);
         assert_eq!(result.len(), 2);
     }
 

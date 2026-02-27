@@ -125,7 +125,7 @@ pub async fn collect_stream(
                             .unwrap_or_else(|_| {
                                 // Malformed JSON from the LLM — treat as an empty object
                                 // rather than hard-failing so the loop can surface it.
-                                serde_json::Value::Object(Default::default())
+                                serde_json::Value::Object(serde_json::Map::default())
                             });
                         ToolCall {
                             id: p.id,
