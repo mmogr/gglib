@@ -23,10 +23,10 @@ use crate::handlers::chat::ChatArgs;
 /// Called from [`crate::handlers::chat::execute`] when `args.agent` is `true`.
 /// Manages the server lifecycle (auto-start / stop) around the REPL session.
 pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
-    let (agent_loop, handle, server_started) = config::compose(ctx, args).await?;
+    let (agent_loop, maybe_handle) = config::compose(ctx, args).await?;
     let result = repl::run_repl(&agent_loop, args).await;
-    if server_started {
-        if let Err(e) = ctx.runner().stop(&handle).await {
+    if let Some(ref handle) = maybe_handle {
+        if let Err(e) = ctx.runner().stop(handle).await {
             tracing::warn!("failed to stop llama-server after agent chat: {e}");
         }
     }
