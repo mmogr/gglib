@@ -18,6 +18,7 @@ gglib-db = { path = "../gglib-db" }
 gglib-download = { path = "../gglib-download" }
 gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root
 gglib-hf = { path = "../gglib-hf" }
+gglib-agent = { path = "../gglib-agent" }
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
 
@@ -30,6 +31,7 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 dotenvy = "0.15"
+rustyline = "14"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
