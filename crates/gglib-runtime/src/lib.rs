@@ -34,7 +34,7 @@ pub use process::{
 };
 
 // Re-export port implementations for runtime adapters
-pub use ports_impl::{CatalogPortImpl, RuntimePortImpl};
+pub use ports_impl::{CatalogPortImpl, LlmCompletionAdapter, RuntimePortImpl};
 
 // Re-export system probe implementation
 pub use system::DefaultSystemProbe;
