@@ -216,10 +216,10 @@ impl LlmCompletionPort for LlmCompletionAdapter {
                     let delta = &choice["delta"];
 
                     // ── Text content delta ─────────────────────────────────
-                    if let Some(content) = delta["content"].as_str() {
-                        if !content.is_empty() {
-                            yield Ok(LlmStreamEvent::TextDelta { content: content.to_owned() });
-                        }
+                    if let Some(content) = delta["content"].as_str()
+                        && !content.is_empty()
+                    {
+                        yield Ok(LlmStreamEvent::TextDelta { content: content.to_owned() });
                     }
 
                     // ── Tool-call deltas ───────────────────────────────────
@@ -237,11 +237,11 @@ impl LlmCompletionPort for LlmCompletionAdapter {
                     // Emitted before the [DONE] sentinel; we emit `Done` here
                     // so the stream collector receives it before the stream
                     // ends, then simply skip the redundant [DONE].
-                    if let Some(finish_reason) = choice["finish_reason"].as_str() {
-                        if !finish_reason.is_empty() {
-                            yield Ok(LlmStreamEvent::Done { finish_reason: finish_reason.to_owned() });
-                            done_sent = true;
-                        }
+                    if let Some(finish_reason) = choice["finish_reason"].as_str()
+                        && !finish_reason.is_empty()
+                    {
+                        yield Ok(LlmStreamEvent::Done { finish_reason: finish_reason.to_owned() });
+                        done_sent = true;
                     }
                 }
             }
