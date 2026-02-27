@@ -202,6 +202,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
         // audio; the pipeline then uses WebSocketAudioSource/Sink instead of
         // local cpal/rodio.  Desktop callers skip this endpoint entirely.
         .route("/voice/audio", get(handlers::voice_ws::audio_ws))
+        // Agent (server-side agentic loop with SSE streaming)
+        .route("/agent/chat", post(handlers::agent::chat))
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }
