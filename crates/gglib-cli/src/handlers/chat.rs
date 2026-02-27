@@ -30,6 +30,11 @@ pub struct ChatArgs {
     pub top_k: Option<i32>,
     pub max_tokens: Option<u32>,
     pub repeat_penalty: Option<f32>,
+    // Agentic mode fields
+    pub agent: bool,
+    pub port: Option<u16>,
+    pub max_iterations: usize,
+    pub tools: Option<String>,
 }
 
 /// Execute the chat command.
@@ -41,6 +46,11 @@ pub struct ChatArgs {
 /// * `ctx` - The CLI context providing access to AppCore
 /// * `args` - Chat command arguments
 pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
+    // Agentic mode: delegate entirely to the agent_chat handler.
+    if args.agent {
+        return super::agent_chat::run(ctx, &args).await;
+    }
+
     // Ensure llama.cpp is installed
     ensure_llama_initialized().await?;
 
@@ -62,6 +72,8 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
         top_k,
         max_tokens,
         repeat_penalty,
+        // agent/port/max_iterations/tools already handled by the early-return above
+        ..
     } = args;
 
     // Look up the model using CliContext

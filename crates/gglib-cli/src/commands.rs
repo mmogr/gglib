@@ -257,6 +257,19 @@ pub enum Commands {
         /// Repeat penalty (overrides model/global defaults)
         #[arg(long = "repeat-penalty")]
         repeat_penalty: Option<f32>,
+        /// Enable agentic mode: drives the backend agentic loop instead of llama-cli
+        #[arg(long)]
+        agent: bool,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum agent iterations before giving up (agentic mode only)
+        #[arg(long = "max-iterations", default_value = "25")]
+        max_iterations: usize,
+        /// Comma-separated tool allowlist exposed to the model, or omit for all tools
+        /// (agentic mode only, e.g. "mcp_search,builtin_time")
+        #[arg(long)]
+        tools: Option<String>,
     },
 
     /// Ask a question with optional context from stdin or file

@@ -231,6 +231,10 @@ async fn main() -> anyhow::Result<()> {
             top_k,
             max_tokens,
             repeat_penalty,
+            agent,
+            port,
+            max_iterations,
+            tools,
         } => {
             // NEW: Uses CliContext
             let args = handlers::chat::ChatArgs {
@@ -248,6 +252,10 @@ async fn main() -> anyhow::Result<()> {
                 top_k,
                 max_tokens,
                 repeat_penalty,
+                agent,
+                port,
+                max_iterations,
+                tools,
             };
             handlers::chat::execute(&ctx, args).await?;
         }
