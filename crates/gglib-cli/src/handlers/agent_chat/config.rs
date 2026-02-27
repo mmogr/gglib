@@ -96,10 +96,7 @@ async fn resolve_port(ctx: &CliContext, args: &ChatArgs) -> Result<(u16, Option<
 
     // Parse an explicit numeric ctx_size; ignore "max" (pass None, let the
     // runner use the model's native context length).
-    let context_size = args
-        .ctx_size
-        .as_deref()
-        .and_then(|s| s.parse::<u64>().ok());
+    let context_size = args.ctx_size.as_deref().and_then(|s| s.parse::<u64>().ok());
 
     let mut server_config = ServerConfig::new(
         model.id,
@@ -135,10 +132,8 @@ fn build_tool_executor(args: &ChatArgs, ctx: &CliContext) -> Arc<dyn ToolExecuto
     match args.tools.as_deref() {
         None | Some("all") => base,
         Some(list) => {
-            let allowed: HashSet<String> =
-                list.split(',').map(|s| s.trim().to_owned()).collect();
+            let allowed: HashSet<String> = list.split(',').map(|s| s.trim().to_owned()).collect();
             Arc::new(FilteredToolExecutor::new(base, allowed))
         }
     }
 }
-

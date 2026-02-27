@@ -109,4 +109,3 @@ mod tests {
         assert_eq!(truncate("", 10), "");
     }
 }
-

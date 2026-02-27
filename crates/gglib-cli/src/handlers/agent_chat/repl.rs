@@ -23,8 +23,8 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -61,10 +61,10 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.
-    let editor: Arc<Mutex<DefaultEditor>> = Arc::new(Mutex::new(
-        DefaultEditor::new()
-            .map_err(|e| anyhow::anyhow!("failed to initialise readline editor: {e}"))?,
-    ));
+    let editor: Arc<Mutex<DefaultEditor>> =
+        Arc::new(Mutex::new(DefaultEditor::new().map_err(|e| {
+            anyhow::anyhow!("failed to initialise readline editor: {e}")
+        })?));
 
     // Conversation history shared across turns.
     let mut messages: Vec<AgentMessage> = Vec::new();
@@ -80,7 +80,10 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
     loop {
         // ── 1. Read user input (blocking → spawn_blocking) ───────────────────
         let ed = Arc::clone(&editor);
-        let line = tokio::task::spawn_blocking(move || ed.lock().expect("editor poisoned").readline("You: ")).await?;
+        let line = tokio::task::spawn_blocking(move || {
+            ed.lock().expect("editor poisoned").readline("You: ")
+        })
+        .await?;
 
         let input = match line {
             Ok(text) => text,
@@ -184,4 +187,3 @@ async fn collect_events(
 
     final_content
 }
-

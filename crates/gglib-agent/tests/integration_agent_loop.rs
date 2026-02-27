@@ -23,9 +23,7 @@ use std::sync::Arc;
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{
-    AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition,
-};
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
 use gglib_core::ports::{AgentError, AgentLoopPort};
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -57,17 +55,17 @@ fn has_final_answer(events: &[AgentEvent]) -> bool {
 /// Return `true` when `events` contains at least one
 /// [`AgentEvent::ToolCallStart`] with the given tool name.
 fn has_tool_start(events: &[AgentEvent], name: &str) -> bool {
-    events.iter().any(|e| {
-        matches!(e, AgentEvent::ToolCallStart { tool_call, .. } if tool_call.name == name)
-    })
+    events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::ToolCallStart { tool_call, .. } if tool_call.name == name))
 }
 
 /// Return `true` when `events` contains at least one
 /// [`AgentEvent::ToolCallComplete`] whose result has the given `success` value.
 fn has_tool_complete_with_success(events: &[AgentEvent], success: bool) -> bool {
-    events.iter().any(|e| {
-        matches!(e, AgentEvent::ToolCallComplete { result, .. } if result.success == success)
-    })
+    events.iter().any(
+        |e| matches!(e, AgentEvent::ToolCallComplete { result, .. } if result.success == success),
+    )
 }
 
 // =============================================================================
@@ -83,7 +81,11 @@ fn has_tool_complete_with_success(events: &[AgentEvent], success: bool) -> bool 
 async fn test_simple_tool_call_cycle() {
     let llm = Arc::new(
         MockLlmPort::new()
-            .push(MockLlmResponse::tool_call("tc1", "search", json!({"q": "rust"})))
+            .push(MockLlmResponse::tool_call(
+                "tc1",
+                "search",
+                json!({"q": "rust"}),
+            ))
             .push(MockLlmResponse::text("Here are the results.")),
     );
 
@@ -274,11 +276,7 @@ async fn test_max_iterations_reached() {
 async fn test_tool_timeout() {
     let llm = Arc::new(
         MockLlmPort::new()
-            .push(MockLlmResponse::tool_call(
-                "tc1",
-                "slow_tool",
-                json!({}),
-            ))
+            .push(MockLlmResponse::tool_call("tc1", "slow_tool", json!({})))
             .push(MockLlmResponse::text("Timeout handled gracefully.")),
     );
 
@@ -424,9 +422,9 @@ async fn test_context_budget_pruning() {
     });
 
     // Single LLM response: no tool calls → FinalAnswer immediately.
-    let llm = Arc::new(
-        MockLlmPort::new().push(MockLlmResponse::text("Pruning worked — I can still answer.")),
-    );
+    let llm = Arc::new(MockLlmPort::new().push(MockLlmResponse::text(
+        "Pruning worked — I can still answer.",
+    )));
 
     // Executor with "search" registered (needed so LLM advertises it),
     // but it won't be called in this test.
@@ -460,5 +458,8 @@ async fn test_context_budget_pruning() {
         "loop aborted unexpectedly after context pruning"
     );
 
-    assert!(has_final_answer(&events), "missing FinalAnswer after pruning");
+    assert!(
+        has_final_answer(&events),
+        "missing FinalAnswer after pruning"
+    );
 }
