@@ -31,15 +31,21 @@ const KEEP_TAIL_MESSAGES: usize = 12;
 fn content_len(msg: &AgentMessage) -> usize {
     match msg {
         AgentMessage::System { content } | AgentMessage::User { content } => content.len(),
-        AgentMessage::Assistant { content, tool_calls } => {
+        AgentMessage::Assistant {
+            content,
+            tool_calls,
+        } => {
             content.as_deref().map_or(0, str::len)
                 + tool_calls.as_deref().map_or(0, |tc| {
-                    tc.iter().map(|c| c.name.len() + c.arguments.to_string().len()).sum()
+                    tc.iter()
+                        .map(|c| c.name.len() + c.arguments.to_string().len())
+                        .sum()
                 })
         }
-        AgentMessage::Tool { tool_call_id, content } => {
-            tool_call_id.len() + content.len()
-        }
+        AgentMessage::Tool {
+            tool_call_id,
+            content,
+        } => tool_call_id.len() + content.len(),
     }
 }
 
@@ -54,7 +60,10 @@ pub fn total_chars(messages: &[AgentMessage]) -> usize {
 /// # Algorithm
 ///
 /// See module-level documentation for the two-pass algorithm.
-pub fn prune_for_budget(mut messages: Vec<AgentMessage>, config: &AgentConfig) -> Vec<AgentMessage> {
+pub fn prune_for_budget(
+    mut messages: Vec<AgentMessage>,
+    config: &AgentConfig,
+) -> Vec<AgentMessage> {
     let budget = config.context_budget_chars;
     if total_chars(&messages) <= budget {
         return messages;
@@ -85,9 +94,10 @@ pub fn prune_for_budget(mut messages: Vec<AgentMessage>, config: &AgentConfig) -
         // one of its requested tool calls is still present in the retained set.
         // This prevents the conversation from containing assistant messages that
         // reference tool results which were pruned away.
-        AgentMessage::Assistant { tool_calls: Some(calls), .. } => calls
-            .iter()
-            .any(|c| kept_tool_call_ids.contains(&c.id)),
+        AgentMessage::Assistant {
+            tool_calls: Some(calls),
+            ..
+        } => calls.iter().any(|c| kept_tool_call_ids.contains(&c.id)),
 
         // System, User, and Assistant-with-no-tool-calls are always kept.
         _ => true,
@@ -131,13 +141,20 @@ mod tests {
     use super::*;
 
     fn system(s: &str) -> AgentMessage {
-        AgentMessage::System { content: s.to_owned() }
+        AgentMessage::System {
+            content: s.to_owned(),
+        }
     }
     fn user(s: &str) -> AgentMessage {
-        AgentMessage::User { content: s.to_owned() }
+        AgentMessage::User {
+            content: s.to_owned(),
+        }
     }
     fn assistant_text(s: &str) -> AgentMessage {
-        AgentMessage::Assistant { content: Some(s.to_owned()), tool_calls: None }
+        AgentMessage::Assistant {
+            content: Some(s.to_owned()),
+            tool_calls: None,
+        }
     }
     fn assistant_with_calls(id: &str, name: &str) -> AgentMessage {
         AgentMessage::Assistant {
@@ -158,7 +175,10 @@ mod tests {
 
     #[test]
     fn within_budget_returns_unchanged() {
-        let cfg = AgentConfig { context_budget_chars: 10_000, ..Default::default() };
+        let cfg = AgentConfig {
+            context_budget_chars: 10_000,
+            ..Default::default()
+        };
         let msgs = vec![system("sys"), user("hi")];
         let result = prune_for_budget(msgs.clone(), &cfg);
         assert_eq!(result.len(), 2);
@@ -217,18 +237,28 @@ mod tests {
         }
 
         let total = total_chars(&msgs);
-        let cfg = AgentConfig { context_budget_chars: total - 1, ..Default::default() };
+        let cfg = AgentConfig {
+            context_budget_chars: total - 1,
+            ..Default::default()
+        };
         let result = prune_for_budget(msgs, &cfg);
 
         // call_0 was pruned → its matching assistant should also be gone.
         let has_call_0_assistant = result.iter().any(|m| {
-            if let AgentMessage::Assistant { tool_calls: Some(calls), .. } = m {
+            if let AgentMessage::Assistant {
+                tool_calls: Some(calls),
+                ..
+            } = m
+            {
                 calls.iter().any(|c| c.id == "call_0")
             } else {
                 false
             }
         });
-        assert!(!has_call_0_assistant, "orphaned assistant message should be dropped");
+        assert!(
+            !has_call_0_assistant,
+            "orphaned assistant message should be dropped"
+        );
     }
 
     #[test]
@@ -242,12 +272,17 @@ mod tests {
             assistant_text(&"B".repeat(5000)),
         ];
 
-        let cfg = AgentConfig { context_budget_chars: 50, ..Default::default() };
+        let cfg = AgentConfig {
+            context_budget_chars: 50,
+            ..Default::default()
+        };
         let result = prune_for_budget(msgs, &cfg);
 
         // System message must survive pass 2.
         assert!(
-            result.iter().any(|m| matches!(m, AgentMessage::System { .. })),
+            result
+                .iter()
+                .any(|m| matches!(m, AgentMessage::System { .. })),
             "system message must be preserved"
         );
         // Should have at most system + KEEP_TAIL_MESSAGES items.

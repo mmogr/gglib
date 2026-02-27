@@ -152,29 +152,55 @@ mod tests {
         };
         let sig = tool_signature(&call);
         assert!(sig.starts_with("fs_read:"), "should start with name: {sig}");
-        assert_eq!(sig.len(), "fs_read:".len() + 8, "hash should be 8 hex chars");
+        assert_eq!(
+            sig.len(),
+            "fs_read:".len() + 8,
+            "hash should be 8 hex chars"
+        );
     }
 
     #[test]
     fn batch_signature_is_sorted() {
         // Regardless of input order, the batch signature must be consistent.
         let calls = vec![
-            ToolCall { id: "c1".into(), name: "b_tool".into(), arguments: json!({}) },
-            ToolCall { id: "c2".into(), name: "a_tool".into(), arguments: json!({}) },
+            ToolCall {
+                id: "c1".into(),
+                name: "b_tool".into(),
+                arguments: json!({}),
+            },
+            ToolCall {
+                id: "c2".into(),
+                name: "a_tool".into(),
+                arguments: json!({}),
+            },
         ];
         let sig = batch_signature(&calls);
         let parts: Vec<&str> = sig.split('|').collect();
         assert_eq!(parts.len(), 2);
         let mut sorted = parts.clone();
         sorted.sort();
-        assert_eq!(parts, sorted, "batch signature parts should be lexicographically sorted");
+        assert_eq!(
+            parts, sorted,
+            "batch signature parts should be lexicographically sorted"
+        );
     }
 
     #[test]
     fn batch_signature_ignores_call_order() {
-        let a = ToolCall { id: "c1".into(), name: "search".into(), arguments: json!({ "q": "rust" }) };
-        let b = ToolCall { id: "c2".into(), name: "read".into(), arguments: json!({ "path": "/" }) };
-        assert_eq!(batch_signature(&[a.clone(), b.clone()]), batch_signature(&[b, a]));
+        let a = ToolCall {
+            id: "c1".into(),
+            name: "search".into(),
+            arguments: json!({ "q": "rust" }),
+        };
+        let b = ToolCall {
+            id: "c2".into(),
+            name: "read".into(),
+            arguments: json!({ "path": "/" }),
+        };
+        assert_eq!(
+            batch_signature(&[a.clone(), b.clone()]),
+            batch_signature(&[b, a])
+        );
     }
 
     // ---- LoopDetector -------------------------------------------------------
@@ -182,7 +208,11 @@ mod tests {
     #[test]
     fn loop_not_detected_within_limit() {
         let mut det = LoopDetector::new();
-        let calls = vec![ToolCall { id: "c1".into(), name: "t".into(), arguments: json!({}) }];
+        let calls = vec![ToolCall {
+            id: "c1".into(),
+            name: "t".into(),
+            arguments: json!({}),
+        }];
         // max_strikes = 2: first two calls must succeed
         assert!(det.check(&calls, 2).is_ok());
         assert!(det.check(&calls, 2).is_ok());
@@ -191,7 +221,11 @@ mod tests {
     #[test]
     fn loop_detected_on_third_identical_batch_with_max_strikes_2() {
         let mut det = LoopDetector::new();
-        let calls = vec![ToolCall { id: "c1".into(), name: "t".into(), arguments: json!({}) }];
+        let calls = vec![ToolCall {
+            id: "c1".into(),
+            name: "t".into(),
+            arguments: json!({}),
+        }];
         assert!(det.check(&calls, 2).is_ok());
         assert!(det.check(&calls, 2).is_ok());
         let err = det.check(&calls, 2).unwrap_err();
@@ -203,23 +237,47 @@ mod tests {
         // Two distinct batches should each have independent hit counters.
         // Each can appear up to max_strikes times without triggering.
         let mut det = LoopDetector::new();
-        let a = vec![ToolCall { id: "c1".into(), name: "a".into(), arguments: json!({}) }];
-        let b = vec![ToolCall { id: "c2".into(), name: "b".into(), arguments: json!({}) }];
+        let a = vec![ToolCall {
+            id: "c1".into(),
+            name: "a".into(),
+            arguments: json!({}),
+        }];
+        let b = vec![ToolCall {
+            id: "c2".into(),
+            name: "b".into(),
+            arguments: json!({}),
+        }];
         // max_strikes = 10: each may appear 10 times
         for _ in 0..10 {
-            assert!(det.check(&a, 10).is_ok(), "batch a should not trigger within limit");
-            assert!(det.check(&b, 10).is_ok(), "batch b should not trigger within limit");
+            assert!(
+                det.check(&a, 10).is_ok(),
+                "batch a should not trigger within limit"
+            );
+            assert!(
+                det.check(&b, 10).is_ok(),
+                "batch b should not trigger within limit"
+            );
         }
         // 11th appearance of `a` should fire (count 11 > 10)
-        assert!(det.check(&a, 10).is_err(), "batch a should trigger on 11th occurrence");
+        assert!(
+            det.check(&a, 10).is_err(),
+            "batch a should trigger on 11th occurrence"
+        );
         // `b` is still at count 10 — one more must fire
-        assert!(det.check(&b, 10).is_err(), "batch b should trigger on 11th occurrence");
+        assert!(
+            det.check(&b, 10).is_err(),
+            "batch b should trigger on 11th occurrence"
+        );
     }
 
     #[test]
     fn loop_error_signature_matches_batch_sig() {
         let mut det = LoopDetector::new();
-        let calls = vec![ToolCall { id: "c1".into(), name: "x".into(), arguments: json!({ "k": "v" }) }];
+        let calls = vec![ToolCall {
+            id: "c1".into(),
+            name: "x".into(),
+            arguments: json!({ "k": "v" }),
+        }];
         let expected_sig = batch_signature(&calls);
         det.check(&calls, 0).unwrap_err(); // max_strikes = 0 → first call triggers
         let mut det2 = LoopDetector::new();

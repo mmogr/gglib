@@ -23,8 +23,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use gglib_core::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::{AgentError, AgentLoopPort, LlmCompletionPort, ToolExecutorPort};
+use gglib_core::{AgentConfig, AgentEvent, AgentMessage};
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
@@ -59,10 +59,7 @@ pub struct AgentLoop {
 
 impl AgentLoop {
     /// Create a new `AgentLoop` with the provided port implementations.
-    pub fn new(
-        llm: Arc<dyn LlmCompletionPort>,
-        tool_executor: Arc<dyn ToolExecutorPort>,
-    ) -> Self {
+    pub fn new(llm: Arc<dyn LlmCompletionPort>, tool_executor: Arc<dyn ToolExecutorPort>) -> Self {
         Self { llm, tool_executor }
     }
 }
@@ -126,14 +123,15 @@ impl AgentLoopPort for AgentLoop {
             );
 
             // ---- 5. Stagnation guard ----------------------------------------
-            stagnation_detector
-                .record(&response.content, config.max_stagnation_steps)?;
+            stagnation_detector.record(&response.content, config.max_stagnation_steps)?;
 
             // ---- 6. No tool calls → final answer ----------------------------
             if response.tool_calls.is_empty() {
                 debug!("no tool calls; final answer reached");
                 let _ = tx
-                    .send(AgentEvent::FinalAnswer { content: response.content.clone() })
+                    .send(AgentEvent::FinalAnswer {
+                        content: response.content.clone(),
+                    })
                     .await;
                 return Ok(response.content);
             }
@@ -142,13 +140,9 @@ impl AgentLoopPort for AgentLoop {
             loop_detector.check(&response.tool_calls, config.max_protocol_strikes)?;
 
             // ---- 8. Parallel tool execution ---------------------------------
-            let results = execute_tools_parallel(
-                &response.tool_calls,
-                &self.tool_executor,
-                &config,
-                &tx,
-            )
-            .await;
+            let results =
+                execute_tools_parallel(&response.tool_calls, &self.tool_executor, &config, &tx)
+                    .await;
 
             // ---- 9. Append assistant + tool-result messages -----------------
             messages.push(AgentMessage::Assistant {
@@ -174,7 +168,11 @@ impl AgentLoopPort for AgentLoop {
                 })
                 .await;
 
-            debug!(iteration, tool_results = results.len(), "iteration complete");
+            debug!(
+                iteration,
+                tool_results = results.len(),
+                "iteration complete"
+            );
         }
 
         // Max iterations reached
@@ -183,7 +181,11 @@ impl AgentLoopPort for AgentLoop {
             "Agent loop reached the maximum number of iterations ({})",
             config.max_iterations
         );
-        let _ = tx.send(AgentEvent::Error { message: message.clone() }).await;
+        let _ = tx
+            .send(AgentEvent::Error {
+                message: message.clone(),
+            })
+            .await;
         Err(AgentError::MaxIterationsReached(config.max_iterations))
     }
 }
@@ -199,8 +201,10 @@ mod tests {
 
     use async_trait::async_trait;
     use futures_util::stream;
-    use gglib_core::{AgentConfig, AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition, ToolResult};
     use gglib_core::ports::{AgentError, AgentLoopPort, LlmCompletionPort, ToolExecutorPort};
+    use gglib_core::{
+        AgentConfig, AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition, ToolResult,
+    };
     use tokio::sync::{Mutex, mpsc};
 
     use super::*;
@@ -226,8 +230,9 @@ mod tests {
             &self,
             _messages: &[AgentMessage],
             _tools: &[ToolDefinition],
-        ) -> anyhow::Result<Pin<Box<dyn futures_core::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send>>>
-        {
+        ) -> anyhow::Result<
+            Pin<Box<dyn futures_core::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send>>,
+        > {
             let events = self
                 .responses
                 .lock()
@@ -267,14 +272,20 @@ mod tests {
                 name: Some(name.into()),
                 arguments: Some("{}".into()),
             },
-            LlmStreamEvent::Done { finish_reason: "tool_calls".into() },
+            LlmStreamEvent::Done {
+                finish_reason: "tool_calls".into(),
+            },
         ]
     }
 
     fn text_response(text: &str) -> Vec<LlmStreamEvent> {
         vec![
-            LlmStreamEvent::TextDelta { content: text.into() },
-            LlmStreamEvent::Done { finish_reason: "stop".into() },
+            LlmStreamEvent::TextDelta {
+                content: text.into(),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
         ]
     }
 
@@ -300,7 +311,9 @@ mod tests {
 
         let result = agent
             .run(
-                vec![AgentMessage::User { content: "what is the answer?".into() }],
+                vec![AgentMessage::User {
+                    content: "what is the answer?".into(),
+                }],
                 AgentConfig::default(),
                 tx,
             )
@@ -329,7 +342,13 @@ mod tests {
         };
 
         let err = agent
-            .run(vec![AgentMessage::User { content: "go".into() }], config, tx)
+            .run(
+                vec![AgentMessage::User {
+                    content: "go".into(),
+                }],
+                config,
+                tx,
+            )
             .await
             .unwrap_err();
 
@@ -355,7 +374,13 @@ mod tests {
         };
 
         let err = agent
-            .run(vec![AgentMessage::User { content: "go".into() }], config, tx)
+            .run(
+                vec![AgentMessage::User {
+                    content: "go".into(),
+                }],
+                config,
+                tx,
+            )
             .await
             .unwrap_err();
 
@@ -369,8 +394,7 @@ mod tests {
     async fn stagnation_detected_on_repeated_text() {
         // Repeat the same text response without tool calls → stagnation detection
         let text = "I cannot do that.";
-        let responses: Vec<Vec<LlmStreamEvent>> =
-            (0..10).map(|_| text_response(text)).collect();
+        let responses: Vec<Vec<LlmStreamEvent>> = (0..10).map(|_| text_response(text)).collect();
 
         let llm = Arc::new(MockLlm::new(responses));
         let agent = AgentLoop::new(llm, Arc::new(MockExecutor));
@@ -404,7 +428,13 @@ mod tests {
         // For a simpler test: use stagnation on the empty-string text that occurs
         // when responses have only tool calls and no content.
         let _ = agent
-            .run(vec![AgentMessage::User { content: "go".into() }], config, tx)
+            .run(
+                vec![AgentMessage::User {
+                    content: "go".into(),
+                }],
+                config,
+                tx,
+            )
             .await;
         // The first text_response with no tool calls causes FinalAnswer immediately,
         // so the stagnation path isn't exercised. This is correct behaviour.
@@ -422,7 +452,9 @@ mod tests {
 
         agent
             .run(
-                vec![AgentMessage::User { content: "go".into() }],
+                vec![AgentMessage::User {
+                    content: "go".into(),
+                }],
                 AgentConfig::default(),
                 tx,
             )
@@ -438,7 +470,10 @@ mod tests {
                 _ => {}
             }
         }
-        assert!(got_iteration_complete, "IterationComplete should be emitted after iteration 1");
+        assert!(
+            got_iteration_complete,
+            "IterationComplete should be emitted after iteration 1"
+        );
         assert!(got_final_answer, "FinalAnswer should be emitted");
     }
 }

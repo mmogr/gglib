@@ -87,7 +87,12 @@ pub async fn collect_stream(
                 let _ = tx.send(AgentEvent::TextDelta { content }).await;
             }
 
-            LlmStreamEvent::ToolCallDelta { index, id, name, arguments } => {
+            LlmStreamEvent::ToolCallDelta {
+                index,
+                id,
+                name,
+                arguments,
+            } => {
                 // Ensure the partials vec has a slot at `index`.
                 if partials.len() <= index {
                     partials.resize_with(index + 1, PartialToolCall::default);
@@ -111,14 +116,22 @@ pub async fn collect_stream(
                     .enumerate()
                     .filter(|(_, p)| !p.name.is_empty()) // skip empty slots
                     .map(|(_, p)| {
-                        let args_str = if p.arguments.is_empty() { "{}" } else { &p.arguments };
-                        let arguments: serde_json::Value =
-                            serde_json::from_str(args_str).unwrap_or_else(|_| {
+                        let args_str = if p.arguments.is_empty() {
+                            "{}"
+                        } else {
+                            &p.arguments
+                        };
+                        let arguments: serde_json::Value = serde_json::from_str(args_str)
+                            .unwrap_or_else(|_| {
                                 // Malformed JSON from the LLM — treat as an empty object
                                 // rather than hard-failing so the loop can surface it.
                                 serde_json::Value::Object(Default::default())
                             });
-                        ToolCall { id: p.id, name: p.name, arguments }
+                        ToolCall {
+                            id: p.id,
+                            name: p.name,
+                            arguments,
+                        }
                     })
                     .collect();
 
@@ -157,9 +170,15 @@ mod tests {
     async fn text_delta_forwarded_and_accumulated() {
         let (tx, mut rx) = mpsc::channel(16);
         let stream = make_stream(vec![
-            LlmStreamEvent::TextDelta { content: "Hello, ".into() },
-            LlmStreamEvent::TextDelta { content: "world!".into() },
-            LlmStreamEvent::Done { finish_reason: "stop".into() },
+            LlmStreamEvent::TextDelta {
+                content: "Hello, ".into(),
+            },
+            LlmStreamEvent::TextDelta {
+                content: "world!".into(),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
         ]);
 
         let response = collect_stream(stream, &tx).await.unwrap();
@@ -190,7 +209,9 @@ mod tests {
                 name: None,
                 arguments: Some("h\": \"/tmp\"}".into()),
             },
-            LlmStreamEvent::Done { finish_reason: "tool_calls".into() },
+            LlmStreamEvent::Done {
+                finish_reason: "tool_calls".into(),
+            },
         ]);
 
         let response = collect_stream(stream, &tx).await.unwrap();
@@ -217,7 +238,9 @@ mod tests {
                 name: Some("tool_b".into()),
                 arguments: Some("{}".into()),
             },
-            LlmStreamEvent::Done { finish_reason: "tool_calls".into() },
+            LlmStreamEvent::Done {
+                finish_reason: "tool_calls".into(),
+            },
         ]);
 
         let response = collect_stream(stream, &tx).await.unwrap();
@@ -230,7 +253,9 @@ mod tests {
     async fn missing_done_event_returns_error() {
         let (tx, _rx) = mpsc::channel(16);
         let stream = make_stream(vec![
-            LlmStreamEvent::TextDelta { content: "partial".into() },
+            LlmStreamEvent::TextDelta {
+                content: "partial".into(),
+            },
             // No Done event
         ]);
         assert!(collect_stream(stream, &tx).await.is_err());

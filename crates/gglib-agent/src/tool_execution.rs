@@ -20,8 +20,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures_util::future::join_all;
-use gglib_core::{AgentConfig, AgentEvent, ToolCall, ToolResult};
 use gglib_core::ports::ToolExecutorPort;
+use gglib_core::{AgentConfig, AgentEvent, ToolCall, ToolResult};
 use tokio::sync::{Semaphore, mpsc};
 
 // =============================================================================
@@ -54,15 +54,15 @@ pub async fn execute_tools_parallel(
 
                 // Notify that execution is starting.
                 let _ = tx
-                    .send(AgentEvent::ToolCallStart { tool_call: tc.clone() })
+                    .send(AgentEvent::ToolCallStart {
+                        tool_call: tc.clone(),
+                    })
                     .await;
 
                 let start = Instant::now();
-                let result = tokio::time::timeout(
-                    Duration::from_millis(timeout_ms),
-                    executor.execute(&tc),
-                )
-                .await;
+                let result =
+                    tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc))
+                        .await;
                 let duration_ms = start.elapsed().as_millis() as u64;
 
                 let tool_result = match result {
@@ -75,10 +75,7 @@ pub async fn execute_tools_parallel(
                     },
                     Err(_) => ToolResult {
                         tool_call_id: tc.id.clone(),
-                        content: format!(
-                            "Tool '{}' timed out after {timeout_ms} ms",
-                            tc.name
-                        ),
+                        content: format!("Tool '{}' timed out after {timeout_ms} ms", tc.name),
                         success: false,
                         duration_ms,
                     },
@@ -86,7 +83,9 @@ pub async fn execute_tools_parallel(
 
                 // Notify that execution is complete.
                 let _ = tx
-                    .send(AgentEvent::ToolCallComplete { result: tool_result.clone() })
+                    .send(AgentEvent::ToolCallComplete {
+                        result: tool_result.clone(),
+                    })
                     .await;
 
                 tool_result
@@ -119,8 +118,8 @@ mod tests {
     use std::sync::Arc;
 
     use async_trait::async_trait;
-    use gglib_core::{AgentConfig, ToolCall, ToolDefinition, ToolResult};
     use gglib_core::ports::ToolExecutorPort;
+    use gglib_core::{AgentConfig, ToolCall, ToolDefinition, ToolResult};
     use serde_json::json;
     use tokio::sync::mpsc;
 
@@ -238,34 +237,56 @@ mod tests {
 
         #[async_trait]
         impl ToolExecutorPort for PeakTracker {
-            async fn list_tools(&self) -> Vec<ToolDefinition> { vec![] }
+            async fn list_tools(&self) -> Vec<ToolDefinition> {
+                vec![]
+            }
             async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
                 let prev = self.current.fetch_add(1, Ordering::SeqCst);
                 let running = prev + 1;
                 // Update peak
                 let mut peak = self.peak.load(Ordering::SeqCst);
                 while running > peak {
-                    match self.peak.compare_exchange(peak, running, Ordering::SeqCst, Ordering::SeqCst) {
+                    match self.peak.compare_exchange(
+                        peak,
+                        running,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
                         Ok(_) => break,
                         Err(p) => peak = p,
                     }
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                 self.current.fetch_sub(1, Ordering::SeqCst);
-                Ok(ToolResult { tool_call_id: call.id.clone(), content: "ok".into(), success: true, duration_ms: 20 })
+                Ok(ToolResult {
+                    tool_call_id: call.id.clone(),
+                    content: "ok".into(),
+                    success: true,
+                    duration_ms: 20,
+                })
             }
         }
 
         let current = Arc::new(AtomicUsize::new(0));
         let peak = Arc::new(AtomicUsize::new(0));
-        let tracker = Arc::new(PeakTracker { current: Arc::clone(&current), peak: Arc::clone(&peak) });
+        let tracker = Arc::new(PeakTracker {
+            current: Arc::clone(&current),
+            peak: Arc::clone(&peak),
+        });
 
         let calls: Vec<ToolCall> = (0..10)
-            .map(|i| ToolCall { id: format!("c{i}"), name: "t".into(), arguments: json!({}) })
+            .map(|i| ToolCall {
+                id: format!("c{i}"),
+                name: "t".into(),
+                arguments: json!({}),
+            })
             .collect();
 
         let (tx, _rx) = mpsc::channel(64);
-        let config = AgentConfig { max_parallel_tools: 3, ..Default::default() };
+        let config = AgentConfig {
+            max_parallel_tools: 3,
+            ..Default::default()
+        };
 
         execute_tools_parallel(
             &calls,

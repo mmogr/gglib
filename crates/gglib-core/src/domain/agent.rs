@@ -366,7 +366,10 @@ mod tests {
         assert_eq!(cfg.tool_timeout_ms, 30_000);
         assert_eq!(cfg.context_budget_chars, 180_000);
         assert_eq!(cfg.max_protocol_strikes, 2);
-        assert_eq!(cfg.max_stagnation_steps, 5, "must mirror MAX_STAGNATION_STEPS from agentLoop.ts");
+        assert_eq!(
+            cfg.max_stagnation_steps, 5,
+            "must mirror MAX_STAGNATION_STEPS from agentLoop.ts"
+        );
     }
 
     #[test]

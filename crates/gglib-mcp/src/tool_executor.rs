@@ -22,8 +22,8 @@ use std::time::Instant;
 
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
-use gglib_core::{ToolCall, ToolDefinition, ToolResult};
 use gglib_core::ports::ToolExecutorPort;
+use gglib_core::{ToolCall, ToolDefinition, ToolResult};
 
 use crate::service::McpService;
 
@@ -95,25 +95,16 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         let all_tools = self.mcp.list_all_tools().await;
         let server_id = all_tools
             .iter()
-            .find_map(|(id, tools)| {
-                tools
-                    .iter()
-                    .any(|t| t.name == call.name)
-                    .then_some(*id)
-            })
+            .find_map(|(id, tools)| tools.iter().any(|t| t.name == call.name).then_some(*id))
             .with_context(|| {
-                format!(
-                    "no running MCP server exposes a tool named '{}'",
-                    call.name
-                )
+                format!("no running MCP server exposes a tool named '{}'", call.name)
             })?;
 
         // ---- Convert arguments Value → HashMap<String, Value> ---------------
         let arguments: HashMap<String, serde_json::Value> = match &call.arguments {
-            serde_json::Value::Object(map) => map
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
+            serde_json::Value::Object(map) => {
+                map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+            }
             serde_json::Value::Null => HashMap::new(),
             other => {
                 return Err(anyhow!(
@@ -208,7 +199,9 @@ mod tests {
         let mcp_tool = gglib_core::McpTool {
             name: "search".into(),
             description: Some("full-text search".into()),
-            input_schema: Some(json!({ "type": "object", "properties": { "q": { "type": "string" } } })),
+            input_schema: Some(
+                json!({ "type": "object", "properties": { "q": { "type": "string" } } }),
+            ),
         };
         let def = ToolDefinition {
             name: mcp_tool.name.clone(),
