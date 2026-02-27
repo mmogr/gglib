@@ -1814,6 +1814,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-agent"
+version = "0.5.2"
+dependencies = [
+ "gglib-core",
+ "serde_json",
+]
+
+[[package]]
 name = "gglib-app"
 version = "0.5.2"
 dependencies = [
