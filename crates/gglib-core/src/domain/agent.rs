@@ -49,8 +49,11 @@ pub struct AgentConfig {
     /// Frontend constant: `MAX_CONTEXT_CHARS = 180_000`.
     pub context_budget_chars: usize,
 
-    /// Number of times the model may emit a response that violates the expected
-    /// protocol (e.g. malformed tool calls) before the loop is aborted.
+    /// Maximum number of times the same tool-call batch signature may repeat
+    /// consecutively before the loop is declared stuck and aborted with
+    /// [`AgentError::LoopDetected`].
+    ///
+    /// Frontend constant: `MAX_SAME_SIGNATURE_HITS = 2` in `agentLoop.ts`.
     pub max_protocol_strikes: usize,
 
     /// Number of consecutive iterations in which the assistant produces identical

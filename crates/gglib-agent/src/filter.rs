@@ -1,10 +1,14 @@
 //! [`FilteredToolExecutor`] — a decorator that restricts a [`ToolExecutorPort`]
 //! to a named allowlist of tools.
 //!
-//! Used by both the Axum HTTP handler (`gglib-axum`) and the CLI agent handler
-//! (`gglib-cli`) wherever the caller supplies a `tool_filter` / `--tools`
-//! option.  Keeping this decorator in the `gglib-agent` crate avoids
-//! duplicating it across consumers.
+//! # Architectural placement
+//!
+//! This is a *concrete implementation* (a decorator), not a pure port or domain
+//! type, so it lives here in `gglib-agent` (the orchestration layer) rather
+//! than in `gglib-core` (which contains only traits and domain models).
+//! Both downstream consumers — the Axum HTTP handler (`gglib-axum`) and the
+//! CLI agent handler (`gglib-cli`) — already depend on `gglib-agent`, so
+//! keeping the decorator here is DRY with zero extra dependency edges.
 
 use std::collections::HashSet;
 use std::sync::Arc;

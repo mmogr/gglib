@@ -369,9 +369,13 @@ async fn test_loop_detection() {
         "expected LoopDetected, got: {result:?}"
     );
 
-    // The loop emits IterationComplete events before detecting the loop.
-    // The detection is returned as a Rust Err — no Error event is emitted
-    // (only MaxIterationsReached emits an Error event before returning).
+    // An AgentEvent::Error must be emitted before the stream closes so SSE
+    // clients always see the termination reason (fix for review finding #4).
+    assert!(
+        events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+        "expected AgentEvent::Error to be emitted before LoopDetected return"
+    );
+
     // At minimum, one IterationComplete should have been emitted.
     assert!(
         events
