@@ -48,12 +48,6 @@ pub enum AgentError {
     #[error("agent loop reached the maximum number of iterations ({0})")]
     MaxIterationsReached(usize),
 
-    /// The accumulated message history exceeded
-    /// [`AgentConfig::context_budget_chars`] and could not be pruned further
-    /// without losing essential context.
-    #[error("context budget of {0} characters exceeded")]
-    ContextBudgetExceeded(usize),
-
     /// The loop detected a repeated tool-call signature, indicating the model
     /// is stuck in a cycle.
     ///

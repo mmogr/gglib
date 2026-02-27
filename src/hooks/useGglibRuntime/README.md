@@ -1,125 +1,26 @@
-# useGglibRuntime — Prompt Layer Architecture
+# useGglibRuntime
 
-This document explains the **additive prompt injection** system used by the
-chat runtime, why it replaced the old hot-swap pattern, and how to extend it.
-
----
-
-## Background: why the old approach was removed
-
-The original implementation used a `hotSwapDefaultSystemPrompt()` function
-that did an **exact string comparison** against `DEFAULT_SYSTEM_PROMPT`:
-
-```typescript
-// old — brittle exact-match hot-swap
-if (msg.content === DEFAULT_SYSTEM_PROMPT) {
-  cloned[i] = { ...msg, content: TOOL_ENABLED_SYSTEM_PROMPT };
-}
-```
-
-This had three failure modes:
-1. **Any user customisation broke it** — even adding a single space meant tool
-   instructions were silently dropped.
-2. **User content was discarded** — even when matched, the entire system prompt
-   was overwritten.
-3. **Silent failure** — tools were declared in the API call but the model
-   received no guidance on how to use them.
+React hook that drives the chat runtime by delegating the agentic loop to the
+Rust backend (`POST /api/agent/chat`) and streaming the results back to the UI.
 
 ---
 
-## The additive injection pattern
-
-All prompt composition now goes through two functions in `promptBuilder.ts`:
+## Architecture
 
 ```
-buildSystemPrompt(base, layers)     → composed string
-injectPromptLayers(messages, layers) → new message array
+useGglibRuntime
+  └── streamAgentChat()      POST /api/agent/chat  → SSE AgentEvent stream
+        ├── text_delta       → append text to current assistant message
+        ├── thinking         → append reasoning part
+        ├── tool_call_start  → add pending tool-call part
+        ├── tool_call_complete → stamp result onto tool-call part
+        ├── iteration_complete → finalize current message, open next
+        ├── final_answer     → finalize last message, done
+        └── error            → surface error text, done
 ```
 
-A **`PromptLayer`** is a plain object:
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | `string` | Unique identifier (used for documentation; not deduplicated at runtime) |
-| `content` | `string` | Prompt fragment to inject |
-| `position` | `'prepend' \| 'append'` | Whether the fragment goes before or after the base prompt |
-| `priority` | `number` | Ordering key — **lower number appears first** within each position group |
-
-`buildSystemPrompt` assembles the final string as:
-
-```
-[...prepends sorted by priority, basePrompt, ...appends sorted by priority]
-  .filter(s => s.trim() !== '')
-  .join('\n\n')
-```
-
-Empty or whitespace-only segments are stripped before joining, so an empty
-base prompt never produces leading/trailing blank blocks.
-
----
-
-## Built-in layers and priority slots
-
-| Layer constant | position | priority | Purpose |
-|---|---|---|---|
-| `TOOL_INSTRUCTIONS_LAYER` | `append` | **100** | Tool-usage guidance injected whenever tools are active |
-| `FORMAT_REMINDER_LAYER` | `append` | **200** | Lightweight response-format nudge |
-| `createWorkingMemoryLayer(…)` | `append` | **300** | Per-iteration tool-digest summary (created fresh each agentic step) |
-
-Slots between these values are intentionally left open for future layers.
-
----
-
-## Immutability contract
-
-`injectPromptLayers` **never mutates its input**:
-
-- It always returns a new array via `slice()`.
-- System message objects are replaced with a spread copy
-  (`{ ...original, content: composed }`) rather than mutating `.content`
-  in-place — important because `slice()` is a shallow copy.
-- The function returns a defensive clone even when `layers` is empty.
-
-### Double-injection safety
-
-`buildSystemPrompt` is **not** idempotent — it does not check whether a layer
-is already present before appending.  Sequential injection calls (e.g. once
-from `runAgenticLoop.ts` for working memory, then from `streamModelResponse.ts`
-for tool/format layers) are safe **only** because the caller keeps its
-`apiMessages` array pristine and passes a fresh clone into each call.
-
-**The architectural guarantee lives in the caller, not in `promptBuilder.ts`.**
-
----
-
-## How to add a new prompt layer
-
-1. **Define a constant** in `promptBuilder.ts` (or in the module that owns the
-   concept, if it is highly domain-specific):
-
-   ```typescript
-   export const MY_LAYER: PromptLayer = {
-     id: 'my-feature',
-     content: 'Instructions for my feature.',
-     position: 'append',
-     priority: 150, // between tool instructions (100) and format reminder (200)
-   };
-   ```
-
-2. **Pass it to `injectPromptLayers`** at the call site where you build the
-   API message array:
-
-   ```typescript
-   const layeredMessages = injectPromptLayers(apiMessages, [
-     TOOL_INSTRUCTIONS_LAYER,
-     MY_LAYER,
-     FORMAT_REMINDER_LAYER,
-   ]);
-   ```
-
-3. **Write a test** that asserts the layer's `id`, `position`, and `priority`
-   are stable (see `promptBuilder.test.ts` for examples of the shape-invariant
-   pattern).
+All loop orchestration (context pruning, tool execution, stagnation detection,
+loop detection) lives in the Rust `gglib-agent` crate.
 
 ---
 
@@ -127,9 +28,32 @@ for tool/format layers) are safe **only** because the caller keeps its
 
 | File | Role |
 |---|---|
-| `promptBuilder.ts` | `PromptLayer` type, `buildSystemPrompt`, `injectPromptLayers`, built-in layers |
-| `agentLoop.ts` | Loop detection, retries, context pruning, `DEFAULT_MAX_TOOL_ITERS` |
-| `runAgenticLoop.ts` | Outer agentic loop; injects the working-memory layer each iteration |
-| `streamModelResponse.ts` | Single LLM call with SSE streaming; injects tool + format layers |
-| `useGglibRuntime.ts` | React hook; wires the above together |
-| `src/constants/prompts.ts` | `DEFAULT_SYSTEM_PROMPT` — UI default, **not** used for string matching |
+| `useGglibRuntime.ts` | React hook; wires user input → `streamAgentChat` → message state |
+| `streamAgentChat.ts` | Backend SSE consumer; converts UI messages → wire format, processes events |
+| `reasoningTiming.ts` | Tracks per-message reasoning segment durations |
+| `clock.ts` | Monotonic clock abstraction for timing |
+| `index.ts` | Public barrel export |
+
+---
+
+## Message-per-iteration model
+
+One React `GglibMessage` (role `assistant`) is created for each backend
+iteration.  Tool-calling iterations open a new message at `iteration_complete`;
+the final-answer iteration closes the last message at `final_answer`.  This
+preserves the multi-message UI layout from the previous client-side loop.
+
+---
+
+## Configuration
+
+`useGglibRuntime` accepts optional overrides forwarded to the backend:
+
+| Option | Backend field | Default |
+|---|---|---|
+| `maxToolIterations` | `AgentConfig::max_iterations` | 25 |
+| `maxStagnationSteps` | `AgentConfig::max_stagnation_steps` | 5 |
+| `supportsToolCalls` | `tool_filter: []` when `false` | all tools |
+
+When `supportsToolCalls === false`, an empty `tool_filter` is sent so the
+backend exposes no tools to the model.

@@ -16,7 +16,7 @@ import {
 } from '@assistant-ui/react';
 import type { GglibMessage, GglibContent } from '../../types/messages';
 import { mkUserMessage, mkAssistantMessage } from '../../types/messages';
-import { runAgenticLoop } from './runAgenticLoop';
+import { streamAgentChat } from './streamAgentChat';
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
 
@@ -143,19 +143,21 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     const turnId = crypto.randomUUID();
 
     try {
-      // Run agentic loop - creates assistant messages as needed
-      await runAgenticLoop({
+      // Run agentic loop against the backend SSE endpoint
+      await streamAgentChat({
         turnId,
         getMessages: () => messagesWithUserMessage,
         setMessages,
         selectedServerPort,
-        maxToolIterations,
-        maxStagnationSteps,
         abortSignal: abortController.signal,
         conversationId,
         mkAssistantMessage: (custom) => mkAssistantMessage({ ...custom, ...extraMeta }),
         timingTracker,
         setCurrentStreamingAssistantMessageId,
+        config: {
+          ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
+          ...(maxStagnationSteps !== undefined && { max_stagnation_steps: maxStagnationSteps }),
+        },
         supportsToolCalls,
       });
     } catch (error) {
