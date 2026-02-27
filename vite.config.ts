@@ -59,6 +59,18 @@ export default defineConfig(async ({ mode }) => {
       '/api': {
         target: `http://localhost:${backendPort}`,
         changeOrigin: true,
+        // Disable response buffering so SSE streams are forwarded immediately.
+        // Without this the proxy may buffer chunks, delaying event delivery.
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            const ct = proxyRes.headers['content-type'] || '';
+            if (ct.includes('text/event-stream')) {
+              // Tell upstream caches / reverse-proxies not to buffer SSE
+              proxyRes.headers['X-Accel-Buffering'] = 'no';
+              proxyRes.headers['Cache-Control'] = 'no-cache';
+            }
+          });
+        },
       },
     },
   },
