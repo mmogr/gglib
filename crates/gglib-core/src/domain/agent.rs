@@ -26,7 +26,11 @@ use serde::{Deserialize, Serialize};
 ///
 /// All fields have sensible defaults via [`Default`] that match the constants
 /// used in the TypeScript frontend (`src/hooks/useGglibRuntime/agentLoop.ts`).
+///
+/// `#[serde(default)]` allows callers (e.g. the web UI) to send *partial*
+/// configs and have omitted fields filled in from [`Default`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AgentConfig {
     /// Maximum number of LLM→tool→LLM iterations before the loop is aborted.
     ///
