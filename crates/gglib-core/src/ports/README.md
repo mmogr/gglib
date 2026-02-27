@@ -32,6 +32,12 @@ This module defines all the **port traits** (interfaces) that the core domain ne
 
 ## Port Categories
 
+### Agent Loop Ports
+- **`agent.rs`** - `ToolExecutorPort` and `AgentLoopPort` traits for the backend agentic loop
+  - `ToolExecutorPort` — list and execute tools; returns `anyhow::Error` for infrastructure failures so they are decoupled from loop logic
+  - `AgentLoopPort` — drives the ReAct loop; takes a `tokio::sync::mpsc::Sender<AgentEvent>` for SSE-ready streaming; returns `Result<String, AgentError>` (final answer)
+  - `AgentError` — fatal loop-level failures only (`MaxIterationsReached`, `ContextBudgetExceeded`, `LoopDetected`, `Internal`)
+
 ### Repository Ports (Data Persistence)
 - **`model_repository.rs`** - Model CRUD operations
 - **`mcp_repository.rs`** - MCP server configuration storage
@@ -97,12 +103,14 @@ Concrete implementations are in:
 - **gglib-hf**: HuggingFace client port
 - **gglib-runtime**: Runtime/process ports
 - **gglib-download**: Download management ports
+- **gglib-agent** *(Phase 2, epic #247)*: `AgentLoopPort` implementation; `ToolExecutorPort` adapter over `gglib-mcp`
 
 ## Modules
 
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`agent.rs`](agent.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-agent-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-agent-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-agent-coverage.json) |
 | [`chat_history.rs`](chat_history.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-chat_history-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-chat_history-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-chat_history-coverage.json) |
 | [`download_event_emitter.rs`](download_event_emitter.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-download_event_emitter-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-download_event_emitter-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-download_event_emitter-coverage.json) |
 | [`download_manager.rs`](download_manager.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-download_manager-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-download_manager-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-download_manager-coverage.json) |
@@ -123,5 +131,6 @@ Concrete implementations are in:
 | [`settings_repository.rs`](settings_repository.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-settings_repository-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-settings_repository-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-settings_repository-coverage.json) |
 | [`system_probe.rs`](system_probe.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-system_probe-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-system_probe-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-system_probe-coverage.json) |
 | [`tool_support.rs`](tool_support.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-tool_support-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-tool_support-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-tool_support-coverage.json) |
+| [`voice.rs`](voice.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-voice-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-voice-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-ports-voice-coverage.json) |
 | [`huggingface/`](huggingface/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-huggingface-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-huggingface-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-huggingface-coverage.json) |
 <!-- module-table:end -->

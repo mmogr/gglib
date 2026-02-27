@@ -10,6 +10,7 @@
 //! - Traits are minimal and CRUD-focused for repositories
 //! - Intent-based methods for process runner (not implementation-leaking)
 
+pub mod agent;
 pub mod chat_history;
 pub mod download;
 pub mod download_event_emitter;
@@ -35,6 +36,9 @@ pub mod voice;
 
 use std::sync::Arc;
 use thiserror::Error;
+
+// Re-export agent port types for convenience
+pub use agent::{AgentError, AgentLoopPort, ToolExecutorPort};
 
 // Re-export repository traits for convenience
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
