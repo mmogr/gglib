@@ -325,35 +325,7 @@ pub async fn delete_message(
 // Chat Proxy Handler
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Allowed port range for llama-server connections.
-/// Prevents the endpoint from becoming a generic SSRF dialer.
-const MIN_ALLOWED_PORT: u16 = 1024;
-const MAX_ALLOWED_PORT: u16 = 65535;
-
-/// Validate the requested port is within allowed range and corresponds
-/// to a running server.
-async fn validate_port(state: &AppState, port: u16) -> Result<(), HttpError> {
-    // Basic range check
-    if !(MIN_ALLOWED_PORT..=MAX_ALLOWED_PORT).contains(&port) {
-        return Err(HttpError::BadRequest(format!(
-            "Port {} is outside allowed range ({}-{})",
-            port, MIN_ALLOWED_PORT, MAX_ALLOWED_PORT
-        )));
-    }
-
-    // Check if the port matches a running server
-    let servers = state.gui.list_servers().await;
-    let port_in_use = servers.iter().any(|s| s.port == port);
-
-    if !port_in_use {
-        return Err(HttpError::BadRequest(format!(
-            "No running server found on port {}. Start a server first.",
-            port
-        )));
-    }
-
-    Ok(())
-}
+use crate::handlers::port_utils::validate_port;
 
 /// Inject tools and tool_choice into the forwarded request body, gated on
 /// whether the model advertises `SUPPORTS_TOOL_CALLS`.
