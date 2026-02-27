@@ -15,13 +15,11 @@
 //! LLM token generation and any in-flight tool calls without leaking compute
 //! or resources.
 
-use std::collections::HashSet;
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use async_trait::async_trait;
 use axum::Json;
 use axum::extract::State;
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -35,10 +33,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
-use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{
-    AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult,
-};
+use gglib_agent::{AgentLoop, FilteredToolExecutor};
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::{AgentLoopPort, ToolExecutorPort};
 use gglib_mcp::McpToolExecutorAdapter;
 use gglib_runtime::LlmCompletionAdapter;
@@ -75,36 +71,6 @@ pub struct AgentChatRequest {
     /// LLM and can be executed. When `None`, all tools from all connected MCP
     /// servers are available.
     pub tool_filter: Option<Vec<String>>,
-}
-
-// =============================================================================
-// FilteredToolExecutor — decorator
-// =============================================================================
-
-/// Decorator that restricts a [`ToolExecutorPort`] to a named allowlist.
-///
-/// Created per-request when [`AgentChatRequest::tool_filter`] is `Some`.
-/// Delegates `execute` unchanged — tools the LLM wasn't told about won't be
-/// requested, but if somehow called, the underlying executor handles them.
-struct FilteredToolExecutor {
-    inner: Arc<dyn ToolExecutorPort>,
-    allowed: HashSet<String>,
-}
-
-#[async_trait]
-impl ToolExecutorPort for FilteredToolExecutor {
-    async fn list_tools(&self) -> Vec<ToolDefinition> {
-        self.inner
-            .list_tools()
-            .await
-            .into_iter()
-            .filter(|t| self.allowed.contains(&t.name))
-            .collect()
-    }
-
-    async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-        self.inner.execute(call).await
-    }
 }
 
 // =============================================================================
@@ -194,10 +160,10 @@ pub async fn chat(
     let mcp_executor = Arc::new(McpToolExecutorAdapter::new(Arc::clone(&state.mcp)));
 
     let tool_executor: Arc<dyn ToolExecutorPort> = match req.tool_filter {
-        Some(filter) => Arc::new(FilteredToolExecutor {
-            inner: mcp_executor,
-            allowed: filter.into_iter().collect(),
-        }),
+        Some(filter) => Arc::new(FilteredToolExecutor::new(
+            mcp_executor,
+            filter.into_iter().collect(),
+        )),
         None => mcp_executor,
     };
 
