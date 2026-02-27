@@ -22,6 +22,7 @@ import {
 } from './runResearchLoop';
 import type { TurnMessage } from './buildTurnMessages';
 import { getToolRegistry } from '../../services/tools';
+import { getAuthenticatedFetchConfig } from '../../services/transport/api/client';
 
 // =============================================================================
 // Configuration
@@ -116,9 +117,10 @@ function createLLMCaller(): (
   }
 ) => Promise<LLMResponse> {
   return async (messages, { tools, endpoint, abortSignal }) => {
-    const url = `http://127.0.0.1:${endpoint.port}/v1/chat/completions`;
+    const { baseUrl, headers: authHeaders } = await getAuthenticatedFetchConfig();
 
     const body: Record<string, unknown> = {
+      port: endpoint.port,
       messages,
       stream: false, // Non-streaming for research loop
     };
@@ -128,12 +130,13 @@ function createLLMCaller(): (
       body.tool_choice = 'auto';
     }
 
+    const url = `${baseUrl}/api/chat`;
     appLogger.debug('research.hook', '[LLMCaller] Request', { url, messagesCount: messages.length, toolsCount: tools?.length ?? 0 });
 
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(body),
         signal: abortSignal,
       });
