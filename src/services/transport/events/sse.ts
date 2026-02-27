@@ -1,8 +1,12 @@
 /**
  * SSE (Server-Sent Events) handling for transport layer.
- * 
+ *
  * Uses fetch-based streaming with Bearer token authentication.
- * Provides reference-counted connection management for multi-subscriber safety.
+ * All event types share a **single** SSE connection to `/api/events` to avoid
+ * exhausting the browser's HTTP/1.1 per-origin connection limit (6 slots).
+ * Events are demultiplexed client-side and dispatched to type-specific handlers.
+ *
+ * @see https://github.com/mmogr/gglib/issues/301
  */
 
 import type { Unsubscribe, EventHandler } from '../types/common';
@@ -14,9 +18,9 @@ import { getApiBaseUrl, getAuthHeaders, getClient } from '../api/client';
 
 /**
  * Unified SSE endpoint path.
- * 
- * All events (server, download, log) are multiplexed through a single
- * SSE connection at this endpoint for efficiency.
+ *
+ * All events (server, download, log, voice, verification) are multiplexed
+ * through a single SSE connection at this endpoint.
  */
 export const SSE_EVENTS_ENDPOINT = '/api/events';
 
@@ -131,10 +135,10 @@ export class SSEConnectionManager<T = unknown> {
     this.abort = new AbortController();
 
     const backoff = new Backoff();
-    
+
     // Ensure client is initialized (triggers API discovery in Tauri mode)
     await getClient();
-    
+
     const url = `${getApiBaseUrl()}${this.path}`;
 
     while (this.running && this.abort && !this.abort.signal.aborted) {
@@ -147,7 +151,7 @@ export class SSEConnectionManager<T = unknown> {
         })) {
           // Successful receipt => reset backoff
           backoff.reset();
-          
+
           const parsed = this.parse(msg);
           if (parsed !== null) {
             this.emit(parsed as T);
@@ -164,7 +168,7 @@ export class SSEConnectionManager<T = unknown> {
 
         appLogger.error('transport.sse', '[SSE] Connection error', { error });
         const wait = backoff.next();
-        
+
         appLogger.debug('transport.sse', '[SSE] Reconnecting', { waitMs: wait });
 
         await new Promise((resolve) => setTimeout(resolve, wait));
@@ -175,37 +179,111 @@ export class SSEConnectionManager<T = unknown> {
   }
 }
 
+// ============================================================================
+// Shared SSE connection (single fetch per app)
+// ============================================================================
+
 /**
- * Manages a reference-counted SSE connection with event filtering.
- * Multiple subscribers can share a single connection.
+ * Map an outer event `type` string to an `AppEventType` category.
+ */
+function getEventCategory(outerType: string): AppEventType | null {
+  if (outerType === 'download') return 'download';
+  if (outerType.startsWith('server_') || outerType === 'server_snapshot') return 'server';
+  if (outerType === 'log' || outerType.startsWith('log_')) return 'log';
+  if (outerType.startsWith('verification_') || outerType.startsWith('verification:')) return 'verification';
+  if (outerType.startsWith('voice_')) return 'voice';
+  return null;
+}
+
+/**
+ * Validate a raw parsed event and optionally decode inner payloads
+ * (e.g. download events with a nested `event` wrapper).
+ *
+ * Returns the validated event or `null` if it should be dropped.
+ */
+function validateEvent(data: unknown, eventType: AppEventType): unknown | null {
+  if (!data || typeof data !== 'object' || !('type' in data)) {
+    return null;
+  }
+
+  const outerType = (data as Record<string, unknown>).type;
+  if (typeof outerType !== 'string') {
+    return null;
+  }
+
+  const category = getEventCategory(outerType);
+  if (category !== eventType) {
+    return null;
+  }
+
+  // Download events use a wrapper format with an inner `event` field.
+  if (eventType === 'download' && outerType === 'download') {
+    const inner = (data as Record<string, unknown>).event;
+    if (inner && typeof inner === 'object' && 'type' in inner) {
+      const validated = decodeDownloadEvent(inner);
+      if (validated) {
+        return { type: 'download', event: validated };
+      }
+    }
+    return null;
+  }
+
+  // All other event types pass through unmodified.
+  return data;
+}
+
+/**
+ * Singleton shared SSE connection manager.
+ *
+ * A single `fetch()` to `/api/events` is opened and kept alive for **all**
+ * event types.  Previously each `SseConnection` created its own manager
+ * (and therefore its own `fetch()`), consuming 3 of the browser's 6
+ * HTTP/1.1 connection slots and starving API requests.
+ */
+let sharedManager: SSEConnectionManager | null = null;
+
+function getSharedManager(): SSEConnectionManager {
+  if (!sharedManager) {
+    sharedManager = new SSEConnectionManager(SSE_EVENTS_ENDPOINT, parseAppEvent);
+  }
+  return sharedManager;
+}
+
+/**
+ * Manages event filtering for a single `AppEventType` on top of the shared
+ * `SSEConnectionManager`.  Multiple handlers can subscribe to the same type;
+ * a reference count on the shared manager ensures the underlying `fetch()` is
+ * opened on the first subscription and closed when the last one unsubscribes.
  */
 class SseConnection<T> {
-  private manager: SSEConnectionManager;
   private handlers: Set<EventHandler<T>> = new Set();
   private unsubscribe: Unsubscribe | null = null;
   private readonly eventType: AppEventType;
 
-  constructor(path: string, eventType: AppEventType) {
+  constructor(eventType: AppEventType) {
     this.eventType = eventType;
-    this.manager = new SSEConnectionManager(path, (msg) => this.parseAndFilter(msg));
   }
 
   /**
-   * Add a handler and connect if this is the first subscriber.
+   * Add a handler and attach to the shared manager if this is the first.
    */
   subscribe(handler: EventHandler<T>): Unsubscribe {
     this.handlers.add(handler);
 
     if (!this.unsubscribe) {
-      this.unsubscribe = this.manager.subscribe((event) => {
-        this.broadcast(event as T);
+      const manager = getSharedManager();
+      this.unsubscribe = manager.subscribe((raw) => {
+        const validated = validateEvent(raw, this.eventType);
+        if (validated !== null) {
+          this.broadcast(validated as T);
+        }
       });
     }
 
     return () => {
       this.handlers.delete(handler);
-      
-      // Disconnect if no more handlers
+
+      // Detach from shared manager when no more handlers for this type
       if (this.handlers.size === 0 && this.unsubscribe) {
         this.unsubscribe();
         this.unsubscribe = null;
@@ -214,73 +292,7 @@ class SseConnection<T> {
   }
 
   /**
-   * Parse and filter events based on type.
-   */
-  private parseAndFilter(msg: SSEMessage): unknown | null {
-    const data = parseAppEvent(msg);
-    return this.validateEvent(data);
-  }
-
-  /**
-   * Validate and decode events based on type.
-   * 
-   * Events are wrapped in an AppEvent envelope with \`type\` field indicating
-   * the category ('download', 'server', 'log', etc.). Only broadcast events
-   * that match this connection's event type.
-   */
-  private validateEvent(data: unknown): unknown | null {
-    if (!data || typeof data !== 'object' || !('type' in data)) {
-      return null;
-    }
-
-    const outerType = (data as Record<string, unknown>).type;
-    if (typeof outerType !== 'string') {
-      return null;
-    }
-
-    // Filter by event type - only process events matching this connection's type
-    const eventCategory = this.getEventCategory(outerType);
-    if (eventCategory !== this.eventType) {
-      return null; // Not for this connection
-    }
-
-    // For download events with wrapper format, validate the inner event
-    if (this.eventType === 'download' && outerType === 'download') {
-      const inner = (data as Record<string, unknown>).event;
-      if (inner && typeof inner === 'object' && 'type' in inner) {
-        // Validate inner download event
-        const validated = decodeDownloadEvent(inner);
-        if (validated) {
-          // Return the full wrapper with validated inner event
-          return { type: 'download', event: validated };
-        }
-      }
-      return null;
-    }
-
-    // Pass through other events without modification
-    return data;
-  }
-
-  /**
-   * Map an outer event type to an AppEventType category.
-   */
-  private getEventCategory(outerType: string): AppEventType | null {
-    // Download events use wrapper format
-    if (outerType === 'download') return 'download';
-    // Server events have specific prefixes
-    if (outerType.startsWith('server_') || outerType === 'server_snapshot') return 'server';
-    // Log events
-    if (outerType === 'log' || outerType.startsWith('log_')) return 'log';
-    // Verification events
-    if (outerType.startsWith('verification_') || outerType.startsWith('verification:')) return 'verification';
-    // Voice events — all Serde type tags start with 'voice_'
-    if (outerType.startsWith('voice_')) return 'voice';
-    return null;
-  }
-
-  /**
-   * Broadcast event to all handlers.
+   * Broadcast event to all handlers for this event type.
    */
   private broadcast(data: T): void {
     for (const handler of this.handlers) {
@@ -305,9 +317,9 @@ function getConnection<K extends AppEventType>(
   eventType: K
 ): SseConnection<AppEventMap[K]> {
   let connection = connections.get(eventType);
-  
+
   if (!connection) {
-    connection = new SseConnection(SSE_EVENTS_ENDPOINT, eventType);
+    connection = new SseConnection(eventType);
     connections.set(eventType, connection);
   }
 
@@ -326,9 +338,6 @@ export function subscribeSseEvent<K extends AppEventType>(
 }
 
 /**
- * Parse server event from SSE payload.
- */
-/**
  * Create SSE-based event system.
  * Returns object with subscribe method matching EventsTransport interface.
  */
@@ -339,6 +348,6 @@ export function createSseEvents() {
   ): Unsubscribe {
     return subscribeSseEvent(eventType, handler);
   }
-  
+
   return { subscribe };
 }
