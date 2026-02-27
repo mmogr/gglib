@@ -1817,8 +1817,14 @@ dependencies = [
 name = "gglib-agent"
 version = "0.5.2"
 dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures-core",
+ "futures-util",
  "gglib-core",
  "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

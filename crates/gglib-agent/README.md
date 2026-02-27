@@ -52,3 +52,15 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | `stream_collector` | Consumes `LlmStreamEvent` stream, forwards text live |
 | `context_pruning` | Budget-aware message trimming |
 <!-- MODULE_TABLE_END -->
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+<!-- module-table:start -->
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+| [`build.rs`](build) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-agent-build-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-agent-build-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-agent-build-coverage.json) |
+| [`src/`](src/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-agent-src-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-agent-src-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-agent-src-coverage.json) |
+<!-- module-table:end -->
+
+</details>
