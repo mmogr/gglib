@@ -160,9 +160,7 @@ impl AgentLoopPort for AgentLoop {
             }
 
             // ---- 7. Loop detection ------------------------------------------
-            if let Err(e) =
-                loop_detector.check(&response.tool_calls, config.max_protocol_strikes)
-            {
+            if let Err(e) = loop_detector.check(&response.tool_calls, config.max_protocol_strikes) {
                 emit_error_event(&tx, &e.to_string()).await;
                 return Err(e);
             }
