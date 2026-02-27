@@ -89,6 +89,17 @@ Cargo workspace with compile-time enforced boundaries. Adapters → infrastructu
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                           │
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                               Application Layer                                     │
+│                                                                                     │
+│   ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│   │                             gglib-agent                                     │   │
+│   │    Pure-domain agentic loop (LLM→tool→LLM). Depends only on gglib-core.    │   │
+│   │    No HTTP, no MCP internals, no database. Port-injected at wiring root.   │   │
+│   └─────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+                                          │
         ┌─────────────┬─────────────┬─────┴─────┬─────────────┬─────────────┐
         ▼             ▼             ▼           ▼             ▼             ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
@@ -190,6 +201,11 @@ Only `gglib-runtime` spawns llama-server processes; only `gglib-download` talks 
 |-------|-------|----------|-----|------------|
 | [gglib-core](crates/gglib-core) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-complexity.json) |
 
+#### Application Layer
+| Crate | Tests | Coverage | LOC | Complexity |
+|-------|-------|----------|-----|------------|
+| [gglib-agent](crates/gglib-agent) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-complexity.json) |
+
 #### Infrastructure Layer
 | Crate | Tests | Coverage | LOC | Complexity |
 |-------|-------|----------|-----|------------|
@@ -226,6 +242,7 @@ Each crate has its own README with architecture diagrams, module breakdowns, and
 | Layer | Crate | Description |
 |-------|-------|-------------|
 | **Core** | [gglib-core](crates/gglib-core/README.md) | Pure domain types, ports & traits |
+| **App** | [gglib-agent](crates/gglib-agent/README.md) | Pure-domain agentic loop (LLM→tool→LLM, port-injected) |
 | **Infra** | [gglib-db](crates/gglib-db/README.md) | SQLite repository implementations |
 | **Infra** | [gglib-gguf](crates/gglib-gguf/README.md) | GGUF file format parser |
 | **Infra** | [gglib-hf](crates/gglib-hf/README.md) | HuggingFace Hub client |
