@@ -69,18 +69,24 @@ fn message_to_openai(msg: &AgentMessage) -> Value {
         AgentMessage::User { content } => {
             json!({ "role": "user", "content": content })
         }
-        AgentMessage::Assistant { content, tool_calls } => {
+        AgentMessage::Assistant {
+            content,
+            tool_calls,
+        } => {
             // Null content is valid when the model only requests tool calls.
-            let calls = tool_calls.as_deref().map(|tcs| {
-                tcs.iter().map(tool_call_to_openai).collect::<Vec<_>>()
-            });
+            let calls = tool_calls
+                .as_deref()
+                .map(|tcs| tcs.iter().map(tool_call_to_openai).collect::<Vec<_>>());
             json!({
                 "role": "assistant",
                 "content": content,
                 "tool_calls": calls,
             })
         }
-        AgentMessage::Tool { tool_call_id, content } => {
+        AgentMessage::Tool {
+            tool_call_id,
+            content,
+        } => {
             json!({ "role": "tool", "tool_call_id": tool_call_id, "content": content })
         }
     }

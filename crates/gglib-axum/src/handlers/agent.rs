@@ -32,11 +32,13 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::handlers::port_utils::validate_port;
 use crate::error::HttpError;
+use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult};
+use gglib_core::domain::agent::{
+    AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult,
+};
 use gglib_core::ports::{AgentLoopPort, ToolExecutorPort};
 use gglib_mcp::McpToolExecutorAdapter;
 use gglib_runtime::LlmCompletionAdapter;
@@ -215,15 +217,17 @@ pub async fn chat(
     });
 
     // AbortOnDrop ensures handle.abort() is called when the SSE stream is dropped.
-    let sse_stream = AbortOnDrop { inner: ReceiverStream::new(rx), handle }.filter_map(
-        |event| {
-            futures_util::future::ready(
-                serde_json::to_string(&event)
-                    .ok()
-                    .map(|j| Ok::<Event, Infallible>(Event::default().data(j))),
-            )
-        },
-    );
+    let sse_stream = AbortOnDrop {
+        inner: ReceiverStream::new(rx),
+        handle,
+    }
+    .filter_map(|event| {
+        futures_util::future::ready(
+            serde_json::to_string(&event)
+                .ok()
+                .map(|j| Ok::<Event, Infallible>(Event::default().data(j))),
+        )
+    });
 
     Ok(Sse::new(sse_stream).keep_alive(
         KeepAlive::new()
