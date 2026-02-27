@@ -4,8 +4,10 @@
 //! defined in gglib-core. They connect the port interfaces to the actual
 //! runtime infrastructure (ProcessManager, database, etc.).
 
+pub mod llm_completion;
 pub mod model_catalog;
 pub mod model_runtime;
 
+pub use llm_completion::LlmCompletionAdapter;
 pub use model_catalog::CatalogPortImpl;
 pub use model_runtime::RuntimePortImpl;
