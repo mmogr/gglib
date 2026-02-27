@@ -1919,6 +1919,7 @@ dependencies = [
  "bitflags 2.11.0",
  "chrono",
  "dirs",
+ "futures-core",
  "mockall",
  "serde",
  "serde_json",
@@ -2032,6 +2033,7 @@ dependencies = [
 name = "gglib-mcp"
 version = "0.5.2"
 dependencies = [
+ "anyhow",
  "async-trait",
  "chrono",
  "gglib-core",
