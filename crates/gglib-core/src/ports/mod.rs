@@ -19,6 +19,7 @@ pub mod download_state;
 pub mod event_emitter;
 pub mod gguf_parser;
 pub mod huggingface;
+pub mod llm_completion;
 pub mod mcp_dto;
 pub mod mcp_error;
 pub mod mcp_repository;
@@ -39,6 +40,8 @@ use thiserror::Error;
 
 // Re-export agent port types for convenience
 pub use agent::{AgentError, AgentLoopPort, ToolExecutorPort};
+// Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
+pub use llm_completion::LlmCompletionPort;
 
 // Re-export repository traits for convenience
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
