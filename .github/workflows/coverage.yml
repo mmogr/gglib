@@ -72,6 +72,7 @@ jobs:
             -p gglib-hf \
             -p gglib-download \
             -p gglib-mcp \
+            -p gglib-agent \
             -p gglib-proxy \
             -p gglib-runtime \
             -p gglib-gui \
@@ -95,6 +96,7 @@ jobs:
           cargo llvm-cov report --package gglib-hf --lcov --output-path gglib-hf-lcov.info
           cargo llvm-cov report --package gglib-download --lcov --output-path gglib-download-lcov.info
           cargo llvm-cov report --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
+          cargo llvm-cov report --package gglib-agent --lcov --output-path gglib-agent-lcov.info
           cargo llvm-cov report --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
           cargo llvm-cov report --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
           cargo llvm-cov report --package gglib-gui --lcov --output-path gglib-gui-lcov.info
@@ -114,6 +116,7 @@ jobs:
             --package gglib-hf \
             --package gglib-download \
             --package gglib-mcp \
+            --package gglib-agent \
             --package gglib-proxy \
             --package gglib-runtime \
             --package gglib-gui \
@@ -136,6 +139,7 @@ jobs:
             gglib-hf-lcov.info
             gglib-download-lcov.info
             gglib-mcp-lcov.info
+            gglib-agent-lcov.info
             gglib-proxy-lcov.info
             gglib-runtime-lcov.info
             gglib-gui-lcov.info
