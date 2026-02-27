@@ -11,3 +11,13 @@ This module is reserved for future refactoring to extract Python subprocess logi
 Currently a placeholder. The actual download execution lives in `gglib-download::manager::worker`.
 
 <!-- module-docs:end -->
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+<!-- module-table:start -->
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+<!-- module-table:end -->
+
+</details>

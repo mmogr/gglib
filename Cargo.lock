@@ -1814,6 +1814,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-agent"
+version = "0.5.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures-core",
+ "futures-util",
+ "gglib-core",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "gglib-app"
 version = "0.5.2"
 dependencies = [
@@ -1919,6 +1933,7 @@ dependencies = [
  "bitflags 2.11.0",
  "chrono",
  "dirs",
+ "futures-core",
  "mockall",
  "serde",
  "serde_json",
@@ -2032,6 +2047,7 @@ dependencies = [
 name = "gglib-mcp"
 version = "0.5.2"
 dependencies = [
+ "anyhow",
  "async-trait",
  "chrono",
  "gglib-core",

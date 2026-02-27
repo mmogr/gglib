@@ -14,8 +14,8 @@ pub mod utils;
 // Re-export commonly used types for convenience
 pub use domain::{
     AgentConfig, AgentEvent, AgentMessage, ChatMessage, Conversation, ConversationUpdate,
-    McpEnvEntry, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
-    McpToolResult, Message, MessageRole, Model, ModelCapabilities, ModelFilterOptions,
+    LlmStreamEvent, McpEnvEntry, McpServer, McpServerConfig, McpServerStatus, McpServerType,
+    McpTool, McpToolResult, Message, MessageRole, Model, ModelCapabilities, ModelFilterOptions,
     NewConversation, NewMcpServer, NewMessage, NewModel, RangeValues, ToolCall, ToolDefinition,
     ToolResult, UpdateMcpServer, infer_from_chat_template, transform_messages_for_capabilities,
 };
@@ -30,11 +30,11 @@ pub use ports::{
     ChatHistoryRepository, CompletedDownload, CoreError, DownloadEventEmitterPort,
     DownloadManagerConfig, DownloadManagerPort, DownloadRequest, DownloadStateRepositoryPort,
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HfClientPort, HfFileInfo,
-    HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, McpErrorCategory,
-    McpErrorInfo, McpRepositoryError, McpServerRepository, McpServiceError, ModelRegistrarPort,
-    ModelRepository, NoopDownloadEmitter, NoopEmitter, NoopGgufParser, ProcessError, ProcessHandle,
-    ProcessRunner, QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile,
-    ServerConfig, ServerHealth, SettingsRepository, ToolExecutorPort,
+    HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, LlmCompletionPort,
+    McpErrorCategory, McpErrorInfo, McpRepositoryError, McpServerRepository, McpServiceError,
+    ModelRegistrarPort, ModelRepository, NoopDownloadEmitter, NoopEmitter, NoopGgufParser,
+    ProcessError, ProcessHandle, ProcessRunner, QuantizationResolver, Repos, RepositoryError,
+    Resolution, ResolvedFile, ServerConfig, ServerHealth, SettingsRepository, ToolExecutorPort,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{

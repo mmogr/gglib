@@ -44,7 +44,9 @@ pub use gguf::{
 };
 
 // Re-export agent types at the domain level for convenience
-pub use agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult};
+pub use agent::{
+    AgentConfig, AgentEvent, AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition, ToolResult,
+};
 
 // Re-export capability types at the domain level for convenience
 pub use capabilities::{

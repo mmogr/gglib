@@ -52,6 +52,12 @@ pub struct AgentConfig {
     /// Number of times the model may emit a response that violates the expected
     /// protocol (e.g. malformed tool calls) before the loop is aborted.
     pub max_protocol_strikes: usize,
+
+    /// Number of consecutive iterations in which the assistant produces identical
+    /// text content before the loop is considered stagnant and aborted.
+    ///
+    /// Frontend constant: `MAX_STAGNATION_STEPS = 5`.
+    pub max_stagnation_steps: usize,
 }
 
 impl Default for AgentConfig {
@@ -62,6 +68,7 @@ impl Default for AgentConfig {
             tool_timeout_ms: 30_000,
             context_budget_chars: 180_000,
             max_protocol_strikes: 2,
+            max_stagnation_steps: 5,
         }
     }
 }
@@ -291,6 +298,58 @@ pub enum AgentEvent {
 }
 
 // =============================================================================
+// LLM stream events (consumed by LlmCompletionPort implementors)
+// =============================================================================
+
+/// A single event produced by a streaming LLM response.
+///
+/// These low-level events are the currency of [`crate::ports::LlmCompletionPort`];
+/// they are parsed by adapter crates from raw SSE frames and handed to
+/// `gglib-agent`'s stream collector, which:
+///
+/// - Forwards [`TextDelta`](LlmStreamEvent::TextDelta) items directly to the
+///   caller's [`AgentEvent`] channel so text appears in real time.
+/// - Accumulates [`ToolCallDelta`](LlmStreamEvent::ToolCallDelta) fragments
+///   until the stream ends, then assembles them into [`ToolCall`] values.
+/// - Waits for [`Done`](LlmStreamEvent::Done) before triggering tool execution.
+#[derive(Debug, Clone)]
+pub enum LlmStreamEvent {
+    /// An incremental text fragment from the model's response.
+    ///
+    /// Must be forwarded immediately to the caller as an
+    /// [`AgentEvent::TextDelta`] to preserve real-time UX.
+    TextDelta {
+        /// The new text fragment (append to the running content buffer).
+        content: String,
+    },
+
+    /// An incremental fragment of a tool-call request.
+    ///
+    /// The adapter crate streams these before the model has finished
+    /// generating the full arguments JSON. The stream collector accumulates
+    /// all deltas for a given `index` into a single [`ToolCall`].
+    ToolCallDelta {
+        /// Zero-based index of the tool call within the current response.
+        index: usize,
+        /// Call identifier (only present in the first delta for this index).
+        id: Option<String>,
+        /// Tool name (only present in the first delta for this index).
+        name: Option<String>,
+        /// Partial arguments JSON string fragment (accumulate with `push_str`).
+        arguments: Option<String>,
+    },
+
+    /// Signals the end of the stream.
+    ///
+    /// Every conforming stream must end with exactly one `Done` item.
+    Done {
+        /// The OpenAI-compatible finish reason (e.g. `"stop"`, `"tool_calls"`,
+        /// `"length"`).
+        finish_reason: String,
+    },
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -307,6 +366,10 @@ mod tests {
         assert_eq!(cfg.tool_timeout_ms, 30_000);
         assert_eq!(cfg.context_budget_chars, 180_000);
         assert_eq!(cfg.max_protocol_strikes, 2);
+        assert_eq!(
+            cfg.max_stagnation_steps, 5,
+            "must mirror MAX_STAGNATION_STEPS from agentLoop.ts"
+        );
     }
 
     #[test]

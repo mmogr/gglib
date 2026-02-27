@@ -1,0 +1,29 @@
+[package]
+name = "gglib-agent"
+version.workspace = true
+edition.workspace = true
+description = "Pure-domain agentic loop implementation for gglib"
+license.workspace = true
+publish = false
+
+[lib]
+name = "gglib_agent"
+path = "src/lib.rs"
+
+[dependencies]
+# Domain types and port traits — the ONLY workspace crate this crate depends on.
+# Hexagonal boundary: gglib-agent must not reference any infrastructure crate.
+gglib-core   = { path = "../gglib-core" }
+tokio        = { workspace = true }
+futures-util = "0.3"
+futures-core = "0.3"
+async-trait  = { workspace = true }
+anyhow       = { workspace = true }
+tracing      = { workspace = true }
+serde_json   = { workspace = true }
+
+[dev-dependencies]
+tokio      = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

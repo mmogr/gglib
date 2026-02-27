@@ -80,3 +80,15 @@ When git is unavailable (e.g., downloaded tarball), constants fall back to safe 
 - `GIT_SHA_SHORT` → `"unknown"`
 - `GIT_DIRTY` → `false`
 - `LONG_VERSION` → just `SEMVER`
+
+<details>
+<summary><h2>Modules</h2></summary>
+
+<!-- module-table:start -->
+| Module | LOC | Complexity | Coverage |
+|--------|-----|------------|----------|
+| [`build.rs`](build) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-build-info-build-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-build-info-build-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-build-info-build-coverage.json) |
+| [`src/`](src/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-build-info-src-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-build-info-src-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges//Users/ogrady8@qut.edu.au/.local/src/gglib/crates/gglib-build-info-src-coverage.json) |
+<!-- module-table:end -->
+
+</details>
