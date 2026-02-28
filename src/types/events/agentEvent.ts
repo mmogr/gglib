@@ -39,12 +39,6 @@ export interface AgentToolResult {
 // Discriminated union
 // ---------------------------------------------------------------------------
 
-/** The model produced a reasoning / thinking segment. */
-export interface AgentThinkingEvent {
-  type: 'thinking';
-  content: string;
-}
-
 /** An incremental text fragment from the model's response. */
 export interface AgentTextDeltaEvent {
   type: 'text_delta';
@@ -91,7 +85,6 @@ export interface AgentErrorEvent {
  * ignored to remain forward-compatible with new variants added on the server.
  */
 export type AgentEvent =
-  | AgentThinkingEvent
   | AgentTextDeltaEvent
   | AgentToolCallStartEvent
   | AgentToolCallCompleteEvent

@@ -268,12 +268,6 @@ pub enum AgentMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentEvent {
-    /// The model has produced a reasoning / thinking segment.
-    Thinking {
-        /// The reasoning text (may be partial if streamed).
-        content: String,
-    },
-
     /// An incremental text fragment from the model's response.
     TextDelta {
         /// The new text fragment (append to the current buffer).

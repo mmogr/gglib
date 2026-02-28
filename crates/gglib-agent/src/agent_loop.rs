@@ -122,16 +122,24 @@ impl AgentLoopPort for AgentLoop {
             debug!(tool_count = tools.len(), "tools available");
 
             // ---- 3. LLM call (streaming) ------------------------------------
-            let stream = self
-                .llm
-                .chat_stream(&messages, &tools)
-                .await
-                .map_err(|e| AgentError::Internal(format!("LLM stream error: {e}")))?;
+            let stream = match self.llm.chat_stream(&messages, &tools).await {
+                Ok(s) => s,
+                Err(e) => {
+                    let msg = format!("LLM stream error: {e}");
+                    emit_error_event(&tx, &msg).await;
+                    return Err(AgentError::Internal(msg));
+                }
+            };
 
             // ---- 4. Collect stream, forwarding text live --------------------
-            let response = collect_stream(stream, &tx)
-                .await
-                .map_err(|e| AgentError::Internal(format!("stream collection error: {e}")))?;
+            let response = match collect_stream(stream, &tx).await {
+                Ok(r) => r,
+                Err(e) => {
+                    let msg = format!("stream collection error: {e}");
+                    emit_error_event(&tx, &msg).await;
+                    return Err(AgentError::Internal(msg));
+                }
+            };
 
             debug!(
                 content_len = response.content.len(),

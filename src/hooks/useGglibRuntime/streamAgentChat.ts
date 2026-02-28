@@ -242,36 +242,6 @@ function applyTextDelta(
   );
 }
 
-/** Append a thinking delta to the current message's last reasoning part. */
-function applyThinkingDelta(
-  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
-  messageId: string,
-  delta: string,
-): void {
-  setMessages(prev =>
-    prev.map(m => {
-      if (m.id !== messageId) return m;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parts = Array.isArray(m.content) ? ([...m.content] as any[]) : [];
-      const lastReasoning =
-        parts.length > 0 && parts[parts.length - 1].type === 'reasoning'
-          ? parts[parts.length - 1]
-          : null;
-
-      let nextParts: unknown[];
-      if (lastReasoning) {
-        nextParts = [
-          ...parts.slice(0, -1),
-          { type: 'reasoning', text: (lastReasoning.text ?? '') + delta },
-        ];
-      } else {
-        nextParts = [...parts, { type: 'reasoning', text: delta }];
-      }
-      return { ...m, content: nextParts as GglibContent };
-    }),
-  );
-}
-
 /** Add a pending (no result yet) tool-call part. */
 function addToolCallPart(
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
@@ -456,12 +426,6 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
       }
 
       switch (event.type) {
-        case 'thinking': {
-          if (timingTracker) timingTracker.onReasoning(currentId);
-          applyThinkingDelta(setMessages, currentId, event.content);
-          break;
-        }
-
         case 'text_delta': {
           if (timingTracker) timingTracker.onBoundary(currentId);
           applyTextDelta(setMessages, currentId, event.content);
