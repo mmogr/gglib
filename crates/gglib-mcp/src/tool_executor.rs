@@ -100,32 +100,31 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         //   - qualified:   "{server_id}__{tool_name}"  (produced by list_tools)
         //   - unqualified: "{tool_name}"               (e.g. from FilteredToolExecutor)
         let all_tools = self.mcp.list_all_tools().await;
-        let (server_id, bare_name): (i64, &str) =
-            if let Some((prefix, bare)) = call.name.split_once("__") {
-                let sid: i64 = prefix.parse().with_context(|| {
-                    format!("qualified tool name '{}' has a non-integer server prefix", call.name)
+        let (server_id, bare_name): (i64, &str) = if let Some((prefix, bare)) =
+            call.name.split_once("__")
+        {
+            let sid: i64 = prefix.parse().with_context(|| {
+                format!(
+                    "qualified tool name '{}' has a non-integer server prefix",
+                    call.name
+                )
+            })?;
+            // Verify the server actually exposes this tool.
+            let found = all_tools
+                .iter()
+                .any(|(id, tools)| *id == sid && tools.iter().any(|t| t.name == bare));
+            anyhow::ensure!(found, "server {sid} does not expose a tool named '{bare}'");
+            (sid, bare)
+        } else {
+            // Unqualified — linear scan across all servers.
+            let server_id = all_tools
+                .iter()
+                .find_map(|(id, tools)| tools.iter().any(|t| t.name == call.name).then_some(*id))
+                .with_context(|| {
+                    format!("no running MCP server exposes a tool named '{}'", call.name)
                 })?;
-                // Verify the server actually exposes this tool.
-                let found = all_tools
-                    .iter()
-                    .any(|(id, tools)| *id == sid && tools.iter().any(|t| t.name == bare));
-                anyhow::ensure!(
-                    found,
-                    "server {sid} does not expose a tool named '{bare}'"
-                );
-                (sid, bare)
-            } else {
-                // Unqualified — linear scan across all servers.
-                let server_id = all_tools
-                    .iter()
-                    .find_map(|(id, tools)| {
-                        tools.iter().any(|t| t.name == call.name).then_some(*id)
-                    })
-                    .with_context(|| {
-                        format!("no running MCP server exposes a tool named '{}'", call.name)
-                    })?;
-                (server_id, call.name.as_str())
-            };
+            (server_id, call.name.as_str())
+        };
 
         // ---- Convert arguments Value → HashMap<String, Value> ---------------
         let arguments: HashMap<String, serde_json::Value> = match &call.arguments {

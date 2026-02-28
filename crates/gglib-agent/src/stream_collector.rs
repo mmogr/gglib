@@ -296,7 +296,10 @@ mod tests {
         let response = collect_stream(stream, &tx, 8).await.unwrap();
         assert_eq!(response.tool_calls.len(), 1);
         // Arguments must be an empty object (the fallback value).
-        assert_eq!(response.tool_calls[0].arguments, serde_json::Value::Object(Default::default()));
+        assert_eq!(
+            response.tool_calls[0].arguments,
+            serde_json::Value::Object(Default::default())
+        );
     }
 
     #[tokio::test]

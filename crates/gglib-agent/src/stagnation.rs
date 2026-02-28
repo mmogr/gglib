@@ -145,7 +145,10 @@ mod tests {
         let mut det = StagnationDetector::new();
         let text = "anything";
         // First occurrence sets the baseline (no stagnation yet).
-        assert!(det.record(text, 0).is_ok(), "first occurrence must not error");
+        assert!(
+            det.record(text, 0).is_ok(),
+            "first occurrence must not error"
+        );
         // Second occurrence — count becomes 1, which satisfies count >= 0.
         let err = det.record(text, 0).unwrap_err();
         assert!(

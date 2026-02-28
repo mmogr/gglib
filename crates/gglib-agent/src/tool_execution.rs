@@ -70,7 +70,8 @@ pub async fn execute_tools_parallel(
                 let result =
                     tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc))
                         .await;
-                let duration_ms = u64::try_from(exec_start.elapsed().as_millis()).unwrap_or(u64::MAX);
+                let duration_ms =
+                    u64::try_from(exec_start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
                 let tool_result = match result {
                     Ok(Ok(r)) => r,

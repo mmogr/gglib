@@ -67,10 +67,7 @@ impl ToolExecutorPort for FilteredToolExecutor {
     /// can ever execute regardless of how the request was constructed.
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
         if !self.allowed.contains(&call.name) {
-            anyhow::bail!(
-                "tool '{}' is not in the allowed list",
-                call.name
-            );
+            anyhow::bail!("tool '{}' is not in the allowed list", call.name);
         }
         self.inner.execute(call).await
     }
