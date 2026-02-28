@@ -111,17 +111,19 @@ impl AgentLoopPort for AgentLoop {
         let mut loop_detector = LoopDetector::new();
         let mut stagnation_detector = StagnationDetector::new();
 
+        // Discover tools once before the iteration loop — the tool set does not
+        // change during a single conversation, and calling list_tools() per
+        // iteration would add pointless overhead (and round-trips for MCP).
+        let tools = self.tool_executor.list_tools().await;
+        debug!(tool_count = tools.len(), "tools available");
+
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
 
             // ---- 1. Context budget pruning ----------------------------------
             messages = prune_for_budget(messages, &config);
 
-            // ---- 2. Tool discovery ------------------------------------------
-            let tools = self.tool_executor.list_tools().await;
-            debug!(tool_count = tools.len(), "tools available");
-
-            // ---- 3. LLM call (streaming) ------------------------------------
+            // ---- 2. LLM call (streaming) ------------------------------------
             let stream = match self.llm.chat_stream(&messages, &tools).await {
                 Ok(s) => s,
                 Err(e) => {
@@ -131,7 +133,7 @@ impl AgentLoopPort for AgentLoop {
                 }
             };
 
-            // ---- 4. Collect stream, forwarding text live --------------------
+            // ---- 3. Collect stream, forwarding text live --------------------
             let response = match collect_stream(stream, &tx, config.max_parallel_tools).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -148,7 +150,7 @@ impl AgentLoopPort for AgentLoop {
                 "LLM response received"
             );
 
-            // ---- 5. Stagnation guard ----------------------------------------
+            // ---- 4. Stagnation guard ----------------------------------------
             if let Err(e) =
                 stagnation_detector.record(&response.content, config.max_stagnation_steps)
             {
@@ -156,7 +158,7 @@ impl AgentLoopPort for AgentLoop {
                 return Err(e);
             }
 
-            // ---- 6. No tool calls → final answer ----------------------------
+            // ---- 5. No tool calls → final answer ----------------------------
             if response.tool_calls.is_empty() {
                 debug!("no tool calls; final answer reached");
                 let _ = tx
@@ -167,18 +169,18 @@ impl AgentLoopPort for AgentLoop {
                 return Ok(response.content);
             }
 
-            // ---- 7. Loop detection ------------------------------------------
+            // ---- 6. Loop detection ------------------------------------------
             if let Err(e) = loop_detector.check(&response.tool_calls, config.max_protocol_strikes) {
                 emit_error_event(&tx, &e.to_string()).await;
                 return Err(e);
             }
 
-            // ---- 8. Parallel tool execution ---------------------------------
+            // ---- 7. Parallel tool execution ---------------------------------
             let results =
                 execute_tools_parallel(&response.tool_calls, &self.tool_executor, &config, &tx)
                     .await;
 
-            // ---- 9. Append assistant + tool-result messages -----------------
+            // ---- 8. Append assistant + tool-result messages -----------------
             messages.push(AgentMessage::Assistant {
                 content: if response.content.is_empty() {
                     None
@@ -194,7 +196,7 @@ impl AgentLoopPort for AgentLoop {
                 });
             }
 
-            // ---- 10. Emit iteration-complete event --------------------------
+            // ---- 9. Emit iteration-complete event ---------------------------
             let _ = tx
                 .send(AgentEvent::IterationComplete {
                     iteration: iteration + 1,
