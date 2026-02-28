@@ -65,19 +65,22 @@ impl McpToolExecutorAdapter {
 impl ToolExecutorPort for McpToolExecutorAdapter {
     /// List every tool available across all running MCP servers.
     ///
-    /// Converts `McpTool { name, description, input_schema }` →
-    /// `ToolDefinition { name, description, input_schema }`.  The mapping is
-    /// 1-to-1 because the agent domain deliberately mirrors MCP's schema shape.
+    /// Tool names are prefixed with `{server_id}__` (e.g. `3__read_file`) to
+    /// guarantee uniqueness when multiple servers expose tools with the same
+    /// bare name.  `execute()` accepts both the qualified and the bare name for
+    /// interoperability with `FilteredToolExecutor` (which operates on the
+    /// names as returned here).
     async fn list_tools(&self) -> Vec<ToolDefinition> {
         self.mcp
             .list_all_tools()
             .await
             .into_iter()
-            .flat_map(|(_, tools)| tools)
-            .map(|t| ToolDefinition {
-                name: t.name,
-                description: t.description,
-                input_schema: t.input_schema,
+            .flat_map(|(server_id, tools)| {
+                tools.into_iter().map(move |t| ToolDefinition {
+                    name: format!("{server_id}__{}", t.name),
+                    description: t.description,
+                    input_schema: t.input_schema,
+                })
             })
             .collect()
     }
@@ -91,14 +94,38 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
     /// `ToolResult { success: false, … }` so the agent can reason about the
     /// failure and retry or adjust.
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-        // ---- Resolve server_id from tool name --------------------------------
+        // ---- Resolve server_id and bare tool name from call.name ------------
+        //
+        // Accepts two formats:
+        //   - qualified:   "{server_id}__{tool_name}"  (produced by list_tools)
+        //   - unqualified: "{tool_name}"               (e.g. from FilteredToolExecutor)
         let all_tools = self.mcp.list_all_tools().await;
-        let server_id = all_tools
-            .iter()
-            .find_map(|(id, tools)| tools.iter().any(|t| t.name == call.name).then_some(*id))
-            .with_context(|| {
-                format!("no running MCP server exposes a tool named '{}'", call.name)
-            })?;
+        let (server_id, bare_name): (i64, &str) =
+            if let Some((prefix, bare)) = call.name.split_once("__") {
+                let sid: i64 = prefix.parse().with_context(|| {
+                    format!("qualified tool name '{}' has a non-integer server prefix", call.name)
+                })?;
+                // Verify the server actually exposes this tool.
+                let found = all_tools
+                    .iter()
+                    .any(|(id, tools)| *id == sid && tools.iter().any(|t| t.name == bare));
+                anyhow::ensure!(
+                    found,
+                    "server {sid} does not expose a tool named '{bare}'"
+                );
+                (sid, bare)
+            } else {
+                // Unqualified — linear scan across all servers.
+                let server_id = all_tools
+                    .iter()
+                    .find_map(|(id, tools)| {
+                        tools.iter().any(|t| t.name == call.name).then_some(*id)
+                    })
+                    .with_context(|| {
+                        format!("no running MCP server exposes a tool named '{}'", call.name)
+                    })?;
+                (server_id, call.name.as_str())
+            };
 
         // ---- Convert arguments Value → HashMap<String, Value> ---------------
         let arguments: HashMap<String, serde_json::Value> = match &call.arguments {
@@ -119,7 +146,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         let start = Instant::now();
         let result = self
             .mcp
-            .call_tool(server_id, &call.name, arguments)
+            .call_tool(server_id, bare_name, arguments)
             .await
             .map_err(|e| anyhow!("MCP call_tool failed: {e}"))?;
         let duration_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
