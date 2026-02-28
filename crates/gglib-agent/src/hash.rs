@@ -17,7 +17,7 @@ use std::time::Instant;
 /// The Rust implementation hashes UTF-8 bytes, matching the JavaScript
 /// implementation's behaviour for the ASCII-dominated argument strings
 /// produced by OpenAI-compatible tool calls.
-pub(crate) fn fnv1a_32(s: &str) -> u32 {
+pub fn fnv1a_32(s: &str) -> u32 {
     const OFFSET: u32 = 2_166_136_261;
     const PRIME: u32 = 16_777_619;
     let mut hash = OFFSET;
@@ -37,7 +37,7 @@ pub(crate) fn fnv1a_32(s: &str) -> u32 {
 /// Used wherever `wait_ms` / `duration_ms` fields are populated so that the
 /// same `u64::try_from(…).unwrap_or(u64::MAX)` boilerplate is not repeated.
 #[inline]
-pub(crate) fn elapsed_ms(start: Instant) -> u64 {
+pub fn elapsed_ms(start: Instant) -> u64 {
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
