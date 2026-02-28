@@ -30,10 +30,6 @@ pub fn render_event(event: &AgentEvent, verbose: bool) {
             let _ = io::stdout().flush();
         }
 
-        AgentEvent::Thinking { content } => {
-            eprintln!("\n  💭  {}", truncate(content, 80));
-        }
-
         AgentEvent::ToolCallStart { tool_call } => {
             eprintln!("\n  ⚙   {} …", tool_call.name);
         }
