@@ -71,41 +71,33 @@ impl LlmCompletionPort for FailingLlm {
 }
 
 // =============================================================================
-// OkExecutor — always returns a successful result immediately
+// StubExecutor — always returns a successful result; tool list is configurable
 // =============================================================================
 
-/// A [`ToolExecutorPort`] that exposes one tool ("`do_thing`") and always
-/// returns `success = true` with content `"done"`.
-pub struct OkExecutor;
+/// A [`ToolExecutorPort`] stub that returns `success = true` for every call.
+///
+/// The advertised tool list is controlled at construction time, covering both
+/// "one-tool" and "no-tools" scenarios without duplicating an implementation.
+/// Replaces the previous `OkExecutor` (hard-coded to `"do_thing"`) and
+/// `NoToolExecutor` (listed no tools) pair.
+pub struct StubExecutor {
+    tools: Vec<ToolDefinition>,
+}
 
-#[async_trait]
-impl ToolExecutorPort for OkExecutor {
-    async fn list_tools(&self) -> Vec<ToolDefinition> {
-        vec![ToolDefinition::new("do_thing")]
-    }
-    async fn execute(&self, call: &ToolCall) -> Result<ToolResult> {
-        Ok(ToolResult {
-            tool_call_id: call.id.clone(),
-            content: "done".into(),
-            success: true,
-            wait_ms: 0,
-            duration_ms: 0,
-        })
+impl StubExecutor {
+    /// Create a stub that advertises tools with the given names.
+    /// Pass `&[]` when the tool list is irrelevant to the test.
+    pub fn with_tools(names: &[&str]) -> Self {
+        Self {
+            tools: names.iter().map(|n| ToolDefinition::new(*n)).collect(),
+        }
     }
 }
 
-// =============================================================================
-// NoToolExecutor — OkExecutor with no listed tools (for tool_execution tests)
-// =============================================================================
-
-/// Like [`OkExecutor`] but lists no tools — used in tool-execution tests where
-/// the tool list is irrelevant.
-pub struct NoToolExecutor;
-
 #[async_trait]
-impl ToolExecutorPort for NoToolExecutor {
+impl ToolExecutorPort for StubExecutor {
     async fn list_tools(&self) -> Vec<ToolDefinition> {
-        vec![]
+        self.tools.clone()
     }
     async fn execute(&self, call: &ToolCall) -> Result<ToolResult> {
         Ok(ToolResult {

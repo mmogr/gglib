@@ -108,28 +108,8 @@ mod tests {
 
     use super::*;
 
-    // ---- FNV-1a hash --------------------------------------------------------
-
-    #[test]
-    fn fnv1a_empty_string_is_offset_basis() {
-        // An empty string leaves the hash at the FNV offset basis.
-        assert_eq!(fnv1a_32(""), 2_166_136_261u32);
-    }
-
-    #[test]
-    fn fnv1a_known_value_a() {
-        // Cross-checked against the TypeScript implementation:
-        // hashString("a") === "e40c292c"
-        assert_eq!(format!("{:08x}", fnv1a_32("a")), "e40c292c");
-    }
-
-    #[test]
-    fn fnv1a_known_value_foo() {
-        // hashString("foo") === "a9f37ed7"
-        assert_eq!(format!("{:08x}", fnv1a_32("foo")), "a9f37ed7");
-    }
-
     // ---- tool_signature / batch_signature -----------------------------------
+    // Note: fnv1a_32 correctness is covered in crates/gglib-agent/src/hash.rs.
 
     #[test]
     fn tool_signature_includes_name_and_hash() {

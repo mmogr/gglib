@@ -151,11 +151,17 @@ impl AgentLoopPort for AgentLoop {
             );
 
             // ---- 4. Stagnation guard ----------------------------------------
-            if let Err(e) =
-                stagnation_detector.record(&response.content, config.max_stagnation_steps)
-            {
-                emit_error_event(&tx, &e.to_string()).await;
-                return Err(e);
+            // Skip hashing when content is empty: a tool-call-only response
+            // always produces the same hash (FNV-1a offset basis), which would
+            // spuriously fire stagnation even while the model makes genuine
+            // progress through distinct tool calls each iteration.
+            if !response.content.is_empty() {
+                if let Err(e) =
+                    stagnation_detector.record(&response.content, config.max_stagnation_steps)
+                {
+                    emit_error_event(&tx, &e.to_string()).await;
+                    return Err(e);
+                }
             }
 
             // ---- 5. No tool calls → final answer ----------------------------
@@ -241,9 +247,8 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
-    use crate::testutil::{
-        FailingLlm, OkExecutor, ScriptedLlm, text_and_tool_events, text_events, tool_call_events,
-    };
+    use crate::testutil::
+        {FailingLlm, StubExecutor, ScriptedLlm, text_and_tool_events, text_events, tool_call_events};
 
     // ---- Tests --------------------------------------------------------------
 
@@ -255,7 +260,7 @@ mod tests {
             // Iteration 2: return final answer
             text_events("The answer is 42."),
         ]));
-        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
+        let agent = AgentLoop::new(llm, Arc::new(StubExecutor::with_tools(&["do_thing"])));
         let (tx, _rx) = mpsc::channel(64);
 
         let result = agent
@@ -279,7 +284,7 @@ mod tests {
             .collect();
 
         let llm = Arc::new(ScriptedLlm::new(responses));
-        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
+        let agent = AgentLoop::new(llm, Arc::new(StubExecutor::with_tools(&["do_thing"])));
         let (tx, _rx) = mpsc::channel(64);
 
         let config = AgentConfig {
@@ -312,7 +317,7 @@ mod tests {
             .collect();
 
         let llm = Arc::new(ScriptedLlm::new(responses));
-        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
+        let agent = AgentLoop::new(llm, Arc::new(StubExecutor::with_tools(&["do_thing"])));
         let (tx, mut rx) = mpsc::channel(64);
 
         let config = AgentConfig {
@@ -366,7 +371,7 @@ mod tests {
             .collect();
 
         let llm = Arc::new(ScriptedLlm::new(responses));
-        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
+        let agent = AgentLoop::new(llm, Arc::new(StubExecutor::with_tools(&["do_thing"])));
         let (tx, mut rx) = mpsc::channel(64);
 
         let config = AgentConfig {
@@ -411,7 +416,7 @@ mod tests {
             tool_call_events("c1", "do_thing"),
             text_events("done"),
         ]));
-        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
+        let agent = AgentLoop::new(llm, Arc::new(StubExecutor::with_tools(&["do_thing"])));
         let (tx, mut rx) = mpsc::channel(64);
 
         agent
@@ -445,7 +450,7 @@ mod tests {
     async fn llm_startup_error_emits_agent_error_event() {
         // When chat_stream returns Err, the loop must emit AgentEvent::Error
         // on the channel BEFORE returning Err(AgentError::Internal).
-        let agent = AgentLoop::new(Arc::new(FailingLlm), Arc::new(OkExecutor));
+        let agent = AgentLoop::new(Arc::new(FailingLlm), Arc::new(StubExecutor::with_tools(&[])));
         let (tx, mut rx) = mpsc::channel(64);
 
         let err = agent

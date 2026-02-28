@@ -60,6 +60,8 @@ pub async fn execute_tools_parallel(
                 let _permit = sem.acquire_owned().await.expect("semaphore closed");
                 let wait_ms = elapsed_ms(enqueue_time);
 
+                let exec_start = Instant::now();
+
                 // Notify that execution is starting (after permit acquired —
                 // we only claim "started" once we have a slot, not when queued).
                 let _ = tx
@@ -67,8 +69,6 @@ pub async fn execute_tools_parallel(
                         tool_call: tc.clone(),
                     })
                     .await;
-
-                let exec_start = Instant::now();
                 let result =
                     tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc))
                         .await;
@@ -137,7 +137,7 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
-    use crate::testutil::{DelayedExecutor, NoToolExecutor};
+    use crate::testutil::{DelayedExecutor, StubExecutor};
 
     // ---- Tests ---------------------------------------------------------------
 
@@ -154,7 +154,7 @@ mod tests {
 
         let results = execute_tools_parallel(
             &calls,
-            &(Arc::new(NoToolExecutor) as Arc<dyn ToolExecutorPort>),
+            &(Arc::new(StubExecutor::with_tools(&[])) as Arc<dyn ToolExecutorPort>),
             &AgentConfig::default(),
             &tx,
         )

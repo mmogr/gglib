@@ -9,7 +9,7 @@
 //! # Cancellation
 //!
 //! When the HTTP client disconnects (browser tab closed, `curl` killed, etc.),
-//! Axum drops the SSE response and therefore the [`AbortOnDrop`] stream
+//! Axum drops the SSE response and therefore the [`AgentTaskGuard`] stream
 //! wrapper. Its [`Drop`] impl calls [`JoinHandle::abort`], which cancels the
 //! spawned `AgentLoop` task at its next `await` point — immediately stopping
 //! LLM token generation and any in-flight tool calls without leaking compute
@@ -74,7 +74,7 @@ pub struct AgentChatRequest {
 }
 
 // =============================================================================
-// AbortOnDrop — RAII cancellation guard
+// AgentTaskGuard — RAII cancellation guard
 // =============================================================================
 
 /// Wraps a [`ReceiverStream<AgentEvent>`] together with the [`JoinHandle`] of
@@ -87,19 +87,19 @@ pub struct AgentChatRequest {
 ///
 /// This prevents the loop from running to completion (burning tokens and CPU)
 /// after the consumer has gone away.
-struct AbortOnDrop {
+struct AgentTaskGuard {
     inner: ReceiverStream<AgentEvent>,
     handle: JoinHandle<()>,
 }
 
-impl Drop for AbortOnDrop {
+impl Drop for AgentTaskGuard {
     fn drop(&mut self) {
         // Idempotent: aborting an already-finished handle is a no-op.
         self.handle.abort();
     }
 }
 
-impl Stream for AbortOnDrop {
+impl Stream for AgentTaskGuard {
     type Item = AgentEvent;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -185,8 +185,8 @@ pub async fn chat(
         }
     });
 
-    // AbortOnDrop ensures handle.abort() is called when the SSE stream is dropped.
-    let sse_stream = AbortOnDrop {
+    // AgentTaskGuard ensures handle.abort() is called when the SSE stream is dropped.
+    let sse_stream = AgentTaskGuard {
         inner: ReceiverStream::new(rx),
         handle,
     }

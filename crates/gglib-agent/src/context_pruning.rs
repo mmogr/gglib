@@ -81,22 +81,44 @@ pub fn prune_for_budget(
         .take(config.prune_keep_tool_messages)
         .collect();
 
-    messages.retain(|m| match m {
-        // Keep a Tool message only if its id is in the retained set.
-        AgentMessage::Tool { tool_call_id, .. } => kept_tool_call_ids.contains(tool_call_id),
+    // Replace retain() with filter_map so we can also strip the pruned call
+    // IDs from retained assistant messages — leaving an assistant message that
+    // references tc2/tc3 when only tc1's result survived would confuse the LLM.
+    messages = messages
+        .into_iter()
+        .filter_map(|m| match m {
+            // Drop a Tool message if its id is not in the retained set.
+            AgentMessage::Tool { ref tool_call_id, .. }
+                if !kept_tool_call_ids.contains(tool_call_id) =>
+            {
+                None
+            }
 
-        // Keep an Assistant message if it carries no tool calls OR if at least
-        // one of its requested tool calls is still present in the retained set.
-        // This prevents the conversation from containing assistant messages that
-        // reference tool results which were pruned away.
-        AgentMessage::Assistant {
-            tool_calls: Some(calls),
-            ..
-        } => calls.iter().any(|c| kept_tool_call_ids.contains(&c.id)),
+            // For an Assistant message with tool calls: keep only if at least
+            // one call survives, but also strip the pruned call IDs so the
+            // context never contains references to missing tool results.
+            AgentMessage::Assistant {
+                content,
+                tool_calls: Some(calls),
+            } => {
+                let retained_calls: Vec<_> = calls
+                    .into_iter()
+                    .filter(|c| kept_tool_call_ids.contains(&c.id))
+                    .collect();
+                if retained_calls.is_empty() {
+                    None
+                } else {
+                    Some(AgentMessage::Assistant {
+                        content,
+                        tool_calls: Some(retained_calls),
+                    })
+                }
+            }
 
-        // System, User, and Assistant-with-no-tool-calls are always kept.
-        _ => true,
-    });
+            // System, User, and Assistant-with-no-tool-calls are always kept.
+            other => Some(other),
+        })
+        .collect();
 
     if total_chars(&messages) <= budget {
         return messages;

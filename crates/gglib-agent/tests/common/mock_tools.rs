@@ -155,11 +155,11 @@ impl ToolExecutorPort for MockToolExecutorPort {
             .await
             .push((call.name.clone(), call.arguments.clone()));
 
-        let behavior = self.behaviors.get(&call.name).cloned().unwrap_or_else(|| {
-            MockToolBehavior::Immediate {
-                content: "ok".into(),
-            }
-        });
+        let behavior = self
+            .behaviors
+            .get(&call.name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("MockToolExecutorPort: unknown tool '{}'", call.name))?;
 
         match behavior {
             MockToolBehavior::Immediate { content } => Ok(ToolResult {
