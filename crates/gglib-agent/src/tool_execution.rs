@@ -49,21 +49,28 @@ pub async fn execute_tools_parallel(
             let executor = Arc::clone(executor);
             let tx = tx.clone();
             tokio::spawn(async move {
-                // Acquire a concurrency permit before starting.
-                let _permit = sem.acquire_owned().await.expect("semaphore closed");
+                // Record the enqueue time so we can measure semaphore wait.
+                // This covers any time spent blocked on the concurrency cap.
+                let enqueue_time = Instant::now();
 
-                // Notify that execution is starting.
+                // Acquire a concurrency permit before starting.
+                // `wait_ms` below captures how long this took.
+                let _permit = sem.acquire_owned().await.expect("semaphore closed");
+                let wait_ms = u64::try_from(enqueue_time.elapsed().as_millis()).unwrap_or(u64::MAX);
+
+                // Notify that execution is starting (after permit acquired —
+                // we only claim "started" once we have a slot, not when queued).
                 let _ = tx
                     .send(AgentEvent::ToolCallStart {
                         tool_call: tc.clone(),
                     })
                     .await;
 
-                let start = Instant::now();
+                let exec_start = Instant::now();
                 let result =
                     tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc))
                         .await;
-                let duration_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
+                let duration_ms = u64::try_from(exec_start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
                 let tool_result = match result {
                     Ok(Ok(r)) => r,
@@ -71,12 +78,14 @@ pub async fn execute_tools_parallel(
                         tool_call_id: tc.id.clone(),
                         content: format!("Tool execution error: {e}"),
                         success: false,
+                        wait_ms,
                         duration_ms,
                     },
                     Err(_) => ToolResult {
                         tool_call_id: tc.id.clone(),
                         content: format!("Tool '{}' timed out after {timeout_ms} ms", tc.name),
                         success: false,
+                        wait_ms,
                         duration_ms,
                     },
                 };
@@ -103,6 +112,7 @@ pub async fn execute_tools_parallel(
                 tool_call_id: calls[i].id.clone(),
                 content: format!("Tool task panicked: {e}"),
                 success: false,
+                wait_ms: 0,
                 duration_ms: 0,
             })
         })
@@ -139,6 +149,7 @@ mod tests {
                 tool_call_id: call.id.clone(),
                 content: "ok".into(),
                 success: true,
+                wait_ms: 0,
                 duration_ms: 0,
             })
         }
@@ -159,6 +170,7 @@ mod tests {
                 tool_call_id: call.id.clone(),
                 content: "slow ok".into(),
                 success: true,
+                wait_ms: 0,
                 duration_ms: self.delay_ms,
             })
         }
@@ -262,6 +274,7 @@ mod tests {
                     tool_call_id: call.id.clone(),
                     content: "ok".into(),
                     success: true,
+                    wait_ms: 0,
                     duration_ms: 20,
                 })
             }

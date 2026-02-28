@@ -323,6 +323,7 @@ function applyToolResult(
                   ? toolResult.content
                   : { error: toolResult.content },
                 isError: !toolResult.success,
+                waitMs: toolResult.wait_ms,
                 durationMs: toolResult.duration_ms,
               }
             : p,
@@ -487,6 +488,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
           appLogger.debug('hook.runtime', 'streamAgentChat: tool call complete', {
             id: event.result.tool_call_id,
             success: event.result.success,
+            waitMs: event.result.wait_ms,
             durationMs: event.result.duration_ms,
           });
           break;

@@ -142,6 +142,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             tool_call_id: call.id.clone(),
             content,
             success,
+            wait_ms: 0,
             duration_ms,
         })
     }

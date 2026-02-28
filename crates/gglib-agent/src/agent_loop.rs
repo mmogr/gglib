@@ -283,6 +283,7 @@ mod tests {
                 tool_call_id: call.id.clone(),
                 content: "done".into(),
                 success: true,
+                wait_ms: 0,
                 duration_ms: 0,
             })
         }

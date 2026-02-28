@@ -29,7 +29,9 @@ export interface AgentToolResult {
   content: string;
   /** `false` here is **not** an error — it is context fed to the LLM. */
   success: boolean;
-  /** Wall-clock execution time in milliseconds. */
+  /** Time spent waiting for a concurrency slot, in milliseconds. */
+  wait_ms: number;
+  /** Wall-clock execution time (after acquiring the slot), in milliseconds. */
   duration_ms: number;
 }
 
