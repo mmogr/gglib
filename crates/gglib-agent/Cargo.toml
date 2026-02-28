@@ -15,8 +15,8 @@ path = "src/lib.rs"
 # Hexagonal boundary: gglib-agent must not reference any infrastructure crate.
 gglib-core   = { path = "../gglib-core" }
 tokio        = { workspace = true }
-futures-util = "0.3"
-futures-core = "0.3"
+futures-util = { workspace = true }
+futures-core = { workspace = true }
 async-trait  = { workspace = true }
 anyhow       = { workspace = true }
 tracing      = { workspace = true }

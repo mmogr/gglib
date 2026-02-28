@@ -1,8 +1,13 @@
 //! Streaming LLM response collector.
 //!
-//! Consumes a [`LlmCompletionPort`] stream, forwarding text deltas to the
-//! caller's [`AgentEvent`] channel **as they arrive** and accumulating
-//! incremental tool-call deltas in memory until the stream terminates.
+//! Consumes a [`LlmCompletionPort`] stream, forwarding text deltas and
+//! reasoning deltas to the caller's [`AgentEvent`] channel **as they arrive**
+//! and accumulating incremental tool-call deltas in memory until the stream
+//! terminates.
+//!
+//! Reasoning deltas ([`LlmStreamEvent::ReasoningDelta`]) are forwarded live
+//! as [`AgentEvent::ReasoningDelta`] and accumulated in a separate buffer; they
+//! are never mixed into the `content` field and are not sent back as context.
 //!
 //! # Why separate from the main loop?
 //!
@@ -31,6 +36,12 @@ use tracing::warn;
 pub struct CollectedResponse {
     /// All text content fragments joined into a single string.
     pub content: String,
+    /// All reasoning/CoT fragments joined into a single string.
+    ///
+    /// Empty for models that do not emit `reasoning_content` frames.
+    /// Present for informational purposes (logging, CLI rendering); it is
+    /// **not** fed back into the conversation history.
+    pub reasoning_content: String,
     /// Tool calls requested by the model (empty when the model answered directly).
     pub tool_calls: Vec<ToolCall>,
     /// The `finish_reason` from the [`LlmStreamEvent::Done`] terminus event.
@@ -81,6 +92,7 @@ pub async fn collect_stream(
     max_parallel_tools: usize,
 ) -> Result<CollectedResponse> {
     let mut text_buf = String::new();
+    let mut reasoning_buf = String::new();
     // Indexed by the tool-call `index` from the stream deltas.
     let mut partials: Vec<PartialToolCall> = Vec::new();
 
@@ -90,6 +102,12 @@ pub async fn collect_stream(
                 text_buf.push_str(&content);
                 // Forward immediately; ignore send errors (client may have disconnected).
                 let _ = tx.send(AgentEvent::TextDelta { content }).await;
+            }
+
+            LlmStreamEvent::ReasoningDelta { content } => {
+                reasoning_buf.push_str(&content);
+                // Forward immediately so CoT tokens appear in real time in the UI.
+                let _ = tx.send(AgentEvent::ReasoningDelta { content }).await;
             }
 
             LlmStreamEvent::ToolCallDelta {
@@ -125,7 +143,9 @@ pub async fn collect_stream(
                 let tool_calls = partials
                     .into_iter()
                     .enumerate()
-                    .filter(|(_, p)| !p.name.is_empty()) // skip empty slots
+                    // Skip empty slots and any partial whose id never arrived
+                    // (an empty id would produce an unmatchable ToolResult).
+                    .filter(|(_, p)| !p.name.is_empty() && !p.id.is_empty())
                     .map(|(_, p)| {
                         let args_str = if p.arguments.is_empty() {
                             "{}"
@@ -152,6 +172,7 @@ pub async fn collect_stream(
 
                 return Ok(CollectedResponse {
                     content: text_buf,
+                    reasoning_content: reasoning_buf,
                     tool_calls,
                     finish_reason,
                 });
@@ -206,6 +227,39 @@ mod tests {
         let evt2 = rx.recv().await.unwrap();
         assert!(matches!(evt1, AgentEvent::TextDelta { content } if content == "Hello, "));
         assert!(matches!(evt2, AgentEvent::TextDelta { content } if content == "world!"));
+    }
+
+    #[tokio::test]
+    async fn reasoning_delta_forwarded_and_accumulated_separately() {
+        let (tx, mut rx) = mpsc::channel(16);
+        let stream = make_stream(vec![
+            LlmStreamEvent::ReasoningDelta {
+                content: "Let me think".into(),
+            },
+            LlmStreamEvent::ReasoningDelta {
+                content: " about this.".into(),
+            },
+            LlmStreamEvent::TextDelta {
+                content: "Answer.".into(),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
+        ]);
+
+        let response = collect_stream(stream, &tx, 8).await.unwrap();
+        // Reasoning content is accumulated separately and NOT mixed into content.
+        assert_eq!(response.reasoning_content, "Let me think about this.");
+        assert_eq!(response.content, "Answer.");
+        assert!(response.tool_calls.is_empty());
+
+        // Both reasoning deltas and the text delta are forwarded live.
+        let evt1 = rx.recv().await.unwrap();
+        let evt2 = rx.recv().await.unwrap();
+        let evt3 = rx.recv().await.unwrap();
+        assert!(matches!(evt1, AgentEvent::ReasoningDelta { content } if content == "Let me think"));
+        assert!(matches!(evt2, AgentEvent::ReasoningDelta { content } if content == " about this."));
+        assert!(matches!(evt3, AgentEvent::TextDelta { content } if content == "Answer."));
     }
 
     #[tokio::test]

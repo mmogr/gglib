@@ -181,6 +181,17 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
         });
     }
 
+    // ── Reasoning/CoT content delta (DeepSeek R1 / QwQ) ────────────────────
+    // llama-server emits chain-of-thought tokens in `delta["reasoning_content"]`
+    // when started with `--reasoning-format deepseek`.
+    if let Some(reasoning) = delta["reasoning_content"].as_str()
+        && !reasoning.is_empty()
+    {
+        events.push(LlmStreamEvent::ReasoningDelta {
+            content: reasoning.to_owned(),
+        });
+    }
+
     // ── Tool-call deltas ────────────────────────────────────────────────────
     if let Some(tool_calls) = delta["tool_calls"].as_array() {
         for tc in tool_calls {
@@ -435,5 +446,51 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert!(matches!(&events[0], LlmStreamEvent::TextDelta { .. }));
         assert!(matches!(&events[1], LlmStreamEvent::Done { .. }));
+    }
+
+    #[test]
+    fn reasoning_content_produces_reasoning_delta_event() {
+        let frame = serde_json::json!({
+            "choices": [{ "delta": { "reasoning_content": "I should check..." }, "finish_reason": null }]
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::ReasoningDelta { content } if content == "I should check..."
+        ));
+    }
+
+    #[test]
+    fn empty_reasoning_content_produces_no_event() {
+        let frame = serde_json::json!({
+            "choices": [{ "delta": { "reasoning_content": "" }, "finish_reason": null }]
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(events.is_empty(), "empty reasoning_content should not produce ReasoningDelta");
+    }
+
+    #[test]
+    fn frame_with_reasoning_and_text_produces_both_events_in_order() {
+        // llama-server may interleave reasoning and text in the same frame.
+        let frame = serde_json::json!({
+            "choices": [{ "delta": { "content": "ok", "reasoning_content": "think" }, "finish_reason": null }]
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 2);
+        assert!(matches!(&events[0], LlmStreamEvent::TextDelta { .. }));
+        assert!(matches!(&events[1], LlmStreamEvent::ReasoningDelta { .. }));
     }
 }

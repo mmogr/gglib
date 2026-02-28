@@ -31,6 +31,7 @@ import { convertToWireMessages } from './wireMessages';
 import { readAgentSSE } from './agentSseReader';
 import {
   applyTextDelta,
+  applyReasoningDelta,
   addToolCallPart,
   applyToolResult,
   finalizeMessageTiming,
@@ -178,6 +179,11 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
       }
 
       switch (event.type) {
+        case 'reasoning_delta': {
+          applyReasoningDelta(setMessages, currentId, event.content);
+          break;
+        }
+
         case 'text_delta': {
           if (timingTracker) timingTracker.onBoundary(currentId);
           applyTextDelta(setMessages, currentId, event.content);

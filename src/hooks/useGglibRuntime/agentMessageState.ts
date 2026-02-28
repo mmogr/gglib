@@ -30,6 +30,9 @@ export function applyTextDelta(
       const parts = Array.isArray(m.content)
         ? ([...m.content] as { type: string; text?: string }[])
         : [];
+      // Invariant: the backend emits all `TextDelta` events before any
+      // `ToolCallStart` events within a single iteration, so the last part is
+      // always a text part (or the array is empty) when this function is called.
       const lastText =
         parts.length > 0 && parts[parts.length - 1].type === 'text'
           ? parts[parts.length - 1]
@@ -43,6 +46,39 @@ export function applyTextDelta(
         ];
       } else {
         nextParts = [...parts, { type: 'text', text: delta }];
+      }
+      return { ...m, content: nextParts as GglibContent };
+    }),
+  );
+}
+
+/** Append a reasoning/thinking delta to the current message's reasoning part (or create one). */
+export function applyReasoningDelta(
+  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
+  messageId: string,
+  delta: string,
+): void {
+  setMessages(prev =>
+    prev.map(m => {
+      if (m.id !== messageId) return m;
+      const parts = Array.isArray(m.content)
+        ? ([...m.content] as { type: string; text?: string }[])
+        : [];
+      // Reasoning parts are always appended to the end of the parts array.
+      // The backend emits all ReasoningDelta events before TextDelta events
+      // within a single iteration, so this is the last part when called.
+      const lastReasoning =
+        parts.length > 0 && parts[parts.length - 1].type === 'reasoning'
+          ? parts[parts.length - 1]
+          : null;
+      let nextParts: unknown[];
+      if (lastReasoning) {
+        nextParts = [
+          ...parts.slice(0, -1),
+          { type: 'reasoning', text: (lastReasoning.text ?? '') + delta },
+        ];
+      } else {
+        nextParts = [...parts, { type: 'reasoning', text: delta }];
       }
       return { ...m, content: nextParts as GglibContent };
     }),

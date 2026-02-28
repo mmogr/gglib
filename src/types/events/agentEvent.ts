@@ -66,6 +66,18 @@ export interface AgentIterationCompleteEvent {
   tool_calls: number;
 }
 
+/**
+ * An incremental reasoning/thinking fragment (CoT tokens).
+ *
+ * Emitted by reasoning-capable models (e.g. DeepSeek R1, QwQ) that expose
+ * their chain-of-thought.  These tokens are forwarded live but are excluded
+ * from the conversation history sent back to the model.
+ */
+export interface AgentReasoningDeltaEvent {
+  type: 'reasoning_delta';
+  content: string;
+}
+
 /** The loop has concluded and produced a definitive answer. */
 export interface AgentFinalAnswerEvent {
   type: 'final_answer';
@@ -86,6 +98,7 @@ export interface AgentErrorEvent {
  */
 export type AgentEvent =
   | AgentTextDeltaEvent
+  | AgentReasoningDeltaEvent
   | AgentToolCallStartEvent
   | AgentToolCallCompleteEvent
   | AgentIterationCompleteEvent

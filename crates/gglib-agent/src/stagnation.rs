@@ -61,11 +61,16 @@ impl StagnationDetector {
     /// | 1           | 2 (fires on the 2nd repeat)       |
     /// | 5 (default) | 6 (fires on the 6th occurrence)   |
     ///
-    /// Note: empty text is hashed normally.  A model that consistently produces
-    /// no text content (e.g., only tool calls) will have the same hash each
-    /// iteration but this is expected and harmless because the tool-call loop
-    /// detector handles that case.
+    /// If `text` is empty, the call is a no-op and `Ok(())` is returned
+    /// immediately.  Empty responses (tool-call-only iterations) always hash
+    /// to the same FNV-1a offset basis value; ignoring them avoids spurious
+    /// stagnation detection while the model makes genuine progress through
+    /// distinct tool calls.  The caller is therefore not required to guard
+    /// against empty strings — this method owns the invariant.
     pub fn record(&mut self, text: &str, max_steps: usize) -> Result<(), AgentError> {
+        if text.is_empty() {
+            return Ok(());
+        }
         let hash = fnv1a_32(text);
         match self.prev_hash {
             Some(prev) if prev == hash => {

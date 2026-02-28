@@ -75,7 +75,18 @@ pub async fn execute_tools_parallel(
                 let duration_ms = elapsed_ms(exec_start);
 
                 let tool_result = match result {
-                    Ok(Ok(r)) => r,
+                    Ok(Ok(mut r)) => {
+                        // Stamp timing metrics onto the adapter result.
+                        // The MCP adapter (and any other ToolExecutorPort impl)
+                        // cannot measure concurrency wait time; we fill it in
+                        // here where both metrics are available.  The adapter's
+                        // own duration_ms is also overridden so the total
+                        // wall-clock time (from permit acquisition to finish)
+                        // is consistently reported.
+                        r.wait_ms = wait_ms;
+                        r.duration_ms = duration_ms;
+                        r
+                    }
                     Ok(Err(e)) => ToolResult {
                         tool_call_id: tc.id.clone(),
                         content: format!("Tool execution error: {e}"),

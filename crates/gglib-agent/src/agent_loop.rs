@@ -151,17 +151,14 @@ impl AgentLoopPort for AgentLoop {
             );
 
             // ---- 4. Stagnation guard ----------------------------------------
-            // Skip hashing when content is empty: a tool-call-only response
-            // always produces the same hash (FNV-1a offset basis), which would
-            // spuriously fire stagnation even while the model makes genuine
-            // progress through distinct tool calls each iteration.
-            if !response.content.is_empty() {
-                if let Err(e) =
-                    stagnation_detector.record(&response.content, config.max_stagnation_steps)
-                {
-                    emit_error_event(&tx, &e.to_string()).await;
-                    return Err(e);
-                }
+            // `record` is a no-op on empty text (tool-call-only responses);
+            // that guard lives inside StagnationDetector to keep the invariant
+            // with the module that owns it.
+            if let Err(e) =
+                stagnation_detector.record(&response.content, config.max_stagnation_steps)
+            {
+                emit_error_event(&tx, &e.to_string()).await;
+                return Err(e);
             }
 
             // ---- 5. No tool calls → final answer ----------------------------

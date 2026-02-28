@@ -60,6 +60,9 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
         .map(p => (p as { type: string; text?: string }).text ?? '')
         .join('');
       const toolCallParts = parts.filter(p => p.type === 'tool-call');
+      // Note: `reasoning` parts (type === 'reasoning') are intentionally
+      // excluded here.  The backend wire format has no `reasoning` message role
+      // and the model does not need its own CoT trace as context.
 
       const toolCalls: AgentWireToolCall[] = toolCallParts.map(p => ({
         id: p.toolCallId as string,

@@ -22,25 +22,34 @@ use gglib_core::{AgentConfig, AgentMessage};
 // Public API
 // =============================================================================
 
-/// Estimate the character cost of a single message.
+/// Estimate the Unicode scalar-value count of a single message.
+///
+/// Uses [`str::chars().count()`] rather than [`str::len`] (byte count) so that
+/// multi-byte characters are counted as one unit, matching how LLMs typically
+/// measure context length.
 fn content_len(msg: &AgentMessage) -> usize {
     match msg {
-        AgentMessage::System { content } | AgentMessage::User { content } => content.len(),
+        AgentMessage::System { content } | AgentMessage::User { content } => {
+            content.chars().count()
+        }
         AgentMessage::Assistant {
             content,
             tool_calls,
         } => {
-            content.as_deref().map_or(0, str::len)
+            content.as_deref().map_or(0, |s| s.chars().count())
                 + tool_calls.as_deref().map_or(0, |tc| {
                     tc.iter()
-                        .map(|c| c.name.len() + c.arguments.to_string().len())
+                        .map(|c| {
+                            c.name.chars().count()
+                                + c.arguments.to_string().chars().count()
+                        })
                         .sum()
                 })
         }
         AgentMessage::Tool {
             tool_call_id,
             content,
-        } => tool_call_id.len() + content.len(),
+        } => tool_call_id.chars().count() + content.chars().count(),
     }
 }
 
