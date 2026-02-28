@@ -23,12 +23,12 @@ use tokio::sync::Mutex;
 ///
 /// If `chat_stream` is called after the queue is exhausted, it returns an
 /// `Err` — which the agent loop surfaces as `AgentError::Internal`.
-pub(crate) struct ScriptedLlm {
+pub struct ScriptedLlm {
     responses: Mutex<std::collections::VecDeque<Vec<LlmStreamEvent>>>,
 }
 
 impl ScriptedLlm {
-    pub(crate) fn new(responses: Vec<Vec<LlmStreamEvent>>) -> Self {
+    pub fn new(responses: Vec<Vec<LlmStreamEvent>>) -> Self {
         Self {
             responses: Mutex::new(responses.into_iter().collect()),
         }
@@ -57,7 +57,7 @@ impl LlmCompletionPort for ScriptedLlm {
 // =============================================================================
 
 /// A [`LlmCompletionPort`] that always fails `chat_stream` with a fixed error.
-pub(crate) struct FailingLlm;
+pub struct FailingLlm;
 
 #[async_trait]
 impl LlmCompletionPort for FailingLlm {
@@ -74,9 +74,9 @@ impl LlmCompletionPort for FailingLlm {
 // OkExecutor — always returns a successful result immediately
 // =============================================================================
 
-/// A [`ToolExecutorPort`] that exposes one tool ("do_thing") and always
+/// A [`ToolExecutorPort`] that exposes one tool ("`do_thing`") and always
 /// returns `success = true` with content `"done"`.
-pub(crate) struct OkExecutor;
+pub struct OkExecutor;
 
 #[async_trait]
 impl ToolExecutorPort for OkExecutor {
@@ -100,7 +100,7 @@ impl ToolExecutorPort for OkExecutor {
 
 /// Like [`OkExecutor`] but lists no tools — used in tool-execution tests where
 /// the tool list is irrelevant.
-pub(crate) struct NoToolExecutor;
+pub struct NoToolExecutor;
 
 #[async_trait]
 impl ToolExecutorPort for NoToolExecutor {
@@ -124,8 +124,8 @@ impl ToolExecutorPort for NoToolExecutor {
 
 /// A [`ToolExecutorPort`] that sleeps for `delay_ms` milliseconds before
 /// returning a successful result.  Useful for exercising per-tool timeouts.
-pub(crate) struct DelayedExecutor {
-    pub(crate) delay_ms: u64,
+pub struct DelayedExecutor {
+    pub delay_ms: u64,
 }
 
 #[async_trait]
@@ -150,7 +150,7 @@ impl ToolExecutorPort for DelayedExecutor {
 // =============================================================================
 
 /// Build a `[ToolCallDelta, Done]` event sequence for a single tool call.
-pub(crate) fn tool_call_events(id: &str, name: &str) -> Vec<LlmStreamEvent> {
+pub fn tool_call_events(id: &str, name: &str) -> Vec<LlmStreamEvent> {
     vec![
         LlmStreamEvent::ToolCallDelta {
             index: 0,
@@ -165,7 +165,7 @@ pub(crate) fn tool_call_events(id: &str, name: &str) -> Vec<LlmStreamEvent> {
 }
 
 /// Build a `[TextDelta, Done]` event sequence.
-pub(crate) fn text_events(text: &str) -> Vec<LlmStreamEvent> {
+pub fn text_events(text: &str) -> Vec<LlmStreamEvent> {
     vec![
         LlmStreamEvent::TextDelta {
             content: text.into(),
@@ -177,7 +177,7 @@ pub(crate) fn text_events(text: &str) -> Vec<LlmStreamEvent> {
 }
 
 /// Build a `[TextDelta, ToolCallDelta, Done]` event sequence.
-pub(crate) fn text_and_tool_events(text: &str, id: &str, name: &str) -> Vec<LlmStreamEvent> {
+pub fn text_and_tool_events(text: &str, id: &str, name: &str) -> Vec<LlmStreamEvent> {
     vec![
         LlmStreamEvent::TextDelta {
             content: text.into(),

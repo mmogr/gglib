@@ -58,8 +58,8 @@ mod tests {
     #[test]
     fn fnv1a_32_matches_known_values() {
         // Cross-checked against the JavaScript hashString implementation.
-        assert_eq!(fnv1a_32("hello"), 1335831723);
-        assert_eq!(fnv1a_32("world"), 933488787);
+        assert_eq!(fnv1a_32("hello"), 1_335_831_723);
+        assert_eq!(fnv1a_32("world"), 933_488_787);
     }
 
     #[test]
