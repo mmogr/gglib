@@ -2,13 +2,13 @@
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
 
-pub mod agent_loop;
-pub mod context_pruning;
-pub mod filter;
-pub mod loop_detection;
-pub mod stagnation;
-pub mod stream_collector;
-pub mod tool_execution;
+pub(crate) mod agent_loop;
+pub(crate) mod context_pruning;
+pub(crate) mod filter;
+pub(crate) mod loop_detection;
+pub(crate) mod stagnation;
+pub(crate) mod stream_collector;
+pub(crate) mod tool_execution;
 
 pub use agent_loop::AgentLoop;
 pub use filter::FilteredToolExecutor;
