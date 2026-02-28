@@ -7,9 +7,11 @@
 //!
 //! # Lifetime
 //!
-//! Create one adapter per agent invocation (construction is cheap — one
-//! `reqwest::Client` allocation) and pass it as `Arc<dyn LlmCompletionPort>`
-//! to [`gglib_agent::AgentLoop::new`].
+//! Prefer constructing one adapter **per request** via
+//! [`LlmCompletionAdapter::with_client`] and passing a clone of the
+//! application-level `reqwest::Client` (stored in `AppState`) so all requests
+//! share a single connection pool.  The `new` constructor is still available
+//! for standalone use (e.g. CLI) and allocates its own pool.
 //!
 //! ```ignore
 //! let adapter = LlmCompletionAdapter::new(9000);
@@ -47,11 +49,24 @@ pub struct LlmCompletionAdapter {
 
 impl LlmCompletionAdapter {
     /// Create a new adapter targeting `http://127.0.0.1:{port}/v1/chat/completions`.
+    ///
+    /// Allocates a fresh [`reqwest::Client`] — prefer [`with_client`](Self::with_client)
+    /// when a shared client is available (e.g. from `AppState`) to avoid
+    /// per-request connection-pool overhead.
     #[must_use]
     pub fn new(port: u16) -> Self {
+        Self::with_client(port, Client::new())
+    }
+
+    /// Create an adapter that reuses an existing [`reqwest::Client`].
+    ///
+    /// Pass a clone of the application-level client (e.g. `state.http_client.clone()`)
+    /// so all agent-chat requests share a single connection pool.
+    #[must_use]
+    pub fn with_client(port: u16, client: Client) -> Self {
         Self {
             url: format!("http://127.0.0.1:{port}/v1/chat/completions"),
-            client: Client::new(),
+            client,
         }
     }
 }
