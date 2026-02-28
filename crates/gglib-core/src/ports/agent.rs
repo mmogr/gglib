@@ -157,7 +157,7 @@ pub trait AgentLoopPort: Send + Sync {
     /// * `messages` — The initial conversation history (system prompt + user
     ///   message at minimum).
     /// * `config` — Loop control parameters (iteration limits, timeouts, etc.).
-    /// * `events` — Async channel over which the loop streams [`AgentEvent`]s.
+    /// * `tx` — Async channel over which the loop streams [`AgentEvent`]s.
     ///   Taken by value; dropped on completion to close the SSE stream.
     ///
     /// # Returns
@@ -171,6 +171,6 @@ pub trait AgentLoopPort: Send + Sync {
         &self,
         messages: Vec<AgentMessage>,
         config: AgentConfig,
-        events: mpsc::Sender<AgentEvent>,
+        tx: mpsc::Sender<AgentEvent>,
     ) -> Result<String, AgentError>;
 }

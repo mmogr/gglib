@@ -218,16 +218,9 @@ impl AgentLoopPort for AgentLoop {
 
         // Max iterations reached
         warn!(max = config.max_iterations, "agent loop hit max iterations");
-        let message = format!(
-            "Agent loop reached the maximum number of iterations ({})",
-            config.max_iterations
-        );
-        let _ = tx
-            .send(AgentEvent::Error {
-                message: message.clone(),
-            })
-            .await;
-        Err(AgentError::MaxIterationsReached(config.max_iterations))
+        let error = AgentError::MaxIterationsReached(config.max_iterations);
+        emit_error_event(&tx, &error.to_string()).await;
+        Err(error)
     }
 }
 

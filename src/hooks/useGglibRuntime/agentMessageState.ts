@@ -15,6 +15,37 @@ import type { GglibMessage, GglibContent, GglibMessagePart } from '../../types/m
 import type { AgentToolResult } from '../../types/events/agentEvent';
 
 // ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+type RawPart = { type: string; text?: string };
+
+/**
+ * Append `delta` to the last part whose `type` matches `partType`, or push a
+ * new part when no such part exists at the tail of the array.
+ *
+ * Returns a new array — `parts` is never mutated.
+ *
+ * This is the common kernel shared by {@link applyTextDelta} and
+ * {@link applyReasoningDelta}; the only difference between those two callers
+ * is the `partType` string they pass in.
+ */
+function applyDeltaToLastPart(
+  parts: RawPart[],
+  partType: string,
+  delta: string,
+): RawPart[] {
+  const last = parts.length > 0 ? parts[parts.length - 1] : null;
+  if (last?.type === partType) {
+    return [
+      ...parts.slice(0, -1),
+      { type: partType, text: (last.text ?? '') + delta },
+    ];
+  }
+  return [...parts, { type: partType, text: delta }];
+}
+
+// ---------------------------------------------------------------------------
 // Text content
 // ---------------------------------------------------------------------------
 
@@ -27,27 +58,11 @@ export function applyTextDelta(
   setMessages(prev =>
     prev.map(m => {
       if (m.id !== messageId) return m;
-      const parts = Array.isArray(m.content)
-        ? ([...m.content] as { type: string; text?: string }[])
-        : [];
       // Invariant: the backend emits all `TextDelta` events before any
       // `ToolCallStart` events within a single iteration, so the last part is
       // always a text part (or the array is empty) when this function is called.
-      const lastText =
-        parts.length > 0 && parts[parts.length - 1].type === 'text'
-          ? parts[parts.length - 1]
-          : null;
-
-      let nextParts: unknown[];
-      if (lastText) {
-        nextParts = [
-          ...parts.slice(0, -1),
-          { type: 'text', text: (lastText.text ?? '') + delta },
-        ];
-      } else {
-        nextParts = [...parts, { type: 'text', text: delta }];
-      }
-      return { ...m, content: nextParts as GglibContent };
+      const parts = Array.isArray(m.content) ? (m.content as RawPart[]).slice() : [];
+      return { ...m, content: applyDeltaToLastPart(parts, 'text', delta) as GglibContent };
     }),
   );
 }
@@ -61,26 +76,10 @@ export function applyReasoningDelta(
   setMessages(prev =>
     prev.map(m => {
       if (m.id !== messageId) return m;
-      const parts = Array.isArray(m.content)
-        ? ([...m.content] as { type: string; text?: string }[])
-        : [];
-      // Reasoning parts are always appended to the end of the parts array.
       // The backend emits all ReasoningDelta events before TextDelta events
-      // within a single iteration, so this is the last part when called.
-      const lastReasoning =
-        parts.length > 0 && parts[parts.length - 1].type === 'reasoning'
-          ? parts[parts.length - 1]
-          : null;
-      let nextParts: unknown[];
-      if (lastReasoning) {
-        nextParts = [
-          ...parts.slice(0, -1),
-          { type: 'reasoning', text: (lastReasoning.text ?? '') + delta },
-        ];
-      } else {
-        nextParts = [...parts, { type: 'reasoning', text: delta }];
-      }
-      return { ...m, content: nextParts as GglibContent };
+      // within a single iteration, so the last part matches 'reasoning' here.
+      const parts = Array.isArray(m.content) ? (m.content as RawPart[]).slice() : [];
+      return { ...m, content: applyDeltaToLastPart(parts, 'reasoning', delta) as GglibContent };
     }),
   );
 }
