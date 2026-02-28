@@ -17,6 +17,7 @@ use anyhow::Result;
 use futures_util::StreamExt as _;
 use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use tokio::sync::mpsc;
+use tracing::warn;
 
 // =============================================================================
 // Output type
@@ -70,10 +71,14 @@ struct PartialToolCall {
 /// # Errors
 ///
 /// - Infrastructure errors (an `Err` item in the stream) are returned immediately.
-/// - Malformed tool-call arguments (not valid JSON) are returned as an error.
+/// - A tool-call index ≥ `max_parallel_tools` is rejected immediately to
+///   prevent a malicious or buggy LLM from triggering an unbounded allocation.
+/// - Malformed tool-call arguments (not valid JSON) are silently replaced with
+///   an empty object and a `warn` log entry rather than hard-failing the loop.
 pub async fn collect_stream(
     mut stream: Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>,
     tx: &mpsc::Sender<AgentEvent>,
+    max_parallel_tools: usize,
 ) -> Result<CollectedResponse> {
     let mut text_buf = String::new();
     // Indexed by the tool-call `index` from the stream deltas.
@@ -93,6 +98,12 @@ pub async fn collect_stream(
                 name,
                 arguments,
             } => {
+                // Guard against a pathological index that would cause a huge allocation.
+                if index >= max_parallel_tools {
+                    anyhow::bail!(
+                        "tool-call index {index} exceeds max_parallel_tools ({max_parallel_tools})"
+                    );
+                }
                 // Ensure the partials vec has a slot at `index`.
                 if partials.len() <= index {
                     partials.resize_with(index + 1, PartialToolCall::default);
@@ -122,9 +133,13 @@ pub async fn collect_stream(
                             &p.arguments
                         };
                         let arguments: serde_json::Value = serde_json::from_str(args_str)
-                            .unwrap_or_else(|_| {
-                                // Malformed JSON from the LLM — treat as an empty object
-                                // rather than hard-failing so the loop can surface it.
+                            .unwrap_or_else(|e| {
+                                warn!(
+                                    tool_name = %p.name,
+                                    raw_args = %args_str,
+                                    error = %e,
+                                    "tool-call arguments are not valid JSON; using empty object"
+                                );
                                 serde_json::Value::Object(serde_json::Map::default())
                             });
                         ToolCall {
@@ -181,7 +196,7 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx).await.unwrap();
+        let response = collect_stream(stream, &tx, 8).await.unwrap();
         assert_eq!(response.content, "Hello, world!");
         assert_eq!(response.finish_reason, "stop");
         assert!(response.tool_calls.is_empty());
@@ -214,7 +229,7 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx).await.unwrap();
+        let response = collect_stream(stream, &tx, 8).await.unwrap();
         assert_eq!(response.tool_calls.len(), 1);
         let tc = &response.tool_calls[0];
         assert_eq!(tc.id, "call_1");
@@ -243,7 +258,7 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx).await.unwrap();
+        let response = collect_stream(stream, &tx, 8).await.unwrap();
         assert_eq!(response.tool_calls.len(), 2);
         assert_eq!(response.tool_calls[0].name, "tool_a");
         assert_eq!(response.tool_calls[1].name, "tool_b");
@@ -258,6 +273,6 @@ mod tests {
             },
             // No Done event
         ]);
-        assert!(collect_stream(stream, &tx).await.is_err());
+        assert!(collect_stream(stream, &tx, 8).await.is_err());
     }
 }

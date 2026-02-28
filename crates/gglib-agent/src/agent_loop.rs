@@ -132,7 +132,7 @@ impl AgentLoopPort for AgentLoop {
             };
 
             // ---- 4. Collect stream, forwarding text live --------------------
-            let response = match collect_stream(stream, &tx).await {
+            let response = match collect_stream(stream, &tx, config.max_parallel_tools).await {
                 Ok(r) => r,
                 Err(e) => {
                     let msg = format!("stream collection error: {e}");
