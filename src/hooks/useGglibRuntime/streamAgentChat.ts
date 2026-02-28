@@ -87,10 +87,10 @@ export interface StreamAgentChatOptions {
  * Stream an agentic conversation against the backend `/api/agent/chat`
  * endpoint and update React state with each incoming event.
  *
- * The function resolves when the loop ends (final answer, error, or abort).
- * It does **not** throw on domain errors (error events): those are surfaced
- * as an error text part on the current assistant message, matching the
- * behaviour of the previous client-side `runAgenticLoop`.
+ * The function resolves when the loop ends with a `final_answer` event or
+ * user abort.  It **throws** when the backend emits an `error` event
+ * (fatal loop failure) or when the HTTP request itself fails, so callers
+ * can surface the failure through their error-handling path (e.g. `onError`).
  */
 export async function streamAgentChat(options: StreamAgentChatOptions): Promise<void> {
   const {
@@ -240,12 +240,8 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         }
 
         case 'error': {
-          // Backend-reported error: surface it as text in the current message.
-          applyTextDelta(
-            setMessages,
-            currentId,
-            `\n\n[Agent error: ${event.message}]`,
-          );
+          // Fatal backend error: clean up the in-progress message then throw
+          // so the caller's catch block can invoke its onError callback.
           if (timingTracker) timingTracker.onEndOfMessage(currentId);
           finalizeMessageTiming(setMessages, currentId);
           setCurrentStreamingAssistantMessageId?.(null);
@@ -253,7 +249,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
           appLogger.warn('hook.runtime', 'streamAgentChat: agent error event', {
             message: event.message,
           });
-          return;
+          throw new Error(`Agent loop error: ${event.message}`);
         }
 
         default: {
