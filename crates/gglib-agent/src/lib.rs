@@ -5,6 +5,7 @@
 pub(crate) mod agent_loop;
 pub(crate) mod context_pruning;
 pub(crate) mod filter;
+pub(crate) mod hash;
 pub(crate) mod loop_detection;
 pub(crate) mod stagnation;
 pub(crate) mod stream_collector;

@@ -6,7 +6,7 @@
 //! # Algorithm
 //!
 //! After each LLM response, the assistant's text content is hashed with
-//! [`crate::loop_detection::fnv1a_32`].  If the hash matches the previous
+//! [`crate::hash::fnv1a_32`].  If the hash matches the previous
 //! iteration, a stagnation counter is incremented.  When the counter reaches
 //! `max_stagnation_steps`, the loop is aborted with an
 //! [`AgentError::Internal`] describing the stagnation.  When the hash
@@ -19,7 +19,7 @@
 
 use gglib_core::ports::AgentError;
 
-use crate::loop_detection::fnv1a_32;
+use crate::hash::fnv1a_32;
 
 // =============================================================================
 // StagnationDetector

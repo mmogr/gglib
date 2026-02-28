@@ -24,6 +24,8 @@ use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{AgentConfig, AgentEvent, ToolCall, ToolResult};
 use tokio::sync::{Semaphore, mpsc};
 
+use crate::hash::elapsed_ms;
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -56,7 +58,7 @@ pub async fn execute_tools_parallel(
                 // Acquire a concurrency permit before starting.
                 // `wait_ms` below captures how long this took.
                 let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                let wait_ms = u64::try_from(enqueue_time.elapsed().as_millis()).unwrap_or(u64::MAX);
+                let wait_ms = elapsed_ms(enqueue_time);
 
                 // Notify that execution is starting (after permit acquired —
                 // we only claim "started" once we have a slot, not when queued).
@@ -70,8 +72,7 @@ pub async fn execute_tools_parallel(
                 let result =
                     tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc))
                         .await;
-                let duration_ms =
-                    u64::try_from(exec_start.elapsed().as_millis()).unwrap_or(u64::MAX);
+                let duration_ms = elapsed_ms(exec_start);
 
                 let tool_result = match result {
                     Ok(Ok(r)) => r,
