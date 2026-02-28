@@ -127,7 +127,7 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         });
 
         // ── 3. Consume event stream; Ctrl+C aborts the agent task ────────────
-        let final_content = collect_events(&mut rx, &handle, false).await;
+        let final_content = collect_events(&mut rx, &handle, args.verbose).await;
 
         // ── 4. Push assistant turn to history if we got a final answer ────────
         if let Some(content) = final_content {
