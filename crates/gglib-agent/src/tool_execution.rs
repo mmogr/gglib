@@ -148,7 +148,29 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
-    use crate::testutil::{DelayedExecutor, StubExecutor};
+
+    // Minimal inline executor: always succeeds immediately.
+    struct OkExecutor;
+
+    #[async_trait]
+    impl ToolExecutorPort for OkExecutor {
+        async fn list_tools(&self) -> Vec<ToolDefinition> { vec![] }
+        async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
+            Ok(ToolResult { tool_call_id: call.id.clone(), content: "ok".into(), success: true, wait_ms: 0, duration_ms: 0 })
+        }
+    }
+
+    // Minimal inline executor: sleeps `delay_ms` before returning success.
+    struct SlowExecutor { delay_ms: u64 }
+
+    #[async_trait]
+    impl ToolExecutorPort for SlowExecutor {
+        async fn list_tools(&self) -> Vec<ToolDefinition> { vec![] }
+        async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
+            tokio::time::sleep(std::time::Duration::from_millis(self.delay_ms)).await;
+            Ok(ToolResult { tool_call_id: call.id.clone(), content: "slow ok".into(), success: true, wait_ms: 0, duration_ms: self.delay_ms })
+        }
+    }
 
     // ---- Tests ---------------------------------------------------------------
 
@@ -165,7 +187,7 @@ mod tests {
 
         let results = execute_tools_parallel(
             &calls,
-            &(Arc::new(StubExecutor::with_tools(&[])) as Arc<dyn ToolExecutorPort>),
+            &(Arc::new(OkExecutor) as Arc<dyn ToolExecutorPort>),
             &AgentConfig::default(),
             &tx,
         )
@@ -200,7 +222,7 @@ mod tests {
 
         let results = execute_tools_parallel(
             &calls,
-            &(Arc::new(DelayedExecutor { delay_ms: 1_000 }) as Arc<dyn ToolExecutorPort>),
+            &(Arc::new(SlowExecutor { delay_ms: 1_000 }) as Arc<dyn ToolExecutorPort>),
             &config,
             &tx,
         )

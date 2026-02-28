@@ -11,8 +11,5 @@ pub(crate) mod stagnation;
 pub(crate) mod stream_collector;
 pub(crate) mod tool_execution;
 
-#[cfg(test)]
-pub(crate) mod testutil;
-
 pub use agent_loop::AgentLoop;
 pub use filter::FilteredToolExecutor;

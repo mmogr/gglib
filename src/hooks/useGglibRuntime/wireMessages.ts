@@ -8,7 +8,7 @@
  * @module wireMessages
  */
 
-import type { GglibMessage } from '../../types/messages';
+import type { GglibMessage, GglibMessagePart, GglibToolCallPart, TextPart } from '../../types/messages';
 
 // ---------------------------------------------------------------------------
 // Wire types (backend request body)
@@ -44,30 +44,36 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
   for (const msg of messages) {
     if (msg.role === 'system' || msg.role === 'user') {
       const content = Array.isArray(msg.content)
-        ? (msg.content as { type: string; text?: string }[])
-            .filter(p => p.type === 'text')
-            .map(p => p.text ?? '')
+        ? (msg.content as GglibMessagePart[])
+            .filter((p): p is TextPart => p.type === 'text')
+            .map(p => p.text)
             .join('')
         : (msg.content as string) ?? '';
       result.push({ role: msg.role, content });
 
     } else if (msg.role === 'assistant') {
-      const parts = Array.isArray(msg.content)
-        ? (msg.content as { type: string; toolCallId?: string; toolName?: string; args?: unknown; argsText?: string; result?: unknown }[])
-        : [];
+      const parts = Array.isArray(msg.content) ? (msg.content as GglibMessagePart[]) : [];
       const text = parts
-        .filter(p => p.type === 'text')
-        .map(p => (p as { type: string; text?: string }).text ?? '')
+        .filter((p): p is TextPart => p.type === 'text')
+        .map(p => p.text)
         .join('');
-      const toolCallParts = parts.filter(p => p.type === 'tool-call');
+      // Filter to tool-call parts that have the required string fields set.
+      // addToolCallPart always populates toolCallId and toolName; this guard
+      // is a defence against parts constructed via other paths.
+      const toolCallParts = parts.filter(
+        (p): p is GglibToolCallPart & { toolCallId: string; toolName: string } =>
+          p.type === 'tool-call' && p.toolCallId != null && p.toolName != null,
+      );
       // Note: `reasoning` parts (type === 'reasoning') are intentionally
       // excluded here.  The backend wire format has no `reasoning` message role
       // and the model does not need its own CoT trace as context.
 
       const toolCalls: AgentWireToolCall[] = toolCallParts.map(p => ({
-        id: p.toolCallId as string,
-        name: p.toolName as string,
-        arguments: p.args ?? (p.argsText ? JSON.parse(p.argsText as string) : {}),
+        id: p.toolCallId,
+        name: p.toolName,
+        // `args` is always populated by addToolCallPart; `?? {}` is a
+        // defensive fallback for any part constructed outside that path.
+        arguments: p.args ?? {},
       }));
 
       result.push({
@@ -81,7 +87,7 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
         if (p.result !== undefined) {
           result.push({
             role: 'tool',
-            tool_call_id: p.toolCallId as string,
+            tool_call_id: p.toolCallId,
             content:
               typeof p.result === 'string'
                 ? p.result
