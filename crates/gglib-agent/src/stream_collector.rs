@@ -275,4 +275,47 @@ mod tests {
         ]);
         assert!(collect_stream(stream, &tx, 8).await.is_err());
     }
+
+    #[tokio::test]
+    async fn malformed_json_arguments_use_empty_object() {
+        // Malformed JSON must NOT hard-fail the loop; it must produce an empty
+        // arguments object so the agent can continue and surface the issue.
+        let (tx, _rx) = mpsc::channel(16);
+        let stream = make_stream(vec![
+            LlmStreamEvent::ToolCallDelta {
+                index: 0,
+                id: Some("c1".into()),
+                name: Some("do_thing".into()),
+                arguments: Some("{ NOT VALID JSON ".into()),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ]);
+
+        let response = collect_stream(stream, &tx, 8).await.unwrap();
+        assert_eq!(response.tool_calls.len(), 1);
+        // Arguments must be an empty object (the fallback value).
+        assert_eq!(response.tool_calls[0].arguments, serde_json::Value::Object(Default::default()));
+    }
+
+    #[tokio::test]
+    async fn oversized_tool_call_index_returns_error() {
+        // An index >= max_parallel_tools must be rejected immediately to
+        // prevent unbounded Vec growth.
+        let (tx, _rx) = mpsc::channel(16);
+        let stream = make_stream(vec![
+            LlmStreamEvent::ToolCallDelta {
+                index: 4, // max_parallel_tools = 4 → indices 0..3 are valid
+                id: Some("c0".into()),
+                name: Some("do_thing".into()),
+                arguments: Some("{}".into()),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "tool_calls".into(),
+            },
+        ]);
+
+        assert!(collect_stream(stream, &tx, 4).await.is_err());
+    }
 }

@@ -538,4 +538,58 @@ mod tests {
         );
         assert!(got_final_answer, "FinalAnswer should be emitted");
     }
+
+    // ---- Failing LLM mock (for error-path tests) ----------------------------
+
+    /// An LLM that always fails `chat_stream` with a fixed error message.
+    struct AlwaysFailingLlm;
+
+    #[async_trait]
+    impl LlmCompletionPort for AlwaysFailingLlm {
+        async fn chat_stream(
+            &self,
+            _messages: &[AgentMessage],
+            _tools: &[ToolDefinition],
+        ) -> anyhow::Result<
+            Pin<Box<dyn futures_core::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send>>,
+        > {
+            Err(anyhow::anyhow!("simulated LLM connection failure"))
+        }
+    }
+
+    #[tokio::test]
+    async fn llm_startup_error_emits_agent_error_event() {
+        // When chat_stream returns Err, the loop must emit AgentEvent::Error
+        // on the channel BEFORE returning Err(AgentError::Internal).
+        let agent = AgentLoop::new(Arc::new(AlwaysFailingLlm), Arc::new(MockExecutor));
+        let (tx, mut rx) = mpsc::channel(64);
+
+        let err = agent
+            .run(
+                vec![AgentMessage::User {
+                    content: "hello".into(),
+                }],
+                AgentConfig::default(),
+                tx,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, AgentError::Internal(_)),
+            "expected Internal, got {err:?}"
+        );
+
+        // The channel must contain an AgentEvent::Error.
+        let mut got_error_event = false;
+        while let Ok(evt) = rx.try_recv() {
+            if matches!(evt, AgentEvent::Error { .. }) {
+                got_error_event = true;
+            }
+        }
+        assert!(
+            got_error_event,
+            "AgentEvent::Error must be emitted before the stream closes on LLM startup failure"
+        );
+    }
 }

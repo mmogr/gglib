@@ -297,4 +297,22 @@ mod tests {
             assert_eq!(signature, expected_sig);
         }
     }
+
+    #[test]
+    fn same_name_different_args_do_not_trigger_loop() {
+        // Two batches with the same tool name but different arguments must
+        // produce distinct signatures and therefore never count as a loop.
+        let mut det = LoopDetector::new();
+        for i in 0u32..10 {
+            let calls = vec![ToolCall {
+                id: "c1".into(),
+                name: "search".into(),
+                arguments: json!({ "q": i }),
+            }];
+            assert!(
+                det.check(&calls, 2).is_ok(),
+                "distinct arguments should not trigger loop detection (i={i})"
+            );
+        }
+    }
 }
