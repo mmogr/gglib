@@ -24,7 +24,7 @@ import React from 'react';
 
 import { appLogger } from '../../services/platform';
 import { getAuthenticatedFetchConfig } from '../../services/transport/api/client';
-import type { GglibMessage } from '../../types/messages';
+import type { GglibMessage, GglibMessageCustom } from '../../types/messages';
 import type { AgentEvent } from '../../types/events/agentEvent';
 import type { ReasoningTimingTracker } from './reasoningTiming';
 import { convertToWireMessages } from './wireMessages';
@@ -66,8 +66,7 @@ export interface StreamAgentChatOptions {
   selectedServerPort: number;
   abortSignal?: AbortSignal;
   conversationId?: number;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  mkAssistantMessage: (custom?: any) => GglibMessage;
+  mkAssistantMessage: (custom?: GglibMessageCustom) => GglibMessage;
   timingTracker?: ReasoningTimingTracker;
   setCurrentStreamingAssistantMessageId?: (id: string | null) => void;
   /** Optional partial `AgentConfig` overrides; omitted fields use backend defaults. */
@@ -260,8 +259,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         default: {
           // Forward-compatibility: ignore unknown event types.
           appLogger.debug('hook.runtime', 'streamAgentChat: unknown event type, skipping', {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            type: (event as any).type,
+            type: (event as { type: string }).type,
           });
         }
       }

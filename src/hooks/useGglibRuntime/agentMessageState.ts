@@ -11,7 +11,7 @@
 
 import React from 'react';
 
-import type { GglibMessage, GglibContent } from '../../types/messages';
+import type { GglibMessage, GglibContent, GglibMessagePart } from '../../types/messages';
 import type { AgentToolResult } from '../../types/events/agentEvent';
 
 // ---------------------------------------------------------------------------
@@ -93,8 +93,7 @@ export function applyToolResult(
   setMessages(prev =>
     prev.map(m => {
       if (m.id !== messageId) return m;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parts = Array.isArray(m.content) ? (m.content as any[]) : [];
+      const parts = Array.isArray(m.content) ? ([...m.content] as GglibMessagePart[]) : [];
       return {
         ...m,
         content: parts.map(p =>

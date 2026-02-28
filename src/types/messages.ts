@@ -35,6 +35,29 @@ export type TextPart = Extract<MessagePart, { type: 'text' }>;
 export type ReasoningPart = Extract<MessagePart, { type: 'reasoning' }>;
 
 /**
+ * Extended tool-call part that adds gglib-specific timing metadata.
+ *
+ * `waitMs`     — wall-clock time from request dispatch to the first tool byte.
+ * `durationMs` — total execution time of the tool call.
+ *
+ * These fields are stamped onto the part by {@link applyToolResult} once the
+ * backend reports completion, allowing the UI to display timing information
+ * without a separate side-channel.
+ */
+export interface GglibToolCallPart extends ToolCallPart {
+  waitMs?: number;
+  durationMs?: number;
+}
+
+/**
+ * Union of all content parts that may appear in a GglibMessage.
+ *
+ * Replaces the raw `MessagePart` where gglib-specific extensions are needed,
+ * e.g. to allow `GglibToolCallPart` in an assistant message's content array.
+ */
+export type GglibMessagePart = Exclude<MessagePart, ToolCallPart> | GglibToolCallPart;
+
+/**
  * Custom metadata stored in message.metadata.custom
  */
 export type GglibMessageCustom = {
