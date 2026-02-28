@@ -354,7 +354,10 @@ mod tests {
 
     #[test]
     fn done_sentinel_returns_done_variant() {
-        assert!(matches!(parse_sse_frame("[DONE]"), Ok(SseParseResult::Done)));
+        assert!(matches!(
+            parse_sse_frame("[DONE]"),
+            Ok(SseParseResult::Done)
+        ));
     }
 
     #[test]
@@ -380,7 +383,10 @@ mod tests {
             Ok(SseParseResult::Events(e)) => e,
             other => panic!("unexpected: {other:?}"),
         };
-        assert!(events.is_empty(), "empty content should not produce TextDelta");
+        assert!(
+            events.is_empty(),
+            "empty content should not produce TextDelta"
+        );
     }
 
     #[test]
@@ -431,4 +437,3 @@ mod tests {
         assert!(matches!(&events[1], LlmStreamEvent::Done { .. }));
     }
 }
-

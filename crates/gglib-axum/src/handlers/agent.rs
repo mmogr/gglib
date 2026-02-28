@@ -154,7 +154,10 @@ pub async fn chat(
     validate_port(&state, req.port).await?;
 
     // ── Compose the LLM adapter (shared reqwest::Client from AppState) ───
-    let llm = Arc::new(LlmCompletionAdapter::with_client(req.port, state.http_client.clone()));
+    let llm = Arc::new(LlmCompletionAdapter::with_client(
+        req.port,
+        state.http_client.clone(),
+    ));
 
     // ── Compose the tool executor (MCP adapter, optionally filtered) ──────
     let mcp_executor = Arc::new(McpToolExecutorAdapter::new(Arc::clone(&state.mcp)));

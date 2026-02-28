@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use reqwest::Client;
 use gglib_core::ModelRegistrar;
 use gglib_core::ports::{
     AppEventBridge, DownloadManagerConfig, DownloadManagerPort, HfClientPort, ModelRepository,
@@ -17,6 +16,7 @@ use gglib_core::ports::{
 use gglib_core::services::AppCore;
 use gglib_db::{CoreFactory, setup_database};
 use gglib_download::{DownloadManagerDeps, build_download_manager};
+use reqwest::Client;
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_gui::{GuiBackend, GuiDeps};

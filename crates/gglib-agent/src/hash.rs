@@ -67,6 +67,9 @@ mod tests {
         let start = Instant::now();
         let ms = elapsed_ms(start);
         // Should be 0 or very small — just verify it does not panic.
-        assert!(ms < 1000, "elapsed_ms should be near zero for an immediate call");
+        assert!(
+            ms < 1000,
+            "elapsed_ms should be near zero for an immediate call"
+        );
     }
 }

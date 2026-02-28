@@ -110,7 +110,9 @@ pub fn prune_for_budget(
         .into_iter()
         .partition(|m| matches!(m, AgentMessage::System { .. }));
 
-    let tail_start = non_system.len().saturating_sub(config.prune_keep_tail_messages);
+    let tail_start = non_system
+        .len()
+        .saturating_sub(config.prune_keep_tail_messages);
     system
         .into_iter()
         .chain(non_system.into_iter().skip(tail_start))
