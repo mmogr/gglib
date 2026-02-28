@@ -61,9 +61,12 @@ describe('convertToWireMessages — system/user', () => {
   });
 
   it('strips non-text parts when building user content string', () => {
+    // Cast to unknown first — image parts are not in the current GglibMessagePart
+    // union but may appear in real UI state (e.g. from multimodal inputs). The
+    // test verifies that convertToWireMessages filters them out silently.
     const wire = convertToWireMessages([
       userMsg([
-        { type: 'image', image: 'data:image/png;base64,abc' } as never,
+        { type: 'image', image: 'data:image/png;base64,abc' } as unknown as Parameters<typeof userMsg>[0],
         { type: 'text', text: 'describe this' },
       ]),
     ]);
@@ -131,6 +134,9 @@ describe('convertToWireMessages — assistant tool calls', () => {
   });
 
   it('falls back to parsing argsText when args is absent', () => {
+    // Cast to unknown: argsText is a gglib extension on ToolCallPart that is
+    // not yet reflected in the GglibToolCallPart interface. The test verifies
+    // that wireMessages falls back to JSON-parsing argsText when args is absent.
     const wire = convertToWireMessages([
       assistantMsg([
         {
@@ -138,7 +144,7 @@ describe('convertToWireMessages — assistant tool calls', () => {
           toolCallId: 'tc2',
           toolName: 'calc',
           argsText: '{"x":1}',
-        } as never,
+        } as unknown as Parameters<typeof assistantMsg>[0],
       ]),
     ]);
     const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;

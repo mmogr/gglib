@@ -155,15 +155,16 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
   }
 
   // ── Create the first assistant message ───────────────────────────────────
-  let iteration = 1;
-  const makeNextMessage = (): string => {
-    const msg = mkAssistantMessage({ turnId, iteration, conversationId });
+  // Takes an explicit `iter` parameter so every caller site is unambiguous
+  // about which iteration number it is requesting (avoids hidden mutable state).
+  const makeNextMessage = (iter: number): string => {
+    const msg = mkAssistantMessage({ turnId, iteration: iter, conversationId });
     setMessages(prev => [...prev, msg]);
     setCurrentStreamingAssistantMessageId?.(msg.id!);
     return msg.id!;
   };
 
-  let currentId = makeNextMessage();
+  let currentId = makeNextMessage(1);
 
   // ── Process the SSE stream ────────────────────────────────────────────────
   try {
@@ -221,8 +222,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
             toolCalls: event.tool_calls,
           });
 
-          iteration = event.iteration + 1;
-          currentId = makeNextMessage();
+          currentId = makeNextMessage(event.iteration + 1);
           break;
         }
 

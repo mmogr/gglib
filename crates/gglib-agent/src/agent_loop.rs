@@ -187,7 +187,9 @@ impl AgentLoopPort for AgentLoop {
                 } else {
                     Some(response.content)
                 },
-                tool_calls: Some(response.tool_calls.clone()),
+                // Move tool_calls — steps 6 and 7 only borrow &response.tool_calls,
+                // so by this point we hold the only reference and no clone is needed.
+                tool_calls: Some(response.tool_calls),
             });
             for result in &results {
                 messages.push(AgentMessage::Tool {

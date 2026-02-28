@@ -43,10 +43,23 @@ impl StagnationDetector {
 
     /// Record the current assistant text and error if the model has stagnated.
     ///
-    /// When `text` hashes to the same value as the previous call,
-    /// the stagnation counter is incremented.  When the counter reaches
-    /// `max_steps`, [`AgentError::Internal`] is returned.  On a new hash
-    /// the counter resets to zero.
+    /// # Semantics
+    ///
+    /// The **first** occurrence of any text sets the baseline (no error is
+    /// raised).  Subsequent occurrences of the *same* text (same FNV-1a hash)
+    /// increment an internal repeat counter starting from 1.  An error is
+    /// raised when `repeat_count >= max_steps`, i.e. after the model has
+    /// produced the same text `max_steps` times **after** the first baseline
+    /// occurrence — meaning the *total* number of identical consecutive
+    /// responses before aborting is `max_steps + 1`.
+    ///
+    /// A different text hash resets the counter to zero.
+    ///
+    /// | `max_steps` | Identical responses before abort |
+    /// |-------------|----------------------------------|
+    /// | 0           | 1 (fires on the 1st repeat)       |
+    /// | 1           | 2 (fires on the 2nd repeat)       |
+    /// | 5 (default) | 6 (fires on the 6th occurrence)   |
     ///
     /// Note: empty text is hashed normally.  A model that consistently produces
     /// no text content (e.g., only tool calls) will have the same hash each
