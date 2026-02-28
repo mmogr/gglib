@@ -103,15 +103,12 @@ impl LoopDetector {
         let sig = batch_signature(calls);
         // Avoid cloning `sig` on the hot (key-exists) path: only clone on the
         // first insertion, when the key must be moved into the map.
-        let count = match self.hits.get_mut(sig.as_str()) {
-            Some(n) => {
-                *n += 1;
-                *n
-            }
-            None => {
-                self.hits.insert(sig.clone(), 1);
-                1
-            }
+        let count = if let Some(n) = self.hits.get_mut(sig.as_str()) {
+            *n += 1;
+            *n
+        } else {
+            self.hits.insert(sig.clone(), 1);
+            1
         };
         if count > max_strikes {
             return Err(AgentError::LoopDetected { signature: sig });
