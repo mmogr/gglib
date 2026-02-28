@@ -86,7 +86,11 @@ impl LoopDetector {
     /// `MAX_SAME_SIGNATURE_HITS = 2` behaviour.
     pub fn check(&mut self, calls: &[ToolCall], max_strikes: usize) -> Result<(), AgentError> {
         let sig = batch_signature(calls);
-        let count = *self.hits.entry(sig.clone()).and_modify(|n| *n += 1).or_insert(1);
+        let count = *self
+            .hits
+            .entry(sig.clone())
+            .and_modify(|n| *n += 1)
+            .or_insert(1);
         if count > max_strikes {
             return Err(AgentError::LoopDetected { signature: sig });
         }
