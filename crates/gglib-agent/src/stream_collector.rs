@@ -298,7 +298,7 @@ mod tests {
         // Arguments must be an empty object (the fallback value).
         assert_eq!(
             response.tool_calls[0].arguments,
-            serde_json::Value::Object(Default::default())
+            serde_json::Value::Object(serde_json::Map::default())
         );
     }
 
