@@ -5,10 +5,11 @@
 //! count exceeds [`AgentConfig::context_budget_chars`], applying two passes:
 //!
 //! 1. **Tool-message pruning** — keep only the most recent
-//!    [`KEEP_LAST_TOOL_MESSAGES`] tool results and drop the corresponding
-//!    `Assistant` messages whose every tool call was removed.
+//!    [`AgentConfig::prune_keep_tool_messages`] tool results and drop the
+//!    corresponding `Assistant` messages whose every tool call was removed.
 //! 2. **Tail pruning** — if still over budget after pass 1, keep all `System`
-//!    messages and the trailing [`KEEP_TAIL_MESSAGES`] non-system messages.
+//!    messages and the trailing [`AgentConfig::prune_keep_tail_messages`]
+//!    non-system messages.
 //!
 //! This is a port of `pruneForContextBudget` from
 //! `src/hooks/useGglibRuntime/agentLoop.ts`.
@@ -16,12 +17,6 @@
 use std::collections::HashSet;
 
 use gglib_core::{AgentConfig, AgentMessage};
-
-/// Number of most-recent tool-result messages to preserve in the first pruning pass.
-const KEEP_LAST_TOOL_MESSAGES: usize = 10;
-
-/// Number of non-system messages kept in the emergency tail-pruning pass.
-const KEEP_TAIL_MESSAGES: usize = 12;
 
 // =============================================================================
 // Public API
@@ -83,7 +78,7 @@ pub fn prune_for_budget(
                 None
             }
         })
-        .take(KEEP_LAST_TOOL_MESSAGES)
+        .take(config.prune_keep_tool_messages)
         .collect();
 
     messages.retain(|m| match m {
@@ -115,7 +110,7 @@ pub fn prune_for_budget(
         .into_iter()
         .partition(|m| matches!(m, AgentMessage::System { .. }));
 
-    let tail_start = non_system.len().saturating_sub(KEEP_TAIL_MESSAGES);
+    let tail_start = non_system.len().saturating_sub(config.prune_keep_tail_messages);
     system
         .into_iter()
         .chain(non_system.into_iter().skip(tail_start))
@@ -278,7 +273,7 @@ mod tests {
                 .any(|m| matches!(m, AgentMessage::System { .. })),
             "system message must be preserved"
         );
-        // Should have at most system + KEEP_TAIL_MESSAGES items.
-        assert!(result.len() <= 1 + KEEP_TAIL_MESSAGES);
+        // Should have at most system + prune_keep_tail_messages items.
+        assert!(result.len() <= 1 + cfg.prune_keep_tail_messages);
     }
 }
