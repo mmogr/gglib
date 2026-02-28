@@ -125,6 +125,76 @@ fn tool_def_to_openai(def: &ToolDefinition) -> Value {
 }
 
 // =============================================================================
+// SSE frame parser (extracted for unit-testability)
+// =============================================================================
+
+/// Result of parsing a single SSE `data:` payload.
+#[derive(Debug)]
+pub(crate) enum SseParseResult {
+    /// The value `[DONE]` — stream terminator, no events.
+    Done,
+    /// One or more events decoded from the JSON frame.
+    Events(Vec<LlmStreamEvent>),
+}
+
+/// Parse a single SSE `data:` payload into zero or more [`LlmStreamEvent`]s.
+///
+/// Returns:
+/// - `Ok(SseParseResult::Done)` when `data == "[DONE]"`
+/// - `Ok(SseParseResult::Events(…))` for a valid JSON frame (may be empty
+///   when the frame carries no content or tool-call deltas)
+/// - `Err(…)` when the frame is not valid JSON
+pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
+    if data == "[DONE]" {
+        return Ok(SseParseResult::Done);
+    }
+
+    let parsed: Value = serde_json::from_str(data)
+        .map_err(|e| anyhow!("SSE frame JSON parse error: {e} — data: {data}"))?;
+
+    let choice = &parsed["choices"][0];
+    let delta = &choice["delta"];
+
+    let mut events: Vec<LlmStreamEvent> = Vec::new();
+
+    // ── Text content delta ──────────────────────────────────────────────────
+    if let Some(content) = delta["content"].as_str()
+        && !content.is_empty()
+    {
+        events.push(LlmStreamEvent::TextDelta {
+            content: content.to_owned(),
+        });
+    }
+
+    // ── Tool-call deltas ────────────────────────────────────────────────────
+    if let Some(tool_calls) = delta["tool_calls"].as_array() {
+        for tc in tool_calls {
+            let index = tc["index"].as_u64().unwrap_or(0) as usize;
+            let id = tc["id"].as_str().map(str::to_owned);
+            let name = tc["function"]["name"].as_str().map(str::to_owned);
+            let arguments = tc["function"]["arguments"].as_str().map(str::to_owned);
+            events.push(LlmStreamEvent::ToolCallDelta {
+                index,
+                id,
+                name,
+                arguments,
+            });
+        }
+    }
+
+    // ── Finish reason → Done ────────────────────────────────────────────────
+    if let Some(finish_reason) = choice["finish_reason"].as_str()
+        && !finish_reason.is_empty()
+    {
+        events.push(LlmStreamEvent::Done {
+            finish_reason: finish_reason.to_owned(),
+        });
+    }
+
+    Ok(SseParseResult::Events(events))
+}
+
+// =============================================================================
 // LlmCompletionPort implementation
 // =============================================================================
 
@@ -194,54 +264,26 @@ impl LlmCompletionPort for LlmCompletionAdapter {
                     // Skip comments and blank lines.
                     let Some(data) = line.strip_prefix("data: ") else { continue };
 
-                    // `[DONE]` is the stream terminator; llama-server sends it
-                    // after the final data frame.
-                    if data == "[DONE]" {
-                        if !done_sent {
-                            debug!("LLM stream ended with [DONE] but no prior finish_reason — emitting fallback Done");
-                            yield Ok(LlmStreamEvent::Done { finish_reason: "stop".to_owned() });
-                        }
-                        break 'outer;
-                    }
-
-                    let parsed: Value = match serde_json::from_str(data) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            yield Err(anyhow!("SSE frame JSON parse error: {e} — data: {data}"));
+                    match parse_sse_frame(data) {
+                        Ok(SseParseResult::Done) => {
+                            if !done_sent {
+                                debug!("LLM stream ended with [DONE] but no prior finish_reason — emitting fallback Done");
+                                yield Ok(LlmStreamEvent::Done { finish_reason: "stop".to_owned() });
+                            }
                             break 'outer;
                         }
-                    };
-
-                    let choice = &parsed["choices"][0];
-                    let delta = &choice["delta"];
-
-                    // ── Text content delta ─────────────────────────────────
-                    if let Some(content) = delta["content"].as_str()
-                        && !content.is_empty()
-                    {
-                        yield Ok(LlmStreamEvent::TextDelta { content: content.to_owned() });
-                    }
-
-                    // ── Tool-call deltas ───────────────────────────────────
-                    if let Some(tool_calls) = delta["tool_calls"].as_array() {
-                        for tc in tool_calls {
-                            let index = tc["index"].as_u64().unwrap_or(0) as usize;
-                            let id        = tc["id"].as_str().map(str::to_owned);
-                            let name      = tc["function"]["name"].as_str().map(str::to_owned);
-                            let arguments = tc["function"]["arguments"].as_str().map(str::to_owned);
-                            yield Ok(LlmStreamEvent::ToolCallDelta { index, id, name, arguments });
+                        Ok(SseParseResult::Events(events)) => {
+                            for event in events {
+                                if matches!(event, LlmStreamEvent::Done { .. }) {
+                                    done_sent = true;
+                                }
+                                yield Ok(event);
+                            }
                         }
-                    }
-
-                    // ── Finish reason → Done ───────────────────────────────
-                    // Emitted before the [DONE] sentinel; we emit `Done` here
-                    // so the stream collector receives it before the stream
-                    // ends, then simply skip the redundant [DONE].
-                    if let Some(finish_reason) = choice["finish_reason"].as_str()
-                        && !finish_reason.is_empty()
-                    {
-                        yield Ok(LlmStreamEvent::Done { finish_reason: finish_reason.to_owned() });
-                        done_sent = true;
+                        Err(e) => {
+                            yield Err(e);
+                            break 'outer;
+                        }
                     }
                 }
             }
@@ -256,3 +298,122 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         Ok(Box::pin(stream))
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text_frame(content: &str) -> String {
+        serde_json::json!({
+            "choices": [{ "delta": { "content": content }, "finish_reason": null }]
+        })
+        .to_string()
+    }
+
+    fn finish_frame(reason: &str) -> String {
+        serde_json::json!({
+            "choices": [{ "delta": {}, "finish_reason": reason }]
+        })
+        .to_string()
+    }
+
+    fn tool_frame(index: usize, id: &str, name: &str, args: &str) -> String {
+        serde_json::json!({
+            "choices": [{
+                "delta": {
+                    "tool_calls": [{
+                        "index": index,
+                        "id": id,
+                        "function": { "name": name, "arguments": args }
+                    }]
+                },
+                "finish_reason": null
+            }]
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn done_sentinel_returns_done_variant() {
+        assert!(matches!(parse_sse_frame("[DONE]"), Ok(SseParseResult::Done)));
+    }
+
+    #[test]
+    fn text_delta_frame_produces_text_event() {
+        let events = match parse_sse_frame(&text_frame("hello")) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::TextDelta { content } if content == "hello"
+        ));
+    }
+
+    #[test]
+    fn empty_content_produces_no_text_event() {
+        let frame = serde_json::json!({
+            "choices": [{ "delta": { "content": "" }, "finish_reason": null }]
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(events.is_empty(), "empty content should not produce TextDelta");
+    }
+
+    #[test]
+    fn finish_reason_produces_done_event() {
+        let events = match parse_sse_frame(&finish_frame("stop")) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::Done { finish_reason } if finish_reason == "stop"
+        ));
+    }
+
+    #[test]
+    fn tool_call_delta_frame_is_parsed() {
+        let events = match parse_sse_frame(&tool_frame(0, "tc1", "search", r#"{"q":"rust"}"#)) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::ToolCallDelta { index: 0, id: Some(id), name: Some(n), arguments: Some(a) }
+            if id == "tc1" && n == "search" && a == r#"{"q":"rust"}"#
+        ));
+    }
+
+    #[test]
+    fn malformed_json_returns_error() {
+        let result = parse_sse_frame("{ broken json }");
+        assert!(result.is_err(), "malformed JSON should return Err");
+    }
+
+    #[test]
+    fn frame_with_text_and_finish_reason_produces_both_events() {
+        let frame = serde_json::json!({
+            "choices": [{ "delta": { "content": "hi" }, "finish_reason": "stop" }]
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 2);
+        assert!(matches!(&events[0], LlmStreamEvent::TextDelta { .. }));
+        assert!(matches!(&events[1], LlmStreamEvent::Done { .. }));
+    }
+}
+
