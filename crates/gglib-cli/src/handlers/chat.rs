@@ -35,6 +35,8 @@ pub struct ChatArgs {
     pub port: Option<u16>,
     pub max_iterations: usize,
     pub tools: Option<String>,
+    /// Mirror of the global `--verbose` / `-v` flag for agentic mode rendering.
+    pub verbose: bool,
 }
 
 /// Execute the chat command.

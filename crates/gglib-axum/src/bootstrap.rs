@@ -16,6 +16,7 @@ use gglib_core::ports::{
 use gglib_core::services::AppCore;
 use gglib_db::{CoreFactory, setup_database};
 use gglib_download::{DownloadManagerDeps, build_download_manager};
+use reqwest::Client;
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_gui::{GuiBackend, GuiDeps};
@@ -107,6 +108,12 @@ pub struct AxumContext {
     pub runner: Arc<dyn ProcessRunner>,
     /// SSE broadcaster for real-time events.
     pub sse: Arc<SseBroadcaster>,
+    /// Shared HTTP client for outbound requests (LLM completion, HF, etc.).
+    ///
+    /// Storing a single `reqwest::Client` here keeps one connection pool for
+    /// the entire process lifetime.  Handlers clone the client cheaply (it is
+    /// internally `Arc`-backed).
+    pub http_client: Client,
     /// Remote audio registry used by the WebSocket audio data plane.
     ///
     /// The WebSocket handler calls `register_remote_audio` before the browser
@@ -275,6 +282,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         hf_client,
         runner,
         sse,
+        http_client: Client::new(),
         voice_registry,
     })
 }

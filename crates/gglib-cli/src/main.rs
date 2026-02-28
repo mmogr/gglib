@@ -256,6 +256,7 @@ async fn main() -> anyhow::Result<()> {
                 port,
                 max_iterations,
                 tools,
+                verbose: cli.verbose,
             };
             handlers::chat::execute(&ctx, args).await?;
         }

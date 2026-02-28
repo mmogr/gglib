@@ -153,8 +153,11 @@ pub async fn chat(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
     validate_port(&state, req.port).await?;
 
-    // ── Compose the LLM adapter (one reqwest::Client, cheap) ─────────────
-    let llm = Arc::new(LlmCompletionAdapter::new(req.port));
+    // ── Compose the LLM adapter (shared reqwest::Client from AppState) ───
+    let llm = Arc::new(LlmCompletionAdapter::with_client(
+        req.port,
+        state.http_client.clone(),
+    ));
 
     // ── Compose the tool executor (MCP adapter, optionally filtered) ──────
     let mcp_executor = Arc::new(McpToolExecutorAdapter::new(Arc::clone(&state.mcp)));
@@ -188,11 +191,13 @@ pub async fn chat(
         handle,
     }
     .filter_map(|event| {
-        futures_util::future::ready(
-            serde_json::to_string(&event)
-                .ok()
-                .map(|j| Ok::<Event, Infallible>(Event::default().data(j))),
-        )
+        futures_util::future::ready(match serde_json::to_string(&event) {
+            Ok(json) => Some(Ok::<Event, Infallible>(Event::default().data(json))),
+            Err(e) => {
+                tracing::error!(error = %e, "agent: failed to serialise AgentEvent, dropping frame");
+                None
+            }
+        })
     });
 
     Ok(Sse::new(sse_stream).keep_alive(

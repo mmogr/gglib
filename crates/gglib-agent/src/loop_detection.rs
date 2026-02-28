@@ -29,22 +29,7 @@ use std::collections::HashMap;
 use gglib_core::ToolCall;
 use gglib_core::ports::AgentError;
 
-// =============================================================================
-// FNV-1a 32-bit hash
-// =============================================================================
-
-/// FNV-1a 32-bit hash of `s` — bit-compatible with the TypeScript
-/// `hashString` function for ASCII input.
-pub fn fnv1a_32(s: &str) -> u32 {
-    const OFFSET: u32 = 2_166_136_261;
-    const PRIME: u32 = 16_777_619;
-    let mut hash = OFFSET;
-    for byte in s.bytes() {
-        hash ^= u32::from(byte);
-        hash = hash.wrapping_mul(PRIME);
-    }
-    hash
-}
+use crate::hash::fnv1a_32;
 
 // =============================================================================
 // Signature helpers
