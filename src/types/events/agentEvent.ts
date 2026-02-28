@@ -29,19 +29,15 @@ export interface AgentToolResult {
   content: string;
   /** `false` here is **not** an error — it is context fed to the LLM. */
   success: boolean;
-  /** Wall-clock execution time in milliseconds. */
+  /** Time spent waiting for a concurrency slot, in milliseconds. */
+  wait_ms: number;
+  /** Wall-clock execution time (after acquiring the slot), in milliseconds. */
   duration_ms: number;
 }
 
 // ---------------------------------------------------------------------------
 // Discriminated union
 // ---------------------------------------------------------------------------
-
-/** The model produced a reasoning / thinking segment. */
-export interface AgentThinkingEvent {
-  type: 'thinking';
-  content: string;
-}
 
 /** An incremental text fragment from the model's response. */
 export interface AgentTextDeltaEvent {
@@ -89,7 +85,6 @@ export interface AgentErrorEvent {
  * ignored to remain forward-compatible with new variants added on the server.
  */
 export type AgentEvent =
-  | AgentThinkingEvent
   | AgentTextDeltaEvent
   | AgentToolCallStartEvent
   | AgentToolCallCompleteEvent

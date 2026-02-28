@@ -101,9 +101,19 @@ impl LoopDetector {
     /// `MAX_SAME_SIGNATURE_HITS = 2` behaviour.
     pub fn check(&mut self, calls: &[ToolCall], max_strikes: usize) -> Result<(), AgentError> {
         let sig = batch_signature(calls);
-        let count = self.hits.entry(sig.clone()).or_insert(0);
-        *count += 1;
-        if *count > max_strikes {
+        // Avoid cloning `sig` on the hot (key-exists) path: only clone on the
+        // first insertion, when the key must be moved into the map.
+        let count = match self.hits.get_mut(sig.as_str()) {
+            Some(n) => {
+                *n += 1;
+                *n
+            }
+            None => {
+                self.hits.insert(sig.clone(), 1);
+                1
+            }
+        };
+        if count > max_strikes {
             return Err(AgentError::LoopDetected { signature: sig });
         }
         Ok(())
@@ -285,6 +295,24 @@ mod tests {
         let err = det2.check(&calls, 0).unwrap_err();
         if let AgentError::LoopDetected { signature } = err {
             assert_eq!(signature, expected_sig);
+        }
+    }
+
+    #[test]
+    fn same_name_different_args_do_not_trigger_loop() {
+        // Two batches with the same tool name but different arguments must
+        // produce distinct signatures and therefore never count as a loop.
+        let mut det = LoopDetector::new();
+        for i in 0u32..10 {
+            let calls = vec![ToolCall {
+                id: "c1".into(),
+                name: "search".into(),
+                arguments: json!({ "q": i }),
+            }];
+            assert!(
+                det.check(&calls, 2).is_ok(),
+                "distinct arguments should not trigger loop detection (i={i})"
+            );
         }
     }
 }

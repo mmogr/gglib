@@ -179,7 +179,16 @@ pub struct ToolResult {
     /// `false` here is **not** a loop error — see type-level docs above.
     pub success: bool,
 
-    /// Wall-clock time taken to execute the tool, in milliseconds.
+    /// Time spent waiting for a concurrency permit (semaphore), in
+    /// milliseconds.
+    ///
+    /// This is the time from when the tool was *enqueued* to when it actually
+    /// *started* executing.  A high `wait_ms` with a low `duration_ms` indicates
+    /// that the tool was fast but had to queue behind other parallel calls.
+    pub wait_ms: u64,
+
+    /// Wall-clock time taken to execute the tool (after acquiring the permit),
+    /// in milliseconds.
     pub duration_ms: u64,
 }
 
@@ -259,12 +268,6 @@ pub enum AgentMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentEvent {
-    /// The model has produced a reasoning / thinking segment.
-    Thinking {
-        /// The reasoning text (may be partial if streamed).
-        content: String,
-    },
-
     /// An incremental text fragment from the model's response.
     TextDelta {
         /// The new text fragment (append to the current buffer).
@@ -416,6 +419,7 @@ mod tests {
             tool_call_id: "c1".into(),
             content: "ERROR: file not found".into(),
             success: false,
+            wait_ms: 0,
             duration_ms: 12,
         };
         let json = serde_json::to_value(&result).unwrap();

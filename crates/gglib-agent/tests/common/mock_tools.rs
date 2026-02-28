@@ -166,6 +166,7 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 tool_call_id: call.id.clone(),
                 content,
                 success: true,
+                wait_ms: 0,
                 duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
             }),
             MockToolBehavior::Delayed { millis, content } => {
@@ -174,6 +175,7 @@ impl ToolExecutorPort for MockToolExecutorPort {
                     tool_call_id: call.id.clone(),
                     content,
                     success: true,
+                    wait_ms: 0,
                     duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
                 })
             }
@@ -181,6 +183,7 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 tool_call_id: call.id.clone(),
                 content: message,
                 success: false,
+                wait_ms: 0,
                 duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
             }),
             MockToolBehavior::Error { message } => Err(anyhow::anyhow!(message)),

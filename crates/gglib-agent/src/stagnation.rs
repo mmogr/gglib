@@ -59,8 +59,8 @@ impl StagnationDetector {
                 self.count += 1;
                 if self.count >= max_steps {
                     return Err(AgentError::Internal(format!(
-                        "agent stagnated: the same response appeared {count} consecutive time(s) \
-                         (limit: {max_steps})",
+                        "agent stagnated: identical response text seen {count} time(s) in a row \
+                        (max_stagnation_steps = {max_steps})",
                         count = self.count,
                     )));
                 }
@@ -136,5 +136,21 @@ mod tests {
         } else {
             panic!("expected AgentError::Internal");
         }
+    }
+
+    #[test]
+    fn max_steps_zero_triggers_on_first_repeat() {
+        // max_stagnation_steps = 0 means no tolerance at all: the very first
+        // repeated response must trigger the error.
+        let mut det = StagnationDetector::new();
+        let text = "anything";
+        // First occurrence sets the baseline (no stagnation yet).
+        assert!(det.record(text, 0).is_ok(), "first occurrence must not error");
+        // Second occurrence — count becomes 1, which satisfies count >= 0.
+        let err = det.record(text, 0).unwrap_err();
+        assert!(
+            matches!(err, AgentError::Internal(_)),
+            "expected Internal on first repeat with max_steps=0, got {err:?}"
+        );
     }
 }
