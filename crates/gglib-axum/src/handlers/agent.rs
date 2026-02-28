@@ -173,12 +173,12 @@ pub async fn chat(
     let config = req.config.unwrap_or_default();
 
     // ── Pipe AgentEvent values from the loop to the SSE stream ───────────
-    let (tx, rx) = mpsc::channel::<AgentEvent>(64);
+    let (tx, rx) = mpsc::channel::<AgentEvent>(256);
 
     let handle = tokio::spawn(async move {
         match agent_loop.run(messages, config, tx).await {
             Ok(_) => {}
-            Err(e) => tracing::debug!("agent loop ended: {e}"),
+            Err(e) => tracing::warn!("agent loop ended with error: {e}"),
         }
     });
 

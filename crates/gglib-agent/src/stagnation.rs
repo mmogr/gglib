@@ -59,8 +59,8 @@ impl StagnationDetector {
                 self.count += 1;
                 if self.count >= max_steps {
                     return Err(AgentError::Internal(format!(
-                        "agent stagnated: the same response appeared {count} consecutive time(s) \
-                         (limit: {max_steps})",
+                        "agent stagnated: identical response text seen {count} time(s) in a row \
+                        (max_stagnation_steps = {max_steps})",
                         count = self.count,
                     )));
                 }
