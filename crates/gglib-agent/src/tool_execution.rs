@@ -128,6 +128,7 @@ pub async fn execute_tools_parallel(
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use async_trait::async_trait;
     use gglib_core::ports::ToolExecutorPort;
@@ -136,47 +137,7 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
-
-    // ---- Mock executor -------------------------------------------------------
-
-    struct InstantExecutor;
-
-    #[async_trait]
-    impl ToolExecutorPort for InstantExecutor {
-        async fn list_tools(&self) -> Vec<ToolDefinition> {
-            vec![]
-        }
-        async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-            Ok(ToolResult {
-                tool_call_id: call.id.clone(),
-                content: "ok".into(),
-                success: true,
-                wait_ms: 0,
-                duration_ms: 0,
-            })
-        }
-    }
-
-    struct SlowExecutor {
-        delay_ms: u64,
-    }
-
-    #[async_trait]
-    impl ToolExecutorPort for SlowExecutor {
-        async fn list_tools(&self) -> Vec<ToolDefinition> {
-            vec![]
-        }
-        async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-            tokio::time::sleep(std::time::Duration::from_millis(self.delay_ms)).await;
-            Ok(ToolResult {
-                tool_call_id: call.id.clone(),
-                content: "slow ok".into(),
-                success: true,
-                wait_ms: 0,
-                duration_ms: self.delay_ms,
-            })
-        }
-    }
+    use crate::testutil::{DelayedExecutor, NoToolExecutor};
 
     // ---- Tests ---------------------------------------------------------------
 
@@ -193,7 +154,7 @@ mod tests {
 
         let results = execute_tools_parallel(
             &calls,
-            &(Arc::new(InstantExecutor) as Arc<dyn ToolExecutorPort>),
+            &(Arc::new(NoToolExecutor) as Arc<dyn ToolExecutorPort>),
             &AgentConfig::default(),
             &tx,
         )
@@ -228,7 +189,7 @@ mod tests {
 
         let results = execute_tools_parallel(
             &calls,
-            &(Arc::new(SlowExecutor { delay_ms: 1_000 }) as Arc<dyn ToolExecutorPort>),
+            &(Arc::new(DelayedExecutor { delay_ms: 1_000 }) as Arc<dyn ToolExecutorPort>),
             &config,
             &tx,
         )
@@ -241,8 +202,6 @@ mod tests {
 
     #[tokio::test]
     async fn concurrency_limited_by_semaphore() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-
         // Track the peak concurrency during execution.
         struct PeakTracker {
             current: Arc<AtomicUsize>,

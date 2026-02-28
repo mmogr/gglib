@@ -232,128 +232,28 @@ impl AgentLoopPort for AgentLoop {
 
 #[cfg(test)]
 mod tests {
-    use std::pin::Pin;
     use std::sync::Arc;
 
-    use async_trait::async_trait;
-    use futures_util::stream;
-    use gglib_core::ports::{AgentError, AgentLoopPort, LlmCompletionPort, ToolExecutorPort};
-    use gglib_core::{
-        AgentConfig, AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition, ToolResult,
-    };
-    use tokio::sync::{Mutex, mpsc};
+    use gglib_core::ports::{AgentError, AgentLoopPort};
+    use gglib_core::{AgentConfig, AgentMessage};
+    use tokio::sync::mpsc;
 
     use super::*;
-
-    // ---- Mock LLM -----------------------------------------------------------
-
-    struct MockLlm {
-        /// Pre-configured responses popped in order on each `chat_stream` call.
-        responses: Mutex<std::collections::VecDeque<Vec<LlmStreamEvent>>>,
-    }
-
-    impl MockLlm {
-        fn new(responses: Vec<Vec<LlmStreamEvent>>) -> Self {
-            Self {
-                responses: Mutex::new(responses.into_iter().collect()),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl LlmCompletionPort for MockLlm {
-        async fn chat_stream(
-            &self,
-            _messages: &[AgentMessage],
-            _tools: &[ToolDefinition],
-        ) -> anyhow::Result<
-            Pin<Box<dyn futures_core::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send>>,
-        > {
-            let events = self
-                .responses
-                .lock()
-                .await
-                .pop_front()
-                .ok_or_else(|| anyhow::anyhow!("mock LLM has no more responses"))?;
-            Ok(Box::pin(stream::iter(events.into_iter().map(Ok))))
-        }
-    }
-
-    // ---- Mock tool executor -------------------------------------------------
-
-    struct MockExecutor;
-
-    #[async_trait]
-    impl ToolExecutorPort for MockExecutor {
-        async fn list_tools(&self) -> Vec<ToolDefinition> {
-            vec![ToolDefinition::new("do_thing")]
-        }
-        async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-            Ok(ToolResult {
-                tool_call_id: call.id.clone(),
-                content: "done".into(),
-                success: true,
-                wait_ms: 0,
-                duration_ms: 0,
-            })
-        }
-    }
-
-    // ---- Helpers ------------------------------------------------------------
-
-    fn tool_call_response(id: &str, name: &str) -> Vec<LlmStreamEvent> {
-        vec![
-            LlmStreamEvent::ToolCallDelta {
-                index: 0,
-                id: Some(id.into()),
-                name: Some(name.into()),
-                arguments: Some("{}".into()),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "tool_calls".into(),
-            },
-        ]
-    }
-
-    fn text_response(text: &str) -> Vec<LlmStreamEvent> {
-        vec![
-            LlmStreamEvent::TextDelta {
-                content: text.into(),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
-            },
-        ]
-    }
-
-    fn text_and_tool_call_response(text: &str, id: &str, name: &str) -> Vec<LlmStreamEvent> {
-        vec![
-            LlmStreamEvent::TextDelta {
-                content: text.into(),
-            },
-            LlmStreamEvent::ToolCallDelta {
-                index: 0,
-                id: Some(id.into()),
-                name: Some(name.into()),
-                arguments: Some("{}".into()),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "tool_calls".into(),
-            },
-        ]
-    }
+    use crate::testutil::{
+        FailingLlm, OkExecutor, ScriptedLlm, text_and_tool_events, text_events, tool_call_events,
+    };
 
     // ---- Tests --------------------------------------------------------------
 
     #[tokio::test]
     async fn two_iteration_loop_produces_final_answer() {
-        let llm = Arc::new(MockLlm::new(vec![
+        let llm = Arc::new(ScriptedLlm::new(vec![
             // Iteration 1: request a tool call
-            tool_call_response("c1", "do_thing"),
+            tool_call_events("c1", "do_thing"),
             // Iteration 2: return final answer
-            text_response("The answer is 42."),
+            text_events("The answer is 42."),
         ]));
-        let agent = AgentLoop::new(llm, Arc::new(MockExecutor));
+        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
         let (tx, _rx) = mpsc::channel(64);
 
         let result = agent
@@ -372,12 +272,12 @@ mod tests {
     #[tokio::test]
     async fn max_iterations_exceeded_returns_error() {
         // Feed only tool-call responses so the loop never finishes naturally.
-        let responses: Vec<Vec<LlmStreamEvent>> = (0..30)
-            .map(|i| tool_call_response(&format!("c{i}"), "do_thing"))
+        let responses: Vec<Vec<_>> = (0..30)
+            .map(|i| tool_call_events(&format!("c{i}"), "do_thing"))
             .collect();
 
-        let llm = Arc::new(MockLlm::new(responses));
-        let agent = AgentLoop::new(llm, Arc::new(MockExecutor));
+        let llm = Arc::new(ScriptedLlm::new(responses));
+        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
         let (tx, _rx) = mpsc::channel(64);
 
         let config = AgentConfig {
@@ -405,12 +305,12 @@ mod tests {
     #[tokio::test]
     async fn loop_detection_fires_on_repeated_tool_batch() {
         // Repeat the exact same tool call 4 times.
-        let responses: Vec<Vec<LlmStreamEvent>> = (0..10)
-            .map(|_| tool_call_response("c1", "do_thing")) // identical each time
+        let responses: Vec<Vec<_>> = (0..10)
+            .map(|_| tool_call_events("c1", "do_thing")) // identical each time
             .collect();
 
-        let llm = Arc::new(MockLlm::new(responses));
-        let agent = AgentLoop::new(llm, Arc::new(MockExecutor));
+        let llm = Arc::new(ScriptedLlm::new(responses));
+        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
         let (tx, mut rx) = mpsc::channel(64);
 
         let config = AgentConfig {
@@ -459,12 +359,12 @@ mod tests {
         // Setup: LLM always emits "Thinking…" text + a tool call (unique ID each
         // time to prevent loop detection from firing first).  Stagnation accumulates
         // until max_stagnation_steps is reached.
-        let responses: Vec<Vec<LlmStreamEvent>> = (0..10)
-            .map(|i| text_and_tool_call_response("Thinking...", &format!("c{i}"), "do_thing"))
+        let responses: Vec<Vec<_>> = (0..10)
+            .map(|i| text_and_tool_events("Thinking...", &format!("c{i}"), "do_thing"))
             .collect();
 
-        let llm = Arc::new(MockLlm::new(responses));
-        let agent = AgentLoop::new(llm, Arc::new(MockExecutor));
+        let llm = Arc::new(ScriptedLlm::new(responses));
+        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
         let (tx, mut rx) = mpsc::channel(64);
 
         let config = AgentConfig {
@@ -505,11 +405,11 @@ mod tests {
 
     #[tokio::test]
     async fn iteration_complete_events_are_emitted() {
-        let llm = Arc::new(MockLlm::new(vec![
-            tool_call_response("c1", "do_thing"),
-            text_response("done"),
+        let llm = Arc::new(ScriptedLlm::new(vec![
+            tool_call_events("c1", "do_thing"),
+            text_events("done"),
         ]));
-        let agent = AgentLoop::new(llm, Arc::new(MockExecutor));
+        let agent = AgentLoop::new(llm, Arc::new(OkExecutor));
         let (tx, mut rx) = mpsc::channel(64);
 
         agent
@@ -539,29 +439,11 @@ mod tests {
         assert!(got_final_answer, "FinalAnswer should be emitted");
     }
 
-    // ---- Failing LLM mock (for error-path tests) ----------------------------
-
-    /// An LLM that always fails `chat_stream` with a fixed error message.
-    struct AlwaysFailingLlm;
-
-    #[async_trait]
-    impl LlmCompletionPort for AlwaysFailingLlm {
-        async fn chat_stream(
-            &self,
-            _messages: &[AgentMessage],
-            _tools: &[ToolDefinition],
-        ) -> anyhow::Result<
-            Pin<Box<dyn futures_core::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send>>,
-        > {
-            Err(anyhow::anyhow!("simulated LLM connection failure"))
-        }
-    }
-
     #[tokio::test]
     async fn llm_startup_error_emits_agent_error_event() {
         // When chat_stream returns Err, the loop must emit AgentEvent::Error
         // on the channel BEFORE returning Err(AgentError::Internal).
-        let agent = AgentLoop::new(Arc::new(AlwaysFailingLlm), Arc::new(MockExecutor));
+        let agent = AgentLoop::new(Arc::new(FailingLlm), Arc::new(OkExecutor));
         let (tx, mut rx) = mpsc::channel(64);
 
         let err = agent
