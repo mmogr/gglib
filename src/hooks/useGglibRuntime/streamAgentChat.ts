@@ -24,31 +24,20 @@ import React from 'react';
 
 import { appLogger } from '../../services/platform';
 import { getAuthenticatedFetchConfig } from '../../services/transport/api/client';
-import type { GglibMessage, GglibContent } from '../../types/messages';
-import type {
-  AgentEvent,
-  AgentToolResult,
-} from '../../types/events/agentEvent';
+import type { GglibMessage } from '../../types/messages';
+import type { AgentEvent } from '../../types/events/agentEvent';
 import type { ReasoningTimingTracker } from './reasoningTiming';
+import { convertToWireMessages } from './wireMessages';
+import { readAgentSSE } from './agentSseReader';
+import {
+  applyTextDelta,
+  addToolCallPart,
+  applyToolResult,
+  finalizeMessageTiming,
+} from './agentMessageState';
 
 // ---------------------------------------------------------------------------
-// Wire types for the backend request body
-// ---------------------------------------------------------------------------
-
-type AgentWireMessage =
-  | { role: 'system';    content: string }
-  | { role: 'user';      content: string }
-  | { role: 'assistant'; content: string | null; tool_calls?: AgentWireToolCall[] }
-  | { role: 'tool';      tool_call_id: string; content: string };
-
-interface AgentWireToolCall {
-  id: string;
-  name: string;
-  arguments: unknown;
-}
-
-// ---------------------------------------------------------------------------
-// Public options
+// Public types
 // ---------------------------------------------------------------------------
 
 /**
@@ -81,10 +70,7 @@ export interface StreamAgentChatOptions {
   mkAssistantMessage: (custom?: any) => GglibMessage;
   timingTracker?: ReasoningTimingTracker;
   setCurrentStreamingAssistantMessageId?: (id: string | null) => void;
-  /**
-   * Optional partial `AgentConfig` overrides forwarded to the backend.
-   * Any omitted fields fall back to `AgentConfig::default()`.
-   */
+  /** Optional partial `AgentConfig` overrides; omitted fields use backend defaults. */
   config?: PartialAgentConfig;
   /**
    * When `false`, no tools are exposed to the model.
@@ -92,240 +78,6 @@ export interface StreamAgentChatOptions {
    * `null` / `undefined` → permissive (all tools available).
    */
   supportsToolCalls?: boolean | null;
-}
-
-// ---------------------------------------------------------------------------
-// Conversion helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Convert `GglibMessage[]` (UI representation) to the flat
- * `AgentMessage[]` wire format expected by the backend.
- *
- * For assistant messages that contain tool-call parts with embedded results,
- * the corresponding `{ role: "tool", … }` entries are emitted immediately
- * after the assistant entry — matching OpenAI's multi-turn format.
- */
-function convertToWireMessages(messages: GglibMessage[]): AgentWireMessage[] {
-  const result: AgentWireMessage[] = [];
-
-  for (const msg of messages) {
-    if (msg.role === 'system' || msg.role === 'user') {
-      const content = Array.isArray(msg.content)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ? (msg.content as any[]).filter(p => p.type === 'text').map(p => p.text ?? '').join('')
-        : (msg.content as string) ?? '';
-      result.push({ role: msg.role, content });
-
-    } else if (msg.role === 'assistant') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parts = Array.isArray(msg.content) ? (msg.content as any[]) : [];
-      const text = parts
-        .filter(p => p.type === 'text')
-        .map(p => p.text ?? '')
-        .join('');
-      const toolCallParts = parts.filter(p => p.type === 'tool-call');
-
-      const toolCalls: AgentWireToolCall[] = toolCallParts.map(p => ({
-        id: p.toolCallId as string,
-        name: p.toolName as string,
-        arguments: (p.args as unknown) ?? (p.argsText ? JSON.parse(p.argsText as string) : {}),
-      }));
-
-      result.push({
-        role: 'assistant',
-        content: text || null,
-        ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
-      });
-
-      // Emit a tool-result entry for each completed tool call (result in part).
-      for (const p of toolCallParts) {
-        if (p.result !== undefined) {
-          result.push({
-            role: 'tool',
-            tool_call_id: p.toolCallId as string,
-            content:
-              typeof p.result === 'string'
-                ? p.result
-                : JSON.stringify(p.result),
-          });
-        }
-      }
-    }
-    // Note: GglibMessage with role === 'tool' does not appear in the
-    // ThreadMessageLike format; tool results live inside assistant parts above.
-  }
-
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// SSE stream reader (POST-capable, minimal)
-// ---------------------------------------------------------------------------
-
-/**
- * Reads raw SSE data payloads from a POST response body.
- *
- * Yields the trimmed JSON string from each `data:` line.  Keepalive `ping`
- * frames and blank lines are silently skipped.
- */
-async function* readAgentSSE(
-  response: Response,
-  abortSignal?: AbortSignal,
-): AsyncGenerator<string> {
-  if (!response.body) throw new Error('Agent SSE: no response body');
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      if (abortSignal?.aborted) break;
-
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // SSE events are separated by blank lines (\n\n)
-      const rawEvents = buffer.split('\n\n');
-      buffer = rawEvents.pop() ?? ''; // keep the trailing partial event
-
-      for (const rawEvent of rawEvents) {
-        const dataLine = rawEvent
-          .split('\n')
-          .find(l => l.startsWith('data:'));
-        if (!dataLine) continue;
-
-        const payload = dataLine.slice(5).trim();
-        if (!payload || payload === 'ping') continue;
-
-        yield payload;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// State helpers — all live on the stack inside streamAgentChat
-// ---------------------------------------------------------------------------
-
-/** Append a text delta to the current message's text part (or create one). */
-function applyTextDelta(
-  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
-  messageId: string,
-  delta: string,
-): void {
-  setMessages(prev =>
-    prev.map(m => {
-      if (m.id !== messageId) return m;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parts = Array.isArray(m.content) ? ([...m.content] as any[]) : [];
-      const lastText = parts.length > 0 && parts[parts.length - 1].type === 'text'
-        ? parts[parts.length - 1]
-        : null;
-
-      let nextParts: unknown[];
-      if (lastText) {
-        nextParts = [
-          ...parts.slice(0, -1),
-          { type: 'text', text: (lastText.text ?? '') + delta },
-        ];
-      } else {
-        nextParts = [...parts, { type: 'text', text: delta }];
-      }
-      return { ...m, content: nextParts as GglibContent };
-    }),
-  );
-}
-
-/** Add a pending (no result yet) tool-call part. */
-function addToolCallPart(
-  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
-  messageId: string,
-  toolCallId: string,
-  toolName: string,
-  toolArgs: unknown,
-): void {
-  setMessages(prev =>
-    prev.map(m => {
-      if (m.id !== messageId) return m;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parts = Array.isArray(m.content) ? ([...m.content] as any[]) : [];
-      return {
-        ...m,
-        content: [
-          ...parts,
-          {
-            type: 'tool-call',
-            toolCallId,
-            toolName,
-            args: typeof toolArgs === 'object' ? toolArgs : {},
-            argsText: JSON.stringify(toolArgs ?? {}),
-          },
-        ] as GglibContent,
-      };
-    }),
-  );
-}
-
-/** Stamp a tool result onto the matching tool-call part. */
-function applyToolResult(
-  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
-  messageId: string,
-  toolResult: AgentToolResult,
-): void {
-  setMessages(prev =>
-    prev.map(m => {
-      if (m.id !== messageId) return m;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parts = Array.isArray(m.content) ? (m.content as any[]) : [];
-      return {
-        ...m,
-        content: parts.map(p =>
-          p.type === 'tool-call' && p.toolCallId === toolResult.tool_call_id
-            ? {
-                ...p,
-                result: toolResult.success
-                  ? toolResult.content
-                  : { error: toolResult.content },
-                isError: !toolResult.success,
-                waitMs: toolResult.wait_ms,
-                durationMs: toolResult.duration_ms,
-              }
-            : p,
-        ) as GglibContent,
-      };
-    }),
-  );
-}
-
-/** Mark a message as timing-finalized (triggers persisted transcript regeneration). */
-function finalizeMessageTiming(
-  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
-  messageId: string,
-): void {
-  setMessages(prev =>
-    prev.map(m => {
-      if (m.id !== messageId) return m;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((m.metadata as any)?.custom?.timingFinalized) return m;
-      return {
-        ...m,
-        metadata: {
-          ...m.metadata,
-          custom: {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ...(m.metadata as any)?.custom,
-            timingFinalized: true,
-          },
-        },
-      };
-    }),
-  );
 }
 
 // ---------------------------------------------------------------------------
