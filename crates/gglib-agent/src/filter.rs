@@ -163,8 +163,6 @@ mod tests {
                 tool_call_id: call.id.clone(),
                 content: format!("executed {}", call.name),
                 success: true,
-                wait_ms: 0,
-                execute_duration_ms: 0,
             })
         }
     }

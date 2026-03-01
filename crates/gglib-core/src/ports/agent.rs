@@ -79,19 +79,22 @@ pub enum AgentError {
     /// The assistant produced the same text content for too many consecutive
     /// iterations, indicating a non-tool-calling repetition loop.
     ///
-    /// Preserves the FNV-1a hash of the repeated text, the number of
-    /// consecutive occurrences seen (including baseline), and the configured
+    /// Preserves the FNV-1a hash of the repeated text, the total session-wide
+    /// occurrence count (including baseline), and the configured
     /// `max_stagnation_steps` limit — giving callers structured access to the
     /// stagnation evidence without parsing an error string.
+    ///
+    /// Detection is session-wide: both strictly consecutive repetitions and
+    /// A → B → A oscillations are caught.
     #[error(
-        "agent stagnated: same response text seen {count} time(s) consecutively \
+        "agent stagnated: same response text seen {count} time(s) in this session \
          (max_stagnation_steps = {max_steps})"
     )]
     StagnationDetected {
         /// FNV-1a hash of the repeated assistant text (for diagnostics).
         repeated_text_hash: u64,
-        /// Total number of consecutive identical responses observed (including
-        /// the baseline occurrence).
+        /// Total number of times this text has been seen in the session
+        /// (including the baseline occurrence).
         count: usize,
         /// The configured stagnation limit at the time of detection.
         max_steps: usize,

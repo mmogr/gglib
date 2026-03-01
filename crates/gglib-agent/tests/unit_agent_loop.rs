@@ -162,7 +162,7 @@ async fn test_empty_tool_filter_exposes_no_tools() {
     // The tool call must have been rejected: ToolCallComplete with success=false
     // and a message that names the empty-filter reason.
     let rejection = events.iter().find_map(|e| {
-        if let AgentEvent::ToolCallComplete { result } = e {
+        if let AgentEvent::ToolCallComplete { result, .. } = e {
             Some(result)
         } else {
             None

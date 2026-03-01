@@ -64,8 +64,6 @@ async fn execute_single_tool(
                 tool_call_id: tc.id.clone(),
                 content: "Tool execution aborted: concurrency gate closed".into(),
                 success: false,
-                wait_ms: elapsed_ms(enqueue_time),
-                execute_duration_ms: 0,
             };
         }
     };
@@ -86,35 +84,16 @@ async fn execute_single_tool(
     let duration_ms = elapsed_ms(exec_start);
 
     let tool_result = match result {
-        Ok(Ok(mut r)) => {
-            // Stamp timing metrics onto the adapter result.
-            // The MCP adapter (and any other ToolExecutorPort impl) cannot
-            // measure concurrency wait time; we fill it in here where both
-            // metrics are available.
-            //
-            // `execute_duration_ms` is always overwritten with the wall-clock
-            // time measured from `exec_start` (after the semaphore was
-            // acquired) so that success, error, and timeout paths all report
-            // the same metric — the total time this slot was in use.  The
-            // adapter's own measurement is discarded to avoid the split-origin
-            // inconsistency that would otherwise make timing analysis misleading.
-            r.wait_ms = wait_ms;
-            r.execute_duration_ms = duration_ms;
-            r
-        }
+        Ok(Ok(r)) => r,
         Ok(Err(e)) => ToolResult {
             tool_call_id: tc.id.clone(),
             content: format!("Tool execution error: {e}"),
             success: false,
-            wait_ms,
-            execute_duration_ms: duration_ms,
         },
         Err(_) => ToolResult {
             tool_call_id: tc.id.clone(),
             content: format!("Tool '{}' timed out after {timeout_ms} ms", tc.name),
             success: false,
-            wait_ms,
-            execute_duration_ms: duration_ms,
         },
     };
 
@@ -122,6 +101,8 @@ async fn execute_single_tool(
     let _ = tx
         .send(AgentEvent::ToolCallComplete {
             result: tool_result.clone(),
+            wait_ms,
+            execute_duration_ms: duration_ms,
         })
         .await;
 
@@ -180,8 +161,6 @@ pub(crate) async fn execute_tools_parallel(
                 tool_call_id: calls[i].id.clone(),
                 content: "Tool task panicked".into(),
                 success: false,
-                wait_ms: 0,
-                execute_duration_ms: 0,
             })
         })
         .collect()
@@ -221,8 +200,6 @@ mod tests {
                 tool_call_id: tc.id.clone(),
                 content: "ok".into(),
                 success: true,
-                wait_ms: 0,
-                execute_duration_ms: 0,
             })
         }
     }
@@ -238,8 +215,6 @@ mod tests {
                 tool_call_id: tc.id.clone(),
                 content: "slow ok".into(),
                 success: true,
-                wait_ms: 0,
-                execute_duration_ms: self.millis,
             })
         }
     }
@@ -307,8 +282,6 @@ mod tests {
                     tool_call_id: tc.id.clone(),
                     content: "ok".into(),
                     success: true,
-                    wait_ms: 0,
-                    execute_duration_ms: 20,
                 })
             }
         }

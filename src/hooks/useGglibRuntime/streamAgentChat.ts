@@ -225,12 +225,12 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         }
 
         case 'tool_call_complete': {
-          applyToolResult(setMessages, currentId, event.result);
+          applyToolResult(setMessages, currentId, event);
           appLogger.debug('hook.runtime', 'streamAgentChat: tool call complete', {
             id: event.result.tool_call_id,
             success: event.result.success,
-            waitMs: event.result.wait_ms,
-            durationMs: event.result.duration_ms,
+            waitMs: event.wait_ms,
+            durationMs: event.execute_duration_ms,
           });
           break;
         }

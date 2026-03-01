@@ -43,10 +43,10 @@ pub fn render_event(event: &AgentEvent, verbose: bool) {
             eprintln!("\n  ⚙   {} …", tool_call.name);
         }
 
-        AgentEvent::ToolCallComplete { result } => {
+        AgentEvent::ToolCallComplete { result, execute_duration_ms, .. } => {
             let icon = if result.success { "✓" } else { "✗" };
             let preview = truncate_string(&result.content, 80);
-            eprintln!("  {icon}  {}ms  {preview}", result.execute_duration_ms);
+            eprintln!("  {icon}  {execute_duration_ms}ms  {preview}");
         }
 
         AgentEvent::IterationComplete {
@@ -111,9 +111,9 @@ mod tests {
                 tool_call_id: "c1".into(),
                 content: "output".into(),
                 success: true,
-                wait_ms: 0,
-                execute_duration_ms: 5,
             },
+            wait_ms: 0,
+            execute_duration_ms: 5,
         });
     }
 }

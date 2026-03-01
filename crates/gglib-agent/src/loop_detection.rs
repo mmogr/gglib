@@ -3,7 +3,7 @@
 //! # Algorithm
 //!
 //! 1. Compute an **individual signature** for each [`ToolCall`] as
-//!    `"{name}:{fnv1a_64(arguments_json):016x}"`.
+//!    `"{name}:{fnv1a_64(canonical_args_json):016x}"`.
 //! 2. Sort the individual signatures and join them with `"|"` to form a
 //!    **batch signature** that is independent of tool-call ordering.
 //! 3. A [`LoopDetector`] counts how many times each batch signature has been
@@ -16,11 +16,17 @@
 //! - Offset basis: `14_695_981_039_346_656_037`
 //! - Prime: `1_099_511_628_211`
 //! - Wrapping 64-bit multiplication (`wrapping_mul`)
+//!
+//! Argument JSON objects are **canonicalised** (keys sorted recursively)
+//! before hashing so that `{"a":1,"b":2}` and `{"b":2,"a":1}` produce the
+//! same signature, preventing a non-deterministically ordered model from
+//! bypassing the loop guard.
 
 use std::collections::HashMap;
 
 use gglib_core::ToolCall;
 use gglib_core::ports::AgentError;
+use serde_json::Value;
 
 use crate::fnv1a::fnv1a_64;
 
@@ -28,16 +34,45 @@ use crate::fnv1a::fnv1a_64;
 // Signature helpers
 // =============================================================================
 
+/// Serialise a [`serde_json::Value`] to a canonical JSON string with object
+/// keys sorted recursively so that `{"b":2,"a":1}` and `{"a":1,"b":2}`
+/// produce identical output.  Array element order is preserved.
+fn canonical_json(v: &Value) -> String {
+    match v {
+        Value::Object(map) => {
+            let mut pairs: Vec<(&String, &Value)> = map.iter().collect();
+            pairs.sort_unstable_by_key(|(k, _)| k.as_str());
+            let inner = pairs
+                .into_iter()
+                .map(|(k, v)| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(k).unwrap_or_default(),
+                        canonical_json(v)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{inner}}}")
+        }
+        Value::Array(arr) => {
+            let inner = arr.iter().map(canonical_json).collect::<Vec<_>>().join(",");
+            format!("[{inner}]")
+        }
+        _ => v.to_string(),
+    }
+}
+
 /// Compute the individual signature for a single [`ToolCall`].
 ///
-/// Format: `"{name}:{fnv1a_64(arguments_json):016x}"`
+/// Format: `"{name}:{fnv1a_64(canonical_args_json):016x}"`
 ///
-/// The arguments are serialised to a canonical JSON string before hashing.
-/// For the purposes of loop detection, argument *identity* is what matters,
-/// not argument ordering; JSON objects are not canonicalised.
+/// Arguments are serialised via [`canonical_json`] before hashing so that
+/// logically identical arguments always hash identically regardless of JSON
+/// key ordering.
 fn tool_signature(call: &ToolCall) -> String {
-    let args_json = call.arguments.to_string();
-    format!("{}:{:016x}", call.name, fnv1a_64(&args_json))
+    let canonical = canonical_json(&call.arguments);
+    format!("{}:{:016x}", call.name, fnv1a_64(&canonical))
 }
 
 /// Compute the batch signature for a slice of [`ToolCall`]s.
@@ -153,6 +188,47 @@ mod tests {
         assert_eq!(
             batch_signature(&[a.clone(), b.clone()]),
             batch_signature(&[b, a])
+        );
+    }
+
+    #[test]
+    fn different_argument_key_order_produces_same_signature() {
+        // Without canonical_json, serde_json preserves insertion order so
+        // {"a":1,"b":2} and {"b":2,"a":1} produce different to_string output.
+        // canonical_json must normalise them to the same string.
+        let call_ab = ToolCall {
+            id: "c1".into(),
+            name: "tool".into(),
+            arguments: json!({ "a": 1, "b": 2 }),
+        };
+        let call_ba = ToolCall {
+            id: "c1".into(),
+            name: "tool".into(),
+            arguments: serde_json::from_str::<Value>(r#"{"b":2,"a":1}"#).unwrap(),
+        };
+        assert_eq!(
+            tool_signature(&call_ab),
+            tool_signature(&call_ba),
+            "signatures must match regardless of JSON key ordering"
+        );
+    }
+
+    #[test]
+    fn nested_argument_objects_are_canonicalised() {
+        let call_sorted = ToolCall {
+            id: "c1".into(),
+            name: "t".into(),
+            arguments: json!({ "outer": { "x": 1, "y": 2 } }),
+        };
+        let call_unsorted = ToolCall {
+            id: "c1".into(),
+            name: "t".into(),
+            arguments: serde_json::from_str::<Value>(r#"{"outer":{"y":2,"x":1}}"#).unwrap(),
+        };
+        assert_eq!(
+            tool_signature(&call_sorted),
+            tool_signature(&call_unsorted),
+            "nested object keys must also be sorted"
         );
     }
 

@@ -25,12 +25,11 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use gglib_core::ports::ToolExecutorPort;
-use gglib_core::{ToolCall, ToolDefinition, ToolResult, elapsed_ms};
+use gglib_core::{ToolCall, ToolDefinition, ToolResult};
 
 use crate::service::McpService;
 
@@ -139,14 +138,12 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             }
         };
 
-        // ---- Execute with wall-clock timing ----------------------------------
-        let start = Instant::now();
+        // ---- Execute --------------------------------------------------------
         let result = self
             .mcp
             .call_tool(server_id, bare_name, arguments)
             .await
             .map_err(|e| anyhow!("MCP call_tool failed: {e}"))?;
-        let duration_ms = elapsed_ms(start);
 
         // ---- Convert McpToolResult → ToolResult ------------------------------
         let (content, success) = if result.success {
@@ -166,10 +163,6 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             tool_call_id: call.id.clone(),
             content,
             success,
-            // wait_ms (concurrency permit wait) is measured by the caller and
-            // overwritten there; zero is a safe sentinel from the adapter side.
-            wait_ms: 0,
-            execute_duration_ms: duration_ms,
         })
     }
 }

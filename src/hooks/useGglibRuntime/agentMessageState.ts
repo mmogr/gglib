@@ -12,7 +12,7 @@
 import React from 'react';
 
 import type { GglibMessage, GglibContent, GglibMessagePart } from '../../types/messages';
-import type { AgentToolResult } from '../../types/events/agentEvent';
+import type { AgentToolCallCompleteEvent } from '../../types/events/agentEvent';
 
 // ---------------------------------------------------------------------------
 // Private helpers
@@ -126,7 +126,7 @@ export function addToolCallPart(
 export function applyToolResult(
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
   messageId: string,
-  toolResult: AgentToolResult,
+  event: AgentToolCallCompleteEvent,
 ): void {
   setMessages(prev =>
     prev.map(m => {
@@ -135,15 +135,15 @@ export function applyToolResult(
       return {
         ...m,
         content: parts.map(p =>
-          p.type === 'tool-call' && p.toolCallId === toolResult.tool_call_id
+          p.type === 'tool-call' && p.toolCallId === event.result.tool_call_id
             ? {
                 ...p,
-                result: toolResult.success
-                  ? toolResult.content
-                  : { error: toolResult.content },
-                isError: !toolResult.success,
-                waitMs: toolResult.wait_ms,
-                durationMs: toolResult.duration_ms,
+                result: event.result.success
+                  ? event.result.content
+                  : { error: event.result.content },
+                isError: !event.result.success,
+                waitMs: event.wait_ms,
+                durationMs: event.execute_duration_ms,
               }
             : p,
         ) as GglibContent,

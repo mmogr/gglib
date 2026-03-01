@@ -29,10 +29,6 @@ export interface AgentToolResult {
   content: string;
   /** `false` here is **not** an error — it is context fed to the LLM. */
   success: boolean;
-  /** Time spent waiting for a concurrency slot, in milliseconds. */
-  wait_ms: number;
-  /** Wall-clock execution time (after acquiring the slot), in milliseconds. */
-  duration_ms: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,6 +51,10 @@ export interface AgentToolCallStartEvent {
 export interface AgentToolCallCompleteEvent {
   type: 'tool_call_complete';
   result: AgentToolResult;
+  /** Time spent waiting for a concurrency slot, in milliseconds. */
+  wait_ms: number;
+  /** Wall-clock execution time (after acquiring the slot), in milliseconds. */
+  execute_duration_ms: number;
 }
 
 /** One full LLM → tool-execution cycle has completed. */

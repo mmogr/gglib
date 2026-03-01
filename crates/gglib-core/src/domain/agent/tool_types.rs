@@ -100,17 +100,6 @@ pub struct ToolResult {
     ///
     /// `false` here is **not** a loop error — see type-level docs above.
     pub success: bool,
-
-    /// Time spent waiting for a concurrency permit (semaphore), in
-    /// milliseconds.
-    pub wait_ms: u64,
-
-    /// Wall-clock time taken to execute the tool as measured by the adapter,
-    /// i.e. pure execution time after the permit was acquired, in milliseconds.
-    ///
-    /// This value is populated by the [`crate::ports::ToolExecutorPort`]
-    /// implementation.  The agent loop does **not** overwrite it.
-    pub execute_duration_ms: u64,
 }
 
 #[cfg(test)]
@@ -134,10 +123,13 @@ mod tests {
             tool_call_id: "c1".into(),
             content: "ERROR: file not found".into(),
             success: false,
-            wait_ms: 0,
-            execute_duration_ms: 12,
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["success"], false);
+        assert!(json.get("wait_ms").is_none(), "wait_ms must not be on ToolResult");
+        assert!(
+            json.get("execute_duration_ms").is_none(),
+            "execute_duration_ms must not be on ToolResult"
+        );
     }
 }

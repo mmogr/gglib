@@ -18,12 +18,10 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 
 use anyhow::Result;
 use async_trait::async_trait;
 use gglib_core::domain::agent::{ToolCall, ToolDefinition, ToolResult};
-use gglib_core::elapsed_ms;
 use gglib_core::ports::ToolExecutorPort;
 use tokio::sync::Mutex;
 
@@ -110,8 +108,6 @@ impl ToolExecutorPort for MockToolExecutorPort {
     }
 
     async fn execute(&self, call: &ToolCall) -> Result<ToolResult> {
-        let start = Instant::now();
-
         // Record the invocation.
         self.call_log
             .lock()
@@ -128,8 +124,6 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 tool_call_id: call.id.clone(),
                 content,
                 success: true,
-                wait_ms: 0,
-                execute_duration_ms: elapsed_ms(start),
             }),
             MockToolBehavior::Delayed { millis, content } => {
                 tokio::time::sleep(std::time::Duration::from_millis(millis)).await;
@@ -137,8 +131,6 @@ impl ToolExecutorPort for MockToolExecutorPort {
                     tool_call_id: call.id.clone(),
                     content,
                     success: true,
-                    wait_ms: 0,
-                    execute_duration_ms: elapsed_ms(start),
                 })
             }
             MockToolBehavior::Error { message } => Err(anyhow::anyhow!(message)),

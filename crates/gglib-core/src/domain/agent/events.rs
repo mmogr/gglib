@@ -46,8 +46,13 @@ pub enum AgentEvent {
 
     /// A tool execution has completed (success or failure).
     ToolCallComplete {
-        /// The outcome of the tool, including timing and success flag.
+        /// The outcome of the tool execution.
         result: ToolResult,
+        /// Time spent waiting for a concurrency permit (semaphore), in milliseconds.
+        wait_ms: u64,
+        /// Wall-clock time taken to execute the tool after acquiring the permit,
+        /// in milliseconds.
+        execute_duration_ms: u64,
     },
 
     /// One full LLM→tool-execution cycle has completed.

@@ -2,26 +2,30 @@
 //!
 //! # Algorithm
 //!
-//! After each LLM response, the assistant's text content is hashed with
-//! [`crate::fnv1a::fnv1a_64`].  If the hash matches the previous
-//! iteration, a stagnation counter is incremented.  When the counter reaches
-//! `max_stagnation_steps`, the loop is aborted with
-//! [`AgentError::StagnationDetected`], which carries the repeated-text hash,
-//! the consecutive count, and the configured limit as structured fields.
-//! When the hash changes, the counter is reset to zero.
+//! After each LLM response the assistant's text is hashed with
+//! [`crate::fnv1a::fnv1a_64`].  The hash is looked up in a session-wide
+//! occurrence map.  When a hash has already been seen at least
+//! `max_stagnation_steps` times **before** the current call, the loop is
+//! aborted with [`AgentError::StagnationDetected`].
 //!
 //! Stagnation detection is a safety net for models that get stuck in a
-//! repetitive non-tool-calling loop — e.g., repeatedly summarising their
-//! previous answer without making progress.  Tool-call loops are handled
-//! separately by [`crate::loop_detection::LoopDetector`].
+//! repetitive non-tool-calling loop.  Tool-call loops are handled separately
+//! by [`crate::loop_detection::LoopDetector`].
 //!
-//! ## Known limitation — oscillation patterns
+//! ## Oscillation detection
 //!
-//! The detector only fires when the **same** hash is repeated **consecutively**.
-//! A model oscillating between two distinct responses (A → B → A → B …) resets
-//! the counter on every turn and therefore bypasses this guard entirely.
-//! Oscillation detection would require a short sliding-window history of past
-//! hashes, which is not currently implemented.
+//! Because occurrence counts are accumulated across the **whole session**, the
+//! detector catches A → B → A → B oscillations as well as strictly consecutive
+//! repetitions.  A model that alternates between two responses will exhaust its
+//! budget for each response independently; with the default `max_stagnation_steps
+//! = 5`, stagnation fires within at most 12 iterations (two responses × 6
+//! occurrences each).
+//!
+//! The first occurrence of any hash is always treated as a baseline and never
+//! triggers an error.  Empty text is silently ignored so that tool-call-only
+//! iterations do not accumulate spurious counts.
+
+use std::collections::HashMap;
 
 use gglib_core::ports::AgentError;
 
@@ -35,62 +39,42 @@ use crate::fnv1a::fnv1a_64;
 ///
 /// Create once per agent run and call [`StagnationDetector::record`] after
 /// every iteration that produces text content.
+///
+/// Tracks **session-wide** occurrence counts per hash so that both strictly
+/// consecutive repetitions and A → B → A oscillations are caught.
 #[derive(Debug, Default)]
 pub(crate) struct StagnationDetector {
-    prev_hash: Option<u64>,
-    count: usize,
+    occurrences: HashMap<u64, usize>,
 }
 
 impl StagnationDetector {
     /// Record the current assistant text and error if the model has stagnated.
     ///
-    /// # Semantics
+    /// The **first** occurrence of any text is always `Ok` (baseline).
+    /// Subsequent occurrences of the same text increment a session counter.
+    /// An error is raised when the prior occurrence count (before this call)
+    /// is both `> 0` and `>= max_steps`, giving:
     ///
-    /// The **first** occurrence of any text sets the baseline (no error is
-    /// raised).  Subsequent occurrences of the *same* text (same FNV-1a hash)
-    /// increment an internal repeat counter starting from 1.  An error is
-    /// raised when `repeat_count >= max_steps`, i.e. after the model has
-    /// produced the same text `max_steps` times **after** the first baseline
-    /// occurrence — meaning the *total* number of identical consecutive
-    /// responses before aborting is `max_steps + 1`.
+    /// | `max_steps` | Total identical responses before abort |
+    /// |-------------|----------------------------------------|
+    /// | 0 or 1      | 2 (fires on first repeat)              |
+    /// | 5 (default) | 6 (fires on sixth occurrence)          |
     ///
-    /// A different text hash resets the counter to zero.
-    ///
-    /// | `max_steps` | Identical responses before abort |
-    /// |-------------|----------------------------------|
-    /// | 0           | 1 (fires on the 1st repeat)       |
-    /// | 1           | 2 (fires on the 2nd repeat)       |
-    /// | 5 (default) | 6 (fires on the 6th occurrence)   |
-    ///
-    /// If `text` is empty, the call is a no-op and `Ok(())` is returned
-    /// immediately.  Empty responses (tool-call-only iterations) always hash
-    /// to the same FNV-1a offset basis value; ignoring them avoids spurious
-    /// stagnation detection while the model makes genuine progress through
-    /// distinct tool calls.  The caller is therefore not required to guard
-    /// against empty strings — this method owns the invariant.
+    /// Empty text is silently ignored (tool-call-only iterations).
     pub(crate) fn record(&mut self, text: &str, max_steps: usize) -> Result<(), AgentError> {
         if text.is_empty() {
             return Ok(());
         }
         let hash = fnv1a_64(text);
-        match self.prev_hash {
-            Some(prev) if prev == hash => {
-                self.count += 1;
-                if self.count >= max_steps {
-                    // self.count is the number of *repeats after the first baseline
-                    // occurrence*, so total identical responses seen = self.count + 1.
-                    return Err(AgentError::StagnationDetected {
-                        repeated_text_hash: hash,
-                        count: self.count + 1,
-                        max_steps,
-                    });
-                }
-            }
-            _ => {
-                self.count = 0;
-                self.prev_hash = Some(hash);
-            }
+        let prior = self.occurrences.entry(hash).or_insert(0);
+        if *prior > 0 && *prior >= max_steps {
+            return Err(AgentError::StagnationDetected {
+                repeated_text_hash: hash,
+                count: *prior + 1,
+                max_steps,
+            });
         }
+        *prior += 1;
         Ok(())
     }
 }
@@ -133,16 +117,39 @@ mod tests {
     }
 
     #[test]
-    fn stagnation_resets_on_new_response() {
+    fn different_responses_accumulate_independently() {
+        // Each hash has its own counter; B does not affect A's count.
         let mut det = StagnationDetector::default();
         let a = "first response";
         let b = "second response";
-        assert!(det.record(a, 2).is_ok());
-        assert!(det.record(a, 2).is_ok()); // count = 1
-        // A different response resets the counter
-        assert!(det.record(b, 2).is_ok());
-        // Now repeating `b` twice should be fine (count starts at 0 again)
-        assert!(det.record(b, 2).is_ok()); // count = 1 (< 2)
+        assert!(det.record(a, 2).is_ok()); // A×1 (baseline)
+        assert!(det.record(a, 2).is_ok()); // A×2, prior=1, 1>=2? No
+        assert!(det.record(b, 2).is_ok()); // B×1 (baseline)
+        assert!(det.record(b, 2).is_ok()); // B×2, prior=1, 1>=2? No
+        // A×3: prior=2, 2>0 && 2>=2 → fire
+        let err = det.record(a, 2).unwrap_err();
+        assert!(
+            matches!(err, AgentError::StagnationDetected { count: 3, .. }),
+            "expected StagnationDetected with count=3, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn oscillation_abab_fires_stagnation() {
+        // A → B → A → B oscillation fires once either hash reaches max_steps+1
+        // total occurrences, even though no two consecutive responses match.
+        let mut det = StagnationDetector::default();
+        let a = "response A";
+        let b = "response B";
+        assert!(det.record(a, 2).is_ok()); // A×1 baseline
+        assert!(det.record(b, 2).is_ok()); // B×1 baseline
+        assert!(det.record(a, 2).is_ok()); // A×2, prior=1 < 2
+        assert!(det.record(b, 2).is_ok()); // B×2, prior=1 < 2
+        let err = det.record(a, 2).unwrap_err(); // A×3, prior=2 >= 2 → fire
+        assert!(
+            matches!(err, AgentError::StagnationDetected { count: 3, .. }),
+            "expected StagnationDetected with count=3, got {err:?}"
+        );
     }
 
     #[test]
