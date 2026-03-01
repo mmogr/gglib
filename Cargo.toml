@@ -36,8 +36,10 @@ tokio = { version = "1.0", features = ["full"] }
 tokio-test = "0.4"
 
 # Futures / async streams
-futures-util = "0.3"
-futures-core = "0.3"
+# Both crates are published in lock-step from the same futures-rs release; using
+# the same constraint here ensures Cargo always resolves them to the same version.
+futures-util = { version = "0.3" }
+futures-core = { version = "0.3" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

@@ -194,10 +194,13 @@ impl AgentLoopPort for AgentLoop {
                 // so by this point we hold the only reference and no clone is needed.
                 tool_calls: Some(response.tool_calls),
             });
-            for result in &results {
+            // Capture length before consuming results by value so we can report
+            // the count in the IterationComplete event without keeping a reference.
+            let tool_call_count = results.len();
+            for result in results {
                 messages.push(AgentMessage::Tool {
-                    tool_call_id: result.tool_call_id.clone(),
-                    content: result.content.clone(),
+                    tool_call_id: result.tool_call_id,
+                    content: result.content,
                 });
             }
 
@@ -205,13 +208,13 @@ impl AgentLoopPort for AgentLoop {
             let _ = tx
                 .send(AgentEvent::IterationComplete {
                     iteration: iteration + 1,
-                    tool_calls: results.len(),
+                    tool_calls: tool_call_count,
                 })
                 .await;
 
             debug!(
                 iteration,
-                tool_results = results.len(),
+                tool_results = tool_call_count,
                 "iteration complete"
             );
         }

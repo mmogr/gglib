@@ -22,11 +22,5 @@ anyhow       = { workspace = true }
 tracing      = { workspace = true }
 serde_json   = { workspace = true }
 
-[dev-dependencies]
-# tokio with test features is the only dev-dep not already in [dependencies].
-# All other dev-deps (gglib-core, serde_json, futures-util, futures-core,
-# async-trait, anyhow) are inherited automatically from [dependencies].
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-
 [lints]
 workspace = true
