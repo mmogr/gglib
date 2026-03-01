@@ -152,7 +152,7 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // ── 3. Consume event stream; Ctrl+C aborts the agent task ────────────────
         let completed = tokio::select! {
             biased;
-            result = collect_events(&mut rx, args.verbose) => result,
+            result = drain_event_stream(&mut rx, args.verbose) => result,
             _ = tokio::signal::ctrl_c() => {
                 handle.abort();
                 while rx.try_recv().is_ok() {}
@@ -192,7 +192,7 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 ///
 /// The caller **must** gate any history update on the return value: history
 /// from a failed or incomplete turn must not replace the previous context.
-async fn collect_events(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
+async fn drain_event_stream(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
     while let Some(event) = rx.recv().await {
         render_event(&event, verbose);
 

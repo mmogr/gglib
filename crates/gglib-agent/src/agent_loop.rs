@@ -33,7 +33,7 @@ use crate::stream_collector::CollectedResponse;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
-use crate::context_pruning::prune_for_budget;
+use crate::context_pruning::{prune_for_budget, total_chars};
 use crate::filter::{EmptyToolExecutor, FilteredToolExecutor};
 use crate::loop_detection::LoopDetector;
 use crate::stagnation::StagnationDetector;
@@ -56,32 +56,54 @@ async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &str) {
         .await;
 }
 
-// =============================================================================
-// Private helpers (non-method)
-// =============================================================================
+/// Emit an [`AgentEvent::Error`] then return the corresponding
+/// [`AgentError::Internal`].
+///
+/// Use this to collapse the repeated three-liner:
+/// ```text
+/// emit_error_event(tx, &msg).await;
+/// return Err(AgentError::Internal(msg));
+/// ```
+/// into a single expression:
+/// ```text
+/// return Err(bail_internal(tx, msg).await);
+/// ```
+async fn bail_internal(tx: &mpsc::Sender<AgentEvent>, msg: String) -> AgentError {
+    emit_error_event(tx, &msg).await;
+    AgentError::Internal(msg)
+}
 
 /// Append the assistant's tool-call message and all tool results to `messages`.
 ///
 /// Call this after the parallel tool execution phase so that the complete
 /// iteration is recorded in the conversation history before the next LLM call.
+///
+/// Returns the total character count of the newly appended messages so the
+/// caller can update its incremental `running_chars` counter without
+/// re-scanning the entire history.
 fn append_iteration_messages(
     messages: &mut Vec<AgentMessage>,
     content: String,
     tool_calls: Vec<ToolCall>,
     results: Vec<ToolResult>,
-) {
-    messages.push(AgentMessage::Assistant {
+) -> usize {
+    let assistant = AgentMessage::Assistant {
         content: if content.is_empty() { None } else { Some(content) },
         // Move tool_calls in — the caller has already finished borrowing it
         // for loop-detection and parallel execution.
         tool_calls: Some(tool_calls),
-    });
+    };
+    let mut added = assistant.char_count();
+    messages.push(assistant);
     for result in results {
-        messages.push(AgentMessage::Tool {
+        let msg = AgentMessage::Tool {
             tool_call_id: result.tool_call_id,
             content: result.content,
-        });
+        };
+        added += msg.char_count();
+        messages.push(msg);
     }
+    added
 }
 
 // =============================================================================
@@ -126,19 +148,11 @@ impl AgentLoop {
     ) -> Result<CollectedResponse, AgentError> {
         let stream = match self.llm.chat_stream(messages, tools).await {
             Ok(s) => s,
-            Err(e) => {
-                let msg = format!("LLM stream error: {e}");
-                emit_error_event(tx, &msg).await;
-                return Err(AgentError::Internal(msg));
-            }
+            Err(e) => return Err(bail_internal(tx, format!("LLM stream error: {e}")).await),
         };
         match collect_stream(stream, tx).await {
             Ok(r) => Ok(r),
-            Err(e) => {
-                let msg = format!("stream collection error: {e}");
-                emit_error_event(tx, &msg).await;
-                Err(AgentError::Internal(msg))
-            }
+            Err(e) => Err(bail_internal(tx, format!("stream collection error: {e}")).await),
         }
     }
 
@@ -217,11 +231,17 @@ impl AgentLoopPort for AgentLoop {
         let tools = self.tool_executor.list_tools().await;
         debug!(tool_count = tools.len(), "tools available");
 
+        // Track the total character count incrementally so that
+        // `prune_for_budget` never has to re-scan the entire history.
+        // Updated after every prune (inside `prune_for_budget`) and after
+        // every `append_iteration_messages` call (via the returned delta).
+        let mut running_chars = total_chars(&messages);
+
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
 
             // ---- 1. Context budget pruning ----------------------------------
-            messages = prune_for_budget(messages, &config);
+            messages = prune_for_budget(messages, &config, &mut running_chars);
 
             // ---- 2+3. LLM call and stream collection ----------------------
             let response = self.call_and_collect(&messages, &tools, &tx).await?;
@@ -309,12 +329,13 @@ impl AgentLoopPort for AgentLoop {
             // Capture len before consuming results so we can report the count
             // in the IterationComplete event without keeping a reference.
             let tool_call_count = results.len();
-            append_iteration_messages(
+            let added_chars = append_iteration_messages(
                 &mut messages,
                 response.content,
                 response.tool_calls,
                 results,
             );
+            running_chars += added_chars;
 
             // ---- 9. Emit iteration-complete event ---------------------------
             let _ = tx

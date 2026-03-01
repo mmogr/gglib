@@ -30,27 +30,29 @@ pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
 /// Prune `messages` so that the total character count fits within the configured
 /// budget.  Returns `messages` unchanged if it is already within budget.
 ///
+/// `running_chars` must be initialised by the caller to `total_chars(&messages)`
+/// before the first call.  The function updates it in place as messages are
+/// dropped, so the caller can maintain an accurate count across iterations
+/// **without** re-scanning the full history on every call.
+///
 /// # Algorithm
 ///
 /// See module-level documentation for the two-pass algorithm.
 pub(crate) fn prune_for_budget(
     messages: Vec<AgentMessage>,
     config: &AgentConfig,
+    running_chars: &mut usize,
 ) -> Vec<AgentMessage> {
     let budget = config.context_budget_chars;
 
-    // A running total is tracked throughout pass 1 so that we avoid a second
-    // O(n) scan of the filtered message list before deciding whether pass 2 is
-    // needed.
-    let mut running = total_chars(&messages);
-    if running <= budget {
+    if *running_chars <= budget {
         return messages;
     }
 
     // ---- Pass 1: drop old tool messages and orphaned assistant messages -----
-    let messages = prune_tool_messages(messages, config, &mut running);
+    let messages = prune_tool_messages(messages, config, running_chars);
 
-    if running <= budget {
+    if *running_chars <= budget {
         return messages;
     }
 
@@ -208,7 +210,8 @@ mod tests {
             ..Default::default()
         };
         let msgs = vec![system("sys"), user("hi")];
-        let result = prune_for_budget(msgs, &cfg);
+        let mut chars = total_chars(&msgs);
+        let result = prune_for_budget(msgs, &cfg, &mut chars);
         assert_eq!(result.len(), 2);
     }
 
@@ -229,7 +232,8 @@ mod tests {
             ..Default::default()
         };
 
-        let result = prune_for_budget(msgs, &cfg);
+        let mut chars = total;
+        let result = prune_for_budget(msgs, &cfg, &mut chars);
 
         // The oldest tool result (call_0) should have been dropped.
         let tool_ids: Vec<_> = result
@@ -269,7 +273,8 @@ mod tests {
             context_budget_chars: total - 1,
             ..Default::default()
         };
-        let result = prune_for_budget(msgs, &cfg);
+        let mut chars = total;
+        let result = prune_for_budget(msgs, &cfg, &mut chars);
 
         // call_0 was pruned → its matching assistant should also be gone.
         let has_call_0_assistant = result.iter().any(|m| {
@@ -329,7 +334,8 @@ mod tests {
             ..Default::default()
         };
 
-        let result = prune_for_budget(msgs, &cfg);
+        let mut chars = total;
+        let result = prune_for_budget(msgs, &cfg, &mut chars);
 
         // tc_old's Tool message must be gone.
         let tool_ids: Vec<_> = result
@@ -397,7 +403,8 @@ mod tests {
             prune_keep_tail_messages: 2,
             ..Default::default()
         };
-        let result = prune_for_budget(msgs, &cfg);
+        let mut chars = total_chars(&msgs);
+        let result = prune_for_budget(msgs, &cfg, &mut chars);
 
         // System message must survive pass 2.
         assert!(
