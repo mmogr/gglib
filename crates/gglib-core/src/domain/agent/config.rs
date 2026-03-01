@@ -87,30 +87,6 @@ impl Default for AgentConfig {
     }
 }
 
-/// Recommended [`tokio::sync::mpsc`] channel capacity for streaming
-/// [`AgentEvent`]s produced by a single [`crate::ports::AgentLoopPort::run`]
-/// call.
-///
-/// Derived from the default [`AgentConfig`] values:
-///
-/// | Source                                              | Events |
-/// |-----------------------------------------------------|--------|
-/// | 25 iterations × 5 tools × 2 (start + complete)     |   250  |
-/// | 25 iterations × 1 `IterationComplete`              |    25  |
-/// | 1 `FinalAnswer` / `Error` sentinel                  |     1  |
-/// | headroom for `TextDelta` / `ReasoningDelta` tokens  |   256  |
-///
-/// The headroom of 256 is intentionally generous: a typical verbose LLM
-/// response produces hundreds of `TextDelta` events, and the channel
-/// must not fill up before the consumer processes them (back-pressure on
-/// every `tx.send().await` in the hot streaming path carries measurable cost).
-///
-/// All callers (SSE handlers, CLI REPL) should use this constant instead of a
-/// magic literal so they stay in sync if default values are adjusted.
-pub const AGENT_EVENT_CHANNEL_CAPACITY: usize = 25 * (5 * 2 + 1) // structural events per iteration (ToolCallStart + Complete + IterationComplete)
-    + 1   // FinalAnswer or Error sentinel
-    + 256; // TextDelta / ReasoningDelta headroom
-
 #[cfg(test)]
 mod tests {
     use super::*;

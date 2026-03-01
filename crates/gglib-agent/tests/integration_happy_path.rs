@@ -1,0 +1,232 @@
+//! Happy-path integration tests for the backend agentic loop.
+//!
+//! Covers the core LLM→tool→LLM round-trips that succeed with a `FinalAnswer`:
+//! single tool call, parallel tool batch, and graceful tool-timeout recovery.
+//!
+//! All tests are fully in-process using [`MockLlmPort`] and
+//! [`MockToolExecutorPort`] — no HTTP server, no llama-server process, no MCP
+//! daemon.
+//!
+//! | Test | Scenario |
+//! |------|----------|
+//! | [`test_simple_tool_call_cycle`] | One tool call → final answer |
+//! | [`test_parallel_tool_calls`]    | Three tools in one batch → final answer |
+//! | [`test_tool_timeout`]           | Slow tool times out; loop recovers |
+
+mod common;
+
+use std::sync::Arc;
+
+use common::event_assertions::{has_final_answer, has_tool_complete_with_success, has_tool_start};
+use common::mock_llm::{collect_events, MockLlmPort, MockLlmResponse};
+use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
+use gglib_agent::AgentLoop;
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
+use serde_json::json;
+use tokio::sync::mpsc;
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+/// **Simple tool-call cycle**: LLM requests one tool → tool executes → LLM
+/// produces the final answer.
+///
+/// Exercises the core happy path from the first iteration through to
+/// `FinalAnswer`.
+#[tokio::test]
+async fn test_simple_tool_call_cycle() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(MockLlmResponse::tool_call(
+                "tc1",
+                "search",
+                json!({"q": "rust"}),
+            ))
+            .push(MockLlmResponse::text("Here are the results.")),
+    );
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("search").with_description("Full-text search"),
+        MockToolBehavior::Immediate {
+            content: "result: async programming".into(),
+        },
+    );
+    let log = Arc::clone(&executor.call_log);
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(64);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "Find info about Rust".into(),
+            }],
+            AgentConfig::default(),
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    assert_eq!(result.unwrap().answer, "Here are the results.");
+
+    // Tool was called exactly once with the right name.
+    let calls = log.lock().await.clone();
+    assert_eq!(calls.len(), 1, "expected exactly one tool invocation");
+    assert_eq!(calls[0].0, "search");
+
+    // Event stream contains the expected milestones.
+    assert!(has_tool_start(&events, "search"), "missing ToolCallStart");
+    assert!(
+        has_tool_complete_with_success(&events, true),
+        "missing successful ToolCallComplete"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::IterationComplete { iteration: 1, .. })),
+        "missing IterationComplete for iteration 1"
+    );
+    assert!(has_final_answer(&events), "missing FinalAnswer");
+}
+
+/// **Parallel tool calls**: LLM requests three tools in a single batch → all
+/// three execute (possibly concurrently) → LLM produces the final answer.
+///
+/// Verifies that `execute_tools_parallel` dispatches all calls and that the
+/// agent loop correctly builds the follow-up conversation.
+#[tokio::test]
+async fn test_parallel_tool_calls() {
+    let batch = MockLlmResponse {
+        content: None,
+        tool_calls: vec![
+            ToolCall {
+                id: "tc1".into(),
+                name: "search".into(),
+                arguments: json!({"q": "Rust"}),
+            },
+            ToolCall {
+                id: "tc2".into(),
+                name: "search".into(),
+                arguments: json!({"q": "async"}),
+            },
+            ToolCall {
+                id: "tc3".into(),
+                name: "search".into(),
+                arguments: json!({"q": "tokio"}),
+            },
+        ],
+        finish_reason: "tool_calls".into(),
+    };
+
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(batch)
+            .push(MockLlmResponse::text("All done.")),
+    );
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("search"),
+        MockToolBehavior::Immediate {
+            content: "ok".into(),
+        },
+    );
+    let log = Arc::clone(&executor.call_log);
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(128);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "Search three topics".into(),
+            }],
+            AgentConfig {
+                max_parallel_tools: 3,
+                ..AgentConfig::default()
+            },
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    assert_eq!(result.unwrap().answer, "All done.");
+
+    // All three tool calls were executed.
+    let calls = log.lock().await.clone();
+    assert_eq!(calls.len(), 3, "expected 3 tool invocations");
+
+    // Three ToolCallStart and three ToolCallComplete events.
+    let starts = events
+        .iter()
+        .filter(|e| matches!(e, AgentEvent::ToolCallStart { .. }))
+        .count();
+    let completes = events
+        .iter()
+        .filter(|e| matches!(e, AgentEvent::ToolCallComplete { .. }))
+        .count();
+    assert_eq!(starts, 3, "expected 3 ToolCallStart events");
+    assert_eq!(completes, 3, "expected 3 ToolCallComplete events");
+    assert!(has_final_answer(&events));
+}
+
+/// **Tool timeout**: a slow tool exceeds the per-tool deadline.  The loop must
+/// continue by injecting a failed `ToolResult` into the conversation so the
+/// LLM can observe and react to the timeout.
+///
+/// Verifies that:
+/// - The timed-out tool produces a `ToolCallComplete` with `success = false`.
+/// - The loop does **not** terminate with an error — it makes another LLM call.
+/// - `FinalAnswer` is still emitted when the second LLM call returns text.
+#[tokio::test]
+async fn test_tool_timeout() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(MockLlmResponse::tool_call("tc1", "slow_tool", json!({})))
+            .push(MockLlmResponse::text("Timeout handled gracefully.")),
+    );
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("slow_tool"),
+        // 5 000 ms far exceeds the 50 ms deadline — timeout will fire first.
+        MockToolBehavior::Delayed {
+            millis: 5_000,
+            content: "this should never arrive".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(64);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "run the slow tool".into(),
+            }],
+            AgentConfig {
+                tool_timeout_ms: 50, // 50 ms — fires long before the 5 s delay
+                ..AgentConfig::default()
+            },
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    // The loop must recover: the second LLM call produces the final answer.
+    assert_eq!(
+        result.unwrap().answer,
+        "Timeout handled gracefully.",
+        "loop should complete successfully after timeout"
+    );
+
+    // The timed-out tool should appear as a failed completion.
+    assert!(
+        has_tool_complete_with_success(&events, false),
+        "expected a ToolCallComplete with success=false for the timed-out tool"
+    );
+
+    assert!(has_final_answer(&events), "missing FinalAnswer");
+}

@@ -50,6 +50,18 @@ use gglib_runtime::LlmCompletionAdapter;
 /// 50 iterations is generous for real workloads; raise if use-cases require it.
 const MAX_ITERATIONS_CEILING: usize = 50;
 
+/// Hard ceiling on `max_parallel_tools` accepted from HTTP requests.
+///
+/// 20 concurrent tools per iteration is far beyond any practical need; this
+/// prevents a crafted request from pinning the thread-pool with tool dispatch.
+const MAX_PARALLEL_TOOLS_CEILING: usize = 20;
+
+/// Hard ceiling on `tool_timeout_ms` accepted from HTTP requests (60 seconds).
+///
+/// Individual tools must resolve within this window; longer values would allow
+/// a crafted request to hold server connections open indefinitely.
+const MAX_TOOL_TIMEOUT_MS_CEILING: u64 = 60_000;
+
 /// User-facing configuration for a single agent chat request.
 ///
 /// Exposes only the fields that are safe to accept from an untrusted HTTP
@@ -58,14 +70,22 @@ const MAX_ITERATIONS_CEILING: usize = 50;
 /// their well-tested values and cannot be weaponised to exhaust server
 /// resources.
 ///
-/// Server-side limits are enforced: `max_iterations` is clamped to
-/// [`MAX_ITERATIONS_CEILING`].
+/// All numeric fields are clamped server-side to their respective ceiling
+/// constants to prevent resource exhaustion.
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 pub struct AgentRequestConfig {
-    /// Maximum number of LLM→tool→LLM iterations. Clamped to
-    /// [`MAX_ITERATIONS_CEILING`] server-side.
+    /// Maximum number of LLM→tool→LLM iterations.
+    /// Clamped to [`MAX_ITERATIONS_CEILING`] server-side.
     pub max_iterations: Option<usize>,
+
+    /// Maximum number of tool calls dispatched in parallel per iteration.
+    /// Clamped to [`MAX_PARALLEL_TOOLS_CEILING`] server-side.
+    pub max_parallel_tools: Option<usize>,
+
+    /// Per-tool execution timeout in milliseconds.
+    /// Clamped to [`MAX_TOOL_TIMEOUT_MS_CEILING`] server-side.
+    pub tool_timeout_ms: Option<u64>,
 }
 
 impl From<AgentRequestConfig> for AgentConfig {
@@ -73,6 +93,12 @@ impl From<AgentRequestConfig> for AgentConfig {
         let mut cfg = AgentConfig::default();
         if let Some(n) = req.max_iterations {
             cfg.max_iterations = n.min(MAX_ITERATIONS_CEILING);
+        }
+        if let Some(n) = req.max_parallel_tools {
+            cfg.max_parallel_tools = n.min(MAX_PARALLEL_TOOLS_CEILING);
+        }
+        if let Some(ms) = req.tool_timeout_ms {
+            cfg.tool_timeout_ms = ms.min(MAX_TOOL_TIMEOUT_MS_CEILING);
         }
         cfg
     }

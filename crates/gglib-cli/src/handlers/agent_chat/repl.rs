@@ -45,14 +45,6 @@ use super::renderer::render_event;
 // Help text
 // =============================================================================
 
-/// Channel capacity for the REPL's per-turn event channel.
-///
-/// Mirrors [`AGENT_EVENT_CHANNEL_CAPACITY`] so all callers stay in step when
-/// default values are adjusted.  The REPL processes events synchronously on
-/// the same machine, so it never faces HTTP framing overhead; but sharing the
-/// constant avoids a silent divergence if defaults change.
-const REPL_CHANNEL_CAPACITY: usize = AGENT_EVENT_CHANNEL_CAPACITY;
-
 const REPL_HELP: &str = "\
   /help     print this message
   /quit     exit the session
@@ -133,7 +125,7 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         });
 
         // ── 2. Run agent loop for this turn ──────────────────────────────────
-        let (tx, mut rx) = mpsc::channel::<AgentEvent>(REPL_CHANNEL_CAPACITY);
+        let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
         let agent = Arc::clone(&agent_loop);
         let msgs = messages.clone();

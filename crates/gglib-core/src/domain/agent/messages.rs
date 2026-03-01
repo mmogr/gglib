@@ -65,6 +65,14 @@ impl AgentMessage {
     /// Uses [`str::chars().count()`] rather than [`str::len`] (byte count) so
     /// that multi-byte characters are counted as one unit, matching how LLMs
     /// typically measure context length.
+    ///
+    /// # Performance
+    ///
+    /// This is an **O(n)** scan — it iterates over every Unicode scalar value
+    /// in every `str` field of the message. Avoid calling it inside tight or
+    /// nested loops. For repeated measurements over the same message set,
+    /// accumulate the total once and update it incrementally (the agent loop
+    /// does exactly this via its `running_chars` counter).
     pub fn char_count(&self) -> usize {
         match self {
             Self::System { content } | Self::User { content } => content.chars().count(),
