@@ -237,6 +237,7 @@ async fn main() -> anyhow::Result<()> {
             tools,
             tool_timeout_ms,
             max_parallel,
+            model,
         } => {
             // NEW: Uses CliContext
             let args = handlers::chat::ChatArgs {
@@ -261,6 +262,7 @@ async fn main() -> anyhow::Result<()> {
                 tool_timeout_ms,
                 max_parallel,
                 verbose: cli.verbose,
+                model,
             };
             handlers::chat::execute(&ctx, args).await?;
         }

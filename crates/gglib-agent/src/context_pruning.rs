@@ -16,7 +16,7 @@
 
 use std::collections::HashSet;
 
-use gglib_core::{AgentConfig, AgentMessage};
+use gglib_core::{AgentConfig, AgentMessage, AssistantContent};
 
 // =============================================================================
 // Public API
@@ -147,30 +147,32 @@ fn prune_tool_messages(
                 // For an Assistant message with tool calls: keep only if at least
                 // one call survives, but also strip the pruned call IDs so the
                 // context never contains references to missing tool results.
-                AgentMessage::Assistant {
-                    content,
-                    tool_calls: Some(calls),
-                } => {
-                    let retained_calls: Vec<_> = calls
-                        .into_iter()
-                        .filter(|c| kept_tool_call_ids.contains(&c.id))
-                        .collect();
-                    if retained_calls.is_empty() {
-                        *running -= old_size;
-                        None
-                    } else {
-                        let new_msg = AgentMessage::Assistant {
-                            content,
-                            tool_calls: Some(retained_calls),
-                        };
-                        // Adjust running for the difference in size when some
-                        // tool calls were stripped from this assistant message.
-                        *running = *running - old_size + new_msg.char_count();
-                        Some(new_msg)
+                AgentMessage::Assistant { content } => {
+                    match content.tool_calls() {
+                        None => Some(AgentMessage::Assistant { content }),
+                        Some(calls) => {
+                            let retained_calls: Vec<_> = calls
+                                .iter()
+                                .filter(|c| kept_tool_call_ids.contains(&c.id))
+                                .cloned()
+                                .collect();
+                            if retained_calls.is_empty() {
+                                *running -= old_size;
+                                None
+                            } else {
+                                let new_msg = AgentMessage::Assistant {
+                                    content: content.with_replaced_tool_calls(retained_calls),
+                                };
+                                // Adjust running for the difference in size when some
+                                // tool calls were stripped from this assistant message.
+                                *running = *running - old_size + new_msg.char_count();
+                                Some(new_msg)
+                            }
+                        }
                     }
                 }
 
-                // System, User, and Assistant-with-no-tool-calls are always kept.
+                // System and User messages are always kept.
                 other => Some(other),
             }
         })
@@ -181,7 +183,7 @@ fn prune_tool_messages(
 
 #[cfg(test)]
 mod tests {
-    use gglib_core::{AgentConfig, AgentMessage, ToolCall};
+    use gglib_core::{AgentConfig, AgentMessage, AssistantContent, ToolCall};
     use serde_json::json;
 
     use super::*;
@@ -198,14 +200,12 @@ mod tests {
     }
     fn assistant_text(s: &str) -> AgentMessage {
         AgentMessage::Assistant {
-            content: Some(s.to_owned()),
-            tool_calls: None,
+            content: AssistantContent::Content(s.to_owned()),
         }
     }
     fn assistant_with_calls(id: &str, name: &str) -> AgentMessage {
         AgentMessage::Assistant {
-            content: None,
-            tool_calls: Some(vec![ToolCall {
+            content: AssistantContent::ToolCalls(vec![ToolCall {
                 id: id.to_owned(),
                 name: name.to_owned(),
                 arguments: json!({}),
@@ -288,12 +288,8 @@ mod tests {
 
         // call_0 was pruned → its matching assistant should also be gone.
         let has_call_0_assistant = result.iter().any(|m| {
-            if let AgentMessage::Assistant {
-                tool_calls: Some(calls),
-                ..
-            } = m
-            {
-                calls.iter().any(|c| c.id == "call_0")
+            if let AgentMessage::Assistant { content } = m {
+                content.tool_calls().map_or(false, |calls| calls.iter().any(|c| c.id == "call_0"))
             } else {
                 false
             }
@@ -316,8 +312,7 @@ mod tests {
         // is the most recent and is retained.  The assistant message should
         // survive with only [tc_new] in its tool_calls.
         let assistant_multi = AgentMessage::Assistant {
-            content: None,
-            tool_calls: Some(vec![
+            content: AssistantContent::ToolCalls(vec![
                 ToolCall {
                     id: "tc_old".into(),
                     name: "t".into(),
@@ -366,12 +361,10 @@ mod tests {
         let assistant_calls: Vec<_> = result
             .iter()
             .filter_map(|m| {
-                if let AgentMessage::Assistant {
-                    tool_calls: Some(calls),
-                    ..
-                } = m
-                {
-                    Some(calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>())
+                if let AgentMessage::Assistant { content } = m {
+                    content.tool_calls().map(|calls| {
+                        calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()
+                    })
                 } else {
                     None
                 }

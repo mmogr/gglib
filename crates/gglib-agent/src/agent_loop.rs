@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, LlmCompletionPort, ToolExecutorPort};
-use gglib_core::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult};
+use gglib_core::{AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult};
 
 use crate::stream_collector::CollectedResponse;
 use tokio::sync::mpsc;
@@ -73,42 +73,6 @@ async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &str) {
 async fn bail_internal(tx: &mpsc::Sender<AgentEvent>, msg: String) -> AgentError {
     emit_error_event(tx, &msg).await;
     AgentError::Internal(msg)
-}
-
-/// Append the assistant's tool-call message and all tool results to `messages`.
-///
-/// Append the assistant turn and its tool results to `messages`, then return
-/// the total character count of the newly added messages.
-///
-/// Call this after the parallel tool execution phase so that the complete
-/// iteration is recorded in the conversation history before the next LLM call.
-///
-/// The name reflects the dual purpose: it **pushes** messages *and* returns
-/// the **char delta** so callers can update `running_chars` incrementally
-/// without re-scanning the entire history.
-fn push_iteration_messages_returning_char_delta(
-    messages: &mut Vec<AgentMessage>,
-    content: String,
-    tool_calls: Vec<ToolCall>,
-    results: Vec<ToolResult>,
-) -> usize {
-    let assistant = AgentMessage::Assistant {
-        content: if content.is_empty() { None } else { Some(content) },
-        // Move tool_calls in — the caller has already finished borrowing it
-        // for loop-detection and parallel execution.
-        tool_calls: Some(tool_calls),
-    };
-    let mut added = assistant.char_count();
-    messages.push(assistant);
-    for result in results {
-        let msg = AgentMessage::Tool {
-            tool_call_id: result.tool_call_id,
-            content: result.content,
-        };
-        added += msg.char_count();
-        messages.push(msg);
-    }
-    added
 }
 
 // =============================================================================
@@ -309,8 +273,7 @@ impl AgentLoopPort for AgentLoop {
                 // complete accumulated history and can pass it back unchanged
                 // as the `messages` argument for the next REPL turn.
                 messages.push(AgentMessage::Assistant {
-                    content: Some(content.clone()),
-                    tool_calls: None,
+                    content: AssistantContent::Content(content.clone()),
                 });
                 return Ok(AgentRunOutput {
                     answer: content,
@@ -341,12 +304,27 @@ impl AgentLoopPort for AgentLoop {
             // Capture len before consuming results so we can report the count
             // in the IterationComplete event without keeping a reference.
             let tool_call_count = results.len();
-            let added_chars = push_iteration_messages_returning_char_delta(
-                &mut messages,
-                response.content,
-                response.tool_calls,
-                results,
-            );
+            // Inline append: push assistant + all tool results, accumulate char delta.
+            let added_chars = {
+                let assistant = AgentMessage::Assistant {
+                    content: if response.content.is_empty() {
+                        AssistantContent::ToolCalls(response.tool_calls)
+                    } else {
+                        AssistantContent::Both(response.content, response.tool_calls)
+                    },
+                };
+                let mut added = assistant.char_count();
+                messages.push(assistant);
+                for result in results {
+                    let msg = AgentMessage::Tool {
+                        tool_call_id: result.tool_call_id,
+                        content: result.content,
+                    };
+                    added += msg.char_count();
+                    messages.push(msg);
+                }
+                added
+            };
             running_chars += added_chars;
 
             // ---- 8. Context budget pruning (applied after new messages added) --

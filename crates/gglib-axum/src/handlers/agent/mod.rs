@@ -86,7 +86,7 @@ pub async fn chat(
     let tool_filter: Option<HashSet<String>> =
         req.tool_filter.map(|f| f.into_iter().collect());
     let llm: Arc<dyn LlmCompletionPort> =
-        Arc::new(LlmCompletionAdapter::with_client(req.port, state.http_client.clone(), None::<String>));
+        Arc::new(LlmCompletionAdapter::with_client(req.port, state.http_client.clone(), req.model.clone()));
     let tool_executor: Arc<dyn ToolExecutorPort> =
         Arc::new(McpToolExecutorAdapter::new(state.mcp.clone()));
     let agent_loop = AgentLoop::build(llm, tool_executor, tool_filter);

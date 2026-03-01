@@ -189,8 +189,12 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 /// The caller **must** gate any history update on the return value: history
 /// from a failed or incomplete turn must not replace the previous context.
 async fn drain_event_stream(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
+    let mut had_text_delta = false;
     while let Some(event) = rx.recv().await {
-        render_event(&event, verbose);
+        render_event(&event, verbose, had_text_delta);
+        if matches!(event, AgentEvent::TextDelta { .. }) {
+            had_text_delta = true;
+        }
 
         if let AgentEvent::FinalAnswer { .. } = event {
             // `FinalAnswer` is always the last event emitted before the loop

@@ -28,7 +28,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 
 use gglib_core::{
-    domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
+    domain::agent::{AgentMessage, AssistantContent, LlmStreamEvent, ToolCall, ToolDefinition},
     ports::LlmCompletionPort,
 };
 
@@ -103,22 +103,29 @@ fn message_to_openai(msg: &AgentMessage) -> Value {
         AgentMessage::User { content } => {
             json!({ "role": "user", "content": content })
         }
-        AgentMessage::Assistant {
-            content,
-            tool_calls,
-        } => {
-            // Null content is valid when the model only requests tool calls.
-            // The `tool_calls` key must be **omitted entirely** (not set to
-            // null) when there are no calls — some LLMs reject a null value.
-            let mut obj = json!({
-                "role": "assistant",
-                "content": content,
-            });
-            if let Some(tcs) = tool_calls.as_deref() {
-                let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
-                obj["tool_calls"] = json!(calls);
+        AgentMessage::Assistant { content } => {
+            match content {
+                AssistantContent::Content(text) => json!({
+                    "role": "assistant",
+                    "content": text,
+                }),
+                AssistantContent::ToolCalls(tcs) => {
+                    let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
+                    json!({
+                        "role": "assistant",
+                        "content": serde_json::Value::Null,
+                        "tool_calls": calls,
+                    })
+                }
+                AssistantContent::Both(text, tcs) => {
+                    let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
+                    json!({
+                        "role": "assistant",
+                        "content": text,
+                        "tool_calls": calls,
+                    })
+                }
             }
-            obj
         }
         AgentMessage::Tool {
             tool_call_id,

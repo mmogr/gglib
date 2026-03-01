@@ -39,6 +39,8 @@ pub struct ChatArgs {
     pub max_parallel: Option<usize>,
     /// Mirror of the global `--verbose` / `-v` flag for agentic mode rendering.
     pub verbose: bool,
+    /// Optional model-name override for llama-server routing (agentic mode only).
+    pub model: Option<String>,
 }
 
 /// Execute the chat command.

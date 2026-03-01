@@ -276,6 +276,9 @@ pub enum Commands {
         /// Maximum number of tools executed in parallel per iteration (agentic mode only)
         #[arg(long = "max-parallel")]
         max_parallel: Option<usize>,
+        /// Model name forwarded to llama-server (agentic mode only; uses server default when omitted)
+        #[arg(long)]
+        model: Option<String>,
     },
 
     /// Ask a question with optional context from stdin or file

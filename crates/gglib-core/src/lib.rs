@@ -13,7 +13,7 @@ pub mod utils;
 
 // Re-export commonly used types for convenience
 pub use domain::{
-    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, ChatMessage, Conversation,
+    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, AssistantContent, ChatMessage, Conversation,
     DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS,
     ConversationUpdate, LlmStreamEvent, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
     MAX_TOOL_TIMEOUT_MS_CEILING, McpEnvEntry, McpServer, McpServerConfig, McpServerStatus,

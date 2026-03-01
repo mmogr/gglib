@@ -24,7 +24,12 @@ use crate::presentation::tables::truncate_string;
 ///
 /// `verbose` enables per-iteration progress lines that are suppressed in
 /// normal/quiet mode.
-pub fn render_event(event: &AgentEvent, verbose: bool) {
+///
+/// `had_text_delta` must be `true` when at least one [`AgentEvent::TextDelta`]
+/// was rendered before this call.  When `false`, [`AgentEvent::FinalAnswer`]
+/// will print `content` to stdout — a defensive fallback for non-streaming
+/// invocations where the model returns its answer in a single chunk.
+pub fn render_event(event: &AgentEvent, verbose: bool, had_text_delta: bool) {
     match event {
         AgentEvent::ReasoningDelta { content } => {
             // Chain-of-thought tokens from reasoning models (DeepSeek R1, QwQ, etc.).
@@ -58,9 +63,15 @@ pub fn render_event(event: &AgentEvent, verbose: bool) {
             }
         }
 
-        AgentEvent::FinalAnswer { .. } => {
-            // Content was already printed token-by-token via TextDelta.
-            // Emit a trailing newline so the next shell prompt appears cleanly.
+        AgentEvent::FinalAnswer { content } => {
+            // Defensive: print the full answer if it was not already streamed
+            // token-by-token via TextDelta events (e.g. non-streaming or
+            // single-chunk model responses). In streaming mode the content is
+            // already on stdout; only a trailing newline is emitted.
+            if !had_text_delta && !content.is_empty() {
+                print!("{content}");
+                let _ = io::stdout().flush();
+            }
             println!();
         }
 
@@ -82,8 +93,8 @@ mod tests {
 
     /// Convenience: call render_event and assert it does not panic.
     fn smoke(event: AgentEvent) {
-        render_event(&event, false);
-        render_event(&event, true);
+        render_event(&event, false, false);
+        render_event(&event, true, false);
     }
 
     #[test]
@@ -100,8 +111,8 @@ mod tests {
     fn iteration_complete_respects_verbose_flag() {
         // verbose=false should suppress the line, verbose=true should print it.
         // Both paths must complete without panicking.
-        render_event(&AgentEvent::IterationComplete { iteration: 1, tool_calls: 2 }, false);
-        render_event(&AgentEvent::IterationComplete { iteration: 1, tool_calls: 2 }, true);
+        render_event(&AgentEvent::IterationComplete { iteration: 1, tool_calls: 2 }, false, false);
+        render_event(&AgentEvent::IterationComplete { iteration: 1, tool_calls: 2 }, true, false);
     }
 
     #[test]

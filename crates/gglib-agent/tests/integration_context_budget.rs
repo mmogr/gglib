@@ -22,7 +22,7 @@ use common::event_assertions::{collect_events, has_final_answer};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentMessage, ToolCall, ToolDefinition};
+use gglib_core::domain::agent::{AgentMessage, AssistantContent, ToolCall, ToolDefinition};
 use serde_json::json;
 use tokio::sync::mpsc;
 
@@ -49,8 +49,7 @@ fn build_long_history(n_pairs: u32) -> Vec<AgentMessage> {
     ];
     for i in 0..n_pairs {
         messages.push(AgentMessage::Assistant {
-            content: None,
-            tool_calls: Some(vec![ToolCall {
+            content: AssistantContent::ToolCalls(vec![ToolCall {
                 id: format!("old_tc{i}"),
                 name: "search".into(),
                 arguments: json!({}),

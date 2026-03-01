@@ -85,4 +85,13 @@ pub struct AgentChatRequest {
     /// LLM and can be executed. When `None`, all tools from all connected MCP
     /// servers are available.
     pub tool_filter: Option<Vec<String>>,
+
+    /// Optional model-name override forwarded to llama-server.
+    ///
+    /// When `None` (or omitted from the request body), the adapter lets
+    /// llama-server pick the loaded model, which is the normal case.  Supply a
+    /// value only when the server exposes multiple models and the caller needs
+    /// to target a specific one.
+    #[serde(default)]
+    pub model: Option<String>,
 }
