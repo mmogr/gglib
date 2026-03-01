@@ -261,4 +261,3 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         Ok(Box::pin(stream))
     }
 }
-

@@ -92,10 +92,9 @@ impl Default for AgentConfig {
 ///
 /// All callers (SSE handlers, CLI REPL) should use this constant instead of a
 /// magic literal so they stay in sync if default values are adjusted.
-pub const AGENT_EVENT_CHANNEL_CAPACITY: usize =
-    25 * (5 * 2 + 1) // structural events per iteration (ToolCallStart + Complete + IterationComplete)
+pub const AGENT_EVENT_CHANNEL_CAPACITY: usize = 25 * (5 * 2 + 1) // structural events per iteration (ToolCallStart + Complete + IterationComplete)
     + 1              // FinalAnswer or Error sentinel
-    + 32;            // TextDelta / ReasoningDelta headroom
+    + 32; // TextDelta / ReasoningDelta headroom
 
 #[cfg(test)]
 mod tests {

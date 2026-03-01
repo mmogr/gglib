@@ -39,10 +39,7 @@ fn content_len(msg: &AgentMessage) -> usize {
             content.as_deref().map_or(0, |s| s.chars().count())
                 + tool_calls.as_deref().map_or(0, |tc| {
                     tc.iter()
-                        .map(|c| {
-                            c.name.chars().count()
-                                + c.arguments.to_string().chars().count()
-                        })
+                        .map(|c| c.name.chars().count() + c.arguments.to_string().chars().count())
                         .sum()
                 })
         }
@@ -105,9 +102,9 @@ pub fn prune_for_budget(
             let old_size = content_len(&m);
             match m {
                 // Drop a Tool message if its id is not in the retained set.
-                AgentMessage::Tool { ref tool_call_id, .. }
-                    if !kept_tool_call_ids.contains(tool_call_id) =>
-                {
+                AgentMessage::Tool {
+                    ref tool_call_id, ..
+                } if !kept_tool_call_ids.contains(tool_call_id) => {
                     running -= old_size;
                     None
                 }
@@ -311,8 +308,16 @@ mod tests {
         let assistant_multi = AgentMessage::Assistant {
             content: None,
             tool_calls: Some(vec![
-                ToolCall { id: "tc_old".into(), name: "t".into(), arguments: json!({}) },
-                ToolCall { id: "tc_new".into(), name: "t".into(), arguments: json!({}) },
+                ToolCall {
+                    id: "tc_old".into(),
+                    name: "t".into(),
+                    arguments: json!({}),
+                },
+                ToolCall {
+                    id: "tc_new".into(),
+                    name: "t".into(),
+                    arguments: json!({}),
+                },
             ]),
         };
         let msgs = vec![
@@ -342,14 +347,21 @@ mod tests {
                 }
             })
             .collect();
-        assert!(!tool_ids.contains(&"tc_old"), "tc_old result should be pruned");
+        assert!(
+            !tool_ids.contains(&"tc_old"),
+            "tc_old result should be pruned"
+        );
         assert!(tool_ids.contains(&"tc_new"), "tc_new result should be kept");
 
         // The assistant message must survive but with tc_old stripped out.
         let assistant_calls: Vec<_> = result
             .iter()
             .filter_map(|m| {
-                if let AgentMessage::Assistant { tool_calls: Some(calls), .. } = m {
+                if let AgentMessage::Assistant {
+                    tool_calls: Some(calls),
+                    ..
+                } = m
+                {
                     Some(calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>())
                 } else {
                     None

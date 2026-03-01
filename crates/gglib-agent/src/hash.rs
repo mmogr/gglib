@@ -49,5 +49,4 @@ mod tests {
         assert_eq!(fnv1a_32("hello"), 1_335_831_723);
         assert_eq!(fnv1a_32("world"), 933_488_787);
     }
-
 }

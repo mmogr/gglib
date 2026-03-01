@@ -260,8 +260,12 @@ mod tests {
         let evt1 = rx.recv().await.unwrap();
         let evt2 = rx.recv().await.unwrap();
         let evt3 = rx.recv().await.unwrap();
-        assert!(matches!(evt1, AgentEvent::ReasoningDelta { content } if content == "Let me think"));
-        assert!(matches!(evt2, AgentEvent::ReasoningDelta { content } if content == " about this."));
+        assert!(
+            matches!(evt1, AgentEvent::ReasoningDelta { content } if content == "Let me think")
+        );
+        assert!(
+            matches!(evt2, AgentEvent::ReasoningDelta { content } if content == " about this.")
+        );
         assert!(matches!(evt3, AgentEvent::TextDelta { content } if content == "Answer."));
     }
 

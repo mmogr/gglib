@@ -25,20 +25,30 @@ fn make_inner() -> MockToolExecutorPort {
     MockToolExecutorPort::new()
         .with_tool(
             ToolDefinition::new("allowed_tool"),
-            MockToolBehavior::Immediate { content: "executed allowed_tool".into() },
+            MockToolBehavior::Immediate {
+                content: "executed allowed_tool".into(),
+            },
         )
         .with_tool(
             ToolDefinition::new("other_tool"),
-            MockToolBehavior::Immediate { content: "executed other_tool".into() },
+            MockToolBehavior::Immediate {
+                content: "executed other_tool".into(),
+            },
         )
         .with_tool(
             ToolDefinition::new("secret_tool"),
-            MockToolBehavior::Immediate { content: "executed secret_tool".into() },
+            MockToolBehavior::Immediate {
+                content: "executed secret_tool".into(),
+            },
         )
 }
 
 fn make_call(name: &str) -> ToolCall {
-    ToolCall { id: "c1".into(), name: name.into(), arguments: json!({}) }
+    ToolCall {
+        id: "c1".into(),
+        name: name.into(),
+        arguments: json!({}),
+    }
 }
 
 // =============================================================================
@@ -100,11 +110,12 @@ async fn execute_allowed_tool_propagates_inner_error() {
     // When the inner executor returns `Err(...)` for an *allowed* tool,
     // `FilteredToolExecutor` must propagate the error unchanged rather than
     // swallowing it or converting it to a `ToolResult { success: false }`.
-    let inner = MockToolExecutorPort::new()
-        .with_tool(
-            ToolDefinition::new("flaky_tool"),
-            MockToolBehavior::Error { message: "infrastructure down".into() },
-        );
+    let inner = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("flaky_tool"),
+        MockToolBehavior::Error {
+            message: "infrastructure down".into(),
+        },
+    );
     let allowed: HashSet<String> = ["flaky_tool".to_owned()].into();
     let f = FilteredToolExecutor::new(Arc::new(inner) as Arc<dyn ToolExecutorPort>, allowed);
 

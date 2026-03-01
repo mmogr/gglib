@@ -28,9 +28,9 @@ use rustyline::error::ReadlineError;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::ports::AgentLoopPort;
-use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 
 use crate::handlers::chat::ChatArgs;
 

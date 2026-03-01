@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use gglib_agent::execute_tools_parallel;
-use gglib_core::{AgentConfig, ToolCall, ToolDefinition, ToolResult};
 use gglib_core::ports::ToolExecutorPort;
+use gglib_core::{AgentConfig, ToolCall, ToolDefinition, ToolResult};
 use serde_json::json;
 use tokio::sync::mpsc;
 
@@ -27,7 +27,11 @@ use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 // =============================================================================
 
 fn call(id: &str, name: &str) -> ToolCall {
-    ToolCall { id: id.into(), name: name.into(), arguments: json!({}) }
+    ToolCall {
+        id: id.into(),
+        name: name.into(),
+        arguments: json!({}),
+    }
 }
 
 // =============================================================================
@@ -37,11 +41,12 @@ fn call(id: &str, name: &str) -> ToolCall {
 #[tokio::test]
 async fn all_tools_return_results_in_order() {
     let (tx, mut rx) = mpsc::channel(32);
-    let executor = MockToolExecutorPort::new()
-        .with_tool(
-            ToolDefinition::new("t"),
-            MockToolBehavior::Immediate { content: "ok".into() },
-        );
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("t"),
+        MockToolBehavior::Immediate {
+            content: "ok".into(),
+        },
+    );
     let calls: Vec<ToolCall> = (0..3).map(|i| call(&format!("c{i}"), "t")).collect();
 
     let results = execute_tools_parallel(
@@ -70,10 +75,16 @@ async fn timeout_produces_failure_result() {
     let (tx, _rx) = mpsc::channel(32);
     let executor = MockToolExecutorPort::new().with_tool(
         ToolDefinition::new("slow_tool"),
-        MockToolBehavior::Delayed { millis: 1_000, content: "slow ok".into() },
+        MockToolBehavior::Delayed {
+            millis: 1_000,
+            content: "slow ok".into(),
+        },
     );
     let calls = vec![call("slow", "slow_tool")];
-    let config = AgentConfig { tool_timeout_ms: 10, ..Default::default() };
+    let config = AgentConfig {
+        tool_timeout_ms: 10,
+        ..Default::default()
+    };
 
     let results = execute_tools_parallel(
         &calls,
@@ -106,7 +117,9 @@ async fn concurrency_limited_by_semaphore() {
             let running = prev + 1;
             let mut peak = self.peak.load(Ordering::SeqCst);
             while running > peak {
-                match self.peak.compare_exchange(peak, running, Ordering::SeqCst, Ordering::SeqCst)
+                match self
+                    .peak
+                    .compare_exchange(peak, running, Ordering::SeqCst, Ordering::SeqCst)
                 {
                     Ok(_) => break,
                     Err(p) => peak = p,
@@ -130,10 +143,12 @@ async fn concurrency_limited_by_semaphore() {
         current: Arc::clone(&current),
         peak: Arc::clone(&peak),
     });
-    let calls: Vec<ToolCall> =
-        (0..10).map(|i| call(&format!("c{i}"), "t")).collect();
+    let calls: Vec<ToolCall> = (0..10).map(|i| call(&format!("c{i}"), "t")).collect();
     let (tx, _rx) = mpsc::channel(64);
-    let config = AgentConfig { max_parallel_tools: 3, ..Default::default() };
+    let config = AgentConfig {
+        max_parallel_tools: 3,
+        ..Default::default()
+    };
 
     execute_tools_parallel(
         &calls,

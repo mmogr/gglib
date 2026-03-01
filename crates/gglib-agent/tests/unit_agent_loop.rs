@@ -36,19 +36,23 @@ use tokio::sync::mpsc;
 /// [`AgentError::Internal`] and emit an [`AgentEvent::Error`] before closing.
 #[tokio::test]
 async fn test_stagnation_detected() {
-    let llm = Arc::new(MockLlmPort::new().push_many((0..10).map(|i| MockLlmResponse {
-        content: Some("Thinking...".into()),
-        tool_calls: vec![ToolCall {
-            id: format!("c{i}"),
-            name: "do_thing".into(),
-            arguments: json!({}),
-        }],
-        finish_reason: "tool_calls".into(),
-    })));
+    let llm = Arc::new(
+        MockLlmPort::new().push_many((0..10).map(|i| MockLlmResponse {
+            content: Some("Thinking...".into()),
+            tool_calls: vec![ToolCall {
+                id: format!("c{i}"),
+                name: "do_thing".into(),
+                arguments: json!({}),
+            }],
+            finish_reason: "tool_calls".into(),
+        })),
+    );
 
     let executor = MockToolExecutorPort::new().with_tool(
         ToolDefinition::new("do_thing"),
-        MockToolBehavior::Immediate { content: "ok".into() },
+        MockToolBehavior::Immediate {
+            content: "ok".into(),
+        },
     );
 
     let agent = AgentLoop::new(llm, Arc::new(executor));
@@ -56,7 +60,9 @@ async fn test_stagnation_detected() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User { content: "go".into() }],
+            vec![AgentMessage::User {
+                content: "go".into(),
+            }],
             AgentConfig {
                 max_iterations: 10,
                 max_protocol_strikes: 100, // disable loop detection
@@ -93,7 +99,9 @@ async fn test_iteration_complete_events() {
 
     let executor = MockToolExecutorPort::new().with_tool(
         ToolDefinition::new("do_thing"),
-        MockToolBehavior::Immediate { content: "ok".into() },
+        MockToolBehavior::Immediate {
+            content: "ok".into(),
+        },
     );
 
     let agent = AgentLoop::new(llm, Arc::new(executor));
@@ -101,7 +109,9 @@ async fn test_iteration_complete_events() {
 
     agent
         .run(
-            vec![AgentMessage::User { content: "go".into() }],
+            vec![AgentMessage::User {
+                content: "go".into(),
+            }],
             AgentConfig::default(),
             tx,
         )
@@ -117,7 +127,9 @@ async fn test_iteration_complete_events() {
         "IterationComplete {{ iteration: 1 }} should be emitted after the first tool-calling iteration"
     );
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::FinalAnswer { .. })),
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::FinalAnswer { .. })),
         "FinalAnswer should be emitted"
     );
 }
@@ -136,7 +148,9 @@ async fn test_llm_startup_error_emits_event() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User { content: "hello".into() }],
+            vec![AgentMessage::User {
+                content: "hello".into(),
+            }],
             AgentConfig::default(),
             tx,
         )

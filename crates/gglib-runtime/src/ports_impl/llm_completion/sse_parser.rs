@@ -176,7 +176,10 @@ mod tests {
             Ok(SseParseResult::Events(e)) => e,
             other => panic!("unexpected: {other:?}"),
         };
-        assert!(events.is_empty(), "empty content should not produce TextDelta");
+        assert!(
+            events.is_empty(),
+            "empty content should not produce TextDelta"
+        );
     }
 
     #[test]
@@ -194,11 +197,10 @@ mod tests {
 
     #[test]
     fn tool_call_delta_frame_is_parsed() {
-        let events =
-            match parse_sse_frame(&tool_frame(0, "tc1", "search", r#"{"q":"rust"}"#)) {
-                Ok(SseParseResult::Events(e)) => e,
-                other => panic!("unexpected: {other:?}"),
-            };
+        let events = match parse_sse_frame(&tool_frame(0, "tc1", "search", r#"{"q":"rust"}"#)) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
