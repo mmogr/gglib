@@ -33,7 +33,6 @@ use tokio::sync::Mutex;
 
 /// Configurable response strategy for a single mock tool.
 #[derive(Clone)]
-#[allow(dead_code)] // Fail/Error are API surface for future tests
 pub enum MockToolBehavior {
     /// Returns a successful result immediately.
     Immediate {
@@ -48,14 +47,6 @@ pub enum MockToolBehavior {
         millis: u64,
         /// Content returned to the LLM as the tool output.
         content: String,
-    },
-    /// Returns a `ToolResult` with `success = false`.
-    ///
-    /// This is a domain-level failure — the loop feeds the message back to
-    /// the LLM so it can observe and react to the failure.
-    Fail {
-        /// Error description returned as the tool content.
-        message: String,
     },
     /// Returns `Err(anyhow::Error)`, simulating an infrastructure failure.
     ///
@@ -152,14 +143,6 @@ impl ToolExecutorPort for MockToolExecutorPort {
                     dispatch_duration_ms: 0,
                 })
             }
-            MockToolBehavior::Fail { message } => Ok(ToolResult {
-                tool_call_id: call.id.clone(),
-                content: message,
-                success: false,
-                wait_ms: 0,
-                execute_duration_ms: elapsed_ms(start),
-                dispatch_duration_ms: 0,
-            }),
             MockToolBehavior::Error { message } => Err(anyhow::anyhow!(message)),
         }
     }

@@ -156,14 +156,6 @@ impl AgentLoop {
         }
     }
 
-    /// Create a new `AgentLoop` with the provided port implementations.
-    ///
-    /// Prefer [`AgentLoop::build`] at composition roots; `new` is
-    /// `pub(crate)` and intended for use in unit tests within this crate.
-    pub(crate) fn new(llm: Arc<dyn LlmCompletionPort>, tool_executor: Arc<dyn ToolExecutorPort>) -> Self {
-        Self { llm, tool_executor }
-    }
-
     /// Compose an `AgentLoop` as `Arc<dyn AgentLoopPort>`, optionally wrapping
     /// `tool_executor` in a [`FilteredToolExecutor`] allowlist.
     ///
@@ -190,7 +182,7 @@ impl AgentLoop {
             // Non-empty allowlist — restrict to the named set.
             Some(allowed) => Arc::new(FilteredToolExecutor::new(tool_executor, allowed)),
         };
-        Arc::new(Self::new(llm, executor))
+        Arc::new(Self { llm, tool_executor: executor })
     }
 }
 

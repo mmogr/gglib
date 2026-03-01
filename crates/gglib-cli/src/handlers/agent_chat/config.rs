@@ -9,11 +9,9 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use gglib_agent::AgentLoop;
+use gglib_axum::agent_components::AgentComponents;
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::{ProcessHandle, ServerConfig};
-use gglib_mcp::McpToolExecutorAdapter;
-use gglib_runtime::LlmCompletionAdapter;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::chat::ChatArgs;
@@ -44,14 +42,12 @@ pub async fn compose(
 
     // 3. Compose the agent loop.  When `--tools` is supplied the loop is
     //    restricted to the named allowlist; otherwise all MCP tools are visible.
-    let llm = Arc::new(LlmCompletionAdapter::new(port, None::<String>));
-    let mcp_executor = Arc::new(McpToolExecutorAdapter::new(Arc::clone(ctx.mcp())));
     let tool_filter = if args.tools.is_empty() {
         None
     } else {
         Some(args.tools.iter().cloned().collect())
     };
-    let agent = AgentLoop::build(llm, mcp_executor, tool_filter);
+    let agent = AgentComponents::build(port, reqwest::Client::new(), Arc::clone(ctx.mcp()), tool_filter);
 
     Ok((agent, maybe_handle))
 }

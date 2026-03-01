@@ -35,14 +35,14 @@ use crate::fnv1a::fnv1a_64;
 /// Create once per agent run and call [`StagnationDetector::record`] after
 /// every iteration that produces text content.
 #[derive(Debug, Default)]
-pub struct StagnationDetector {
+pub(crate) struct StagnationDetector {
     prev_hash: Option<u64>,
     count: usize,
 }
 
 impl StagnationDetector {
     /// Create a fresh detector with empty state.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -72,7 +72,7 @@ impl StagnationDetector {
     /// stagnation detection while the model makes genuine progress through
     /// distinct tool calls.  The caller is therefore not required to guard
     /// against empty strings — this method owns the invariant.
-    pub fn record(&mut self, text: &str, max_steps: usize) -> Result<(), AgentError> {
+    pub(crate) fn record(&mut self, text: &str, max_steps: usize) -> Result<(), AgentError> {
         if text.is_empty() {
             return Ok(());
         }

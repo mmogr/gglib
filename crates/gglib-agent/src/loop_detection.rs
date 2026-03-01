@@ -59,13 +59,13 @@ pub(crate) fn batch_signature(calls: &[ToolCall]) -> String {
 /// Create once per agent run and call [`LoopDetector::check`] after every
 /// iteration that produces tool calls.
 #[derive(Debug, Default)]
-pub struct LoopDetector {
+pub(crate) struct LoopDetector {
     hits: HashMap<String, usize>,
 }
 
 impl LoopDetector {
     /// Create a fresh detector with empty state.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -76,7 +76,7 @@ impl LoopDetector {
     /// comparison so that `max_strikes = 2` allows two identical batches
     /// before erroring on the third, matching the frontend's
     /// `MAX_SAME_SIGNATURE_HITS = 2` behaviour.
-    pub fn check(&mut self, calls: &[ToolCall], max_strikes: usize) -> Result<(), AgentError> {
+    pub(crate) fn check(&mut self, calls: &[ToolCall], max_strikes: usize) -> Result<(), AgentError> {
         let sig = batch_signature(calls);
         let count = self.hits.entry(sig.clone()).or_insert(0);
         *count += 1;

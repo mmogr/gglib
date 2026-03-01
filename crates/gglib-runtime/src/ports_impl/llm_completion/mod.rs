@@ -15,7 +15,7 @@
 //!
 //! ```ignore
 //! let adapter = LlmCompletionAdapter::new(9000, None::<String>);
-//! let agent   = AgentLoop::new(Arc::new(adapter), tool_executor);
+//! let agent   = AgentLoop::build(Arc::new(adapter), tool_executor, None);
 //! ```
 
 use std::pin::Pin;

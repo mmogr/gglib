@@ -1,6 +1,32 @@
 //! [`AgentConfig`] — configuration for a single agentic loop run.
+//!
+//! This module also defines the public ceiling constants used by HTTP and CLI
+//! callers to clamp untrusted user input to safe values.  Centralising them
+//! here ensures a single source of truth across all entry points.
 
 use serde::Serialize;
+
+// =============================================================================
+// Ceiling constants — shared across HTTP and CLI callers
+// =============================================================================
+
+/// Hard ceiling on `max_iterations` accepted from external callers.
+///
+/// 50 iterations is generous for real workloads.  Prevents a crafted request
+/// from running an unbounded loop at server expense.
+pub const MAX_ITERATIONS_CEILING: usize = 50;
+
+/// Hard ceiling on `max_parallel_tools` accepted from external callers.
+///
+/// 20 concurrent tools per iteration is far beyond any practical need and
+/// prevents thread-pool saturation from crafted requests.
+pub const MAX_PARALLEL_TOOLS_CEILING: usize = 20;
+
+/// Hard ceiling on `tool_timeout_ms` accepted from external callers (60 s).
+///
+/// Prevents a crafted request from holding server connections open
+/// indefinitely via slow or stalled tool calls.
+pub const MAX_TOOL_TIMEOUT_MS_CEILING: u64 = 60_000;
 
 /// Configuration that governs a single agentic loop run.
 ///

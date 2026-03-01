@@ -30,6 +30,7 @@ use tracing as _;
 use tracing_subscriber as _; // Used by main.rs binary
 use uuid as _; // Will be used by embedded module
 
+pub mod agent_components;
 pub mod bootstrap;
 pub mod chat_api;
 pub mod dto;
