@@ -69,7 +69,12 @@ pub fn prune_for_budget(
     config: &AgentConfig,
 ) -> Vec<AgentMessage> {
     let budget = config.context_budget_chars;
-    if total_chars(&messages) <= budget {
+
+    // A running total is tracked throughout pass 1 so that we avoid a second
+    // O(n) scan of the filtered message list before deciding whether pass 2 is
+    // needed.
+    let mut running = total_chars(&messages);
+    if running <= budget {
         return messages;
     }
 
@@ -95,41 +100,51 @@ pub fn prune_for_budget(
     // references tc2/tc3 when only tc1's result survived would confuse the LLM.
     messages = messages
         .into_iter()
-        .filter_map(|m| match m {
-            // Drop a Tool message if its id is not in the retained set.
-            AgentMessage::Tool { ref tool_call_id, .. }
-                if !kept_tool_call_ids.contains(tool_call_id) =>
-            {
-                None
-            }
-
-            // For an Assistant message with tool calls: keep only if at least
-            // one call survives, but also strip the pruned call IDs so the
-            // context never contains references to missing tool results.
-            AgentMessage::Assistant {
-                content,
-                tool_calls: Some(calls),
-            } => {
-                let retained_calls: Vec<_> = calls
-                    .into_iter()
-                    .filter(|c| kept_tool_call_ids.contains(&c.id))
-                    .collect();
-                if retained_calls.is_empty() {
+        .filter_map(|m| {
+            // Compute the size of this message before (potentially) moving it.
+            let old_size = content_len(&m);
+            match m {
+                // Drop a Tool message if its id is not in the retained set.
+                AgentMessage::Tool { ref tool_call_id, .. }
+                    if !kept_tool_call_ids.contains(tool_call_id) =>
+                {
+                    running -= old_size;
                     None
-                } else {
-                    Some(AgentMessage::Assistant {
-                        content,
-                        tool_calls: Some(retained_calls),
-                    })
                 }
-            }
 
-            // System, User, and Assistant-with-no-tool-calls are always kept.
-            other => Some(other),
+                // For an Assistant message with tool calls: keep only if at least
+                // one call survives, but also strip the pruned call IDs so the
+                // context never contains references to missing tool results.
+                AgentMessage::Assistant {
+                    content,
+                    tool_calls: Some(calls),
+                } => {
+                    let retained_calls: Vec<_> = calls
+                        .into_iter()
+                        .filter(|c| kept_tool_call_ids.contains(&c.id))
+                        .collect();
+                    if retained_calls.is_empty() {
+                        running -= old_size;
+                        None
+                    } else {
+                        let new_msg = AgentMessage::Assistant {
+                            content,
+                            tool_calls: Some(retained_calls),
+                        };
+                        // Adjust running for the difference in size when some
+                        // tool calls were stripped from this assistant message.
+                        running = running - old_size + content_len(&new_msg);
+                        Some(new_msg)
+                    }
+                }
+
+                // System, User, and Assistant-with-no-tool-calls are always kept.
+                other => Some(other),
+            }
         })
         .collect();
 
-    if total_chars(&messages) <= budget {
+    if running <= budget {
         return messages;
     }
 

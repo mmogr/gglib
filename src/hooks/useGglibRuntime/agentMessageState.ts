@@ -111,6 +111,9 @@ export function addToolCallPart(
             toolCallId,
             toolName,
             args: typeof toolArgs === 'object' ? toolArgs : {},
+            // argsText is intentionally kept alongside `args` for the DB
+            // persistence round-trip in contentParts.ts — it is serialised
+            // into metadata.contentParts and restored on load.  Do not remove.
             argsText: JSON.stringify(toolArgs ?? {}),
           },
         ] as GglibContent,

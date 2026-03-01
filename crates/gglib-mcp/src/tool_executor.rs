@@ -99,24 +99,23 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         // Accepts two formats:
         //   - qualified:   "{server_id}__{tool_name}"  (produced by list_tools)
         //   - unqualified: "{tool_name}"               (e.g. from FilteredToolExecutor)
-        let all_tools = self.mcp.list_all_tools().await;
         let (server_id, bare_name): (i64, &str) = if let Some((prefix, bare)) =
             call.name.split_once("__")
         {
+            // Qualified format: trust the prefix directly and skip list_all_tools().
+            // Any mismatch (bad server_id or unknown tool name) surfaces as an Err
+            // from call_tool with a descriptive McpServiceError — no pre-flight scan
+            // needed.
             let sid: i64 = prefix.parse().with_context(|| {
                 format!(
                     "qualified tool name '{}' has a non-integer server prefix",
                     call.name
                 )
             })?;
-            // Verify the server actually exposes this tool.
-            let found = all_tools
-                .iter()
-                .any(|(id, tools)| *id == sid && tools.iter().any(|t| t.name == bare));
-            anyhow::ensure!(found, "server {sid} does not expose a tool named '{bare}'");
             (sid, bare)
         } else {
-            // Unqualified — linear scan across all servers.
+            // Unqualified — linear scan across all servers to find the owner.
+            let all_tools = self.mcp.list_all_tools().await;
             let server_id = all_tools
                 .iter()
                 .find_map(|(id, tools)| tools.iter().any(|t| t.name == call.name).then_some(*id))
@@ -168,6 +167,9 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             tool_call_id: call.id.clone(),
             content,
             success,
+            // wait_ms measures time spent queued for a concurrency permit inside
+            // execute_tools_parallel.  The adapter has no view into that; the real
+            // value is always overwritten by the caller.  Zero is a safe sentinel.
             wait_ms: 0,
             duration_ms,
         })

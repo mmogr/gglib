@@ -82,8 +82,11 @@ struct PartialToolCall {
 /// # Errors
 ///
 /// - Infrastructure errors (an `Err` item in the stream) are returned immediately.
-/// - A tool-call index ≥ `max_parallel_tools` is rejected immediately to
-///   prevent a malicious or buggy LLM from triggering an unbounded allocation.
+/// - A tool-call index ≥ `max_parallel_tools` is rejected immediately.
+///   This guard lives here — rather than in the caller — because it bounds the
+///   `partials` Vec that grows during streaming; by the time `Done` arrives it
+///   would already have caused the allocation.  The value doubles as the
+///   concurrency cap in `execute_tools_parallel`, making the policy consistent.
 /// - Malformed tool-call arguments (not valid JSON) are silently replaced with
 ///   an empty object and a `warn` log entry rather than hard-failing the loop.
 pub async fn collect_stream(

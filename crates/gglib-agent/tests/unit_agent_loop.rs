@@ -17,6 +17,7 @@ mod common;
 
 use std::sync::Arc;
 
+use common::collect_events;
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
@@ -24,18 +25,6 @@ use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall,
 use gglib_core::ports::{AgentError, AgentLoopPort};
 use serde_json::json;
 use tokio::sync::mpsc;
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-async fn collect_events(mut rx: mpsc::Receiver<AgentEvent>) -> Vec<AgentEvent> {
-    let mut events = Vec::new();
-    while let Some(evt) = rx.recv().await {
-        events.push(evt);
-    }
-    events
-}
 
 // =============================================================================
 // Tests

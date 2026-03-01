@@ -20,6 +20,7 @@ mod common;
 
 use std::sync::Arc;
 
+use common::collect_events;
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
@@ -31,19 +32,6 @@ use tokio::sync::mpsc;
 // =============================================================================
 // Helpers
 // =============================================================================
-
-/// Drain all events that were sent to `rx` before the channel was closed.
-///
-/// `AgentLoopPort::run` takes the `Sender` by value and drops it on return,
-/// so by the time we call this the channel is already closed; we just read
-/// what's buffered.
-async fn collect_events(mut rx: mpsc::Receiver<AgentEvent>) -> Vec<AgentEvent> {
-    let mut events = Vec::new();
-    while let Some(evt) = rx.recv().await {
-        events.push(evt);
-    }
-    events
-}
 
 /// Return `true` when `events` contains at least one [`AgentEvent::FinalAnswer`].
 fn has_final_answer(events: &[AgentEvent]) -> bool {

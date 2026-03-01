@@ -32,8 +32,10 @@ export async function* readAgentSSE(
 
       buffer += decoder.decode(value, { stream: true });
 
-      // SSE events are separated by blank lines (\n\n)
-      const rawEvents = buffer.split('\n\n');
+      // Normalise CRLF → LF so the split below works regardless of whether the
+      // server (or a proxy) uses \r\n or \n as SSE line terminators.
+      // SSE events are separated by blank lines (\n\n after normalization).
+      const rawEvents = buffer.replace(/\r\n/g, '\n').split('\n\n');
       buffer = rawEvents.pop() ?? ''; // keep the trailing partial event
 
       for (const rawEvent of rawEvents) {

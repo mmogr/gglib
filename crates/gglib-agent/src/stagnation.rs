@@ -76,10 +76,12 @@ impl StagnationDetector {
             Some(prev) if prev == hash => {
                 self.count += 1;
                 if self.count >= max_steps {
+                    // self.count is the number of *repeats after the first baseline
+                    // occurrence*, so total identical responses seen = self.count + 1.
                     return Err(AgentError::Internal(format!(
-                        "agent stagnated: identical response text seen {count} time(s) in a row \
+                        "agent stagnated: same response text seen {} time(s) consecutively \
                         (max_stagnation_steps = {max_steps})",
-                        count = self.count,
+                        self.count + 1,
                     )));
                 }
             }
