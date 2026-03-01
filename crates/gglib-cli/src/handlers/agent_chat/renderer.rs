@@ -24,6 +24,13 @@ use gglib_core::domain::agent::AgentEvent;
 /// normal/quiet mode.
 pub fn render_event(event: &AgentEvent, verbose: bool) {
     match event {
+        AgentEvent::ReasoningDelta { content } => {
+            // Chain-of-thought tokens from reasoning models (DeepSeek R1, QwQ, etc.).
+            // Printed to stderr so they don't interleave with the answer on stdout.
+            eprint!("{content}");
+            let _ = io::stderr().flush();
+        }
+
         AgentEvent::TextDelta { content } => {
             print!("{content}");
             // Flush immediately so each token appears as it arrives.

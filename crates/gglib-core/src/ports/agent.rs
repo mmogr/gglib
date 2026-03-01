@@ -137,8 +137,11 @@ pub trait ToolExecutorPort: Send + Sync {
 ///     });
 ///
 ///     let messages = vec![AgentMessage::User { content: "Hello".into() }];
-///     let final_answer = agent.run(messages, AgentConfig::default(), tx).await?;
+///     let (final_answer, history) = agent.run(messages, AgentConfig::default(), tx).await?;
 ///     println!("Final: {final_answer}");
+///     // `history` contains the full accumulated message list including all
+///     // assistant and tool-result messages appended during the loop — safe
+///     // to pass directly as the `messages` argument for the next turn.
 /// }
 /// ```
 ///
@@ -162,15 +165,19 @@ pub trait AgentLoopPort: Send + Sync {
     ///
     /// # Returns
     ///
-    /// * `Ok(String)` — The final answer produced by the model.  Identical to
-    ///   the `content` of the last [`AgentEvent::FinalAnswer`] emitted, provided
-    ///   for CLI callers that don't want to accumulate the event stream.
+    /// * `Ok((String, Vec<AgentMessage>))` — The final answer string plus the
+    ///   full accumulated conversation history (caller-provided messages **plus**
+    ///   every assistant and tool-result message appended during the loop,
+    ///   including the final assistant reply).  CLI callers can feed this
+    ///   `Vec<AgentMessage>` directly back as `messages` on the next turn to
+    ///   maintain complete multi-turn context.
     /// * `Err(AgentError)` — A fatal loop-level failure (max iterations reached,
-    ///   context overflow, loop detection, or internal error).
+    ///   loop detection, stagnation, or internal error).  No partial history is
+    ///   returned on failure; the caller's existing history is left intact.
     async fn run(
         &self,
         messages: Vec<AgentMessage>,
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
-    ) -> Result<String, AgentError>;
+    ) -> Result<(String, Vec<AgentMessage>), AgentError>;
 }

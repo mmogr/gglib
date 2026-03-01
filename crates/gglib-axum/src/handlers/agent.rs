@@ -180,7 +180,7 @@ pub async fn chat(
 
     let handle = tokio::spawn(async move {
         match agent_loop.run(messages, config, tx).await {
-            Ok(_) => {}
+            Ok(_) => {} // history return value not needed for stateless HTTP handler
             Err(e) => tracing::warn!("agent loop ended with error: {e}"),
         }
     });

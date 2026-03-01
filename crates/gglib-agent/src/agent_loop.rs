@@ -93,8 +93,10 @@ impl AgentLoopPort for AgentLoop {
     ///
     /// # Returns
     ///
-    /// - `Ok(final_answer)` — the model produced a response without requesting
-    ///   further tool calls.
+    /// - `Ok((final_answer, messages))` — the model produced a response without
+    ///   requesting further tool calls. `messages` is the full conversation
+    ///   history including every assistant and tool-result message appended
+    ///   during the loop, plus the final assistant reply.
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
     ///   without a final answer.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated more
@@ -106,7 +108,7 @@ impl AgentLoopPort for AgentLoop {
         messages: Vec<AgentMessage>,
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
-    ) -> Result<String, AgentError> {
+    ) -> Result<(String, Vec<AgentMessage>), AgentError> {
         let mut messages = messages;
         let mut loop_detector = LoopDetector::new();
         let mut stagnation_detector = StagnationDetector::new();
@@ -164,12 +166,20 @@ impl AgentLoopPort for AgentLoop {
             // ---- 5. No tool calls → final answer ----------------------------
             if response.tool_calls.is_empty() {
                 debug!("no tool calls; final answer reached");
+                let content = response.content;
                 let _ = tx
                     .send(AgentEvent::FinalAnswer {
-                        content: response.content.clone(),
+                        content: content.clone(),
                     })
                     .await;
-                return Ok(response.content);
+                // Append the final assistant reply so callers receive the
+                // complete accumulated history and can pass it back unchanged
+                // as the `messages` argument for the next REPL turn.
+                messages.push(AgentMessage::Assistant {
+                    content: Some(content.clone()),
+                    tool_calls: None,
+                });
+                return Ok((content, messages));
             }
 
             // ---- 6. Loop detection ------------------------------------------

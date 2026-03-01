@@ -100,7 +100,7 @@ async fn test_simple_tool_call_cycle() {
 
     let events = collect_events(rx).await;
 
-    assert_eq!(result.unwrap(), "Here are the results.");
+    assert_eq!(result.unwrap().0, "Here are the results.");
 
     // Tool was called exactly once with the right name.
     let calls = log.snapshot().await;
@@ -179,7 +179,7 @@ async fn test_parallel_tool_calls() {
 
     let events = collect_events(rx).await;
 
-    assert_eq!(result.unwrap(), "All done.");
+    assert_eq!(result.unwrap().0, "All done.");
 
     // All three tool calls were executed.
     let calls = log.snapshot().await;
@@ -297,7 +297,7 @@ async fn test_tool_timeout() {
 
     // The loop must recover: the second LLM call produces the final answer.
     assert_eq!(
-        result.unwrap(),
+        result.unwrap().0,
         "Timeout handled gracefully.",
         "loop should complete successfully after timeout"
     );
@@ -445,7 +445,7 @@ async fn test_context_budget_pruning() {
 
     // Pruning must not abort the loop — it should complete successfully.
     assert_eq!(
-        result.unwrap(),
+        result.unwrap().0,
         "Pruning worked — I can still answer.",
         "loop aborted unexpectedly after context pruning"
     );

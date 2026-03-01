@@ -119,22 +119,31 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         let msgs = messages.clone();
         let cfg = config.clone();
 
-        let handle: JoinHandle<()> = tokio::spawn(async move {
+        let handle: JoinHandle<Option<Vec<AgentMessage>>> = tokio::spawn(async move {
             match agent.run(msgs, cfg, tx).await {
-                Ok(_) => {}
-                Err(e) => tracing::debug!("agent loop ended: {e}"),
+                Ok((_, new_messages)) => Some(new_messages),
+                Err(e) => {
+                    tracing::debug!("agent loop ended: {e}");
+                    None
+                }
             }
         });
 
-        // ── 3. Consume event stream; Ctrl+C aborts the agent task ────────────
-        let final_content = collect_events(&mut rx, &handle, args.verbose).await;
+        // ── 3. Consume event stream; Ctrl+C aborts the agent task ────────────────
+        let completed = collect_events(&mut rx, &handle, args.verbose).await;
 
-        // ── 4. Push assistant turn to history if we got a final answer ────────
-        if let Some(content) = final_content {
-            messages.push(AgentMessage::Assistant {
-                content: Some(content),
-                tool_calls: None,
-            });
+        // ── 4. Replace conversation history with the loop’s accumulated messages.
+        //
+        // The loop appends every assistant + tool-result message during the run
+        // and includes the final assistant reply, so `new_messages` is the
+        // complete context needed for the next turn.
+        //
+        // On Ctrl+C (`completed = false`) or loop error (handle returns `None`)
+        // the history stays unchanged — failed or cancelled turns are not added.
+        if completed {
+            if let Ok(Some(new_messages)) = handle.await {
+                messages = new_messages;
+            }
         }
     }
 
@@ -148,16 +157,16 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
 /// arrives, rendering each event.
 ///
-/// Returns the final-answer content string if one was received.
-/// On Ctrl+C the agent `handle` is aborted and `None` is returned, preserving
-/// the partial response in message history only if it was a non-empty string.
+/// Returns `true` when the turn completed normally (channel closed or
+/// `FinalAnswer` received), `false` when the agent task was aborted by Ctrl+C.
+///
+/// Callers should only attempt to retrieve accumulated message history from
+/// the `handle` when this function returns `true`.
 async fn collect_events(
     rx: &mut mpsc::Receiver<AgentEvent>,
-    handle: &JoinHandle<()>,
+    handle: &JoinHandle<Option<Vec<AgentMessage>>>,
     verbose: bool,
-) -> Option<String> {
-    let mut final_content: Option<String> = None;
-
+) -> bool {
     loop {
         tokio::select! {
             // Prefer processing events over handling Ctrl+C when both are ready.
@@ -166,13 +175,16 @@ async fn collect_events(
             maybe = rx.recv() => {
                 let Some(event) = maybe else { break };
 
-                if let AgentEvent::FinalAnswer { ref content } = event {
-                    final_content = Some(content.clone());
-                    render_event(&event, verbose);
-                    break;
-                }
-
                 render_event(&event, verbose);
+
+                if let AgentEvent::FinalAnswer { .. } = event {
+                    // NOTE: `FinalAnswer` is always the last event emitted
+                    // before the loop drops its `Sender`. Returning here is
+                    // safe; any events that arrive after `FinalAnswer` would
+                    // indicate a protocol violation and are intentionally
+                    // dropped.
+                    return true;
+                }
             }
 
             _ = tokio::signal::ctrl_c() => {
@@ -180,10 +192,11 @@ async fn collect_events(
                 // Drain any buffered events without displaying them.
                 while rx.try_recv().is_ok() {}
                 eprintln!("\n[agent response cancelled — Ctrl+C]");
-                break;
+                return false;
             }
         }
     }
-
-    final_content
+    // Channel closed normally (e.g. loop ended with an error event, no
+    // FinalAnswer emitted). History update is still attempted via handle.await.
+    true
 }
