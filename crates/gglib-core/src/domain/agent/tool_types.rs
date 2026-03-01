@@ -111,14 +111,6 @@ pub struct ToolResult {
     /// This value is populated by the [`crate::ports::ToolExecutorPort`]
     /// implementation.  The agent loop does **not** overwrite it.
     pub execute_duration_ms: u64,
-
-    /// Total wall-clock time from permit acquisition (including semaphore wait)
-    /// to result delivery, as measured by the agent loop's dispatch machinery,
-    /// in milliseconds.
-    ///
-    /// Always ≥ `execute_duration_ms`.  Set to zero by the adapter; populated
-    /// by the agent loop's `execute_single_tool` wrapper.
-    pub dispatch_duration_ms: u64,
 }
 
 #[cfg(test)]
@@ -144,7 +136,6 @@ mod tests {
             success: false,
             wait_ms: 0,
             execute_duration_ms: 12,
-            dispatch_duration_ms: 0,
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["success"], false);

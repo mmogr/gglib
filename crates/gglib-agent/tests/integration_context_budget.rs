@@ -22,7 +22,7 @@ use common::event_assertions::{collect_events, has_final_answer};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentMessage, ToolCall, ToolDefinition};
+use gglib_core::domain::agent::{AgentMessage, ToolCall, ToolDefinition};
 use serde_json::json;
 use tokio::sync::mpsc;
 
@@ -93,7 +93,7 @@ async fn test_context_budget_pruning() {
     let result = agent
         .run(
             messages,
-            { let mut c = AgentConfig::default(); c.context_budget_chars = 500; c },
+            common::for_test(|c| { c.context_budget_chars = 500; }),
             tx,
         )
         .await;
@@ -184,7 +184,7 @@ async fn test_context_budget_pruning_two_iters() {
     let result = agent
         .run(
             messages,
-            { let mut c = AgentConfig::default(); c.context_budget_chars = 500; c },
+            common::for_test(|c| { c.context_budget_chars = 500; }),
             tx,
         )
         .await;
@@ -208,15 +208,16 @@ async fn test_context_budget_pruning_two_iters() {
         "first call: pruning must reduce message count below {original_count}; got {}",
         received[0].len()
     );
-    // The second call adds at most two new messages (assistant tool-call + tool
-    // result).  If running_chars was stale after Pass 2, the second call would
-    // see an aggressively pruned list shorter than (pruned_first + 2).
-    // A correct implementation retains at least the messages from the first
-    // call's result plus the new tool exchange.
+    // The second call adds at least two new messages (assistant tool-call +
+    // tool result).  If running_chars was stale after Pass 2, the second call
+    // would see an aggressively pruned list shorter than (pruned_first + 2).
+    // A correct implementation retains the messages from the first call's
+    // result plus the new tool exchange — the +2 assertion would fail if
+    // over-pruning dropped those messages.
     assert!(
-        received[1].len() >= received[0].len(),
-        "second call should not have fewer messages than the first call \
-         (stale running_chars would over-prune); first={}, second={}",
+        received[1].len() >= received[0].len() + 2,
+        "second call must include at least two new messages (tool-call + result) \
+         beyond the first call's message list; first={}, second={}",
         received[0].len(),
         received[1].len()
     );

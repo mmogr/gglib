@@ -5,16 +5,18 @@
 //! ```text
 //! AgentLoop::run()
 //!   │
-//!   ├─ context_pruning::prune_for_budget()        budget management
-//!   ├─ tool_executor.list_tools()                 tool schema discovery
-//!   ├─ llm.chat_stream()                          LLM call (streaming)
-//!   ├─ stream_collector::collect_stream()          text forwarded live ──→ AgentEvent::TextDelta
-//!   ├─ stagnation::StagnationDetector::record()   stagnation guard ──→ AgentEvent::Error (on failure)
-//!   ├─ loop_detection::LoopDetector::check()      loop guard       ──→ AgentEvent::Error (on failure)
-//!   ├─ tool_execution::execute_tools_parallel()   parallel tool dispatch
-//!   │      ├─ AgentEvent::ToolCallStart           per-tool
-//!   │      └─ AgentEvent::ToolCallComplete        per-tool
-//!   └─ AgentEvent::IterationComplete              per-iteration
+//!   ├─ context_pruning::prune_for_budget()        initial budget trim (before loop)
+//!   │
+//!   └─ [per iteration]
+//!       ├─ llm.chat_stream()                          LLM call (streaming)
+//!       ├─ stream_collector::collect_stream()          text forwarded live ──→ AgentEvent::TextDelta
+//!       ├─ stagnation::StagnationDetector::record()   stagnation guard ──→ AgentEvent::Error (on failure)
+//!       ├─ loop_detection::LoopDetector::check()      loop guard       ──→ AgentEvent::Error (on failure)
+//!       ├─ tool_execution::execute_tools_parallel()   parallel tool dispatch
+//!       │      ├─ AgentEvent::ToolCallStart           per-tool
+//!       │      └─ AgentEvent::ToolCallComplete        per-tool
+//!       ├─ context_pruning::prune_for_budget()        post-append budget trim
+//!       └─ AgentEvent::IterationComplete              per-iteration
 //! ```
 //!
 //! When a final answer is reached: `AgentEvent::FinalAnswer` → `Ok(content)`.
@@ -133,6 +135,18 @@ pub struct AgentLoop {
 }
 
 impl AgentLoop {
+    /// Create a new `AgentLoop` with the provided LLM and tool-executor ports.
+    ///
+    /// The `tool_executor` is used as-is — no filter is applied.  Use
+    /// [`AgentLoop::build`] when you need optional tool filtering via an
+    /// allowlist, or to receive the type-erased `Arc<dyn AgentLoopPort>` form.
+    pub fn new(
+        llm: Arc<dyn LlmCompletionPort>,
+        tool_executor: Arc<dyn ToolExecutorPort>,
+    ) -> Self {
+        Self { llm, tool_executor }
+    }
+
     /// Call the LLM (step 2) then collect the stream (step 3) into a
     /// [`CollectedResponse`].
     ///
@@ -182,7 +196,7 @@ impl AgentLoop {
             // Non-empty allowlist — restrict to the named set.
             Some(allowed) => Arc::new(FilteredToolExecutor::new(tool_executor, allowed)),
         };
-        Arc::new(Self { llm, tool_executor: executor })
+        Arc::new(Self::new(llm, executor))
     }
 }
 
@@ -204,7 +218,7 @@ impl AgentLoopPort for AgentLoop {
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
     ///   without a final answer.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated more
-    ///   than `config.max_empty_tool_response_steps` times.
+    ///   than `config.max_repeated_batch_steps` times.
     ///   - `Err(AgentError::StagnationDetected)` — the assistant repeated the same
     ///   text content for too many consecutive iterations.
     async fn run(
@@ -214,8 +228,8 @@ impl AgentLoopPort for AgentLoop {
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
         let mut messages = messages;
-        let mut loop_detector = LoopDetector::new();
-        let mut stagnation_detector = StagnationDetector::new();
+        let mut loop_detector = LoopDetector::default();
+        let mut stagnation_detector = StagnationDetector::default();
 
         // Discover tools once before the iteration loop — the tool set does not
         // change during a single conversation, and calling list_tools() per
@@ -229,13 +243,15 @@ impl AgentLoopPort for AgentLoop {
         // every `append_iteration_messages` call (via the returned delta).
         let mut running_chars = total_chars(&messages);
 
+        // Prune the caller-supplied history once before the first LLM call so
+        // that oversized initial contexts are handled even when the model
+        // returns a final answer on the very first iteration (no append step).
+        messages = prune_for_budget(messages, &config, &mut running_chars);
+
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
 
-            // ---- 1. Context budget pruning ----------------------------------
-            messages = prune_for_budget(messages, &config, &mut running_chars);
-
-            // ---- 2+3. LLM call and stream collection ----------------------
+            // ---- 1+2. LLM call and stream collection ----------------------
             let response = self.call_and_collect(&messages, &tools, &tx).await?;
 
             // Guard: reject tool-call batches that exceed the configured
@@ -262,7 +278,7 @@ impl AgentLoopPort for AgentLoop {
                 "LLM response received"
             );
 
-            // ---- 4. Stagnation guard ----------------------------------------
+            // ---- 3. Stagnation guard ----------------------------------------
             // `record` is a no-op on empty text (tool-call-only responses);
             // that guard lives inside StagnationDetector to keep the invariant
             // with the module that owns it.  When `max_stagnation_steps` is
@@ -277,7 +293,7 @@ impl AgentLoopPort for AgentLoop {
                 }
             }
 
-            // ---- 5. No tool calls → final answer ----------------------------
+            // ---- 4. No tool calls → final answer ----------------------------
             if response.tool_calls.is_empty() {
                 debug!("no tool calls; final answer reached");
                 let content = response.content;
@@ -300,11 +316,11 @@ impl AgentLoopPort for AgentLoop {
                 });
             }
 
-            // ---- 6. Loop detection ------------------------------------------
-            // When `max_empty_tool_response_steps` is `None` the guard is disabled
+            // ---- 5. Loop detection ------------------------------------------
+            // When `max_repeated_batch_steps` is `None` the guard is disabled
             // (e.g. in tests that deliberately repeat the same tool call to
             // exercise multi-iteration behaviour without hitting the limit).
-            if let Some(max_strikes) = config.max_empty_tool_response_steps {
+            if let Some(max_strikes) = config.max_repeated_batch_steps {
                 if let Err(e) =
                     loop_detector.check(&response.tool_calls, max_strikes)
                 {
@@ -313,12 +329,12 @@ impl AgentLoopPort for AgentLoop {
                 }
             }
 
-            // ---- 7. Parallel tool execution ---------------------------------
+            // ---- 6. Parallel tool execution ---------------------------------
             let results =
                 execute_tools_parallel(&response.tool_calls, &self.tool_executor, &config, &tx)
                     .await;
 
-            // ---- 8. Append assistant + tool-result messages -----------------
+            // ---- 7. Append assistant + tool-result messages -----------------
             // Capture len before consuming results so we can report the count
             // in the IterationComplete event without keeping a reference.
             let tool_call_count = results.len();
@@ -329,6 +345,9 @@ impl AgentLoopPort for AgentLoop {
                 results,
             );
             running_chars += added_chars;
+
+            // ---- 8. Context budget pruning (applied after new messages added) --
+            messages = prune_for_budget(messages, &config, &mut running_chars);
 
             // ---- 9. Emit iteration-complete event ---------------------------
             let _ = tx

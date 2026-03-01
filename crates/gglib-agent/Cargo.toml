@@ -11,10 +11,14 @@ name = "gglib_agent"
 path = "src/lib.rs"
 
 [dependencies]
-# Domain types and port traits — the ONLY workspace crate this crate depends on.
-# Hexagonal boundary: gglib-agent must not reference any infrastructure crate.
-gglib-core   = { path = "../gglib-core" }
-tokio        = { workspace = true }
+# Domain and composition dependencies.
+# gglib-core provides port traits; gglib-mcp and gglib-runtime are wired in
+# compose.rs (the single composition root for the agentic loop).
+gglib-core    = { path = "../gglib-core" }
+gglib-mcp     = { path = "../gglib-mcp" }
+gglib-runtime = { path = "../gglib-runtime" }
+reqwest       = { workspace = true }
+tokio         = { workspace = true }
 futures-util = { workspace = true }
 futures-core = { workspace = true }
 async-trait  = { workspace = true }

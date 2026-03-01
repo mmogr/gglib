@@ -182,7 +182,14 @@ pub async fn collect_stream(
                 for p in partials {
                     let (id, name) = match (p.id, p.name) {
                         (Some(id), Some(name)) => (id, name),
-                        _ => continue, // incomplete partial — skip silently
+                        (id, name) => {
+                            warn!(
+                                id = ?id,
+                                name = ?name,
+                                "dropping incomplete tool-call partial: missing id or name"
+                            );
+                            continue;
+                        }
                     };
                     let raw = p.arguments;
                     let args_str = if raw.is_empty() { "{}" } else { &raw };

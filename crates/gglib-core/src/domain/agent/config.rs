@@ -86,7 +86,7 @@ pub struct AgentConfig {
     ///
     /// Set to `None` to disable loop detection entirely (useful in tests that
     /// deliberately repeat the same tool call).
-    pub max_empty_tool_response_steps: Option<usize>,
+    pub max_repeated_batch_steps: Option<usize>,
 
     /// Number of consecutive iterations in which the assistant produces identical
     /// text content before the loop is considered stagnant and aborted.
@@ -104,12 +104,14 @@ pub struct AgentConfig {
     /// to balance context retention against token budget; changing it
     /// independently of `context_budget_chars` can produce incoherent
     /// conversation histories.
+    #[serde(skip)]
     pub prune_keep_tool_messages: usize,
 
     /// Number of non-system messages retained during the emergency tail-prune
     /// pass (second pass of context pruning).
     ///
     /// Same rationale as [`Self::prune_keep_tool_messages`].
+    #[serde(skip)]
     pub prune_keep_tail_messages: usize,
 
     /// Whether to include the full accumulated conversation history in
@@ -129,7 +131,7 @@ impl Default for AgentConfig {
             max_parallel_tools: DEFAULT_MAX_PARALLEL_TOOLS,
             tool_timeout_ms: 30_000,
             context_budget_chars: 180_000,
-            max_empty_tool_response_steps: Some(2),
+            max_repeated_batch_steps: Some(2),
             max_stagnation_steps: Some(5),
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
@@ -149,7 +151,7 @@ mod tests {
         assert_eq!(cfg.max_parallel_tools, 5);
         assert_eq!(cfg.tool_timeout_ms, 30_000);
         assert_eq!(cfg.context_budget_chars, 180_000);
-        assert_eq!(cfg.max_empty_tool_response_steps, Some(2));
+        assert_eq!(cfg.max_repeated_batch_steps, Some(2));
         assert_eq!(
             cfg.max_stagnation_steps,
             Some(5),

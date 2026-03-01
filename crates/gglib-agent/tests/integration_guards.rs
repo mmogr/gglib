@@ -21,7 +21,7 @@ use common::event_assertions::{collect_events, has_final_answer};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
+use gglib_core::domain::agent::{AgentEvent, AgentMessage, ToolCall, ToolDefinition};
 use gglib_core::ports::AgentError;
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -55,13 +55,11 @@ async fn test_max_iterations_reached() {
             vec![AgentMessage::User {
                 content: "go".into(),
             }],
-            {
-                let mut c = AgentConfig::default();
+            common::for_test(|c| {
                 c.max_iterations = 3;
-                c.max_empty_tool_response_steps = None; // disable loop detection for this test
-                c.max_stagnation_steps = None; // disable stagnation for this test
-                c
-            },
+                c.max_repeated_batch_steps = None; // disable loop detection for this test
+                c.max_stagnation_steps = None;     // disable stagnation for this test
+            }),
             tx,
         )
         .await;
@@ -85,7 +83,7 @@ async fn test_max_iterations_reached() {
 }
 
 /// **Loop detection**: the model keeps invoking the same tool with the same
-/// arguments across multiple iterations.  After `max_empty_tool_response_steps`
+/// arguments across multiple iterations.  After `max_repeated_batch_steps`
 /// repetitions the loop must terminate with [`AgentError::LoopDetected`].
 ///
 /// The loop detector computes a signature over tool *names and argument hashes*
@@ -112,13 +110,11 @@ async fn test_loop_detection() {
             vec![AgentMessage::User {
                 content: "go".into(),
             }],
-            {
-                let mut c = AgentConfig::default();
+            common::for_test(|c| {
                 c.max_iterations = 10;
-                c.max_empty_tool_response_steps = Some(2);
+                c.max_repeated_batch_steps = Some(2);
                 c.max_stagnation_steps = None;
-                c
-            },
+            }),
             tx,
         )
         .await;
@@ -183,13 +179,11 @@ async fn test_stagnation_detected_integration() {
             vec![AgentMessage::User {
                 content: "say something new".into(),
             }],
-            {
-                let mut c = AgentConfig::default();
+            common::for_test(|c| {
                 c.max_stagnation_steps = Some(2);
-                c.max_empty_tool_response_steps = None;
+                c.max_repeated_batch_steps = None;
                 c.max_iterations = 10;
-                c
-            },
+            }),
             tx,
         )
         .await;
@@ -242,12 +236,10 @@ async fn test_too_many_tool_calls_integration() {
     let result = agent
         .run(
             vec![AgentMessage::User { content: "search for things".into() }],
-            {
-                let mut c = AgentConfig::default();
+            common::for_test(|c| {
                 c.max_parallel_tools = 2; // 3 calls > 2 → rejected
-                c.max_empty_tool_response_steps = None;
-                c
-            },
+                c.max_repeated_batch_steps = None;
+            }),
             tx,
         )
         .await;

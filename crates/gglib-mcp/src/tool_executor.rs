@@ -171,14 +171,10 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             tool_call_id: call.id.clone(),
             content,
             success,
-            // wait_ms measures time spent queued for a concurrency permit inside
-            // execute_tools_parallel.  The adapter has no view into that; the real
-            // value is always overwritten by the caller.  Zero is a safe sentinel.
+            // wait_ms (concurrency permit wait) is measured by the caller and
+            // overwritten there; zero is a safe sentinel from the adapter side.
             wait_ms: 0,
             execute_duration_ms: duration_ms,
-            // dispatch_duration_ms (wait + execution) is stamped by the loop;
-            // the adapter leaves it at zero as a sentinel.
-            dispatch_duration_ms: 0,
         })
     }
 }

@@ -8,7 +8,7 @@ use gglib_core::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TI
 /// User-facing configuration for a single agent chat request.
 ///
 /// Exposes only the fields that are safe to accept from an untrusted HTTP
-/// caller. Internal tuning parameters (`prune_*`, `max_empty_tool_response_steps`,
+/// caller. Internal tuning parameters (`prune_*`, `max_repeated_batch_steps`,
 /// `context_budget_chars`, etc.) are intentionally absent — they default to
 /// their well-tested values and cannot be weaponised to exhaust server
 /// resources.
@@ -62,6 +62,15 @@ pub struct AgentChatRequest {
     ///
     /// Supports all four [`AgentMessage`] variants: `system`, `user`,
     /// `assistant` (with or without `tool_calls`), and `tool`.
+    ///
+    /// # Security note
+    ///
+    /// This field is not validated for structural consistency.  A client could
+    /// forge `AgentMessage::Tool` entries with invented `tool_call_id` values,
+    /// or `AgentMessage::Assistant` entries with arbitrary `tool_calls`, and
+    /// the loop would accept them.  Known limitation: callers are trusted to
+    /// supply a structurally sound history (i.e. every `Tool` message
+    /// references an `id` that appeared in a preceding `Assistant.tool_calls`).
     pub messages: Vec<AgentMessage>,
 
     /// Optional loop tuning, restricted to safe user-facing fields.

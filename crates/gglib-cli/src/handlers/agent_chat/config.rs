@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use gglib_axum::agent_components::AgentComponents;
+use gglib_agent::compose::build_agent;
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::{ProcessHandle, ServerConfig};
 
@@ -47,7 +47,7 @@ pub async fn compose(
     } else {
         Some(args.tools.iter().cloned().collect())
     };
-    let agent = AgentComponents::build(port, reqwest::Client::new(), Arc::clone(ctx.mcp()), tool_filter);
+    let agent = build_agent(port, reqwest::Client::new(), Arc::clone(ctx.mcp()), tool_filter);
 
     Ok((agent, maybe_handle))
 }

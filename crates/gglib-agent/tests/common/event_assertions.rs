@@ -11,6 +11,18 @@ use tokio::sync::mpsc;
 /// [`AgentLoopPort::run`] takes the [`mpsc::Sender`] by value and drops it on
 /// return, so by the time a test calls this helper the channel is already
 /// closed — `recv()` will return `None` after the last buffered event.
+///
+/// # Deadlock risk
+///
+/// This function blocks until the channel is **closed**, i.e., until every
+/// [`mpsc::Sender`] clone has been dropped.  If any sender clone is still
+/// alive when this is called — for example, a background task that holds a
+/// cloned `tx` but has not yet been awaited or aborted — `recv()` will block
+/// forever and the test will hang.
+///
+/// **Always** call this *after* `await`ing the agent run (which consumes and
+/// drops the `tx` passed to [`AgentLoopPort::run`]) and after joining any
+/// other tasks that hold `tx` clones.
 pub async fn collect_events(mut rx: mpsc::Receiver<AgentEvent>) -> Vec<AgentEvent> {
     let mut events = Vec::new();
     while let Some(evt) = rx.recv().await {

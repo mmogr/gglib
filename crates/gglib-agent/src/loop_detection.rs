@@ -7,7 +7,7 @@
 //! 2. Sort the individual signatures and join them with `"|"` to form a
 //!    **batch signature** that is independent of tool-call ordering.
 //! 3. A [`LoopDetector`] counts how many times each batch signature has been
-//!    seen.  When the count exceeds `max_empty_tool_response_steps` the loop is
+//!    seen.  When the count exceeds `max_repeated_batch_steps` the loop is
 //!    considered stuck and [`AgentError::LoopDetected`] is returned.
 //!
 //! ## Hash algorithm
@@ -35,7 +35,7 @@ use crate::fnv1a::fnv1a_64;
 /// The arguments are serialised to a canonical JSON string before hashing.
 /// For the purposes of loop detection, argument *identity* is what matters,
 /// not argument ordering; JSON objects are not canonicalised.
-pub(crate) fn tool_signature(call: &ToolCall) -> String {
+fn tool_signature(call: &ToolCall) -> String {
     let args_json = call.arguments.to_string();
     format!("{}:{:016x}", call.name, fnv1a_64(&args_json))
 }
@@ -44,7 +44,7 @@ pub(crate) fn tool_signature(call: &ToolCall) -> String {
 ///
 /// Individual signatures are sorted before joining so that the result is
 /// independent of the order in which the LLM emitted the calls.
-pub(crate) fn batch_signature(calls: &[ToolCall]) -> String {
+fn batch_signature(calls: &[ToolCall]) -> String {
     let mut sigs: Vec<String> = calls.iter().map(tool_signature).collect();
     sigs.sort_unstable();
     sigs.join("|")
@@ -64,11 +64,6 @@ pub(crate) struct LoopDetector {
 }
 
 impl LoopDetector {
-    /// Create a fresh detector with empty state.
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
     /// Record the current batch of tool calls and error if a loop is detected.
     ///
     /// A loop is declared when the same batch signature has been seen more
@@ -165,7 +160,7 @@ mod tests {
 
     #[test]
     fn loop_not_detected_within_limit() {
-        let mut det = LoopDetector::new();
+        let mut det = LoopDetector::default();
         let calls = vec![ToolCall {
             id: "c1".into(),
             name: "t".into(),
@@ -178,7 +173,7 @@ mod tests {
 
     #[test]
     fn loop_detected_on_third_identical_batch_with_max_strikes_2() {
-        let mut det = LoopDetector::new();
+        let mut det = LoopDetector::default();
         let calls = vec![ToolCall {
             id: "c1".into(),
             name: "t".into(),
@@ -194,7 +189,7 @@ mod tests {
     fn different_batches_do_not_trigger_loop() {
         // Two distinct batches should each have independent hit counters.
         // Each can appear up to max_strikes times without triggering.
-        let mut det = LoopDetector::new();
+        let mut det = LoopDetector::default();
         let a = vec![ToolCall {
             id: "c1".into(),
             name: "a".into(),
@@ -230,7 +225,7 @@ mod tests {
 
     #[test]
     fn loop_error_signature_matches_batch_sig() {
-        let mut det = LoopDetector::new();
+        let mut det = LoopDetector::default();
         let calls = vec![ToolCall {
             id: "c1".into(),
             name: "x".into(),
@@ -238,7 +233,7 @@ mod tests {
         }];
         let expected_sig = batch_signature(&calls);
         det.check(&calls, 0).unwrap_err(); // max_strikes = 0 → first call triggers
-        let mut det2 = LoopDetector::new();
+        let mut det2 = LoopDetector::default();
         det2.check(&calls, 0).ok(); // ignore first result
         let err = det2.check(&calls, 0).unwrap_err();
         if let AgentError::LoopDetected { signature } = err {
@@ -250,7 +245,7 @@ mod tests {
     fn same_name_different_args_do_not_trigger_loop() {
         // Two batches with the same tool name but different arguments must
         // produce distinct signatures and therefore never count as a loop.
-        let mut det = LoopDetector::new();
+        let mut det = LoopDetector::default();
         for i in 0u32..10 {
             let calls = vec![ToolCall {
                 id: "c1".into(),
@@ -268,7 +263,7 @@ mod tests {
     fn max_strikes_zero_triggers_on_first_occurrence() {
         // max_strikes = 0 means "no tolerance": even the very first time a
         // batch signature is seen it should be rejected immediately.
-        let mut det = LoopDetector::new();
+        let mut det = LoopDetector::default();
         let calls = vec![ToolCall {
             id: "c1".into(),
             name: "instant_tool".into(),

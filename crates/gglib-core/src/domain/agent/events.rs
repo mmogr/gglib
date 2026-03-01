@@ -167,6 +167,7 @@ pub const AGENT_EVENT_CHANNEL_CAPACITY: usize =
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::config::{DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS};
 
     #[test]
     fn agent_event_serde_tag_matches_wire_format() {
@@ -190,5 +191,32 @@ mod tests {
         let json = serde_json::to_value(&evt).unwrap();
         assert_eq!(json["type"], "tool_call_start");
         assert_eq!(json["tool_call"]["name"], "search");
+    }
+
+    /// [`AGENT_EVENT_CHANNEL_CAPACITY`] must be positive and must precisely
+    /// match its documented formula so that callers always stay in sync if
+    /// default limits are adjusted.
+    ///
+    /// Formula: `DEFAULT_MAX_ITERATIONS × (DEFAULT_MAX_PARALLEL_TOOLS × 2 + 1)
+    ///           + 1  (FinalAnswer / Error sentinel)
+    ///           + 256  (TextDelta / ReasoningDelta headroom)`
+    #[test]
+    fn agent_event_channel_capacity_is_positive_and_consistent() {
+        assert!(
+            AGENT_EVENT_CHANNEL_CAPACITY > 0,
+            "channel capacity must be positive"
+        );
+
+        // ToolCallStart + ToolCallComplete per tool, plus IterationComplete.
+        let structural_per_iter = DEFAULT_MAX_PARALLEL_TOOLS * 2 + 1;
+        let expected = DEFAULT_MAX_ITERATIONS * structural_per_iter
+            + 1   // FinalAnswer or Error sentinel
+            + 256; // TextDelta / ReasoningDelta headroom
+        assert_eq!(
+            AGENT_EVENT_CHANNEL_CAPACITY,
+            expected,
+            "AGENT_EVENT_CHANNEL_CAPACITY ({AGENT_EVENT_CHANNEL_CAPACITY}) does not match \
+             the documented formula ({expected}); update the formula or the constant"
+        );
     }
 }

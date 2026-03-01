@@ -142,7 +142,7 @@ async fn test_parallel_tool_calls() {
             vec![AgentMessage::User {
                 content: "Search three topics".into(),
             }],
-            { let mut c = AgentConfig::default(); c.max_parallel_tools = 3; c },
+            common::for_test(|c| { c.max_parallel_tools = 3; }),
             tx,
         )
         .await;
@@ -202,7 +202,7 @@ async fn test_tool_timeout() {
             vec![AgentMessage::User {
                 content: "run the slow tool".into(),
             }],
-            { let mut c = AgentConfig::default(); c.tool_timeout_ms = 50; c },
+            common::for_test(|c| { c.tool_timeout_ms = 50; }),
             tx,
         )
         .await;

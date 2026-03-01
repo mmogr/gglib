@@ -1,7 +1,7 @@
 //! POST /api/agent/chat — server-side agentic loop with SSE streaming.
 //!
-//! The handler delegates composition to [`crate::agent_components::AgentComponents`],
-//! spawns the loop as a background task, and bridges the resulting
+//! The handler calls [`gglib_agent::compose::build_agent`] to compose the loop,
+//! spawns it as a background task, and bridges the resulting
 //! `mpsc::Receiver<AgentEvent>` to an Axum [`Sse`] response.
 //!
 //! # Cancellation
@@ -28,7 +28,7 @@ use futures_util::StreamExt as _;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::agent_components::AgentComponents;
+use gglib_agent::compose::build_agent;
 use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
@@ -79,7 +79,7 @@ pub async fn chat(
     validate_port(&state, req.port).await?;
 
     let tool_filter = req.tool_filter.map(|f| f.into_iter().collect());
-    let agent_loop = AgentComponents::build(
+    let agent_loop = build_agent(
         req.port,
         state.http_client.clone(),
         state.mcp.clone(),

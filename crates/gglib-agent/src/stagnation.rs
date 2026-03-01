@@ -42,11 +42,6 @@ pub(crate) struct StagnationDetector {
 }
 
 impl StagnationDetector {
-    /// Create a fresh detector with empty state.
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
     /// Record the current assistant text and error if the model has stagnated.
     ///
     /// # Semantics
@@ -110,7 +105,7 @@ mod tests {
 
     #[test]
     fn no_stagnation_for_varied_responses() {
-        let mut det = StagnationDetector::new();
+        let mut det = StagnationDetector::default();
         for i in 0..20 {
             assert!(
                 det.record(&format!("response {i}"), 5).is_ok(),
@@ -121,7 +116,7 @@ mod tests {
 
     #[test]
     fn stagnation_triggers_at_limit() {
-        let mut det = StagnationDetector::new();
+        let mut det = StagnationDetector::default();
         let text = "I cannot proceed further.";
         // First occurrence — no stagnation (sets the baseline)
         assert!(det.record(text, 3).is_ok());
@@ -139,7 +134,7 @@ mod tests {
 
     #[test]
     fn stagnation_resets_on_new_response() {
-        let mut det = StagnationDetector::new();
+        let mut det = StagnationDetector::default();
         let a = "first response";
         let b = "second response";
         assert!(det.record(a, 2).is_ok());
@@ -152,7 +147,7 @@ mod tests {
 
     #[test]
     fn stagnation_error_message_contains_count_and_limit() {
-        let mut det = StagnationDetector::new();
+        let mut det = StagnationDetector::default();
         let text = "stuck";
         // Trigger stagnation at limit = 1
         assert!(det.record(text, 1).is_ok()); // baseline
@@ -169,7 +164,7 @@ mod tests {
     fn max_steps_zero_triggers_on_first_repeat() {
         // max_stagnation_steps = 0 means no tolerance at all: the very first
         // repeated response must trigger the error.
-        let mut det = StagnationDetector::new();
+        let mut det = StagnationDetector::default();
         let text = "anything";
         // First occurrence sets the baseline (no stagnation yet).
         assert!(

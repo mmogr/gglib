@@ -52,7 +52,7 @@ pub enum AgentError {
     /// is stuck in a cycle.
     ///
     /// The `signature` field is a stable hash of the tool-call batch that was
-    /// repeated beyond [`AgentConfig::max_empty_tool_response_steps`].
+    /// repeated beyond [`AgentConfig::max_repeated_batch_steps`].
     #[error("tool-call loop detected (repeated signature: {signature})")]
     LoopDetected {
         /// Stable hash of the repeated tool-call batch (for diagnostics).

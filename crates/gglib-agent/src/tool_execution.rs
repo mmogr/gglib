@@ -66,7 +66,6 @@ async fn execute_single_tool(
                 success: false,
                 wait_ms: elapsed_ms(enqueue_time),
                 execute_duration_ms: 0,
-                dispatch_duration_ms: elapsed_ms(enqueue_time),
             };
         }
     };
@@ -92,11 +91,8 @@ async fn execute_single_tool(
             // The MCP adapter (and any other ToolExecutorPort impl) cannot
             // measure concurrency wait time; we fill it in here where both
             // metrics are available.  We preserve the adapter's own
-            // `execute_duration_ms` (pure execution time as it measured it)
-            // and set `dispatch_duration_ms` to the loop's wall-clock
-            // measurement (permit acquisition → result delivered).
+            // `execute_duration_ms` (pure execution time as it measured it).
             r.wait_ms = wait_ms;
-            r.dispatch_duration_ms = duration_ms;
             r
         }
         Ok(Err(e)) => ToolResult {
@@ -105,7 +101,6 @@ async fn execute_single_tool(
             success: false,
             wait_ms,
             execute_duration_ms: duration_ms,
-            dispatch_duration_ms: duration_ms,
         },
         Err(_) => ToolResult {
             tool_call_id: tc.id.clone(),
@@ -113,7 +108,6 @@ async fn execute_single_tool(
             success: false,
             wait_ms,
             execute_duration_ms: duration_ms,
-            dispatch_duration_ms: duration_ms,
         },
     };
 
@@ -181,7 +175,6 @@ pub(crate) async fn execute_tools_parallel(
                 success: false,
                 wait_ms: 0,
                 execute_duration_ms: 0,
-                dispatch_duration_ms: 0,
             })
         })
         .collect()
@@ -223,7 +216,6 @@ mod tests {
                 success: true,
                 wait_ms: 0,
                 execute_duration_ms: 0,
-                dispatch_duration_ms: 0,
             })
         }
     }
@@ -241,7 +233,6 @@ mod tests {
                 success: true,
                 wait_ms: 0,
                 execute_duration_ms: self.millis,
-                dispatch_duration_ms: 0,
             })
         }
     }
@@ -311,7 +302,6 @@ mod tests {
                     success: true,
                     wait_ms: 0,
                     execute_duration_ms: 20,
-                    dispatch_duration_ms: 0,
                 })
             }
         }
