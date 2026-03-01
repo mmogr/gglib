@@ -20,7 +20,7 @@ use std::sync::Arc;
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
-use gglib_core::ports::{AgentError, AgentLoopPort};
+use gglib_core::ports::AgentError;
 use common::mock_llm::collect_events;
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use serde_json::json;
@@ -55,7 +55,7 @@ async fn test_stagnation_detected() {
         },
     );
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(128);
 
     let result = agent
@@ -65,8 +65,8 @@ async fn test_stagnation_detected() {
             }],
             AgentConfig {
                 max_iterations: 10,
-                max_protocol_strikes: 100, // disable loop detection
-                max_stagnation_steps: 2,   // fires on the 3rd identical-text iteration
+                max_protocol_strikes: None, // disable loop detection
+                max_stagnation_steps: Some(2),   // fires on the 3rd identical-text iteration
                 ..AgentConfig::default()
             },
             tx,
@@ -76,8 +76,8 @@ async fn test_stagnation_detected() {
     let events = collect_events(rx).await;
 
     assert!(
-        matches!(result, Err(AgentError::Internal(_))),
-        "expected Internal (stagnation), got: {result:?}"
+        matches!(&result, Err(AgentError::Internal(msg)) if msg.contains("max_stagnation_steps = 2")),
+        "expected stagnation error reporting max_stagnation_steps = 2, got: {result:?}"
     );
 
     // An AgentEvent::Error must be emitted before the stream closes.
@@ -104,7 +104,7 @@ async fn test_iteration_complete_events() {
         },
     );
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(64);
 
     agent
@@ -143,7 +143,7 @@ async fn test_llm_startup_error_emits_event() {
     let llm = Arc::new(MockLlmPort::new());
     let executor = MockToolExecutorPort::new();
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(64);
 
     let result = agent

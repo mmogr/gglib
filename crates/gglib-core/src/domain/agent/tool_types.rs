@@ -105,9 +105,20 @@ pub struct ToolResult {
     /// milliseconds.
     pub wait_ms: u64,
 
-    /// Wall-clock time taken to execute the tool (after acquiring the permit),
+    /// Wall-clock time taken to execute the tool as measured by the adapter,
+    /// i.e. pure execution time after the permit was acquired, in milliseconds.
+    ///
+    /// This value is populated by the [`crate::ports::ToolExecutorPort`]
+    /// implementation.  The agent loop does **not** overwrite it.
+    pub execute_duration_ms: u64,
+
+    /// Total wall-clock time from permit acquisition (including semaphore wait)
+    /// to result delivery, as measured by the agent loop's dispatch machinery,
     /// in milliseconds.
-    pub duration_ms: u64,
+    ///
+    /// Always ≥ `execute_duration_ms`.  Set to zero by the adapter; populated
+    /// by the agent loop's `execute_single_tool` wrapper.
+    pub dispatch_duration_ms: u64,
 }
 
 #[cfg(test)]
@@ -132,7 +143,8 @@ mod tests {
             content: "ERROR: file not found".into(),
             success: false,
             wait_ms: 0,
-            duration_ms: 12,
+            execute_duration_ms: 12,
+            dispatch_duration_ms: 0,
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["success"], false);

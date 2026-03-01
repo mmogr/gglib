@@ -138,7 +138,8 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 content,
                 success: true,
                 wait_ms: 0,
-                duration_ms: elapsed_ms(start),
+                execute_duration_ms: elapsed_ms(start),
+                dispatch_duration_ms: 0,
             }),
             MockToolBehavior::Delayed { millis, content } => {
                 tokio::time::sleep(std::time::Duration::from_millis(millis)).await;
@@ -147,7 +148,8 @@ impl ToolExecutorPort for MockToolExecutorPort {
                     content,
                     success: true,
                     wait_ms: 0,
-                    duration_ms: elapsed_ms(start),
+                    execute_duration_ms: elapsed_ms(start),
+                    dispatch_duration_ms: 0,
                 })
             }
             MockToolBehavior::Fail { message } => Ok(ToolResult {
@@ -155,7 +157,8 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 content: message,
                 success: false,
                 wait_ms: 0,
-                duration_ms: elapsed_ms(start),
+                execute_duration_ms: elapsed_ms(start),
+                dispatch_duration_ms: 0,
             }),
             MockToolBehavior::Error { message } => Err(anyhow::anyhow!(message)),
         }

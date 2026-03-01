@@ -22,37 +22,9 @@ use gglib_core::{AgentConfig, AgentMessage};
 // Public API
 // =============================================================================
 
-/// Estimate the Unicode scalar-value count of a single message.
-///
-/// Uses [`str::chars().count()`] rather than [`str::len`] (byte count) so that
-/// multi-byte characters are counted as one unit, matching how LLMs typically
-/// measure context length.
-fn content_len(msg: &AgentMessage) -> usize {
-    match msg {
-        AgentMessage::System { content } | AgentMessage::User { content } => {
-            content.chars().count()
-        }
-        AgentMessage::Assistant {
-            content,
-            tool_calls,
-        } => {
-            content.as_deref().map_or(0, |s| s.chars().count())
-                + tool_calls.as_deref().map_or(0, |tc| {
-                    tc.iter()
-                        .map(|c| c.name.chars().count() + c.arguments.to_string().chars().count())
-                        .sum()
-                })
-        }
-        AgentMessage::Tool {
-            tool_call_id,
-            content,
-        } => tool_call_id.chars().count() + content.chars().count(),
-    }
-}
-
 /// Total estimated character count across all messages.
 pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
-    messages.iter().map(content_len).sum()
+    messages.iter().map(AgentMessage::char_count).sum()
 }
 
 /// Prune `messages` so that the total character count fits within the configured
@@ -62,7 +34,7 @@ pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
 ///
 /// See module-level documentation for the two-pass algorithm.
 pub(crate) fn prune_for_budget(
-    mut messages: Vec<AgentMessage>,
+    messages: Vec<AgentMessage>,
     config: &AgentConfig,
 ) -> Vec<AgentMessage> {
     let budget = config.context_budget_chars;
@@ -76,7 +48,52 @@ pub(crate) fn prune_for_budget(
     }
 
     // ---- Pass 1: drop old tool messages and orphaned assistant messages -----
+    let messages = prune_tool_messages(messages, config, &mut running);
 
+    if running <= budget {
+        return messages;
+    }
+
+    // ---- Pass 2: emergency tail-prune ---------------------------------------
+    // Keep all System messages at their original positions and the last
+    // KEEP_TAIL_MESSAGES non-system messages.
+    //
+    // NOTE: this pass re-orders the message stream.  All `System` messages are
+    // moved to the **front** of the output (via `partition`) followed by the
+    // retained non-system tail.  If the original conversation interleaved
+    // system prompts with user/assistant turns, the relative ordering of those
+    // system prompts is preserved but they will no longer appear at their
+    // original positions within the non-system flow.  This is intentional —
+    // most LLM APIs expect system messages at the head of the context window.
+
+    let (system, non_system): (Vec<AgentMessage>, Vec<AgentMessage>) = messages
+        .into_iter()
+        .partition(|m| matches!(m, AgentMessage::System { .. }));
+
+    let tail_start = non_system
+        .len()
+        .saturating_sub(config.prune_keep_tail_messages);
+    system
+        .into_iter()
+        .chain(non_system.into_iter().skip(tail_start))
+        .collect()
+}
+
+/// Pass 1 of the pruning algorithm: drop old tool messages and orphaned
+/// assistant messages to reclaim context budget.
+///
+/// Keeps the most recent [`AgentConfig::prune_keep_tool_messages`] `Tool`
+/// messages and strips any `Assistant` messages whose every tool-call reference
+/// was removed.  `Assistant` messages that still have at least one surviving
+/// call are retained with only those surviving calls listed.
+///
+/// `running` is updated in place so the caller can decide whether Pass 2 is
+/// still needed without a separate `total_chars` scan.
+pub(crate) fn prune_tool_messages(
+    messages: Vec<AgentMessage>,
+    config: &AgentConfig,
+    running: &mut usize,
+) -> Vec<AgentMessage> {
     // Collect the tool_call_ids of the tool results we intend to keep
     // (the last KEEP_LAST_TOOL_MESSAGES Tool messages, in reverse order).
     let kept_tool_call_ids: HashSet<String> = messages
@@ -95,17 +112,17 @@ pub(crate) fn prune_for_budget(
     // Replace retain() with filter_map so we can also strip the pruned call
     // IDs from retained assistant messages — leaving an assistant message that
     // references tc2/tc3 when only tc1's result survived would confuse the LLM.
-    messages = messages
+    messages
         .into_iter()
         .filter_map(|m| {
             // Compute the size of this message before (potentially) moving it.
-            let old_size = content_len(&m);
+            let old_size = m.char_count();
             match m {
                 // Drop a Tool message if its id is not in the retained set.
                 AgentMessage::Tool {
                     ref tool_call_id, ..
                 } if !kept_tool_call_ids.contains(tool_call_id) => {
-                    running -= old_size;
+                    *running -= old_size;
                     None
                 }
 
@@ -121,7 +138,7 @@ pub(crate) fn prune_for_budget(
                         .filter(|c| kept_tool_call_ids.contains(&c.id))
                         .collect();
                     if retained_calls.is_empty() {
-                        running -= old_size;
+                        *running -= old_size;
                         None
                     } else {
                         let new_msg = AgentMessage::Assistant {
@@ -130,7 +147,7 @@ pub(crate) fn prune_for_budget(
                         };
                         // Adjust running for the difference in size when some
                         // tool calls were stripped from this assistant message.
-                        running = running - old_size + content_len(&new_msg);
+                        *running = *running - old_size + new_msg.char_count();
                         Some(new_msg)
                     }
                 }
@@ -139,32 +156,10 @@ pub(crate) fn prune_for_budget(
                 other => Some(other),
             }
         })
-        .collect();
-
-    if running <= budget {
-        return messages;
-    }
-
-    // ---- Pass 2: emergency tail-prune ---------------------------------------
-    // Keep all System messages at their original positions and the last
-    // KEEP_TAIL_MESSAGES non-system messages.
-
-    let (system, non_system): (Vec<AgentMessage>, Vec<AgentMessage>) = messages
-        .into_iter()
-        .partition(|m| matches!(m, AgentMessage::System { .. }));
-
-    let tail_start = non_system
-        .len()
-        .saturating_sub(config.prune_keep_tail_messages);
-    system
-        .into_iter()
-        .chain(non_system.into_iter().skip(tail_start))
         .collect()
 }
 
-// =============================================================================
-// Tests
-// =============================================================================
+
 
 #[cfg(test)]
 mod tests {

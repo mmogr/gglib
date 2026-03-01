@@ -27,6 +27,102 @@ use tokio::sync::{Semaphore, mpsc};
 use gglib_core::elapsed_ms;
 
 // =============================================================================
+// Private helpers
+// =============================================================================
+
+/// Execute a single tool call, respecting the shared concurrency semaphore and
+/// a per-call timeout.
+///
+/// Emits [`AgentEvent::ToolCallStart`] after acquiring the semaphore permit and
+/// [`AgentEvent::ToolCallComplete`] when the call finishes (whether it succeeded,
+/// errored, or timed out).  Send failures on `tx` are silently ignored — the
+/// SSE client may have disconnected.
+async fn execute_single_tool(
+    tc: ToolCall,
+    executor: Arc<dyn ToolExecutorPort>,
+    sem: Arc<Semaphore>,
+    tx: mpsc::Sender<AgentEvent>,
+    timeout_ms: u64,
+) -> ToolResult {
+    // Record the enqueue time so we can measure semaphore wait.
+    // This covers any time spent blocked on the concurrency cap.
+    let enqueue_time = Instant::now();
+
+    // Acquire a concurrency permit before starting.
+    // `wait_ms` below captures how long this took.
+    let _permit = match sem.acquire_owned().await {
+        Ok(permit) => permit,
+        Err(_) => {
+            // The semaphore was dropped (agent loop was shut down).
+            // Return a graceful failure instead of panicking inside spawn.
+            return ToolResult {
+                tool_call_id: tc.id.clone(),
+                content: "Tool execution aborted: concurrency gate closed".into(),
+                success: false,
+                wait_ms: elapsed_ms(enqueue_time),
+                execute_duration_ms: 0,
+                dispatch_duration_ms: elapsed_ms(enqueue_time),
+            };
+        }
+    };
+    let wait_ms = elapsed_ms(enqueue_time);
+
+    let exec_start = Instant::now();
+
+    // Notify that execution is starting (after permit acquired —
+    // we only claim "started" once we have a slot, not when queued).
+    let _ = tx
+        .send(AgentEvent::ToolCallStart {
+            tool_call: tc.clone(),
+        })
+        .await;
+
+    let result =
+        tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc)).await;
+    let duration_ms = elapsed_ms(exec_start);
+
+    let tool_result = match result {
+        Ok(Ok(mut r)) => {
+            // Stamp timing metrics onto the adapter result.
+            // The MCP adapter (and any other ToolExecutorPort impl) cannot
+            // measure concurrency wait time; we fill it in here where both
+            // metrics are available.  We preserve the adapter's own
+            // `execute_duration_ms` (pure execution time as it measured it)
+            // and set `dispatch_duration_ms` to the loop's wall-clock
+            // measurement (permit acquisition → result delivered).
+            r.wait_ms = wait_ms;
+            r.dispatch_duration_ms = duration_ms;
+            r
+        }
+        Ok(Err(e)) => ToolResult {
+            tool_call_id: tc.id.clone(),
+            content: format!("Tool execution error: {e}"),
+            success: false,
+            wait_ms,
+            execute_duration_ms: duration_ms,
+            dispatch_duration_ms: duration_ms,
+        },
+        Err(_) => ToolResult {
+            tool_call_id: tc.id.clone(),
+            content: format!("Tool '{}' timed out after {timeout_ms} ms", tc.name),
+            success: false,
+            wait_ms,
+            execute_duration_ms: duration_ms,
+            dispatch_duration_ms: duration_ms,
+        },
+    };
+
+    // Notify that execution is complete.
+    let _ = tx
+        .send(AgentEvent::ToolCallComplete {
+            result: tool_result.clone(),
+        })
+        .await;
+
+    tool_result
+}
+
+// =============================================================================
 // Public API
 // =============================================================================
 
@@ -50,68 +146,7 @@ pub(crate) async fn execute_tools_parallel(
             let sem = Arc::clone(&semaphore);
             let executor = Arc::clone(executor);
             let tx = tx.clone();
-            tokio::spawn(async move {
-                // Record the enqueue time so we can measure semaphore wait.
-                // This covers any time spent blocked on the concurrency cap.
-                let enqueue_time = Instant::now();
-
-                // Acquire a concurrency permit before starting.
-                // `wait_ms` below captures how long this took.
-                let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                let wait_ms = elapsed_ms(enqueue_time);
-
-                let exec_start = Instant::now();
-
-                // Notify that execution is starting (after permit acquired —
-                // we only claim "started" once we have a slot, not when queued).
-                let _ = tx
-                    .send(AgentEvent::ToolCallStart {
-                        tool_call: tc.clone(),
-                    })
-                    .await;
-                let result =
-                    tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc))
-                        .await;
-                let duration_ms = elapsed_ms(exec_start);
-
-                let tool_result = match result {
-                    Ok(Ok(mut r)) => {
-                        // Stamp timing metrics onto the adapter result.
-                        // The MCP adapter (and any other ToolExecutorPort impl)
-                        // cannot measure concurrency wait time; we fill it in
-                        // here where both metrics are available.  The adapter's
-                        // own duration_ms is also overridden so the total
-                        // wall-clock time (from permit acquisition to finish)
-                        // is consistently reported.
-                        r.wait_ms = wait_ms;
-                        r.duration_ms = duration_ms;
-                        r
-                    }
-                    Ok(Err(e)) => ToolResult {
-                        tool_call_id: tc.id.clone(),
-                        content: format!("Tool execution error: {e}"),
-                        success: false,
-                        wait_ms,
-                        duration_ms,
-                    },
-                    Err(_) => ToolResult {
-                        tool_call_id: tc.id.clone(),
-                        content: format!("Tool '{}' timed out after {timeout_ms} ms", tc.name),
-                        success: false,
-                        wait_ms,
-                        duration_ms,
-                    },
-                };
-
-                // Notify that execution is complete.
-                let _ = tx
-                    .send(AgentEvent::ToolCallComplete {
-                        result: tool_result.clone(),
-                    })
-                    .await;
-
-                tool_result
-            })
+            tokio::spawn(async move { execute_single_tool(tc, executor, sem, tx, timeout_ms).await })
         })
         .collect();
 
@@ -126,7 +161,8 @@ pub(crate) async fn execute_tools_parallel(
                 content: format!("Tool task panicked: {e}"),
                 success: false,
                 wait_ms: 0,
-                duration_ms: 0,
+                execute_duration_ms: 0,
+                dispatch_duration_ms: 0,
             })
         })
         .collect()
@@ -167,7 +203,8 @@ mod tests {
                 content: "ok".into(),
                 success: true,
                 wait_ms: 0,
-                duration_ms: 0,
+                execute_duration_ms: 0,
+                dispatch_duration_ms: 0,
             })
         }
     }
@@ -184,7 +221,8 @@ mod tests {
                 content: "slow ok".into(),
                 success: true,
                 wait_ms: 0,
-                duration_ms: self.millis,
+                execute_duration_ms: self.millis,
+                dispatch_duration_ms: 0,
             })
         }
     }
@@ -252,7 +290,8 @@ mod tests {
                     content: "ok".into(),
                     success: true,
                     wait_ms: 0,
-                    duration_ms: 20,
+                    execute_duration_ms: 20,
+                    dispatch_duration_ms: 0,
                 })
             }
         }

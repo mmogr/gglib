@@ -39,7 +39,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 // Re-export agent port types for convenience
-pub use agent::{AgentError, AgentLoopPort, ToolExecutorPort};
+pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
 // Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
 pub use llm_completion::LlmCompletionPort;
 

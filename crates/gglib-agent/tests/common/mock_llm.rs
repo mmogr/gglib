@@ -100,8 +100,16 @@ impl MockLlmResponse {
 /// `Err` — which the agent loop surfaces as `AgentError::Internal`.  In
 /// practice, tests should push at least as many responses as the expected
 /// number of LLM calls.
+///
+/// Every `chat_stream` call appends a snapshot of the `messages` argument to
+/// an internal log accessible via [`MockLlmPort::messages_received`], letting
+/// tests assert on what the agent actually passed to the LLM (e.g. to verify
+/// that context pruning reduced the message count).
 pub struct MockLlmPort {
     responses: Mutex<VecDeque<Vec<LlmStreamEvent>>>,
+    /// Snapshots of the `messages` slice passed to each `chat_stream` call,
+    /// in call order.
+    messages_received: Mutex<Vec<Vec<AgentMessage>>>,
 }
 
 impl MockLlmPort {
@@ -109,7 +117,17 @@ impl MockLlmPort {
     pub fn new() -> Self {
         Self {
             responses: Mutex::new(VecDeque::new()),
+            messages_received: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Return a snapshot of all `messages` arguments passed to `chat_stream`,
+    /// in call order.
+    ///
+    /// Useful for asserting that context pruning reduced the number of messages
+    /// the agent actually sent to the LLM.
+    pub async fn messages_received(&self) -> Vec<Vec<AgentMessage>> {
+        self.messages_received.lock().await.clone()
     }
 
     /// Append one scripted response to the queue (builder-style, takes `self`).
@@ -153,9 +171,15 @@ impl Default for MockLlmPort {
 impl LlmCompletionPort for MockLlmPort {
     async fn chat_stream(
         &self,
-        _messages: &[AgentMessage],
+        messages: &[AgentMessage],
         _tools: &[ToolDefinition],
     ) -> Result<Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        // Record a snapshot of the messages for test inspection.
+        self.messages_received
+            .lock()
+            .await
+            .push(messages.to_vec());
+
         let events = self
             .responses
             .lock()

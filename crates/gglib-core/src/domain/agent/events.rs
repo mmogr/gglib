@@ -1,6 +1,6 @@
 //! [`AgentEvent`] and [`LlmStreamEvent`] — observable events in the agentic loop.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use super::tool_types::{ToolCall, ToolResult};
 
@@ -18,7 +18,7 @@ use super::tool_types::{ToolCall, ToolResult};
 ///
 /// `#[serde(tag = "type", rename_all = "snake_case")]` produces e.g.
 /// `{"type":"tool_call_start","tool_call":{...}}`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentEvent {
     /// An incremental text fragment from the model's response.

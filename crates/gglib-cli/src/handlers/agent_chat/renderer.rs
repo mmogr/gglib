@@ -46,7 +46,7 @@ pub fn render_event(event: &AgentEvent, verbose: bool) {
         AgentEvent::ToolCallComplete { result } => {
             let icon = if result.success { "✓" } else { "✗" };
             let preview = truncate_string(&result.content, 80);
-            eprintln!("  {icon}  {}ms  {preview}", result.duration_ms);
+            eprintln!("  {icon}  {}ms  {preview}", result.dispatch_duration_ms);
         }
 
         AgentEvent::IterationComplete {
@@ -112,7 +112,8 @@ mod tests {
                 content: "output".into(),
                 success: true,
                 wait_ms: 0,
-                duration_ms: 5,
+                execute_duration_ms: 5,
+                dispatch_duration_ms: 0,
             },
         });
     }

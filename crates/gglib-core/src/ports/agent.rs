@@ -65,6 +65,28 @@ pub enum AgentError {
 }
 
 // =============================================================================
+// AgentRunOutput — structured return value for a successful run
+// =============================================================================
+
+/// Output returned by a successful [`AgentLoopPort::run`] invocation.
+///
+/// Using a named struct instead of a bare tuple keeps call sites
+/// self-documenting and allows new fields (e.g. `iterations_used`) to be added
+/// without breaking existing destructures.
+#[derive(Debug)]
+pub struct AgentRunOutput {
+    /// The final answer text produced by the agent.
+    pub answer: String,
+    /// Full accumulated conversation history: the caller-supplied messages
+    /// **plus** every assistant and tool-result message appended during the
+    /// loop, including the final assistant reply.
+    ///
+    /// CLI callers can feed this directly back as `messages` on the next turn
+    /// to maintain complete multi-turn context.
+    pub history: Vec<AgentMessage>,
+}
+
+// =============================================================================
 // ToolExecutorPort
 // =============================================================================
 
@@ -137,8 +159,8 @@ pub trait ToolExecutorPort: Send + Sync {
 ///     });
 ///
 ///     let messages = vec![AgentMessage::User { content: "Hello".into() }];
-///     let (final_answer, history) = agent.run(messages, AgentConfig::default(), tx).await?;
-///     println!("Final: {final_answer}");
+///     let output = agent.run(messages, AgentConfig::default(), tx).await?;
+///     println!("Final: {}", output.answer);
 ///     // `history` contains the full accumulated message list including all
 ///     // assistant and tool-result messages appended during the loop — safe
 ///     // to pass directly as the `messages` argument for the next turn.
@@ -165,12 +187,11 @@ pub trait AgentLoopPort: Send + Sync {
     ///
     /// # Returns
     ///
-    /// * `Ok((String, Vec<AgentMessage>))` — The final answer string plus the
-    ///   full accumulated conversation history (caller-provided messages **plus**
-    ///   every assistant and tool-result message appended during the loop,
-    ///   including the final assistant reply).  CLI callers can feed this
-    ///   `Vec<AgentMessage>` directly back as `messages` on the next turn to
-    ///   maintain complete multi-turn context.
+    /// * `Ok(AgentRunOutput)` — The final answer string and the full accumulated
+    ///   conversation history (caller-provided messages **plus** every assistant
+    ///   and tool-result message appended during the loop, including the final
+    ///   assistant reply).  CLI callers can feed `output.history` directly back
+    ///   as `messages` on the next turn to maintain complete multi-turn context.
     /// * `Err(AgentError)` — A fatal loop-level failure (max iterations reached,
     ///   loop detection, stagnation, or internal error).  No partial history is
     ///   returned on failure; the caller's existing history is left intact.
@@ -179,5 +200,5 @@ pub trait AgentLoopPort: Send + Sync {
         messages: Vec<AgentMessage>,
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
-    ) -> Result<(String, Vec<AgentMessage>), AgentError>;
+    ) -> Result<AgentRunOutput, AgentError>;
 }

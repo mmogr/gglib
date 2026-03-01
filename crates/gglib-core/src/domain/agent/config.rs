@@ -11,9 +11,9 @@ use serde::Serialize;
 ///
 /// `AgentConfig` is intentionally **not** `Deserialize`.  External callers
 /// (HTTP, future config files) must go through a dedicated DTO that exposes
-/// only the safe subset of fields — currently [`crate::AgentRequestConfig`]
-/// in `gglib-axum`.  This prevents accidental exposure of internal tuning
-/// knobs (pruning parameters, strike limits, etc.) to untrusted callers.
+/// only the safe subset of fields.  This prevents accidental exposure of
+/// internal tuning knobs (pruning parameters, strike limits, etc.) to
+/// untrusted callers.
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentConfig {
     /// Maximum number of LLM→tool→LLM iterations before the loop is aborted.
@@ -42,13 +42,19 @@ pub struct AgentConfig {
     /// [`crate::ports::AgentError::LoopDetected`].
     ///
     /// Frontend constant: `MAX_SAME_SIGNATURE_HITS = 2` in `agentLoop.ts`.
-    pub max_protocol_strikes: usize,
+    ///
+    /// Set to `None` to disable loop detection entirely (useful in tests that
+    /// deliberately repeat the same tool call).
+    pub max_protocol_strikes: Option<usize>,
 
     /// Number of consecutive iterations in which the assistant produces identical
     /// text content before the loop is considered stagnant and aborted.
     ///
     /// Frontend constant: `MAX_STAGNATION_STEPS = 5`.
-    pub max_stagnation_steps: usize,
+    ///
+    /// Set to `None` to disable stagnation detection entirely (useful in tests
+    /// that return a fixed LLM response across many iterations).
+    pub max_stagnation_steps: Option<usize>,
 
     /// Number of most-recent tool-result messages preserved during the first
     /// pass of context pruning.
@@ -73,8 +79,8 @@ impl Default for AgentConfig {
             max_parallel_tools: 5,
             tool_timeout_ms: 30_000,
             context_budget_chars: 180_000,
-            max_protocol_strikes: 2,
-            max_stagnation_steps: 5,
+            max_protocol_strikes: Some(2),
+            max_stagnation_steps: Some(5),
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
         }
@@ -116,9 +122,10 @@ mod tests {
         assert_eq!(cfg.max_parallel_tools, 5);
         assert_eq!(cfg.tool_timeout_ms, 30_000);
         assert_eq!(cfg.context_budget_chars, 180_000);
-        assert_eq!(cfg.max_protocol_strikes, 2);
+        assert_eq!(cfg.max_protocol_strikes, Some(2));
         assert_eq!(
-            cfg.max_stagnation_steps, 5,
+            cfg.max_stagnation_steps,
+            Some(5),
             "must mirror MAX_STAGNATION_STEPS from agentLoop.ts"
         );
         assert_eq!(cfg.prune_keep_tool_messages, 10);

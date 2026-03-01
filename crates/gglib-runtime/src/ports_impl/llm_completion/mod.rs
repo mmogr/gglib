@@ -26,15 +26,15 @@ use futures_core::Stream;
 use futures_util::StreamExt as _;
 use reqwest::Client;
 use serde_json::{Value, json};
-use tracing::debug;
 
 use gglib_core::{
     domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
     ports::LlmCompletionPort,
 };
 
+mod sse_decoder;
 mod sse_parser;
-use sse_parser::{SseParseResult, parse_sse_frame};
+use sse_decoder::SseStreamDecoder;
 
 // =============================================================================
 // Adapter struct
@@ -108,14 +108,17 @@ fn message_to_openai(msg: &AgentMessage) -> Value {
             tool_calls,
         } => {
             // Null content is valid when the model only requests tool calls.
-            let calls = tool_calls
-                .as_deref()
-                .map(|tcs| tcs.iter().map(tool_call_to_openai).collect::<Vec<_>>());
-            json!({
+            // The `tool_calls` key must be **omitted entirely** (not set to
+            // null) when there are no calls — some LLMs reject a null value.
+            let mut obj = json!({
                 "role": "assistant",
                 "content": content,
-                "tool_calls": calls,
-            })
+            });
+            if let Some(tcs) = tool_calls.as_deref() {
+                let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
+                obj["tool_calls"] = json!(calls);
+            }
+            obj
         }
         AgentMessage::Tool {
             tool_call_id,
@@ -193,7 +196,10 @@ impl LlmCompletionPort for LlmCompletionAdapter {
 
         if !response.status().is_success() {
             let status = response.status();
-            let text = response.text().await.unwrap_or_default();
+            let text = response
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<body read error: {e}>"));
             return Err(anyhow!("llama-server returned {status}: {text}"));
         }
 
@@ -201,11 +207,8 @@ impl LlmCompletionPort for LlmCompletionAdapter {
 
         // Build the typed event stream from the raw SSE byte stream.
         let stream = async_stream::stream! {
+            let mut decoder = SseStreamDecoder::new();
             let mut byte_stream = std::pin::pin!(byte_stream);
-            let mut buf = String::new();
-            // Set once we emit `Done` so we don't emit it twice if the server
-            // sends both a `finish_reason` frame and a `[DONE]` sentinel.
-            let mut done_sent = false;
 
             'outer: while let Some(chunk_result) = byte_stream.next().await {
                 let chunk = match chunk_result {
@@ -216,45 +219,17 @@ impl LlmCompletionPort for LlmCompletionAdapter {
                     }
                 };
 
-                buf.push_str(&String::from_utf8_lossy(&chunk));
-
-                // Drain complete lines from the buffer.
-                loop {
-                    let Some(newline_pos) = buf.find('\n') else { break };
-                    let line = buf[..newline_pos].trim_end_matches('\r').to_owned();
-                    buf.drain(..=newline_pos);
-
-                    // Skip comments and blank lines.
-                    let Some(data) = line.strip_prefix("data: ") else { continue };
-
-                    match parse_sse_frame(data) {
-                        Ok(SseParseResult::Done) => {
-                            if !done_sent {
-                                debug!("LLM stream ended with [DONE] but no prior finish_reason — emitting fallback Done");
-                                yield Ok(LlmStreamEvent::Done { finish_reason: "stop".to_owned() });
-                            }
-                            break 'outer;
-                        }
-                        Ok(SseParseResult::Events(events)) => {
-                            for event in events {
-                                if matches!(event, LlmStreamEvent::Done { .. }) {
-                                    done_sent = true;
-                                }
-                                yield Ok(event);
-                            }
-                        }
-                        Err(e) => {
-                            yield Err(e);
-                            break 'outer;
-                        }
-                    }
+                let (events, stop) = decoder.feed_bytes(&chunk);
+                for event in events {
+                    yield event;
+                }
+                if stop {
+                    break 'outer;
                 }
             }
 
-            // Guard: stream must always end with exactly one Done.
-            if !done_sent {
-                debug!("LLM byte-stream ended without [DONE] sentinel — emitting fallback Done");
-                yield Ok(LlmStreamEvent::Done { finish_reason: "stop".to_owned() });
+            if let Some(fallback) = decoder.finish() {
+                yield Ok(fallback);
             }
         };
 

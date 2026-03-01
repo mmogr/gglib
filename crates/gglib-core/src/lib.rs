@@ -27,7 +27,7 @@ pub use download::{
 };
 pub use events::{AppEvent, McpServerSummary, ModelSummary, ServerSnapshotEntry};
 pub use ports::{
-    AgentError, AgentLoopPort, AppEventBridge, AppEventEmitter, ChatHistoryError,
+    AgentError, AgentLoopPort, AgentRunOutput, AppEventBridge, AppEventEmitter, ChatHistoryError,
     ChatHistoryRepository, CompletedDownload, CoreError, DownloadEventEmitterPort,
     DownloadManagerConfig, DownloadManagerPort, DownloadRequest, DownloadStateRepositoryPort,
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HfClientPort, HfFileInfo,

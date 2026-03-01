@@ -77,7 +77,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             .into_iter()
             .flat_map(|(server_id, tools)| {
                 tools.into_iter().map(move |t| ToolDefinition {
-                    name: format!("{server_id}__{}", t.name),
+                        name: format!("{server_id}:{}", t.name),
                     description: t.description,
                     input_schema: t.input_schema,
                 })
@@ -97,10 +97,14 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         // ---- Resolve server_id and bare tool name from call.name ------------
         //
         // Accepts two formats:
-        //   - qualified:   "{server_id}__{tool_name}"  (produced by list_tools)
+        //   - qualified:   "{server_id}:{tool_name}"  (produced by list_tools)
         //   - unqualified: "{tool_name}"               (e.g. from FilteredToolExecutor)
+        //
+        // The `:` separator is safe because MCP tool names (`[a-zA-Z0-9_-]+`)
+        // cannot contain `:`, so `split_once(':')` unambiguously identifies
+        // a qualified name.
         let (server_id, bare_name): (i64, &str) = if let Some((prefix, bare)) =
-            call.name.split_once("__")
+            call.name.split_once(':')
         {
             // Qualified format: trust the prefix directly and skip list_all_tools().
             // Any mismatch (bad server_id or unknown tool name) surfaces as an Err
@@ -171,7 +175,10 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             // execute_tools_parallel.  The adapter has no view into that; the real
             // value is always overwritten by the caller.  Zero is a safe sentinel.
             wait_ms: 0,
-            duration_ms,
+            execute_duration_ms: duration_ms,
+            // dispatch_duration_ms (wait + execution) is stamped by the loop;
+            // the adapter leaves it at zero as a sentinel.
+            dispatch_duration_ms: 0,
         })
     }
 }
@@ -242,37 +249,38 @@ mod tests {
     }
 
     #[test]
-    fn qualified_name_splits_on_first_double_underscore() {
-        // The execute() method uses split_once("__") to determine whether a
-        // tool name is qualified (produced by list_tools as "{id}__{bare}")
+    fn qualified_name_splits_on_colon_separator() {
+        // The execute() method uses split_once(':') to determine whether a
+        // tool name is qualified (produced by list_tools as "{id}:{bare}")
         // or unqualified (user-supplied bare name that triggers a linear scan).
+        // `:` is not permitted in MCP tool names (`[a-zA-Z0-9_-]+`), making
+        // it an unambiguous separator with no collision risk.
 
         // Happy path: qualified name → integer server-id + bare name.
-        let (prefix, bare) = "3__search".split_once("__").unwrap();
+        let (prefix, bare) = "3:search".split_once(':').unwrap();
         assert_eq!(prefix.parse::<i64>().unwrap(), 3i64);
         assert_eq!(bare, "search");
 
-        // Only the first `__` is used as the separator; the rest is part of
-        // the bare name (e.g. a tool whose bare name itself contains `__`).
-        let (p, b) = "7__read__file".split_once("__").unwrap();
+        // Bare names may legally contain `_` and `-` but not `:`.
+        let (p, b) = "7:read_file".split_once(':').unwrap();
         assert_eq!(p.parse::<i64>().unwrap(), 7i64);
-        assert_eq!(b, "read__file");
+        assert_eq!(b, "read_file");
 
-        // Unqualified name (no `__`) → split_once returns None, triggering
+        // Unqualified name (no `:`) → split_once returns None, triggering
         // the linear-scan fallback path inside execute().
         assert!(
-            "search".split_once("__").is_none(),
-            "bare names must not contain `__`"
+            "search".split_once(':').is_none(),
+            "bare MCP tool names cannot contain `:` by spec"
         );
     }
 
     #[test]
-    fn non_integer_server_prefix_is_not_a_qualified_name() {
-        // A string that contains `__` but whose prefix is not a valid i64
+    fn non_integer_server_prefix_falls_back_to_linear_scan() {
+        // A string that contains `:` but whose prefix is not a valid i64
         // would cause execute() to return an error rather than panic.
         // Verify the parse fails so there is no silent wrong-server dispatch.
-        let name = "not_int__tool";
-        let (prefix, _) = name.split_once("__").unwrap();
+        let name = "not_int:tool";
+        let (prefix, _) = name.split_once(':').unwrap();
         assert!(
             prefix.parse::<i64>().is_err(),
             "non-integer prefix must fail to parse as server id"

@@ -14,47 +14,22 @@
 //! | [`test_max_iterations_reached`] | [`AgentConfig::max_iterations`] limit |
 //! | [`test_tool_timeout`] | Per-tool timeout → `success = false` result |
 //! | [`test_loop_detection`] | Repeated tool-call batch → [`AgentError::LoopDetected`] |
+//! | [`test_stagnation_detected_integration`] | Repeated text response → [`AgentError::Internal`] |
 //! | [`test_context_budget_pruning`] | Oversized history → pruning → loop continues |
 
 mod common;
 
 use std::sync::Arc;
 
+use common::event_assertions::{has_final_answer, has_tool_complete_with_success, has_tool_start};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
-use gglib_core::ports::{AgentError, AgentLoopPort};
+use gglib_core::ports::AgentError;
 use common::mock_llm::collect_events;
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use serde_json::json;
 use tokio::sync::mpsc;
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-/// Return `true` when `events` contains at least one [`AgentEvent::FinalAnswer`].
-fn has_final_answer(events: &[AgentEvent]) -> bool {
-    events
-        .iter()
-        .any(|e| matches!(e, AgentEvent::FinalAnswer { .. }))
-}
-
-/// Return `true` when `events` contains at least one
-/// [`AgentEvent::ToolCallStart`] with the given tool name.
-fn has_tool_start(events: &[AgentEvent], name: &str) -> bool {
-    events
-        .iter()
-        .any(|e| matches!(e, AgentEvent::ToolCallStart { tool_call, .. } if tool_call.name == name))
-}
-
-/// Return `true` when `events` contains at least one
-/// [`AgentEvent::ToolCallComplete`] whose result has the given `success` value.
-fn has_tool_complete_with_success(events: &[AgentEvent], success: bool) -> bool {
-    events.iter().any(
-        |e| matches!(e, AgentEvent::ToolCallComplete { result, .. } if result.success == success),
-    )
-}
 
 // =============================================================================
 // Tests
@@ -85,7 +60,7 @@ async fn test_simple_tool_call_cycle() {
     );
     let log = Arc::clone(&executor.call_log);
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(64);
 
     let result = agent
@@ -100,7 +75,7 @@ async fn test_simple_tool_call_cycle() {
 
     let events = collect_events(rx).await;
 
-    assert_eq!(result.unwrap().0, "Here are the results.");
+    assert_eq!(result.unwrap().answer, "Here are the results.");
 
     // Tool was called exactly once with the right name.
     let calls = log.lock().await.clone();
@@ -165,7 +140,7 @@ async fn test_parallel_tool_calls() {
     );
     let log = Arc::clone(&executor.call_log);
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(128);
 
     let result = agent
@@ -183,7 +158,7 @@ async fn test_parallel_tool_calls() {
 
     let events = collect_events(rx).await;
 
-    assert_eq!(result.unwrap().0, "All done.");
+    assert_eq!(result.unwrap().answer, "All done.");
 
     // All three tool calls were executed.
     let calls = log.lock().await.clone();
@@ -220,7 +195,7 @@ async fn test_max_iterations_reached() {
         },
     );
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(128);
 
     let result = agent
@@ -230,8 +205,8 @@ async fn test_max_iterations_reached() {
             }],
             AgentConfig {
                 max_iterations: 3,
-                max_protocol_strikes: 100, // disable loop detection for this test
-                max_stagnation_steps: 100, // disable stagnation for this test
+                max_protocol_strikes: None, // disable loop detection for this test
+                max_stagnation_steps: None, // disable stagnation for this test
                 ..AgentConfig::default()
             },
             tx,
@@ -281,7 +256,7 @@ async fn test_tool_timeout() {
         },
     );
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(64);
 
     let result = agent
@@ -301,7 +276,7 @@ async fn test_tool_timeout() {
 
     // The loop must recover: the second LLM call produces the final answer.
     assert_eq!(
-        result.unwrap().0,
+        result.unwrap().answer,
         "Timeout handled gracefully.",
         "loop should complete successfully after timeout"
     );
@@ -335,7 +310,7 @@ async fn test_loop_detection() {
         },
     );
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(128);
 
     let result = agent
@@ -345,8 +320,8 @@ async fn test_loop_detection() {
             }],
             AgentConfig {
                 max_iterations: 10,
-                max_protocol_strikes: 2,
-                max_stagnation_steps: 100,
+                max_protocol_strikes: Some(2),
+                max_stagnation_steps: None,
                 ..AgentConfig::default()
             },
             tx,
@@ -377,6 +352,71 @@ async fn test_loop_detection() {
     );
 }
 
+/// **Text stagnation**: the LLM produces the same response text on every
+/// iteration (text + tool call each time, so the loop does not exit on
+/// `FinalAnswer` — it must hit the stagnation guard instead).
+/// After `max_stagnation_steps` identical responses the loop must terminate
+/// with [`AgentError::Internal`] and emit [`AgentEvent::Error`].
+///
+/// Uses `max_stagnation_steps: Some(2)` so the detector fires after the
+/// 3rd identical response (baseline + 2 repeats).
+#[tokio::test]
+async fn test_stagnation_detected_integration() {
+    // Each response includes both text content AND a tool call so the loop
+    // does not immediately produce a FinalAnswer and has a chance to stagnate.
+    let llm = Arc::new(MockLlmPort::new().push_many((0..5).map(|i| MockLlmResponse {
+        content: Some("Thinking...".into()),
+        tool_calls: vec![ToolCall {
+            id: format!("s{i}"),
+            name: "do_thing".into(),
+            arguments: json!({}),
+        }],
+        finish_reason: "tool_calls".into(),
+    })));
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("do_thing"),
+        MockToolBehavior::Immediate {
+            content: "ok".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(128);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "say something new".into(),
+            }],
+            AgentConfig {
+                max_stagnation_steps: Some(2),
+                max_protocol_strikes: None,
+                max_iterations: 10,
+                ..AgentConfig::default()
+            },
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    assert!(
+        matches!(result, Err(AgentError::Internal(_))),
+        "expected Internal (stagnation), got: {result:?}"
+    );
+
+    assert!(
+        events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+        "AgentEvent::Error must be emitted before stream closes on stagnation"
+    );
+
+    assert!(
+        !has_final_answer(&events),
+        "FinalAnswer must not be emitted when stagnation is detected"
+    );
+}
+
 /// **Context budget pruning**: when the accumulated message history exceeds
 /// `context_budget_chars`, the pruning pass must trim old tool messages so
 /// the loop can continue rather than aborting.
@@ -384,6 +424,9 @@ async fn test_loop_detection() {
 /// This test verifies the end-to-end behaviour: an oversized history is passed
 /// in, pruning runs silently during the first iteration, and the loop completes
 /// normally with a `FinalAnswer`.
+///
+/// Also verifies that the LLM actually received fewer messages than the
+/// original history (i.e. pruning was not a no-op).
 #[tokio::test]
 async fn test_context_budget_pruning() {
     // Build a history that far exceeds a small budget.
@@ -421,6 +464,8 @@ async fn test_context_budget_pruning() {
     let llm = Arc::new(MockLlmPort::new().push(MockLlmResponse::text(
         "Pruning worked — I can still answer.",
     )));
+    // Keep a handle so we can inspect what messages the LLM actually received.
+    let llm_handle = Arc::clone(&llm);
 
     // Executor with "search" registered (needed so LLM advertises it),
     // but it won't be called in this test.
@@ -431,7 +476,7 @@ async fn test_context_budget_pruning() {
         },
     );
 
-    let agent = AgentLoop::new(llm, Arc::new(executor));
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
     let (tx, rx) = mpsc::channel(64);
 
     let result = agent
@@ -449,7 +494,7 @@ async fn test_context_budget_pruning() {
 
     // Pruning must not abort the loop — it should complete successfully.
     assert_eq!(
-        result.unwrap().0,
+        result.unwrap().answer,
         "Pruning worked — I can still answer.",
         "loop aborted unexpectedly after context pruning"
     );
@@ -457,5 +502,16 @@ async fn test_context_budget_pruning() {
     assert!(
         has_final_answer(&events),
         "missing FinalAnswer after pruning"
+    );
+
+    // Verify that pruning actually reduced the context: the LLM was called
+    // exactly once, and it received fewer than the original 43 messages.
+    // (2 initial + 40 assistant/tool pairs + 1 final user = 43)
+    let received = llm_handle.messages_received().await;
+    assert_eq!(received.len(), 1, "expected exactly one LLM call");
+    assert!(
+        received[0].len() < 43,
+        "pruning must reduce the message count below the original 43; got {}",
+        received[0].len()
     );
 }

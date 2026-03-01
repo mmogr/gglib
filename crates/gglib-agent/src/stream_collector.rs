@@ -109,8 +109,9 @@ struct PartialToolCall {
 ///   it a malformed stream could allocate unbounded memory before `Done` arrives.
 ///   Tool-call *concurrency* is a separate concern — the caller (agent loop)
 ///   enforces [`AgentConfig::max_parallel_tools`] after this function returns.
-/// - Malformed tool-call arguments (not valid JSON) are silently replaced with
-///   an empty object and a `warn` log entry rather than hard-failing the loop.
+/// - Malformed tool-call arguments (not valid JSON) cause `collect_stream` to
+///   emit an [`AgentEvent::Error`] on `tx` and return `Err`. This ensures the
+///   SSE client always sees the failure reason before the stream closes.
 pub async fn collect_stream(
     mut stream: Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>,
     tx: &mpsc::Sender<AgentEvent>,
@@ -166,26 +167,33 @@ pub async fn collect_stream(
                 // Assemble the partial tool calls into domain ToolCall values.
                 // Slots where `id` or `name` never arrived are skipped — an
                 // absent id would produce an unmatchable ToolResult.
-                let tool_calls = partials
-                    .into_iter()
-                    .filter_map(|p| {
-                        let id = p.id?;
-                        let name = p.name?;
-                        let raw = p.arguments;
-                        let args_str = if raw.is_empty() { "{}" } else { raw.as_str() };
-                        let arguments: serde_json::Value = serde_json::from_str(args_str)
-                            .unwrap_or_else(|e| {
-                                warn!(
-                                    tool_name = %name,
-                                    raw_args = %args_str,
-                                    error = %e,
-                                    "tool-call arguments are not valid JSON; using empty object"
-                                );
-                                serde_json::Value::Object(serde_json::Map::default())
-                            });
-                        Some(ToolCall { id, name, arguments })
-                    })
-                    .collect();
+                let mut tool_calls = Vec::with_capacity(partials.len());
+                for p in partials {
+                    let (id, name) = match (p.id, p.name) {
+                        (Some(id), Some(name)) => (id, name),
+                        _ => continue, // incomplete partial — skip silently
+                    };
+                    let raw = p.arguments;
+                    let args_str = if raw.is_empty() { "{}" } else { &raw };
+                    let arguments = match serde_json::from_str::<serde_json::Value>(args_str) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let message = format!(
+                                "tool '{}' (id: {}) has malformed JSON arguments: {e}",
+                                name, id
+                            );
+                            warn!(
+                                tool_name = %name,
+                                raw_args = %args_str,
+                                error = %e,
+                                "tool-call arguments are not valid JSON"
+                            );
+                            let _ = tx.send(AgentEvent::Error { message: message.clone() }).await;
+                            anyhow::bail!("{message}");
+                        }
+                    };
+                    tool_calls.push(ToolCall { id, name, arguments });
+                }
 
                 return Ok(CollectedResponse {
                     content: text_buf,
@@ -352,10 +360,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn malformed_json_arguments_use_empty_object() {
-        // Malformed JSON must NOT hard-fail the loop; it must produce an empty
-        // arguments object so the agent can continue and surface the issue.
-        let (tx, _rx) = mpsc::channel(16);
+    async fn malformed_json_arguments_emit_error_and_fail() {
+        // Malformed JSON must hard-fail with a visible AgentEvent::Error so the
+        // SSE client always sees why the stream was terminated.
+        let (tx, mut rx) = mpsc::channel(16);
         let stream = make_stream(vec![
             LlmStreamEvent::ToolCallDelta {
                 index: 0,
@@ -368,12 +376,15 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx).await.unwrap();
-        assert_eq!(response.tool_calls.len(), 1);
-        // Arguments must be an empty object (the fallback value).
-        assert_eq!(
-            response.tool_calls[0].arguments,
-            serde_json::Value::Object(serde_json::Map::default())
+        // collect_stream must return Err on malformed JSON.
+        assert!(collect_stream(stream, &tx).await.is_err());
+
+        // An AgentEvent::Error must have been sent before the bail.
+        drop(tx); // close sender so try_recv can drain
+        let events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        assert!(
+            events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+            "AgentEvent::Error must be emitted for malformed JSON arguments"
         );
     }
 

@@ -26,8 +26,10 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use gglib_core::ports::{AgentError, AgentLoopPort, LlmCompletionPort, ToolExecutorPort};
-use gglib_core::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, LlmCompletionPort, ToolExecutorPort};
+use gglib_core::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult};
+
+use crate::stream_collector::CollectedResponse;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
@@ -55,6 +57,34 @@ async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &str) {
 }
 
 // =============================================================================
+// Private helpers (non-method)
+// =============================================================================
+
+/// Append the assistant's tool-call message and all tool results to `messages`.
+///
+/// Call this after the parallel tool execution phase so that the complete
+/// iteration is recorded in the conversation history before the next LLM call.
+fn append_iteration_messages(
+    messages: &mut Vec<AgentMessage>,
+    content: String,
+    tool_calls: Vec<ToolCall>,
+    results: Vec<ToolResult>,
+) {
+    messages.push(AgentMessage::Assistant {
+        content: if content.is_empty() { None } else { Some(content) },
+        // Move tool_calls in — the caller has already finished borrowing it
+        // for loop-detection and parallel execution.
+        tool_calls: Some(tool_calls),
+    });
+    for result in results {
+        messages.push(AgentMessage::Tool {
+            tool_call_id: result.tool_call_id,
+            content: result.content,
+        });
+    }
+}
+
+// =============================================================================
 // Public struct
 // =============================================================================
 
@@ -66,11 +96,14 @@ async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &str) {
 ///
 /// # Wiring
 ///
+/// Prefer [`AgentLoop::build`] at composition roots:
+///
 /// ```rust,ignore
-/// let agent: Arc<dyn AgentLoopPort> = Arc::new(AgentLoop::new(
+/// let agent: Arc<dyn AgentLoopPort> = AgentLoop::build(
 ///     Arc::new(my_llm_adapter),    // impl LlmCompletionPort
 ///     Arc::new(my_tool_executor),  // impl ToolExecutorPort
-/// ));
+///     None,                        // no tool filter
+/// );
 /// ```
 pub struct AgentLoop {
     llm: Arc<dyn LlmCompletionPort>,
@@ -78,8 +111,42 @@ pub struct AgentLoop {
 }
 
 impl AgentLoop {
+    /// Call the LLM (step 2) then collect the stream (step 3) into a
+    /// [`CollectedResponse`].
+    ///
+    /// Both the LLM call and stream-collection errors are translated into
+    /// [`AgentError::Internal`] after emitting an [`AgentEvent::Error`] on `tx`
+    /// so that SSE consumers always see the failure reason before the stream
+    /// closes.
+    async fn call_and_collect(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+        tx: &mpsc::Sender<AgentEvent>,
+    ) -> Result<CollectedResponse, AgentError> {
+        let stream = match self.llm.chat_stream(messages, tools).await {
+            Ok(s) => s,
+            Err(e) => {
+                let msg = format!("LLM stream error: {e}");
+                emit_error_event(tx, &msg).await;
+                return Err(AgentError::Internal(msg));
+            }
+        };
+        match collect_stream(stream, tx).await {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                let msg = format!("stream collection error: {e}");
+                emit_error_event(tx, &msg).await;
+                Err(AgentError::Internal(msg))
+            }
+        }
+    }
+
     /// Create a new `AgentLoop` with the provided port implementations.
-    pub fn new(llm: Arc<dyn LlmCompletionPort>, tool_executor: Arc<dyn ToolExecutorPort>) -> Self {
+    ///
+    /// Prefer [`AgentLoop::build`] at composition roots; `new` is
+    /// `pub(crate)` and intended for use in unit tests within this crate.
+    pub(crate) fn new(llm: Arc<dyn LlmCompletionPort>, tool_executor: Arc<dyn ToolExecutorPort>) -> Self {
         Self { llm, tool_executor }
     }
 
@@ -135,7 +202,7 @@ impl AgentLoopPort for AgentLoop {
         messages: Vec<AgentMessage>,
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
-    ) -> Result<(String, Vec<AgentMessage>), AgentError> {
+    ) -> Result<AgentRunOutput, AgentError> {
         let mut messages = messages;
         let mut loop_detector = LoopDetector::new();
         let mut stagnation_detector = StagnationDetector::new();
@@ -152,25 +219,8 @@ impl AgentLoopPort for AgentLoop {
             // ---- 1. Context budget pruning ----------------------------------
             messages = prune_for_budget(messages, &config);
 
-            // ---- 2. LLM call (streaming) ------------------------------------
-            let stream = match self.llm.chat_stream(&messages, &tools).await {
-                Ok(s) => s,
-                Err(e) => {
-                    let msg = format!("LLM stream error: {e}");
-                    emit_error_event(&tx, &msg).await;
-                    return Err(AgentError::Internal(msg));
-                }
-            };
-
-            // ---- 3. Collect stream, forwarding text live --------------------
-            let response = match collect_stream(stream, &tx).await {
-                Ok(r) => r,
-                Err(e) => {
-                    let msg = format!("stream collection error: {e}");
-                    emit_error_event(&tx, &msg).await;
-                    return Err(AgentError::Internal(msg));
-                }
-            };
+            // ---- 2+3. LLM call and stream collection ----------------------
+            let response = self.call_and_collect(&messages, &tools, &tx).await?;
 
             // Guard: reject tool-call batches that exceed the configured
             // concurrency cap.  (The stream collector applies a hard index cap
@@ -196,12 +246,16 @@ impl AgentLoopPort for AgentLoop {
             // ---- 4. Stagnation guard ----------------------------------------
             // `record` is a no-op on empty text (tool-call-only responses);
             // that guard lives inside StagnationDetector to keep the invariant
-            // with the module that owns it.
-            if let Err(e) =
-                stagnation_detector.record(&response.content, config.max_stagnation_steps)
-            {
-                emit_error_event(&tx, &e.to_string()).await;
-                return Err(e);
+            // with the module that owns it.  When `max_stagnation_steps` is
+            // `None` the guard is disabled (e.g. in tests that use a fixed
+            // LLM response across many iterations).
+            if let Some(max_steps) = config.max_stagnation_steps {
+                if let Err(e) =
+                    stagnation_detector.record(&response.content, max_steps)
+                {
+                    emit_error_event(&tx, &e.to_string()).await;
+                    return Err(e);
+                }
             }
 
             // ---- 5. No tool calls → final answer ----------------------------
@@ -220,13 +274,23 @@ impl AgentLoopPort for AgentLoop {
                     content: Some(content.clone()),
                     tool_calls: None,
                 });
-                return Ok((content, messages));
+                return Ok(AgentRunOutput {
+                    answer: content,
+                    history: messages,
+                });
             }
 
             // ---- 6. Loop detection ------------------------------------------
-            if let Err(e) = loop_detector.check(&response.tool_calls, config.max_protocol_strikes) {
-                emit_error_event(&tx, &e.to_string()).await;
-                return Err(e);
+            // When `max_protocol_strikes` is `None` the guard is disabled
+            // (e.g. in tests that deliberately repeat the same tool call to
+            // exercise multi-iteration behaviour without hitting the limit).
+            if let Some(max_strikes) = config.max_protocol_strikes {
+                if let Err(e) =
+                    loop_detector.check(&response.tool_calls, max_strikes)
+                {
+                    emit_error_event(&tx, &e.to_string()).await;
+                    return Err(e);
+                }
             }
 
             // ---- 7. Parallel tool execution ---------------------------------
@@ -235,25 +299,15 @@ impl AgentLoopPort for AgentLoop {
                     .await;
 
             // ---- 8. Append assistant + tool-result messages -----------------
-            messages.push(AgentMessage::Assistant {
-                content: if response.content.is_empty() {
-                    None
-                } else {
-                    Some(response.content)
-                },
-                // Move tool_calls — steps 6 and 7 only borrow &response.tool_calls,
-                // so by this point we hold the only reference and no clone is needed.
-                tool_calls: Some(response.tool_calls),
-            });
-            // Capture length before consuming results by value so we can report
-            // the count in the IterationComplete event without keeping a reference.
+            // Capture len before consuming results so we can report the count
+            // in the IterationComplete event without keeping a reference.
             let tool_call_count = results.len();
-            for result in results {
-                messages.push(AgentMessage::Tool {
-                    tool_call_id: result.tool_call_id,
-                    content: result.content,
-                });
-            }
+            append_iteration_messages(
+                &mut messages,
+                response.content,
+                response.tool_calls,
+                results,
+            );
 
             // ---- 9. Emit iteration-complete event ---------------------------
             let _ = tx

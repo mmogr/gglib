@@ -59,6 +59,37 @@ pub enum AgentMessage {
     },
 }
 
+impl AgentMessage {
+    /// Estimate the Unicode scalar-value count of this message.
+    ///
+    /// Uses [`str::chars().count()`] rather than [`str::len`] (byte count) so
+    /// that multi-byte characters are counted as one unit, matching how LLMs
+    /// typically measure context length.
+    pub fn char_count(&self) -> usize {
+        match self {
+            Self::System { content } | Self::User { content } => content.chars().count(),
+            Self::Assistant {
+                content,
+                tool_calls,
+            } => {
+                content.as_deref().map_or(0, |s| s.chars().count())
+                    + tool_calls.as_deref().map_or(0, |tc| {
+                        tc.iter()
+                            .map(|c| {
+                                c.name.chars().count()
+                                    + c.arguments.to_string().chars().count()
+                            })
+                            .sum()
+                    })
+            }
+            Self::Tool {
+                tool_call_id,
+                content,
+            } => tool_call_id.chars().count() + content.chars().count(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
