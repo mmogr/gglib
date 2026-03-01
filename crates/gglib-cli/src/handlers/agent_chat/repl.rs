@@ -141,10 +141,8 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         //
         // On Ctrl+C (`completed = false`) or loop error (handle returns `None`)
         // the history stays unchanged — failed or cancelled turns are not added.
-        if completed {
-            if let Ok(Some(new_messages)) = handle.await {
-                messages = new_messages;
-            }
+        if completed && let Ok(Some(new_messages)) = handle.await {
+            messages = new_messages;
         }
     }
 
