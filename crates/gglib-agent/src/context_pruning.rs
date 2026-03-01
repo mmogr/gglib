@@ -419,4 +419,77 @@ mod tests {
             cfg.context_budget_chars
         );
     }
+
+    #[test]
+    fn pass2_reorders_interleaved_system_messages_to_front() {
+        // Build a history where System messages are **interleaved** at different
+        // positions among user/assistant turns.  Pass 2 must hoist all of them
+        // to the front of the output slice (preserving mutual ordering among
+        // the system messages) so the LLM always sees system prompts first.
+        //
+        // Layout (5 messages, no tool calls so Pass 1 is a no-op):
+        //   [0] User("U1")               — 2 chars
+        //   [1] System("SYS-A")          — 5 chars   ← interleaved
+        //   [2] Assistant("A".repeat(5_000)) — 5 000 chars  ← forces Pass 2
+        //   [3] System("SYS-B")          — 5 chars   ← interleaved
+        //   [4] User("U-recent")         — 8 chars   ← tail
+        let msgs = vec![
+            user("U1"),
+            system("SYS-A"),
+            assistant_text(&"A".repeat(5_000)),
+            system("SYS-B"),
+            user("U-recent"),
+        ];
+
+        let mut cfg = AgentConfig::default();
+        cfg.context_budget_chars = 50;
+        cfg.prune_keep_tail_messages = 1; // keep only "U-recent" in the non-system tail
+
+        let mut chars = total_chars(&msgs);
+        let result = prune_for_budget(msgs, &cfg, &mut chars);
+
+        // Both system messages must be present.
+        let system_contents: Vec<_> = result
+            .iter()
+            .filter_map(|m| {
+                if let AgentMessage::System { content } = m {
+                    Some(content.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            system_contents.len(),
+            2,
+            "both system messages must survive Pass 2"
+        );
+        assert!(system_contents.contains(&"SYS-A"), "SYS-A must be present");
+        assert!(system_contents.contains(&"SYS-B"), "SYS-B must be present");
+
+        // The first two slots in the result must both be System messages.
+        assert!(
+            matches!(&result[0], AgentMessage::System { .. }),
+            "result[0] must be a System message after Pass 2 re-ordering; got {:?}",
+            result[0]
+        );
+        assert!(
+            matches!(&result[1], AgentMessage::System { .. }),
+            "result[1] must be a System message after Pass 2 re-ordering; got {:?}",
+            result[1]
+        );
+
+        // No non-system message may appear before the last system message.
+        let last_system_pos = result
+            .iter()
+            .rposition(|m| matches!(m, AgentMessage::System { .. }))
+            .expect("at least one system message expected");
+        for (i, msg) in result.iter().enumerate().take(last_system_pos) {
+            assert!(
+                matches!(msg, AgentMessage::System { .. }),
+                "non-System message at position {i} precedes all System messages; got {:?}",
+                msg
+            );
+        }
+    }
 }

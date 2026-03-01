@@ -36,8 +36,19 @@ use tracing::warn;
 /// the value is intentionally large enough to never constrain normal usage
 /// while still protecting against malformed streams.
 ///
-/// The *concurrency* cap for actually executing tools is [`AgentConfig::max_parallel_tools`],
-/// which the caller enforces after `collect_stream` returns.
+/// Note the distinction between this constant and
+/// [`AgentConfig::max_parallel_tools`]:
+///
+/// | Concern | Enforced by |
+/// |---------|-------------|
+/// | Streaming slot index DoS protection | `MAX_TOOL_CALL_INDEX` (this constant, checked inside `collect_stream`) |
+/// | Runtime concurrency cap for tool execution | [`AgentConfig::max_parallel_tools`] (checked by the agent loop *after* `collect_stream` returns) |
+///
+/// Setting `max_parallel_tools` to a value smaller than `MAX_TOOL_CALL_INDEX`
+/// does **not** prevent a model from emitting more tool-call slots in the
+/// stream — it only limits how many are executed concurrently.  The agent
+/// loop rejects oversized batches before execution via
+/// [`AgentError::TooManyToolCalls`].
 pub(crate) const MAX_TOOL_CALL_INDEX: usize = 64;
 
 // =============================================================================

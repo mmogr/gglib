@@ -1,8 +1,5 @@
 //! Text stagnation detection for the agentic loop.
 //!
-//! This module is a port of stagnation detection from
-//! `src/hooks/useGglibRuntime/agentLoop.ts` (`MAX_STAGNATION_STEPS`).
-//!
 //! # Algorithm
 //!
 //! After each LLM response, the assistant's text content is hashed with
@@ -16,6 +13,14 @@
 //! repetitive non-tool-calling loop — e.g., repeatedly summarising their
 //! previous answer without making progress.  Tool-call loops are handled
 //! separately by [`crate::loop_detection::LoopDetector`].
+//!
+//! ## Known limitation — oscillation patterns
+//!
+//! The detector only fires when the **same** hash is repeated **consecutively**.
+//! A model oscillating between two distinct responses (A → B → A → B …) resets
+//! the counter on every turn and therefore bypasses this guard entirely.
+//! Oscillation detection would require a short sliding-window history of past
+//! hashes, which is not currently implemented.
 
 use gglib_core::ports::AgentError;
 

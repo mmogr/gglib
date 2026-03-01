@@ -17,8 +17,8 @@ mod common;
 
 use std::sync::Arc;
 
-use common::event_assertions::{has_final_answer, has_tool_complete_with_success, has_tool_start};
-use common::mock_llm::{collect_events, MockLlmPort, MockLlmResponse};
+use common::event_assertions::{collect_events, has_final_answer, has_tool_complete_with_success, has_tool_start};
+use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};

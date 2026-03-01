@@ -1,7 +1,6 @@
 //! Guard integration tests for the backend agentic loop.
 //!
-//! Covers the three termination guards that abort an unbounded loop:
-//! max-iterations limit, loop detection, and text stagnation.
+//! Covers the termination guards that abort an unbounded loop.
 //!
 //! All tests are fully in-process using [`MockLlmPort`] and
 //! [`MockToolExecutorPort`] — no HTTP server, no llama-server process, no MCP
@@ -12,13 +11,14 @@
 //! | [`test_max_iterations_reached`]         | [`AgentConfig::max_iterations`] limit |
 //! | [`test_loop_detection`]                 | Repeated tool-call batch → [`AgentError::LoopDetected`] |
 //! | [`test_stagnation_detected_integration`] | Repeated text response → [`AgentError::Internal`] |
+//! | [`test_too_many_tool_calls_integration`] | Oversized tool-call batch → [`AgentError::TooManyToolCalls`] |
 
 mod common;
 
 use std::sync::Arc;
 
-use common::event_assertions::has_final_answer;
-use common::mock_llm::{collect_events, MockLlmPort, MockLlmResponse};
+use common::event_assertions::{collect_events, has_final_answer};
+use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
@@ -209,5 +209,66 @@ async fn test_stagnation_detected_integration() {
     assert!(
         !has_final_answer(&events),
         "FinalAnswer must not be emitted when stagnation is detected"
+    );
+}
+
+/// **Too many tool calls**: when the LLM returns more tool calls in a single
+/// batch than `max_parallel_tools` allows, the loop must terminate immediately
+/// with [`AgentError::TooManyToolCalls`] and emit [`AgentEvent::Error`].
+///
+/// The batch is rejected *before* any tool is executed — this is checked by
+/// asserting that the tool executor is never called.
+#[tokio::test]
+async fn test_too_many_tool_calls_integration() {
+    // LLM emits 3 tool calls in one response; limit is 2.
+    let batch = MockLlmResponse {
+        content: None,
+        tool_calls: vec![
+            ToolCall { id: "c1".into(), name: "search".into(), arguments: json!({}) },
+            ToolCall { id: "c2".into(), name: "search".into(), arguments: json!({}) },
+            ToolCall { id: "c3".into(), name: "search".into(), arguments: json!({}) },
+        ],
+        finish_reason: "tool_calls".into(),
+    };
+    let llm = Arc::new(MockLlmPort::new().push(batch));
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("search"),
+        MockToolBehavior::Immediate { content: "result".into() },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(64);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User { content: "search for things".into() }],
+            {
+                let mut c = AgentConfig::default();
+                c.max_parallel_tools = 2; // 3 calls > 2 → rejected
+                c.max_protocol_strikes = None;
+                c
+            },
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    // Must produce the dedicated error variant.
+    assert!(
+        matches!(result, Err(AgentError::TooManyToolCalls { count: 3, limit: 2 })),
+        "expected TooManyToolCalls {{ count: 3, limit: 2 }}, got: {result:?}"
+    );
+
+    // An AgentEvent::Error must have been emitted before the stream closes.
+    assert!(
+        events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+        "AgentEvent::Error must be emitted on TooManyToolCalls"
+    );
+
+    // The tool must never have been called — the batch is rejected before execution.
+    assert!(
+        !has_final_answer(&events),
+        "FinalAnswer must not be emitted when the batch is rejected"
     );
 }
