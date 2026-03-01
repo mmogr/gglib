@@ -52,7 +52,16 @@ impl SseStreamDecoder {
     ///   (a `[DONE]` sentinel or an unrecoverable parse error).  The caller
     ///   must not feed any further chunks once this flag is `true`.
     pub(crate) fn feed_bytes(&mut self, bytes: &[u8]) -> (Vec<Result<LlmStreamEvent>>, bool) {
-        self.buf.push_str(&String::from_utf8_lossy(bytes));
+        let text = match std::str::from_utf8(bytes) {
+            Ok(t) => t,
+            Err(e) => {
+                return (
+                    vec![Err(anyhow::anyhow!("invalid UTF-8 in LLM SSE stream: {e}"))],
+                    true,
+                );
+            }
+        };
+        self.buf.push_str(text);
         let mut events = Vec::new();
 
         loop {

@@ -117,56 +117,6 @@ pub struct CliContext {
     pub http_client: reqwest::Client,
 }
 
-impl CliContext {
-    /// Access the AppCore.
-    pub fn app(&self) -> &AppCore {
-        &self.app
-    }
-
-    /// Access the process runner for server operations.
-    pub fn runner(&self) -> &Arc<dyn ProcessRunner> {
-        &self.runner
-    }
-
-    /// Access the MCP service.
-    pub fn mcp(&self) -> &Arc<McpService> {
-        &self.mcp
-    }
-
-    /// Access the download manager.
-    pub fn downloads(&self) -> &Arc<dyn DownloadManagerPort> {
-        &self.downloads
-    }
-
-    /// Access the GGUF parser.
-    pub fn gguf_parser(&self) -> &Arc<dyn GgufParserPort> {
-        &self.gguf_parser
-    }
-
-    /// Access the model repository.
-    pub fn model_repo(&self) -> &Arc<dyn ModelRepository> {
-        &self.model_repo
-    }
-
-    /// Access the llama-server path.
-    pub fn llama_server_path(&self) -> &PathBuf {
-        &self.llama_server_path
-    }
-
-    /// Base port used when allocating ports for auto-started llama-server instances.
-    pub fn base_port(&self) -> u16 {
-        self.base_port
-    }
-
-    /// Shared HTTP client for LLM adapter calls.
-    ///
-    /// Clone this into each agent session to share the underlying connection
-    /// pool across REPL turns.
-    pub fn http_client(&self) -> &reqwest::Client {
-        &self.http_client
-    }
-}
-
 /// Bootstrap the CLI application.
 ///
 /// This is the composition root. It:

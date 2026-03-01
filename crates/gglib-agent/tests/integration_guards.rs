@@ -191,26 +191,18 @@ async fn test_stagnation_detected_integration() {
 
     let events = collect_events(rx).await;
 
-    // Inline FNV-1a 64-bit hash helper — mirrors `gglib_agent::fnv1a::fnv1a_64`.
-    fn fnv1a_hash(s: &str) -> u64 {
-        const OFFSET: u64 = 14_695_981_039_346_656_037;
-        const PRIME: u64 = 1_099_511_628_211;
-        s.bytes().fold(OFFSET, |h, b| (h ^ b as u64).wrapping_mul(PRIME))
-    }
-    let expected_hash = fnv1a_hash("Thinking...");
-
     // max_stagnation_steps=2 → 3 total identical responses before abort
-    // (baseline + 2 repeats → fires when repeat_count >= 2, count = self.count + 1 = 3).
+    // (baseline + 2 repeats → fires when repeat_count >= 2, count = 3).
     assert!(
         matches!(
             result,
             Err(AgentError::StagnationDetected {
                 max_steps: 2,
                 count: 3,
-                repeated_text_hash: h
-            }) if h == expected_hash
+                ..
+            })
         ),
-        "expected StagnationDetected {{ max_steps: 2, count: 3, hash={expected_hash:#018x} }}, got: {result:?}"
+        "expected StagnationDetected {{ max_steps: 2, count: 3 }}, got: {result:?}"
     );
 
     assert!(

@@ -25,7 +25,7 @@ pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     let result = repl::run_repl(agent, args).await;
 
     if let Some(ref handle) = maybe_handle
-        && let Err(e) = ctx.runner().stop(handle).await
+        && let Err(e) = ctx.runner.stop(handle).await
     {
         tracing::warn!("failed to stop llama-server after agent chat: {e}");
     }

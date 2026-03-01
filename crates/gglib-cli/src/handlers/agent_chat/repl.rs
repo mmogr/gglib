@@ -200,6 +200,10 @@ async fn drain_event_stream(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) 
             // `FinalAnswer` is always the last event emitted before the loop
             // drops its `Sender`.  Any events after this would be a protocol
             // violation and are intentionally dropped.
+            debug_assert!(
+                rx.try_recv().is_err(),
+                "events after FinalAnswer violate agent protocol"
+            );
             return true;
         }
     }

@@ -27,7 +27,7 @@ use crate::presentation::{print_separator, truncate_string};
 /// - Database query fails
 pub async fn execute(ctx: &CliContext) -> Result<()> {
     // Retrieve all models via AppCore
-    let models = ctx.app().models().list().await?;
+    let models = ctx.app.models().list().await?;
 
     if models.is_empty() {
         println!("No models found in the database.");

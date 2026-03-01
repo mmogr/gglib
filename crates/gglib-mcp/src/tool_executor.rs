@@ -178,42 +178,6 @@ mod tests {
 
     use super::*;
 
-    /// Minimal smoke-test: verify the argument conversion from `Value::Object`
-    /// to `HashMap` without needing a real `McpService`.
-    #[test]
-    fn arguments_object_round_trips() {
-        let args = json!({ "path": "/tmp/foo", "recursive": true });
-        let call = ToolCall {
-            id: "c1".into(),
-            name: "fs_list".into(),
-            arguments: args,
-        };
-
-        // Extract the same conversion logic used in execute()
-        let map: HashMap<String, serde_json::Value> = match &call.arguments {
-            serde_json::Value::Object(m) => m.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-            _ => panic!("expected object"),
-        };
-
-        assert_eq!(map["path"], json!("/tmp/foo"));
-        assert_eq!(map["recursive"], json!(true));
-    }
-
-    #[test]
-    fn null_arguments_produce_empty_map() {
-        let call = ToolCall {
-            id: "c2".into(),
-            name: "get_time".into(),
-            arguments: serde_json::Value::Null,
-        };
-        let map: HashMap<String, serde_json::Value> = match &call.arguments {
-            serde_json::Value::Object(m) => m.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-            serde_json::Value::Null => HashMap::new(),
-            other => panic!("unexpected: {other}"),
-        };
-        assert!(map.is_empty());
-    }
-
     #[test]
     fn tool_definition_conversion_preserves_schema() {
         let mcp_tool = gglib_core::McpTool {

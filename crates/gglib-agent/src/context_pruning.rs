@@ -16,7 +16,7 @@
 
 use std::collections::HashSet;
 
-use gglib_core::{AgentConfig, AgentMessage, AssistantContent};
+use gglib_core::{AgentConfig, AgentMessage};
 use tracing::warn;
 
 // =============================================================================
@@ -67,18 +67,28 @@ pub(crate) fn prune_for_budget(
         return messages;
     }
 
-    // ---- Pass 2: emergency tail-prune ---------------------------------------
-    // Keep all System messages at their original positions and the last
-    // KEEP_TAIL_MESSAGES non-system messages.
-    //
-    // NOTE: this pass re-orders the message stream.  All `System` messages are
-    // moved to the **front** of the output (via `partition`) followed by the
-    // retained non-system tail.  If the original conversation interleaved
-    // system prompts with user/assistant turns, the relative ordering of those
-    // system prompts is preserved but they will no longer appear at their
-    // original positions within the non-system flow.  This is intentional —
-    // most LLM APIs expect system messages at the head of the context window.
+    prune_tail(messages, config, running_chars)
+}
 
+/// Pass 2 of the pruning algorithm: emergency tail-prune.
+///
+/// Keeps all [`AgentMessage::System`] messages (hoisted to the front) and the
+/// last [`AgentConfig::prune_keep_tail_messages`] non-system messages.
+///
+/// Called by [`prune_for_budget`] when Pass 1 alone was insufficient.  Also
+/// callable directly in tests to verify Pass 2 behaviour in isolation.
+///
+/// # Warning — re-orders `System` messages
+///
+/// All `System` messages are moved to the **front** of the output regardless
+/// of their original positions (relative order among system messages is
+/// preserved).  This is intentional — most LLM APIs expect system prompts at
+/// the head of the context window.
+fn prune_tail(
+    messages: Vec<AgentMessage>,
+    config: &AgentConfig,
+    running_chars: &mut usize,
+) -> Vec<AgentMessage> {
     let before_count = messages.len();
     let (system, non_system): (Vec<AgentMessage>, Vec<AgentMessage>) = messages
         .into_iter()
@@ -100,8 +110,8 @@ pub(crate) fn prune_for_budget(
          System messages hoisted to front, oldest non-system messages dropped"
     );
 
-    // Sync the running counter after Pass 2; Pass 1 updated it incrementally
-    // but the partition+skip above drops additional messages without touching
+    // Sync the running counter; Pass 1 updated it incrementally but the
+    // partition+skip above drops additional messages without touching
     // `running_chars`.  Without this, the next iteration sees a stale count
     // above budget and re-runs Pass 2 unnecessarily, over-pruning history.
     *running_chars = total_chars(&result);

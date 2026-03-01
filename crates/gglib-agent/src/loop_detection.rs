@@ -47,7 +47,7 @@ fn canonical_json(v: &Value) -> String {
                 .map(|(k, v)| {
                     format!(
                         "{}:{}",
-                        serde_json::to_string(k).unwrap_or_default(),
+                        serde_json::to_string(k).expect("in-memory String serialisation is infallible"),
                         canonical_json(v)
                     )
                 })

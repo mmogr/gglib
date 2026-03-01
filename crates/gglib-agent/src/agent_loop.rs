@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, LlmCompletionPort, ToolExecutorPort};
-use gglib_core::{AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult};
+use gglib_core::{AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolDefinition};
 
 use crate::stream_collector::CollectedResponse;
 use tokio::sync::mpsc;
@@ -46,7 +46,7 @@ use crate::tool_execution::execute_tools_parallel;
 // Private helpers
 // =============================================================================
 
-/// Send an [`AgentEvent::Error`] on `tx`, ignoring send failures.
+/// Emit an [`AgentEvent::Error`] on `tx`, ignoring send failures.
 ///
 /// Called before every early-return that carries an [`AgentError`], so that
 /// SSE consumers always receive an `error` event before the stream closes.
@@ -58,21 +58,20 @@ async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &str) {
         .await;
 }
 
-/// Emit an [`AgentEvent::Error`] then return the corresponding
-/// [`AgentError::Internal`].
+/// Emit an [`AgentEvent::Error`] and return `Err(`[`AgentError::Internal`]`)`.
 ///
-/// Use this to collapse the repeated three-liner:
+/// Collapses the repeated pattern:
 /// ```text
 /// emit_error_event(tx, &msg).await;
 /// return Err(AgentError::Internal(msg));
 /// ```
-/// into a single expression:
+/// into:
 /// ```text
-/// return Err(bail_internal(tx, msg).await);
+/// return bail_internal(tx, msg).await;
 /// ```
-async fn bail_internal(tx: &mpsc::Sender<AgentEvent>, msg: String) -> AgentError {
+async fn bail_internal<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T, AgentError> {
     emit_error_event(tx, &msg).await;
-    AgentError::Internal(msg)
+    Err(AgentError::Internal(msg))
 }
 
 // =============================================================================
@@ -129,11 +128,11 @@ impl AgentLoop {
     ) -> Result<CollectedResponse, AgentError> {
         let stream = match self.llm.chat_stream(messages, tools).await {
             Ok(s) => s,
-            Err(e) => return Err(bail_internal(tx, format!("LLM stream error: {e}")).await),
+            Err(e) => return bail_internal(tx, format!("LLM stream error: {e}")).await,
         };
         match collect_stream(stream, tx).await {
             Ok(r) => Ok(r),
-            Err(e) => Err(bail_internal(tx, format!("stream collection error: {e}")).await),
+            Err(e) => bail_internal(tx, format!("stream collection error: {e}")).await,
         }
     }
 

@@ -148,8 +148,8 @@ mod tests {
     #[test]
     fn defaults_match_frontend_constants() {
         let cfg = AgentConfig::default();
-        assert_eq!(cfg.max_iterations, 25);
-        assert_eq!(cfg.max_parallel_tools, 5);
+        assert_eq!(cfg.max_iterations, DEFAULT_MAX_ITERATIONS);
+        assert_eq!(cfg.max_parallel_tools, DEFAULT_MAX_PARALLEL_TOOLS);
         assert_eq!(cfg.tool_timeout_ms, 30_000);
         assert_eq!(cfg.context_budget_chars, 180_000);
         assert_eq!(cfg.max_repeated_batch_steps, Some(2));

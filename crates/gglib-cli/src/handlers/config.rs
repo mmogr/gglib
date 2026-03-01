@@ -51,7 +51,7 @@ async fn handle_default_model(
             default_model_id: Some(None),
             ..Default::default()
         };
-        ctx.app().settings().update(update).await?;
+        ctx.app.settings().update(update).await?;
         println!("✓ Default model cleared.");
         return Ok(());
     }
@@ -59,19 +59,19 @@ async fn handle_default_model(
     match identifier {
         Some(id) => {
             // Set the default model
-            let model = ctx.app().models().find_by_identifier(&id).await?;
+            let model = ctx.app.models().find_by_identifier(&id).await?;
             let update = SettingsUpdate {
                 default_model_id: Some(Some(model.id)),
                 ..Default::default()
             };
-            ctx.app().settings().update(update).await?;
+            ctx.app.settings().update(update).await?;
             println!("✓ Default model set to: {} (ID: {})", model.name, model.id);
         }
         None => {
             // Show current default
-            let settings = ctx.app().settings().get().await?;
+            let settings = ctx.app.settings().get().await?;
             match settings.default_model_id {
-                Some(model_id) => match ctx.app().models().get_by_id(model_id).await? {
+                Some(model_id) => match ctx.app.models().get_by_id(model_id).await? {
                     Some(model) => {
                         println!("Default model: {} (ID: {})", model.name, model.id);
                     }
@@ -136,7 +136,7 @@ fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
 async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<()> {
     match command {
         SettingsCommand::Show => {
-            let settings = ctx.app().settings().get().await?;
+            let settings = ctx.app.settings().get().await?;
             println!("Current application settings:");
             println!(
                 "  default_download_path:   {:?}",
@@ -155,7 +155,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
 
             // Show default model with name if available
             match settings.default_model_id {
-                Some(model_id) => match ctx.app().models().get_by_id(model_id).await? {
+                Some(model_id) => match ctx.app.models().get_by_id(model_id).await? {
                     Some(model) => {
                         println!("  default_model_id:        {} ({})", model_id, model.name);
                     }
@@ -218,7 +218,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
             };
 
             // Get current settings and apply updates for validation
-            let mut current = ctx.app().settings().get().await?;
+            let mut current = ctx.app.settings().get().await?;
             if let Some(Some(v)) = &update.default_download_path {
                 current.default_download_path = Some(v.clone());
             }
@@ -239,7 +239,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
             validate_settings(&current)?;
 
             // Save settings
-            let updated = ctx.app().settings().update(update).await?;
+            let updated = ctx.app.settings().update(update).await?;
             println!("✓ Settings updated successfully:");
             if has_default_download_path {
                 println!(
@@ -276,7 +276,7 @@ async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<(
             }
 
             let defaults = Settings::with_defaults();
-            ctx.app().settings().save(&defaults).await?;
+            ctx.app.settings().save(&defaults).await?;
             println!("✓ All settings have been reset to defaults.");
             Ok(())
         }

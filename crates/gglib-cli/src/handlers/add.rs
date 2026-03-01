@@ -36,7 +36,7 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
     let path = PathBuf::from(file_path);
 
     // Validate the GGUF file and extract metadata for CLI preview
-    let gguf_metadata = validation::validate_and_parse_gguf(ctx.gguf_parser().as_ref(), file_path)?;
+    let gguf_metadata = validation::validate_and_parse_gguf(ctx.gguf_parser.as_ref(), file_path)?;
     println!("File validation and metadata extraction successful.");
 
     // Display extracted metadata to the user
@@ -72,9 +72,9 @@ pub async fn execute(ctx: &CliContext, file_path: &str) -> Result<()> {
 
     // Delegate to shared core logic for model import
     let saved_model = ctx
-        .app()
+        .app
         .models()
-        .import_from_file(&path, ctx.gguf_parser().as_ref(), param_count_override)
+        .import_from_file(&path, ctx.gguf_parser.as_ref(), param_count_override)
         .await?;
 
     // Display clean summary using shared presentation

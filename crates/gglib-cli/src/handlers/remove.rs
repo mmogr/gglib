@@ -33,7 +33,7 @@ use crate::utils::input;
 /// - Database removal operation fails
 pub async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     // First, try to find the model to show it to the user
-    let model = match ctx.app().models().get(identifier).await? {
+    let model = match ctx.app.models().get(identifier).await? {
         Some(m) => m,
         None => {
             println!("No model found matching: '{identifier}'");
@@ -56,7 +56,7 @@ pub async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<
     }
 
     // Remove the model
-    let removed = ctx.app().models().remove(identifier).await?;
+    let removed = ctx.app.models().remove(identifier).await?;
 
     println!(
         "✅ Model '{}' (ID {}) successfully removed from database.",

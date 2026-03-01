@@ -17,7 +17,7 @@ pub async fn execute(ctx: &CliContext, model_id: u32) -> Result<()> {
 
     // Get model from database
     let mut model = ctx
-        .app()
+        .app
         .models()
         .get_by_id(model_id as i64)
         .await?
@@ -73,7 +73,7 @@ pub async fn execute(ctx: &CliContext, model_id: u32) -> Result<()> {
     model.hf_commit_sha = Some(result.commit_sha.clone());
     model.last_update_check = Some(Utc::now());
 
-    ctx.app().models().update(&model).await?;
+    ctx.app.models().update(&model).await?;
 
     println!("✓ Model updated successfully");
     println!("  New SHA: {}", &result.commit_sha[..8]);

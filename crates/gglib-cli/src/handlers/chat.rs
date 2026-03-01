@@ -83,7 +83,7 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
     } = args;
 
     // Look up the model using CliContext
-    let model = ctx.app().models().find_by_identifier(&identifier).await?;
+    let model = ctx.app.models().find_by_identifier(&identifier).await?;
 
     // Log model info
     println!("Using model: {} (ID: {})", model.name, model.id);
@@ -109,7 +109,7 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
     }
 
     // Apply global defaults
-    let settings = ctx.app().settings().get().await?;
+    let settings = ctx.app.settings().get().await?;
     if let Some(ref global_defaults) = settings.inference_defaults {
         inference_config.merge_with(global_defaults);
     }

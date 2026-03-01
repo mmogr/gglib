@@ -26,7 +26,7 @@ use crate::handlers::chat::ChatArgs;
 ///
 /// Returns `(agent, maybe_handle)`:
 /// - `maybe_handle` is `Some(handle)` when we auto-started a llama-server.
-///   The caller **must** call `ctx.runner().stop(&handle)` when the session ends.
+///   The caller **must** call `ctx.runner.stop(&handle)` when the session ends.
 /// - `maybe_handle` is `None` when the caller supplied `--port` (reuse).
 pub async fn compose(
     ctx: &CliContext,
@@ -38,7 +38,7 @@ pub async fn compose(
     // 2. Initialise MCP servers (CLI bootstrap intentionally skips this).
     //    A failure is logged as a warning rather than aborting the session:
     //    the agent can still run without tools.
-    if let Err(e) = ctx.mcp().initialize().await {
+    if let Err(e) = ctx.mcp.initialize().await {
         eprintln!("warning: MCP initialisation failed — tools may be unavailable: {e}");
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
@@ -51,9 +51,9 @@ pub async fn compose(
         Some(args.tools.iter().cloned().collect())
     };
     let llm: Arc<dyn LlmCompletionPort> =
-        Arc::new(LlmCompletionAdapter::with_client(port, ctx.http_client().clone(), args.model.clone()));
+        Arc::new(LlmCompletionAdapter::with_client(port, ctx.http_client.clone(), args.model.clone()));
     let tool_executor: Arc<dyn ToolExecutorPort> =
-        Arc::new(McpToolExecutorAdapter::new(Arc::clone(ctx.mcp())));
+        Arc::new(McpToolExecutorAdapter::new(Arc::clone(&ctx.mcp)));
     let agent = AgentLoop::build(llm, tool_executor, tool_filter);
 
     Ok((agent, maybe_handle))
@@ -78,7 +78,7 @@ async fn resolve_port(ctx: &CliContext, args: &ChatArgs) -> Result<(u16, Option<
 
     // Auto-start: look up the model, then ask the process runner to start it.
     let model = ctx
-        .app()
+        .app
         .models()
         .find_by_identifier(&args.identifier)
         .await
@@ -104,7 +104,7 @@ async fn resolve_port(ctx: &CliContext, args: &ChatArgs) -> Result<(u16, Option<
     );
 
     let handle = ctx
-        .runner()
+        .runner
         .start(server_config)
         .await
         .context("failed to start llama-server")?;

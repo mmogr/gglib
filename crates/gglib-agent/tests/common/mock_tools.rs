@@ -53,6 +53,15 @@ pub enum MockToolBehavior {
         /// Human-readable error description.
         message: String,
     },
+    /// Returns `Ok(ToolResult { success: false, … })`, simulating a tool that
+    /// ran successfully but reported a logical failure.
+    ///
+    /// Use this to test the path where the LLM receives a failed tool result
+    /// and can reason about / retry it, distinct from infrastructure errors.
+    Failure {
+        /// Content of the tool failure message fed back to the LLM.
+        content: String,
+    },
 }
 
 // =============================================================================
@@ -88,6 +97,7 @@ impl MockToolExecutorPort {
     /// Register a tool with its associated behaviour (builder-style).
     ///
     /// Tools are advertised to the LLM in the order they are added.
+    #[must_use]
     pub fn with_tool(mut self, definition: ToolDefinition, behavior: MockToolBehavior) -> Self {
         self.behaviors.insert(definition.name.clone(), behavior);
         self.tools.push(definition);
@@ -134,6 +144,11 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 })
             }
             MockToolBehavior::Error { message } => Err(anyhow::anyhow!(message)),
+            MockToolBehavior::Failure { content } => Ok(ToolResult {
+                tool_call_id: call.id.clone(),
+                content,
+                success: false,
+            }),
         }
     }
 }

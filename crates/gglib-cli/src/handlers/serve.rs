@@ -55,7 +55,7 @@ pub async fn execute(
 
     // Look up the model using CliContext
     let model = ctx
-        .app()
+        .app
         .models()
         .get_by_id(id as i64)
         .await?
@@ -85,7 +85,7 @@ pub async fn execute(
     }
 
     // Apply global defaults
-    let settings = ctx.app().settings().get().await?;
+    let settings = ctx.app.settings().get().await?;
     if let Some(ref global_defaults) = settings.inference_defaults {
         inference_config.merge_with(global_defaults);
     }

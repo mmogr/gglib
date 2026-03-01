@@ -23,8 +23,15 @@ use gglib_core::domain::agent::AgentEvent;
 /// This prevents the loop from running to completion (burning tokens and CPU)
 /// after the consumer has gone away.
 pub(super) struct AgentTaskGuard {
-    pub(super) inner: ReceiverStream<AgentEvent>,
-    pub(super) handle: JoinHandle<()>,
+    inner: ReceiverStream<AgentEvent>,
+    handle: JoinHandle<()>,
+}
+
+impl AgentTaskGuard {
+    /// Wrap `inner` and `handle` into a cancellation-on-drop guard.
+    pub(super) fn new(inner: ReceiverStream<AgentEvent>, handle: JoinHandle<()>) -> Self {
+        Self { inner, handle }
+    }
 }
 
 impl Drop for AgentTaskGuard {

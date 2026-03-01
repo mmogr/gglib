@@ -6,10 +6,9 @@
 use crate::error::HttpError;
 use crate::state::AppState;
 
-/// Allowed port range for llama-server connections.
+/// Minimum allowed port for llama-server connections.
 /// Prevents the endpoints from becoming generic SSRF dialers.
 const MIN_ALLOWED_PORT: u16 = 1024;
-const MAX_ALLOWED_PORT: u16 = 65535;
 
 /// Validate that `port` is within the allowed range **and** corresponds to a
 /// currently-running llama-server.
@@ -17,13 +16,13 @@ const MAX_ALLOWED_PORT: u16 = 65535;
 /// # Errors
 ///
 /// Returns [`HttpError::BadRequest`] when:
-/// - `port` is outside `1024–65535`
+/// - `port` is below `1024` (privileged / reserved)
 /// - No running server is registered on that port
 pub(crate) async fn validate_port(state: &AppState, port: u16) -> Result<(), HttpError> {
-    // Basic range check — blocks well-known privileged ports and invalid values.
-    if !(MIN_ALLOWED_PORT..=MAX_ALLOWED_PORT).contains(&port) {
+    // Block well-known privileged ports.
+    if port < MIN_ALLOWED_PORT {
         return Err(HttpError::BadRequest(format!(
-            "Port {port} is outside the allowed range ({MIN_ALLOWED_PORT}–{MAX_ALLOWED_PORT})"
+            "Port {port} is below the minimum allowed port ({MIN_ALLOWED_PORT})"
         )));
     }
 

@@ -12,7 +12,7 @@ use crate::bootstrap::CliContext;
 pub async fn execute(ctx: &CliContext, model_id: Option<u32>, all: bool) -> Result<()> {
     if all {
         println!("Checking updates for all models...");
-        let models = ctx.app().models().list().await?;
+        let models = ctx.app.models().list().await?;
 
         if models.is_empty() {
             println!("No models found in database.");
@@ -30,7 +30,7 @@ pub async fn execute(ctx: &CliContext, model_id: Option<u32>, all: bool) -> Resu
             }
         }
     } else if let Some(id) = model_id {
-        match ctx.app().models().get_by_id(id as i64).await? {
+        match ctx.app.models().get_by_id(id as i64).await? {
             Some(model) => {
                 if let Some(hf_repo) = &model.hf_repo_id {
                     check_model_update(&model, hf_repo).await?;

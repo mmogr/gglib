@@ -157,6 +157,7 @@ impl MockLlmPort {
     /// # Panics
     ///
     /// Panics if called concurrently — this is a build-time helper.
+    #[must_use]
     pub fn push(self, response: MockLlmResponse) -> Self {
         self.responses
             .try_lock()
@@ -170,6 +171,7 @@ impl MockLlmPort {
     /// # Panics
     ///
     /// Panics if called concurrently — this is a build-time helper.
+    #[must_use]
     pub fn push_many(self, responses: impl IntoIterator<Item = MockLlmResponse>) -> Self {
         let mut guard = self
             .responses

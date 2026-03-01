@@ -68,7 +68,7 @@ impl LlmCompletionAdapter {
     /// when a shared client is available (e.g. from `AppState`) to avoid
     /// per-request connection-pool overhead.
     #[must_use]
-    pub fn new(port: u16, model: Option<impl Into<String>>) -> Self {
+    pub fn new(port: u16, model: Option<String>) -> Self {
         Self::with_client(port, Client::new(), model)
     }
 
@@ -81,10 +81,10 @@ impl LlmCompletionAdapter {
     /// Pass a clone of the application-level client (e.g. `state.http_client.clone()`)
     /// so all agent-chat requests share a single connection pool.
     #[must_use]
-    pub fn with_client(port: u16, client: Client, model: Option<impl Into<String>>) -> Self {
+    pub fn with_client(port: u16, client: Client, model: Option<String>) -> Self {
         Self {
             url: format!("http://127.0.0.1:{port}/v1/chat/completions"),
-            model: model.map_or_else(String::new, Into::into),
+            model: model.unwrap_or_default(),
             client,
         }
     }
