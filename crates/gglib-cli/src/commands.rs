@@ -266,10 +266,16 @@ pub enum Commands {
         /// Maximum agent iterations before giving up (agentic mode only)
         #[arg(long = "max-iterations", default_value = "25")]
         max_iterations: usize,
-        /// Comma-separated tool allowlist exposed to the model, or omit for all tools
-        /// (agentic mode only, e.g. "mcp_search,builtin_time")
-        #[arg(long)]
-        tools: Option<String>,
+        /// Tool allowlist exposed to the model; may be repeated or comma-separated.
+        /// Omit to allow all tools. (agentic mode only, e.g. "mcp_search,builtin_time")
+        #[arg(long, value_delimiter = ',')]
+        tools: Vec<String>,
+        /// Per-tool execution timeout in milliseconds (agentic mode only)
+        #[arg(long = "tool-timeout-ms")]
+        tool_timeout_ms: Option<u64>,
+        /// Maximum number of tools executed in parallel per iteration (agentic mode only)
+        #[arg(long = "max-parallel")]
+        max_parallel: Option<usize>,
     },
 
     /// Ask a question with optional context from stdin or file

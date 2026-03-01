@@ -4,13 +4,13 @@
 //! The only public surface is [`compose`], which returns the ready-to-use
 //! [`AgentLoop`] and an optional [`ProcessHandle`] that the caller must stop
 //! when the session ends (`Some` only when we auto-started the server).
+//! [`AgentConfig`] is built inline by the REPL from the same `args`.
 
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use gglib_agent::{AgentLoop, FilteredToolExecutor};
-use gglib_core::domain::agent::AgentConfig;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_mcp::McpToolExecutorAdapter;
@@ -51,17 +51,6 @@ pub async fn compose(
     let agent_loop = AgentLoop::new(llm, tool_executor);
 
     Ok((agent_loop, maybe_handle))
-}
-
-/// Build an [`AgentConfig`] from CLI args.
-///
-/// Only `max_iterations` is overridden; all other parameters use their
-/// well-tested defaults (matching the TypeScript frontend constants).
-pub fn build_agent_config(args: &ChatArgs) -> AgentConfig {
-    AgentConfig {
-        max_iterations: args.max_iterations,
-        ..AgentConfig::default()
-    }
 }
 
 // =============================================================================
@@ -123,11 +112,10 @@ fn build_tool_executor(args: &ChatArgs, ctx: &CliContext) -> Arc<dyn ToolExecuto
     let base: Arc<dyn ToolExecutorPort> =
         Arc::new(McpToolExecutorAdapter::new(Arc::clone(ctx.mcp())));
 
-    match args.tools.as_deref() {
-        None | Some("all") => base,
-        Some(list) => {
-            let allowed: HashSet<String> = list.split(',').map(|s| s.trim().to_owned()).collect();
-            Arc::new(FilteredToolExecutor::new(base, allowed))
-        }
+    if args.tools.is_empty() {
+        base
+    } else {
+        let allowed: HashSet<String> = args.tools.iter().cloned().collect();
+        Arc::new(FilteredToolExecutor::new(base, allowed))
     }
 }

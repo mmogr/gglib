@@ -34,7 +34,9 @@ pub struct ChatArgs {
     pub agent: bool,
     pub port: Option<u16>,
     pub max_iterations: usize,
-    pub tools: Option<String>,
+    pub tools: Vec<String>,
+    pub tool_timeout_ms: Option<u64>,
+    pub max_parallel: Option<usize>,
     /// Mirror of the global `--verbose` / `-v` flag for agentic mode rendering.
     pub verbose: bool,
 }

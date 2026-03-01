@@ -25,6 +25,22 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+/// Hard upper bound on the tool-call slot index accepted during streaming.
+///
+/// This is a DoS guard: if an LLM emits an absurdly large `index` value the
+/// collector would otherwise allocate a huge `partials` Vec before `Done`
+/// arrives.  64 simultaneous tool calls is far beyond any realistic scenario;
+/// the value is intentionally large enough to never constrain normal usage
+/// while still protecting against malformed streams.
+///
+/// The *concurrency* cap for actually executing tools is [`AgentConfig::max_parallel_tools`],
+/// which the caller enforces after `collect_stream` returns.
+pub(crate) const MAX_TOOL_CALL_INDEX: usize = 64;
+
+// =============================================================================
 // Output type
 // =============================================================================
 
@@ -82,17 +98,16 @@ struct PartialToolCall {
 /// # Errors
 ///
 /// - Infrastructure errors (an `Err` item in the stream) are returned immediately.
-/// - A tool-call index ≥ `max_parallel_tools` is rejected immediately.
-///   This guard lives here — rather than in the caller — because it bounds the
-///   `partials` Vec that grows during streaming; by the time `Done` arrives it
-///   would already have caused the allocation.  The value doubles as the
-///   concurrency cap in `execute_tools_parallel`, making the policy consistent.
+/// - A tool-call index ≥ [`MAX_TOOL_CALL_INDEX`] is rejected immediately.
+///   This guard bounds the `partials` Vec that grows during streaming; without
+///   it a malformed stream could allocate unbounded memory before `Done` arrives.
+///   Tool-call *concurrency* is a separate concern — the caller (agent loop)
+///   enforces [`AgentConfig::max_parallel_tools`] after this function returns.
 /// - Malformed tool-call arguments (not valid JSON) are silently replaced with
 ///   an empty object and a `warn` log entry rather than hard-failing the loop.
 pub async fn collect_stream(
     mut stream: Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>,
     tx: &mpsc::Sender<AgentEvent>,
-    max_parallel_tools: usize,
 ) -> Result<CollectedResponse> {
     let mut text_buf = String::new();
     let mut reasoning_buf = String::new();
@@ -120,9 +135,9 @@ pub async fn collect_stream(
                 arguments,
             } => {
                 // Guard against a pathological index that would cause a huge allocation.
-                if index >= max_parallel_tools {
+                if index >= MAX_TOOL_CALL_INDEX {
                     anyhow::bail!(
-                        "tool-call index {index} exceeds max_parallel_tools ({max_parallel_tools})"
+                        "tool-call index {index} exceeds hard limit ({MAX_TOOL_CALL_INDEX})"
                     );
                 }
                 // Ensure the partials vec has a slot at `index`.
@@ -220,7 +235,7 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx, 8).await.unwrap();
+        let response = collect_stream(stream, &tx).await.unwrap();
         assert_eq!(response.content, "Hello, world!");
         assert_eq!(response.finish_reason, "stop");
         assert!(response.tool_calls.is_empty());
@@ -250,7 +265,7 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx, 8).await.unwrap();
+        let response = collect_stream(stream, &tx).await.unwrap();
         // Reasoning content is accumulated separately and NOT mixed into content.
         assert_eq!(response.reasoning_content, "Let me think about this.");
         assert_eq!(response.content, "Answer.");
@@ -290,7 +305,7 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx, 8).await.unwrap();
+        let response = collect_stream(stream, &tx).await.unwrap();
         assert_eq!(response.tool_calls.len(), 1);
         let tc = &response.tool_calls[0];
         assert_eq!(tc.id, "call_1");
@@ -319,7 +334,7 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx, 8).await.unwrap();
+        let response = collect_stream(stream, &tx).await.unwrap();
         assert_eq!(response.tool_calls.len(), 2);
         assert_eq!(response.tool_calls[0].name, "tool_a");
         assert_eq!(response.tool_calls[1].name, "tool_b");
@@ -334,7 +349,7 @@ mod tests {
             },
             // No Done event
         ]);
-        assert!(collect_stream(stream, &tx, 8).await.is_err());
+        assert!(collect_stream(stream, &tx).await.is_err());
     }
 
     #[tokio::test]
@@ -354,7 +369,7 @@ mod tests {
             },
         ]);
 
-        let response = collect_stream(stream, &tx, 8).await.unwrap();
+        let response = collect_stream(stream, &tx).await.unwrap();
         assert_eq!(response.tool_calls.len(), 1);
         // Arguments must be an empty object (the fallback value).
         assert_eq!(
@@ -365,12 +380,12 @@ mod tests {
 
     #[tokio::test]
     async fn oversized_tool_call_index_returns_error() {
-        // An index >= max_parallel_tools must be rejected immediately to
-        // prevent unbounded Vec growth.
+        // An index >= MAX_TOOL_CALL_INDEX must be rejected immediately to
+        // prevent unbounded Vec growth from a malformed or adversarial stream.
         let (tx, _rx) = mpsc::channel(16);
         let stream = make_stream(vec![
             LlmStreamEvent::ToolCallDelta {
-                index: 4, // max_parallel_tools = 4 → indices 0..3 are valid
+                index: MAX_TOOL_CALL_INDEX, // at or beyond the hard limit → rejected
                 id: Some("c0".into()),
                 name: Some("do_thing".into()),
                 arguments: Some("{}".into()),
@@ -380,6 +395,6 @@ mod tests {
             },
         ]);
 
-        assert!(collect_stream(stream, &tx, 4).await.is_err());
+        assert!(collect_stream(stream, &tx).await.is_err());
     }
 }

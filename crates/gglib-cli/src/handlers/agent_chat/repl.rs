@@ -15,10 +15,15 @@
 //!
 //! ## Ctrl+C cancellation
 //!
-//! `tokio::signal::ctrl_c()` is used inside a `tokio::select!` to abort the
-//! running agent-loop task without terminating the process.  A Ctrl+C at the
-//! readline prompt is handled by rustyline itself, which returns
-//! [`ReadlineError::Interrupted`].
+//! A Ctrl+C **during an agent response** is handled via a `tokio::select!` in
+//! `run_repl`: the agent-loop task is aborted, the event channel is drained,
+//! and the REPL returns to the prompt — the `handle.abort()` side effect is
+//! explicit at the call site, not hidden inside `collect_events`.
+//!
+//! A Ctrl+C **at the readline prompt** is signalled by rustyline as
+//! [`ReadlineError::Interrupted`]; the REPL prints a hint and continues to
+//! the next prompt instead of exiting (keeping behaviour consistent with the
+//! help text — `/quit` or Ctrl+D are the intended exit paths).
 
 use std::sync::{Arc, Mutex};
 
@@ -29,12 +34,11 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
-use gglib_core::domain::agent::{AgentEvent, AgentMessage};
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::AgentLoopPort;
 
 use crate::handlers::chat::ChatArgs;
 
-use super::config::build_agent_config;
 use super::renderer::render_event;
 
 // =============================================================================
@@ -58,7 +62,13 @@ const REPL_HELP: &str = "\
 /// clone the reference for each spawned per-turn task without requiring
 /// [`AgentLoop`] to implement [`Clone`].
 pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Result<()> {
-    let config = build_agent_config(args);
+    let defaults = AgentConfig::default();
+    let config = AgentConfig {
+        max_iterations: args.max_iterations,
+        tool_timeout_ms: args.tool_timeout_ms.unwrap_or(defaults.tool_timeout_ms),
+        max_parallel_tools: args.max_parallel.unwrap_or(defaults.max_parallel_tools),
+        ..defaults
+    };
 
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.
@@ -89,9 +99,10 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         let input = match line {
             Ok(text) => text,
             Err(ReadlineError::Interrupted) => {
-                // Ctrl+C at the prompt → exit cleanly.
-                println!("[exiting]");
-                break;
+                // Ctrl+C at the prompt → cancel any pending input and return
+                // to the prompt.  (Use /quit or Ctrl+D to exit the session.)
+                println!("[use /quit or Ctrl+D to exit]");
+                continue;
             }
             Err(ReadlineError::Eof) => break, // Ctrl+D / EOF
             Err(e) => return Err(anyhow::anyhow!("readline error: {e}")),
@@ -131,7 +142,16 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         });
 
         // ── 3. Consume event stream; Ctrl+C aborts the agent task ────────────────
-        let completed = collect_events(&mut rx, &handle, args.verbose).await;
+        let completed = tokio::select! {
+            biased;
+            result = collect_events(&mut rx, args.verbose) => result,
+            _ = tokio::signal::ctrl_c() => {
+                handle.abort();
+                while rx.try_recv().is_ok() {}
+                eprintln!("\n[agent response cancelled — Ctrl+C]");
+                false
+            }
+        };
 
         // ── 4. Replace conversation history with the loop’s accumulated messages.
         //
@@ -157,42 +177,20 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 /// arrives, rendering each event.
 ///
 /// Returns `true` when the turn completed normally (channel closed or
-/// `FinalAnswer` received), `false` when the agent task was aborted by Ctrl+C.
+/// `FinalAnswer` received).  Cancellation (Ctrl+C) is handled by the caller
+/// via `tokio::select!`; this function has no side effects beyond rendering.
 ///
-/// Callers should only attempt to retrieve accumulated message history from
-/// the `handle` when this function returns `true`.
-async fn collect_events(
-    rx: &mut mpsc::Receiver<AgentEvent>,
-    handle: &JoinHandle<Option<Vec<AgentMessage>>>,
-    verbose: bool,
-) -> bool {
-    loop {
-        tokio::select! {
-            // Prefer processing events over handling Ctrl+C when both are ready.
-            biased;
+/// Callers should only attempt to retrieve accumulated message history
+/// when this function returns `true`.
+async fn collect_events(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
+    while let Some(event) = rx.recv().await {
+        render_event(&event, verbose);
 
-            maybe = rx.recv() => {
-                let Some(event) = maybe else { break };
-
-                render_event(&event, verbose);
-
-                if let AgentEvent::FinalAnswer { .. } = event {
-                    // NOTE: `FinalAnswer` is always the last event emitted
-                    // before the loop drops its `Sender`. Returning here is
-                    // safe; any events that arrive after `FinalAnswer` would
-                    // indicate a protocol violation and are intentionally
-                    // dropped.
-                    return true;
-                }
-            }
-
-            _ = tokio::signal::ctrl_c() => {
-                handle.abort();
-                // Drain any buffered events without displaying them.
-                while rx.try_recv().is_ok() {}
-                eprintln!("\n[agent response cancelled — Ctrl+C]");
-                return false;
-            }
+        if let AgentEvent::FinalAnswer { .. } = event {
+            // `FinalAnswer` is always the last event emitted before the loop
+            // drops its `Sender`.  Any events after this would be a protocol
+            // violation and are intentionally dropped.
+            return true;
         }
     }
     // Channel closed normally (e.g. loop ended with an error event, no

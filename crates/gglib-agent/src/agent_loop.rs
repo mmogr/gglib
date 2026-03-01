@@ -136,7 +136,7 @@ impl AgentLoopPort for AgentLoop {
             };
 
             // ---- 3. Collect stream, forwarding text live --------------------
-            let response = match collect_stream(stream, &tx, config.max_parallel_tools).await {
+            let response = match collect_stream(stream, &tx).await {
                 Ok(r) => r,
                 Err(e) => {
                     let msg = format!("stream collection error: {e}");
@@ -144,6 +144,19 @@ impl AgentLoopPort for AgentLoop {
                     return Err(AgentError::Internal(msg));
                 }
             };
+
+            // Guard: reject tool-call batches that exceed the configured
+            // concurrency cap.  (The stream collector applies a hard index cap
+            // during parsing; this check enforces the user-visible limit.)
+            if response.tool_calls.len() > config.max_parallel_tools {
+                let msg = format!(
+                    "response contained {} tool calls, exceeds max_parallel_tools ({})",
+                    response.tool_calls.len(),
+                    config.max_parallel_tools
+                );
+                emit_error_event(&tx, &msg).await;
+                return Err(AgentError::Internal(msg));
+            }
 
             debug!(
                 content_len = response.content.len(),
