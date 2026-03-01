@@ -104,7 +104,6 @@ impl MockToolExecutorPort {
         self.tools.push(definition);
         self
     }
-
 }
 
 impl Default for MockToolExecutorPort {

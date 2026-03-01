@@ -15,9 +15,11 @@ use std::pin::Pin;
 use anyhow::Result;
 use async_trait::async_trait;
 use futures_util::stream;
-use gglib_core::domain::agent::{AgentEvent, AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition};
+use gglib_core::domain::agent::{
+    AgentEvent, AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition,
+};
 use gglib_core::ports::LlmCompletionPort;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 
 // =============================================================================
 // MockLlmResponse — one scripted turn
