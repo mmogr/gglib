@@ -23,7 +23,7 @@ use std::time::Instant;
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use gglib_core::ports::ToolExecutorPort;
-use gglib_core::{ToolCall, ToolDefinition, ToolResult};
+use gglib_core::{ToolCall, ToolDefinition, ToolResult, elapsed_ms};
 
 use crate::service::McpService;
 
@@ -147,7 +147,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             .call_tool(server_id, bare_name, arguments)
             .await
             .map_err(|e| anyhow!("MCP call_tool failed: {e}"))?;
-        let duration_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let duration_ms = elapsed_ms(start);
 
         // ---- Convert McpToolResult → ToolResult ------------------------------
         let (content, success) = if result.success {

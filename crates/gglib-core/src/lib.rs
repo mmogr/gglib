@@ -42,6 +42,9 @@ pub use settings::{
     validate_settings,
 };
 
+// Re-export timing utility
+pub use utils::timing::elapsed_ms;
+
 // Re-export path utilities
 pub use paths::{
     DEFAULT_MODELS_DIR_RELATIVE, DirectoryCreationStrategy, ModelsDirResolution, ModelsDirSource,

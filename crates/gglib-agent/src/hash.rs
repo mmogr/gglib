@@ -1,6 +1,7 @@
-//! Small, shared hashing and timing utilities used across the `gglib-agent` crate.
-
-use std::time::Instant;
+//! FNV-1a 32-bit hash utility used across the `gglib-agent` crate.
+//!
+//! Timing utilities live in `gglib_core::utils::timing` and are re-exported
+//! from the `gglib_core` crate root as `gglib_core::elapsed_ms`.
 
 // =============================================================================
 // FNV-1a 32-bit hash
@@ -29,19 +30,6 @@ pub fn fnv1a_32(s: &str) -> u32 {
 }
 
 // =============================================================================
-// Timing helper
-// =============================================================================
-
-/// Convert `Instant::elapsed()` to whole milliseconds, clamping to `u64::MAX`.
-///
-/// Used wherever `wait_ms` / `duration_ms` fields are populated so that the
-/// same `u64::try_from(…).unwrap_or(u64::MAX)` boilerplate is not repeated.
-#[inline]
-pub fn elapsed_ms(start: Instant) -> u64 {
-    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
-}
-
-// =============================================================================
 // Tests
 // =============================================================================
 
@@ -62,14 +50,4 @@ mod tests {
         assert_eq!(fnv1a_32("world"), 933_488_787);
     }
 
-    #[test]
-    fn elapsed_ms_returns_small_value_immediately() {
-        let start = Instant::now();
-        let ms = elapsed_ms(start);
-        // Should be 0 or very small — just verify it does not panic.
-        assert!(
-            ms < 1000,
-            "elapsed_ms should be near zero for an immediate call"
-        );
-    }
 }

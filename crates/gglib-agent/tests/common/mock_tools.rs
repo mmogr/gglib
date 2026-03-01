@@ -23,6 +23,7 @@ use std::time::Instant;
 use anyhow::Result;
 use async_trait::async_trait;
 use gglib_core::domain::agent::{ToolCall, ToolDefinition, ToolResult};
+use gglib_core::elapsed_ms;
 use gglib_core::ports::ToolExecutorPort;
 use tokio::sync::Mutex;
 
@@ -167,7 +168,7 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 content,
                 success: true,
                 wait_ms: 0,
-                duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
+                duration_ms: elapsed_ms(start),
             }),
             MockToolBehavior::Delayed { millis, content } => {
                 tokio::time::sleep(std::time::Duration::from_millis(millis)).await;
@@ -176,7 +177,7 @@ impl ToolExecutorPort for MockToolExecutorPort {
                     content,
                     success: true,
                     wait_ms: 0,
-                    duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
+                    duration_ms: elapsed_ms(start),
                 })
             }
             MockToolBehavior::Fail { message } => Ok(ToolResult {
@@ -184,7 +185,7 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 content: message,
                 success: false,
                 wait_ms: 0,
-                duration_ms: u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX),
+                duration_ms: elapsed_ms(start),
             }),
             MockToolBehavior::Error { message } => Err(anyhow::anyhow!(message)),
         }

@@ -13,3 +13,4 @@ pub(crate) mod tool_execution;
 
 pub use agent_loop::AgentLoop;
 pub use filter::FilteredToolExecutor;
+pub use tool_execution::execute_tools_parallel;
