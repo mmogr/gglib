@@ -17,6 +17,7 @@
 use std::collections::HashSet;
 
 use gglib_core::{AgentConfig, AgentMessage, AssistantContent};
+use tracing::warn;
 
 // =============================================================================
 // Public API
@@ -78,6 +79,7 @@ pub(crate) fn prune_for_budget(
     // original positions within the non-system flow.  This is intentional —
     // most LLM APIs expect system messages at the head of the context window.
 
+    let before_count = messages.len();
     let (system, non_system): (Vec<AgentMessage>, Vec<AgentMessage>) = messages
         .into_iter()
         .partition(|m| matches!(m, AgentMessage::System { .. }));
@@ -89,6 +91,15 @@ pub(crate) fn prune_for_budget(
         .into_iter()
         .chain(non_system.into_iter().skip(tail_start))
         .collect();
+
+    warn!(
+        before = before_count,
+        after = result.len(),
+        dropped = before_count.saturating_sub(result.len()),
+        "context-pruning Pass 2 (emergency tail-prune) triggered: \
+         System messages hoisted to front, oldest non-system messages dropped"
+    );
+
     // Sync the running counter after Pass 2; Pass 1 updated it incrementally
     // but the partition+skip above drops additional messages without touching
     // `running_chars`.  Without this, the next iteration sees a stale count

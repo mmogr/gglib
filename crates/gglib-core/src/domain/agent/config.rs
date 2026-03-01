@@ -44,8 +44,9 @@ pub const DEFAULT_MAX_PARALLEL_TOOLS: usize = 5;
 
 /// Configuration that governs a single agentic loop run.
 ///
-/// All fields have sensible defaults via [`Default`] that match the constants
-/// used in the TypeScript frontend (`src/hooks/useGglibRuntime/agentLoop.ts`).
+/// All fields have sensible defaults via [`Default`] that match the historical
+/// TypeScript frontend constants (previously in `agentLoop.ts`, now reflected
+/// in `streamAgentChat.ts`).
 ///
 /// # Serialisation
 ///

@@ -204,9 +204,9 @@ pub(crate) fn api_routes() -> Router<AppState> {
         // local cpal/rodio.  Desktop callers skip this endpoint entirely.
         .route("/voice/audio", get(handlers::voice_ws::audio_ws))
         // Agent (server-side agentic loop with SSE streaming)
-        // Body is bounded explicitly: agent conversation histories can grow
-        // large, so we permit up to 4 MiB rather than relying on the global
-        // Axum default (2 MiB).
+        // 4 MiB body limit — larger than the Axum default (2 MiB) because agent
+        // requests carry the full conversation history (all prior messages, tool
+        // results, and assistant turns), which grows with each session turn.
         .route(
             "/agent/chat",
             post(handlers::agent::chat)

@@ -131,8 +131,13 @@ pub async fn collect_stream(
     let mut reasoning_buf = String::new();
     // Indexed by the tool-call `index` from the stream deltas.
     let mut partials: Vec<PartialToolCall> = Vec::new();
+    // Tracks whether at least one event was received before the stream ended.
+    // Used to distinguish a hard connectivity failure (zero events) from a
+    // mid-response truncation (some events, no Done frame).
+    let mut got_any_event = false;
 
     while let Some(event) = stream.next().await {
+        got_any_event = true;
         match event? {
             LlmStreamEvent::TextDelta { content } => {
                 text_buf.push_str(&content);
@@ -183,12 +188,18 @@ pub async fn collect_stream(
                     let (id, name) = match (p.id, p.name) {
                         (Some(id), Some(name)) => (id, name),
                         (id, name) => {
-                            warn!(
-                                id = ?id,
-                                name = ?name,
-                                "dropping incomplete tool-call partial: missing id or name"
+                            let message = format!(
+                                "incomplete tool-call partial at Done: missing {} \
+                                 (id={:?}, name={:?}) — aborting to prevent incoherent context",
+                                if id.is_none() && name.is_none() { "id and name" }
+                                else if id.is_none() { "id" }
+                                else { "name" },
+                                id,
+                                name,
                             );
-                            continue;
+                            warn!(%message, "aborting stream collection due to incomplete tool-call partial");
+                            let _ = tx.send(AgentEvent::Error { message: message.clone() }).await;
+                            anyhow::bail!("{message}");
                         }
                     };
                     let raw = p.arguments;
@@ -223,8 +234,14 @@ pub async fn collect_stream(
         }
     }
 
-    // The stream ended without a Done event — treat as an infrastructure error.
-    anyhow::bail!("LLM stream ended without a Done event")
+    // The stream ended without a Done event.  Distinguish two failure modes:
+    // - Zero events: hard connectivity failure (server unreachable, refused connection).
+    // - Some events, no Done: stream truncated mid-response.
+    if got_any_event {
+        anyhow::bail!("LLM stream ended without a Done event (stream truncated mid-response)")
+    } else {
+        anyhow::bail!("LLM stream yielded zero events (connection refused or server unreachable)")
+    }
 }
 
 // =============================================================================

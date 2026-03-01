@@ -109,6 +109,12 @@ pub struct CliContext {
     pub llama_server_path: PathBuf,
     /// Base port for allocating llama-server instances (from CLI `--base-port`).
     pub base_port: u16,
+    /// Shared HTTP client for LLM adapter calls.
+    ///
+    /// Constructed once at bootstrap and cloned into each agent session so that
+    /// TCP connections to llama-server are pooled across REPL turns, matching
+    /// the connection-pooling behaviour of the Axum handler.
+    pub http_client: reqwest::Client,
 }
 
 impl CliContext {
@@ -150,6 +156,14 @@ impl CliContext {
     /// Base port used when allocating ports for auto-started llama-server instances.
     pub fn base_port(&self) -> u16 {
         self.base_port
+    }
+
+    /// Shared HTTP client for LLM adapter calls.
+    ///
+    /// Clone this into each agent session to share the underlying connection
+    /// pool across REPL turns.
+    pub fn http_client(&self) -> &reqwest::Client {
+        &self.http_client
     }
 }
 
@@ -248,6 +262,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         model_repo: repos.models,
         llama_server_path: config.llama_server_path,
         base_port: config.base_port,
+        http_client: reqwest::Client::new(),
     })
 }
 
@@ -276,6 +291,7 @@ pub fn bootstrap_with(
         model_repo,
         llama_server_path,
         base_port: 9000,
+        http_client: reqwest::Client::new(),
     }
 }
 

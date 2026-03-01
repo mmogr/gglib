@@ -268,6 +268,8 @@ pub enum Commands {
         max_iterations: usize,
         /// Tool allowlist exposed to the model; may be repeated or comma-separated.
         /// Omit to allow all tools. (agentic mode only, e.g. "mcp_search,builtin_time")
+        /// Note: the filter is evaluated once at session start. To change the
+        /// available tools mid-session, exit and restart with a new --tools list.
         #[arg(long, value_delimiter = ',')]
         tools: Vec<String>,
         /// Per-tool execution timeout in milliseconds (agentic mode only)
