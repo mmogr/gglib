@@ -99,6 +99,7 @@ async fn test_simple_tool_call_cycle() {
 #[tokio::test]
 async fn test_parallel_tool_calls() {
     let batch = MockLlmResponse {
+        reasoning: None,
         content: None,
         tool_calls: vec![
             ToolCall {
@@ -220,6 +221,52 @@ async fn test_tool_timeout() {
     assert!(
         has_tool_complete_with_success(&events, false),
         "expected a ToolCallComplete with success=false for the timed-out tool"
+    );
+
+    assert!(has_final_answer(&events), "missing FinalAnswer");
+}
+
+/// **ReasoningDelta forwarded**: the LLM emits a reasoning block before the
+/// final text answer.  The agent loop must forward the reasoning as
+/// [`AgentEvent::ReasoningDelta`] and still produce the [`AgentEvent::FinalAnswer`].
+///
+/// Exercises the `LlmStreamEvent::ReasoningDelta` → `AgentEvent::ReasoningDelta`
+/// path through `stream_collector` without any tool calls.
+#[tokio::test]
+async fn test_reasoning_delta_emitted() {
+    let llm = Arc::new(
+        MockLlmPort::new().push(MockLlmResponse::text_with_reasoning(
+            "Let me think about this carefully.",
+            "The answer is 42.",
+        )),
+    );
+
+    let executor = MockToolExecutorPort::new();
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(64);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "What is the meaning of life?".into(),
+            }],
+            AgentConfig::default(),
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    assert_eq!(result.unwrap().answer, "The answer is 42.");
+
+    // The reasoning delta must appear in the event stream.
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            AgentEvent::ReasoningDelta { content }
+            if content == "Let me think about this carefully."
+        )),
+        "expected AgentEvent::ReasoningDelta with the scripted reasoning text; events: {events:?}"
     );
 
     assert!(has_final_answer(&events), "missing FinalAnswer");

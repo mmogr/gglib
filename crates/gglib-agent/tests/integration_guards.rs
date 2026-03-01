@@ -155,6 +155,7 @@ async fn test_stagnation_detected_integration() {
     // Each response includes both text content AND a tool call so the loop
     // does not immediately produce a FinalAnswer and has a chance to stagnate.
     let llm = Arc::new(MockLlmPort::new().push_many((0..5).map(|i| MockLlmResponse {
+        reasoning: None,
         content: Some("Thinking...".into()),
         tool_calls: vec![ToolCall {
             id: format!("s{i}"),
@@ -190,9 +191,26 @@ async fn test_stagnation_detected_integration() {
 
     let events = collect_events(rx).await;
 
+    // Inline FNV-1a 64-bit hash helper — mirrors `gglib_agent::fnv1a::fnv1a_64`.
+    fn fnv1a_hash(s: &str) -> u64 {
+        const OFFSET: u64 = 14_695_981_039_346_656_037;
+        const PRIME: u64 = 1_099_511_628_211;
+        s.bytes().fold(OFFSET, |h, b| (h ^ b as u64).wrapping_mul(PRIME))
+    }
+    let expected_hash = fnv1a_hash("Thinking...");
+
+    // max_stagnation_steps=2 → 3 total identical responses before abort
+    // (baseline + 2 repeats → fires when repeat_count >= 2, count = self.count + 1 = 3).
     assert!(
-        matches!(result, Err(AgentError::StagnationDetected { max_steps: 2, .. })),
-        "expected StagnationDetected {{ max_steps: 2 }}, got: {result:?}"
+        matches!(
+            result,
+            Err(AgentError::StagnationDetected {
+                max_steps: 2,
+                count: 3,
+                repeated_text_hash: h
+            }) if h == expected_hash
+        ),
+        "expected StagnationDetected {{ max_steps: 2, count: 3, hash={expected_hash:#018x} }}, got: {result:?}"
     );
 
     assert!(
@@ -216,6 +234,7 @@ async fn test_stagnation_detected_integration() {
 async fn test_too_many_tool_calls_integration() {
     // LLM emits 3 tool calls in one response; limit is 2.
     let batch = MockLlmResponse {
+        reasoning: None,
         content: None,
         tool_calls: vec![
             ToolCall { id: "c1".into(), name: "search".into(), arguments: json!({}) },

@@ -75,7 +75,7 @@ impl ToolExecutorPort for EmptyToolExecutor {
 /// The allowlist is compared against the **exact names returned by the inner
 /// executor's `list_tools`**.  When the inner executor is
 /// [`McpToolExecutorAdapter`], names are qualified with a server-id prefix
-/// (e.g. `"3__read_file"`).  The `tool_filter` values forwarded from the
+/// (e.g. `"3:read_file"`).  The `tool_filter` values forwarded from the
 /// frontend should therefore use those same qualified names.
 pub(crate) struct FilteredToolExecutor {
     inner: Arc<dyn ToolExecutorPort>,

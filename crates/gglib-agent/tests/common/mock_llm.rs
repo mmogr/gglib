@@ -27,8 +27,11 @@ use tokio::sync::Mutex;
 /// `chat_stream` call.
 ///
 /// Converts into the sequence of [`LlmStreamEvent`] values:
-/// `TextDelta?` → `ToolCallDelta*` → `Done`.
+/// `ReasoningDelta?` → `TextDelta?` → `ToolCallDelta*` → `Done`.
 pub struct MockLlmResponse {
+    /// Optional reasoning text emitted as [`LlmStreamEvent::ReasoningDelta`]
+    /// before any text content.
+    pub reasoning: Option<String>,
     /// Optional assistant text (emitted as one [`LlmStreamEvent::TextDelta`]).
     pub content: Option<String>,
     /// Tool invocations the model "requests".
@@ -41,6 +44,23 @@ impl MockLlmResponse {
     /// A plain-text response with `finish_reason = "stop"`.
     pub fn text(content: impl Into<String>) -> Self {
         Self {
+            reasoning: None,
+            content: Some(content.into()),
+            tool_calls: vec![],
+            finish_reason: "stop".into(),
+        }
+    }
+
+    /// A plain-text response with a preceding reasoning block.
+    ///
+    /// Emits [`LlmStreamEvent::ReasoningDelta`] followed by
+    /// [`LlmStreamEvent::TextDelta`], then `Done`.
+    pub fn text_with_reasoning(
+        reasoning: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
+        Self {
+            reasoning: Some(reasoning.into()),
             content: Some(content.into()),
             tool_calls: vec![],
             finish_reason: "stop".into(),
@@ -54,6 +74,7 @@ impl MockLlmResponse {
         args: serde_json::Value,
     ) -> Self {
         Self {
+            reasoning: None,
             content: None,
             tool_calls: vec![ToolCall {
                 id: id.into(),
@@ -67,6 +88,9 @@ impl MockLlmResponse {
     /// Expand into the raw [`LlmStreamEvent`] sequence the adapter would emit.
     fn into_events(self) -> Vec<LlmStreamEvent> {
         let mut events = Vec::new();
+        if let Some(reasoning) = self.reasoning {
+            events.push(LlmStreamEvent::ReasoningDelta { content: reasoning });
+        }
         if let Some(text) = self.content {
             events.push(LlmStreamEvent::TextDelta { content: text });
         }

@@ -65,7 +65,7 @@ impl McpToolExecutorAdapter {
 impl ToolExecutorPort for McpToolExecutorAdapter {
     /// List every tool available across all running MCP servers.
     ///
-    /// Tool names are prefixed with `{server_id}__` (e.g. `3__read_file`) to
+    /// Tool names are prefixed with `{server_id}:` (e.g. `3:read_file`) to
     /// guarantee uniqueness when multiple servers expose tools with the same
     /// bare name.  `execute()` accepts both the qualified and the bare name for
     /// interoperability with `FilteredToolExecutor` (which operates on the

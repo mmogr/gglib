@@ -79,7 +79,7 @@ pub struct AgentConfig {
     pub context_budget_chars: usize,
 
     /// Maximum number of times the same tool-call batch signature may repeat
-    /// consecutively before the loop is declared stuck and aborted with
+    /// before the loop is declared stuck and aborted with
     /// [`crate::ports::AgentError::LoopDetected`].
     ///
     /// Frontend constant: `MAX_SAME_SIGNATURE_HITS = 2` in `agentLoop.ts`.

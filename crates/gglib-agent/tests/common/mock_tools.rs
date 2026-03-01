@@ -13,7 +13,7 @@
 //!         ToolDefinition::new("slow_io"),
 //!         MockToolBehavior::Delayed { millis: 5_000, content: "ok".into() },
 //!     );
-//! let call_log = executor.call_log_handle();  // clone before Arc wrapping
+//! let call_log = Arc::clone(&executor.call_log);  // clone before Arc wrapping
 //! ```
 
 use std::collections::HashMap;

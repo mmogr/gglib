@@ -94,7 +94,7 @@ mod tests {
     use super::*;
 
     // ---- tool_signature / batch_signature -----------------------------------
-    // Note: fnv1a_32 correctness is covered in crates/gglib-agent/src/fnv1a.rs.
+    // Note: fnv1a_64 correctness is covered in crates/gglib-agent/src/fnv1a.rs.
 
     #[test]
     fn tool_signature_includes_name_and_hash() {

@@ -38,6 +38,16 @@ pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
 /// # Algorithm
 ///
 /// See module-level documentation for the two-pass algorithm.
+///
+/// # Warning — Pass 2 reorders `System` messages
+///
+/// If Pass 1 alone is insufficient, Pass 2 partitions the message list into
+/// `System` and non-`System` groups.  All `System` messages are moved to the
+/// **front** regardless of their original positions, followed by the retained
+/// non-system tail.  Most LLM APIs expect system prompts at the head of the
+/// context, so this is intentional — but callers should be aware that
+/// interleaved system prompts will no longer appear at their original
+/// positions within the non-system flow after Pass 2 runs.
 pub(crate) fn prune_for_budget(
     messages: Vec<AgentMessage>,
     config: &AgentConfig,
@@ -97,7 +107,7 @@ pub(crate) fn prune_for_budget(
 ///
 /// `running` is updated in place so the caller can decide whether Pass 2 is
 /// still needed without a separate `total_chars` scan.
-pub(crate) fn prune_tool_messages(
+fn prune_tool_messages(
     messages: Vec<AgentMessage>,
     config: &AgentConfig,
     running: &mut usize,
