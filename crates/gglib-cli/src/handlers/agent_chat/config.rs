@@ -53,7 +53,7 @@ pub async fn compose(
     let tool_executor = build_tool_executor(args, ctx);
 
     // 4. Compose the agent loop (stateless — cheap to create).
-    let llm = Arc::new(LlmCompletionAdapter::new(port));
+    let llm = Arc::new(LlmCompletionAdapter::new(port, None::<String>));
     let agent_loop = AgentLoop::new(llm, tool_executor);
 
     Ok((agent_loop, maybe_handle))

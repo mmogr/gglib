@@ -298,6 +298,76 @@ mod tests {
     }
 
     #[test]
+    fn pass1_strips_pruned_call_ids_from_partially_surviving_assistant_message() {
+        // An assistant message with TWO tool calls where only one result survives
+        // pruning should be kept, but the pruned call ID must be stripped from
+        // the `tool_calls` list so the LLM never sees a reference to a missing
+        // tool result.
+        //
+        // Scenario: assistant calls [tc_old, tc_new]. tc_old's result is older
+        // than prune_keep_tool_messages=1, so it gets dropped; tc_new's result
+        // is the most recent and is retained.  The assistant message should
+        // survive with only [tc_new] in its tool_calls.
+        let assistant_multi = AgentMessage::Assistant {
+            content: None,
+            tool_calls: Some(vec![
+                ToolCall { id: "tc_old".into(), name: "t".into(), arguments: json!({}) },
+                ToolCall { id: "tc_new".into(), name: "t".into(), arguments: json!({}) },
+            ]),
+        };
+        let msgs = vec![
+            system("sys"),
+            assistant_multi,
+            tool_result("tc_old", &"x".repeat(100)),
+            tool_result("tc_new", &"y".repeat(100)),
+        ];
+
+        let total = total_chars(&msgs);
+        let cfg = AgentConfig {
+            context_budget_chars: total - 1,
+            prune_keep_tool_messages: 1, // keep only tc_new
+            ..Default::default()
+        };
+
+        let result = prune_for_budget(msgs, &cfg);
+
+        // tc_old's Tool message must be gone.
+        let tool_ids: Vec<_> = result
+            .iter()
+            .filter_map(|m| {
+                if let AgentMessage::Tool { tool_call_id, .. } = m {
+                    Some(tool_call_id.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!tool_ids.contains(&"tc_old"), "tc_old result should be pruned");
+        assert!(tool_ids.contains(&"tc_new"), "tc_new result should be kept");
+
+        // The assistant message must survive but with tc_old stripped out.
+        let assistant_calls: Vec<_> = result
+            .iter()
+            .filter_map(|m| {
+                if let AgentMessage::Assistant { tool_calls: Some(calls), .. } = m {
+                    Some(calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>())
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect();
+        assert!(
+            !assistant_calls.contains(&"tc_old"),
+            "pruned call id must be stripped from assistant message"
+        );
+        assert!(
+            assistant_calls.contains(&"tc_new"),
+            "surviving call id must remain in assistant message"
+        );
+    }
+
+    #[test]
     fn pass2_keeps_system_and_tail() {
         // Force into pass-2 territory by using a very tight budget.
         let msgs = vec![

@@ -13,11 +13,12 @@ pub mod utils;
 
 // Re-export commonly used types for convenience
 pub use domain::{
-    AgentConfig, AgentEvent, AgentMessage, ChatMessage, Conversation, ConversationUpdate,
-    LlmStreamEvent, McpEnvEntry, McpServer, McpServerConfig, McpServerStatus, McpServerType,
-    McpTool, McpToolResult, Message, MessageRole, Model, ModelCapabilities, ModelFilterOptions,
-    NewConversation, NewMcpServer, NewMessage, NewModel, RangeValues, ToolCall, ToolDefinition,
-    ToolResult, UpdateMcpServer, infer_from_chat_template, transform_messages_for_capabilities,
+    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, ChatMessage, Conversation,
+    ConversationUpdate, LlmStreamEvent, McpEnvEntry, McpServer, McpServerConfig, McpServerStatus,
+    McpServerType, McpTool, McpToolResult, Message, MessageRole, Model, ModelCapabilities,
+    ModelFilterOptions, NewConversation, NewMcpServer, NewMessage, NewModel, RangeValues, ToolCall,
+    ToolDefinition, ToolResult, UpdateMcpServer, infer_from_chat_template,
+    transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,

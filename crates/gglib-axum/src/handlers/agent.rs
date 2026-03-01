@@ -35,6 +35,7 @@ use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
 use gglib_agent::{AgentLoop, FilteredToolExecutor};
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::ports::{AgentLoopPort, ToolExecutorPort};
 use gglib_mcp::McpToolExecutorAdapter;
 use gglib_runtime::LlmCompletionAdapter;
@@ -94,7 +95,15 @@ struct AgentTaskGuard {
 
 impl Drop for AgentTaskGuard {
     fn drop(&mut self) {
-        // Idempotent: aborting an already-finished handle is a no-op.
+        // RAII cancellation: when the SSE response is dropped — either because
+        // the stream reached its natural end or because Axum detected that the
+        // HTTP client disconnected — this `Drop` impl fires and cancels the
+        // background `AgentLoop` task at its next `await` point.  This prevents
+        // the loop from burning CPU and LLM tokens after the consumer is gone.
+        //
+        // `abort()` is idempotent: calling it on an already-finished handle is
+        // a no-op, so the guard is always safe to drop regardless of how far
+        // the spawned task progressed.
         self.handle.abort();
     }
 }
@@ -157,6 +166,7 @@ pub async fn chat(
     let llm = Arc::new(LlmCompletionAdapter::with_client(
         req.port,
         state.http_client.clone(),
+        None::<String>,
     ));
 
     // ── Compose the tool executor (MCP adapter, optionally filtered) ──────
@@ -176,7 +186,7 @@ pub async fn chat(
     let config = req.config.unwrap_or_default();
 
     // ── Pipe AgentEvent values from the loop to the SSE stream ───────────
-    let (tx, rx) = mpsc::channel::<AgentEvent>(256);
+    let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
     let handle = tokio::spawn(async move {
         match agent_loop.run(messages, config, tx).await {

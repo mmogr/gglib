@@ -30,6 +30,7 @@ use tokio::task::JoinHandle;
 
 use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::ports::AgentLoopPort;
+use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 
 use crate::handlers::chat::ChatArgs;
 
@@ -113,7 +114,7 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         });
 
         // ── 2. Run agent loop for this turn ──────────────────────────────────
-        let (tx, mut rx) = mpsc::channel::<AgentEvent>(64);
+        let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
         let agent = Arc::clone(&agent_loop);
         let msgs = messages.clone();

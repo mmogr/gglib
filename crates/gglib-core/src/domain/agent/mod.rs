@@ -31,7 +31,7 @@ pub mod messages;
 pub mod tool_types;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
-pub use config::AgentConfig;
+pub use config::{AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig};
 pub use events::{AgentEvent, LlmStreamEvent};
 pub use messages::AgentMessage;
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};

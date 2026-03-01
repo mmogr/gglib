@@ -94,3 +94,23 @@ async fn execute_rejects_tool_not_shown_by_list() {
     let err = f.execute(&make_call("other_tool")).await.unwrap_err();
     assert!(err.to_string().contains("not in the allowed list"));
 }
+
+#[tokio::test]
+async fn execute_allowed_tool_propagates_inner_error() {
+    // When the inner executor returns `Err(...)` for an *allowed* tool,
+    // `FilteredToolExecutor` must propagate the error unchanged rather than
+    // swallowing it or converting it to a `ToolResult { success: false }`.
+    let inner = MockToolExecutorPort::new()
+        .with_tool(
+            ToolDefinition::new("flaky_tool"),
+            MockToolBehavior::Error { message: "infrastructure down".into() },
+        );
+    let allowed: HashSet<String> = ["flaky_tool".to_owned()].into();
+    let f = FilteredToolExecutor::new(Arc::new(inner) as Arc<dyn ToolExecutorPort>, allowed);
+
+    let err = f.execute(&make_call("flaky_tool")).await.unwrap_err();
+    assert!(
+        err.to_string().contains("infrastructure down"),
+        "inner Err must be propagated verbatim; got: {err}"
+    );
+}

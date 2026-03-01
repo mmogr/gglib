@@ -14,7 +14,7 @@
 //! for standalone use (e.g. CLI) and allocates its own pool.
 //!
 //! ```ignore
-//! let adapter = LlmCompletionAdapter::new(9000);
+//! let adapter = LlmCompletionAdapter::new(9000, None::<String>);
 //! let agent   = AgentLoop::new(Arc::new(adapter), tool_executor);
 //! ```
 
@@ -47,28 +47,44 @@ use sse_parser::{SseParseResult, parse_sse_frame};
 /// OpenAI wire format.
 pub struct LlmCompletionAdapter {
     url: String,
+    /// Forwarded verbatim as the `model` field in the OpenAI request body.
+    ///
+    /// llama-server ignores this field when serving a single model.  Set it
+    /// when the server is serving multiple GGUF files by name (e.g. via
+    /// `--model-alias`) or when routing through a proxy that selects backends
+    /// by model name.
+    model: String,
     client: Client,
 }
 
 impl LlmCompletionAdapter {
     /// Create a new adapter targeting `http://127.0.0.1:{port}/v1/chat/completions`.
     ///
+    /// `model` is forwarded verbatim in the OpenAI `model` field.  Pass `None`
+    /// to send an empty string, which is the right default for llama-server
+    /// when it is serving a single model.
+    ///
     /// Allocates a fresh [`reqwest::Client`] — prefer [`with_client`](Self::with_client)
     /// when a shared client is available (e.g. from `AppState`) to avoid
     /// per-request connection-pool overhead.
     #[must_use]
-    pub fn new(port: u16) -> Self {
-        Self::with_client(port, Client::new())
+    pub fn new(port: u16, model: Option<impl Into<String>>) -> Self {
+        Self::with_client(port, Client::new(), model)
     }
 
     /// Create an adapter that reuses an existing [`reqwest::Client`].
     ///
+    /// `model` is forwarded verbatim in the OpenAI `model` field.  Pass `None`
+    /// to send an empty string (the default for llama-server in single-model
+    /// mode).  Pass a name when the server is routing by `--model-alias`.
+    ///
     /// Pass a clone of the application-level client (e.g. `state.http_client.clone()`)
     /// so all agent-chat requests share a single connection pool.
     #[must_use]
-    pub fn with_client(port: u16, client: Client) -> Self {
+    pub fn with_client(port: u16, client: Client, model: Option<impl Into<String>>) -> Self {
         Self {
             url: format!("http://127.0.0.1:{port}/v1/chat/completions"),
+            model: model.map_or_else(String::new, Into::into),
             client,
         }
     }
@@ -156,9 +172,8 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
         let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
 
-        // llama-server ignores the `model` field when serving a single model.
         let mut body = json!({
-            "model": "",
+            "model": self.model,
             "messages": openai_messages,
             "stream": true,
         });
