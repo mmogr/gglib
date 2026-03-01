@@ -17,11 +17,13 @@
 //! | [`test_context_budget_pruning`] | Oversized history → pruning → loop continues |
 
 mod common;
+#[path = "common/mock_llm.rs"]
+mod mock_llm;
 
 use std::sync::Arc;
 
-use common::collect_events;
-use common::mock_llm::{MockLlmPort, MockLlmResponse};
+use mock_llm::collect_events;
+use mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
@@ -83,7 +85,7 @@ async fn test_simple_tool_call_cycle() {
             content: "result: async programming".into(),
         },
     );
-    let log = executor.call_log_handle();
+    let log = Arc::clone(&executor.call_log);
 
     let agent = AgentLoop::new(llm, Arc::new(executor));
     let (tx, rx) = mpsc::channel(64);
@@ -103,7 +105,7 @@ async fn test_simple_tool_call_cycle() {
     assert_eq!(result.unwrap().0, "Here are the results.");
 
     // Tool was called exactly once with the right name.
-    let calls = log.snapshot().await;
+    let calls = log.lock().await.clone();
     assert_eq!(calls.len(), 1, "expected exactly one tool invocation");
     assert_eq!(calls[0].0, "search");
 
@@ -129,23 +131,27 @@ async fn test_simple_tool_call_cycle() {
 /// and that the agent loop correctly builds the follow-up conversation.
 #[tokio::test]
 async fn test_parallel_tool_calls() {
-    let batch = MockLlmResponse::tool_calls(vec![
-        ToolCall {
-            id: "tc1".into(),
-            name: "search".into(),
-            arguments: json!({"q": "Rust"}),
-        },
-        ToolCall {
-            id: "tc2".into(),
-            name: "search".into(),
-            arguments: json!({"q": "async"}),
-        },
-        ToolCall {
-            id: "tc3".into(),
-            name: "search".into(),
-            arguments: json!({"q": "tokio"}),
-        },
-    ]);
+    let batch = MockLlmResponse {
+        content: None,
+        tool_calls: vec![
+            ToolCall {
+                id: "tc1".into(),
+                name: "search".into(),
+                arguments: json!({"q": "Rust"}),
+            },
+            ToolCall {
+                id: "tc2".into(),
+                name: "search".into(),
+                arguments: json!({"q": "async"}),
+            },
+            ToolCall {
+                id: "tc3".into(),
+                name: "search".into(),
+                arguments: json!({"q": "tokio"}),
+            },
+        ],
+        finish_reason: "tool_calls".into(),
+    };
 
     let llm = Arc::new(
         MockLlmPort::new()
@@ -159,7 +165,7 @@ async fn test_parallel_tool_calls() {
             content: "ok".into(),
         },
     );
-    let log = executor.call_log_handle();
+    let log = Arc::clone(&executor.call_log);
 
     let agent = AgentLoop::new(llm, Arc::new(executor));
     let (tx, rx) = mpsc::channel(128);
@@ -182,7 +188,7 @@ async fn test_parallel_tool_calls() {
     assert_eq!(result.unwrap().0, "All done.");
 
     // All three tool calls were executed.
-    let calls = log.snapshot().await;
+    let calls = log.lock().await.clone();
     assert_eq!(calls.len(), 3, "expected 3 tool invocations");
 
     // Three ToolCallStart and three ToolCallComplete events.

@@ -70,41 +70,20 @@ pub enum MockToolBehavior {
 // CallLog handle — sharable snapshot accessor
 // =============================================================================
 
-/// A clonable handle to the shared call-log, so callers can capture it before
-/// the executor is wrapped in an `Arc<dyn ToolExecutorPort>`.
-///
-/// ```rust,ignore
-/// let executor = MockToolExecutorPort::new().with_tool(…);
-/// let log = executor.call_log_handle();
-/// let agent = AgentLoop::new(llm, Arc::new(executor));
-/// agent.run(…).await.unwrap();
-///
-/// let calls = log.snapshot().await;
-/// assert_eq!(calls.len(), 1);
-/// ```
-#[derive(Clone)]
-pub struct CallLogHandle(Arc<Mutex<Vec<(String, serde_json::Value)>>>);
-
-impl CallLogHandle {
-    /// Return a cloned snapshot of all `(tool_name, arguments)` pairs recorded
-    /// up to now.
-    pub async fn snapshot(&self) -> Vec<(String, serde_json::Value)> {
-        self.0.lock().await.clone()
-    }
-}
-
 // =============================================================================
 // MockToolExecutorPort
 // =============================================================================
 
 /// Mock [`ToolExecutorPort`] with configurable per-tool behaviour.
 ///
-/// All invocations are appended to a shared [`CallLogHandle`] that can be
-/// captured before wrapping the executor in `Arc<dyn ToolExecutorPort>`.
+/// All invocations are recorded in the public `call_log` field — clone the
+/// inner `Arc` before wrapping the executor in `Arc<dyn ToolExecutorPort>` so
+/// you can inspect it after the agent has run.
 pub struct MockToolExecutorPort {
     tools: Vec<ToolDefinition>,
     behaviors: HashMap<String, MockToolBehavior>,
-    call_log: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
+    /// Shared call log — clone the `Arc` before wrapping in `Arc<dyn …>`.
+    pub call_log: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
 }
 
 impl MockToolExecutorPort {
@@ -126,13 +105,6 @@ impl MockToolExecutorPort {
         self
     }
 
-    /// Return a [`CallLogHandle`] that shares the internal call-log.
-    ///
-    /// Clone this **before** wrapping the executor in `Arc<dyn ToolExecutorPort>`
-    /// so you can inspect calls after the agent loop has run.
-    pub fn call_log_handle(&self) -> CallLogHandle {
-        CallLogHandle(Arc::clone(&self.call_log))
-    }
 }
 
 impl Default for MockToolExecutorPort {

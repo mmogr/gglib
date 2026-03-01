@@ -15,9 +15,9 @@ use std::pin::Pin;
 use anyhow::Result;
 use async_trait::async_trait;
 use futures_util::stream;
-use gglib_core::domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition};
+use gglib_core::domain::agent::{AgentEvent, AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition};
 use gglib_core::ports::LlmCompletionPort;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 
 // =============================================================================
 // MockLlmResponse — one scripted turn
@@ -60,15 +60,6 @@ impl MockLlmResponse {
                 name: name.into(),
                 arguments: args,
             }],
-            finish_reason: "tool_calls".into(),
-        }
-    }
-
-    /// A multi-tool response with `finish_reason = "tool_calls"`.
-    pub fn tool_calls(calls: Vec<ToolCall>) -> Self {
-        Self {
-            content: None,
-            tool_calls: calls,
             finish_reason: "tool_calls".into(),
         }
     }
@@ -171,4 +162,21 @@ impl LlmCompletionPort for MockLlmPort {
             .ok_or_else(|| anyhow::anyhow!("MockLlmPort: no more scripted responses"))?;
         Ok(Box::pin(stream::iter(events.into_iter().map(Ok))))
     }
+}
+
+// =============================================================================
+// collect_events — test helper
+// =============================================================================
+
+/// Drain all events buffered in `rx` after the sending end has been dropped.
+///
+/// [`AgentLoopPort::run`] takes the [`mpsc::Sender`] by value and drops it on
+/// return, so by the time a test calls this helper the channel is already
+/// closed — `recv()` will return `None` after the last buffered event.
+pub async fn collect_events(mut rx: mpsc::Receiver<AgentEvent>) -> Vec<AgentEvent> {
+    let mut events = Vec::new();
+    while let Some(evt) = rx.recv().await {
+        events.push(evt);
+    }
+    events
 }

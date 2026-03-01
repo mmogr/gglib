@@ -14,11 +14,13 @@
 //! | [`test_llm_startup_error_emits_event`] | LLM stream failure → error event before `Err` return |
 
 mod common;
+#[path = "common/mock_llm.rs"]
+mod mock_llm;
 
 use std::sync::Arc;
 
-use common::collect_events;
-use common::mock_llm::{MockLlmPort, MockLlmResponse};
+use mock_llm::collect_events;
+use mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
@@ -87,7 +89,7 @@ async fn test_stagnation_detected() {
     );
 }
 
-/// **Iteration / FinalAnswer events**: a single-tool iteration should emit
+/// **Iteration / `FinalAnswer` events**: a single-tool iteration should emit
 /// `IterationComplete { iteration: 1, .. }` followed by `FinalAnswer`.
 #[tokio::test]
 async fn test_iteration_complete_events() {
