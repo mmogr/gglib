@@ -1,16 +1,20 @@
 //! [`AgentConfig`] — configuration for a single agentic loop run.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Configuration that governs a single agentic loop run.
 ///
 /// All fields have sensible defaults via [`Default`] that match the constants
 /// used in the TypeScript frontend (`src/hooks/useGglibRuntime/agentLoop.ts`).
 ///
-/// `#[serde(default)]` allows callers (e.g. the web UI) to send *partial*
-/// configs and have omitted fields filled in from [`Default`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+/// # Serialisation
+///
+/// `AgentConfig` is intentionally **not** `Deserialize`.  External callers
+/// (HTTP, future config files) must go through a dedicated DTO that exposes
+/// only the safe subset of fields — currently [`crate::AgentRequestConfig`]
+/// in `gglib-axum`.  This prevents accidental exposure of internal tuning
+/// knobs (pruning parameters, strike limits, etc.) to untrusted callers.
+#[derive(Debug, Clone, Serialize)]
 pub struct AgentConfig {
     /// Maximum number of LLM→tool→LLM iterations before the loop is aborted.
     ///
@@ -88,13 +92,18 @@ impl Default for AgentConfig {
 /// | 25 iterations × 5 tools × 2 (start + complete)     |   250  |
 /// | 25 iterations × 1 `IterationComplete`              |    25  |
 /// | 1 `FinalAnswer` / `Error` sentinel                  |     1  |
-/// | headroom for `TextDelta` / `ReasoningDelta` tokens  |    32  |
+/// | headroom for `TextDelta` / `ReasoningDelta` tokens  |   256  |
+///
+/// The headroom of 256 is intentionally generous: a typical verbose LLM
+/// response produces hundreds of `TextDelta` events, and the channel
+/// must not fill up before the consumer processes them (back-pressure on
+/// every `tx.send().await` in the hot streaming path carries measurable cost).
 ///
 /// All callers (SSE handlers, CLI REPL) should use this constant instead of a
 /// magic literal so they stay in sync if default values are adjusted.
 pub const AGENT_EVENT_CHANNEL_CAPACITY: usize = 25 * (5 * 2 + 1) // structural events per iteration (ToolCallStart + Complete + IterationComplete)
-    + 1              // FinalAnswer or Error sentinel
-    + 32; // TextDelta / ReasoningDelta headroom
+    + 1   // FinalAnswer or Error sentinel
+    + 256; // TextDelta / ReasoningDelta headroom
 
 #[cfg(test)]
 mod tests {

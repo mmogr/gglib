@@ -35,6 +35,7 @@ use tokio::task::JoinHandle;
 
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::AgentLoopPort;
+use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 
 use crate::handlers::chat::ChatArgs;
 
@@ -46,12 +47,11 @@ use super::renderer::render_event;
 
 /// Channel capacity for the REPL's per-turn event channel.
 ///
-/// Unlike the SSE handler — which must buffer enough events to survive HTTP
-/// framing overhead and potential slow clients — the REPL processes events
-/// synchronously in a single task on the same machine.  A modest buffer is
-/// sufficient while still providing enough headroom for bursty tool-result
-/// events within one iteration.
-const REPL_CHANNEL_CAPACITY: usize = 128;
+/// Mirrors [`AGENT_EVENT_CHANNEL_CAPACITY`] so all callers stay in step when
+/// default values are adjusted.  The REPL processes events synchronously on
+/// the same machine, so it never faces HTTP framing overhead; but sharing the
+/// constant avoids a silent divergence if defaults change.
+const REPL_CHANNEL_CAPACITY: usize = AGENT_EVENT_CHANNEL_CAPACITY;
 
 const REPL_HELP: &str = "\
   /help     print this message
@@ -184,12 +184,14 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
 /// arrives, rendering each event.
 ///
-/// Returns `true` when the turn completed normally (channel closed or
-/// `FinalAnswer` received).  Cancellation (Ctrl+C) is handled by the caller
-/// via `tokio::select!`; this function has no side effects beyond rendering.
+/// Returns `true` only when the turn completed with a [`AgentEvent::FinalAnswer`]
+/// event.  Returns `false` when the channel closes without one (e.g. the loop
+/// hit max iterations or stagnated).  Cancellation (Ctrl+C) is handled by the
+/// caller via `tokio::select!`; this function has no side effects beyond
+/// rendering.
 ///
-/// Callers should only attempt to retrieve accumulated message history
-/// when this function returns `true`.
+/// The caller **must** gate any history update on the return value: history
+/// from a failed or incomplete turn must not replace the previous context.
 async fn collect_events(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
     while let Some(event) = rx.recv().await {
         render_event(&event, verbose);
@@ -201,7 +203,7 @@ async fn collect_events(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> b
             return true;
         }
     }
-    // Channel closed normally (e.g. loop ended with an error event, no
-    // FinalAnswer emitted). History update is still attempted via handle.await.
-    true
+    // Channel closed without a FinalAnswer — the loop ended with an error
+    // (max iterations, stagnation, etc.).  The caller must not update history.
+    false
 }

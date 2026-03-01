@@ -61,7 +61,7 @@ pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
 /// # Algorithm
 ///
 /// See module-level documentation for the two-pass algorithm.
-pub fn prune_for_budget(
+pub(crate) fn prune_for_budget(
     mut messages: Vec<AgentMessage>,
     config: &AgentConfig,
 ) -> Vec<AgentMessage> {

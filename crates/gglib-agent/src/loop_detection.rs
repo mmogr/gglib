@@ -29,7 +29,7 @@ use std::collections::HashMap;
 use gglib_core::ToolCall;
 use gglib_core::ports::AgentError;
 
-use crate::hash::fnv1a_32;
+use crate::fnv1a::fnv1a_32;
 
 // =============================================================================
 // Signature helpers
@@ -53,8 +53,7 @@ pub fn tool_signature(call: &ToolCall) -> String {
 /// Individual signatures are sorted before joining so that the result is
 /// independent of the order in which the LLM emitted the calls.
 pub fn batch_signature(calls: &[ToolCall]) -> String {
-    let mut sigs: Vec<String> = Vec::with_capacity(calls.len());
-    sigs.extend(calls.iter().map(tool_signature));
+    let mut sigs: Vec<String> = calls.iter().map(tool_signature).collect();
     sigs.sort_unstable();
     sigs.join("|")
 }
@@ -108,7 +107,7 @@ mod tests {
     use super::*;
 
     // ---- tool_signature / batch_signature -----------------------------------
-    // Note: fnv1a_32 correctness is covered in crates/gglib-agent/src/hash.rs.
+    // Note: fnv1a_32 correctness is covered in crates/gglib-agent/src/fnv1a.rs.
 
     #[test]
     fn tool_signature_includes_name_and_hash() {

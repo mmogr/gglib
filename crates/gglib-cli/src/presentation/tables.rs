@@ -38,3 +38,34 @@ pub fn format_optional<T: std::fmt::Display>(value: &Option<T>, default: &str) -
         None => default.to_string(),
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_string;
+
+    #[test]
+    fn truncate_short_string_unchanged() {
+        assert_eq!(truncate_string("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_exact_length_unchanged() {
+        assert_eq!(truncate_string("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_long_string_gets_ellipsis() {
+        // max_len=5: 4 chars of content + ellipsis = 5 chars total
+        let result = truncate_string("hello world", 5);
+        assert_eq!(result, "hell\u{2026}");
+    }
+
+    #[test]
+    fn truncate_empty_string() {
+        assert_eq!(truncate_string("", 10), "");
+    }
+}

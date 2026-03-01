@@ -76,27 +76,44 @@ pub fn render_event(event: &AgentEvent, verbose: bool) {
 
 #[cfg(test)]
 mod tests {
-    use crate::presentation::tables::truncate_string;
+    use gglib_core::domain::agent::{AgentEvent, ToolResult};
 
-    #[test]
-    fn truncate_short_string_unchanged() {
-        assert_eq!(truncate_string("hello", 10), "hello");
+    use super::render_event;
+
+    /// Convenience: call render_event and assert it does not panic.
+    fn smoke(event: AgentEvent) {
+        render_event(&event, false);
+        render_event(&event, true);
     }
 
     #[test]
-    fn truncate_exact_length_unchanged() {
-        assert_eq!(truncate_string("hello", 5), "hello");
+    fn final_answer_does_not_panic() {
+        smoke(AgentEvent::FinalAnswer { content: "42".into() });
     }
 
     #[test]
-    fn truncate_long_string_gets_ellipsis() {
-        // max_len=5: 4 chars of content + ellipsis = 5 chars total
-        let result = truncate_string("hello world", 5);
-        assert_eq!(result, "hell\u{2026}");
+    fn error_does_not_panic() {
+        smoke(AgentEvent::Error { message: "something went wrong".into() });
     }
 
     #[test]
-    fn truncate_empty_string() {
-        assert_eq!(truncate_string("", 10), "");
+    fn iteration_complete_respects_verbose_flag() {
+        // verbose=false should suppress the line, verbose=true should print it.
+        // Both paths must complete without panicking.
+        render_event(&AgentEvent::IterationComplete { iteration: 1, tool_calls: 2 }, false);
+        render_event(&AgentEvent::IterationComplete { iteration: 1, tool_calls: 2 }, true);
+    }
+
+    #[test]
+    fn tool_call_complete_does_not_panic() {
+        smoke(AgentEvent::ToolCallComplete {
+            result: ToolResult {
+                tool_call_id: "c1".into(),
+                content: "output".into(),
+                success: true,
+                wait_ms: 0,
+                duration_ms: 5,
+            },
+        });
     }
 }

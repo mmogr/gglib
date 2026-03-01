@@ -5,7 +5,7 @@
 pub(crate) mod agent_loop;
 pub(crate) mod context_pruning;
 pub(crate) mod filter;
-pub(crate) mod hash;
+pub(crate) mod fnv1a;
 pub(crate) mod loop_detection;
 pub(crate) mod stagnation;
 pub(crate) mod stream_collector;
@@ -13,4 +13,3 @@ pub(crate) mod tool_execution;
 
 pub use agent_loop::AgentLoop;
 pub use filter::FilteredToolExecutor;
-pub use tool_execution::execute_tools_parallel;

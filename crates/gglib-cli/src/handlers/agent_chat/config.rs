@@ -1,17 +1,16 @@
-//! Maps [`ChatArgs`] flags to an [`AgentLoop`] composition root and manages
-//! llama-server lifecycle (auto-start or port reuse).
+//! Maps [`ChatArgs`] flags to an [`AgentLoopPort`] composition root and
+//! manages llama-server lifecycle (auto-start or port reuse).
 //!
 //! The only public surface is [`compose`], which returns the ready-to-use
-//! [`AgentLoop`] and an optional [`ProcessHandle`] that the caller must stop
-//! when the session ends (`Some` only when we auto-started the server).
-//! [`AgentConfig`] is built inline by the REPL from the same `args`.
+//! `Arc<dyn AgentLoopPort>` and an optional [`ProcessHandle`] that the caller
+//! must stop when the session ends (`Some` only when we auto-started the
+//! server).  [`AgentConfig`] is built inline by the REPL from the same `args`.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use gglib_agent::{AgentLoop, FilteredToolExecutor};
-use gglib_core::ports::ToolExecutorPort;
+use gglib_agent::AgentLoop;
+use gglib_core::ports::AgentLoopPort;
 use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_mcp::McpToolExecutorAdapter;
 use gglib_runtime::LlmCompletionAdapter;
@@ -23,16 +22,16 @@ use crate::handlers::chat::ChatArgs;
 // Public API
 // =============================================================================
 
-/// Compose the [`AgentLoop`] ready to use for a chat session.
+/// Compose the agent loop ready to use for a chat session.
 ///
-/// Returns `(loop, maybe_handle)`:
+/// Returns `(agent, maybe_handle)`:
 /// - `maybe_handle` is `Some(handle)` when we auto-started a llama-server.
 ///   The caller **must** call `ctx.runner().stop(&handle)` when the session ends.
 /// - `maybe_handle` is `None` when the caller supplied `--port` (reuse).
 pub async fn compose(
     ctx: &CliContext,
     args: &ChatArgs,
-) -> Result<(AgentLoop, Option<ProcessHandle>)> {
+) -> Result<(Arc<dyn AgentLoopPort>, Option<ProcessHandle>)> {
     // 1. Resolve the LLM port — reuse or auto-start.
     let (port, maybe_handle) = resolve_port(ctx, args).await?;
 
@@ -43,14 +42,18 @@ pub async fn compose(
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
 
-    // 3. Build the tool executor, optionally restricted to an allowlist.
-    let tool_executor = build_tool_executor(args, ctx);
-
-    // 4. Compose the agent loop (stateless — cheap to create).
+    // 3. Compose the agent loop.  When `--tools` is supplied the loop is
+    //    restricted to the named allowlist; otherwise all MCP tools are visible.
     let llm = Arc::new(LlmCompletionAdapter::new(port, None::<String>));
-    let agent_loop = AgentLoop::new(llm, tool_executor);
+    let mcp_executor = Arc::new(McpToolExecutorAdapter::new(Arc::clone(ctx.mcp())));
+    let tool_filter = if args.tools.is_empty() {
+        None
+    } else {
+        Some(args.tools.iter().cloned().collect())
+    };
+    let agent = AgentLoop::build(llm, mcp_executor, tool_filter);
 
-    Ok((agent_loop, maybe_handle))
+    Ok((agent, maybe_handle))
 }
 
 // =============================================================================
@@ -58,6 +61,7 @@ pub async fn compose(
 // =============================================================================
 
 /// Return `(port, maybe_handle)`.
+///
 ///
 /// When `args.port` is supplied the server is treated as externally managed
 /// and no `ProcessHandle` is returned.  Otherwise a llama-server is spawned
@@ -105,17 +109,4 @@ async fn resolve_port(ctx: &CliContext, args: &ChatArgs) -> Result<(u16, Option<
     println!("llama-server ready on port {}", handle.port);
 
     Ok((handle.port, Some(handle)))
-}
-
-/// Wrap the MCP executor in a [`FilteredToolExecutor`] when `--tools` is set.
-fn build_tool_executor(args: &ChatArgs, ctx: &CliContext) -> Arc<dyn ToolExecutorPort> {
-    let base: Arc<dyn ToolExecutorPort> =
-        Arc::new(McpToolExecutorAdapter::new(Arc::clone(ctx.mcp())));
-
-    if args.tools.is_empty() {
-        base
-    } else {
-        let allowed: HashSet<String> = args.tools.iter().cloned().collect();
-        Arc::new(FilteredToolExecutor::new(base, allowed))
-    }
 }

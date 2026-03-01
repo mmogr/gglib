@@ -69,10 +69,16 @@ pub struct CollectedResponse {
 // =============================================================================
 
 /// Mutable accumulator for a single tool-call that arrives in fragments.
+///
+/// `id` and `name` are `None` until the first delta for this index arrives
+/// (the LLM emits them in the opening delta alongside `index`).  `arguments`
+/// accumulates as further deltas arrive and may remain empty for no-arg tools.
 #[derive(Default)]
 struct PartialToolCall {
-    id: String,
-    name: String,
+    /// Call identifier — `None` until received in the first delta.
+    id: Option<String>,
+    /// Tool name — `None` until received in the first delta.
+    name: Option<String>,
     /// Accumulated JSON string (fragments are concatenated, not parsed yet).
     arguments: String,
 }
@@ -146,10 +152,10 @@ pub async fn collect_stream(
                 }
                 let p = &mut partials[index];
                 if let Some(id) = id {
-                    p.id = id;
+                    p.id = Some(id);
                 }
                 if let Some(name) = name {
-                    p.name = name;
+                    p.name = Some(name);
                 }
                 if let Some(args) = arguments {
                     p.arguments.push_str(&args);
@@ -158,33 +164,26 @@ pub async fn collect_stream(
 
             LlmStreamEvent::Done { finish_reason } => {
                 // Assemble the partial tool calls into domain ToolCall values.
+                // Slots where `id` or `name` never arrived are skipped — an
+                // absent id would produce an unmatchable ToolResult.
                 let tool_calls = partials
                     .into_iter()
-                    .enumerate()
-                    // Skip empty slots and any partial whose id never arrived
-                    // (an empty id would produce an unmatchable ToolResult).
-                    .filter(|(_, p)| !p.name.is_empty() && !p.id.is_empty())
-                    .map(|(_, p)| {
-                        let args_str = if p.arguments.is_empty() {
-                            "{}"
-                        } else {
-                            &p.arguments
-                        };
+                    .filter_map(|p| {
+                        let id = p.id?;
+                        let name = p.name?;
+                        let raw = p.arguments;
+                        let args_str = if raw.is_empty() { "{}" } else { raw.as_str() };
                         let arguments: serde_json::Value = serde_json::from_str(args_str)
                             .unwrap_or_else(|e| {
                                 warn!(
-                                    tool_name = %p.name,
+                                    tool_name = %name,
                                     raw_args = %args_str,
                                     error = %e,
                                     "tool-call arguments are not valid JSON; using empty object"
                                 );
                                 serde_json::Value::Object(serde_json::Map::default())
                             });
-                        ToolCall {
-                            id: p.id,
-                            name: p.name,
-                            arguments,
-                        }
+                        Some(ToolCall { id, name, arguments })
                     })
                     .collect();
 

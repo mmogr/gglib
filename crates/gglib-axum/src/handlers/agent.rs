@@ -33,10 +33,10 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
-use gglib_agent::{AgentLoop, FilteredToolExecutor};
+use gglib_agent::AgentLoop;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
-use gglib_core::ports::{AgentLoopPort, ToolExecutorPort};
+use gglib_core::ports::ToolExecutorPort;
 use gglib_mcp::McpToolExecutorAdapter;
 use gglib_runtime::LlmCompletionAdapter;
 
@@ -128,16 +128,8 @@ struct AgentTaskGuard {
 
 impl Drop for AgentTaskGuard {
     fn drop(&mut self) {
-        // RAII cancellation: when the SSE response is dropped — either because
-        // the stream reached its natural end or because Axum detected that the
-        // HTTP client disconnected — this `Drop` impl fires and cancels the
-        // background `AgentLoop` task at its next `await` point.  This prevents
-        // the loop from burning CPU and LLM tokens after the consumer is gone.
-        //
-        // `abort()` is idempotent: calling it on an already-finished handle is
-        // a no-op, so the guard is always safe to drop regardless of how far
-        // the spawned task progressed.
-        self.handle.abort();
+        // See [`AgentTaskGuard`] for the cancellation contract.
+        self.handle.abort(); // idempotent — safe on already-finished handles
     }
 }
 
@@ -195,26 +187,17 @@ pub async fn chat(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
     validate_port(&state, req.port).await?;
 
-    // ── Compose the LLM adapter (shared reqwest::Client from AppState) ───
+    // ── Compose the agent loop (LLM adapter + MCP tools, optionally filtered)
     let llm = Arc::new(LlmCompletionAdapter::with_client(
         req.port,
         state.http_client.clone(),
         None::<String>,
     ));
+    let mcp_executor: Arc<dyn ToolExecutorPort> =
+        Arc::new(McpToolExecutorAdapter::new(Arc::clone(&state.mcp)));
+    let tool_filter = req.tool_filter.map(|f| f.into_iter().collect());
+    let agent_loop = AgentLoop::build(llm, mcp_executor, tool_filter);
 
-    // ── Compose the tool executor (MCP adapter, optionally filtered) ──────
-    let mcp_executor = Arc::new(McpToolExecutorAdapter::new(Arc::clone(&state.mcp)));
-
-    let tool_executor: Arc<dyn ToolExecutorPort> = match req.tool_filter {
-        Some(filter) => Arc::new(FilteredToolExecutor::new(
-            mcp_executor,
-            filter.into_iter().collect(),
-        )),
-        None => mcp_executor,
-    };
-
-    // ── Build the AgentLoop (stateless, cheap to construct) ───────────────
-    let agent_loop: Arc<dyn AgentLoopPort> = Arc::new(AgentLoop::new(llm, tool_executor));
     let messages = req.messages;
     let config: AgentConfig = req.config.unwrap_or_default().into();
 

@@ -22,6 +22,7 @@
 //! `Err(AgentError::…)` is returned — the SSE client always sees the reason
 //! before the stream closes.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -31,6 +32,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::context_pruning::prune_for_budget;
+use crate::filter::FilteredToolExecutor;
 use crate::loop_detection::LoopDetector;
 use crate::stagnation::StagnationDetector;
 use crate::stream_collector::collect_stream;
@@ -79,6 +81,31 @@ impl AgentLoop {
     /// Create a new `AgentLoop` with the provided port implementations.
     pub fn new(llm: Arc<dyn LlmCompletionPort>, tool_executor: Arc<dyn ToolExecutorPort>) -> Self {
         Self { llm, tool_executor }
+    }
+
+    /// Compose an `AgentLoop` as `Arc<dyn AgentLoopPort>`, optionally wrapping
+    /// `tool_executor` in a [`FilteredToolExecutor`] allowlist.
+    ///
+    /// This is the preferred construction path for both HTTP handlers and CLI
+    /// callers, eliminating the boilerplate `Arc::new` + optional filter-wrapping
+    /// that would otherwise be duplicated at every call site.
+    ///
+    /// # Parameters
+    ///
+    /// * `tool_filter` — `Some(set)` restricts the visible and executable tools
+    ///   to the names in `set`; `None` exposes all tools from `tool_executor`.
+    pub fn build(
+        llm: Arc<dyn LlmCompletionPort>,
+        tool_executor: Arc<dyn ToolExecutorPort>,
+        tool_filter: Option<HashSet<String>>,
+    ) -> Arc<dyn AgentLoopPort> {
+        let executor: Arc<dyn ToolExecutorPort> = match tool_filter {
+            Some(allowed) if !allowed.is_empty() => {
+                Arc::new(FilteredToolExecutor::new(tool_executor, allowed))
+            }
+            _ => tool_executor,
+        };
+        Arc::new(Self::new(llm, executor))
     }
 }
 
