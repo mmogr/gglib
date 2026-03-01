@@ -181,7 +181,10 @@ async fn test_context_budget_pruning_two_iters() {
     let result = agent
         .run(
             messages,
-            common::for_test(|c| { c.context_budget_chars = 500; }),
+            // Budget of 600 chars: forces pruning on the initial ~1 600-char history while
+            // leaving enough room for the ~35-char new tool-call+result pair added after
+            // the first iteration so the second call is not over-pruned.
+            common::for_test(|c| { c.context_budget_chars = 600; }),
             tx,
         )
         .await;

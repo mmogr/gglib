@@ -19,6 +19,16 @@ use super::tool_types::ToolCall;
 /// | `Content(s)` | `"content": "…"` |
 /// | `ToolCalls(tcs)` | `"tool_calls": […]` |
 /// | `Both(s, tcs)` | `"content": "…", "tool_calls": […]` |
+///
+/// # Why not `#[serde(untagged)]`?
+///
+/// `#[serde(untagged)]` cannot enforce the “at least one field present”
+/// invariant: a JSON object `{}` (missing both `content` and `tool_calls`)
+/// would silently deserialise to an arbitrary variant rather than returning a
+/// meaningful error.  The hand-rolled [`Deserialize`] impl rejects that case
+/// with `"assistant message must have \`content\` or \`tool_calls\`"`.
+/// The [`Serialize`] impl mirrors the structure exactly so round-trips are
+/// lossless.
 #[derive(Debug, Clone)]
 pub enum AssistantContent {
     /// Text response only (no tool calls).
@@ -191,7 +201,11 @@ impl AgentMessage {
                     + content.tool_calls().map_or(0, |tcs| {
                         tcs.iter()
                             .map(|c| {
-                                c.name.chars().count()
+                                // Include `id` so the context-budget estimate
+                                // matches what llama-server actually tokenises
+                                // (a typical id like "call_abc123" is ~15 chars).
+                                c.id.chars().count()
+                                    + c.name.chars().count()
                                     + c.arguments.to_string().chars().count()
                             })
                             .sum()

@@ -191,9 +191,7 @@ pub async fn collect_stream(
                             let message = format!(
                                 "incomplete tool-call partial at Done: missing {} \
                                  (id={:?}, name={:?}) — aborting to prevent incoherent context",
-                                if id.is_none() && name.is_none() { "id and name" }
-                                else if id.is_none() { "id" }
-                                else { "name" },
+                                missing_fields_desc(id.as_deref(), name.as_deref()),
                                 id,
                                 name,
                             );
@@ -241,6 +239,23 @@ pub async fn collect_stream(
         anyhow::bail!("LLM stream ended without a Done event (stream truncated mid-response)")
     } else {
         anyhow::bail!("LLM stream yielded zero events (connection refused or server unreachable)")
+    }
+}
+
+// =============================================================================
+// Private helpers
+// =============================================================================
+
+/// Describe which fields of an incomplete tool-call partial are missing.
+///
+/// Extracted from the `format!` call at the `Done` assembly site to make the
+/// three-branch logic independently testable and avoid deep nesting.
+fn missing_fields_desc(id: Option<&str>, name: Option<&str>) -> &'static str {
+    match (id, name) {
+        (None, None) => "id and name",
+        (None, Some(_)) => "id",
+        (Some(_), None) => "name",
+        (Some(_), Some(_)) => unreachable!("called with both fields present"),
     }
 }
 

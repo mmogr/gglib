@@ -161,7 +161,11 @@ fn prune_tool_messages(
                 AgentMessage::Tool {
                     ref tool_call_id, ..
                 } if !kept_tool_call_ids.contains(tool_call_id) => {
-                    *running -= old_size;
+                    // Use saturating_sub: a caller-supplied `running_chars`
+                    // that is already wrong (e.g. from a char_count bug) must
+                    // not wrap around to usize::MAX and permanently disable
+                    // pruning for the rest of the session.
+                    *running = running.saturating_sub(old_size);
                     None
                 }
 
@@ -186,7 +190,9 @@ fn prune_tool_messages(
                                 };
                                 // Adjust running for the difference in size when some
                                 // tool calls were stripped from this assistant message.
-                                *running = *running - old_size + new_msg.char_count();
+                                // saturating_sub prevents usize wrap-around in release
+                                // if running_chars ever becomes inconsistent.
+                                *running = running.saturating_sub(old_size) + new_msg.char_count();
                                 Some(new_msg)
                             }
                         }

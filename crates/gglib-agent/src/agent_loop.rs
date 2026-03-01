@@ -244,22 +244,11 @@ impl AgentLoopPort for AgentLoop {
                 "LLM response received"
             );
 
-            // ---- 3. Stagnation guard ----------------------------------------
-            // `record` is a no-op on empty text (tool-call-only responses);
-            // that guard lives inside StagnationDetector to keep the invariant
-            // with the module that owns it.  When `max_stagnation_steps` is
-            // `None` the guard is disabled (e.g. in tests that use a fixed
-            // LLM response across many iterations).
-            if let Some(max_steps) = config.max_stagnation_steps {
-                if let Err(e) =
-                    stagnation_detector.record(&response.content, max_steps)
-                {
-                    emit_error_event(&tx, &e.to_string()).await;
-                    return Err(e);
-                }
-            }
-
-            // ---- 4. No tool calls → final answer ----------------------------
+            // ---- 3. No tool calls → final answer ----------------------------
+            // Checked BEFORE the stagnation guard: a model that says "I’m
+            // done" in the same wording as a prior non-final turn must not be
+            // penalised as stagnating — the absence of tool calls is the
+            // definitive signal that the loop completed normally.
             if response.tool_calls.is_empty() {
                 debug!("no tool calls; final answer reached");
                 let content = response.content;
@@ -279,6 +268,21 @@ impl AgentLoopPort for AgentLoop {
                     history: if config.return_history { Some(messages) } else { None },
                     total_iterations: iteration + 1,
                 });
+            }
+
+            // ---- 4. Stagnation guard ----------------------------------------
+            // Only evaluated on turns that produced tool calls (non-final
+            // turns), so a repeated terminal text never fires this guard.
+            // `record` is a no-op on empty text; that guard lives inside
+            // StagnationDetector.  When `max_stagnation_steps` is `None` the
+            // guard is disabled (e.g. in tests that reuse a fixed LLM response).
+            if let Some(max_steps) = config.max_stagnation_steps {
+                if let Err(e) =
+                    stagnation_detector.record(&response.content, max_steps)
+                {
+                    emit_error_event(&tx, &e.to_string()).await;
+                    return Err(e);
+                }
             }
 
             // ---- 5. Loop detection ------------------------------------------

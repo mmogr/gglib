@@ -36,10 +36,14 @@ impl From<AgentRequestConfig> for AgentConfig {
         let AgentRequestConfig { max_iterations, max_parallel_tools, tool_timeout_ms } = req;
         let mut cfg = AgentConfig::default();
         if let Some(n) = max_iterations {
-            cfg.max_iterations = n.min(MAX_ITERATIONS_CEILING);
+            // Clamp to [1, ceiling]: 0 would make the loop exit immediately as
+            // MaxIterationsReached(0) without ever running.
+            cfg.max_iterations = n.clamp(1, MAX_ITERATIONS_CEILING);
         }
         if let Some(n) = max_parallel_tools {
-            cfg.max_parallel_tools = n.min(MAX_PARALLEL_TOOLS_CEILING);
+            // Clamp to [1, ceiling]: Semaphore::new(0) would deadlock any
+            // iteration that produces tool calls — no permit can ever be acquired.
+            cfg.max_parallel_tools = n.clamp(1, MAX_PARALLEL_TOOLS_CEILING);
         }
         if let Some(ms) = tool_timeout_ms {
             cfg.tool_timeout_ms = ms.min(MAX_TOOL_TIMEOUT_MS_CEILING);

@@ -21,6 +21,13 @@
 use std::pin::Pin;
 
 use anyhow::{Result, anyhow};
+
+/// Timeout (seconds) for the `.send()` phase of each LLM request.
+///
+/// Covers TCP connect + TLS handshake + HTTP response headers.  Does **not**
+/// apply to the streaming body, which can take arbitrarily long during prompt
+/// pre-fill.  Chosen conservatively; the llama-server is always local.
+const LLM_CONNECT_TIMEOUT_SECS: u64 = 30;
 use async_trait::async_trait;
 use futures_core::Stream;
 use futures_util::StreamExt as _;
@@ -192,14 +199,22 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             body["tool_choice"] = json!("auto");
         }
 
-        let response = self
-            .client
-            .post(&self.url)
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| anyhow!("request to llama-server failed: {e}"))?;
+        // Gate the connect + first-byte phase with a hard timeout so a
+        // stalled or slow llama-server doesn’t hang the agent task
+        // indefinitely.  The timeout covers only `.send()` (connect through
+        // HTTP response headers); subsequent streaming body reads are not
+        // gated here because prompt pre-fill can be arbitrarily long.
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(LLM_CONNECT_TIMEOUT_SECS),
+            self.client
+                .post(&self.url)
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send(),
+        )
+        .await
+        .map_err(|_| anyhow!("llama-server connection timed out after {LLM_CONNECT_TIMEOUT_SECS}s"))?
+        .map_err(|e| anyhow!("request to llama-server failed: {e}"))?;
 
         if !response.status().is_success() {
             let status = response.status();

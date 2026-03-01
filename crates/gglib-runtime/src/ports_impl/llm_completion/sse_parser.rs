@@ -48,7 +48,16 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     let parsed: serde_json::Value = serde_json::from_str(data)
         .map_err(|e| anyhow!("SSE frame JSON parse error: {e} — data: {data}"))?;
 
-    let choice = &parsed["choices"][0];
+    // Guard against keepalive / error frames that carry no `choices` array.
+    // Without this check every field access falls through to `Value::Null`,
+    // events are silently dropped, and a `finish_reason: "stop"` in such a
+    // frame would mean the stream never emits `Done`.
+    let choices = &parsed["choices"];
+    if choices.as_array().map_or(true, |a| a.is_empty()) {
+        tracing::debug!(data = %data, "SSE frame has no 'choices' entries — skipping");
+        return Ok(SseParseResult::Events(vec![]));
+    }
+    let choice = &choices[0];
     let delta = &choice["delta"];
 
     let mut events: Vec<LlmStreamEvent> = Vec::new();

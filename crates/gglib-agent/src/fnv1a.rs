@@ -1,5 +1,11 @@
 //! FNV-1a 64-bit hash utility used across the `gglib-agent` crate.
 //!
+//! # Why inline rather than using the `fnv` crate?
+//!
+//! The full implementation is 10 lines with no unsafe code and no trait
+//! machinery.  Vendoring it keeps the `gglib-agent` dependency graph minimal
+//! and avoids pulling in an additional crate for a single trivial function.
+//!
 //! Timing utilities live in `gglib_core::utils::timing` and are re-exported
 //! from the `gglib_core` crate root as `gglib_core::elapsed_ms`.
 

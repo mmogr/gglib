@@ -34,10 +34,15 @@ use crate::fnv1a::fnv1a_64;
 // Signature helpers
 // =============================================================================
 
-/// Serialise a [`serde_json::Value`] to a canonical JSON string with object
-/// keys sorted recursively so that `{"b":2,"a":1}` and `{"a":1,"b":2}`
-/// produce identical output.  Array element order is preserved.
-fn canonical_json(v: &Value) -> String {
+/// Produce a **deterministic string representation** of a [`serde_json::Value`]
+/// suitable for stable hashing.
+///
+/// Object keys are sorted recursively so that `{"b":2,"a":1}` and
+/// `{"a":1,"b":2}` produce identical output.  Array element order is
+/// preserved.  The output is **not** valid JSON — it is intentionally compact
+/// and only used as a pre-image for FNV-1a; never parsed or returned to
+/// callers.
+fn stable_repr(v: &Value) -> String {
     match v {
         Value::Object(map) => {
             let mut pairs: Vec<(&String, &Value)> = map.iter().collect();
@@ -48,7 +53,7 @@ fn canonical_json(v: &Value) -> String {
                     format!(
                         "{}:{}",
                         serde_json::to_string(k).expect("in-memory String serialisation is infallible"),
-                        canonical_json(v)
+                        stable_repr(v)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -56,7 +61,7 @@ fn canonical_json(v: &Value) -> String {
             format!("{{{inner}}}")
         }
         Value::Array(arr) => {
-            let inner = arr.iter().map(canonical_json).collect::<Vec<_>>().join(",");
+            let inner = arr.iter().map(stable_repr).collect::<Vec<_>>().join(",");
             format!("[{inner}]")
         }
         _ => v.to_string(),
@@ -71,7 +76,7 @@ fn canonical_json(v: &Value) -> String {
 /// logically identical arguments always hash identically regardless of JSON
 /// key ordering.
 fn tool_signature(call: &ToolCall) -> String {
-    let canonical = canonical_json(&call.arguments);
+    let canonical = stable_repr(&call.arguments);
     format!("{}:{:016x}", call.name, fnv1a_64(&canonical))
 }
 

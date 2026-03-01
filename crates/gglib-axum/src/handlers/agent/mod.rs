@@ -98,7 +98,12 @@ pub async fn chat(
 
     let handle = tokio::spawn(async move {
         match agent_loop.run(messages, config, tx).await {
-            Ok(_) => {}
+            Ok(output) => {
+                tracing::debug!(
+                    total_iterations = output.total_iterations,
+                    "agent loop completed"
+                );
+            }
             Err(e @ AgentError::Internal(_)) => {
                 tracing::error!("agent loop failed with internal error: {e}");
             }
