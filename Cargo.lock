@@ -1882,6 +1882,7 @@ dependencies = [
  "gglib-tauri",
  "gglib-voice",
  "open",
+ "reqwest 0.13.2",
  "serde",
  "serde_json",
  "tauri",
