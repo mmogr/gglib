@@ -5,9 +5,10 @@
 //! After each LLM response, the assistant's text content is hashed with
 //! [`crate::fnv1a::fnv1a_64`].  If the hash matches the previous
 //! iteration, a stagnation counter is incremented.  When the counter reaches
-//! `max_stagnation_steps`, the loop is aborted with an
-//! [`AgentError::Internal`] describing the stagnation.  When the hash
-//! changes, the counter is reset to zero.
+//! `max_stagnation_steps`, the loop is aborted with
+//! [`AgentError::StagnationDetected`], which carries the repeated-text hash,
+//! the consecutive count, and the configured limit as structured fields.
+//! When the hash changes, the counter is reset to zero.
 //!
 //! Stagnation detection is a safety net for models that get stuck in a
 //! repetitive non-tool-calling loop — e.g., repeatedly summarising their
@@ -83,11 +84,11 @@ impl StagnationDetector {
                 if self.count >= max_steps {
                     // self.count is the number of *repeats after the first baseline
                     // occurrence*, so total identical responses seen = self.count + 1.
-                    return Err(AgentError::Internal(format!(
-                        "agent stagnated: same response text seen {} time(s) consecutively \
-                        (max_stagnation_steps = {max_steps})",
-                        self.count + 1,
-                    )));
+                    return Err(AgentError::StagnationDetected {
+                        repeated_text_hash: hash,
+                        count: self.count + 1,
+                        max_steps,
+                    });
                 }
             }
             _ => {
@@ -131,8 +132,8 @@ mod tests {
         // Fourth occurrence — count = 3 (>= 3) → error
         let err = det.record(text, 3).unwrap_err();
         assert!(
-            matches!(err, AgentError::Internal(_)),
-            "expected AgentError::Internal, got {err:?}"
+            matches!(err, AgentError::StagnationDetected { .. }),
+            "expected AgentError::StagnationDetected, got {err:?}"
         );
     }
 
@@ -156,10 +157,11 @@ mod tests {
         // Trigger stagnation at limit = 1
         assert!(det.record(text, 1).is_ok()); // baseline
         let err = det.record(text, 1).unwrap_err(); // count = 1 >= 1 → error
-        if let AgentError::Internal(msg) = err {
-            assert!(msg.contains('1'), "message should contain the count: {msg}");
+        if let AgentError::StagnationDetected { count, max_steps, .. } = err {
+            assert_eq!(count, 2, "total count should be 2 (baseline + 1 repeat)");
+            assert_eq!(max_steps, 1);
         } else {
-            panic!("expected AgentError::Internal");
+            panic!("expected AgentError::StagnationDetected");
         }
     }
 
@@ -177,8 +179,8 @@ mod tests {
         // Second occurrence — count becomes 1, which satisfies count >= 0.
         let err = det.record(text, 0).unwrap_err();
         assert!(
-            matches!(err, AgentError::Internal(_)),
-            "expected Internal on first repeat with max_steps=0, got {err:?}"
+            matches!(err, AgentError::StagnationDetected { .. }),
+            "expected StagnationDetected on first repeat with max_steps=0, got {err:?}"
         );
     }
 }

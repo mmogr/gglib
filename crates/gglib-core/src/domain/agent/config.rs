@@ -28,6 +28,20 @@ pub const MAX_PARALLEL_TOOLS_CEILING: usize = 20;
 /// indefinitely via slow or stalled tool calls.
 pub const MAX_TOOL_TIMEOUT_MS_CEILING: u64 = 60_000;
 
+/// Default value for [`AgentConfig::max_iterations`].
+///
+/// Mirrors `DEFAULT_MAX_TOOL_ITERS = 25` from the TypeScript frontend.
+/// Used both in [`AgentConfig::default`] and in [`super::events::AGENT_EVENT_CHANNEL_CAPACITY`]
+/// so the channel size automatically scales with the iteration ceiling.
+pub const DEFAULT_MAX_ITERATIONS: usize = 25;
+
+/// Default value for [`AgentConfig::max_parallel_tools`].
+///
+/// Mirrors `MAX_PARALLEL_TOOLS = 5` from the TypeScript frontend.
+/// Used both in [`AgentConfig::default`] and in [`super::events::AGENT_EVENT_CHANNEL_CAPACITY`]
+/// so the channel size accounts for the correct number of concurrent tool events.
+pub const DEFAULT_MAX_PARALLEL_TOOLS: usize = 5;
+
 /// Configuration that governs a single agentic loop run.
 ///
 /// All fields have sensible defaults via [`Default`] that match the constants
@@ -72,7 +86,7 @@ pub struct AgentConfig {
     ///
     /// Set to `None` to disable loop detection entirely (useful in tests that
     /// deliberately repeat the same tool call).
-    pub max_protocol_strikes: Option<usize>,
+    pub max_empty_tool_response_steps: Option<usize>,
 
     /// Number of consecutive iterations in which the assistant produces identical
     /// text content before the loop is considered stagnant and aborted.
@@ -97,19 +111,29 @@ pub struct AgentConfig {
     ///
     /// Same rationale as [`Self::prune_keep_tool_messages`].
     pub prune_keep_tail_messages: usize,
+
+    /// Whether to include the full accumulated conversation history in
+    /// [`crate::ports::AgentRunOutput::history`] on a successful run.
+    ///
+    /// Defaults to `false`.  HTTP SSE handlers should leave this `false`
+    /// (the history is discarded after streaming); CLI callers set this to
+    /// `true` so they can feed the history back as `messages` on the next
+    /// REPL turn.
+    pub return_history: bool,
 }
 
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
-            max_iterations: 25,
-            max_parallel_tools: 5,
+            max_iterations: DEFAULT_MAX_ITERATIONS,
+            max_parallel_tools: DEFAULT_MAX_PARALLEL_TOOLS,
             tool_timeout_ms: 30_000,
             context_budget_chars: 180_000,
-            max_protocol_strikes: Some(2),
+            max_empty_tool_response_steps: Some(2),
             max_stagnation_steps: Some(5),
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
+            return_history: false,
         }
     }
 }
@@ -125,7 +149,7 @@ mod tests {
         assert_eq!(cfg.max_parallel_tools, 5);
         assert_eq!(cfg.tool_timeout_ms, 30_000);
         assert_eq!(cfg.context_budget_chars, 180_000);
-        assert_eq!(cfg.max_protocol_strikes, Some(2));
+        assert_eq!(cfg.max_empty_tool_response_steps, Some(2));
         assert_eq!(
             cfg.max_stagnation_steps,
             Some(5),
@@ -133,5 +157,6 @@ mod tests {
         );
         assert_eq!(cfg.prune_keep_tool_messages, 10);
         assert_eq!(cfg.prune_keep_tail_messages, 12);
+        assert!(!cfg.return_history, "return_history must default to false");
     }
 }

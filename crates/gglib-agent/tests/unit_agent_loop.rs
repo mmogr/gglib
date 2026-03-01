@@ -9,11 +9,11 @@
 //!
 //! | Test | Guard exercised |
 //! |------|-----------------|
-//! | [`test_stagnation_detected`] | Repeated response text → [`AgentError::Internal`] |
+//! | [`test_stagnation_detected`] | Repeated response text → [`AgentError::StagnationDetected`] |
 //! | [`test_iteration_complete_events`] | [`AgentEvent::IterationComplete`] / [`AgentEvent::FinalAnswer`] ordering |
 //! | [`test_llm_startup_error_emits_event`] | LLM stream failure → error event before `Err` return |
 //! | [`test_empty_tool_filter_exposes_no_tools`] | `build(…, Some([]))` → `EmptyToolExecutor` path |
-//! | [`test_too_many_tool_calls_returns_dedicated_error`] | Batch exceeds `max_parallel_tools` → [`AgentError::TooManyToolCalls`] |
+//! | [`test_too_many_tool_calls_returns_dedicated_error`] | Batch exceeds `max_parallel_tools` → [`AgentError::ParallelToolLimitExceeded`] |
 
 mod common;
 
@@ -36,7 +36,7 @@ use tokio::sync::mpsc;
 /// **Stagnation detection**: every LLM response contains the same text plus a
 /// tool call (unique ID each time so loop detection does not fire first).
 /// After `max_stagnation_steps` repeats the loop must abort with
-/// [`AgentError::Internal`] and emit an [`AgentEvent::Error`] before closing.
+/// [`AgentError::StagnationDetected`] and emit an [`AgentEvent::Error`] before closing.
 #[tokio::test]
 async fn test_stagnation_detected() {
     let llm = Arc::new(
@@ -69,7 +69,7 @@ async fn test_stagnation_detected() {
             {
                 let mut c = AgentConfig::default();
                 c.max_iterations = 10;
-                c.max_protocol_strikes = None; // disable loop detection
+                c.max_empty_tool_response_steps = None; // disable loop detection
                 c.max_stagnation_steps = Some(2); // fires on the 3rd identical-text iteration
                 c
             },
@@ -80,8 +80,8 @@ async fn test_stagnation_detected() {
     let events = collect_events(rx).await;
 
     assert!(
-        matches!(&result, Err(AgentError::Internal(msg)) if msg.contains("max_stagnation_steps = 2")),
-        "expected stagnation error reporting max_stagnation_steps = 2, got: {result:?}"
+        matches!(&result, Err(AgentError::StagnationDetected { max_steps: 2, .. })),
+        "expected StagnationDetected {{ max_steps: 2 }}, got: {result:?}"
     );
 
     // An AgentEvent::Error must be emitted before the stream closes.
@@ -241,7 +241,7 @@ async fn test_empty_tool_filter_exposes_no_tools() {
 
 /// **Too many tool calls**: when the LLM returns more tool calls in one batch
 /// than `max_parallel_tools` allows, the loop must abort with
-/// [`AgentError::TooManyToolCalls`] — not [`AgentError::Internal`] — and emit
+/// [`AgentError::ParallelToolLimitExceeded`] — not [`AgentError::Internal`] — and emit
 /// an [`AgentEvent::Error`] before closing the channel.
 #[tokio::test]
 async fn test_too_many_tool_calls_returns_dedicated_error() {
@@ -271,7 +271,7 @@ async fn test_too_many_tool_calls_returns_dedicated_error() {
             {
                 let mut c = AgentConfig::default();
                 c.max_parallel_tools = 2; // 3 calls > 2 → rejected
-                c.max_protocol_strikes = None;
+                c.max_empty_tool_response_steps = None;
                 c
             },
             tx,
@@ -284,14 +284,14 @@ async fn test_too_many_tool_calls_returns_dedicated_error() {
     assert!(
         matches!(
             result,
-            Err(AgentError::TooManyToolCalls { count: 3, limit: 2 })
+            Err(AgentError::ParallelToolLimitExceeded { count: 3, limit: 2 })
         ),
-        "expected TooManyToolCalls {{ count: 3, limit: 2 }}, got: {result:?}"
+        "expected ParallelToolLimitExceeded {{ count: 3, limit: 2 }}, got: {result:?}"
     );
 
     // An error event must be visible to SSE consumers before the stream closes.
     assert!(
         events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
-        "AgentEvent::Error must be emitted on TooManyToolCalls"
+        "AgentEvent::Error must be emitted on ParallelToolLimitExceeded"
     );
 }

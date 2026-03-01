@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 
+use super::config::{DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS};
 use super::tool_types::{ToolCall, ToolResult};
 
 // =============================================================================
@@ -157,7 +158,9 @@ pub enum LlmStreamEvent {
 ///
 /// All callers (SSE handlers, CLI REPL) should use this constant instead of a
 /// magic literal so they stay in sync if default values are adjusted.
-pub const AGENT_EVENT_CHANNEL_CAPACITY: usize = 25 * (5 * 2 + 1) // structural events per iteration (ToolCallStart + Complete + IterationComplete)
+pub const AGENT_EVENT_CHANNEL_CAPACITY: usize =
+    DEFAULT_MAX_ITERATIONS * (DEFAULT_MAX_PARALLEL_TOOLS * 2 + 1) // structural events per iteration
+    // (ToolCallStart + ToolCallComplete per tool, plus IterationComplete)
     + 1   // FinalAnswer or Error sentinel
     + 256; // TextDelta / ReasoningDelta headroom
 

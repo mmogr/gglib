@@ -8,7 +8,7 @@ use gglib_core::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TI
 /// User-facing configuration for a single agent chat request.
 ///
 /// Exposes only the fields that are safe to accept from an untrusted HTTP
-/// caller. Internal tuning parameters (`prune_*`, `max_protocol_strikes`,
+/// caller. Internal tuning parameters (`prune_*`, `max_empty_tool_response_steps`,
 /// `context_budget_chars`, etc.) are intentionally absent — they default to
 /// their well-tested values and cannot be weaponised to exhaust server
 /// resources.

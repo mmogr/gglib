@@ -36,7 +36,7 @@ This module defines all the **port traits** (interfaces) that the core domain ne
 - **`agent.rs`** - `ToolExecutorPort` and `AgentLoopPort` traits for the backend agentic loop
   - `ToolExecutorPort` — list and execute tools; returns `anyhow::Error` for infrastructure failures so they are decoupled from loop logic
   - `AgentLoopPort` — drives the ReAct loop; takes a `tokio::sync::mpsc::Sender<AgentEvent>` for SSE-ready streaming; returns `Result<String, AgentError>` (final answer)
-  - `AgentError` — fatal loop-level failures only (`MaxIterationsReached`, `LoopDetected`, `Internal`)
+  - `AgentError` — fatal loop-level failures only (`MaxIterationsReached`, `LoopDetected`, `ParallelToolLimitExceeded`, `StagnationDetected`, `Internal`)
 
 ### Repository Ports (Data Persistence)
 - **`model_repository.rs`** - Model CRUD operations

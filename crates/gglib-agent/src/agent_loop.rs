@@ -204,9 +204,9 @@ impl AgentLoopPort for AgentLoop {
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
     ///   without a final answer.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated more
-    ///   than `config.max_protocol_strikes` times.
-    /// - `Err(AgentError::Internal)` — text stagnation or an infrastructure
-    ///   error (LLM stream failure, etc.).
+    ///   than `config.max_empty_tool_response_steps` times.
+    ///   - `Err(AgentError::StagnationDetected)` — the assistant repeated the same
+    ///   text content for too many consecutive iterations.
     async fn run(
         &self,
         messages: Vec<AgentMessage>,
@@ -243,10 +243,10 @@ impl AgentLoopPort for AgentLoop {
             // during parsing; this check enforces the user-visible limit.)
             //
             // This is a model protocol violation, not an internal infrastructure
-            // failure, so it returns TooManyToolCalls rather than Internal —
+            // failure, so it returns ParallelToolLimitExceeded rather than Internal —
             // callers can distinguish and report it differently.
             if response.tool_calls.len() > config.max_parallel_tools {
-                let error = AgentError::TooManyToolCalls {
+                let error = AgentError::ParallelToolLimitExceeded {
                     count: response.tool_calls.len(),
                     limit: config.max_parallel_tools,
                 };
@@ -295,16 +295,16 @@ impl AgentLoopPort for AgentLoop {
                 });
                 return Ok(AgentRunOutput {
                     answer: content,
-                    history: messages,
+                    history: if config.return_history { Some(messages) } else { None },
                     total_iterations: iteration + 1,
                 });
             }
 
             // ---- 6. Loop detection ------------------------------------------
-            // When `max_protocol_strikes` is `None` the guard is disabled
+            // When `max_empty_tool_response_steps` is `None` the guard is disabled
             // (e.g. in tests that deliberately repeat the same tool call to
             // exercise multi-iteration behaviour without hitting the limit).
-            if let Some(max_strikes) = config.max_protocol_strikes {
+            if let Some(max_strikes) = config.max_empty_tool_response_steps {
                 if let Err(e) =
                     loop_detector.check(&response.tool_calls, max_strikes)
                 {

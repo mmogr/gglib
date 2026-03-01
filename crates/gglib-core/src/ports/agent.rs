@@ -52,7 +52,7 @@ pub enum AgentError {
     /// is stuck in a cycle.
     ///
     /// The `signature` field is a stable hash of the tool-call batch that was
-    /// repeated beyond [`AgentConfig::max_protocol_strikes`].
+    /// repeated beyond [`AgentConfig::max_empty_tool_response_steps`].
     #[error("tool-call loop detected (repeated signature: {signature})")]
     LoopDetected {
         /// Stable hash of the repeated tool-call batch (for diagnostics).
@@ -69,11 +69,32 @@ pub enum AgentError {
     #[error(
         "LLM requested {count} tool calls in one batch, exceeds max_parallel_tools ({limit})"
     )]
-    TooManyToolCalls {
+    ParallelToolLimitExceeded {
         /// Number of tool calls the LLM returned.
         count: usize,
         /// The configured maximum ([`AgentConfig::max_parallel_tools`]).
         limit: usize,
+    },
+
+    /// The assistant produced the same text content for too many consecutive
+    /// iterations, indicating a non-tool-calling repetition loop.
+    ///
+    /// Preserves the FNV-1a hash of the repeated text, the number of
+    /// consecutive occurrences seen (including baseline), and the configured
+    /// `max_stagnation_steps` limit — giving callers structured access to the
+    /// stagnation evidence without parsing an error string.
+    #[error(
+        "agent stagnated: same response text seen {count} time(s) consecutively \
+         (max_stagnation_steps = {max_steps})"
+    )]
+    StagnationDetected {
+        /// FNV-1a hash of the repeated assistant text (for diagnostics).
+        repeated_text_hash: u64,
+        /// Total number of consecutive identical responses observed (including
+        /// the baseline occurrence).
+        count: usize,
+        /// The configured stagnation limit at the time of detection.
+        max_steps: usize,
     },
 
     /// An unrecoverable internal error inside the loop implementation.
@@ -98,9 +119,15 @@ pub struct AgentRunOutput {
     /// **plus** every assistant and tool-result message appended during the
     /// loop, including the final assistant reply.
     ///
-    /// CLI callers can feed this directly back as `messages` on the next turn
-    /// to maintain complete multi-turn context.
-    pub history: Vec<AgentMessage>,
+    /// Only populated when [`AgentConfig::return_history`] is `true`.
+    /// Callers that do not need the history (e.g. HTTP SSE handlers) should
+    /// leave the flag at its default (`false`) to avoid allocating and moving
+    /// the full message vector for every request.
+    ///
+    /// CLI callers set `return_history = true` and feed this value back as
+    /// the `messages` argument on the next REPL turn to maintain multi-turn
+    /// context.
+    pub history: Option<Vec<AgentMessage>>,
     /// Number of loop iterations consumed before the agent produced its final
     /// answer.  Always ≥ 1.  Useful for logging and telemetry.
     pub total_iterations: usize,
@@ -207,11 +234,8 @@ pub trait AgentLoopPort: Send + Sync {
     ///
     /// # Returns
     ///
-    /// * `Ok(AgentRunOutput)` — The final answer string and the full accumulated
-    ///   conversation history (caller-provided messages **plus** every assistant
-    ///   and tool-result message appended during the loop, including the final
-    ///   assistant reply).  CLI callers can feed `output.history` directly back
-    ///   as `messages` on the next turn to maintain complete multi-turn context.
+    /// * `Ok(AgentRunOutput)` — The final answer.  [`AgentRunOutput::history`]
+    ///   is populated only when [`AgentConfig::return_history`] is `true`.
     /// * `Err(AgentError)` — A fatal loop-level failure (max iterations reached,
     ///   loop detection, stagnation, or internal error).  No partial history is
     ///   returned on failure; the caller's existing history is left intact.

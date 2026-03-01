@@ -45,8 +45,9 @@ pub use gguf::{
 
 // Re-export agent types at the domain level for convenience
 pub use agent::{
-    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, LlmStreamEvent,
-    MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, ToolCall,
+    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, DEFAULT_MAX_ITERATIONS,
+    DEFAULT_MAX_PARALLEL_TOOLS, LlmStreamEvent, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
+    MAX_TOOL_TIMEOUT_MS_CEILING, ToolCall,
     ToolDefinition, ToolResult,
 };
 

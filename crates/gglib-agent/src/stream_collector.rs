@@ -48,7 +48,7 @@ use tracing::warn;
 /// does **not** prevent a model from emitting more tool-call slots in the
 /// stream — it only limits how many are executed concurrently.  The agent
 /// loop rejects oversized batches before execution via
-/// [`AgentError::TooManyToolCalls`].
+/// [`AgentError::ParallelToolLimitExceeded`].
 pub(crate) const MAX_TOOL_CALL_INDEX: usize = 64;
 
 // =============================================================================

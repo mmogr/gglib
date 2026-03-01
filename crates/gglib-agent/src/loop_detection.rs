@@ -7,7 +7,7 @@
 //! 2. Sort the individual signatures and join them with `"|"` to form a
 //!    **batch signature** that is independent of tool-call ordering.
 //! 3. A [`LoopDetector`] counts how many times each batch signature has been
-//!    seen.  When the count exceeds `max_protocol_strikes` the loop is
+//!    seen.  When the count exceeds `max_empty_tool_response_steps` the loop is
 //!    considered stuck and [`AgentError::LoopDetected`] is returned.
 //!
 //! ## Hash algorithm

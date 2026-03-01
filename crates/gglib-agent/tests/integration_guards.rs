@@ -10,8 +10,8 @@
 //! |------|----------------|
 //! | [`test_max_iterations_reached`]         | [`AgentConfig::max_iterations`] limit |
 //! | [`test_loop_detection`]                 | Repeated tool-call batch → [`AgentError::LoopDetected`] |
-//! | [`test_stagnation_detected_integration`] | Repeated text response → [`AgentError::Internal`] |
-//! | [`test_too_many_tool_calls_integration`] | Oversized tool-call batch → [`AgentError::TooManyToolCalls`] |
+//! | [`test_stagnation_detected_integration`] | Repeated text response → [`AgentError::StagnationDetected`] |
+//! | [`test_too_many_tool_calls_integration`] | Oversized tool-call batch → [`AgentError::ParallelToolLimitExceeded`] |
 
 mod common;
 
@@ -58,7 +58,7 @@ async fn test_max_iterations_reached() {
             {
                 let mut c = AgentConfig::default();
                 c.max_iterations = 3;
-                c.max_protocol_strikes = None; // disable loop detection for this test
+                c.max_empty_tool_response_steps = None; // disable loop detection for this test
                 c.max_stagnation_steps = None; // disable stagnation for this test
                 c
             },
@@ -85,7 +85,7 @@ async fn test_max_iterations_reached() {
 }
 
 /// **Loop detection**: the model keeps invoking the same tool with the same
-/// arguments across multiple iterations.  After `max_protocol_strikes`
+/// arguments across multiple iterations.  After `max_empty_tool_response_steps`
 /// repetitions the loop must terminate with [`AgentError::LoopDetected`].
 ///
 /// The loop detector computes a signature over tool *names and argument hashes*
@@ -115,7 +115,7 @@ async fn test_loop_detection() {
             {
                 let mut c = AgentConfig::default();
                 c.max_iterations = 10;
-                c.max_protocol_strikes = Some(2);
+                c.max_empty_tool_response_steps = Some(2);
                 c.max_stagnation_steps = None;
                 c
             },
@@ -150,7 +150,7 @@ async fn test_loop_detection() {
 /// iteration (text + tool call each time, so the loop does not exit on
 /// `FinalAnswer` — it must hit the stagnation guard instead).
 /// After `max_stagnation_steps` identical responses the loop must terminate
-/// with [`AgentError::Internal`] and emit [`AgentEvent::Error`].
+/// with [`AgentError::StagnationDetected`] and emit [`AgentEvent::Error`].
 ///
 /// Uses `max_stagnation_steps: Some(2)` so the detector fires after the
 /// 3rd identical response (baseline + 2 repeats).
@@ -186,7 +186,7 @@ async fn test_stagnation_detected_integration() {
             {
                 let mut c = AgentConfig::default();
                 c.max_stagnation_steps = Some(2);
-                c.max_protocol_strikes = None;
+                c.max_empty_tool_response_steps = None;
                 c.max_iterations = 10;
                 c
             },
@@ -197,8 +197,8 @@ async fn test_stagnation_detected_integration() {
     let events = collect_events(rx).await;
 
     assert!(
-        matches!(result, Err(AgentError::Internal(_))),
-        "expected Internal (stagnation), got: {result:?}"
+        matches!(result, Err(AgentError::StagnationDetected { max_steps: 2, .. })),
+        "expected StagnationDetected {{ max_steps: 2 }}, got: {result:?}"
     );
 
     assert!(
@@ -214,7 +214,7 @@ async fn test_stagnation_detected_integration() {
 
 /// **Too many tool calls**: when the LLM returns more tool calls in a single
 /// batch than `max_parallel_tools` allows, the loop must terminate immediately
-/// with [`AgentError::TooManyToolCalls`] and emit [`AgentEvent::Error`].
+/// with [`AgentError::ParallelToolLimitExceeded`] and emit [`AgentEvent::Error`].
 ///
 /// The batch is rejected *before* any tool is executed — this is checked by
 /// asserting that the tool executor is never called.
@@ -245,7 +245,7 @@ async fn test_too_many_tool_calls_integration() {
             {
                 let mut c = AgentConfig::default();
                 c.max_parallel_tools = 2; // 3 calls > 2 → rejected
-                c.max_protocol_strikes = None;
+                c.max_empty_tool_response_steps = None;
                 c
             },
             tx,
@@ -256,14 +256,14 @@ async fn test_too_many_tool_calls_integration() {
 
     // Must produce the dedicated error variant.
     assert!(
-        matches!(result, Err(AgentError::TooManyToolCalls { count: 3, limit: 2 })),
-        "expected TooManyToolCalls {{ count: 3, limit: 2 }}, got: {result:?}"
+        matches!(result, Err(AgentError::ParallelToolLimitExceeded { count: 3, limit: 2 })),
+        "expected ParallelToolLimitExceeded {{ count: 3, limit: 2 }}, got: {result:?}"
     );
 
     // An AgentEvent::Error must have been emitted before the stream closes.
     assert!(
         events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
-        "AgentEvent::Error must be emitted on TooManyToolCalls"
+        "AgentEvent::Error must be emitted on ParallelToolLimitExceeded"
     );
 
     // The tool must never have been called — the batch is rejected before execution.
