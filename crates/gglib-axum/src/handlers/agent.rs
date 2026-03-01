@@ -41,8 +41,42 @@ use gglib_mcp::McpToolExecutorAdapter;
 use gglib_runtime::LlmCompletionAdapter;
 
 // =============================================================================
-// Request DTO
+// Request DTOs
 // =============================================================================
+
+/// Hard ceiling on `max_iterations` accepted from HTTP requests.
+///
+/// Prevents a crafted request from running an unbounded loop at our expense.
+/// 50 iterations is generous for real workloads; raise if use-cases require it.
+const MAX_ITERATIONS_CEILING: usize = 50;
+
+/// User-facing configuration for a single agent chat request.
+///
+/// Exposes only the fields that are safe to accept from an untrusted HTTP
+/// caller. Internal tuning parameters (`prune_*`, `max_protocol_strikes`,
+/// `context_budget_chars`, etc.) are intentionally absent — they default to
+/// their well-tested values and cannot be weaponised to exhaust server
+/// resources.
+///
+/// Server-side limits are enforced: `max_iterations` is clamped to
+/// [`MAX_ITERATIONS_CEILING`].
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+pub struct AgentRequestConfig {
+    /// Maximum number of LLM→tool→LLM iterations. Clamped to
+    /// [`MAX_ITERATIONS_CEILING`] server-side.
+    pub max_iterations: Option<usize>,
+}
+
+impl From<AgentRequestConfig> for AgentConfig {
+    fn from(req: AgentRequestConfig) -> Self {
+        let mut cfg = AgentConfig::default();
+        if let Some(n) = req.max_iterations {
+            cfg.max_iterations = n.min(MAX_ITERATIONS_CEILING);
+        }
+        cfg
+    }
+}
 
 /// Request body for `POST /api/agent/chat`.
 #[derive(Debug, Deserialize)]
@@ -59,12 +93,11 @@ pub struct AgentChatRequest {
     /// `assistant` (with or without `tool_calls`), and `tool`.
     pub messages: Vec<AgentMessage>,
 
-    /// Optional loop configuration.
+    /// Optional loop tuning, restricted to safe user-facing fields.
     ///
-    /// When `None`, [`AgentConfig::default`] is used (matches the TypeScript
-    /// frontend constants: `max_iterations = 25`, `tool_timeout_ms = 30 000`,
-    /// etc.).
-    pub config: Option<AgentConfig>,
+    /// When `None` (or omitted), all fields default to the values in
+    /// [`AgentConfig::default`], which match the TypeScript frontend constants.
+    pub config: Option<AgentRequestConfig>,
 
     /// Optional allowlist of tool names to expose to the model.
     ///
@@ -183,7 +216,7 @@ pub async fn chat(
     // ── Build the AgentLoop (stateless, cheap to construct) ───────────────
     let agent_loop = AgentLoop::new(llm, tool_executor);
     let messages = req.messages;
-    let config = req.config.unwrap_or_default();
+    let config: AgentConfig = req.config.unwrap_or_default().into();
 
     // ── Pipe AgentEvent values from the loop to the SSE stream ───────────
     let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);

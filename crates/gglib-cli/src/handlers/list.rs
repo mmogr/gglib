@@ -87,6 +87,7 @@ mod tests {
     #[test]
     fn test_truncate_string_needs_truncation() {
         let result = truncate_string("this is a very long string", 10);
-        assert_eq!(result, "this is...");
+        // 9 chars of content + single-char ellipsis = 10 chars total
+        assert_eq!(result, "this is a\u{2026}");
     }
 }

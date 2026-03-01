@@ -20,12 +20,6 @@ use crate::bootstrap::CliContext;
 use crate::handlers::chat::ChatArgs;
 
 // =============================================================================
-// Base port used when auto-starting a server (consistent with CliConfig)
-// =============================================================================
-
-const DEFAULT_BASE_PORT: u16 = 9000;
-
-// =============================================================================
 // Public API
 // =============================================================================
 
@@ -102,7 +96,7 @@ async fn resolve_port(ctx: &CliContext, args: &ChatArgs) -> Result<(u16, Option<
         model.id,
         model.name.clone(),
         model.file_path.clone(),
-        DEFAULT_BASE_PORT,
+        ctx.base_port,
     );
     if let Some(ctx_size) = context_size {
         server_config = server_config.with_context_size(ctx_size);

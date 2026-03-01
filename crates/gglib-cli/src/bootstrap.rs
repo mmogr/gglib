@@ -107,6 +107,8 @@ pub struct CliContext {
     pub model_repo: Arc<dyn ModelRepository>,
     /// Path to llama-server binary.
     pub llama_server_path: PathBuf,
+    /// Base port for allocating llama-server instances (from CLI `--base-port`).
+    pub base_port: u16,
 }
 
 impl CliContext {
@@ -143,6 +145,11 @@ impl CliContext {
     /// Access the llama-server path.
     pub fn llama_server_path(&self) -> &PathBuf {
         &self.llama_server_path
+    }
+
+    /// Base port used when allocating ports for auto-started llama-server instances.
+    pub fn base_port(&self) -> u16 {
+        self.base_port
     }
 }
 
@@ -240,6 +247,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         gguf_parser,
         model_repo: repos.models,
         llama_server_path: config.llama_server_path,
+        base_port: config.base_port,
     })
 }
 
@@ -267,6 +275,7 @@ pub fn bootstrap_with(
         gguf_parser,
         model_repo,
         llama_server_path,
+        base_port: 9000,
     }
 }
 

@@ -4,6 +4,7 @@
 //! Handlers delegate to the shared GuiBackend facade.
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
 use std::path::Path;
 use std::sync::Arc;
@@ -203,7 +204,14 @@ pub(crate) fn api_routes() -> Router<AppState> {
         // local cpal/rodio.  Desktop callers skip this endpoint entirely.
         .route("/voice/audio", get(handlers::voice_ws::audio_ws))
         // Agent (server-side agentic loop with SSE streaming)
-        .route("/agent/chat", post(handlers::agent::chat))
+        // Body is bounded explicitly: agent conversation histories can grow
+        // large, so we permit up to 4 MiB rather than relying on the global
+        // Axum default (2 MiB).
+        .route(
+            "/agent/chat",
+            post(handlers::agent::chat)
+                .layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
+        )
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }

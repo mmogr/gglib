@@ -14,6 +14,8 @@ use std::io::{self, Write as _};
 
 use gglib_core::domain::agent::AgentEvent;
 
+use crate::presentation::tables::truncate_string;
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -43,7 +45,7 @@ pub fn render_event(event: &AgentEvent, verbose: bool) {
 
         AgentEvent::ToolCallComplete { result } => {
             let icon = if result.success { "✓" } else { "✗" };
-            let preview = truncate(&result.content, 80);
+            let preview = truncate_string(&result.content, 80);
             eprintln!("  {icon}  {}ms  {preview}", result.duration_ms);
         }
 
@@ -69,46 +71,32 @@ pub fn render_event(event: &AgentEvent, verbose: bool) {
 }
 
 // =============================================================================
-// Private helpers
-// =============================================================================
-
-/// Truncate `s` to at most `max_chars` characters, appending `…` if cut.
-fn truncate(s: &str, max_chars: usize) -> String {
-    let mut chars = s.chars();
-    let truncated: String = chars.by_ref().take(max_chars).collect();
-    if chars.next().is_some() {
-        format!("{truncated}…")
-    } else {
-        truncated
-    }
-}
-
-// =============================================================================
 // Tests
 // =============================================================================
 
 #[cfg(test)]
 mod tests {
-    use super::truncate;
+    use crate::presentation::tables::truncate_string;
 
     #[test]
     fn truncate_short_string_unchanged() {
-        assert_eq!(truncate("hello", 10), "hello");
+        assert_eq!(truncate_string("hello", 10), "hello");
     }
 
     #[test]
     fn truncate_exact_length_unchanged() {
-        assert_eq!(truncate("hello", 5), "hello");
+        assert_eq!(truncate_string("hello", 5), "hello");
     }
 
     #[test]
     fn truncate_long_string_gets_ellipsis() {
-        let result = truncate("hello world", 5);
-        assert_eq!(result, "hello…");
+        // max_len=5: 4 chars of content + ellipsis = 5 chars total
+        let result = truncate_string("hello world", 5);
+        assert_eq!(result, "hell\u{2026}");
     }
 
     #[test]
     fn truncate_empty_string() {
-        assert_eq!(truncate("", 10), "");
+        assert_eq!(truncate_string("", 10), "");
     }
 }
