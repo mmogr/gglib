@@ -1,8 +1,8 @@
 //! POST /api/agent/chat — server-side agentic loop with SSE streaming.
 //!
-//! The handler calls [`gglib_agent::compose::build_agent`] to compose the loop,
-//! spawns it as a background task, and bridges the resulting
-//! `mpsc::Receiver<AgentEvent>` to an Axum [`Sse`] response.
+//! The handler composes `LlmCompletionAdapter + McpToolExecutorAdapter +
+//! AgentLoop::build` inline, spawns the loop as a background task, and bridges
+//! the resulting `mpsc::Receiver<AgentEvent>` to an Axum [`Sse`] response.
 //!
 //! # Cancellation
 //!
@@ -18,7 +18,9 @@ mod guard;
 
 pub use dto::{AgentChatRequest, AgentRequestConfig};
 
+use std::collections::HashSet;
 use std::convert::Infallible;
+use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
@@ -28,12 +30,14 @@ use futures_util::StreamExt as _;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-use gglib_agent::compose::build_agent;
+use gglib_agent::AgentLoop;
+use gglib_mcp::McpToolExecutorAdapter;
+use gglib_runtime::LlmCompletionAdapter;
 use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
-use gglib_core::ports::AgentError;
+use gglib_core::ports::{AgentError, LlmCompletionPort, ToolExecutorPort};
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 
 use guard::AgentTaskGuard;
@@ -79,13 +83,13 @@ pub async fn chat(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
     validate_port(&state, req.port).await?;
 
-    let tool_filter = req.tool_filter.map(|f| f.into_iter().collect());
-    let agent_loop = build_agent(
-        req.port,
-        state.http_client.clone(),
-        state.mcp.clone(),
-        tool_filter,
-    );
+    let tool_filter: Option<HashSet<String>> =
+        req.tool_filter.map(|f| f.into_iter().collect());
+    let llm: Arc<dyn LlmCompletionPort> =
+        Arc::new(LlmCompletionAdapter::with_client(req.port, state.http_client.clone(), None::<String>));
+    let tool_executor: Arc<dyn ToolExecutorPort> =
+        Arc::new(McpToolExecutorAdapter::new(state.mcp.clone()));
+    let agent_loop = AgentLoop::build(llm, tool_executor, tool_filter);
 
     let messages = req.messages;
     let config: AgentConfig = req.config.unwrap_or_default().into();

@@ -11,7 +11,5 @@ pub(crate) mod stagnation;
 pub(crate) mod stream_collector;
 pub(crate) mod tool_execution;
 
-pub mod compose;
-
 pub use agent_loop::AgentLoop;
 pub use filter::TOOL_NOT_AVAILABLE_MSG;

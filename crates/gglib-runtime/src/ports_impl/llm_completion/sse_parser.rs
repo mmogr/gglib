@@ -77,8 +77,13 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
 
     // ── Tool-call deltas ────────────────────────────────────────────────────
     if let Some(tool_calls) = delta["tool_calls"].as_array() {
-        for tc in tool_calls {
-            let index = tc["index"].as_u64().unwrap_or(0) as usize;
+        for (sequential, tc) in tool_calls.iter().enumerate() {
+            // Prefer the explicit `index` field; fall back to the element's
+            // position in the array when `index` is absent.  A server that
+            // omits `index` on every element is non-compliant with the OpenAI
+            // spec, but we handle it gracefully rather than silently collapsing
+            // all calls onto slot 0.
+            let index = tc["index"].as_u64().map(|i| i as usize).unwrap_or(sequential);
             let id = tc["id"].as_str().map(str::to_owned);
             let name = tc["function"]["name"].as_str().map(str::to_owned);
             let arguments = tc["function"]["arguments"].as_str().map(str::to_owned);
@@ -136,6 +141,38 @@ mod tests {
                         "id": id,
                         "function": { "name": name, "arguments": args }
                     }]
+                },
+                "finish_reason": null
+            }]
+        })
+        .to_string()
+    }
+
+    /// Build a frame whose `tool_calls` array elements intentionally omit the
+    /// `index` field, simulating a non-compliant but real-world server.
+    fn tool_frame_no_index(id: &str, name: &str, args: &str) -> String {
+        serde_json::json!({
+            "choices": [{
+                "delta": {
+                    "tool_calls": [
+                        { "id": id, "function": { "name": name, "arguments": args } }
+                    ]
+                },
+                "finish_reason": null
+            }]
+        })
+        .to_string()
+    }
+
+    /// Build a frame with two tool-call elements that both omit `index`.
+    fn two_tool_frames_no_index() -> String {
+        serde_json::json!({
+            "choices": [{
+                "delta": {
+                    "tool_calls": [
+                        { "id": "c1", "function": { "name": "search",  "arguments": "{}" } },
+                        { "id": "c2", "function": { "name": "read_file", "arguments": "{}" } }
+                    ]
                 },
                 "finish_reason": null
             }]
@@ -210,6 +247,44 @@ mod tests {
                 name: Some(n),
                 arguments: Some(a),
             } if id == "tc1" && n == "search" && a == r#"{"q":"rust"}"#
+        ));
+    }
+
+    #[test]
+    fn tool_call_delta_with_no_index_defaults_to_sequential_position() {
+        // A server that omits `index` on a single tool-call element should
+        // assign it position 0 (first element), not silently collapse onto 0
+        // from `unwrap_or(0)` which is the same value — but for TWO elements
+        // both collapsing to 0 would data-lose the second call.
+        let events = match parse_sse_frame(&tool_frame_no_index("tc1", "search", r#"{"q":"rust"}"#)) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::ToolCallDelta { index: 0, id: Some(id), .. } if id == "tc1"
+        ));
+    }
+
+    #[test]
+    fn two_tool_calls_with_no_index_get_distinct_sequential_slots() {
+        // This is the critical regression test for the silent slot-collision bug:
+        // two tool-call elements without `index` must be assigned slots 0 and 1,
+        // not both slot 0 (which would cause the second to overwrite the first
+        // in the stream collector's `partials` Vec).
+        let events = match parse_sse_frame(&two_tool_frames_no_index()) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 2, "both tool-call deltas must be emitted");
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::ToolCallDelta { index: 0, id: Some(id), .. } if id == "c1"
+        ));
+        assert!(matches!(
+            &events[1],
+            LlmStreamEvent::ToolCallDelta { index: 1, id: Some(id), .. } if id == "c2"
         ));
     }
 

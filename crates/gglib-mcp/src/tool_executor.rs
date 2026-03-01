@@ -6,6 +6,13 @@
 //! orchestration crate is deliberately kept free of any MCP dependency; it only
 //! accepts the abstract `Arc<dyn ToolExecutorPort>`.
 //!
+//! # Tool-name format
+//!
+//! Tool names are always **qualified**: `"{server_id}:{bare_name}"` (e.g.
+//! `"3:read_file"`).  This is the format produced by [`McpToolExecutorAdapter::list_tools`]
+//! and the only format accepted by [`McpToolExecutorAdapter::execute`].  Bare,
+//! unqualified names are rejected at execution time with a descriptive error.
+//!
 //! # Wiring
 //!
 //! Entrypoint crates (`gglib-axum`, `gglib-cli`) construct this adapter at the
@@ -40,11 +47,9 @@ use crate::service::McpService;
 ///
 /// # Tool-name → server-id resolution
 ///
-/// `McpService::list_all_tools` returns `Vec<(server_id, Vec<McpTool>)>`.  On
-/// each `execute` call the adapter performs a linear scan to find the `server_id`
-/// associated with the requested tool name.  This is deliberately simple: MCP
-/// tool lists are small (typically tens of entries) and `list_all_tools` is an
-/// in-memory `RwLock` read — nanosecond cost.
+/// `execute` parses the leading integer from the qualified name
+/// (`"{server_id}:{bare_name}"`) to route the call directly.  No list scan
+/// is required; the server-id is encoded in the name itself.
 #[derive(Clone)]
 pub struct McpToolExecutorAdapter {
     mcp: Arc<McpService>,
@@ -65,11 +70,9 @@ impl McpToolExecutorAdapter {
 impl ToolExecutorPort for McpToolExecutorAdapter {
     /// List every tool available across all running MCP servers.
     ///
-    /// Tool names are prefixed with `{server_id}:` (e.g. `3:read_file`) to
-    /// guarantee uniqueness when multiple servers expose tools with the same
-    /// bare name.  `execute()` accepts both the qualified and the bare name for
-    /// interoperability with `FilteredToolExecutor` (which operates on the
-    /// names as returned here).
+    /// Tool names are qualified with `{server_id}:` (e.g. `"3:read_file"`)
+    /// to guarantee uniqueness when multiple servers expose tools with the
+    /// same bare name.  `execute()` requires this qualified format.
     async fn list_tools(&self) -> Vec<ToolDefinition> {
         self.mcp
             .list_all_tools()
@@ -87,6 +90,10 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
 
     /// Execute a single tool call, returning a [`ToolResult`].
     ///
+    /// `call.name` **must** be a qualified name of the form
+    /// `"{server_id}:{bare_tool_name}"` as produced by [`Self::list_tools`].
+    /// Unqualified names are rejected with an error.
+    ///
     /// Failures are **not** propagated as `anyhow::Error` unless the tool
     /// cannot be found or the arguments are structurally invalid (those are
     /// infrastructure-level problems, not tool-level failures).  A tool that
@@ -96,20 +103,12 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
         // ---- Resolve server_id and bare tool name from call.name ------------
         //
-        // Accepts two formats:
-        //   - qualified:   "{server_id}:{tool_name}"  (produced by list_tools)
-        //   - unqualified: "{tool_name}"               (e.g. from FilteredToolExecutor)
-        //
-        // The `:` separator is safe because MCP tool names (`[a-zA-Z0-9_-]+`)
-        // cannot contain `:`, so `split_once(':')` unambiguously identifies
-        // a qualified name.
+        // Only qualified names are accepted: "{server_id}:{tool_name}".
+        // The `:` separator is unambiguous because MCP tool names
+        // (`[a-zA-Z0-9_-]+`) cannot contain `:`.
         let (server_id, bare_name): (i64, &str) = if let Some((prefix, bare)) =
             call.name.split_once(':')
         {
-            // Qualified format: trust the prefix directly and skip list_all_tools().
-            // Any mismatch (bad server_id or unknown tool name) surfaces as an Err
-            // from call_tool with a descriptive McpServiceError — no pre-flight scan
-            // needed.
             let sid: i64 = prefix.parse().with_context(|| {
                 format!(
                     "qualified tool name '{}' has a non-integer server prefix",
@@ -118,15 +117,11 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             })?;
             (sid, bare)
         } else {
-            // Unqualified — linear scan across all servers to find the owner.
-            let all_tools = self.mcp.list_all_tools().await;
-            let server_id = all_tools
-                .iter()
-                .find_map(|(id, tools)| tools.iter().any(|t| t.name == call.name).then_some(*id))
-                .with_context(|| {
-                    format!("no running MCP server exposes a tool named '{}'", call.name)
-                })?;
-            (server_id, call.name.as_str())
+            return Err(anyhow!(
+                "tool name '{}' is unqualified; expected format is '{{server_id}}:{{tool_name}}' \
+                 as produced by list_tools()",
+                call.name
+            ));
         };
 
         // ---- Convert arguments Value → HashMap<String, Value> ---------------
@@ -246,40 +241,39 @@ mod tests {
 
     #[test]
     fn qualified_name_splits_on_colon_separator() {
-        // The execute() method uses split_once(':') to determine whether a
-        // tool name is qualified (produced by list_tools as "{id}:{bare}")
-        // or unqualified (user-supplied bare name that triggers a linear scan).
-        // `:` is not permitted in MCP tool names (`[a-zA-Z0-9_-]+`), making
-        // it an unambiguous separator with no collision risk.
+        // execute() uses split_once(':') to parse the qualified form
+        // "{server_id}:{bare_name}".  `:` is not permitted in MCP tool names
+        // (`[a-zA-Z0-9_-]+`), making it an unambiguous separator.
 
-        // Happy path: qualified name → integer server-id + bare name.
         let (prefix, bare) = "3:search".split_once(':').unwrap();
         assert_eq!(prefix.parse::<i64>().unwrap(), 3i64);
         assert_eq!(bare, "search");
 
-        // Bare names may legally contain `_` and `-` but not `:`.
         let (p, b) = "7:read_file".split_once(':').unwrap();
         assert_eq!(p.parse::<i64>().unwrap(), 7i64);
         assert_eq!(b, "read_file");
-
-        // Unqualified name (no `:`) → split_once returns None, triggering
-        // the linear-scan fallback path inside execute().
-        assert!(
-            "search".split_once(':').is_none(),
-            "bare MCP tool names cannot contain `:` by spec"
-        );
     }
 
     #[test]
-    fn non_integer_server_prefix_falls_back_to_linear_scan() {
-        // A string that contains `:` but whose prefix is not a valid i64
-        // would cause execute() to return an error rather than panic.
-        // Verify the parse fails so there is no silent wrong-server dispatch.
+    fn non_integer_server_prefix_is_an_error() {
+        // A name that contains `:` but whose prefix is not a valid i64 must
+        // cause execute() to return Err rather than panic or dispatch blindly.
         let name = "not_int:tool";
         let (prefix, _) = name.split_once(':').unwrap();
         assert!(
             prefix.parse::<i64>().is_err(),
             "non-integer prefix must fail to parse as server id"
+        );
+    }
+
+    #[test]
+    fn unqualified_name_is_rejected() {
+        // Bare tool names (no `:`) are not supported; callers must always use
+        // names as returned by list_tools() which includes the server-id prefix.
+        let name = "search";
+        assert!(
+            name.split_once(':').is_none(),
+            "unqualified name must not contain a colon — execute() will reject it"
         );
     }
 }
