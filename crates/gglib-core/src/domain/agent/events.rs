@@ -27,9 +27,9 @@ pub enum AgentEvent {
         content: String,
     },
 
-    /// An incremental reasoning/thinking fragment from the model (CoT tokens).
+    /// An incremental reasoning/thinking fragment from the model (`CoT` tokens).
     ///
-    /// Emitted by reasoning-capable models (e.g. DeepSeek R1, QwQ) that expose
+    /// Emitted by reasoning-capable models (e.g. `DeepSeek` R1, `QwQ`) that expose
     /// their chain-of-thought via a separate `reasoning_content` SSE field.
     /// These fragments are forwarded to the UI as they arrive but are **not**
     /// included in the conversation history sent back to the model.
@@ -94,9 +94,9 @@ pub enum LlmStreamEvent {
         content: String,
     },
 
-    /// An incremental reasoning/thinking fragment (CoT tokens).
+    /// An incremental reasoning/thinking fragment (`CoT` tokens).
     ///
-    /// Produced by reasoning-capable models (e.g. DeepSeek R1, QwQ) when
+    /// Produced by reasoning-capable models (e.g. `DeepSeek` R1, `QwQ`) when
     /// llama-server is started with `--reasoning-format deepseek`.  The
     /// runtime adapter maps `delta["reasoning_content"]` frames to this
     /// variant; the stream collector forwards them as
