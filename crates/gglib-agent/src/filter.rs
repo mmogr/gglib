@@ -25,6 +25,16 @@ use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{ToolCall, ToolDefinition, ToolResult};
 
 // =============================================================================
+// Shared rejection message
+// =============================================================================
+
+/// Sentinel phrase embedded in every tool-rejection error produced by this
+/// module.  Both [`EmptyToolExecutor`] and [`FilteredToolExecutor`] use this
+/// constant so tests can assert on `error_string.contains(TOOL_NOT_AVAILABLE_MSG)`
+/// without depending on the surrounding format string.
+pub const TOOL_NOT_AVAILABLE_MSG: &str = "is not available in this session";
+
+// =============================================================================
 // EmptyToolExecutor
 // =============================================================================
 
@@ -44,7 +54,7 @@ impl ToolExecutorPort for EmptyToolExecutor {
     }
 
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-        anyhow::bail!("tool '{}' is not available in this session", call.name);
+        anyhow::bail!("tool '{}' {}", call.name, TOOL_NOT_AVAILABLE_MSG);
     }
 }
 
@@ -99,7 +109,7 @@ impl ToolExecutorPort for FilteredToolExecutor {
     /// can ever execute regardless of how the request was constructed.
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
         if !self.allowed.contains(&call.name) {
-            anyhow::bail!("tool '{}' is not available in this session", call.name);
+            anyhow::bail!("tool '{}' {}", call.name, TOOL_NOT_AVAILABLE_MSG);
         }
         self.inner.execute(call).await
     }
@@ -214,7 +224,7 @@ mod tests {
             allowed,
         );
         let err = f.execute(&make_call("secret_tool")).await.unwrap_err();
-        assert!(err.to_string().contains("not available in this session"));
+        assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG));
         assert!(err.to_string().contains("secret_tool"));
     }
 
@@ -229,7 +239,7 @@ mod tests {
             allowed,
         );
         let err = f.execute(&make_call("other_tool")).await.unwrap_err();
-        assert!(err.to_string().contains("not available in this session"));
+        assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG));
     }
 
     #[tokio::test]

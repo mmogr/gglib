@@ -90,9 +90,16 @@ async fn execute_single_tool(
             // Stamp timing metrics onto the adapter result.
             // The MCP adapter (and any other ToolExecutorPort impl) cannot
             // measure concurrency wait time; we fill it in here where both
-            // metrics are available.  We preserve the adapter's own
-            // `execute_duration_ms` (pure execution time as it measured it).
+            // metrics are available.
+            //
+            // `execute_duration_ms` is always overwritten with the wall-clock
+            // time measured from `exec_start` (after the semaphore was
+            // acquired) so that success, error, and timeout paths all report
+            // the same metric — the total time this slot was in use.  The
+            // adapter's own measurement is discarded to avoid the split-origin
+            // inconsistency that would otherwise make timing analysis misleading.
             r.wait_ms = wait_ms;
+            r.execute_duration_ms = duration_ms;
             r
         }
         Ok(Err(e)) => ToolResult {

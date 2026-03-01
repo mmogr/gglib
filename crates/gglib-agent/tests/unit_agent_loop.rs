@@ -22,8 +22,9 @@ use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolDefinition};
 use gglib_core::ports::AgentError;
-use common::event_assertions::collect_events;
+use common::event_assertions::{collect_events, has_error_event};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
+use gglib_agent::TOOL_NOT_AVAILABLE_MSG;
 use serde_json::json;
 use tokio::sync::mpsc;
 
@@ -108,7 +109,7 @@ async fn test_llm_startup_error_emits_event() {
     );
 
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+        has_error_event(&events),
         "AgentEvent::Error must be emitted before the stream closes on LLM startup failure"
     );
 }
@@ -173,7 +174,7 @@ async fn test_empty_tool_filter_exposes_no_tools() {
         "tool call must have success=false when empty filter is active"
     );
     assert!(
-        rejection.content.contains("is not available in this session"),
+        rejection.content.contains(TOOL_NOT_AVAILABLE_MSG),
         "rejection message should explain the tool is not available, got: {}",
         rejection.content
     );

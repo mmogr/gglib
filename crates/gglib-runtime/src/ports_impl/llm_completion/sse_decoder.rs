@@ -78,6 +78,7 @@ impl SseStreamDecoder {
                             finish_reason: "stop".to_owned(),
                         }));
                     }
+                    self.done_sent = true;
                     return (events, true);
                 }
                 Ok(SseParseResult::Events(parsed_events)) => {
@@ -177,6 +178,11 @@ mod tests {
         assert!(
             events.iter().any(|e| matches!(e, LlmStreamEvent::Done { .. })),
             "fallback Done should be emitted when no prior finish_reason"
+        );
+        // After a [DONE] sentinel, finish() must not emit a second Done.
+        assert!(
+            dec.finish().is_none(),
+            "finish() must return None after a [DONE] sentinel — done_sent must be set"
         );
     }
 

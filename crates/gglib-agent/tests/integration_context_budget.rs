@@ -27,6 +27,44 @@ use serde_json::json;
 use tokio::sync::mpsc;
 
 // =============================================================================
+// Shared test utilities
+// =============================================================================
+
+/// Build a history of `n_pairs` completed tool-call rounds, preceded by a
+/// `System` message and an initial `User` message.
+///
+/// Returns (in order):
+///   - `System("You are helpful.")` 
+///   - `User("First question.")`
+///   - for each `i` in `0..n_pairs`: `Assistant(tool_calls=[old_tc{i}])` then `Tool(old_tc{i})`
+///
+/// Each `Tool` body is `"old result {i}: " + "x" × 40` (~58 chars), so
+/// 20 pairs give ~1 160 tool-message chars — well above any reasonable 500-char
+/// test budget.  The caller must append a final `User` message (or any other
+/// messages) before passing the history to the agent.
+fn build_long_history(n_pairs: u32) -> Vec<AgentMessage> {
+    let mut messages = vec![
+        AgentMessage::System { content: "You are helpful.".into() },
+        AgentMessage::User   { content: "First question.".into() },
+    ];
+    for i in 0..n_pairs {
+        messages.push(AgentMessage::Assistant {
+            content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: format!("old_tc{i}"),
+                name: "search".into(),
+                arguments: json!({}),
+            }]),
+        });
+        messages.push(AgentMessage::Tool {
+            tool_call_id: format!("old_tc{i}"),
+            content: format!("old result {i}: {}", "x".repeat(40)),
+        });
+    }
+    messages
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -42,31 +80,8 @@ use tokio::sync::mpsc;
 async fn test_context_budget_pruning() {
     // Build a history that far exceeds a small budget.
     // Pattern: System → User → [Assistant(tool_calls) + Tool] × 20 → User
-    let mut messages: Vec<AgentMessage> = vec![
-        AgentMessage::System {
-            content: "You are helpful.".into(),
-        },
-        AgentMessage::User {
-            content: "First question.".into(),
-        },
-    ];
-
-    for i in 0_u32..20 {
-        messages.push(AgentMessage::Assistant {
-            content: None,
-            tool_calls: Some(vec![ToolCall {
-                id: format!("old_tc{i}"),
-                name: "search".into(),
-                arguments: json!({}),
-            }]),
-        });
-        // 60 chars per result — 20 × 60 = 1 200 chars, well over the 500-char budget.
-        messages.push(AgentMessage::Tool {
-            tool_call_id: format!("old_tc{i}"),
-            content: format!("old tool result {i}: {}", "x".repeat(40)),
-        });
-    }
-
+    // (20 × ~58 tool-message chars ≈ 1 160 chars, well over the 500-char budget)
+    let mut messages = build_long_history(20);
     messages.push(AgentMessage::User {
         content: "Final question after a long history.".into(),
     });
@@ -145,24 +160,7 @@ async fn test_context_budget_pruning() {
 #[tokio::test]
 async fn test_context_budget_pruning_two_iters() {
     // Build a large history that triggers Pass 2 on the first prune.
-    let mut messages: Vec<AgentMessage> = vec![
-        AgentMessage::System { content: "You are helpful.".into() },
-        AgentMessage::User   { content: "First question.".into() },
-    ];
-    for i in 0_u32..20 {
-        messages.push(AgentMessage::Assistant {
-            content: None,
-            tool_calls: Some(vec![ToolCall {
-                id: format!("old_tc{i}"),
-                name: "search".into(),
-                arguments: json!({}),
-            }]),
-        });
-        messages.push(AgentMessage::Tool {
-            tool_call_id: format!("old_tc{i}"),
-            content: format!("old result {i}: {}", "x".repeat(40)),
-        });
-    }
+    let mut messages = build_long_history(20);
     messages.push(AgentMessage::User { content: "Second question.".into() });
 
     // Two LLM responses: first a tool call, then a final answer.

@@ -2,7 +2,6 @@
 
 use serde::Serialize;
 
-use super::config::{DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS};
 use super::tool_types::{ToolCall, ToolResult};
 
 // =============================================================================
@@ -138,36 +137,27 @@ pub enum LlmStreamEvent {
 // Channel sizing
 // =============================================================================
 
-/// Recommended [`tokio::sync::mpsc`] channel capacity for streaming
-/// [`AgentEvent`]s produced by a single [`crate::ports::AgentLoopPort::run`]
-/// call.
+/// [`tokio::sync::mpsc`] channel capacity for streaming [`AgentEvent`]s
+/// produced by a single [`crate::ports::AgentLoopPort::run`] call.
 ///
-/// Derived from the default [`AgentConfig`](super::config::AgentConfig) values:
+/// Set to a generous static ceiling (4 096) rather than a formula tied to
+/// default config values.  The formula-based value (~532 for default config)
+/// is too small for callers that use non-default settings such as
+/// `max_iterations = 50` + `max_parallel_tools = 20`, which would produce
+/// up to ~2 061 structural events per run before any `TextDelta` headroom.
+/// Filling the channel causes `tx.send().await` to back-pressure on every
+/// token in the hot streaming path, with measurable latency impact.
 ///
-/// | Source                                              | Events |
-/// |-----------------------------------------------------|--------|
-/// | 25 iterations × 5 tools × 2 (start + complete)     |   250  |
-/// | 25 iterations × 1 `IterationComplete`              |    25  |
-/// | 1 `FinalAnswer` / `Error` sentinel                  |     1  |
-/// | headroom for `TextDelta` / `ReasoningDelta` tokens  |   256  |
+/// 4 096 fits comfortably in a few hundred kilobytes of memory per active
+/// agent session and is sufficient for any realistic configuration.
 ///
-/// The headroom of 256 is intentionally generous: a typical verbose LLM
-/// response produces hundreds of `TextDelta` events, and the channel
-/// must not fill up before the consumer processes them (back-pressure on
-/// every `tx.send().await` in the hot streaming path carries measurable cost).
-///
-/// All callers (SSE handlers, CLI REPL) should use this constant instead of a
-/// magic literal so they stay in sync if default values are adjusted.
-pub const AGENT_EVENT_CHANNEL_CAPACITY: usize =
-    DEFAULT_MAX_ITERATIONS * (DEFAULT_MAX_PARALLEL_TOOLS * 2 + 1) // structural events per iteration
-    // (ToolCallStart + ToolCallComplete per tool, plus IterationComplete)
-    + 1   // FinalAnswer or Error sentinel
-    + 256; // TextDelta / ReasoningDelta headroom
+/// All callers (SSE handlers, CLI REPL) should use this constant instead of
+/// a magic literal.
+pub const AGENT_EVENT_CHANNEL_CAPACITY: usize = 4_096;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::config::{DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS};
 
     #[test]
     fn agent_event_serde_tag_matches_wire_format() {
@@ -193,30 +183,29 @@ mod tests {
         assert_eq!(json["tool_call"]["name"], "search");
     }
 
-    /// [`AGENT_EVENT_CHANNEL_CAPACITY`] must be positive and must precisely
-    /// match its documented formula so that callers always stay in sync if
-    /// default limits are adjusted.
-    ///
-    /// Formula: `DEFAULT_MAX_ITERATIONS × (DEFAULT_MAX_PARALLEL_TOOLS × 2 + 1)
-    ///           + 1  (FinalAnswer / Error sentinel)
-    ///           + 256  (TextDelta / ReasoningDelta headroom)`
+    /// [`AGENT_EVENT_CHANNEL_CAPACITY`] must be positive and must be at least
+    /// large enough for a full run at the maximum ceiling configuration
+    /// (`MAX_ITERATIONS_CEILING` × (`MAX_PARALLEL_TOOLS_CEILING` × 2 + 1) + 1
+    /// structural events), so that back-pressure never occurs on the hot
+    /// streaming path for any valid configuration.
     #[test]
-    fn agent_event_channel_capacity_is_positive_and_consistent() {
+    fn agent_event_channel_capacity_is_sufficient_for_max_config() {
+        use super::super::config::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING};
+
         assert!(
             AGENT_EVENT_CHANNEL_CAPACITY > 0,
             "channel capacity must be positive"
         );
 
-        // ToolCallStart + ToolCallComplete per tool, plus IterationComplete.
-        let structural_per_iter = DEFAULT_MAX_PARALLEL_TOOLS * 2 + 1;
-        let expected = DEFAULT_MAX_ITERATIONS * structural_per_iter
-            + 1   // FinalAnswer or Error sentinel
-            + 256; // TextDelta / ReasoningDelta headroom
-        assert_eq!(
-            AGENT_EVENT_CHANNEL_CAPACITY,
-            expected,
-            "AGENT_EVENT_CHANNEL_CAPACITY ({AGENT_EVENT_CHANNEL_CAPACITY}) does not match \
-             the documented formula ({expected}); update the formula or the constant"
+        // Minimum structural events for a run at ceiling config
+        // (no TextDelta headroom included — this is the hard lower bound).
+        let structural_per_iter = MAX_PARALLEL_TOOLS_CEILING * 2 + 1;
+        let minimum_structural = MAX_ITERATIONS_CEILING * structural_per_iter + 1;
+        assert!(
+            AGENT_EVENT_CHANNEL_CAPACITY >= minimum_structural,
+            "AGENT_EVENT_CHANNEL_CAPACITY ({AGENT_EVENT_CHANNEL_CAPACITY}) is smaller than \
+             the minimum required for ceiling config ({minimum_structural}); \
+             increase the constant"
         );
     }
 }

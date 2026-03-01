@@ -17,7 +17,7 @@ mod common;
 
 use std::sync::Arc;
 
-use common::event_assertions::{collect_events, has_final_answer};
+use common::event_assertions::{collect_events, has_error_event, has_final_answer};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
@@ -74,7 +74,7 @@ async fn test_max_iterations_reached() {
 
     // The event stream should contain an Error event.
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+        has_error_event(&events),
         "expected at least one Error event in the stream"
     );
 
@@ -129,7 +129,7 @@ async fn test_loop_detection() {
 
     // An AgentEvent::Error must be emitted before the stream closes.
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+        has_error_event(&events),
         "expected AgentEvent::Error to be emitted before LoopDetected return"
     );
 
@@ -196,7 +196,7 @@ async fn test_stagnation_detected_integration() {
     );
 
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+        has_error_event(&events),
         "AgentEvent::Error must be emitted before stream closes on stagnation"
     );
 
@@ -254,7 +254,7 @@ async fn test_too_many_tool_calls_integration() {
 
     // An AgentEvent::Error must have been emitted before the stream closes.
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
+        has_error_event(&events),
         "AgentEvent::Error must be emitted on ParallelToolLimitExceeded"
     );
 

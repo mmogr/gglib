@@ -53,3 +53,8 @@ pub fn has_tool_complete_with_success(events: &[AgentEvent], success: bool) -> b
         |e| matches!(e, AgentEvent::ToolCallComplete { result, .. } if result.success == success),
     )
 }
+
+/// Return `true` when `events` contains at least one [`AgentEvent::Error`].
+pub fn has_error_event(events: &[AgentEvent]) -> bool {
+    events.iter().any(|e| matches!(e, AgentEvent::Error { .. }))
+}

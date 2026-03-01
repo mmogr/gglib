@@ -33,6 +33,7 @@ use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
+use gglib_core::ports::AgentError;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 
 use guard::AgentTaskGuard;
@@ -94,7 +95,10 @@ pub async fn chat(
     let handle = tokio::spawn(async move {
         match agent_loop.run(messages, config, tx).await {
             Ok(_) => {}
-            Err(e) => tracing::warn!("agent loop ended with error: {e}"),
+            Err(e @ AgentError::Internal(_)) => {
+                tracing::error!("agent loop failed with internal error: {e}");
+            }
+            Err(e) => tracing::warn!("agent loop ended: {e}"),
         }
     });
 

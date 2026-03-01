@@ -33,7 +33,7 @@ use rustyline::error::ReadlineError;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING};
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 
@@ -63,9 +63,15 @@ const REPL_HELP: &str = "\
 /// [`AgentLoop`] to implement [`Clone`].
 pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Result<()> {
     let mut config = AgentConfig::default();
-    config.max_iterations = args.max_iterations;
-    if let Some(ms) = args.tool_timeout_ms { config.tool_timeout_ms = ms; }
-    if let Some(n) = args.max_parallel { config.max_parallel_tools = n; }
+    // Clamp all user-supplied limits to the same ceilings as the HTTP handler
+    // so the CLI cannot be used to launch unconstrained loops.
+    config.max_iterations = args.max_iterations.min(MAX_ITERATIONS_CEILING);
+    if let Some(ms) = args.tool_timeout_ms {
+        config.tool_timeout_ms = ms.min(MAX_TOOL_TIMEOUT_MS_CEILING);
+    }
+    if let Some(n) = args.max_parallel {
+        config.max_parallel_tools = n.min(MAX_PARALLEL_TOOLS_CEILING);
+    }
 
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.

@@ -77,13 +77,16 @@ async fn bail_internal(tx: &mpsc::Sender<AgentEvent>, msg: String) -> AgentError
 
 /// Append the assistant's tool-call message and all tool results to `messages`.
 ///
+/// Append the assistant turn and its tool results to `messages`, then return
+/// the total character count of the newly added messages.
+///
 /// Call this after the parallel tool execution phase so that the complete
 /// iteration is recorded in the conversation history before the next LLM call.
 ///
-/// Returns the total character count of the newly appended messages so the
-/// caller can update its incremental `running_chars` counter without
-/// re-scanning the entire history.
-fn append_iteration_messages(
+/// The name reflects the dual purpose: it **pushes** messages *and* returns
+/// the **char delta** so callers can update `running_chars` incrementally
+/// without re-scanning the entire history.
+fn push_iteration_messages_returning_char_delta(
     messages: &mut Vec<AgentMessage>,
     content: String,
     tool_calls: Vec<ToolCall>,
@@ -240,7 +243,7 @@ impl AgentLoopPort for AgentLoop {
         // Track the total character count incrementally so that
         // `prune_for_budget` never has to re-scan the entire history.
         // Updated after every prune (inside `prune_for_budget`) and after
-        // every `append_iteration_messages` call (via the returned delta).
+        // every `push_iteration_messages_returning_char_delta` call (via the returned delta).
         let mut running_chars = total_chars(&messages);
 
         // Prune the caller-supplied history once before the first LLM call so
@@ -338,7 +341,7 @@ impl AgentLoopPort for AgentLoop {
             // Capture len before consuming results so we can report the count
             // in the IterationComplete event without keeping a reference.
             let tool_call_count = results.len();
-            let added_chars = append_iteration_messages(
+            let added_chars = push_iteration_messages_returning_char_delta(
                 &mut messages,
                 response.content,
                 response.tool_calls,

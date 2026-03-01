@@ -154,7 +154,7 @@ impl MockLlmPort {
         for r in responses {
             guard.push_back(r.into_events());
         }
-        drop(guard);
+        drop(guard); // explicit drop required: guard borrows self.responses, must be released before self is moved
         self
     }
 }
