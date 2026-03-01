@@ -240,4 +240,42 @@ mod tests {
         assert_eq!(def.name, "search");
         assert!(def.input_schema.is_some());
     }
+
+    #[test]
+    fn qualified_name_splits_on_first_double_underscore() {
+        // The execute() method uses split_once("__") to determine whether a
+        // tool name is qualified (produced by list_tools as "{id}__{bare}")
+        // or unqualified (user-supplied bare name that triggers a linear scan).
+
+        // Happy path: qualified name → integer server-id + bare name.
+        let (prefix, bare) = "3__search".split_once("__").unwrap();
+        assert_eq!(prefix.parse::<i64>().unwrap(), 3i64);
+        assert_eq!(bare, "search");
+
+        // Only the first `__` is used as the separator; the rest is part of
+        // the bare name (e.g. a tool whose bare name itself contains `__`).
+        let (p, b) = "7__read__file".split_once("__").unwrap();
+        assert_eq!(p.parse::<i64>().unwrap(), 7i64);
+        assert_eq!(b, "read__file");
+
+        // Unqualified name (no `__`) → split_once returns None, triggering
+        // the linear-scan fallback path inside execute().
+        assert!(
+            "search".split_once("__").is_none(),
+            "bare names must not contain `__`"
+        );
+    }
+
+    #[test]
+    fn non_integer_server_prefix_is_not_a_qualified_name() {
+        // A string that contains `__` but whose prefix is not a valid i64
+        // would cause execute() to return an error rather than panic.
+        // Verify the parse fails so there is no silent wrong-server dispatch.
+        let name = "not_int__tool";
+        let (prefix, _) = name.split_once("__").unwrap();
+        assert!(
+            prefix.parse::<i64>().is_err(),
+            "non-integer prefix must fail to parse as server id"
+        );
+    }
 }

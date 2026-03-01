@@ -272,4 +272,23 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn max_strikes_zero_triggers_on_first_occurrence() {
+        // max_strikes = 0 means "no tolerance": even the very first time a
+        // batch signature is seen it should be rejected immediately.
+        let mut det = LoopDetector::new();
+        let calls = vec![ToolCall {
+            id: "c1".into(),
+            name: "instant_tool".into(),
+            arguments: json!({}),
+        }];
+        let err = det
+            .check(&calls, 0)
+            .expect_err("max_strikes=0 must reject the first occurrence");
+        assert!(
+            matches!(err, AgentError::LoopDetected { .. }),
+            "expected LoopDetected, got {err:?}"
+        );
+    }
 }

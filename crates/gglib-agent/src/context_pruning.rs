@@ -51,7 +51,7 @@ fn content_len(msg: &AgentMessage) -> usize {
 }
 
 /// Total estimated character count across all messages.
-pub fn total_chars(messages: &[AgentMessage]) -> usize {
+pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
     messages.iter().map(content_len).sum()
 }
 
@@ -381,17 +381,25 @@ mod tests {
 
     #[test]
     fn pass2_keeps_system_and_tail() {
-        // Force into pass-2 territory by using a very tight budget.
+        // Use a very tight budget and an explicit tail window of 2 so pass-2 is
+        // forced and the outcome is deterministic.
+        //
+        // Character accounting (pass-2 survivors):
+        //   system("S")                    →  1 char  (always kept)
+        //   user("U-recent")               →  8 chars ─┐ last 2 non-system
+        //   assistant_text("Best answer.") → 12 chars ─┘
+        //   total = 21 ≤ 50  ✓
         let msgs = vec![
-            system("S"),
-            user("U1"),
-            assistant_text(&"A".repeat(5000)),
-            user("U2"),
-            assistant_text(&"B".repeat(5000)),
+            system("S"),                      // 1 char  — always kept
+            user("U1"),                       // 2 chars — outside tail, dropped
+            assistant_text(&"A".repeat(5_000)), // 5 000 chars — forces pass-2
+            user("U-recent"),                 // 8 chars ─┐ tail of 2
+            assistant_text("Best answer."),   // 12 chars ─┘
         ];
 
         let cfg = AgentConfig {
             context_budget_chars: 50,
+            prune_keep_tail_messages: 2,
             ..Default::default()
         };
         let result = prune_for_budget(msgs, &cfg);
@@ -405,5 +413,12 @@ mod tests {
         );
         // Should have at most system + prune_keep_tail_messages items.
         assert!(result.len() <= 1 + cfg.prune_keep_tail_messages);
+        // The trimmed result must also fit inside the character budget.
+        let after_chars = total_chars(&result);
+        assert!(
+            after_chars <= cfg.context_budget_chars,
+            "pass-2 result still exceeds budget: {after_chars} > {}",
+            cfg.context_budget_chars
+        );
     }
 }

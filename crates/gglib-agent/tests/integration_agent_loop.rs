@@ -17,8 +17,6 @@
 //! | [`test_context_budget_pruning`] | Oversized history → pruning → loop continues |
 
 mod common;
-#[path = "common/mock_llm.rs"]
-mod mock_llm;
 
 use std::sync::Arc;
 
@@ -26,8 +24,8 @@ use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
 use gglib_core::ports::{AgentError, AgentLoopPort};
-use mock_llm::collect_events;
-use mock_llm::{MockLlmPort, MockLlmResponse};
+use common::mock_llm::collect_events;
+use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use serde_json::json;
 use tokio::sync::mpsc;
 

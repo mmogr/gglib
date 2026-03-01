@@ -33,7 +33,6 @@ use rustyline::error::ReadlineError;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::AgentLoopPort;
 
@@ -44,6 +43,15 @@ use super::renderer::render_event;
 // =============================================================================
 // Help text
 // =============================================================================
+
+/// Channel capacity for the REPL's per-turn event channel.
+///
+/// Unlike the SSE handler — which must buffer enough events to survive HTTP
+/// framing overhead and potential slow clients — the REPL processes events
+/// synchronously in a single task on the same machine.  A modest buffer is
+/// sufficient while still providing enough headroom for bursty tool-result
+/// events within one iteration.
+const REPL_CHANNEL_CAPACITY: usize = 128;
 
 const REPL_HELP: &str = "\
   /help     print this message
@@ -125,7 +133,7 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         });
 
         // ── 2. Run agent loop for this turn ──────────────────────────────────
-        let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
+        let (tx, mut rx) = mpsc::channel::<AgentEvent>(REPL_CHANNEL_CAPACITY);
 
         let agent = Arc::clone(&agent_loop);
         let msgs = messages.clone();

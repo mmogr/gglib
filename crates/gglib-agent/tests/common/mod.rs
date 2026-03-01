@@ -2,13 +2,9 @@
 //!
 //! - [`mock_tools`] — configurable [`ToolExecutorPort`] with per-tool
 //!   behaviour (instant, delayed, fail, infra-error) and call recording.
-//!
-//! For LLM mocking and `collect_events`, include `mock_llm.rs` directly in
-//! each test binary that needs it:
-//!
-//! ```rust,ignore
-//! #[path = "common/mock_llm.rs"]
-//! mod mock_llm;
-//! ```
+//! - [`mock_llm`] — scripted [`LlmPort`] that returns pre-queued responses
+//!   and the [`collect_events`] helper for draining an agent run into a
+//!   `Vec<AgentEvent>`.
 
+pub mod mock_llm;
 pub mod mock_tools;

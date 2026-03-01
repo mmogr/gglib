@@ -214,7 +214,7 @@ pub async fn chat(
     };
 
     // ── Build the AgentLoop (stateless, cheap to construct) ───────────────
-    let agent_loop = AgentLoop::new(llm, tool_executor);
+    let agent_loop: Arc<dyn AgentLoopPort> = Arc::new(AgentLoop::new(llm, tool_executor));
     let messages = req.messages;
     let config: AgentConfig = req.config.unwrap_or_default().into();
 
