@@ -51,7 +51,7 @@ fn content_len(msg: &AgentMessage) -> usize {
 }
 
 /// Total estimated character count across all messages.
-pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
+pub fn total_chars(messages: &[AgentMessage]) -> usize {
     messages.iter().map(content_len).sum()
 }
 
