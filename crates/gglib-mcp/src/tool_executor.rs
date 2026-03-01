@@ -179,24 +179,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tool_definition_conversion_preserves_schema() {
-        let mcp_tool = gglib_core::McpTool {
-            name: "search".into(),
-            description: Some("full-text search".into()),
-            input_schema: Some(
-                json!({ "type": "object", "properties": { "q": { "type": "string" } } }),
-            ),
-        };
-        let def = ToolDefinition {
-            name: mcp_tool.name.clone(),
-            description: mcp_tool.description.clone(),
-            input_schema: mcp_tool.input_schema,
-        };
-        assert_eq!(def.name, "search");
-        assert!(def.input_schema.is_some());
-    }
-
-    #[test]
     fn qualified_name_splits_on_colon_separator() {
         // execute() uses split_once(':') to parse the qualified form
         // "{server_id}:{bare_name}".  `:` is not permitted in MCP tool names

@@ -83,16 +83,22 @@ pub struct AgentConfig {
     /// before the loop is declared stuck and aborted with
     /// [`crate::ports::AgentError::LoopDetected`].
     ///
-    /// Frontend constant: `MAX_SAME_SIGNATURE_HITS = 2` in `agentLoop.ts`.
+    /// Frontend constant: `MAX_SAME_SIGNATURE_HITS = 2` in `streamAgentChat.ts`.
     ///
     /// Set to `None` to disable loop detection entirely (useful in tests that
     /// deliberately repeat the same tool call).
     pub max_repeated_batch_steps: Option<usize>,
 
-    /// Number of consecutive iterations in which the assistant produces identical
-    /// text content before the loop is considered stagnant and aborted.
+    /// Session-wide occurrence limit for identical assistant text before the
+    /// loop is considered stagnant and aborted with
+    /// [`crate::ports::AgentError::StagnationDetected`].
     ///
-    /// Frontend constant: `MAX_STAGNATION_STEPS = 5`.
+    /// **Semantics:** The first occurrence of any response text is always free.
+    /// The error fires when the same text has been seen `N + 1` times in total
+    /// (i.e. after `N` repeats).  With the default value of `5`, stagnation
+    /// triggers on the **sixth** identical occurrence.
+    ///
+    /// Frontend constant: `MAX_STAGNATION_STEPS = 5` in `streamAgentChat.ts`.
     ///
     /// Set to `None` to disable stagnation detection entirely (useful in tests
     /// that return a fixed LLM response across many iterations).
@@ -156,7 +162,7 @@ mod tests {
         assert_eq!(
             cfg.max_stagnation_steps,
             Some(5),
-            "must mirror MAX_STAGNATION_STEPS from agentLoop.ts"
+            "must mirror MAX_STAGNATION_STEPS from streamAgentChat.ts"
         );
         assert_eq!(cfg.prune_keep_tool_messages, 10);
         assert_eq!(cfg.prune_keep_tail_messages, 12);

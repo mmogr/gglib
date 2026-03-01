@@ -49,6 +49,14 @@ async fn execute_single_tool(
     tx: mpsc::Sender<AgentEvent>,
     timeout_ms: u64,
 ) -> ToolResult {
+    // Shared failure constructor — avoids repeating the struct literal with the
+    // same `tool_call_id` and `success: false` across every error branch.
+    let fail = |content: String| ToolResult {
+        tool_call_id: tc.id.clone(),
+        content,
+        success: false,
+    };
+
     // Record the enqueue time so we can measure semaphore wait.
     // This covers any time spent blocked on the concurrency cap.
     let enqueue_time = Instant::now();
@@ -60,11 +68,7 @@ async fn execute_single_tool(
         Err(_) => {
             // The semaphore was dropped (agent loop was shut down).
             // Return a graceful failure instead of panicking inside spawn.
-            return ToolResult {
-                tool_call_id: tc.id.clone(),
-                content: "Tool execution aborted: concurrency gate closed".into(),
-                success: false,
-            };
+            return fail("Tool execution aborted: concurrency gate closed".into());
         }
     };
     let wait_ms = elapsed_ms(enqueue_time);
@@ -85,16 +89,8 @@ async fn execute_single_tool(
 
     let tool_result = match result {
         Ok(Ok(r)) => r,
-        Ok(Err(e)) => ToolResult {
-            tool_call_id: tc.id.clone(),
-            content: format!("Tool execution error: {e}"),
-            success: false,
-        },
-        Err(_) => ToolResult {
-            tool_call_id: tc.id.clone(),
-            content: format!("Tool '{}' timed out after {timeout_ms} ms", tc.name),
-            success: false,
-        },
+        Ok(Err(e)) => fail(format!("Tool execution error: {e}")),
+        Err(_) => fail(format!("Tool '{}' timed out after {timeout_ms} ms", tc.name)),
     };
 
     // Notify that execution is complete.

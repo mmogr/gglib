@@ -12,7 +12,7 @@
 //!    non-system messages.
 //!
 //! This is a port of `pruneForContextBudget` from
-//! `src/hooks/useGglibRuntime/agentLoop.ts`.
+//! `src/hooks/useGglibRuntime/streamAgentChat.ts` (previously `agentLoop.ts`).
 
 use std::collections::HashSet;
 
@@ -75,8 +75,7 @@ pub(crate) fn prune_for_budget(
 /// Keeps all [`AgentMessage::System`] messages (hoisted to the front) and the
 /// last [`AgentConfig::prune_keep_tail_messages`] non-system messages.
 ///
-/// Called by [`prune_for_budget`] when Pass 1 alone was insufficient.  Also
-/// callable directly in tests to verify Pass 2 behaviour in isolation.
+/// Called by [`prune_for_budget`] when Pass 1 alone was insufficient.
 ///
 /// # Warning — re-orders `System` messages
 ///

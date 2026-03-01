@@ -60,19 +60,19 @@ pub(crate) const MAX_TOOL_CALL_INDEX: usize = 64;
 /// This is what the agent loop receives after
 /// [`collect_stream`] has processed the entire stream.
 #[derive(Debug)]
-pub struct CollectedResponse {
+pub(crate) struct CollectedResponse {
     /// All text content fragments joined into a single string.
-    pub content: String,
+    pub(crate) content: String,
     /// All reasoning/CoT fragments joined into a single string.
     ///
     /// Empty for models that do not emit `reasoning_content` frames.
     /// Present for informational purposes (logging, CLI rendering); it is
     /// **not** fed back into the conversation history.
-    pub reasoning_content: String,
+    pub(crate) reasoning_content: String,
     /// Tool calls requested by the model (empty when the model answered directly).
-    pub tool_calls: Vec<ToolCall>,
+    pub(crate) tool_calls: Vec<ToolCall>,
     /// The `finish_reason` from the [`LlmStreamEvent::Done`] terminus event.
-    pub finish_reason: String,
+    pub(crate) finish_reason: String,
 }
 
 // =============================================================================

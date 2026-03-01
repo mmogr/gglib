@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, LlmCompletionPort, ToolExecutorPort};
-use gglib_core::{AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolDefinition};
+use gglib_core::{AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolDefinition, ToolResult};
 
 use crate::stream_collector::CollectedResponse;
 use tokio::sync::mpsc;
@@ -307,28 +307,12 @@ impl AgentLoopPort for AgentLoop {
             // Capture len before consuming results so we can report the count
             // in the IterationComplete event without keeping a reference.
             let tool_call_count = results.len();
-            // Inline append: push assistant + all tool results, accumulate char delta.
-            let added_chars = {
-                let assistant = AgentMessage::Assistant {
-                    content: if response.content.is_empty() {
-                        AssistantContent::ToolCalls(response.tool_calls)
-                    } else {
-                        AssistantContent::Both(response.content, response.tool_calls)
-                    },
-                };
-                let mut added = assistant.char_count();
-                messages.push(assistant);
-                for result in results {
-                    let msg = AgentMessage::Tool {
-                        tool_call_id: result.tool_call_id,
-                        content: result.content,
-                    };
-                    added += msg.char_count();
-                    messages.push(msg);
-                }
-                added
-            };
-            running_chars += added_chars;
+            running_chars += append_iteration_messages(
+                &mut messages,
+                response.content,
+                response.tool_calls,
+                results,
+            );
 
             // ---- 8. Context budget pruning (applied after new messages added) --
             messages = prune_for_budget(messages, &config, &mut running_chars);
@@ -354,6 +338,38 @@ impl AgentLoopPort for AgentLoop {
         emit_error_event(&tx, &error.to_string()).await;
         Err(error)
     }
+}
+
+/// Append an assistant turn and its tool results to `messages`, returning
+/// the total character delta so the caller can maintain `running_chars`
+/// without re-scanning the full history.
+///
+/// Selects the correct [`AssistantContent`] variant based on whether
+/// `content` is empty, avoiding the vacuous all-`None` state.
+fn append_iteration_messages(
+    messages: &mut Vec<AgentMessage>,
+    content: String,
+    tool_calls: Vec<gglib_core::ToolCall>,
+    results: Vec<ToolResult>,
+) -> usize {
+    let assistant = AgentMessage::Assistant {
+        content: if content.is_empty() {
+            AssistantContent::ToolCalls(tool_calls)
+        } else {
+            AssistantContent::Both(content, tool_calls)
+        },
+    };
+    let mut added = assistant.char_count();
+    messages.push(assistant);
+    for result in results {
+        let msg = AgentMessage::Tool {
+            tool_call_id: result.tool_call_id,
+            content: result.content,
+        };
+        added += msg.char_count();
+        messages.push(msg);
+    }
+    added
 }
 
 // Tests live in tests/unit_agent_loop.rs so they can share the richer mock

@@ -73,8 +73,8 @@ export interface PartialAgentConfig {
   tool_timeout_ms?: number;
   /** Maps to `AgentConfig::context_budget_chars` (default 180 000). */
   context_budget_chars?: number;
-  /** Maps to `AgentConfig::max_protocol_strikes` (default 2). */
-  max_protocol_strikes?: number;
+  /** Maps to `AgentConfig::max_repeated_batch_steps` (default 2). */
+  max_repeated_batch_steps?: number;
   /** Maps to `AgentConfig::max_parallel_tools` (default 5). */
   max_parallel_tools?: number;
 }
