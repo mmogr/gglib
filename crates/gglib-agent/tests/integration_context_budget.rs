@@ -92,10 +92,7 @@ async fn test_context_budget_pruning() {
     let result = agent
         .run(
             messages,
-            AgentConfig {
-                context_budget_chars: 500,
-                ..AgentConfig::default()
-            },
+            { let mut c = AgentConfig::default(); c.context_budget_chars = 500; c },
             tx,
         )
         .await;

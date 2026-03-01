@@ -1,12 +1,9 @@
 //! Tool-call loop detection via FNV-1a batch signatures.
 //!
-//! This module is a direct port of the loop-detection logic in
-//! `src/hooks/useGglibRuntime/agentLoop.ts`.
-//!
 //! # Algorithm
 //!
 //! 1. Compute an **individual signature** for each [`ToolCall`] as
-//!    `"{name}:{fnv1a_32(arguments_json):08x}"`.
+//!    `"{name}:{fnv1a_64(arguments_json):016x}"`.
 //! 2. Sort the individual signatures and join them with `"|"` to form a
 //!    **batch signature** that is independent of tool-call ordering.
 //! 3. A [`LoopDetector`] counts how many times each batch signature has been
@@ -15,21 +12,17 @@
 //!
 //! ## Hash algorithm
 //!
-//! FNV-1a 32-bit with:
-//! - Offset basis: `2_166_136_261`
-//! - Prime: `16_777_619`
-//! - Wrapping 32-bit multiplication (`wrapping_mul`)
-//!
-//! The Rust implementation hashes **UTF-8 bytes**, matching the JavaScript
-//! implementation's behaviour for the ASCII-dominated argument strings
-//! produced by OpenAI-compatible tool calls.
+//! FNV-1a 64-bit with:
+//! - Offset basis: `14_695_981_039_346_656_037`
+//! - Prime: `1_099_511_628_211`
+//! - Wrapping 64-bit multiplication (`wrapping_mul`)
 
 use std::collections::HashMap;
 
 use gglib_core::ToolCall;
 use gglib_core::ports::AgentError;
 
-use crate::fnv1a::fnv1a_32;
+use crate::fnv1a::fnv1a_64;
 
 // =============================================================================
 // Signature helpers
@@ -37,22 +30,21 @@ use crate::fnv1a::fnv1a_32;
 
 /// Compute the individual signature for a single [`ToolCall`].
 ///
-/// Format: `"{name}:{fnv1a_32(arguments_json):08x}"`
+/// Format: `"{name}:{fnv1a_64(arguments_json):016x}"`
 ///
 /// The arguments are serialised to a canonical JSON string before hashing.
 /// For the purposes of loop detection, argument *identity* is what matters,
-/// not argument ordering; JSON objects are not canonicalised — this matches
-/// the frontend's behaviour.
-pub fn tool_signature(call: &ToolCall) -> String {
+/// not argument ordering; JSON objects are not canonicalised.
+pub(crate) fn tool_signature(call: &ToolCall) -> String {
     let args_json = call.arguments.to_string();
-    format!("{}:{:08x}", call.name, fnv1a_32(&args_json))
+    format!("{}:{:016x}", call.name, fnv1a_64(&args_json))
 }
 
 /// Compute the batch signature for a slice of [`ToolCall`]s.
 ///
 /// Individual signatures are sorted before joining so that the result is
 /// independent of the order in which the LLM emitted the calls.
-pub fn batch_signature(calls: &[ToolCall]) -> String {
+pub(crate) fn batch_signature(calls: &[ToolCall]) -> String {
     let mut sigs: Vec<String> = calls.iter().map(tool_signature).collect();
     sigs.sort_unstable();
     sigs.join("|")
@@ -120,8 +112,8 @@ mod tests {
         assert!(sig.starts_with("fs_read:"), "should start with name: {sig}");
         assert_eq!(
             sig.len(),
-            "fs_read:".len() + 8,
-            "hash should be 8 hex chars"
+            "fs_read:".len() + 16,
+            "hash should be 16 hex chars"
         );
     }
 

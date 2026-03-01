@@ -88,8 +88,8 @@ pub enum AgentError {
 /// Output returned by a successful [`AgentLoopPort::run`] invocation.
 ///
 /// Using a named struct instead of a bare tuple keeps call sites
-/// self-documenting and allows new fields (e.g. `iterations_used`) to be added
-/// without breaking existing destructures.
+/// self-documenting and allows new fields to be added without breaking
+/// existing destructures.
 #[derive(Debug)]
 pub struct AgentRunOutput {
     /// The final answer text produced by the agent.
@@ -101,6 +101,9 @@ pub struct AgentRunOutput {
     /// CLI callers can feed this directly back as `messages` on the next turn
     /// to maintain complete multi-turn context.
     pub history: Vec<AgentMessage>,
+    /// Number of loop iterations consumed before the agent produced its final
+    /// answer.  Always ≥ 1.  Useful for logging and telemetry.
+    pub total_iterations: usize,
 }
 
 // =============================================================================

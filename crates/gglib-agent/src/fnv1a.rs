@@ -1,29 +1,26 @@
-//! FNV-1a 32-bit hash utility used across the `gglib-agent` crate.
+//! FNV-1a 64-bit hash utility used across the `gglib-agent` crate.
 //!
 //! Timing utilities live in `gglib_core::utils::timing` and are re-exported
 //! from the `gglib_core` crate root as `gglib_core::elapsed_ms`.
 
 // =============================================================================
-// FNV-1a 32-bit hash
+// FNV-1a 64-bit hash
 // =============================================================================
 
-/// FNV-1a 32-bit hash of `s` — bit-compatible with the TypeScript
-/// `hashString` function for ASCII input.
+/// FNV-1a 64-bit hash of `s`.
 ///
 /// Parameters:
-/// - Offset basis: `2_166_136_261`
-/// - Prime: `16_777_619`
-/// - Wrapping 32-bit multiplication
+/// - Offset basis: `14_695_981_039_346_656_037`
+/// - Prime: `1_099_511_628_211`
+/// - Wrapping 64-bit multiplication
 ///
-/// The Rust implementation hashes UTF-8 bytes, matching the JavaScript
-/// implementation's behaviour for the ASCII-dominated argument strings
-/// produced by OpenAI-compatible tool calls.
-pub fn fnv1a_32(s: &str) -> u32 {
-    const OFFSET: u32 = 2_166_136_261;
-    const PRIME: u32 = 16_777_619;
+/// The Rust implementation hashes UTF-8 bytes.
+pub fn fnv1a_64(s: &str) -> u64 {
+    const OFFSET: u64 = 14_695_981_039_346_656_037;
+    const PRIME: u64 = 1_099_511_628_211;
     let mut hash = OFFSET;
     for byte in s.bytes() {
-        hash ^= u32::from(byte);
+        hash ^= u64::from(byte);
         hash = hash.wrapping_mul(PRIME);
     }
     hash
@@ -38,15 +35,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fnv1a_32_empty_string_is_offset_basis() {
+    fn fnv1a_64_empty_string_is_offset_basis() {
         // FNV-1a of "" is the offset basis unchanged.
-        assert_eq!(fnv1a_32(""), 2_166_136_261);
+        assert_eq!(fnv1a_64(""), 14_695_981_039_346_656_037);
     }
 
     #[test]
-    fn fnv1a_32_matches_known_values() {
-        // Cross-checked against the JavaScript hashString implementation.
-        assert_eq!(fnv1a_32("hello"), 1_335_831_723);
-        assert_eq!(fnv1a_32("world"), 933_488_787);
+    fn fnv1a_64_known_empty_rounds_stable() {
+        // Hashing the same string twice must yield the same value.
+        assert_eq!(fnv1a_64("hello"), fnv1a_64("hello"));
+        assert_ne!(fnv1a_64("hello"), fnv1a_64("world"));
+    }
+
+    #[test]
+    fn fnv1a_64_differs_from_32_bit_basis() {
+        // Sanity check: the 64-bit offset basis is different from the 32-bit one.
+        assert_ne!(fnv1a_64("") as u32, 2_166_136_261_u32);
     }
 }

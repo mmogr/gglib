@@ -55,11 +55,12 @@ async fn test_max_iterations_reached() {
             vec![AgentMessage::User {
                 content: "go".into(),
             }],
-            AgentConfig {
-                max_iterations: 3,
-                max_protocol_strikes: None, // disable loop detection for this test
-                max_stagnation_steps: None, // disable stagnation for this test
-                ..AgentConfig::default()
+            {
+                let mut c = AgentConfig::default();
+                c.max_iterations = 3;
+                c.max_protocol_strikes = None; // disable loop detection for this test
+                c.max_stagnation_steps = None; // disable stagnation for this test
+                c
             },
             tx,
         )
@@ -111,11 +112,12 @@ async fn test_loop_detection() {
             vec![AgentMessage::User {
                 content: "go".into(),
             }],
-            AgentConfig {
-                max_iterations: 10,
-                max_protocol_strikes: Some(2),
-                max_stagnation_steps: None,
-                ..AgentConfig::default()
+            {
+                let mut c = AgentConfig::default();
+                c.max_iterations = 10;
+                c.max_protocol_strikes = Some(2);
+                c.max_stagnation_steps = None;
+                c
             },
             tx,
         )
@@ -181,11 +183,12 @@ async fn test_stagnation_detected_integration() {
             vec![AgentMessage::User {
                 content: "say something new".into(),
             }],
-            AgentConfig {
-                max_stagnation_steps: Some(2),
-                max_protocol_strikes: None,
-                max_iterations: 10,
-                ..AgentConfig::default()
+            {
+                let mut c = AgentConfig::default();
+                c.max_stagnation_steps = Some(2);
+                c.max_protocol_strikes = None;
+                c.max_iterations = 10;
+                c
             },
             tx,
         )

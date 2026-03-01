@@ -75,10 +75,16 @@ pub(crate) fn prune_for_budget(
     let tail_start = non_system
         .len()
         .saturating_sub(config.prune_keep_tail_messages);
-    system
+    let result: Vec<AgentMessage> = system
         .into_iter()
         .chain(non_system.into_iter().skip(tail_start))
-        .collect()
+        .collect();
+    // Sync the running counter after Pass 2; Pass 1 updated it incrementally
+    // but the partition+skip above drops additional messages without touching
+    // `running_chars`.  Without this, the next iteration sees a stale count
+    // above budget and re-runs Pass 2 unnecessarily, over-pruning history.
+    *running_chars = total_chars(&result);
+    result
 }
 
 /// Pass 1 of the pruning algorithm: drop old tool messages and orphaned
@@ -205,10 +211,8 @@ mod tests {
 
     #[test]
     fn within_budget_returns_unchanged() {
-        let cfg = AgentConfig {
-            context_budget_chars: 10_000,
-            ..Default::default()
-        };
+        let mut cfg = AgentConfig::default();
+        cfg.context_budget_chars = 10_000;
         let msgs = vec![system("sys"), user("hi")];
         let mut chars = total_chars(&msgs);
         let result = prune_for_budget(msgs, &cfg, &mut chars);
@@ -227,10 +231,8 @@ mod tests {
 
         // Budget is just barely exceeded.
         let total = total_chars(&msgs);
-        let cfg = AgentConfig {
-            context_budget_chars: total - 1,
-            ..Default::default()
-        };
+        let mut cfg = AgentConfig::default();
+        cfg.context_budget_chars = total - 1;
 
         let mut chars = total;
         let result = prune_for_budget(msgs, &cfg, &mut chars);
@@ -269,10 +271,8 @@ mod tests {
         }
 
         let total = total_chars(&msgs);
-        let cfg = AgentConfig {
-            context_budget_chars: total - 1,
-            ..Default::default()
-        };
+        let mut cfg = AgentConfig::default();
+        cfg.context_budget_chars = total - 1;
         let mut chars = total;
         let result = prune_for_budget(msgs, &cfg, &mut chars);
 
@@ -328,11 +328,9 @@ mod tests {
         ];
 
         let total = total_chars(&msgs);
-        let cfg = AgentConfig {
-            context_budget_chars: total - 1,
-            prune_keep_tool_messages: 1, // keep only tc_new
-            ..Default::default()
-        };
+        let mut cfg = AgentConfig::default();
+        cfg.context_budget_chars = total - 1;
+        cfg.prune_keep_tool_messages = 1; // keep only tc_new
 
         let mut chars = total;
         let result = prune_for_budget(msgs, &cfg, &mut chars);
@@ -398,11 +396,9 @@ mod tests {
             assistant_text("Best answer."),   // 12 chars ─┘
         ];
 
-        let cfg = AgentConfig {
-            context_budget_chars: 50,
-            prune_keep_tail_messages: 2,
-            ..Default::default()
-        };
+        let mut cfg = AgentConfig::default();
+        cfg.context_budget_chars = 50;
+        cfg.prune_keep_tail_messages = 2;
         let mut chars = total_chars(&msgs);
         let result = prune_for_budget(msgs, &cfg, &mut chars);
 

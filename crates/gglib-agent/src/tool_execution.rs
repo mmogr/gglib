@@ -5,8 +5,12 @@
 //!
 //! # Behaviour
 //!
-//! - All tool calls in a batch are dispatched concurrently.
-//! - An [`tokio::sync::Semaphore`] caps the number of *simultaneously running*
+//! - All tool calls in a batch are dispatched concurrently via a
+//!   [`tokio::task::JoinSet`].  When the future returned by
+//!   [`execute_tools_parallel`] is dropped (e.g. because `AgentTaskGuard`
+//!   aborts the parent agent task on client disconnect), the `JoinSet` is
+//!   dropped and every in-flight sub-task is cancelled — no resource leak.
+//! - A [`tokio::sync::Semaphore`] caps the number of *simultaneously running*
 //!   tool calls at [`AgentConfig::max_parallel_tools`].
 //! - Each call is wrapped in a [`tokio::time::timeout`] capped at
 //!   [`AgentConfig::tool_timeout_ms`].
@@ -19,10 +23,11 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use futures_util::future::join_all;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{AgentConfig, AgentEvent, ToolCall, ToolResult};
 use tokio::sync::{Semaphore, mpsc};
+use tokio::task::JoinSet;
+use tracing::warn;
 
 use gglib_core::elapsed_ms;
 
@@ -139,26 +144,40 @@ pub(crate) async fn execute_tools_parallel(
     let semaphore = Arc::new(Semaphore::new(config.max_parallel_tools));
     let timeout_ms = config.tool_timeout_ms;
 
-    let handles: Vec<_> = calls
-        .iter()
-        .map(|tc| {
-            let tc = tc.clone();
-            let sem = Arc::clone(&semaphore);
-            let executor = Arc::clone(executor);
-            let tx = tx.clone();
-            tokio::spawn(async move { execute_single_tool(tc, executor, sem, tx, timeout_ms).await })
-        })
-        .collect();
+    // Spawn each tool call into a JoinSet rather than as detached tasks.
+    // When this future is dropped (e.g. because AgentTaskGuard aborts the
+    // parent agent task on client disconnect), the JoinSet is dropped and
+    // every in-flight tool task is cancelled automatically — no resource leak.
+    let mut set: JoinSet<(usize, ToolResult)> = JoinSet::new();
 
-    // Await all handles in order.  JoinError (task panic) is treated as failure.
-    join_all(handles)
-        .await
+    for (i, tc) in calls.iter().enumerate() {
+        let tc = tc.clone();
+        let sem = Arc::clone(&semaphore);
+        let executor = Arc::clone(executor);
+        let tx = tx.clone();
+        set.spawn(async move {
+            let result = execute_single_tool(tc, executor, sem, tx, timeout_ms).await;
+            (i, result)
+        });
+    }
+
+    // Collect results.  Pre-fill with None so that any panicked slot (which
+    // carries no index) can be identified and replaced with a failure result.
+    let mut results: Vec<Option<ToolResult>> = vec![None; calls.len()];
+    while let Some(join_result) = set.join_next().await {
+        match join_result {
+            Ok((i, result)) => results[i] = Some(result),
+            Err(e) => warn!("Tool task panicked: {e}"),
+        }
+    }
+
+    results
         .into_iter()
         .enumerate()
-        .map(|(i, join_result)| {
-            join_result.unwrap_or_else(|e| ToolResult {
+        .map(|(i, opt)| {
+            opt.unwrap_or_else(|| ToolResult {
                 tool_call_id: calls[i].id.clone(),
-                content: format!("Tool task panicked: {e}"),
+                content: "Tool task panicked".into(),
                 success: false,
                 wait_ms: 0,
                 execute_duration_ms: 0,
@@ -253,7 +272,8 @@ mod tests {
         let (tx, _rx) = mpsc::channel(32);
         let executor: Arc<dyn ToolExecutorPort> = Arc::new(SlowExecutor { millis: 1_000 });
         let calls = vec![call("slow", "slow_tool")];
-        let config = AgentConfig { tool_timeout_ms: 10, ..Default::default() };
+        let mut config = AgentConfig::default();
+        config.tool_timeout_ms = 10;
 
         let results = execute_tools_parallel(&calls, &executor, &config, &tx).await;
 
@@ -304,7 +324,8 @@ mod tests {
         });
         let calls: Vec<ToolCall> = (0..10).map(|i| call(&format!("c{i}"), "t")).collect();
         let (tx, _rx) = mpsc::channel(64);
-        let config = AgentConfig { max_parallel_tools: 3, ..Default::default() };
+        let mut config = AgentConfig::default();
+        config.max_parallel_tools = 3;
 
         execute_tools_parallel(&calls, &tracker, &config, &tx).await;
 

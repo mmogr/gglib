@@ -304,6 +304,7 @@ impl AgentLoopPort for AgentLoop {
                 return Ok(AgentRunOutput {
                     answer: content,
                     history: messages,
+                    total_iterations: iteration + 1,
                 });
             }
 

@@ -62,13 +62,10 @@ const REPL_HELP: &str = "\
 /// clone the reference for each spawned per-turn task without requiring
 /// [`AgentLoop`] to implement [`Clone`].
 pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Result<()> {
-    let defaults = AgentConfig::default();
-    let config = AgentConfig {
-        max_iterations: args.max_iterations,
-        tool_timeout_ms: args.tool_timeout_ms.unwrap_or(defaults.tool_timeout_ms),
-        max_parallel_tools: args.max_parallel.unwrap_or(defaults.max_parallel_tools),
-        ..defaults
-    };
+    let mut config = AgentConfig::default();
+    config.max_iterations = args.max_iterations;
+    if let Some(ms) = args.tool_timeout_ms { config.tool_timeout_ms = ms; }
+    if let Some(n) = args.max_parallel { config.max_parallel_tools = n; }
 
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.

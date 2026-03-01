@@ -44,10 +44,7 @@ impl ToolExecutorPort for EmptyToolExecutor {
     }
 
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-        anyhow::bail!(
-            "tool '{}' is not available: the tool filter allows no tools",
-            call.name
-        );
+        anyhow::bail!("tool '{}' is not available in this session", call.name);
     }
 }
 

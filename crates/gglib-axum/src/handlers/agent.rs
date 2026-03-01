@@ -90,14 +90,15 @@ pub struct AgentRequestConfig {
 
 impl From<AgentRequestConfig> for AgentConfig {
     fn from(req: AgentRequestConfig) -> Self {
+        let AgentRequestConfig { max_iterations, max_parallel_tools, tool_timeout_ms } = req;
         let mut cfg = AgentConfig::default();
-        if let Some(n) = req.max_iterations {
+        if let Some(n) = max_iterations {
             cfg.max_iterations = n.min(MAX_ITERATIONS_CEILING);
         }
-        if let Some(n) = req.max_parallel_tools {
+        if let Some(n) = max_parallel_tools {
             cfg.max_parallel_tools = n.min(MAX_PARALLEL_TOOLS_CEILING);
         }
-        if let Some(ms) = req.tool_timeout_ms {
+        if let Some(ms) = tool_timeout_ms {
             cfg.tool_timeout_ms = ms.min(MAX_TOOL_TIMEOUT_MS_CEILING);
         }
         cfg

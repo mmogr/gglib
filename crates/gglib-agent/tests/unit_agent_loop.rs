@@ -66,11 +66,12 @@ async fn test_stagnation_detected() {
             vec![AgentMessage::User {
                 content: "go".into(),
             }],
-            AgentConfig {
-                max_iterations: 10,
-                max_protocol_strikes: None, // disable loop detection
-                max_stagnation_steps: Some(2),   // fires on the 3rd identical-text iteration
-                ..AgentConfig::default()
+            {
+                let mut c = AgentConfig::default();
+                c.max_iterations = 10;
+                c.max_protocol_strikes = None; // disable loop detection
+                c.max_stagnation_steps = Some(2); // fires on the 3rd identical-text iteration
+                c
             },
             tx,
         )
@@ -232,8 +233,8 @@ async fn test_empty_tool_filter_exposes_no_tools() {
         "tool call must have success=false when empty filter is active"
     );
     assert!(
-        rejection.content.contains("tool filter allows no tools"),
-        "rejection message should explain the empty-filter cause, got: {}",
+        rejection.content.contains("is not available in this session"),
+        "rejection message should explain the tool is not available, got: {}",
         rejection.content
     );
 }
@@ -267,10 +268,11 @@ async fn test_too_many_tool_calls_returns_dedicated_error() {
     let result = agent
         .run(
             vec![AgentMessage::User { content: "go".into() }],
-            AgentConfig {
-                max_parallel_tools: 2, // 3 calls > 2 → rejected
-                max_protocol_strikes: None,
-                ..AgentConfig::default()
+            {
+                let mut c = AgentConfig::default();
+                c.max_parallel_tools = 2; // 3 calls > 2 → rejected
+                c.max_protocol_strikes = None;
+                c
             },
             tx,
         )

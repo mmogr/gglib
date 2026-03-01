@@ -15,6 +15,7 @@ use serde::Serialize;
 /// internal tuning knobs (pruning parameters, strike limits, etc.) to
 /// untrusted callers.
 #[derive(Debug, Clone, Serialize)]
+#[non_exhaustive]
 pub struct AgentConfig {
     /// Maximum number of LLM→tool→LLM iterations before the loop is aborted.
     ///
