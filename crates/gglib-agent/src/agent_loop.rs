@@ -34,7 +34,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::context_pruning::prune_for_budget;
-use crate::filter::FilteredToolExecutor;
+use crate::filter::{EmptyToolExecutor, FilteredToolExecutor};
 use crate::loop_detection::LoopDetector;
 use crate::stagnation::StagnationDetector;
 use crate::stream_collector::collect_stream;
@@ -167,10 +167,14 @@ impl AgentLoop {
         tool_filter: Option<HashSet<String>>,
     ) -> Arc<dyn AgentLoopPort> {
         let executor: Arc<dyn ToolExecutorPort> = match tool_filter {
-            Some(allowed) if !allowed.is_empty() => {
-                Arc::new(FilteredToolExecutor::new(tool_executor, allowed))
-            }
-            _ => tool_executor,
+            // No filter supplied — expose every tool from the inner executor.
+            None => tool_executor,
+            // Empty allowlist — the caller explicitly wants zero tools exposed.
+            // Fall through to EmptyToolExecutor rather than exposing all tools;
+            // `Some([])` must never be silently interpreted as "no restriction".
+            Some(allowed) if allowed.is_empty() => Arc::new(EmptyToolExecutor),
+            // Non-empty allowlist — restrict to the named set.
+            Some(allowed) => Arc::new(FilteredToolExecutor::new(tool_executor, allowed)),
         };
         Arc::new(Self::new(llm, executor))
     }
@@ -225,14 +229,17 @@ impl AgentLoopPort for AgentLoop {
             // Guard: reject tool-call batches that exceed the configured
             // concurrency cap.  (The stream collector applies a hard index cap
             // during parsing; this check enforces the user-visible limit.)
+            //
+            // This is a model protocol violation, not an internal infrastructure
+            // failure, so it returns TooManyToolCalls rather than Internal —
+            // callers can distinguish and report it differently.
             if response.tool_calls.len() > config.max_parallel_tools {
-                let msg = format!(
-                    "response contained {} tool calls, exceeds max_parallel_tools ({})",
-                    response.tool_calls.len(),
-                    config.max_parallel_tools
-                );
-                emit_error_event(&tx, &msg).await;
-                return Err(AgentError::Internal(msg));
+                let error = AgentError::TooManyToolCalls {
+                    count: response.tool_calls.len(),
+                    limit: config.max_parallel_tools,
+                };
+                emit_error_event(&tx, &error.to_string()).await;
+                return Err(error);
             }
 
             debug!(

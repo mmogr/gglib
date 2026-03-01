@@ -59,6 +59,23 @@ pub enum AgentError {
         signature: String,
     },
 
+    /// The LLM produced more tool calls in a single batch than configured by
+    /// [`AgentConfig::max_parallel_tools`].
+    ///
+    /// This is a model protocol violation: the LLM returned more concurrent
+    /// calls than the loop is configured to dispatch.  The loop aborts rather
+    /// than silently truncating the batch, because partial execution could
+    /// leave the model with an incoherent view of which calls were handled.
+    #[error(
+        "LLM requested {count} tool calls in one batch, exceeds max_parallel_tools ({limit})"
+    )]
+    TooManyToolCalls {
+        /// Number of tool calls the LLM returned.
+        count: usize,
+        /// The configured maximum ([`AgentConfig::max_parallel_tools`]).
+        limit: usize,
+    },
+
     /// An unrecoverable internal error inside the loop implementation.
     #[error("internal agent error: {0}")]
     Internal(String),
