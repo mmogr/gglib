@@ -260,4 +260,58 @@ mod tests {
         assert!(json_val.get("content").is_none());
         assert!(json_val["tool_calls"].is_array());
     }
+
+    /// Verify that the custom Serde deserializer reconstructs
+    /// [`AssistantContent::Both`] correctly on a round-trip.
+    ///
+    /// Some LLMs (e.g. models with parallel function calling) emit a non-empty
+    /// `content` string alongside `tool_calls` in the same assistant message.
+    /// The round-trip must preserve both arms exactly.
+    #[test]
+    fn assistant_both_round_trips() {
+        use serde_json::json;
+
+        let original = AgentMessage::Assistant {
+            content: AssistantContent::Both(
+                "thinking out loud".into(),
+                vec![
+                    ToolCall {
+                        id: "c1".into(),
+                        name: "web_search".into(),
+                        arguments: json!({ "query": "rust async" }),
+                    },
+                    ToolCall {
+                        id: "c2".into(),
+                        name: "read_file".into(),
+                        arguments: json!({ "path": "/tmp/x" }),
+                    },
+                ],
+            ),
+        };
+
+        // Serialise → deserialise.
+        let json_val = serde_json::to_value(&original).unwrap();
+        assert_eq!(json_val["role"], "assistant");
+        assert_eq!(json_val["content"], "thinking out loud", "content arm must be present");
+        assert_eq!(
+            json_val["tool_calls"].as_array().unwrap().len(),
+            2,
+            "tool_calls arm must be present with 2 entries"
+        );
+
+        // Round-trip: deserialise back from the serialised value.
+        let reconstructed: AgentMessage = serde_json::from_value(json_val).unwrap();
+        if let AgentMessage::Assistant { content } = reconstructed {
+            if let AssistantContent::Both(text, calls) = content {
+                assert_eq!(text, "thinking out loud");
+                assert_eq!(calls.len(), 2);
+                assert_eq!(calls[0].id, "c1");
+                assert_eq!(calls[1].name, "read_file");
+            } else {
+                panic!("expected AssistantContent::Both, got something else");
+            }
+        } else {
+            panic!("expected AgentMessage::Assistant");
+        }
+    }
 }

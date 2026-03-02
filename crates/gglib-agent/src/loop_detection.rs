@@ -379,4 +379,53 @@ mod tests {
             "expected LoopDetected, got {err:?}"
         );
     }
+
+    // ---- stable_repr / MAX_REPR_DEPTH guard ---------------------------------
+
+    /// Build a JSON object nested `depth` levels deep: `{"x": {"x": ... }}`.
+    fn nested_object(depth: usize) -> serde_json::Value {
+        let mut v = json!("leaf");
+        for _ in 0..depth {
+            v = json!({ "x": v });
+        }
+        v
+    }
+
+    #[test]
+    fn stable_repr_caps_recursion_at_max_depth() {
+        // Build an object that is one level deeper than the guard threshold.
+        // At depth == MAX_REPR_DEPTH the inner call should return "\"...\"".
+        // The important assertion is that the function returns at all (no
+        // stack overflow) and that the sentinel appears somewhere in the output.
+        let deep = nested_object(MAX_REPR_DEPTH + 1);
+        let repr = stable_repr(&deep);
+        assert!(
+            repr.contains("\"...\""),
+            "stable_repr of a {}-level nested object must contain sentinel; got: {repr}",
+            MAX_REPR_DEPTH + 1,
+        );
+    }
+
+    #[test]
+    fn stable_repr_at_exact_max_depth_triggers_sentinel() {
+        // An object at exactly MAX_REPR_DEPTH levels must also trigger the cap,
+        // since depth >= MAX_REPR_DEPTH is the guard condition.
+        let at_limit = nested_object(MAX_REPR_DEPTH);
+        let repr = stable_repr(&at_limit);
+        assert!(
+            repr.contains("\"...\""),
+            "stable_repr at depth=MAX_REPR_DEPTH must hit the sentinel; got: {repr}",
+        );
+    }
+
+    #[test]
+    fn stable_repr_below_max_depth_produces_full_output() {
+        // An object strictly shallower than the limit must not be truncated.
+        let shallow = nested_object(MAX_REPR_DEPTH - 1);
+        let repr = stable_repr(&shallow);
+        assert!(
+            !repr.contains("\"...\""),
+            "stable_repr at depth=MAX_REPR_DEPTH-1 must not sentinel; got: {repr}",
+        );
+    }
 }

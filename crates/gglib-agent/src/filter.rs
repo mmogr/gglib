@@ -45,6 +45,7 @@ pub const TOOL_NOT_AVAILABLE_MSG: &str = "is not available in this session";
 /// *"expose nothing"*, not *"expose everything"* — this executor enforces that
 /// contract on both `list_tools` (LLM sees no tools) and `execute` (defence in
 /// depth: any synthesised call is rejected).
+#[derive(Debug, Default, Clone)]
 pub(crate) struct EmptyToolExecutor;
 
 #[async_trait]
@@ -260,5 +261,44 @@ mod tests {
             err.to_string().contains("infrastructure down"),
             "inner Err must be propagated verbatim; got: {err}"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // EmptyToolExecutor
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn empty_executor_list_tools_returns_empty() {
+        let e = EmptyToolExecutor;
+        assert!(
+            e.list_tools().await.is_empty(),
+            "EmptyToolExecutor must expose no tools"
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_executor_execute_returns_error() {
+        let e = EmptyToolExecutor;
+        let call = make_call("any_tool");
+        let err = e.execute(&call).await.unwrap_err();
+        assert!(
+            err.to_string().contains(TOOL_NOT_AVAILABLE_MSG),
+            "EmptyToolExecutor::execute must emit TOOL_NOT_AVAILABLE_MSG; got: {err}"
+        );
+        assert!(
+            err.to_string().contains("any_tool"),
+            "error message must include the tool name; got: {err}"
+        );
+    }
+
+    #[test]
+    fn empty_executor_derives_are_sound() {
+        // Exercises the Debug, Default, and Clone derives to ensure they
+        // compile and produce values that satisfy basic sanity checks.
+        let a = EmptyToolExecutor::default();
+        let b = a.clone();
+        // Debug must not panic.
+        let _ = format!("{a:?}");
+        let _ = format!("{b:?}");
     }
 }
