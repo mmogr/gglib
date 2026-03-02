@@ -21,13 +21,6 @@
 use std::pin::Pin;
 
 use anyhow::{Result, anyhow};
-
-/// Timeout (seconds) for the `.send()` phase of each LLM request.
-///
-/// Covers TCP connect + TLS handshake + HTTP response headers.  Does **not**
-/// apply to the streaming body, which can take arbitrarily long during prompt
-/// pre-fill.  Chosen conservatively; the llama-server is always local.
-const LLM_CONNECT_TIMEOUT_SECS: u64 = 30;
 use async_trait::async_trait;
 use futures_core::Stream;
 use futures_util::StreamExt as _;
@@ -42,6 +35,13 @@ use gglib_core::{
 mod sse_decoder;
 mod sse_parser;
 use sse_decoder::SseStreamDecoder;
+
+/// Timeout (seconds) for the `.send()` phase of each LLM request.
+///
+/// Covers TCP connect + TLS handshake + HTTP response headers.  Does **not**
+/// apply to the streaming body, which can take arbitrarily long during prompt
+/// pre-fill.  Chosen conservatively; the llama-server is always local.
+const LLM_CONNECT_TIMEOUT_SECS: u64 = 30;
 
 // =============================================================================
 // Adapter struct

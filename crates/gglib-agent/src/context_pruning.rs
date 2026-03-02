@@ -151,7 +151,7 @@ fn prune_tool_messages(
     // Replace retain() with filter_map so we can also strip the pruned call
     // IDs from retained assistant messages — leaving an assistant message that
     // references tc2/tc3 when only tc1's result survived would confuse the LLM.
-    let result = messages
+    let result: Vec<AgentMessage> = messages
         .into_iter()
         .filter_map(|m| {
             // Compute the size of this message before (potentially) moving it.
