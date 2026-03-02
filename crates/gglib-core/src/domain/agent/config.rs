@@ -102,10 +102,12 @@ pub struct AgentConfig {
     /// loop is considered stagnant and aborted with
     /// [`crate::ports::AgentError::StagnationDetected`].
     ///
-    /// **Semantics:** The first occurrence of any response text is always free.
-    /// The error fires when the same text has been seen `N + 1` times in total
-    /// (i.e. after `N` repeats).  With the default value of `5`, stagnation
-    /// triggers on the **sixth** identical occurrence.
+    /// **Semantics:** Each occurrence of the same response text increments a
+    /// session counter.  The error fires when the counter **after**
+    /// incrementing exceeds `max_stagnation_steps`.  With the default value
+    /// of `5`, stagnation triggers on the **sixth** identical occurrence.
+    /// With `max_stagnation_steps = 0`, the error fires on the **very first**
+    /// occurrence of any repeated text.
     ///
     /// Frontend constant: `MAX_STAGNATION_STEPS = 5` in `streamAgentChat.ts`.
     ///

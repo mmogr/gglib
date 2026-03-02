@@ -98,7 +98,9 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // ── 1. Read user input (blocking → spawn_blocking) ───────────────────
         let ed = Arc::clone(&editor);
         let line = tokio::task::spawn_blocking(move || {
-            ed.lock().expect("editor poisoned").readline("You: ")
+            ed.lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .readline("You: ")
         })
         .await?;
 
@@ -126,70 +128,11 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
             _ => {}
         }
 
-        messages.push(AgentMessage::User {
-            content: input.clone(),
-        });
+        messages.push(AgentMessage::User { content: input });
 
-        // ── 2. Run agent loop for this turn ──────────────────────────────────
-        let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
-
-        let agent = Arc::clone(&agent_loop);
-        // Preserve system messages so the prompt survives Ctrl+C or agent
-        // error.  `run()` takes ownership of the full history; on the success
-        // path it returns `output.history` which is the extended vector.  On
-        // the failure path we restore just the system messages so subsequent
-        // turns still see the configured system prompt.
-        let system_fallback: Vec<AgentMessage> = messages
-            .iter()
-            .filter(|m| matches!(m, AgentMessage::System { .. }))
-            .cloned()
-            .collect();
+        // ── 2–4. Run turn and update history ─────────
         let turn_msgs = std::mem::take(&mut messages);
-        let cfg = config.clone();
-
-        let handle: JoinHandle<Option<Vec<AgentMessage>>> = tokio::spawn(async move {
-            match agent.run(turn_msgs, cfg, tx).await {
-                Ok(output) => Some(output.history),
-                Err(e) => {
-                    tracing::debug!("agent loop ended: {e}");
-                    None
-                }
-            }
-        });
-
-        // ── 3. Consume event stream; Ctrl+C aborts the agent task ────────────────
-        let completed = tokio::select! {
-            biased;
-            result = drain_event_stream(&mut rx, args.verbose) => result,
-            _ = tokio::signal::ctrl_c() => {
-                handle.abort();
-                while rx.try_recv().is_ok() {}
-                eprintln!("\n[agent response cancelled — Ctrl+C]");
-                false
-            }
-        };
-
-        // ── 4. Replace conversation history with the loop’s accumulated messages.
-        //
-        // The loop appends every assistant + tool-result message during the run
-        // and includes the final assistant reply, so `new_messages` is the
-        // complete context needed for the next turn.
-        //
-        // Always await the handle — even on the Ctrl+C path (after abort()) —
-        // so the spawned task is fully cleaned up before the next iteration
-        // and any panic inside an aborted task is not silently dropped.
-        let loop_result = handle.await;
-        // Default: restore the system prompt so subsequent turns are not
-        // context-free after a Ctrl+C or agent error.
-        messages = system_fallback;
-        // On success: replace with output.history — the fully-extended Vec
-        // that was moved in via std::mem::take comes back including every
-        // assistant + tool-result message, with zero intermediate copies.
-        if completed {
-            if let Ok(Some(new_messages)) = loop_result {
-                messages = new_messages;
-            }
-        }
+        messages = run_single_turn(&agent_loop, turn_msgs, config.clone(), args.verbose).await;
     }
 
     Ok(())
@@ -198,6 +141,60 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 // =============================================================================
 // Private helpers
 // =============================================================================
+
+/// Run one agent turn: spawn the loop task, consume events, handle Ctrl+C,
+/// and return the updated conversation history.
+///
+/// Returns the system-message-only fallback on cancellation or agent error,
+/// and the full `output.history` on a successful turn.
+async fn run_single_turn(
+    agent_loop: &Arc<dyn AgentLoopPort>,
+    messages: Vec<AgentMessage>,
+    config: AgentConfig,
+    verbose: bool,
+) -> Vec<AgentMessage> {
+    // Preserve system messages so the prompt survives Ctrl+C or agent error.
+    let system_fallback: Vec<AgentMessage> = messages
+        .iter()
+        .filter(|m| matches!(m, AgentMessage::System { .. }))
+        .cloned()
+        .collect();
+
+    let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
+    let agent = Arc::clone(agent_loop);
+    let handle: JoinHandle<Option<Vec<AgentMessage>>> = tokio::spawn(async move {
+        match agent.run(messages, config, tx).await {
+            Ok(output) => Some(output.history),
+            Err(e) => {
+                tracing::debug!("agent loop ended: {e}");
+                None
+            }
+        }
+    });
+
+    let completed = tokio::select! {
+        biased;
+        result = drain_event_stream(&mut rx, verbose) => result,
+        _ = tokio::signal::ctrl_c() => {
+            handle.abort();
+            while rx.try_recv().is_ok() {}
+            eprintln!("\n[agent response cancelled — Ctrl+C]");
+            false
+        }
+    };
+
+    // Always await the handle — even after abort() — so any panic is not
+    // silently dropped and the task is fully cleaned up.
+    let loop_result = handle.await;
+
+    if completed {
+        if let Ok(Some(new_messages)) = loop_result {
+            return new_messages;
+        }
+    }
+    system_fallback
+}
+
 
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
 /// arrives, rendering each event.

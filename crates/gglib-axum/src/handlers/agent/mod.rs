@@ -114,7 +114,7 @@ pub async fn chat(
     });
 
     let sse_stream = AgentTaskGuard::new(ReceiverStream::new(rx), handle)
-    .filter_map(|event| {
+        .filter_map(|event| {
         futures_util::future::ready(match serde_json::to_string(&event) {
             Ok(json) => Some(Ok::<Event, Infallible>(Event::default().data(json))),
             Err(e) => {

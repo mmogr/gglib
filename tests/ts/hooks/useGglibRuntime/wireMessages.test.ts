@@ -29,6 +29,24 @@ function assistantMsg(content: GglibMessage['content']): GglibMessage {
   return { id: '3', role: 'assistant', content };
 }
 
+/**
+ * Build a user message with raw part objects that may not satisfy the
+ * static MessagePart union (e.g. image parts from multimodal inputs).
+ * Concentrates the unsafe cast in one place so test cases stay clean.
+ */
+function userMsgRaw(parts: ReadonlyArray<{ type: string } & Record<string, unknown>>): GglibMessage {
+  return userMsg(parts as unknown as GglibMessage['content']);
+}
+
+/**
+ * Build an assistant message with raw part objects that omit required fields
+ * (e.g. tool-call parts without `args` to exercise defensive fallbacks).
+ * Concentrates the unsafe cast in one place so test cases stay clean.
+ */
+function assistantMsgRaw(parts: ReadonlyArray<{ type: string } & Record<string, unknown>>): GglibMessage {
+  return assistantMsg(parts as unknown as GglibMessage['content']);
+}
+
 // ---------------------------------------------------------------------------
 // system / user messages
 // ---------------------------------------------------------------------------
@@ -65,8 +83,8 @@ describe('convertToWireMessages — system/user', () => {
     // union but may appear in real UI state (e.g. from multimodal inputs). The
     // test verifies that convertToWireMessages filters them out silently.
     const wire = convertToWireMessages([
-      userMsg([
-        { type: 'image', image: 'data:image/png;base64,abc' } as unknown as Parameters<typeof userMsg>[0],
+      userMsgRaw([
+        { type: 'image', image: 'data:image/png;base64,abc' },
         { type: 'text', text: 'describe this' },
       ]),
     ]);
@@ -161,14 +179,14 @@ describe('convertToWireMessages — assistant tool calls', () => {
     // addToolCallPart always populates args; this exercises the defensive
     // fallback for parts constructed through other paths.
     const wire = convertToWireMessages([
-      assistantMsg([
+      assistantMsgRaw([
         {
           type: 'tool-call',
           toolCallId: 'tc2',
           toolName: 'calc',
-          // args intentionally absent
+          // args intentionally absent — exercises the defensive `isObjectArgs` fallback
           result: '42',
-        } as unknown as Parameters<typeof assistantMsg>[0],
+        },
       ]),
     ]);
     const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;

@@ -50,14 +50,14 @@ pub(crate) struct StagnationDetector {
 impl StagnationDetector {
     /// Record the current assistant text and error if the model has stagnated.
     ///
-    /// The **first** occurrence of any text is always `Ok` (baseline).
-    /// Subsequent occurrences of the same text increment a session counter.
-    /// An error is raised when the prior occurrence count (before this call)
-    /// is both `> 0` and `>= max_steps`, giving:
+    /// Each call increments the session-wide occurrence counter for the text
+    /// hash.  An error is raised when the counter **after** incrementing
+    /// exceeds `max_steps`:
     ///
     /// | `max_steps` | Total identical responses before abort |
     /// |-------------|----------------------------------------|
-    /// | 0 or 1      | 2 (fires on first repeat)              |
+    /// | 0           | 1 (fires on first occurrence)          |
+    /// | 1           | 2 (fires on first repeat)              |
     /// | 5 (default) | 6 (fires on sixth occurrence)          |
     ///
     /// Empty text is silently ignored (tool-call-only iterations).
@@ -66,15 +66,15 @@ impl StagnationDetector {
             return Ok(());
         }
         let hash = fnv1a_64(text);
-        let prior = self.occurrences.entry(hash).or_insert(0);
-        if *prior > 0 && *prior >= max_steps {
+        let count = self.occurrences.entry(hash).or_insert(0);
+        *count += 1;
+        if *count > max_steps {
             return Err(AgentError::StagnationDetected {
                 repeated_text_hash: format!("{hash:016x}"),
-                count: *prior + 1,
+                count: *count,
                 max_steps,
             });
         }
-        *prior += 1;
         Ok(())
     }
 }
@@ -102,13 +102,11 @@ mod tests {
     fn stagnation_triggers_at_limit() {
         let mut det = StagnationDetector::default();
         let text = "I cannot proceed further.";
-        // First occurrence — no stagnation (sets the baseline)
-        assert!(det.record(text, 3).is_ok());
-        // Second occurrence — count = 1 (< 3)
-        assert!(det.record(text, 3).is_ok());
-        // Third occurrence — count = 2 (< 3)
-        assert!(det.record(text, 3).is_ok());
-        // Fourth occurrence — count = 3 (>= 3) → error
+        // Occurrences 1–3 are within the limit (count ≤ 3).
+        assert!(det.record(text, 3).is_ok()); // count = 1
+        assert!(det.record(text, 3).is_ok()); // count = 2
+        assert!(det.record(text, 3).is_ok()); // count = 3
+        // Fourth occurrence — count = 4 (> 3) → error
         let err = det.record(text, 3).unwrap_err();
         assert!(
             matches!(err, AgentError::StagnationDetected { .. }),
@@ -156,14 +154,14 @@ mod tests {
     fn stagnation_error_message_contains_count_and_limit() {
         let mut det = StagnationDetector::default();
         let text = "stuck";
-        // Trigger stagnation at limit = 1
-        assert!(det.record(text, 1).is_ok()); // baseline
-        let err = det.record(text, 1).unwrap_err(); // count = 1 >= 1 → error
+        // With max_steps=1: first occurrence is count=1 (≤ 1, ok); second is count=2 (> 1, error).
+        assert!(det.record(text, 1).is_ok()); // count = 1
+        let err = det.record(text, 1).unwrap_err(); // count = 2 > 1 → error
         if let AgentError::StagnationDetected {
             count, max_steps, ..
         } = err
         {
-            assert_eq!(count, 2, "total count should be 2 (baseline + 1 repeat)");
+            assert_eq!(count, 2, "count should be 2 on the first repeat with max_steps=1");
             assert_eq!(max_steps, 1);
         } else {
             panic!("expected AgentError::StagnationDetected");
@@ -171,21 +169,17 @@ mod tests {
     }
 
     #[test]
-    fn max_steps_zero_triggers_on_first_repeat() {
-        // max_stagnation_steps = 0 means no tolerance at all: the very first
-        // repeated response must trigger the error.
+    fn max_steps_zero_triggers_on_first_occurrence() {
+        // max_stagnation_steps = 0 means zero tolerance: count=1 immediately
+        // exceeds max_steps=0, so the very first occurrence triggers the error.
         let mut det = StagnationDetector::default();
         let text = "anything";
-        // First occurrence sets the baseline (no stagnation yet).
+        let err = det
+            .record(text, 0)
+            .expect_err("max_steps=0 must reject the very first occurrence");
         assert!(
-            det.record(text, 0).is_ok(),
-            "first occurrence must not error"
-        );
-        // Second occurrence — count becomes 1, which satisfies count >= 0.
-        let err = det.record(text, 0).unwrap_err();
-        assert!(
-            matches!(err, AgentError::StagnationDetected { .. }),
-            "expected StagnationDetected on first repeat with max_steps=0, got {err:?}"
+            matches!(err, AgentError::StagnationDetected { count: 1, max_steps: 0, .. }),
+            "expected StagnationDetected with count=1 and max_steps=0, got {err:?}"
         );
     }
 }

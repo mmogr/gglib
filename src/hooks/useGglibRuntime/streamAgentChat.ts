@@ -184,17 +184,16 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     return msg.id;
   };
 
-  let currentId = makeNextMessage(1);
+  const state: DispatchState = { currentId: makeNextMessage(1) };
 
   // Finalize the current in-progress message and clear the streaming indicator.
-  // Extracted to avoid repeating the same two-liner across all early-exit paths
-  // (final_answer, error event, abort, catch-all post-loop fallback).
   const cleanup = (): void => {
-    finalizeMessageTiming(setMessages, currentId);
+    finalizeMessageTiming(setMessages, state.currentId);
     setCurrentStreamingAssistantMessageId?.(null);
   };
 
-  // ── Process the SSE stream ────────────────────────────────────────────────
+  // -- Process the SSE stream --------------------------------------------------
+  const dispatchDeps: DispatchDeps = { setMessages, timingTracker, makeNextMessage, cleanup };
   try {
     for await (const payload of readAgentSSE(response, abortSignal)) {
       let event: AgentEvent;
@@ -204,112 +203,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         appLogger.warn('hook.runtime', 'streamAgentChat: ignoring unparseable SSE payload', { payload });
         continue;
       }
-
-      switch (event.type) {
-        case 'reasoning_delta': {
-          if (typeof event.content !== 'string') {
-            appLogger.warn('hook.runtime', 'streamAgentChat: reasoning_delta missing content string', { event });
-            break;
-          }
-          if (timingTracker) timingTracker.onReasoning(currentId);
-          applyReasoningDelta(setMessages, currentId, event.content);
-          break;
-        }
-
-        case 'text_delta': {
-          if (typeof event.content !== 'string') {
-            appLogger.warn('hook.runtime', 'streamAgentChat: text_delta missing content string', { event });
-            break;
-          }
-          if (timingTracker) timingTracker.onBoundary(currentId);
-          applyTextDelta(setMessages, currentId, event.content);
-          break;
-        }
-
-        case 'tool_call_start': {
-          if (!event.tool_call || typeof event.tool_call.id !== 'string' || typeof event.tool_call.name !== 'string') {
-            appLogger.warn('hook.runtime', 'streamAgentChat: tool_call_start malformed', { event });
-            break;
-          }
-          if (timingTracker) timingTracker.onBoundary(currentId);
-          addToolCallPart(
-            setMessages,
-            currentId,
-            event.tool_call.id,
-            event.tool_call.name,
-            event.tool_call.arguments,
-          );
-          appLogger.debug('hook.runtime', 'streamAgentChat: tool call started', {
-            tool: event.tool_call.name,
-          });
-          break;
-        }
-
-        case 'tool_call_complete': {
-          if (!event.result || typeof event.result.tool_call_id !== 'string') {
-            appLogger.warn('hook.runtime', 'streamAgentChat: tool_call_complete malformed', { event });
-            break;
-          }
-          applyToolResult(setMessages, currentId, event);
-          appLogger.debug('hook.runtime', 'streamAgentChat: tool call complete', {
-            id: event.result.tool_call_id,
-            success: event.result.success,
-            waitMs: event.wait_ms,
-            durationMs: event.execute_duration_ms,
-          });
-          break;
-        }
-
-        case 'iteration_complete': {
-          // Finalize the current message and open a fresh one for the next
-          // iteration (which will start with its own text_delta stream).
-          if (timingTracker) timingTracker.onEndOfMessage(currentId);
-          cleanup();
-
-          appLogger.debug('hook.runtime', 'streamAgentChat: iteration complete', {
-            iteration: event.iteration,
-            toolCalls: event.tool_calls,
-          });
-
-          currentId = makeNextMessage(event.iteration + 1);
-          break;
-        }
-
-        case 'final_answer': {
-          // The stream has ended normally.  The accumulated text_deltas have
-          // already built the message content; finalize timing and stop.
-          if (typeof event.content !== 'string') {
-            appLogger.warn('hook.runtime', 'streamAgentChat: final_answer missing content string', { event });
-            // Treat as complete even with a malformed payload — the accumulated
-            // text_deltas are sufficient to finalize the message.
-          }
-          if (timingTracker) timingTracker.onEndOfMessage(currentId);
-          cleanup();
-
-          appLogger.info('hook.runtime', 'streamAgentChat: final answer', {
-            contentLength: typeof event.content === 'string' ? event.content.length : null,
-          });
-          return;
-        }
-
-        case 'error': {
-          // Fatal backend error: clean up the in-progress message then throw
-          // so the caller's catch block can invoke its onError callback.
-          if (timingTracker) timingTracker.onEndOfMessage(currentId);
-          cleanup();
-          appLogger.warn('hook.runtime', 'streamAgentChat: agent error event', {
-            message: event.message,
-          });
-          throw new Error(`Agent loop error: ${String(event.message ?? 'unknown agent error')}`);
-        }
-
-        default: {
-          // Forward-compatibility: ignore unknown event types.
-          appLogger.debug('hook.runtime', 'streamAgentChat: unknown event type, skipping', {
-            type: (event as { type: string }).type,
-          });
-        }
-      }
+      if (dispatchAgentEvent(event, state, dispatchDeps)) return;
     }
   } catch (err) {
     if (isAbortError(err)) {
@@ -326,4 +220,119 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
 
   // Stream ended without a final_answer or error event — treat as complete.
   cleanup();
+}
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+interface DispatchState {
+  /** ID of the current in-progress assistant message. Mutated on iteration_complete. */
+  currentId: string;
+}
+
+interface DispatchDeps {
+  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>;
+  timingTracker: ReasoningTimingTracker | undefined;
+  makeNextMessage: (iter: number) => string;
+  cleanup: () => void;
+}
+
+/**
+ * Handle one SSE {@link AgentEvent}, mutating React message state in-place.
+ *
+ * Mutates `state.currentId` on `iteration_complete` (new message for next turn).
+ *
+ * @returns `true` when the stream is complete (`final_answer`), `false` to
+ *          continue consuming.  Throws on `error` events (fatal backend failure).
+ */
+function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps: DispatchDeps): boolean {
+  const { setMessages, timingTracker, makeNextMessage, cleanup } = deps;
+
+  switch (event.type) {
+    case 'reasoning_delta': {
+      if (typeof event.content !== 'string') {
+        appLogger.warn('hook.runtime', 'streamAgentChat: reasoning_delta missing content string', { event });
+        return false;
+      }
+      if (timingTracker) timingTracker.onReasoning(state.currentId);
+      applyReasoningDelta(setMessages, state.currentId, event.content);
+      return false;
+    }
+
+    case 'text_delta': {
+      if (typeof event.content !== 'string') {
+        appLogger.warn('hook.runtime', 'streamAgentChat: text_delta missing content string', { event });
+        return false;
+      }
+      if (timingTracker) timingTracker.onBoundary(state.currentId);
+      applyTextDelta(setMessages, state.currentId, event.content);
+      return false;
+    }
+
+    case 'tool_call_start': {
+      if (!event.tool_call || typeof event.tool_call.id !== 'string' || typeof event.tool_call.name !== 'string') {
+        appLogger.warn('hook.runtime', 'streamAgentChat: tool_call_start malformed', { event });
+        return false;
+      }
+      if (timingTracker) timingTracker.onBoundary(state.currentId);
+      addToolCallPart(setMessages, state.currentId, event.tool_call.id, event.tool_call.name, event.tool_call.arguments);
+      appLogger.debug('hook.runtime', 'streamAgentChat: tool call started', { tool: event.tool_call.name });
+      return false;
+    }
+
+    case 'tool_call_complete': {
+      if (!event.result || typeof event.result.tool_call_id !== 'string') {
+        appLogger.warn('hook.runtime', 'streamAgentChat: tool_call_complete malformed', { event });
+        return false;
+      }
+      applyToolResult(setMessages, state.currentId, event);
+      appLogger.debug('hook.runtime', 'streamAgentChat: tool call complete', {
+        id: event.result.tool_call_id,
+        success: event.result.success,
+        waitMs: event.wait_ms,
+        durationMs: event.execute_duration_ms,
+      });
+      return false;
+    }
+
+    case 'iteration_complete': {
+      // Finalize the current message and open a fresh one for the next iteration.
+      if (timingTracker) timingTracker.onEndOfMessage(state.currentId);
+      cleanup();
+      appLogger.debug('hook.runtime', 'streamAgentChat: iteration complete', {
+        iteration: event.iteration,
+        toolCalls: event.tool_calls,
+      });
+      state.currentId = makeNextMessage(event.iteration + 1);
+      return false;
+    }
+
+    case 'final_answer': {
+      if (typeof event.content !== 'string') {
+        appLogger.warn('hook.runtime', 'streamAgentChat: final_answer missing content string', { event });
+      }
+      if (timingTracker) timingTracker.onEndOfMessage(state.currentId);
+      cleanup();
+      appLogger.info('hook.runtime', 'streamAgentChat: final answer', {
+        contentLength: typeof event.content === 'string' ? event.content.length : null,
+      });
+      return true;
+    }
+
+    case 'error': {
+      if (timingTracker) timingTracker.onEndOfMessage(state.currentId);
+      cleanup();
+      appLogger.warn('hook.runtime', 'streamAgentChat: agent error event', { message: event.message });
+      throw new Error(`Agent loop error: ${String(event.message ?? 'unknown agent error')}`);
+    }
+
+    default: {
+      // Forward-compatibility: ignore unknown event types.
+      appLogger.debug('hook.runtime', 'streamAgentChat: unknown event type, skipping', {
+        type: (event as { type: string }).type,
+      });
+      return false;
+    }
+  }
 }

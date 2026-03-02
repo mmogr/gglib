@@ -12,6 +12,15 @@ import { appLogger } from '../../services/platform';
 import { extractParts, type GglibMessage, type GglibToolCallPart, type TextPart } from '../../types/messages';
 
 // ---------------------------------------------------------------------------
+// Type guards
+// ---------------------------------------------------------------------------
+
+/** Narrow an unknown value to a plain JSON-object args record. */
+function isObjectArgs(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+// ---------------------------------------------------------------------------
 // Wire types (backend request body)
 // ---------------------------------------------------------------------------
 
@@ -85,9 +94,9 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
       const toolCalls: AgentWireToolCall[] = completedToolCallParts.map(p => ({
         id: p.toolCallId,
         name: p.toolName,
-        // `args` is always populated by addToolCallPart; `?? {}` is a
+        // `args` is always populated by addToolCallPart; the guard is a
         // defensive fallback for any part constructed outside that path.
-        arguments: (p.args ?? {}) as Record<string, unknown>,
+        arguments: isObjectArgs(p.args) ? p.args : {},
       }));
 
       result.push({

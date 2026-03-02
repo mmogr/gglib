@@ -48,7 +48,7 @@ async fn execute_single_tool(
 ) -> ToolResult {
     // Shared failure constructor — avoids repeating the struct literal with the
     // same `tool_call_id` and `success: false` across every error branch.
-    let fail = |content: String| ToolResult {
+    let error_result = |content: String| ToolResult {
         tool_call_id: tc.id.clone(),
         content,
         success: false,
@@ -65,7 +65,7 @@ async fn execute_single_tool(
         Err(_) => {
             // The semaphore was dropped (agent loop was shut down).
             // Return a graceful failure instead of panicking inside spawn.
-            return fail("Tool execution aborted: concurrency gate closed".into());
+            return error_result("Tool execution aborted: concurrency gate closed".into());
         }
     };
     let wait_ms = elapsed_ms(enqueue_time);
@@ -86,8 +86,8 @@ async fn execute_single_tool(
 
     let tool_result = match result {
         Ok(Ok(r)) => r,
-        Ok(Err(e)) => fail(format!("Tool execution error: {e}")),
-        Err(_) => fail(format!(
+        Ok(Err(e)) => error_result(format!("Tool execution error: {e}")),
+        Err(_) => error_result(format!(
             "Tool '{}' timed out after {timeout_ms} ms",
             tc.name
         )),
