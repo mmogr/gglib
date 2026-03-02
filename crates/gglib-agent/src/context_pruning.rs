@@ -70,13 +70,8 @@ pub fn prune_for_budget(
 /// last [`AgentConfig::prune_keep_tail_messages`] non-system messages.
 ///
 /// Called by [`prune_for_budget`] when Pass 1 alone was insufficient.
-///
-/// # Warning — re-orders `System` messages
-///
-/// All `System` messages are moved to the **front** of the output regardless
-/// of their original positions (relative order among system messages is
-/// preserved).  This is intentional — most LLM APIs expect system prompts at
-/// the head of the context window.
+/// See the `# Warning` note on that function for the System message reordering
+/// behaviour.
 fn prune_tail(
     messages: Vec<AgentMessage>,
     config: &AgentConfig,

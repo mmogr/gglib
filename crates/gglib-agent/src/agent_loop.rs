@@ -45,22 +45,11 @@ use crate::loop_detection::LoopDetector;
 use crate::stagnation::StagnationDetector;
 use crate::stream_collector::collect_stream;
 use crate::tool_execution::execute_tools_parallel;
+use crate::util::emit_error_event;
 
 // =============================================================================
 // Private helpers
 // =============================================================================
-
-/// Emit an [`AgentEvent::Error`] on `tx`, ignoring send failures.
-///
-/// Called before every early-return that carries an [`AgentError`], so that
-/// SSE consumers always receive an `error` event before the stream closes.
-async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &str) {
-    let _ = tx
-        .send(AgentEvent::Error {
-            message: message.to_owned(),
-        })
-        .await;
-}
 
 /// Emit an [`AgentEvent::Error`] and return `Err(`[`AgentError::Internal`]`)`.
 ///

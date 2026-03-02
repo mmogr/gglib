@@ -24,6 +24,8 @@ use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use tokio::sync::mpsc;
 use tracing::warn;
 
+use crate::util::emit_error_event;
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -255,7 +257,7 @@ pub async fn collect_stream(
 /// "emit error event + bail" pattern in the [`LlmStreamEvent::Done`] assembly
 /// code so error handling logic lives in exactly one place.
 async fn bail_stream<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T> {
-    let _ = tx.send(AgentEvent::Error { message: msg.clone() }).await;
+    emit_error_event(tx, &msg).await;
     anyhow::bail!("{msg}")
 }
 

@@ -165,10 +165,16 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // and includes the final assistant reply, so `new_messages` is the
         // complete context needed for the next turn.
         //
+        // Always await the handle — even on the Ctrl+C path (after abort()) —
+        // so the spawned task is fully cleaned up before the next iteration
+        // and any panic inside an aborted task is not silently dropped.
+        let loop_result = handle.await;
         // On Ctrl+C (`completed = false`) or loop error (handle returns `None`)
         // the history stays unchanged — failed or cancelled turns are not added.
-        if completed && let Ok(Some(new_messages)) = handle.await {
-            messages = new_messages;
+        if completed {
+            if let Ok(Some(new_messages)) = loop_result {
+                messages = new_messages;
+            }
         }
     }
 

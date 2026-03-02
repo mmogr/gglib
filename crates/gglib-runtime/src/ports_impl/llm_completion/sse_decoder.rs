@@ -27,6 +27,7 @@ use super::sse_parser::{SseParseResult, parse_sse_frame};
 /// }
 /// if let Some(fallback) = decoder.finish() { … }
 /// ```
+#[derive(Default)]
 pub(crate) struct SseStreamDecoder {
     buf: String,
     /// Set to `true` once a [`LlmStreamEvent::Done`] has been yielded, so the
@@ -36,16 +37,7 @@ pub(crate) struct SseStreamDecoder {
 
 impl SseStreamDecoder {
     pub(crate) fn new() -> Self {
-        Self {
-            buf: String::new(),
-            done_sent: false,
-        }
-    }
-}
-
-impl Default for SseStreamDecoder {
-    fn default() -> Self {
-        Self::new()
+        Self::default()
     }
 }
 

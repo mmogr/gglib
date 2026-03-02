@@ -10,6 +10,7 @@ pub(crate) mod loop_detection;
 pub(crate) mod stagnation;
 pub(crate) mod stream_collector;
 pub(crate) mod tool_execution;
+pub(crate) mod util;
 
 pub use agent_loop::AgentLoop;
 pub use filter::TOOL_NOT_AVAILABLE_MSG;
