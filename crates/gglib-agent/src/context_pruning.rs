@@ -21,7 +21,7 @@ use tracing::{debug, warn};
 // =============================================================================
 
 /// Total estimated character count across all messages.
-pub fn total_chars(messages: &[AgentMessage]) -> usize {
+pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
     messages.iter().map(AgentMessage::char_count).sum()
 }
 

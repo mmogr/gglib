@@ -120,10 +120,15 @@ pub async fn chat(
             Err(e) => {
                 // Silently dropping a frame here would leave the client hanging
                 // indefinitely — especially fatal if the failed event is
-                // `FinalAnswer` or `Error`. Emit a raw fallback error event so
-                // the client always receives a terminal signal.
+                // `FinalAnswer` or `Error`. Construct a typed fallback event so
+                // the client always receives a terminal signal that is
+                // structurally valid regardless of future AgentEvent changes.
                 tracing::error!(error = %e, "agent: failed to serialise AgentEvent; emitting fallback error");
-                let fallback = r#"{"type":"error","message":"serialization failed"}"#;
+                let typed_fallback = AgentEvent::Error {
+                    message: "serialization failed".to_owned(),
+                };
+                let fallback = serde_json::to_string(&typed_fallback)
+                    .unwrap_or_else(|_| r#"{"type":"error","message":"serialization failed"}"#.to_owned());
                 Some(Ok::<Event, Infallible>(Event::default().data(fallback)))
             }
         })
