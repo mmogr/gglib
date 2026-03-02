@@ -292,7 +292,10 @@ mod tests {
         // Serialise → deserialise.
         let json_val = serde_json::to_value(&original).unwrap();
         assert_eq!(json_val["role"], "assistant");
-        assert_eq!(json_val["content"], "thinking out loud", "content arm must be present");
+        assert_eq!(
+            json_val["content"], "thinking out loud",
+            "content arm must be present"
+        );
         assert_eq!(
             json_val["tool_calls"].as_array().unwrap().len(),
             2,

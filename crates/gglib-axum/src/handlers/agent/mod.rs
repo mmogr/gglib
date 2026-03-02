@@ -16,7 +16,7 @@
 mod dto;
 mod guard;
 
-pub use dto::{AgentChatRequest, AgentRequestConfig};
+pub use dto::AgentChatRequest;
 
 use std::collections::HashSet;
 use std::convert::Infallible;

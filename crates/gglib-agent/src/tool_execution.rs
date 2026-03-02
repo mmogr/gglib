@@ -1,8 +1,5 @@
 //! Parallel tool execution with bounded concurrency and per-tool timeout.
 //!
-//! This module is the Rust port of `executeToolBatch` from
-//! `src/hooks/useGglibRuntime/toolBatchExecution.ts`.
-//!
 //! # Behaviour
 //!
 //! - All tool calls in a batch are dispatched concurrently via a

@@ -5,9 +5,6 @@
  * Server-Sent Event stream that the backend emits for each observable step of
  * the loop (text deltas, tool calls, iterations, final answer).
  *
- * This replaces the client-side `runAgenticLoop` / `streamModelResponse` /
- * `executeToolBatch` stack — all loop orchestration now lives in Rust.
- *
  * # Message-per-iteration model
  *
  * One `GglibMessage` (role = "assistant") is created per backend iteration,

@@ -148,7 +148,11 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         let (content, success) = if result.success {
             let text = result.data.as_ref().map_or_else(
                 || "null".to_owned(),
-                |v| v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string()),
+                |v| {
+                    v.as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| v.to_string())
+                },
             );
             (text, true)
         } else {
