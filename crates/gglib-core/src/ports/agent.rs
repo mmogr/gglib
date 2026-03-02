@@ -66,9 +66,7 @@ pub enum AgentError {
     /// calls than the loop is configured to dispatch.  The loop aborts rather
     /// than silently truncating the batch, because partial execution could
     /// leave the model with an incoherent view of which calls were handled.
-    #[error(
-        "LLM requested {count} tool calls in one batch, exceeds max_parallel_tools ({limit})"
-    )]
+    #[error("LLM requested {count} tool calls in one batch, exceeds max_parallel_tools ({limit})")]
     ParallelToolLimitExceeded {
         /// Number of tool calls the LLM returned.
         count: usize,

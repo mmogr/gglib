@@ -174,9 +174,11 @@ mod tests {
         let mut dec = SseStreamDecoder::new();
         let (events, stop) = collect_all(&mut dec, &text_delta_frame("hello"));
         assert!(!stop);
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, LlmStreamEvent::TextDelta { content } if content == "hello")));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, LlmStreamEvent::TextDelta { content } if content == "hello"))
+        );
     }
 
     #[test]
@@ -185,7 +187,9 @@ mod tests {
         let (events, stop) = collect_all(&mut dec, done_frame());
         assert!(stop, "decoder should signal stop on [DONE]");
         assert!(
-            events.iter().any(|e| matches!(e, LlmStreamEvent::Done { .. })),
+            events
+                .iter()
+                .any(|e| matches!(e, LlmStreamEvent::Done { .. })),
             "fallback Done should be emitted when no prior finish_reason"
         );
         // After a [DONE] sentinel, finish() must not emit a second Done.

@@ -209,8 +209,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
         // results, and assistant turns), which grows with each session turn.
         .route(
             "/agent/chat",
-            post(handlers::agent::chat)
-                .layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
+            post(handlers::agent::chat).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
         )
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())

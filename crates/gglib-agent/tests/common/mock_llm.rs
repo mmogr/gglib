@@ -55,10 +55,7 @@ impl MockLlmResponse {
     ///
     /// Emits [`LlmStreamEvent::ReasoningDelta`] followed by
     /// [`LlmStreamEvent::TextDelta`], then `Done`.
-    pub fn text_with_reasoning(
-        reasoning: impl Into<String>,
-        content: impl Into<String>,
-    ) -> Self {
+    pub fn text_with_reasoning(reasoning: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             reasoning: Some(reasoning.into()),
             content: Some(content.into()),
@@ -199,10 +196,7 @@ impl LlmCompletionPort for MockLlmPort {
         _tools: &[ToolDefinition],
     ) -> Result<Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>> {
         // Record a snapshot of the messages for test inspection.
-        self.messages_received
-            .lock()
-            .await
-            .push(messages.to_vec());
+        self.messages_received.lock().await.push(messages.to_vec());
 
         let events = self
             .responses
@@ -213,5 +207,3 @@ impl LlmCompletionPort for MockLlmPort {
         Ok(Box::pin(stream::iter(events.into_iter().map(Ok))))
     }
 }
-
-

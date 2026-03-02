@@ -110,30 +110,28 @@ fn message_to_openai(msg: &AgentMessage) -> Value {
         AgentMessage::User { content } => {
             json!({ "role": "user", "content": content })
         }
-        AgentMessage::Assistant { content } => {
-            match content {
-                AssistantContent::Content(text) => json!({
+        AgentMessage::Assistant { content } => match content {
+            AssistantContent::Content(text) => json!({
+                "role": "assistant",
+                "content": text,
+            }),
+            AssistantContent::ToolCalls(tcs) => {
+                let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
+                json!({
+                    "role": "assistant",
+                    "content": serde_json::Value::Null,
+                    "tool_calls": calls,
+                })
+            }
+            AssistantContent::Both(text, tcs) => {
+                let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
+                json!({
                     "role": "assistant",
                     "content": text,
-                }),
-                AssistantContent::ToolCalls(tcs) => {
-                    let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
-                    json!({
-                        "role": "assistant",
-                        "content": serde_json::Value::Null,
-                        "tool_calls": calls,
-                    })
-                }
-                AssistantContent::Both(text, tcs) => {
-                    let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
-                    json!({
-                        "role": "assistant",
-                        "content": text,
-                        "tool_calls": calls,
-                    })
-                }
+                    "tool_calls": calls,
+                })
             }
-        }
+        },
         AgentMessage::Tool {
             tool_call_id,
             content,
@@ -213,7 +211,9 @@ impl LlmCompletionPort for LlmCompletionAdapter {
                 .send(),
         )
         .await
-        .map_err(|_| anyhow!("llama-server connection timed out after {LLM_CONNECT_TIMEOUT_SECS}s"))?
+        .map_err(|_| {
+            anyhow!("llama-server connection timed out after {LLM_CONNECT_TIMEOUT_SECS}s")
+        })?
         .map_err(|e| anyhow!("request to llama-server failed: {e}"))?;
 
         if !response.status().is_success() {

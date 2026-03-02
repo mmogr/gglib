@@ -173,7 +173,7 @@ async fn resolve_model(
     } else {
         // Try to use default model from settings
         let settings = ctx
-        .app
+            .app
             .settings()
             .get()
             .await
@@ -181,7 +181,7 @@ async fn resolve_model(
 
         match settings.default_model_id {
             Some(model_id) => ctx
-        .app
+                .app
                 .models()
                 .get_by_id(model_id)
                 .await

@@ -126,7 +126,10 @@ mod tests {
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json.get("wait_ms").is_none(), "wait_ms must not be on ToolResult");
+        assert!(
+            json.get("wait_ms").is_none(),
+            "wait_ms must not be on ToolResult"
+        );
         assert!(
             json.get("execute_duration_ms").is_none(),
             "execute_duration_ms must not be on ToolResult"

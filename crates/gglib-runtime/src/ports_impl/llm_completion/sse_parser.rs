@@ -92,7 +92,10 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
             // omits `index` on every element is non-compliant with the OpenAI
             // spec, but we handle it gracefully rather than silently collapsing
             // all calls onto slot 0.
-            let index = tc["index"].as_u64().map(|i| i as usize).unwrap_or(sequential);
+            let index = tc["index"]
+                .as_u64()
+                .map(|i| i as usize)
+                .unwrap_or(sequential);
             let id = tc["id"].as_str().map(str::to_owned);
             let name = tc["function"]["name"].as_str().map(str::to_owned);
             let arguments = tc["function"]["arguments"].as_str().map(str::to_owned);
@@ -265,7 +268,8 @@ mod tests {
         // assign it position 0 (first element), not silently collapse onto 0
         // from `unwrap_or(0)` which is the same value — but for TWO elements
         // both collapsing to 0 would data-lose the second call.
-        let events = match parse_sse_frame(&tool_frame_no_index("tc1", "search", r#"{"q":"rust"}"#)) {
+        let events = match parse_sse_frame(&tool_frame_no_index("tc1", "search", r#"{"q":"rust"}"#))
+        {
             Ok(SseParseResult::Events(e)) => e,
             other => panic!("unexpected: {other:?}"),
         };

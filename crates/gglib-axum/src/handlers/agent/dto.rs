@@ -33,7 +33,11 @@ pub struct AgentRequestConfig {
 
 impl From<AgentRequestConfig> for AgentConfig {
     fn from(req: AgentRequestConfig) -> Self {
-        let AgentRequestConfig { max_iterations, max_parallel_tools, tool_timeout_ms } = req;
+        let AgentRequestConfig {
+            max_iterations,
+            max_parallel_tools,
+            tool_timeout_ms,
+        } = req;
         let mut cfg = AgentConfig::default();
         if let Some(n) = max_iterations {
             // Clamp to [1, ceiling]: 0 would make the loop exit immediately as
@@ -85,9 +89,13 @@ pub struct AgentChatRequest {
 
     /// Optional allowlist of tool names to expose to the model.
     ///
-    /// When `Some`, only tools whose names appear in this list are sent to the
-    /// LLM and can be executed. When `None`, all tools from all connected MCP
-    /// servers are available.
+    /// - `None` (JSON `null` or field absent): all tools from all connected MCP
+    ///   servers are available.
+    /// - `Some([])` (JSON `[]`): **no tools** are exposed — tool calling is
+    ///   effectively disabled.  Not equivalent to `None`; clients that want
+    ///   all tools must use `null`, not `[]`.
+    /// - `Some(["tool_a", "tool_b"])`: only the listed tools are sent to the LLM
+    ///   and can be executed.
     pub tool_filter: Option<Vec<String>>,
 
     /// Optional model-name override forwarded to llama-server.

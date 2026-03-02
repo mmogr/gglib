@@ -33,9 +33,12 @@ use rustyline::error::ReadlineError;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING};
-use gglib_core::ports::AgentLoopPort;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
+use gglib_core::domain::agent::{
+    AgentConfig, AgentEvent, AgentMessage, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
+    MAX_TOOL_TIMEOUT_MS_CEILING,
+};
+use gglib_core::ports::AgentLoopPort;
 
 use crate::handlers::chat::ChatArgs;
 

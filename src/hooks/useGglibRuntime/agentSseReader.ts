@@ -39,12 +39,15 @@ export async function* readAgentSSE(
       buffer = rawEvents.pop() ?? ''; // keep the trailing partial event
 
       for (const rawEvent of rawEvents) {
-        const dataLine = rawEvent
+        // RFC 8895 §9.2: multiple `data:` lines in one event are concatenated
+        // with a newline. Use filter+join rather than .find() to handle this
+        // correctly and avoid silently dropping multi-line payloads.
+        const payload = rawEvent
           .split('\n')
-          .find(l => l.startsWith('data:'));
-        if (!dataLine) continue;
-
-        const payload = dataLine.slice(5).trim();
+          .filter(l => l.startsWith('data:'))
+          .map(l => l.slice(5))
+          .join('\n')
+          .trim();
         if (!payload || payload === 'ping') continue;
 
         yield payload;

@@ -90,7 +90,10 @@ async fn execute_single_tool(
     let tool_result = match result {
         Ok(Ok(r)) => r,
         Ok(Err(e)) => fail(format!("Tool execution error: {e}")),
-        Err(_) => fail(format!("Tool '{}' timed out after {timeout_ms} ms", tc.name)),
+        Err(_) => fail(format!(
+            "Tool '{}' timed out after {timeout_ms} ms",
+            tc.name
+        )),
     };
 
     // Notify that execution is complete.
@@ -181,7 +184,11 @@ mod tests {
     use super::execute_tools_parallel;
 
     fn call(id: &str, name: &str) -> ToolCall {
-        ToolCall { id: id.into(), name: name.into(), arguments: json!({}) }
+        ToolCall {
+            id: id.into(),
+            name: name.into(),
+            arguments: json!({}),
+        }
     }
 
     // ---- Minimal test executors ---------------------------------------------
@@ -190,7 +197,9 @@ mod tests {
 
     #[async_trait]
     impl ToolExecutorPort for OkExecutor {
-        async fn list_tools(&self) -> Vec<ToolDefinition> { vec![] }
+        async fn list_tools(&self) -> Vec<ToolDefinition> {
+            vec![]
+        }
         async fn execute(&self, tc: &ToolCall) -> Result<ToolResult> {
             Ok(ToolResult {
                 tool_call_id: tc.id.clone(),
@@ -200,11 +209,15 @@ mod tests {
         }
     }
 
-    struct SlowExecutor { millis: u64 }
+    struct SlowExecutor {
+        millis: u64,
+    }
 
     #[async_trait]
     impl ToolExecutorPort for SlowExecutor {
-        async fn list_tools(&self) -> Vec<ToolDefinition> { vec![] }
+        async fn list_tools(&self) -> Vec<ToolDefinition> {
+            vec![]
+        }
         async fn execute(&self, tc: &ToolCall) -> Result<ToolResult> {
             tokio::time::sleep(std::time::Duration::from_millis(self.millis)).await;
             Ok(ToolResult {
@@ -232,7 +245,9 @@ mod tests {
         }
         // Each call emits ToolCallStart + ToolCallComplete (6 total).
         let mut event_count = 0;
-        while rx.try_recv().is_ok() { event_count += 1; }
+        while rx.try_recv().is_ok() {
+            event_count += 1;
+        }
         assert_eq!(event_count, 6);
     }
 
@@ -261,13 +276,20 @@ mod tests {
 
         #[async_trait]
         impl ToolExecutorPort for PeakTracker {
-            async fn list_tools(&self) -> Vec<ToolDefinition> { vec![] }
+            async fn list_tools(&self) -> Vec<ToolDefinition> {
+                vec![]
+            }
             async fn execute(&self, tc: &ToolCall) -> Result<ToolResult> {
                 let prev = self.current.fetch_add(1, Ordering::SeqCst);
                 let running = prev + 1;
                 let mut peak = self.peak.load(Ordering::SeqCst);
                 while running > peak {
-                    match self.peak.compare_exchange(peak, running, Ordering::SeqCst, Ordering::SeqCst) {
+                    match self.peak.compare_exchange(
+                        peak,
+                        running,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
                         Ok(_) => break,
                         Err(p) => peak = p,
                     }

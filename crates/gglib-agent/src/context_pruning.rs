@@ -17,7 +17,7 @@
 use std::collections::HashSet;
 
 use gglib_core::{AgentConfig, AgentMessage};
-use tracing::warn;
+use tracing::{debug, warn};
 
 // =============================================================================
 // Public API
@@ -132,6 +132,7 @@ fn prune_tool_messages(
     config: &AgentConfig,
     running: &mut usize,
 ) -> Vec<AgentMessage> {
+    let before_count = messages.len();
     // Collect the tool_call_ids of the tool results we intend to keep
     // (the last KEEP_LAST_TOOL_MESSAGES Tool messages, in reverse order).
     let kept_tool_call_ids: HashSet<String> = messages
@@ -150,7 +151,7 @@ fn prune_tool_messages(
     // Replace retain() with filter_map so we can also strip the pruned call
     // IDs from retained assistant messages — leaving an assistant message that
     // references tc2/tc3 when only tc1's result survived would confuse the LLM.
-    messages
+    let result = messages
         .into_iter()
         .filter_map(|m| {
             // Compute the size of this message before (potentially) moving it.
@@ -181,7 +182,10 @@ fn prune_tool_messages(
                                 .cloned()
                                 .collect();
                             if retained_calls.is_empty() {
-                                *running -= old_size;
+                                // Use saturating_sub: same rationale as the Tool
+                                // drop site above — a stale counter must not wrap
+                                // to usize::MAX and permanently disable pruning.
+                                *running = running.saturating_sub(old_size);
                                 None
                             } else {
                                 let new_msg = AgentMessage::Assistant {
@@ -202,10 +206,20 @@ fn prune_tool_messages(
                 other => Some(other),
             }
         })
-        .collect()
+        .collect();
+
+    let after_count: usize = result.len();
+    let dropped = before_count.saturating_sub(after_count);
+    if dropped > 0 {
+        debug!(
+            before = before_count,
+            after = after_count,
+            dropped,
+            "context-pruning Pass 1 (tool-message pruning): dropped old tool/assistant messages"
+        );
+    }
+    result
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -315,7 +329,9 @@ mod tests {
         // call_0 was pruned → its matching assistant should also be gone.
         let has_call_0_assistant = result.iter().any(|m| {
             if let AgentMessage::Assistant { content } = m {
-                content.tool_calls().map_or(false, |calls| calls.iter().any(|c| c.id == "call_0"))
+                content
+                    .tool_calls()
+                    .map_or(false, |calls| calls.iter().any(|c| c.id == "call_0"))
             } else {
                 false
             }
@@ -388,9 +404,9 @@ mod tests {
             .iter()
             .filter_map(|m| {
                 if let AgentMessage::Assistant { content } = m {
-                    content.tool_calls().map(|calls| {
-                        calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>()
-                    })
+                    content
+                        .tool_calls()
+                        .map(|calls| calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>())
                 } else {
                     None
                 }
@@ -418,11 +434,11 @@ mod tests {
         //   assistant_text("Best answer.") → 12 chars ─┘
         //   total = 21 ≤ 50  ✓
         let msgs = vec![
-            system("S"),                      // 1 char  — always kept
-            user("U1"),                       // 2 chars — outside tail, dropped
+            system("S"),                        // 1 char  — always kept
+            user("U1"),                         // 2 chars — outside tail, dropped
             assistant_text(&"A".repeat(5_000)), // 5 000 chars — forces pass-2
-            user("U-recent"),                 // 8 chars ─┐ tail of 2
-            assistant_text("Best answer."),   // 12 chars ─┘
+            user("U-recent"),                   // 8 chars ─┐ tail of 2
+            assistant_text("Best answer."),     // 12 chars ─┘
         ];
 
         let mut cfg = AgentConfig::default();

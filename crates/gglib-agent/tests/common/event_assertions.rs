@@ -41,9 +41,9 @@ pub fn has_final_answer(events: &[AgentEvent]) -> bool {
 /// Return `true` when `events` contains at least one
 /// [`AgentEvent::ToolCallStart`] with the given tool name.
 pub fn has_tool_start(events: &[AgentEvent], name: &str) -> bool {
-    events.iter().any(
-        |e| matches!(e, AgentEvent::ToolCallStart { tool_call, .. } if tool_call.name == name),
-    )
+    events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::ToolCallStart { tool_call, .. } if tool_call.name == name))
 }
 
 /// Return `true` when `events` contains at least one

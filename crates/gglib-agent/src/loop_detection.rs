@@ -52,7 +52,8 @@ fn stable_repr(v: &Value) -> String {
                 .map(|(k, v)| {
                     format!(
                         "{}:{}",
-                        serde_json::to_string(k).expect("in-memory String serialisation is infallible"),
+                        serde_json::to_string(k)
+                            .expect("in-memory String serialisation is infallible"),
                         stable_repr(v)
                     )
                 })
@@ -111,10 +112,14 @@ impl LoopDetector {
     /// comparison so that `max_strikes = 2` allows two identical batches
     /// before erroring on the third, matching the frontend's
     /// `MAX_SAME_SIGNATURE_HITS = 2` behaviour.
-    pub(crate) fn check(&mut self, calls: &[ToolCall], max_strikes: usize) -> Result<(), AgentError> {
+    pub(crate) fn check(&mut self, calls: &[ToolCall], max_steps: usize) -> Result<(), AgentError> {
         let sig = batch_signature(calls);
-        let count = *self.hits.entry(sig.clone()).and_modify(|n| *n += 1).or_insert(1);
-        if count > max_strikes {
+        let count = *self
+            .hits
+            .entry(sig.clone())
+            .and_modify(|n| *n += 1)
+            .or_insert(1);
+        if count > max_steps {
             return Err(AgentError::LoopDetected { signature: sig });
         }
         Ok(())

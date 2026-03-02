@@ -50,8 +50,11 @@ pub async fn compose(
     } else {
         Some(args.tools.iter().cloned().collect())
     };
-    let llm: Arc<dyn LlmCompletionPort> =
-        Arc::new(LlmCompletionAdapter::with_client(port, ctx.http_client.clone(), args.model.clone()));
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
+        port,
+        ctx.http_client.clone(),
+        args.model.clone(),
+    ));
     let tool_executor: Arc<dyn ToolExecutorPort> =
         Arc::new(McpToolExecutorAdapter::new(Arc::clone(&ctx.mcp)));
     let agent = AgentLoop::build(llm, tool_executor, tool_filter);

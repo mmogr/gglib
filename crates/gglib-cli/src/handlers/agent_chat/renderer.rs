@@ -48,7 +48,11 @@ pub fn render_event(event: &AgentEvent, verbose: bool, had_text_delta: bool) {
             eprintln!("\n  ⚙   {} …", tool_call.name);
         }
 
-        AgentEvent::ToolCallComplete { result, execute_duration_ms, .. } => {
+        AgentEvent::ToolCallComplete {
+            result,
+            execute_duration_ms,
+            ..
+        } => {
             let icon = if result.success { "✓" } else { "✗" };
             let preview = truncate_string(&result.content, 80);
             eprintln!("  {icon}  {execute_duration_ms}ms  {preview}");
@@ -99,20 +103,38 @@ mod tests {
 
     #[test]
     fn final_answer_does_not_panic() {
-        smoke(AgentEvent::FinalAnswer { content: "42".into() });
+        smoke(AgentEvent::FinalAnswer {
+            content: "42".into(),
+        });
     }
 
     #[test]
     fn error_does_not_panic() {
-        smoke(AgentEvent::Error { message: "something went wrong".into() });
+        smoke(AgentEvent::Error {
+            message: "something went wrong".into(),
+        });
     }
 
     #[test]
     fn iteration_complete_respects_verbose_flag() {
         // verbose=false should suppress the line, verbose=true should print it.
         // Both paths must complete without panicking.
-        render_event(&AgentEvent::IterationComplete { iteration: 1, tool_calls: 2 }, false, false);
-        render_event(&AgentEvent::IterationComplete { iteration: 1, tool_calls: 2 }, true, false);
+        render_event(
+            &AgentEvent::IterationComplete {
+                iteration: 1,
+                tool_calls: 2,
+            },
+            false,
+            false,
+        );
+        render_event(
+            &AgentEvent::IterationComplete {
+                iteration: 1,
+                tool_calls: 2,
+            },
+            true,
+            false,
+        );
     }
 
     #[test]

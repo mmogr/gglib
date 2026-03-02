@@ -17,7 +17,9 @@ mod common;
 
 use std::sync::Arc;
 
-use common::event_assertions::{collect_events, has_final_answer, has_tool_complete_with_success, has_tool_start};
+use common::event_assertions::{
+    collect_events, has_final_answer, has_tool_complete_with_success, has_tool_start,
+};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
@@ -143,7 +145,9 @@ async fn test_parallel_tool_calls() {
             vec![AgentMessage::User {
                 content: "Search three topics".into(),
             }],
-            common::for_test(|c| { c.max_parallel_tools = 3; }),
+            common::for_test(|c| {
+                c.max_parallel_tools = 3;
+            }),
             tx,
         )
         .await;
@@ -203,7 +207,9 @@ async fn test_tool_timeout() {
             vec![AgentMessage::User {
                 content: "run the slow tool".into(),
             }],
-            common::for_test(|c| { c.tool_timeout_ms = 50; }),
+            common::for_test(|c| {
+                c.tool_timeout_ms = 50;
+            }),
             tx,
         )
         .await;

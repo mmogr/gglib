@@ -28,8 +28,12 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, LlmCompletionPort, ToolExecutorPort};
-use gglib_core::{AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolDefinition, ToolResult};
+use gglib_core::ports::{
+    AgentError, AgentLoopPort, AgentRunOutput, LlmCompletionPort, ToolExecutorPort,
+};
+use gglib_core::{
+    AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolDefinition, ToolResult,
+};
 
 use crate::stream_collector::CollectedResponse;
 use tokio::sync::mpsc;
@@ -104,9 +108,14 @@ impl AgentLoop {
     /// Create a new `AgentLoop` with the provided LLM and tool-executor ports.
     ///
     /// The `tool_executor` is used as-is — no filter is applied.  Use
-    /// [`AgentLoop::build`] when you need optional tool filtering via an
-    /// allowlist, or to receive the type-erased `Arc<dyn AgentLoopPort>` form.
-    pub fn new(
+    /// [`AgentLoop::build`] at composition roots; it handles the tool-filter
+    /// contract (`Some([])` → zero tools, `None` → all tools) and returns the
+    /// type-erased `Arc<dyn AgentLoopPort>`.
+    ///
+    /// `new` is intentionally crate-private so that external callers cannot
+    /// bypass the filter contract and accidentally expose all tools when the
+    /// intent was an empty allowlist.
+    pub(crate) fn new(
         llm: Arc<dyn LlmCompletionPort>,
         tool_executor: Arc<dyn ToolExecutorPort>,
     ) -> Self {
@@ -265,7 +274,11 @@ impl AgentLoopPort for AgentLoop {
                 });
                 return Ok(AgentRunOutput {
                     answer: content,
-                    history: if config.return_history { Some(messages) } else { None },
+                    history: if config.return_history {
+                        Some(messages)
+                    } else {
+                        None
+                    },
                     total_iterations: iteration + 1,
                 });
             }
@@ -277,9 +290,7 @@ impl AgentLoopPort for AgentLoop {
             // StagnationDetector.  When `max_stagnation_steps` is `None` the
             // guard is disabled (e.g. in tests that reuse a fixed LLM response).
             if let Some(max_steps) = config.max_stagnation_steps {
-                if let Err(e) =
-                    stagnation_detector.record(&response.content, max_steps)
-                {
+                if let Err(e) = stagnation_detector.record(&response.content, max_steps) {
                     emit_error_event(&tx, &e.to_string()).await;
                     return Err(e);
                 }
@@ -289,10 +300,8 @@ impl AgentLoopPort for AgentLoop {
             // When `max_repeated_batch_steps` is `None` the guard is disabled
             // (e.g. in tests that deliberately repeat the same tool call to
             // exercise multi-iteration behaviour without hitting the limit).
-            if let Some(max_strikes) = config.max_repeated_batch_steps {
-                if let Err(e) =
-                    loop_detector.check(&response.tool_calls, max_strikes)
-                {
+            if let Some(max_steps) = config.max_repeated_batch_steps {
+                if let Err(e) = loop_detector.check(&response.tool_calls, max_steps) {
                     emit_error_event(&tx, &e.to_string()).await;
                     return Err(e);
                 }

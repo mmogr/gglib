@@ -196,7 +196,11 @@ pub async fn collect_stream(
                                 name,
                             );
                             warn!(%message, "aborting stream collection due to incomplete tool-call partial");
-                            let _ = tx.send(AgentEvent::Error { message: message.clone() }).await;
+                            let _ = tx
+                                .send(AgentEvent::Error {
+                                    message: message.clone(),
+                                })
+                                .await;
                             anyhow::bail!("{message}");
                         }
                     };
@@ -215,11 +219,19 @@ pub async fn collect_stream(
                                 error = %e,
                                 "tool-call arguments are not valid JSON"
                             );
-                            let _ = tx.send(AgentEvent::Error { message: message.clone() }).await;
+                            let _ = tx
+                                .send(AgentEvent::Error {
+                                    message: message.clone(),
+                                })
+                                .await;
                             anyhow::bail!("{message}");
                         }
                     };
-                    tool_calls.push(ToolCall { id, name, arguments });
+                    tool_calls.push(ToolCall {
+                        id,
+                        name,
+                        arguments,
+                    });
                 }
 
                 return Ok(CollectedResponse {
@@ -395,6 +407,40 @@ mod tests {
         assert_eq!(response.tool_calls.len(), 2);
         assert_eq!(response.tool_calls[0].name, "tool_a");
         assert_eq!(response.tool_calls[1].name, "tool_b");
+    }
+
+    #[tokio::test]
+    async fn zero_event_stream_returns_distinct_error() {
+        // A completely empty stream (server immediately closed connection)
+        // must fail with a message clearly identifying the zero-event case,
+        // distinguishing it from a mid-response truncation.
+        let (tx, _rx) = mpsc::channel(16);
+        let stream = make_stream(vec![]);
+        let err = collect_stream(stream, &tx).await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("zero events"),
+            "zero-event error should mention 'zero events', got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn truncated_stream_returns_distinct_error() {
+        // A stream that started but never sent a Done event should produce an
+        // error message about truncation, not about zero events.
+        let (tx, _rx) = mpsc::channel(16);
+        let stream = make_stream(vec![
+            LlmStreamEvent::TextDelta {
+                content: "partial response".into(),
+            },
+            // No Done event
+        ]);
+        let err = collect_stream(stream, &tx).await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("truncated"),
+            "truncated-stream error should mention 'truncated', got: {msg}"
+        );
     }
 
     #[tokio::test]

@@ -79,7 +79,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             .into_iter()
             .flat_map(|(server_id, tools)| {
                 tools.into_iter().map(move |t| ToolDefinition {
-                        name: format!("{server_id}:{}", t.name),
+                    name: format!("{server_id}:{}", t.name),
                     description: t.description,
                     input_schema: t.input_schema,
                 })

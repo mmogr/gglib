@@ -34,7 +34,7 @@ use tokio::sync::mpsc;
 /// `System` message and an initial `User` message.
 ///
 /// Returns (in order):
-///   - `System("You are helpful.")` 
+///   - `System("You are helpful.")`
 ///   - `User("First question.")`
 ///   - for each `i` in `0..n_pairs`: `Assistant(tool_calls=[old_tc{i}])` then `Tool(old_tc{i})`
 ///
@@ -44,8 +44,12 @@ use tokio::sync::mpsc;
 /// messages) before passing the history to the agent.
 fn build_long_history(n_pairs: u32) -> Vec<AgentMessage> {
     let mut messages = vec![
-        AgentMessage::System { content: "You are helpful.".into() },
-        AgentMessage::User   { content: "First question.".into() },
+        AgentMessage::System {
+            content: "You are helpful.".into(),
+        },
+        AgentMessage::User {
+            content: "First question.".into(),
+        },
     ];
     for i in 0..n_pairs {
         messages.push(AgentMessage::Assistant {
@@ -86,9 +90,9 @@ async fn test_context_budget_pruning() {
     });
 
     // Single LLM response: no tool calls → FinalAnswer immediately.
-    let llm = Arc::new(
-        MockLlmPort::new().push(MockLlmResponse::text("Pruning worked — I can still answer.")),
-    );
+    let llm = Arc::new(MockLlmPort::new().push(MockLlmResponse::text(
+        "Pruning worked — I can still answer.",
+    )));
     // Keep a handle so we can inspect what messages the LLM actually received.
     let llm_handle = Arc::clone(&llm);
 
@@ -107,7 +111,9 @@ async fn test_context_budget_pruning() {
     let result = agent
         .run(
             messages,
-            common::for_test(|c| { c.context_budget_chars = 500; }),
+            common::for_test(|c| {
+                c.context_budget_chars = 500;
+            }),
             tx,
         )
         .await;
@@ -160,7 +166,9 @@ async fn test_context_budget_pruning() {
 async fn test_context_budget_pruning_two_iters() {
     // Build a large history that triggers Pass 2 on the first prune.
     let mut messages = build_long_history(20);
-    messages.push(AgentMessage::User { content: "Second question.".into() });
+    messages.push(AgentMessage::User {
+        content: "Second question.".into(),
+    });
 
     // Two LLM responses: first a tool call, then a final answer.
     let llm = Arc::new(
@@ -172,7 +180,9 @@ async fn test_context_budget_pruning_two_iters() {
 
     let executor = MockToolExecutorPort::new().with_tool(
         ToolDefinition::new("search"),
-        MockToolBehavior::Immediate { content: "live result".into() },
+        MockToolBehavior::Immediate {
+            content: "live result".into(),
+        },
     );
 
     let agent = AgentLoop::build(llm, Arc::new(executor), None);
@@ -184,7 +194,9 @@ async fn test_context_budget_pruning_two_iters() {
             // Budget of 600 chars: forces pruning on the initial ~1 600-char history while
             // leaving enough room for the ~35-char new tool-call+result pair added after
             // the first iteration so the second call is not over-pruned.
-            common::for_test(|c| { c.context_budget_chars = 600; }),
+            common::for_test(|c| {
+                c.context_budget_chars = 600;
+            }),
             tx,
         )
         .await;
@@ -196,7 +208,10 @@ async fn test_context_budget_pruning_two_iters() {
         "Two-pass pruning worked.",
         "loop aborted unexpectedly on second iteration after context pruning"
     );
-    assert!(has_final_answer(&events), "missing FinalAnswer after two-iteration pruning");
+    assert!(
+        has_final_answer(&events),
+        "missing FinalAnswer after two-iteration pruning"
+    );
 
     let received = llm_handle.messages_received().await;
     assert_eq!(received.len(), 2, "expected exactly two LLM calls");

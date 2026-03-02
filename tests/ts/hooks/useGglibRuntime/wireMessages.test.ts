@@ -113,7 +113,9 @@ describe('convertToWireMessages — assistant text', () => {
 // ---------------------------------------------------------------------------
 
 describe('convertToWireMessages — assistant tool calls', () => {
-  it('emits tool_calls array for tool-call parts', () => {
+  it('emits tool_calls array and tool entry for a completed tool call', () => {
+    // A tool call with a result ("completed") must appear in both the
+    // assistant tool_calls array and as a following tool entry.
     const wire = convertToWireMessages([
       assistantMsg([
         {
@@ -121,6 +123,7 @@ describe('convertToWireMessages — assistant tool calls', () => {
           toolCallId: 'tc1',
           toolName: 'search',
           args: { q: 'foo' },
+          result: 'found it',
         },
       ]),
     ]);
@@ -130,28 +133,49 @@ describe('convertToWireMessages — assistant tool calls', () => {
         content: null,
         tool_calls: [{ id: 'tc1', name: 'search', arguments: { q: 'foo' } }],
       },
+      { role: 'tool', tool_call_id: 'tc1', content: 'found it' },
     ]);
   });
 
-  it('falls back to parsing argsText when args is absent', () => {
-    // Cast to unknown: argsText is a gglib extension on ToolCallPart that is
-    // not yet reflected in the GglibToolCallPart interface. The test verifies
-    // that wireMessages falls back to JSON-parsing argsText when args is absent.
+  it('excludes in-flight tool calls (no result) from the wire format', () => {
+    // An in-flight tool call has no result yet. Including it in tool_calls
+    // without a matching tool entry would create structurally invalid context
+    // — the wire format must omit the call entirely.
+    const wire = convertToWireMessages([
+      assistantMsg([
+        {
+          type: 'tool-call',
+          toolCallId: 'tc-inflight',
+          toolName: 'fn',
+          args: {},
+          // result intentionally absent — still in-flight
+        },
+      ]),
+    ]);
+    expect(wire).toHaveLength(1);
+    const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;
+    expect('tool_calls' in msg).toBe(false);
+  });
+
+  it('falls back to {} args when args is absent but call has a result', () => {
+    // addToolCallPart always populates args; this exercises the defensive
+    // fallback for parts constructed through other paths.
     const wire = convertToWireMessages([
       assistantMsg([
         {
           type: 'tool-call',
           toolCallId: 'tc2',
           toolName: 'calc',
-          argsText: '{"x":1}',
+          // args intentionally absent
+          result: '42',
         } as unknown as Parameters<typeof assistantMsg>[0],
       ]),
     ]);
     const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;
-    expect(msg.tool_calls?.[0].arguments).toEqual({ x: 1 });
+    expect(msg.tool_calls?.[0].arguments).toEqual({});
   });
 
-  it('omits tool_calls key when there are no tool-call parts', () => {
+  it('omits tool_calls key when there are no completed tool-call parts', () => {
     const wire = convertToWireMessages([
       assistantMsg([{ type: 'text', text: 'OK' }]),
     ]);
@@ -160,6 +184,8 @@ describe('convertToWireMessages — assistant tool calls', () => {
   });
 
   it('does NOT emit a tool entry when result is absent', () => {
+    // In-flight calls are excluded entirely (no assistant tool_calls entry,
+    // no tool entry) to keep the wire format structurally valid.
     const wire = convertToWireMessages([
       assistantMsg([
         {
@@ -172,6 +198,9 @@ describe('convertToWireMessages — assistant tool calls', () => {
       ]),
     ]);
     expect(wire).toHaveLength(1);
+    const msg = wire[0] as Extract<AgentWireMessage, { role: 'assistant' }>;
+    // The assistant entry must not include the in-flight call in tool_calls.
+    expect('tool_calls' in msg).toBe(false);
   });
 });
 

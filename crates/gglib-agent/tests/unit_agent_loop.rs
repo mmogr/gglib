@@ -18,13 +18,13 @@ mod common;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
-use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolDefinition};
-use gglib_core::ports::AgentError;
 use common::event_assertions::{collect_events, has_error_event};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
+use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
+use gglib_agent::AgentLoop;
 use gglib_agent::TOOL_NOT_AVAILABLE_MSG;
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolDefinition};
+use gglib_core::ports::AgentError;
 use serde_json::json;
 use tokio::sync::mpsc;
 
@@ -179,4 +179,3 @@ async fn test_empty_tool_filter_exposes_no_tools() {
         rejection.content
     );
 }
-

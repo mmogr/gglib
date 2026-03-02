@@ -30,15 +30,15 @@ use futures_util::StreamExt as _;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-use gglib_agent::AgentLoop;
-use gglib_mcp::McpToolExecutorAdapter;
-use gglib_runtime::LlmCompletionAdapter;
 use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
+use gglib_agent::AgentLoop;
+use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
 use gglib_core::ports::{AgentError, LlmCompletionPort, ToolExecutorPort};
-use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
+use gglib_mcp::McpToolExecutorAdapter;
+use gglib_runtime::LlmCompletionAdapter;
 
 use guard::AgentTaskGuard;
 
@@ -83,10 +83,12 @@ pub async fn chat(
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
     validate_port(&state, req.port).await?;
 
-    let tool_filter: Option<HashSet<String>> =
-        req.tool_filter.map(|f| f.into_iter().collect());
-    let llm: Arc<dyn LlmCompletionPort> =
-        Arc::new(LlmCompletionAdapter::with_client(req.port, state.http_client.clone(), req.model.clone()));
+    let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
+        req.port,
+        state.http_client.clone(),
+        req.model.clone(),
+    ));
     let tool_executor: Arc<dyn ToolExecutorPort> =
         Arc::new(McpToolExecutorAdapter::new(state.mcp.clone()));
     let agent_loop = AgentLoop::build(llm, tool_executor, tool_filter);

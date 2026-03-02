@@ -159,7 +159,10 @@ mod tests {
         // Trigger stagnation at limit = 1
         assert!(det.record(text, 1).is_ok()); // baseline
         let err = det.record(text, 1).unwrap_err(); // count = 1 >= 1 → error
-        if let AgentError::StagnationDetected { count, max_steps, .. } = err {
+        if let AgentError::StagnationDetected {
+            count, max_steps, ..
+        } = err
+        {
             assert_eq!(count, 2, "total count should be 2 (baseline + 1 repeat)");
             assert_eq!(max_steps, 1);
         } else {

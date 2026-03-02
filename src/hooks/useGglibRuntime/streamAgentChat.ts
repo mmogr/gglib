@@ -61,22 +61,24 @@ function isAbortError(err: unknown): err is DOMException {
 // ---------------------------------------------------------------------------
 
 /**
- * Partial `AgentConfig` forwarded to the backend.  All fields are optional;
- * omitted fields use the backend's `AgentConfig::default()` values.
+ * Partial `AgentConfig` forwarded to the backend.
+ *
+ * Only includes fields exposed by `AgentRequestConfig` in `gglib-axum`.
+ * Internal tuning parameters (`max_stagnation_steps`, `context_budget_chars`,
+ * `max_repeated_batch_steps`, `prune_*`) are intentionally absent from the
+ * backend DTO to prevent resource exhaustion by untrusted callers; omit them
+ * here to avoid silently sending values the server will discard.
+ *
+ * All fields are optional; omitted fields use the backend's
+ * `AgentConfig::default()` values.
  */
 export interface PartialAgentConfig {
   /** Maps to `AgentConfig::max_iterations` (default 25). */
   max_iterations?: number;
-  /** Maps to `AgentConfig::max_stagnation_steps` (default 5). */
-  max_stagnation_steps?: number;
-  /** Maps to `AgentConfig::tool_timeout_ms` (default 30 000). */
-  tool_timeout_ms?: number;
-  /** Maps to `AgentConfig::context_budget_chars` (default 180 000). */
-  context_budget_chars?: number;
-  /** Maps to `AgentConfig::max_repeated_batch_steps` (default 2). */
-  max_repeated_batch_steps?: number;
   /** Maps to `AgentConfig::max_parallel_tools` (default 5). */
   max_parallel_tools?: number;
+  /** Maps to `AgentConfig::tool_timeout_ms` (default 30 000). */
+  tool_timeout_ms?: number;
 }
 
 export interface StreamAgentChatOptions {
@@ -204,12 +206,20 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         }
 
         case 'text_delta': {
+          if (typeof event.content !== 'string') {
+            appLogger.warn('hook.runtime', 'streamAgentChat: text_delta missing content string', { event });
+            break;
+          }
           if (timingTracker) timingTracker.onBoundary(currentId);
           applyTextDelta(setMessages, currentId, event.content);
           break;
         }
 
         case 'tool_call_start': {
+          if (!event.tool_call || typeof event.tool_call.id !== 'string' || typeof event.tool_call.name !== 'string') {
+            appLogger.warn('hook.runtime', 'streamAgentChat: tool_call_start malformed', { event });
+            break;
+          }
           if (timingTracker) timingTracker.onBoundary(currentId);
           addToolCallPart(
             setMessages,
@@ -254,12 +264,17 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         case 'final_answer': {
           // The stream has ended normally.  The accumulated text_deltas have
           // already built the message content; finalize timing and stop.
+          if (typeof event.content !== 'string') {
+            appLogger.warn('hook.runtime', 'streamAgentChat: final_answer missing content string', { event });
+            // Treat as complete even with a malformed payload — the accumulated
+            // text_deltas are sufficient to finalize the message.
+          }
           if (timingTracker) timingTracker.onEndOfMessage(currentId);
           finalizeMessageTiming(setMessages, currentId);
           setCurrentStreamingAssistantMessageId?.(null);
 
           appLogger.info('hook.runtime', 'streamAgentChat: final answer', {
-            contentLength: event.content.length,
+            contentLength: typeof event.content === 'string' ? event.content.length : null,
           });
           return;
         }
@@ -274,7 +289,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
           appLogger.warn('hook.runtime', 'streamAgentChat: agent error event', {
             message: event.message,
           });
-          throw new Error(`Agent loop error: ${event.message}`);
+          throw new Error(`Agent loop error: ${String(event.message ?? 'unknown agent error')}`);
         }
 
         default: {

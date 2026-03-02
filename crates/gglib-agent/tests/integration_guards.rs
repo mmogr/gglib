@@ -58,7 +58,7 @@ async fn test_max_iterations_reached() {
             common::for_test(|c| {
                 c.max_iterations = 3;
                 c.max_repeated_batch_steps = None; // disable loop detection for this test
-                c.max_stagnation_steps = None;     // disable stagnation for this test
+                c.max_stagnation_steps = None; // disable stagnation for this test
             }),
             tx,
         )
@@ -154,16 +154,18 @@ async fn test_loop_detection() {
 async fn test_stagnation_detected_integration() {
     // Each response includes both text content AND a tool call so the loop
     // does not immediately produce a FinalAnswer and has a chance to stagnate.
-    let llm = Arc::new(MockLlmPort::new().push_many((0..5).map(|i| MockLlmResponse {
-        reasoning: None,
-        content: Some("Thinking...".into()),
-        tool_calls: vec![ToolCall {
-            id: format!("s{i}"),
-            name: "do_thing".into(),
-            arguments: json!({}),
-        }],
-        finish_reason: "tool_calls".into(),
-    })));
+    let llm = Arc::new(
+        MockLlmPort::new().push_many((0..5).map(|i| MockLlmResponse {
+            reasoning: None,
+            content: Some("Thinking...".into()),
+            tool_calls: vec![ToolCall {
+                id: format!("s{i}"),
+                name: "do_thing".into(),
+                arguments: json!({}),
+            }],
+            finish_reason: "tool_calls".into(),
+        })),
+    );
 
     let executor = MockToolExecutorPort::new().with_tool(
         ToolDefinition::new("do_thing"),
@@ -229,16 +231,30 @@ async fn test_too_many_tool_calls_integration() {
         reasoning: None,
         content: None,
         tool_calls: vec![
-            ToolCall { id: "c1".into(), name: "search".into(), arguments: json!({}) },
-            ToolCall { id: "c2".into(), name: "search".into(), arguments: json!({}) },
-            ToolCall { id: "c3".into(), name: "search".into(), arguments: json!({}) },
+            ToolCall {
+                id: "c1".into(),
+                name: "search".into(),
+                arguments: json!({}),
+            },
+            ToolCall {
+                id: "c2".into(),
+                name: "search".into(),
+                arguments: json!({}),
+            },
+            ToolCall {
+                id: "c3".into(),
+                name: "search".into(),
+                arguments: json!({}),
+            },
         ],
         finish_reason: "tool_calls".into(),
     };
     let llm = Arc::new(MockLlmPort::new().push(batch));
     let executor = MockToolExecutorPort::new().with_tool(
         ToolDefinition::new("search"),
-        MockToolBehavior::Immediate { content: "result".into() },
+        MockToolBehavior::Immediate {
+            content: "result".into(),
+        },
     );
 
     let agent = AgentLoop::build(llm, Arc::new(executor), None);
@@ -246,7 +262,9 @@ async fn test_too_many_tool_calls_integration() {
 
     let result = agent
         .run(
-            vec![AgentMessage::User { content: "search for things".into() }],
+            vec![AgentMessage::User {
+                content: "search for things".into(),
+            }],
             common::for_test(|c| {
                 c.max_parallel_tools = 2; // 3 calls > 2 → rejected
                 c.max_repeated_batch_steps = None;
@@ -259,7 +277,10 @@ async fn test_too_many_tool_calls_integration() {
 
     // Must produce the dedicated error variant.
     assert!(
-        matches!(result, Err(AgentError::ParallelToolLimitExceeded { count: 3, limit: 2 })),
+        matches!(
+            result,
+            Err(AgentError::ParallelToolLimitExceeded { count: 3, limit: 2 })
+        ),
         "expected ParallelToolLimitExceeded {{ count: 3, limit: 2 }}, got: {result:?}"
     );
 
