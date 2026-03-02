@@ -50,7 +50,7 @@ pub async fn compose(
         Some(args.tools.iter().cloned().collect())
     };
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
-        port,
+        format!("http://127.0.0.1:{port}"),
         ctx.http_client.clone(),
         args.model.clone(),
     ));

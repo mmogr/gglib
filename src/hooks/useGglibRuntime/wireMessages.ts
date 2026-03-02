@@ -8,6 +8,7 @@
  * @module wireMessages
  */
 
+import { appLogger } from '../../services/platform';
 import { extractParts, type GglibMessage, type GglibToolCallPart, type TextPart } from '../../types/messages';
 
 // ---------------------------------------------------------------------------
@@ -68,13 +69,18 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
       // Note: `reasoning` parts (type === 'reasoning') are intentionally
       // excluded. The backend wire format has no `reasoning` role and the model
       // does not need its own CoT trace as context.
-      const completedToolCallParts = parts.filter(
+      const allToolCallParts = parts.filter(p => p.type === 'tool-call');
+      const completedToolCallParts = allToolCallParts.filter(
         (p): p is GglibToolCallPart & { toolCallId: string; toolName: string; result: unknown } =>
           p.type === 'tool-call' &&
           p.toolCallId != null &&
           p.toolName != null &&
           p.result !== undefined,
       );
+      const droppedCount = allToolCallParts.length - completedToolCallParts.length;
+      if (droppedCount > 0) {
+        appLogger.debug('hook.runtime', 'convertToWireMessages: dropped in-flight tool calls (no result yet)', { droppedCount });
+      }
 
       const toolCalls: AgentWireToolCall[] = completedToolCallParts.map(p => ({
         id: p.toolCallId,

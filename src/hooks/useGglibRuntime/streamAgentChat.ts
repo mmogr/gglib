@@ -181,9 +181,10 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
   // about which iteration number it is requesting (avoids hidden mutable state).
   const makeNextMessage = (iter: number): string => {
     const msg = mkAssistantMessage({ turnId, iteration: iter, conversationId });
+    if (!msg.id) throw new Error('mkAssistantMessage must return a message with an id');
     setMessages(prev => [...prev, msg]);
-    setCurrentStreamingAssistantMessageId?.(msg.id!);
-    return msg.id!;
+    setCurrentStreamingAssistantMessageId?.(msg.id);
+    return msg.id;
   };
 
   let currentId = makeNextMessage(1);
@@ -201,6 +202,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
 
       switch (event.type) {
         case 'reasoning_delta': {
+          if (timingTracker) timingTracker.onReasoning(currentId);
           applyReasoningDelta(setMessages, currentId, event.content);
           break;
         }

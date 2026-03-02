@@ -85,7 +85,7 @@ pub async fn chat(
 
     let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
-        req.port,
+        format!("http://127.0.0.1:{}", req.port),
         state.http_client.clone(),
         req.model.clone(),
     ));

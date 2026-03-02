@@ -1,9 +1,13 @@
-//! Concrete [`LlmCompletionPort`] adapter for a local llama-server instance.
+//! Concrete [`LlmCompletionPort`] adapter for a llama-server instance.
 //!
 //! Translates domain [`AgentMessage`] / [`ToolDefinition`] values into the
 //! OpenAI-compatible JSON wire format, POSTs to
-//! `http://127.0.0.1:{port}/v1/chat/completions` with `"stream": true`, and
-//! maps the response SSE frames back to [`LlmStreamEvent`] values.
+//! `{base_url}/v1/chat/completions` with `"stream": true`, and maps the
+//! response SSE frames back to [`LlmStreamEvent`] values.
+//!
+//! The `base_url` is the server root without a trailing path component,
+//! e.g. `"http://127.0.0.1:9000"`.  This allows the adapter to target any
+//! reachable host (Docker networks, remote servers, CI environments).
 //!
 //! # Lifetime
 //!
@@ -14,7 +18,7 @@
 //! for standalone use (e.g. CLI) and allocates its own pool.
 //!
 //! ```ignore
-//! let adapter = LlmCompletionAdapter::new(9000, None::<String>);
+//! let adapter = LlmCompletionAdapter::new("http://127.0.0.1:9000", None::<String>);
 //! let agent   = AgentLoop::build(Arc::new(adapter), tool_executor, None);
 //! ```
 
@@ -64,8 +68,20 @@ pub struct LlmCompletionAdapter {
     client: Client,
 }
 
+/// Build the completions endpoint URL from a base URL.
+///
+/// Trims any trailing slash from `base_url` before appending the path so
+/// callers do not need to normalise their input.
+fn completions_url(base_url: &str) -> String {
+    format!("{}/v1/chat/completions", base_url.trim_end_matches('/'))
+}
+
 impl LlmCompletionAdapter {
-    /// Create a new adapter targeting `http://127.0.0.1:{port}/v1/chat/completions`.
+    /// Create a new adapter targeting `{base_url}/v1/chat/completions`.
+    ///
+    /// `base_url` is the server root without a trailing slash, e.g.
+    /// `"http://127.0.0.1:9000"`.  This accepts any reachable host, not just
+    /// loopback.
     ///
     /// `model` is forwarded verbatim in the OpenAI `model` field.  Pass `None`
     /// to send an empty string, which is the right default for llama-server
@@ -75,11 +91,14 @@ impl LlmCompletionAdapter {
     /// when a shared client is available (e.g. from `AppState`) to avoid
     /// per-request connection-pool overhead.
     #[must_use]
-    pub fn new(port: u16, model: Option<String>) -> Self {
-        Self::with_client(port, Client::new(), model)
+    pub fn new(base_url: impl Into<String>, model: Option<String>) -> Self {
+        Self::with_client(base_url, Client::new(), model)
     }
 
     /// Create an adapter that reuses an existing [`reqwest::Client`].
+    ///
+    /// `base_url` is the server root without a trailing slash, e.g.
+    /// `"http://127.0.0.1:9000"`.  A trailing slash is tolerated and stripped.
     ///
     /// `model` is forwarded verbatim in the OpenAI `model` field.  Pass `None`
     /// to send an empty string (the default for llama-server in single-model
@@ -88,9 +107,9 @@ impl LlmCompletionAdapter {
     /// Pass a clone of the application-level client (e.g. `state.http_client.clone()`)
     /// so all agent-chat requests share a single connection pool.
     #[must_use]
-    pub fn with_client(port: u16, client: Client, model: Option<String>) -> Self {
+    pub fn with_client(base_url: impl Into<String>, client: Client, model: Option<String>) -> Self {
         Self {
-            url: format!("http://127.0.0.1:{port}/v1/chat/completions"),
+            url: completions_url(&base_url.into()),
             model: model.unwrap_or_default(),
             client,
         }
