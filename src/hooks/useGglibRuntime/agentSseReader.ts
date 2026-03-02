@@ -54,6 +54,11 @@ export async function* readAgentSSE(
       }
     }
   } finally {
+    // If the abort signal fired, cancel the underlying stream so the browser
+    // doesn't continue consuming a stale chunk that arrived after the break.
+    if (abortSignal?.aborted) {
+      await reader.cancel().catch(() => {});
+    }
     reader.releaseLock();
   }
 }

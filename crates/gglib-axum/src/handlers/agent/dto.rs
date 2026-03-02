@@ -50,7 +50,9 @@ impl From<AgentRequestConfig> for AgentConfig {
             cfg.max_parallel_tools = n.clamp(1, MAX_PARALLEL_TOOLS_CEILING);
         }
         if let Some(ms) = tool_timeout_ms {
-            cfg.tool_timeout_ms = ms.min(MAX_TOOL_TIMEOUT_MS_CEILING);
+            // Clamp to [100, ceiling]: 0 ms would silently time out every tool
+            // call immediately, making tool calling unusable without a clear error.
+            cfg.tool_timeout_ms = ms.clamp(100, MAX_TOOL_TIMEOUT_MS_CEILING);
         }
         cfg
     }

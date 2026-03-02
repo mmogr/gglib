@@ -118,8 +118,13 @@ pub async fn chat(
         futures_util::future::ready(match serde_json::to_string(&event) {
             Ok(json) => Some(Ok::<Event, Infallible>(Event::default().data(json))),
             Err(e) => {
-                tracing::error!(error = %e, "agent: failed to serialise AgentEvent, dropping frame");
-                None
+                // Silently dropping a frame here would leave the client hanging
+                // indefinitely — especially fatal if the failed event is
+                // `FinalAnswer` or `Error`. Emit a raw fallback error event so
+                // the client always receives a terminal signal.
+                tracing::error!(error = %e, "agent: failed to serialise AgentEvent; emitting fallback error");
+                let fallback = r#"{"type":"error","message":"serialization failed"}"#;
+                Some(Ok::<Event, Infallible>(Event::default().data(fallback)))
             }
         })
     });
