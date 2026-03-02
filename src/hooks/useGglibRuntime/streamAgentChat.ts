@@ -284,10 +284,6 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
           if (timingTracker) timingTracker.onEndOfMessage(currentId);
           finalizeMessageTiming(setMessages, currentId);
           setCurrentStreamingAssistantMessageId?.(null);
-
-          appLogger.warn('hook.runtime', 'streamAgentChat: agent error event', {
-            message: event.message,
-          });
           throw new Error(`Agent loop error: ${String(event.message ?? 'unknown agent error')}`);
         }
 
@@ -306,6 +302,10 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
       setCurrentStreamingAssistantMessageId?.(null);
       return;
     }
+    // Non-abort error (network failure, protocol violation, etc.) — finalize
+    // the in-progress message so it is never left permanently "in-flight".
+    finalizeMessageTiming(setMessages, currentId);
+    setCurrentStreamingAssistantMessageId?.(null);
     appLogger.error('hook.runtime', 'streamAgentChat: stream error', { err });
     throw err;
   }
