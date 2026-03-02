@@ -134,11 +134,17 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
         let agent = Arc::clone(&agent_loop);
-        let msgs = messages.clone();
+        // Move the conversation history into the task instead of cloning —
+        // `output.history` on a successful run IS the accumulated messages,
+        // so ownership transfers in and back with zero intermediate copies on
+        // the common (success) path.
+        // On agent error or Ctrl+C, `run()` has consumed the messages and
+        // they cannot be recovered; the session history is empty for this turn.
+        let turn_msgs = std::mem::take(&mut messages);
         let cfg = config.clone();
 
         let handle: JoinHandle<Option<Vec<AgentMessage>>> = tokio::spawn(async move {
-            match agent.run(msgs, cfg, tx).await {
+            match agent.run(turn_msgs, cfg, tx).await {
                 Ok(output) => Some(output.history),
                 Err(e) => {
                     tracing::debug!("agent loop ended: {e}");
@@ -169,8 +175,10 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // so the spawned task is fully cleaned up before the next iteration
         // and any panic inside an aborted task is not silently dropped.
         let loop_result = handle.await;
-        // On Ctrl+C (`completed = false`) or loop error (handle returns `None`)
-        // the history stays unchanged — failed or cancelled turns are not added.
+        // On success: restore messages from output.history — the Vec that was
+        // moved in via std::mem::take comes back extended, with zero copies.
+        // On Ctrl+C or agent error: run() consumed turn_msgs so the history is
+        // unrecoverable; messages stays empty until the next successful turn.
         if completed {
             if let Ok(Some(new_messages)) = loop_result {
                 messages = new_messages;

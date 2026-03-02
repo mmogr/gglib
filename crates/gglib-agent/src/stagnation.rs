@@ -69,7 +69,7 @@ impl StagnationDetector {
         let prior = self.occurrences.entry(hash).or_insert(0);
         if *prior > 0 && *prior >= max_steps {
             return Err(AgentError::StagnationDetected {
-                repeated_text_hash: hash,
+                repeated_text_hash: format!("{hash:016x}"),
                 count: *prior + 1,
                 max_steps,
             });

@@ -187,11 +187,10 @@ impl AgentLoopPort for AgentLoop {
     ///   text content for too many consecutive iterations.
     async fn run(
         &self,
-        messages: Vec<AgentMessage>,
+        mut messages: Vec<AgentMessage>,
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
-        let mut messages = messages;
         let mut loop_detector = LoopDetector::default();
         let mut stagnation_detector = StagnationDetector::default();
 

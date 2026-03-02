@@ -89,8 +89,10 @@ pub enum AgentError {
          (max_stagnation_steps = {max_steps})"
     )]
     StagnationDetected {
-        /// FNV-1a hash of the repeated assistant text (for diagnostics).
-        repeated_text_hash: u64,
+        /// FNV-1a hash of the repeated assistant text, hex-encoded for diagnostics.
+        /// Stored as `String` to decouple the public API from the internal u64
+        /// representation so callers never need to know the hashing algorithm.
+        repeated_text_hash: String,
         /// Total number of times this text has been seen in the session
         /// (including the baseline occurrence).
         count: usize,
