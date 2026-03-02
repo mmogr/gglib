@@ -134,7 +134,11 @@ impl LoopDetector {
     ///
     /// `max_strikes = 0` rejects the very first occurrence (zero tolerance).
     /// `max_strikes = 1` rejects on the second occurrence (one repeat allowed).
-    pub(crate) fn check(&mut self, calls: &[ToolCall], max_strikes: usize) -> Result<(), AgentError> {
+    pub(crate) fn check(
+        &mut self,
+        calls: &[ToolCall],
+        max_strikes: usize,
+    ) -> Result<(), AgentError> {
         let sig = batch_signature(calls);
         let entry = self.hits.entry(sig.clone()).or_insert(0);
         *entry += 1;
