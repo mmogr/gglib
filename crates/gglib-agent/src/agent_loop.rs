@@ -39,7 +39,7 @@ use crate::stream_collector::CollectedResponse;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
-use crate::context_pruning::{prune_for_budget, total_chars};
+use crate::context_pruning::prune_for_budget;
 use crate::filter::{EmptyToolExecutor, FilteredToolExecutor};
 use crate::loop_detection::LoopDetector;
 use crate::stagnation::StagnationDetector;
@@ -212,16 +212,10 @@ impl AgentLoopPort for AgentLoop {
         let tools = self.tool_executor.list_tools().await;
         debug!(tool_count = tools.len(), "tools available");
 
-        // Track the total character count incrementally so that
-        // `prune_for_budget` never has to re-scan the entire history.
-        // Updated after every prune (inside `prune_for_budget`) and after
-        // every `push_iteration_messages_returning_char_delta` call (via the returned delta).
-        let mut running_chars = total_chars(&messages);
-
         // Prune the caller-supplied history once before the first LLM call so
         // that oversized initial contexts are handled even when the model
         // returns a final answer on the very first iteration (no append step).
-        messages = prune_for_budget(messages, &config, &mut running_chars);
+        messages = prune_for_budget(messages, &config);
 
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
@@ -274,11 +268,7 @@ impl AgentLoopPort for AgentLoop {
                 });
                 return Ok(AgentRunOutput {
                     answer: content,
-                    history: if config.return_history {
-                        Some(messages)
-                    } else {
-                        None
-                    },
+                    history: messages,
                     total_iterations: iteration + 1,
                 });
             }
@@ -316,7 +306,7 @@ impl AgentLoopPort for AgentLoop {
             // Capture len before consuming results so we can report the count
             // in the IterationComplete event without keeping a reference.
             let tool_call_count = results.len();
-            running_chars += append_iteration_messages(
+            append_iteration_messages(
                 &mut messages,
                 response.content,
                 response.tool_calls,
@@ -324,7 +314,7 @@ impl AgentLoopPort for AgentLoop {
             );
 
             // ---- 8. Context budget pruning (applied after new messages added) --
-            messages = prune_for_budget(messages, &config, &mut running_chars);
+            messages = prune_for_budget(messages, &config);
 
             // ---- 9. Emit iteration-complete event ---------------------------
             let _ = tx
@@ -349,9 +339,7 @@ impl AgentLoopPort for AgentLoop {
     }
 }
 
-/// Append an assistant turn and its tool results to `messages`, returning
-/// the total character delta so the caller can maintain `running_chars`
-/// without re-scanning the full history.
+/// Append an assistant turn and its tool results to `messages`.
 ///
 /// Selects the correct [`AssistantContent`] variant based on whether
 /// `content` is empty, avoiding the vacuous all-`None` state.
@@ -360,7 +348,7 @@ fn append_iteration_messages(
     content: String,
     tool_calls: Vec<gglib_core::ToolCall>,
     results: Vec<ToolResult>,
-) -> usize {
+) {
     let assistant = AgentMessage::Assistant {
         content: if content.is_empty() {
             AssistantContent::ToolCalls(tool_calls)
@@ -368,17 +356,13 @@ fn append_iteration_messages(
             AssistantContent::Both(content, tool_calls)
         },
     };
-    let mut added = assistant.char_count();
     messages.push(assistant);
     for result in results {
-        let msg = AgentMessage::Tool {
+        messages.push(AgentMessage::Tool {
             tool_call_id: result.tool_call_id,
             content: result.content,
-        };
-        added += msg.char_count();
-        messages.push(msg);
+        });
     }
-    added
 }
 
 // Tests live in tests/unit_agent_loop.rs so they can share the richer mock

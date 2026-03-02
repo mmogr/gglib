@@ -71,6 +71,8 @@ export type GglibMessageCustom = {
   isDeepResearch?: boolean;
   /** Whether this message originated from voice input/output */
   isVoice?: boolean;
+  /** Set once the final iteration is complete; triggers persisted transcript regeneration. */
+  timingFinalized?: boolean;
 };
 
 /**

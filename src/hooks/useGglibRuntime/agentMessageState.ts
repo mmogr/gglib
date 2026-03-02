@@ -11,14 +11,22 @@
 
 import React from 'react';
 
-import type { GglibMessage, GglibContent, GglibMessagePart } from '../../types/messages';
+import type {
+  GglibMessage,
+  GglibContent,
+  GglibMessagePart,
+  GglibMessageCustom,
+  TextPart,
+  ReasoningPart,
+} from '../../types/messages';
 import type { AgentToolCallCompleteEvent } from '../../types/events/agentEvent';
 
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
 
-type RawPart = { type: string; text?: string };
+/** Parts that carry a `text` payload and can be extended by delta events. */
+type DeltaPart = TextPart | ReasoningPart;
 
 /**
  * Append `delta` to the last part whose `type` matches `partType`, or push a
@@ -31,18 +39,19 @@ type RawPart = { type: string; text?: string };
  * is the `partType` string they pass in.
  */
 function applyDeltaToLastPart(
-  parts: RawPart[],
-  partType: string,
+  parts: GglibMessagePart[],
+  partType: DeltaPart['type'],
   delta: string,
-): RawPart[] {
-  const last = parts.length > 0 ? parts[parts.length - 1] : null;
+): GglibMessagePart[] {
+  const last = parts.at(-1);
   if (last?.type === partType) {
+    const prev = last as DeltaPart;
     return [
       ...parts.slice(0, -1),
-      { type: partType, text: (last.text ?? '') + delta },
+      { ...prev, text: (prev.text ?? '') + delta },
     ];
   }
-  return [...parts, { type: partType, text: delta }];
+  return [...parts, { type: partType, text: delta } as GglibMessagePart];
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +70,7 @@ export function applyTextDelta(
       // Invariant: the backend emits all `TextDelta` events before any
       // `ToolCallStart` events within a single iteration, so the last part is
       // always a text part (or the array is empty) when this function is called.
-      const parts = Array.isArray(m.content) ? (m.content as RawPart[]).slice() : [];
+      const parts = Array.isArray(m.content) ? ([...m.content] as GglibMessagePart[]) : [];
       return { ...m, content: applyDeltaToLastPart(parts, 'text', delta) as GglibContent };
     }),
   );
@@ -78,7 +87,7 @@ export function applyReasoningDelta(
       if (m.id !== messageId) return m;
       // The backend emits all ReasoningDelta events before TextDelta events
       // within a single iteration, so the last part matches 'reasoning' here.
-      const parts = Array.isArray(m.content) ? (m.content as RawPart[]).slice() : [];
+      const parts = Array.isArray(m.content) ? ([...m.content] as GglibMessagePart[]) : [];
       return { ...m, content: applyDeltaToLastPart(parts, 'reasoning', delta) as GglibContent };
     }),
   );
@@ -100,7 +109,7 @@ export function addToolCallPart(
     prev.map(m => {
       if (m.id !== messageId) return m;
       const parts = Array.isArray(m.content)
-        ? ([...m.content] as unknown[])
+        ? ([...m.content] as GglibMessagePart[])
         : [];
       return {
         ...m,
@@ -164,13 +173,14 @@ export function finalizeMessageTiming(
   setMessages(prev =>
     prev.map(m => {
       if (m.id !== messageId) return m;
-      if ((m.metadata as { custom?: { timingFinalized?: boolean } } | undefined)?.custom?.timingFinalized) return m;
+      const meta = m.metadata as { custom?: GglibMessageCustom } | undefined;
+      if (meta?.custom?.timingFinalized) return m;
       return {
         ...m,
         metadata: {
           ...m.metadata,
           custom: {
-            ...(m.metadata as { custom?: Record<string, unknown> } | undefined)?.custom,
+            ...meta?.custom,
             timingFinalized: true,
           },
         },

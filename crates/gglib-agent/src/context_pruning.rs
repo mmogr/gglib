@@ -31,11 +31,6 @@ pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
 /// Prune `messages` so that the total character count fits within the configured
 /// budget.  Returns `messages` unchanged if it is already within budget.
 ///
-/// `running_chars` must be initialised by the caller to `total_chars(&messages)`
-/// before the first call.  The function updates it in place as messages are
-/// dropped, so the caller can maintain an accurate count across iterations
-/// **without** re-scanning the full history on every call.
-///
 /// # Algorithm
 ///
 /// See module-level documentation for the two-pass algorithm.
@@ -52,22 +47,21 @@ pub(crate) fn total_chars(messages: &[AgentMessage]) -> usize {
 pub(crate) fn prune_for_budget(
     messages: Vec<AgentMessage>,
     config: &AgentConfig,
-    running_chars: &mut usize,
 ) -> Vec<AgentMessage> {
     let budget = config.context_budget_chars;
 
-    if *running_chars <= budget {
+    if total_chars(&messages) <= budget {
         return messages;
     }
 
     // ---- Pass 1: drop old tool messages and orphaned assistant messages -----
-    let messages = prune_tool_messages(messages, config, running_chars);
+    let messages = prune_tool_messages(messages, config);
 
-    if *running_chars <= budget {
+    if total_chars(&messages) <= budget {
         return messages;
     }
 
-    prune_tail(messages, config, running_chars)
+    prune_tail(messages, config)
 }
 
 /// Pass 2 of the pruning algorithm: emergency tail-prune.
@@ -86,7 +80,6 @@ pub(crate) fn prune_for_budget(
 fn prune_tail(
     messages: Vec<AgentMessage>,
     config: &AgentConfig,
-    running_chars: &mut usize,
 ) -> Vec<AgentMessage> {
     let before_count = messages.len();
     let (system, non_system): (Vec<AgentMessage>, Vec<AgentMessage>) = messages
@@ -109,11 +102,6 @@ fn prune_tail(
          System messages hoisted to front, oldest non-system messages dropped"
     );
 
-    // Sync the running counter; Pass 1 updated it incrementally but the
-    // partition+skip above drops additional messages without touching
-    // `running_chars`.  Without this, the next iteration sees a stale count
-    // above budget and re-runs Pass 2 unnecessarily, over-pruning history.
-    *running_chars = total_chars(&result);
     result
 }
 
@@ -124,13 +112,9 @@ fn prune_tail(
 /// messages and strips any `Assistant` messages whose every tool-call reference
 /// was removed.  `Assistant` messages that still have at least one surviving
 /// call are retained with only those surviving calls listed.
-///
-/// `running` is updated in place so the caller can decide whether Pass 2 is
-/// still needed without a separate `total_chars` scan.
 fn prune_tool_messages(
     messages: Vec<AgentMessage>,
     config: &AgentConfig,
-    running: &mut usize,
 ) -> Vec<AgentMessage> {
     let before_count = messages.len();
     // Collect the tool_call_ids of the tool results we intend to keep
@@ -154,20 +138,11 @@ fn prune_tool_messages(
     let result: Vec<AgentMessage> = messages
         .into_iter()
         .filter_map(|m| {
-            // Compute the size of this message before (potentially) moving it.
-            let old_size = m.char_count();
             match m {
                 // Drop a Tool message if its id is not in the retained set.
                 AgentMessage::Tool {
                     ref tool_call_id, ..
-                } if !kept_tool_call_ids.contains(tool_call_id) => {
-                    // Use saturating_sub: a caller-supplied `running_chars`
-                    // that is already wrong (e.g. from a char_count bug) must
-                    // not wrap around to usize::MAX and permanently disable
-                    // pruning for the rest of the session.
-                    *running = running.saturating_sub(old_size);
-                    None
-                }
+                } if !kept_tool_call_ids.contains(tool_call_id) => None,
 
                 // For an Assistant message with tool calls: keep only if at least
                 // one call survives, but also strip the pruned call IDs so the
@@ -182,21 +157,11 @@ fn prune_tool_messages(
                                 .cloned()
                                 .collect();
                             if retained_calls.is_empty() {
-                                // Use saturating_sub: same rationale as the Tool
-                                // drop site above — a stale counter must not wrap
-                                // to usize::MAX and permanently disable pruning.
-                                *running = running.saturating_sub(old_size);
                                 None
                             } else {
-                                let new_msg = AgentMessage::Assistant {
+                                Some(AgentMessage::Assistant {
                                     content: content.with_replaced_tool_calls(retained_calls),
-                                };
-                                // Adjust running for the difference in size when some
-                                // tool calls were stripped from this assistant message.
-                                // saturating_sub prevents usize wrap-around in release
-                                // if running_chars ever becomes inconsistent.
-                                *running = running.saturating_sub(old_size) + new_msg.char_count();
-                                Some(new_msg)
+                                })
                             }
                         }
                     }
@@ -264,8 +229,7 @@ mod tests {
         let mut cfg = AgentConfig::default();
         cfg.context_budget_chars = 10_000;
         let msgs = vec![system("sys"), user("hi")];
-        let mut chars = total_chars(&msgs);
-        let result = prune_for_budget(msgs, &cfg, &mut chars);
+        let result = prune_for_budget(msgs, &cfg);
         assert_eq!(result.len(), 2);
     }
 
@@ -284,8 +248,7 @@ mod tests {
         let mut cfg = AgentConfig::default();
         cfg.context_budget_chars = total - 1;
 
-        let mut chars = total;
-        let result = prune_for_budget(msgs, &cfg, &mut chars);
+        let result = prune_for_budget(msgs, &cfg);
 
         // The oldest tool result (call_0) should have been dropped.
         let tool_ids: Vec<_> = result
@@ -323,8 +286,7 @@ mod tests {
         let total = total_chars(&msgs);
         let mut cfg = AgentConfig::default();
         cfg.context_budget_chars = total - 1;
-        let mut chars = total;
-        let result = prune_for_budget(msgs, &cfg, &mut chars);
+        let result = prune_for_budget(msgs, &cfg);
 
         // call_0 was pruned → its matching assistant should also be gone.
         let has_call_0_assistant = result.iter().any(|m| {
@@ -379,8 +341,7 @@ mod tests {
         cfg.context_budget_chars = total - 1;
         cfg.prune_keep_tool_messages = 1; // keep only tc_new
 
-        let mut chars = total;
-        let result = prune_for_budget(msgs, &cfg, &mut chars);
+        let result = prune_for_budget(msgs, &cfg);
 
         // tc_old's Tool message must be gone.
         let tool_ids: Vec<_> = result
@@ -444,8 +405,7 @@ mod tests {
         let mut cfg = AgentConfig::default();
         cfg.context_budget_chars = 50;
         cfg.prune_keep_tail_messages = 2;
-        let mut chars = total_chars(&msgs);
-        let result = prune_for_budget(msgs, &cfg, &mut chars);
+        let result = prune_for_budget(msgs, &cfg);
 
         // System message must survive pass 2.
         assert!(
@@ -490,8 +450,7 @@ mod tests {
         cfg.context_budget_chars = 50;
         cfg.prune_keep_tail_messages = 1; // keep only "U-recent" in the non-system tail
 
-        let mut chars = total_chars(&msgs);
-        let result = prune_for_budget(msgs, &cfg, &mut chars);
+        let result = prune_for_budget(msgs, &cfg);
 
         // Both system messages must be present.
         let system_contents: Vec<_> = result

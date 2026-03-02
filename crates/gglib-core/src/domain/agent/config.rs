@@ -120,15 +120,6 @@ pub struct AgentConfig {
     /// Same rationale as [`Self::prune_keep_tool_messages`].
     #[serde(skip)]
     pub prune_keep_tail_messages: usize,
-
-    /// Whether to include the full accumulated conversation history in
-    /// [`crate::ports::AgentRunOutput::history`] on a successful run.
-    ///
-    /// Defaults to `false`.  HTTP SSE handlers should leave this `false`
-    /// (the history is discarded after streaming); CLI callers set this to
-    /// `true` so they can feed the history back as `messages` on the next
-    /// REPL turn.
-    pub return_history: bool,
 }
 
 impl Default for AgentConfig {
@@ -142,7 +133,6 @@ impl Default for AgentConfig {
             max_stagnation_steps: Some(5),
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
-            return_history: false,
         }
     }
 }
@@ -166,6 +156,5 @@ mod tests {
         );
         assert_eq!(cfg.prune_keep_tool_messages, 10);
         assert_eq!(cfg.prune_keep_tail_messages, 12);
-        assert!(!cfg.return_history, "return_history must default to false");
     }
 }

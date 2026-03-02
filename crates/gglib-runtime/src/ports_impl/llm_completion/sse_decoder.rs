@@ -41,7 +41,15 @@ impl SseStreamDecoder {
             done_sent: false,
         }
     }
+}
 
+impl Default for SseStreamDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SseStreamDecoder {
     /// Feed one raw byte chunk into the decoder.
     ///
     /// Returns `(events, should_stop)`.

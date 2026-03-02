@@ -135,12 +135,11 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 
         let agent = Arc::clone(&agent_loop);
         let msgs = messages.clone();
-        let mut cfg = config.clone();
-        cfg.return_history = true;
+        let cfg = config.clone();
 
         let handle: JoinHandle<Option<Vec<AgentMessage>>> = tokio::spawn(async move {
             match agent.run(msgs, cfg, tx).await {
-                Ok(output) => output.history,
+                Ok(output) => Some(output.history),
                 Err(e) => {
                     tracing::debug!("agent loop ended: {e}");
                     None

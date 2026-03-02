@@ -120,15 +120,8 @@ pub struct AgentRunOutput {
     /// **plus** every assistant and tool-result message appended during the
     /// loop, including the final assistant reply.
     ///
-    /// Only populated when [`AgentConfig::return_history`] is `true`.
-    /// Callers that do not need the history (e.g. HTTP SSE handlers) should
-    /// leave the flag at its default (`false`) to avoid allocating and moving
-    /// the full message vector for every request.
-    ///
-    /// CLI callers set `return_history = true` and feed this value back as
-    /// the `messages` argument on the next REPL turn to maintain multi-turn
-    /// context.
-    pub history: Option<Vec<AgentMessage>>,
+    /// Safe to pass directly as the `messages` argument for the next turn.
+    pub history: Vec<AgentMessage>,
     /// Number of loop iterations consumed before the agent produced its final
     /// answer.  Always ≥ 1.  Useful for logging and telemetry.
     pub total_iterations: usize,
@@ -235,8 +228,8 @@ pub trait AgentLoopPort: Send + Sync {
     ///
     /// # Returns
     ///
-    /// * `Ok(AgentRunOutput)` — The final answer.  [`AgentRunOutput::history`]
-    ///   is populated only when [`AgentConfig::return_history`] is `true`.
+    /// * `Ok(AgentRunOutput)` — The final answer and full accumulated message
+    ///   history (safe to pass back as `messages` on the next turn).
     /// * `Err(AgentError)` — A fatal loop-level failure (max iterations reached,
     ///   loop detection, stagnation, or internal error).  No partial history is
     ///   returned on failure; the caller's existing history is left intact.

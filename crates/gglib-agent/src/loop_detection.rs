@@ -34,15 +34,31 @@ use crate::fnv1a::fnv1a_64;
 // Signature helpers
 // =============================================================================
 
+/// Maximum recursion depth for [`stable_repr_inner`].
+///
+/// Deeply-nested JSON arguments (e.g. from a hostile tool result fed back
+/// into tool arguments) would otherwise cause unbounded stack growth.  Values
+/// beyond this depth are replaced with the sentinel `"..."`.
+const MAX_REPR_DEPTH: usize = 16;
+
 /// Produce a **deterministic string representation** of a [`serde_json::Value`]
 /// suitable for stable hashing.
 ///
 /// Object keys are sorted recursively so that `{"b":2,"a":1}` and
 /// `{"a":1,"b":2}` produce identical output.  Array element order is
-/// preserved.  The output is **not** valid JSON — it is intentionally compact
-/// and only used as a pre-image for FNV-1a; never parsed or returned to
-/// callers.
+/// preserved.  Recursion is capped at [`MAX_REPR_DEPTH`] to prevent
+/// stack overflow on adversarially nested inputs.
+///
+/// The output is **not** valid JSON — it is intentionally compact and only
+/// used as a pre-image for FNV-1a; never parsed or returned to callers.
 fn stable_repr(v: &Value) -> String {
+    stable_repr_inner(v, 0)
+}
+
+fn stable_repr_inner(v: &Value, depth: usize) -> String {
+    if depth >= MAX_REPR_DEPTH {
+        return "\"...\"".to_owned();
+    }
     match v {
         Value::Object(map) => {
             let mut pairs: Vec<(&String, &Value)> = map.iter().collect();
@@ -54,7 +70,7 @@ fn stable_repr(v: &Value) -> String {
                         "{}:{}",
                         serde_json::to_string(k)
                             .expect("in-memory String serialisation is infallible"),
-                        stable_repr(v)
+                        stable_repr_inner(v, depth + 1)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -62,7 +78,11 @@ fn stable_repr(v: &Value) -> String {
             format!("{{{inner}}}")
         }
         Value::Array(arr) => {
-            let inner = arr.iter().map(stable_repr).collect::<Vec<_>>().join(",");
+            let inner = arr
+                .iter()
+                .map(|e| stable_repr_inner(e, depth + 1))
+                .collect::<Vec<_>>()
+                .join(",");
             format!("[{inner}]")
         }
         _ => v.to_string(),
