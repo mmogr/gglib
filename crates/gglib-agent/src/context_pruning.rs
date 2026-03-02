@@ -139,6 +139,12 @@ fn prune_tool_messages(messages: Vec<AgentMessage>, config: &AgentConfig) -> Vec
                             .cloned()
                             .collect();
                         if retained_calls.is_empty() {
+                            // All tool calls were pruned from this assistant
+                            // message.  The text content (if any) is also
+                            // dropped because keeping text that references
+                            // calls whose results are absent would confuse the
+                            // model — it would see reasoning about tool outputs
+                            // it never received.
                             None
                         } else {
                             Some(AgentMessage::Assistant {

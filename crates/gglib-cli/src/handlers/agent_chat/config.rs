@@ -39,7 +39,7 @@ pub async fn compose(
     //    A failure is logged as a warning rather than aborting the session:
     //    the agent can still run without tools.
     if let Err(e) = ctx.mcp.initialize().await {
-        eprintln!("warning: MCP initialisation failed — tools may be unavailable: {e}");
+        tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
 
     // 3. Compose the agent loop.  When `--tools` is supplied the loop is

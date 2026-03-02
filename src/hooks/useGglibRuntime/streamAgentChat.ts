@@ -186,6 +186,14 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
 
   let currentId = makeNextMessage(1);
 
+  // Finalize the current in-progress message and clear the streaming indicator.
+  // Extracted to avoid repeating the same two-liner across all early-exit paths
+  // (final_answer, error event, abort, catch-all post-loop fallback).
+  const cleanup = (): void => {
+    finalizeMessageTiming(setMessages, currentId);
+    setCurrentStreamingAssistantMessageId?.(null);
+  };
+
   // ── Process the SSE stream ────────────────────────────────────────────────
   try {
     for await (const payload of readAgentSSE(response, abortSignal)) {
@@ -199,6 +207,10 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
 
       switch (event.type) {
         case 'reasoning_delta': {
+          if (typeof event.content !== 'string') {
+            appLogger.warn('hook.runtime', 'streamAgentChat: reasoning_delta missing content string', { event });
+            break;
+          }
           if (timingTracker) timingTracker.onReasoning(currentId);
           applyReasoningDelta(setMessages, currentId, event.content);
           break;
@@ -234,6 +246,10 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
         }
 
         case 'tool_call_complete': {
+          if (!event.result || typeof event.result.tool_call_id !== 'string') {
+            appLogger.warn('hook.runtime', 'streamAgentChat: tool_call_complete malformed', { event });
+            break;
+          }
           applyToolResult(setMessages, currentId, event);
           appLogger.debug('hook.runtime', 'streamAgentChat: tool call complete', {
             id: event.result.tool_call_id,
@@ -248,8 +264,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
           // Finalize the current message and open a fresh one for the next
           // iteration (which will start with its own text_delta stream).
           if (timingTracker) timingTracker.onEndOfMessage(currentId);
-          finalizeMessageTiming(setMessages, currentId);
-          setCurrentStreamingAssistantMessageId?.(null);
+          cleanup();
 
           appLogger.debug('hook.runtime', 'streamAgentChat: iteration complete', {
             iteration: event.iteration,
@@ -269,8 +284,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
             // text_deltas are sufficient to finalize the message.
           }
           if (timingTracker) timingTracker.onEndOfMessage(currentId);
-          finalizeMessageTiming(setMessages, currentId);
-          setCurrentStreamingAssistantMessageId?.(null);
+          cleanup();
 
           appLogger.info('hook.runtime', 'streamAgentChat: final answer', {
             contentLength: typeof event.content === 'string' ? event.content.length : null,
@@ -282,8 +296,10 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
           // Fatal backend error: clean up the in-progress message then throw
           // so the caller's catch block can invoke its onError callback.
           if (timingTracker) timingTracker.onEndOfMessage(currentId);
-          finalizeMessageTiming(setMessages, currentId);
-          setCurrentStreamingAssistantMessageId?.(null);
+          cleanup();
+          appLogger.warn('hook.runtime', 'streamAgentChat: agent error event', {
+            message: event.message,
+          });
           throw new Error(`Agent loop error: ${String(event.message ?? 'unknown agent error')}`);
         }
 
@@ -298,19 +314,16 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
   } catch (err) {
     if (isAbortError(err)) {
       // User cancelled — finalize the current message cleanly.
-      finalizeMessageTiming(setMessages, currentId);
-      setCurrentStreamingAssistantMessageId?.(null);
+      cleanup();
       return;
     }
     // Non-abort error (network failure, protocol violation, etc.) — finalize
     // the in-progress message so it is never left permanently "in-flight".
-    finalizeMessageTiming(setMessages, currentId);
-    setCurrentStreamingAssistantMessageId?.(null);
+    cleanup();
     appLogger.error('hook.runtime', 'streamAgentChat: stream error', { err });
     throw err;
   }
 
   // Stream ended without a final_answer or error event — treat as complete.
-  finalizeMessageTiming(setMessages, currentId);
-  setCurrentStreamingAssistantMessageId?.(null);
+  cleanup();
 }

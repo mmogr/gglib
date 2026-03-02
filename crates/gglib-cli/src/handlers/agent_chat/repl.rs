@@ -134,12 +134,16 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
         let agent = Arc::clone(&agent_loop);
-        // Move the conversation history into the task instead of cloning —
-        // `output.history` on a successful run IS the accumulated messages,
-        // so ownership transfers in and back with zero intermediate copies on
-        // the common (success) path.
-        // On agent error or Ctrl+C, `run()` has consumed the messages and
-        // they cannot be recovered; the session history is empty for this turn.
+        // Preserve system messages so the prompt survives Ctrl+C or agent
+        // error.  `run()` takes ownership of the full history; on the success
+        // path it returns `output.history` which is the extended vector.  On
+        // the failure path we restore just the system messages so subsequent
+        // turns still see the configured system prompt.
+        let system_fallback: Vec<AgentMessage> = messages
+            .iter()
+            .filter(|m| matches!(m, AgentMessage::System { .. }))
+            .cloned()
+            .collect();
         let turn_msgs = std::mem::take(&mut messages);
         let cfg = config.clone();
 
@@ -175,10 +179,12 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // so the spawned task is fully cleaned up before the next iteration
         // and any panic inside an aborted task is not silently dropped.
         let loop_result = handle.await;
-        // On success: restore messages from output.history — the Vec that was
-        // moved in via std::mem::take comes back extended, with zero copies.
-        // On Ctrl+C or agent error: run() consumed turn_msgs so the history is
-        // unrecoverable; messages stays empty until the next successful turn.
+        // Default: restore the system prompt so subsequent turns are not
+        // context-free after a Ctrl+C or agent error.
+        messages = system_fallback;
+        // On success: replace with output.history — the fully-extended Vec
+        // that was moved in via std::mem::take comes back including every
+        // assistant + tool-result message, with zero intermediate copies.
         if completed {
             if let Ok(Some(new_messages)) = loop_result {
                 messages = new_messages;

@@ -130,8 +130,10 @@ impl LoopDetector {
     /// A loop is declared when the same batch signature has been seen more
     /// than `max_strikes` times.  The count is incremented **before** the
     /// comparison so that `max_strikes = 2` allows two identical batches
-    /// before erroring on the third, matching the frontend's
-    /// `MAX_SAME_SIGNATURE_HITS = 2` behaviour.
+    /// before erroring on the third.
+    ///
+    /// `max_strikes = 0` rejects the very first occurrence (zero tolerance).
+    /// `max_strikes = 1` rejects on the second occurrence (one repeat allowed).
     pub(crate) fn check(&mut self, calls: &[ToolCall], max_strikes: usize) -> Result<(), AgentError> {
         let sig = batch_signature(calls);
         let entry = self.hits.entry(sig.clone()).or_insert(0);
@@ -327,17 +329,15 @@ mod tests {
 
     #[test]
     fn loop_error_signature_matches_batch_sig() {
-        let mut det = LoopDetector::default();
         let calls = vec![ToolCall {
             id: "c1".into(),
             name: "x".into(),
             arguments: json!({ "k": "v" }),
         }];
         let expected_sig = batch_signature(&calls);
-        det.check(&calls, 0).unwrap_err(); // max_strikes = 0 → first call triggers
-        let mut det2 = LoopDetector::default();
-        det2.check(&calls, 0).ok(); // ignore first result
-        let err = det2.check(&calls, 0).unwrap_err();
+        // max_strikes = 0 → first occurrence triggers immediately.
+        let mut det = LoopDetector::default();
+        let err = det.check(&calls, 0).unwrap_err();
         if let AgentError::LoopDetected { signature } = err {
             assert_eq!(signature, expected_sig);
         }
