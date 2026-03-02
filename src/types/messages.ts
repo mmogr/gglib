@@ -106,4 +106,18 @@ export function mkAssistantMessage(
   };
 }
 
+/**
+ * Extract content parts from a message's content field as a typed array.
+ *
+ * Consolidates the repeated `Array.isArray(content) ? content as GglibMessagePart[] : []`
+ * pattern into a single helper so call sites need no inline type assertions.
+ * The internal `as` cast is an unavoidable narrowing from
+ * `ThreadMessageLike['content']` (which uses `readonly Part[]`) to
+ * `GglibMessagePart[]`; it is sound because `GglibMessagePart` is a
+ * supertype of every member of `MessagePart`.
+ */
+export function extractParts(content: GglibMessage['content']): readonly GglibMessagePart[] {
+  return Array.isArray(content) ? (content as readonly GglibMessagePart[]) : [];
+}
+
 

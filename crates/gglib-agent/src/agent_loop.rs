@@ -32,7 +32,7 @@ use gglib_core::ports::{
     AgentError, AgentLoopPort, AgentRunOutput, LlmCompletionPort, ToolExecutorPort,
 };
 use gglib_core::{
-    AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolDefinition, ToolResult,
+    AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult,
 };
 
 use crate::stream_collector::CollectedResponse;
@@ -273,29 +273,16 @@ impl AgentLoopPort for AgentLoop {
                 });
             }
 
-            // ---- 4. Stagnation guard ----------------------------------------
-            // Only evaluated on turns that produced tool calls (non-final
-            // turns), so a repeated terminal text never fires this guard.
-            // `record` is a no-op on empty text; that guard lives inside
-            // StagnationDetector.  When `max_stagnation_steps` is `None` the
-            // guard is disabled (e.g. in tests that reuse a fixed LLM response).
-            if let Some(max_steps) = config.max_stagnation_steps {
-                if let Err(e) = stagnation_detector.record(&response.content, max_steps) {
-                    emit_error_event(&tx, &e.to_string()).await;
-                    return Err(e);
-                }
-            }
-
-            // ---- 5. Loop detection ------------------------------------------
-            // When `max_repeated_batch_steps` is `None` the guard is disabled
-            // (e.g. in tests that deliberately repeat the same tool call to
-            // exercise multi-iteration behaviour without hitting the limit).
-            if let Some(max_steps) = config.max_repeated_batch_steps {
-                if let Err(e) = loop_detector.check(&response.tool_calls, max_steps) {
-                    emit_error_event(&tx, &e.to_string()).await;
-                    return Err(e);
-                }
-            }
+            // ---- 4+5. Stagnation and loop-detection guards ------------------
+            check_guards(
+                &mut stagnation_detector,
+                &mut loop_detector,
+                &config,
+                &response.content,
+                &response.tool_calls,
+                &tx,
+            )
+            .await?;
 
             // ---- 6. Parallel tool execution ---------------------------------
             let results =
@@ -339,6 +326,38 @@ impl AgentLoopPort for AgentLoop {
     }
 }
 
+/// Check both stagnation and loop-detection guards against the current iteration's response.
+///
+/// Evaluates in order; returns on the first failure. On failure, emits an
+/// [`AgentEvent::Error`] on `tx` before returning so SSE consumers always
+/// see the failure reason before the stream closes.
+///
+/// Guards whose corresponding `Option` field in `config` is `None` are
+/// skipped entirely — `None` disables the guard (e.g. in tests that reuse
+/// a fixed LLM response or deliberately repeat the same tool call batch).
+async fn check_guards(
+    stagnation_detector: &mut StagnationDetector,
+    loop_detector: &mut LoopDetector,
+    config: &AgentConfig,
+    content: &str,
+    tool_calls: &[ToolCall],
+    tx: &mpsc::Sender<AgentEvent>,
+) -> Result<(), AgentError> {
+    if let Some(max_steps) = config.max_stagnation_steps {
+        if let Err(e) = stagnation_detector.record(content, max_steps) {
+            emit_error_event(tx, &e.to_string()).await;
+            return Err(e);
+        }
+    }
+    if let Some(max_steps) = config.max_repeated_batch_steps {
+        if let Err(e) = loop_detector.check(tool_calls, max_steps) {
+            emit_error_event(tx, &e.to_string()).await;
+            return Err(e);
+        }
+    }
+    Ok(())
+}
+
 /// Append an assistant turn and its tool results to `messages`.
 ///
 /// Selects the correct [`AssistantContent`] variant based on whether
@@ -346,7 +365,7 @@ impl AgentLoopPort for AgentLoop {
 fn append_iteration_messages(
     messages: &mut Vec<AgentMessage>,
     content: String,
-    tool_calls: Vec<gglib_core::ToolCall>,
+    tool_calls: Vec<ToolCall>,
     results: Vec<ToolResult>,
 ) {
     let assistant = AgentMessage::Assistant {

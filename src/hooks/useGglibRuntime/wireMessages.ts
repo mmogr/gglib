@@ -8,7 +8,7 @@
  * @module wireMessages
  */
 
-import type { GglibMessage, GglibMessagePart, GglibToolCallPart, TextPart } from '../../types/messages';
+import { extractParts, type GglibMessage, type GglibToolCallPart, type TextPart } from '../../types/messages';
 
 // ---------------------------------------------------------------------------
 // Wire types (backend request body)
@@ -45,7 +45,7 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
   for (const msg of messages) {
     if (msg.role === 'system' || msg.role === 'user') {
       const content = Array.isArray(msg.content)
-        ? (msg.content as GglibMessagePart[])
+        ? extractParts(msg.content)
             .filter((p): p is TextPart => p.type === 'text')
             .map(p => p.text)
             .join('')
@@ -53,7 +53,7 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
       result.push({ role: msg.role, content });
 
     } else if (msg.role === 'assistant') {
-      const parts = Array.isArray(msg.content) ? (msg.content as GglibMessagePart[]) : [];
+      const parts = extractParts(msg.content);
       const text = parts
         .filter((p): p is TextPart => p.type === 'text')
         .map(p => p.text)

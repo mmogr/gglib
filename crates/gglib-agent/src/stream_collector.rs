@@ -49,7 +49,7 @@ use tracing::warn;
 /// stream — it only limits how many are executed concurrently.  The agent
 /// loop rejects oversized batches before execution via
 /// [`AgentError::ParallelToolLimitExceeded`].
-pub(crate) const MAX_TOOL_CALL_INDEX: usize = 64;
+pub const MAX_TOOL_CALL_INDEX: usize = 64;
 
 // =============================================================================
 // Output type
@@ -60,19 +60,19 @@ pub(crate) const MAX_TOOL_CALL_INDEX: usize = 64;
 /// This is what the agent loop receives after
 /// [`collect_stream`] has processed the entire stream.
 #[derive(Debug)]
-pub(crate) struct CollectedResponse {
+pub struct CollectedResponse {
     /// All text content fragments joined into a single string.
-    pub(crate) content: String,
+    pub content: String,
     /// All reasoning/CoT fragments joined into a single string.
     ///
     /// Empty for models that do not emit `reasoning_content` frames.
     /// Present for informational purposes (logging, CLI rendering); it is
     /// **not** fed back into the conversation history.
-    pub(crate) reasoning_content: String,
+    pub reasoning_content: String,
     /// Tool calls requested by the model (empty when the model answered directly).
-    pub(crate) tool_calls: Vec<ToolCall>,
+    pub tool_calls: Vec<ToolCall>,
     /// The `finish_reason` from the [`LlmStreamEvent::Done`] terminus event.
-    pub(crate) finish_reason: String,
+    pub finish_reason: String,
 }
 
 // =============================================================================
@@ -196,12 +196,7 @@ pub async fn collect_stream(
                                 name,
                             );
                             warn!(%message, "aborting stream collection due to incomplete tool-call partial");
-                            let _ = tx
-                                .send(AgentEvent::Error {
-                                    message: message.clone(),
-                                })
-                                .await;
-                            anyhow::bail!("{message}");
+                            return bail_stream(tx, message).await;
                         }
                     };
                     let raw = p.arguments;
@@ -219,12 +214,7 @@ pub async fn collect_stream(
                                 error = %e,
                                 "tool-call arguments are not valid JSON"
                             );
-                            let _ = tx
-                                .send(AgentEvent::Error {
-                                    message: message.clone(),
-                                })
-                                .await;
-                            anyhow::bail!("{message}");
+                            return bail_stream(tx, message).await;
                         }
                     };
                     tool_calls.push(ToolCall {
@@ -258,6 +248,17 @@ pub async fn collect_stream(
 // Private helpers
 // =============================================================================
 
+/// Emit an [`AgentEvent::Error`] on `tx` and bail with the same message.
+///
+/// Mirrors `bail_internal` in the agent loop, but returns `anyhow::Result<T>`
+/// rather than `Result<_, AgentError>`. Used to consolidate the repeated
+/// "emit error event + bail" pattern in the [`LlmStreamEvent::Done`] assembly
+/// code so error handling logic lives in exactly one place.
+async fn bail_stream<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T> {
+    let _ = tx.send(AgentEvent::Error { message: msg.clone() }).await;
+    anyhow::bail!("{msg}")
+}
+
 /// Describe which fields of an incomplete tool-call partial are missing.
 ///
 /// Extracted from the `format!` call at the `Done` assembly site to make the
@@ -268,239 +269,5 @@ fn missing_fields_desc(id: Option<&str>, name: Option<&str>) -> &'static str {
         (None, Some(_)) => "id",
         (Some(_), None) => "name",
         (Some(_), Some(_)) => unreachable!("called with both fields present"),
-    }
-}
-
-// =============================================================================
-// Tests
-// =============================================================================
-
-#[cfg(test)]
-mod tests {
-    use futures_util::stream;
-    use gglib_core::LlmStreamEvent;
-    use tokio::sync::mpsc;
-
-    use super::*;
-
-    fn make_stream(
-        events: Vec<LlmStreamEvent>,
-    ) -> Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>> {
-        Box::pin(stream::iter(events.into_iter().map(Ok)))
-    }
-
-    #[tokio::test]
-    async fn text_delta_forwarded_and_accumulated() {
-        let (tx, mut rx) = mpsc::channel(16);
-        let stream = make_stream(vec![
-            LlmStreamEvent::TextDelta {
-                content: "Hello, ".into(),
-            },
-            LlmStreamEvent::TextDelta {
-                content: "world!".into(),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
-            },
-        ]);
-
-        let response = collect_stream(stream, &tx).await.unwrap();
-        assert_eq!(response.content, "Hello, world!");
-        assert_eq!(response.finish_reason, "stop");
-        assert!(response.tool_calls.is_empty());
-
-        // Both text deltas should have been forwarded to the channel.
-        let evt1 = rx.recv().await.unwrap();
-        let evt2 = rx.recv().await.unwrap();
-        assert!(matches!(evt1, AgentEvent::TextDelta { content } if content == "Hello, "));
-        assert!(matches!(evt2, AgentEvent::TextDelta { content } if content == "world!"));
-    }
-
-    #[tokio::test]
-    async fn reasoning_delta_forwarded_and_accumulated_separately() {
-        let (tx, mut rx) = mpsc::channel(16);
-        let stream = make_stream(vec![
-            LlmStreamEvent::ReasoningDelta {
-                content: "Let me think".into(),
-            },
-            LlmStreamEvent::ReasoningDelta {
-                content: " about this.".into(),
-            },
-            LlmStreamEvent::TextDelta {
-                content: "Answer.".into(),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "stop".into(),
-            },
-        ]);
-
-        let response = collect_stream(stream, &tx).await.unwrap();
-        // Reasoning content is accumulated separately and NOT mixed into content.
-        assert_eq!(response.reasoning_content, "Let me think about this.");
-        assert_eq!(response.content, "Answer.");
-        assert!(response.tool_calls.is_empty());
-
-        // Both reasoning deltas and the text delta are forwarded live.
-        let evt1 = rx.recv().await.unwrap();
-        let evt2 = rx.recv().await.unwrap();
-        let evt3 = rx.recv().await.unwrap();
-        assert!(
-            matches!(evt1, AgentEvent::ReasoningDelta { content } if content == "Let me think")
-        );
-        assert!(
-            matches!(evt2, AgentEvent::ReasoningDelta { content } if content == " about this.")
-        );
-        assert!(matches!(evt3, AgentEvent::TextDelta { content } if content == "Answer."));
-    }
-
-    #[tokio::test]
-    async fn tool_call_deltas_assembled_into_tool_calls() {
-        let (tx, _rx) = mpsc::channel(16);
-        let stream = make_stream(vec![
-            LlmStreamEvent::ToolCallDelta {
-                index: 0,
-                id: Some("call_1".into()),
-                name: Some("fs_read".into()),
-                arguments: Some("{\"pat".into()),
-            },
-            LlmStreamEvent::ToolCallDelta {
-                index: 0,
-                id: None,
-                name: None,
-                arguments: Some("h\": \"/tmp\"}".into()),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "tool_calls".into(),
-            },
-        ]);
-
-        let response = collect_stream(stream, &tx).await.unwrap();
-        assert_eq!(response.tool_calls.len(), 1);
-        let tc = &response.tool_calls[0];
-        assert_eq!(tc.id, "call_1");
-        assert_eq!(tc.name, "fs_read");
-        assert_eq!(tc.arguments["path"], "/tmp");
-    }
-
-    #[tokio::test]
-    async fn multiple_tool_calls_assembled_by_index() {
-        let (tx, _rx) = mpsc::channel(16);
-        let stream = make_stream(vec![
-            LlmStreamEvent::ToolCallDelta {
-                index: 0,
-                id: Some("c0".into()),
-                name: Some("tool_a".into()),
-                arguments: Some("{}".into()),
-            },
-            LlmStreamEvent::ToolCallDelta {
-                index: 1,
-                id: Some("c1".into()),
-                name: Some("tool_b".into()),
-                arguments: Some("{}".into()),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "tool_calls".into(),
-            },
-        ]);
-
-        let response = collect_stream(stream, &tx).await.unwrap();
-        assert_eq!(response.tool_calls.len(), 2);
-        assert_eq!(response.tool_calls[0].name, "tool_a");
-        assert_eq!(response.tool_calls[1].name, "tool_b");
-    }
-
-    #[tokio::test]
-    async fn zero_event_stream_returns_distinct_error() {
-        // A completely empty stream (server immediately closed connection)
-        // must fail with a message clearly identifying the zero-event case,
-        // distinguishing it from a mid-response truncation.
-        let (tx, _rx) = mpsc::channel(16);
-        let stream = make_stream(vec![]);
-        let err = collect_stream(stream, &tx).await.unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("zero events"),
-            "zero-event error should mention 'zero events', got: {msg}"
-        );
-    }
-
-    #[tokio::test]
-    async fn truncated_stream_returns_distinct_error() {
-        // A stream that started but never sent a Done event should produce an
-        // error message about truncation, not about zero events.
-        let (tx, _rx) = mpsc::channel(16);
-        let stream = make_stream(vec![
-            LlmStreamEvent::TextDelta {
-                content: "partial response".into(),
-            },
-            // No Done event
-        ]);
-        let err = collect_stream(stream, &tx).await.unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("truncated"),
-            "truncated-stream error should mention 'truncated', got: {msg}"
-        );
-    }
-
-    #[tokio::test]
-    async fn missing_done_event_returns_error() {
-        let (tx, _rx) = mpsc::channel(16);
-        let stream = make_stream(vec![
-            LlmStreamEvent::TextDelta {
-                content: "partial".into(),
-            },
-            // No Done event
-        ]);
-        assert!(collect_stream(stream, &tx).await.is_err());
-    }
-
-    #[tokio::test]
-    async fn malformed_json_arguments_emit_error_and_fail() {
-        // Malformed JSON must hard-fail with a visible AgentEvent::Error so the
-        // SSE client always sees why the stream was terminated.
-        let (tx, mut rx) = mpsc::channel(16);
-        let stream = make_stream(vec![
-            LlmStreamEvent::ToolCallDelta {
-                index: 0,
-                id: Some("c1".into()),
-                name: Some("do_thing".into()),
-                arguments: Some("{ NOT VALID JSON ".into()),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "tool_calls".into(),
-            },
-        ]);
-
-        // collect_stream must return Err on malformed JSON.
-        assert!(collect_stream(stream, &tx).await.is_err());
-
-        // An AgentEvent::Error must have been sent before the bail.
-        drop(tx); // close sender so try_recv can drain
-        let events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
-        assert!(
-            events.iter().any(|e| matches!(e, AgentEvent::Error { .. })),
-            "AgentEvent::Error must be emitted for malformed JSON arguments"
-        );
-    }
-
-    #[tokio::test]
-    async fn oversized_tool_call_index_returns_error() {
-        // An index >= MAX_TOOL_CALL_INDEX must be rejected immediately to
-        // prevent unbounded Vec growth from a malformed or adversarial stream.
-        let (tx, _rx) = mpsc::channel(16);
-        let stream = make_stream(vec![
-            LlmStreamEvent::ToolCallDelta {
-                index: MAX_TOOL_CALL_INDEX, // at or beyond the hard limit → rejected
-                id: Some("c0".into()),
-                name: Some("do_thing".into()),
-                arguments: Some("{}".into()),
-            },
-            LlmStreamEvent::Done {
-                finish_reason: "tool_calls".into(),
-            },
-        ]);
-
-        assert!(collect_stream(stream, &tx).await.is_err());
     }
 }
