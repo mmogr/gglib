@@ -24,7 +24,7 @@ use super::TOOL_NOT_AVAILABLE_MSG;
 /// [`McpToolExecutorAdapter`], names are qualified with a server-id prefix
 /// (e.g. `"3:read_file"`).  The `tool_filter` values forwarded from the
 /// frontend should therefore use those same qualified names.
-pub(crate) struct FilteredToolExecutor {
+pub struct FilteredToolExecutor {
     inner: Arc<dyn ToolExecutorPort>,
     allowed: HashSet<String>,
 }

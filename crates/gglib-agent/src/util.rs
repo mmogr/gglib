@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 /// Called before every early-return that propagates an error out of the agent
 /// loop, so that SSE / CLI consumers always receive an `error` event before
 /// the channel closes — regardless of which module detected the failure.
-pub(crate) async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &str) {
+pub async fn emit_error_event(tx: &mpsc::Sender<AgentEvent>, message: &str) {
     let _ = tx
         .send(AgentEvent::Error {
             message: message.to_owned(),

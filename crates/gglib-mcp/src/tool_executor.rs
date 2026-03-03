@@ -117,7 +117,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             (sid, bare)
         } else {
             return Err(anyhow!(
-                "tool name '{}' is unqualified; expected format is '{{server_id}}:{{tool_name}}' \
+                "tool name '{}' is unqualified; expected format is '<server_id>:<tool_name>' \
                  as produced by list_tools()",
                 call.name
             ));
@@ -149,9 +149,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             let text = result.data.as_ref().map_or_else(
                 || "null".to_owned(),
                 |v| {
-                    v.as_str()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| v.to_string())
+                    v.as_str().map_or_else(|| v.to_string(), str::to_owned)
                 },
             );
             (text, true)
@@ -176,9 +174,6 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
 
 #[cfg(test)]
 mod tests {
-    use gglib_core::{ToolCall, ToolDefinition};
-    use serde_json::json;
-
     use super::*;
 
     #[test]

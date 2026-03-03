@@ -14,7 +14,7 @@ use super::TOOL_NOT_AVAILABLE_MSG;
 /// that contract on both `list_tools` (LLM sees no tools) and `execute`
 /// (defence in depth: any synthesised call is rejected).
 #[derive(Debug, Default, Clone)]
-pub(crate) struct EmptyToolExecutor;
+pub struct EmptyToolExecutor;
 
 #[async_trait]
 impl ToolExecutorPort for EmptyToolExecutor {

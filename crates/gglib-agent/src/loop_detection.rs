@@ -120,7 +120,7 @@ fn batch_signature(calls: &[ToolCall]) -> String {
 /// Create once per agent run and call [`LoopDetector::check`] after every
 /// iteration that produces tool calls.
 #[derive(Debug, Default)]
-pub(crate) struct LoopDetector {
+pub struct LoopDetector {
     hits: HashMap<String, usize>,
 }
 

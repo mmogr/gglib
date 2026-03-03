@@ -51,7 +51,7 @@ use crate::util::emit_error_event;
 // Private helpers
 // =============================================================================
 
-/// Emit an [`AgentEvent::Error`] and return `Err(`[`AgentError::Internal`]`)`.
+/// Emit an [`AgentEvent::Error`] and return <code>Err([`AgentError::Internal`])</code>.
 ///
 /// Collapses the repeated pattern:
 /// ```text

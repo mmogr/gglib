@@ -43,7 +43,7 @@ use crate::fnv1a::fnv1a_64;
 /// Tracks **session-wide** occurrence counts per hash so that both strictly
 /// consecutive repetitions and A → B → A oscillations are caught.
 #[derive(Debug, Default)]
-pub(crate) struct StagnationDetector {
+pub struct StagnationDetector {
     occurrences: HashMap<u64, usize>,
 }
 

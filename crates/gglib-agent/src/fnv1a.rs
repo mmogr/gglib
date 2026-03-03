@@ -21,7 +21,7 @@
 /// - Wrapping 64-bit multiplication
 ///
 /// The Rust implementation hashes UTF-8 bytes.
-pub(crate) fn fnv1a_64(s: &str) -> u64 {
+pub fn fnv1a_64(s: &str) -> u64 {
     const OFFSET: u64 = 14_695_981_039_346_656_037;
     const PRIME: u64 = 1_099_511_628_211;
     let mut hash = OFFSET;

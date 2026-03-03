@@ -60,13 +60,10 @@ async fn execute_single_tool(
 
     // Acquire a concurrency permit before starting.
     // `wait_ms` below captures how long this took.
-    let _permit = match sem.acquire_owned().await {
-        Ok(permit) => permit,
-        Err(_) => {
-            // The semaphore was dropped (agent loop was shut down).
-            // Return a graceful failure instead of panicking inside spawn.
-            return error_result("Tool execution aborted: concurrency gate closed".into());
-        }
+    let Ok(_permit) = sem.acquire_owned().await else {
+        // The semaphore was dropped (agent loop was shut down).
+        // Return a graceful failure instead of panicking inside spawn.
+        return error_result("Tool execution aborted: concurrency gate closed".into());
     };
     let wait_ms = elapsed_ms(enqueue_time);
 
@@ -113,7 +110,7 @@ async fn execute_single_tool(
 ///
 /// Returns one [`ToolResult`] per call in the same order as `calls`.
 /// Results for timed-out or errored calls have `success: false`.
-pub(crate) async fn execute_tools_parallel(
+pub async fn execute_tools_parallel(
     calls: &[ToolCall],
     executor: &Arc<dyn ToolExecutorPort>,
     config: &AgentConfig,
