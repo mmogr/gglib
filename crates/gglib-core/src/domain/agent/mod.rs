@@ -11,6 +11,7 @@
 //! | [`config`] | [`AgentConfig`] — loop control parameters |
 //! | [`tool_types`] | [`ToolDefinition`], [`ToolCall`], [`ToolResult`] |
 //! | [`messages`] | [`AgentMessage`] — closed conversation-turn enum |
+//! | `messages_serde` | Custom `Serialize`/`Deserialize` impls for [`AssistantContent`] |
 //! | [`events`] | [`AgentEvent`] (SSE units), [`LlmStreamEvent`] (stream protocol) |
 //!
 //! # Design Principles
@@ -28,6 +29,7 @@
 pub mod config;
 pub mod events;
 pub mod messages;
+mod messages_serde;
 pub mod tool_types;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.

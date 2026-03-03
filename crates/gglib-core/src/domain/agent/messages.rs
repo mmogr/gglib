@@ -1,4 +1,9 @@
 //! [`AgentMessage`] — A single message in the agent conversation.
+//!
+//! This module contains pure domain structs and enums.  All custom
+//! [`Serialize`] / [`Deserialize`] implementations live in the sibling
+//! [`super::messages_serde`] module to keep domain types free of
+//! serialisation noise.
 
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +13,8 @@ use super::tool_types::ToolCall;
 ///
 /// A flat struct with optional `text` and a (possibly empty) `tool_calls` vec.
 /// At the wire level, at least one of the two fields must be present — the
-/// hand-rolled [`Deserialize`] impl enforces this.
+/// hand-rolled [`Deserialize`] impl (in [`super::messages_serde`]) enforces
+/// this.
 ///
 /// # Serde
 ///
@@ -20,6 +26,9 @@ use super::tool_types::ToolCall;
 /// | text only | `"content": "..."` |
 /// | tool calls only | `"tool_calls": [...]` |
 /// | both | `"content": "...", "tool_calls": [...]` |
+///
+/// Custom `Serialize` and `Deserialize` impls are in
+/// [`super::messages_serde`].
 #[derive(Debug, Clone)]
 pub struct AssistantContent {
     /// Optional text content from the model.  `None` when the model produced
@@ -39,62 +48,6 @@ impl AssistantContent {
             tool_calls: calls,
             ..self
         }
-    }
-}
-
-impl Serialize for AssistantContent {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeMap;
-        let has_text = self.text.is_some();
-        let has_calls = !self.tool_calls.is_empty();
-        let count = usize::from(has_text) + usize::from(has_calls);
-        let mut m = serializer.serialize_map(Some(count))?;
-        if let Some(text) = &self.text {
-            m.serialize_entry("content", text)?;
-        }
-        if has_calls {
-            m.serialize_entry("tool_calls", &self.tool_calls)?;
-        }
-        m.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for AssistantContent {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct V;
-        impl<'de> serde::de::Visitor<'de> for V {
-            type Value = AssistantContent;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("assistant message with `content` and/or `tool_calls`")
-            }
-            fn visit_map<A: serde::de::MapAccess<'de>>(
-                self,
-                mut map: A,
-            ) -> Result<Self::Value, A::Error> {
-                let mut content: Option<String> = None;
-                let mut tool_calls: Option<Vec<ToolCall>> = None;
-                while let Some(key) = map.next_key::<String>()? {
-                    match key.as_str() {
-                        "content" => content = map.next_value()?,
-                        "tool_calls" => tool_calls = map.next_value()?,
-                        _ => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
-                        }
-                    }
-                }
-                let tool_calls = tool_calls.unwrap_or_default();
-                if content.is_none() && tool_calls.is_empty() {
-                    return Err(serde::de::Error::custom(
-                        "assistant message must have `content` or `tool_calls`",
-                    ));
-                }
-                Ok(AssistantContent {
-                    text: content,
-                    tool_calls,
-                })
-            }
-        }
-        deserializer.deserialize_map(V)
     }
 }
 
