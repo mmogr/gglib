@@ -182,48 +182,7 @@ pub async fn collect_stream(
             }
 
             LlmStreamEvent::Done { finish_reason } => {
-                // Assemble the partial tool calls into domain ToolCall values.
-                // Slots where `id` or `name` never arrived are skipped — an
-                // absent id would produce an unmatchable ToolResult.
-                let mut tool_calls = Vec::with_capacity(partials.len());
-                for p in partials {
-                    let (id, name) = match (p.id, p.name) {
-                        (Some(id), Some(name)) => (id, name),
-                        (id, name) => {
-                            let message = format!(
-                                "incomplete tool-call partial at Done: missing {} \
-                                 (id={:?}, name={:?}) — aborting to prevent incoherent context",
-                                missing_fields_desc(id.as_deref(), name.as_deref()),
-                                id,
-                                name,
-                            );
-                            warn!(%message, "aborting stream collection due to incomplete tool-call partial");
-                            return bail_stream(tx, message).await;
-                        }
-                    };
-                    let raw = p.arguments;
-                    let args_str = if raw.is_empty() { "{}" } else { &raw };
-                    let arguments = match serde_json::from_str::<serde_json::Value>(args_str) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            let message = format!(
-                                "tool '{name}' (id: {id}) has malformed JSON arguments: {e}"
-                            );
-                            warn!(
-                                tool_name = %name,
-                                raw_args = %args_str,
-                                error = %e,
-                                "tool-call arguments are not valid JSON"
-                            );
-                            return bail_stream(tx, message).await;
-                        }
-                    };
-                    tool_calls.push(ToolCall {
-                        id,
-                        name,
-                        arguments,
-                    });
-                }
+                let tool_calls = assemble_tool_calls(partials, tx).await?;
 
                 return Ok(CollectedResponse {
                     content: text_buf,
@@ -247,6 +206,63 @@ pub async fn collect_stream(
 // =============================================================================
 // Private helpers
 // =============================================================================
+
+/// Assemble accumulated [`PartialToolCall`]s into domain [`ToolCall`] values.
+///
+/// Slots where `id` or `name` never arrived are treated as errors — an absent
+/// `id` would produce an unmatchable `ToolResult`, and an absent `name` cannot
+/// be routed to a tool executor.
+///
+/// Malformed JSON in `arguments` is also treated as an error: the model
+/// violated the protocol and feeding garbage to a tool executor would be
+/// worse than aborting early.
+///
+/// On any error an [`AgentEvent::Error`] is emitted on `tx` before bailing
+/// so the SSE client always sees the failure reason.
+async fn assemble_tool_calls(
+    partials: Vec<PartialToolCall>,
+    tx: &mpsc::Sender<AgentEvent>,
+) -> Result<Vec<ToolCall>> {
+    let mut tool_calls = Vec::with_capacity(partials.len());
+    for p in partials {
+        let (id, name) = match (p.id, p.name) {
+            (Some(id), Some(name)) => (id, name),
+            (id, name) => {
+                let message = format!(
+                    "incomplete tool-call partial at Done: missing {} \
+                     (id={:?}, name={:?}) — aborting to prevent incoherent context",
+                    missing_fields_desc(id.as_deref(), name.as_deref()),
+                    id,
+                    name,
+                );
+                warn!(%message, "aborting stream collection due to incomplete tool-call partial");
+                return bail_stream(tx, message).await;
+            }
+        };
+        let raw = p.arguments;
+        let args_str = if raw.is_empty() { "{}" } else { &raw };
+        let arguments = match serde_json::from_str::<serde_json::Value>(args_str) {
+            Ok(v) => v,
+            Err(e) => {
+                let message =
+                    format!("tool '{name}' (id: {id}) has malformed JSON arguments: {e}");
+                warn!(
+                    tool_name = %name,
+                    raw_args = %args_str,
+                    error = %e,
+                    "tool-call arguments are not valid JSON"
+                );
+                return bail_stream(tx, message).await;
+            }
+        };
+        tool_calls.push(ToolCall {
+            id,
+            name,
+            arguments,
+        });
+    }
+    Ok(tool_calls)
+}
 
 /// Emit an [`AgentEvent::Error`] on `tx` and bail with the same message.
 ///
