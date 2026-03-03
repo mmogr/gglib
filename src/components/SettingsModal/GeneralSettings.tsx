@@ -40,8 +40,6 @@ interface GeneralSettingsProps {
   setIsAdvancedOpen: (value: boolean) => void;
   maxToolIterationsInput: string;
   setMaxToolIterationsInput: (value: string) => void;
-  maxStagnationStepsInput: string;
-  setMaxStagnationStepsInput: (value: string) => void;
   titlePromptInput: string;
   setTitlePromptInput: (value: string) => void;
   
@@ -85,8 +83,6 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setIsAdvancedOpen,
   maxToolIterationsInput,
   setMaxToolIterationsInput,
-  maxStagnationStepsInput,
-  setMaxStagnationStepsInput,
   titlePromptInput,
   setTitlePromptInput,
   inferenceDefaultsInput,
@@ -290,23 +286,6 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
           />
           <Row justify="between" gap="sm" className="text-text-secondary text-sm">
             <span>Maximum iterations for tool calling in agentic loop (default: 25)</span>
-          </Row>
-
-          <Label htmlFor="max-stagnation-steps-input">
-            Max Stagnation Steps
-          </Label>
-          <Input
-            id="max-stagnation-steps-input"
-            type="number"
-            value={maxStagnationStepsInput}
-            onChange={(event) => setMaxStagnationStepsInput(event.target.value)}
-            placeholder="5"
-            min="1"
-            max="20"
-            disabled={saving}
-          />
-          <Row justify="between" gap="sm" className="text-text-secondary text-sm">
-            <span>Maximum repeated outputs before stopping (prevents infinite loops, default: 5)</span>
           </Row>
 
           <Label htmlFor="title-prompt-input">

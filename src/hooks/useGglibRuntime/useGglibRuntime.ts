@@ -25,7 +25,6 @@ export interface UseGglibRuntimeOptions {
   conversationId?: number;
   selectedServerPort?: number;
   maxToolIterations?: number;
-  maxStagnationSteps?: number;
   onError?: (error: Error) => void;
   /**
    * Whether the active model supports tool/function calling.
@@ -58,7 +57,6 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     conversationId,
     selectedServerPort,
     maxToolIterations,
-    maxStagnationSteps: _maxStagnationSteps,
     onError,
     supportsToolCalls,
   } = options;
@@ -157,11 +155,6 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         setCurrentStreamingAssistantMessageId,
         config: {
           ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
-          // Note: maxStagnationSteps is intentionally NOT forwarded.
-          // PartialAgentConfig omits internal tuning parameters
-          // (max_stagnation_steps, context_budget_chars, etc.) to prevent
-          // resource exhaustion by untrusted callers; the backend's
-          // AgentConfig::default() values are used instead.
         },
         supportsToolCalls,
       });

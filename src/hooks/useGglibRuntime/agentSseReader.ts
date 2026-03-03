@@ -4,6 +4,11 @@
  * Yields the trimmed JSON payload from each `data:` line.  Keepalive `ping`
  * frames and blank lines are silently skipped.
  *
+ * **Note:** only `data:` lines are processed.  Standard SSE fields `event:`,
+ * `id:`, and `retry:` are silently ignored because the backend agent stream
+ * uses plain `data:`-only events with JSON payloads — no named event types
+ * or reconnection directives are emitted.
+ *
  * @module agentSseReader
  */
 

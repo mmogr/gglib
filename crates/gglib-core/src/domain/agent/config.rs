@@ -28,6 +28,13 @@ pub const MAX_PARALLEL_TOOLS_CEILING: usize = 20;
 /// indefinitely via slow or stalled tool calls.
 pub const MAX_TOOL_TIMEOUT_MS_CEILING: u64 = 60_000;
 
+/// Hard floor on `tool_timeout_ms` accepted from external callers (100 ms).
+///
+/// A value of 0 would silently time out every tool call immediately, making
+/// tool calling unusable without a clear error.  100 ms is still very tight
+/// but allows intentionally fast tools (health checks, no-ops in tests).
+pub const MIN_TOOL_TIMEOUT_MS: u64 = 100;
+
 /// Default value for [`AgentConfig::max_iterations`].
 ///
 /// Mirrors `DEFAULT_MAX_TOOL_ITERS = 25` from the TypeScript frontend.

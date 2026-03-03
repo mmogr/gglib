@@ -94,8 +94,6 @@ export interface AppSettings {
   showMemoryFitIndicators?: boolean | null;
   /** Maximum iterations for tool calling agentic loop (default: 25) */
   maxToolIterations?: number | null;
-  /** Maximum stagnation steps before stopping agent loop (default: 5) */
-  maxStagnationSteps?: number | null;
   /** Default model ID for quick commands (e.g., `gglib question`) */
   defaultModelId?: number | null;
   /** Global inference parameter defaults */
@@ -124,8 +122,6 @@ export interface UpdateSettingsRequest {
   showMemoryFitIndicators?: boolean | null | undefined;
   /** Maximum iterations for tool calling agentic loop (default: 25) */
   maxToolIterations?: number | null | undefined;
-  /** Maximum stagnation steps before stopping agent loop (default: 5) */
-  maxStagnationSteps?: number | null | undefined;
   /** Default model ID for quick commands (e.g., `gglib question`) */
   defaultModelId?: number | null | undefined;
   /** Global inference parameter defaults */

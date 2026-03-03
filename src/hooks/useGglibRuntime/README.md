@@ -52,8 +52,11 @@ preserves the multi-message UI layout from the previous client-side loop.
 | Option | Backend field | Default |
 |---|---|---|
 | `maxToolIterations` | `AgentConfig::max_iterations` | 25 |
-| `maxStagnationSteps` | `AgentConfig::max_stagnation_steps` | 5 |
 | `supportsToolCalls` | `tool_filter: []` when `false` | all tools |
+
+Internal tuning parameters (`max_stagnation_steps`, `context_budget_chars`,
+etc.) are controlled by the backend's `AgentConfig::default()` and are not
+exposed to untrusted callers.
 
 When `supportsToolCalls === false`, an empty `tool_filter` is sent so the
 backend exposes no tools to the model.

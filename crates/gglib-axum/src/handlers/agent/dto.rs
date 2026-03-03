@@ -3,7 +3,7 @@
 use serde::Deserialize;
 
 use gglib_core::domain::agent::{AgentConfig, AgentMessage};
-use gglib_core::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING};
+use gglib_core::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, MIN_TOOL_TIMEOUT_MS};
 
 /// User-facing configuration for a single agent chat request.
 ///
@@ -50,9 +50,10 @@ impl From<AgentRequestConfig> for AgentConfig {
             cfg.max_parallel_tools = n.clamp(1, MAX_PARALLEL_TOOLS_CEILING);
         }
         if let Some(ms) = tool_timeout_ms {
-            // Clamp to [100, ceiling]: 0 ms would silently time out every tool
-            // call immediately, making tool calling unusable without a clear error.
-            cfg.tool_timeout_ms = ms.clamp(100, MAX_TOOL_TIMEOUT_MS_CEILING);
+            // Clamp to [MIN_TOOL_TIMEOUT_MS, ceiling]: 0 ms would silently
+            // time out every tool call immediately, making tool calling
+            // unusable without a clear error.
+            cfg.tool_timeout_ms = ms.clamp(MIN_TOOL_TIMEOUT_MS, MAX_TOOL_TIMEOUT_MS_CEILING);
         }
         cfg
     }

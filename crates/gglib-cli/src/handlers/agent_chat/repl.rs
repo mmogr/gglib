@@ -135,8 +135,11 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // is called before the first LLM call and after each tool-execution
         // iteration).  The returned `output.history` is already within budget,
         // so a redundant prune here is unnecessary.
-        let turn_msgs = std::mem::take(&mut messages);
-        messages = run_single_turn(&agent_loop, turn_msgs, config.clone(), args.verbose).await;
+        //
+        // Clone the messages so the pre-turn snapshot survives a failed or
+        // cancelled turn.  On success the clone is replaced by the loop's
+        // output; on failure / Ctrl+C the original `messages` is intact.
+        messages = run_single_turn(&agent_loop, messages.clone(), config.clone(), args.verbose).await;
     }
 
     Ok(())
@@ -149,20 +152,21 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 /// Run one agent turn: spawn the loop task, consume events, handle Ctrl+C,
 /// and return the updated conversation history.
 ///
-/// Returns the system-message-only fallback on cancellation or agent error,
-/// and the full `output.history` on a successful turn.
+/// On success, returns the full `output.history` from the agent loop (which
+/// includes assistant + tool-result messages appended during the turn).
+///
+/// On cancellation or agent error, returns the original `messages` unchanged
+/// so the user's prior conversation context is preserved.
 async fn run_single_turn(
     agent_loop: &Arc<dyn AgentLoopPort>,
     messages: Vec<AgentMessage>,
     config: AgentConfig,
     verbose: bool,
 ) -> Vec<AgentMessage> {
-    // Preserve system messages so the prompt survives Ctrl+C or agent error.
-    let system_fallback: Vec<AgentMessage> = messages
-        .iter()
-        .filter(|m| matches!(m, AgentMessage::System { .. }))
-        .cloned()
-        .collect();
+    // Keep a copy of the pre-turn messages so a failed or cancelled turn
+    // restores the exact conversation state (including the user message
+    // that triggered this turn).
+    let pre_turn = messages.clone();
 
     let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let agent = Arc::clone(agent_loop);
@@ -194,7 +198,7 @@ async fn run_single_turn(
     if completed && let Ok(Some(new_messages)) = loop_result {
         return new_messages;
     }
-    system_fallback
+    pre_turn
 }
 
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
