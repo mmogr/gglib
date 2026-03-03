@@ -173,6 +173,13 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>,
     ));
 
+    // Validate configured servers and start any with auto_start enabled.
+    // Without this, McpManager.servers stays empty and the agent loop
+    // will never see any tool definitions.
+    if let Err(e) = mcp.initialize().await {
+        tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
+    }
+
     // 7. Create download manager with SSE emitter
     let download_config = DownloadManagerConfig::new(models_resolution.path);
 
