@@ -97,8 +97,7 @@ fn nested_argument_objects_are_canonicalised() {
     let call_unsorted = ToolCall {
         id: "c1".into(),
         name: "t".into(),
-        arguments: serde_json::from_str::<serde_json::Value>(r#"{"outer":{"y":2,"x":1}}"#)
-            .unwrap(),
+        arguments: serde_json::from_str::<serde_json::Value>(r#"{"outer":{"y":2,"x":1}}"#).unwrap(),
     };
     assert_eq!(
         tool_signature(&call_sorted),

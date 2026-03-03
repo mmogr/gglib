@@ -244,8 +244,7 @@ async fn assemble_tool_calls(
         let arguments = match serde_json::from_str::<serde_json::Value>(args_str) {
             Ok(v) => v,
             Err(e) => {
-                let message =
-                    format!("tool '{name}' (id: {id}) has malformed JSON arguments: {e}");
+                let message = format!("tool '{name}' (id: {id}) has malformed JSON arguments: {e}");
                 warn!(
                     tool_name = %name,
                     raw_args = %args_str,

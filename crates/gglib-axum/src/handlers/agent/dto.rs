@@ -3,7 +3,10 @@
 use serde::Deserialize;
 
 use gglib_core::domain::agent::{AgentConfig, AgentMessage};
-use gglib_core::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, MIN_TOOL_TIMEOUT_MS};
+use gglib_core::{
+    MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING,
+    MIN_TOOL_TIMEOUT_MS,
+};
 
 /// User-facing configuration for a single agent chat request.
 ///

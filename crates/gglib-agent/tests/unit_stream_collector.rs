@@ -22,7 +22,7 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use futures_util::stream;
-use gglib_agent::{collect_stream, MAX_TOOL_CALL_INDEX};
+use gglib_agent::{MAX_TOOL_CALL_INDEX, collect_stream};
 use gglib_core::{AgentEvent, LlmStreamEvent};
 use tokio::sync::mpsc;
 
@@ -88,9 +88,7 @@ async fn reasoning_delta_forwarded_and_accumulated_separately() {
     let evt2 = rx.recv().await.unwrap();
     let evt3 = rx.recv().await.unwrap();
     assert!(matches!(evt1, AgentEvent::ReasoningDelta { content } if content == "Let me think"));
-    assert!(
-        matches!(evt2, AgentEvent::ReasoningDelta { content } if content == " about this.")
-    );
+    assert!(matches!(evt2, AgentEvent::ReasoningDelta { content } if content == " about this."));
     assert!(matches!(evt3, AgentEvent::TextDelta { content } if content == "Answer."));
 }
 

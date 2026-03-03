@@ -111,12 +111,10 @@ async fn concurrency_limited_by_semaphore() {
             let running = prev + 1;
             let mut peak = self.peak.load(Ordering::SeqCst);
             while running > peak {
-                match self.peak.compare_exchange(
-                    peak,
-                    running,
-                    Ordering::SeqCst,
-                    Ordering::SeqCst,
-                ) {
+                match self
+                    .peak
+                    .compare_exchange(peak, running, Ordering::SeqCst, Ordering::SeqCst)
+                {
                     Ok(_) => break,
                     Err(p) => peak = p,
                 }

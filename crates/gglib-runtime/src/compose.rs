@@ -40,9 +40,11 @@ pub fn compose_agent_loop(
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
 ) -> Arc<dyn AgentLoopPort> {
-    let llm: Arc<dyn LlmCompletionPort> =
-        Arc::new(LlmCompletionAdapter::with_client(base_url, http_client, model));
-    let tool_executor: Arc<dyn ToolExecutorPort> =
-        Arc::new(McpToolExecutorAdapter::new(mcp));
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
+        base_url,
+        http_client,
+        model,
+    ));
+    let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(McpToolExecutorAdapter::new(mcp));
     AgentLoop::build(llm, tool_executor, tool_filter)
 }

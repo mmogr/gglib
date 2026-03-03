@@ -54,10 +54,7 @@ impl<'de> serde::de::Visitor<'de> for AssistantContentVisitor {
         f.write_str("assistant message with `content` and/or `tool_calls`")
     }
 
-    fn visit_map<A: serde::de::MapAccess<'de>>(
-        self,
-        mut map: A,
-    ) -> Result<Self::Value, A::Error> {
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
         let mut content: Option<String> = None;
         let mut tool_calls: Option<Vec<ToolCall>> = None;
         while let Some(key) = map.next_key::<String>()? {

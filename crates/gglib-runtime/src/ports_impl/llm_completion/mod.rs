@@ -135,7 +135,8 @@ fn message_to_openai(msg: &AgentMessage) -> Value {
                 "content": content.text.as_deref().map_or(Value::Null, |s| Value::String(s.to_owned())),
             });
             if !content.tool_calls.is_empty() {
-                let calls: Vec<Value> = content.tool_calls.iter().map(tool_call_to_openai).collect();
+                let calls: Vec<Value> =
+                    content.tool_calls.iter().map(tool_call_to_openai).collect();
                 obj["tool_calls"] = Value::Array(calls);
             }
             obj
