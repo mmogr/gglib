@@ -318,4 +318,74 @@ mod tests {
             panic!("expected AgentMessage::Assistant");
         }
     }
+
+    #[test]
+    fn with_replaced_tool_calls_content_becomes_both() {
+        use serde_json::json;
+        let original = AssistantContent::Content("hello".into());
+        let calls = vec![ToolCall {
+            id: "c1".into(),
+            name: "search".into(),
+            arguments: json!({}),
+        }];
+        let result = original.with_replaced_tool_calls(calls.clone());
+        match result {
+            AssistantContent::Both(text, tcs) => {
+                assert_eq!(text, "hello");
+                assert_eq!(tcs.len(), 1);
+                assert_eq!(tcs[0].id, "c1");
+            }
+            other => panic!("expected Both, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn with_replaced_tool_calls_both_replaces_calls() {
+        use serde_json::json;
+        let original = AssistantContent::Both(
+            "thinking".into(),
+            vec![ToolCall {
+                id: "old".into(),
+                name: "old_tool".into(),
+                arguments: json!({}),
+            }],
+        );
+        let new_calls = vec![ToolCall {
+            id: "new".into(),
+            name: "new_tool".into(),
+            arguments: json!({"key": "val"}),
+        }];
+        let result = original.with_replaced_tool_calls(new_calls);
+        match result {
+            AssistantContent::Both(text, tcs) => {
+                assert_eq!(text, "thinking");
+                assert_eq!(tcs.len(), 1);
+                assert_eq!(tcs[0].name, "new_tool");
+            }
+            other => panic!("expected Both, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn with_replaced_tool_calls_tool_calls_only_stays_tool_calls() {
+        use serde_json::json;
+        let original = AssistantContent::ToolCalls(vec![ToolCall {
+            id: "old".into(),
+            name: "old".into(),
+            arguments: json!({}),
+        }]);
+        let new_calls = vec![ToolCall {
+            id: "new".into(),
+            name: "new".into(),
+            arguments: json!({}),
+        }];
+        let result = original.with_replaced_tool_calls(new_calls);
+        match result {
+            AssistantContent::ToolCalls(tcs) => {
+                assert_eq!(tcs.len(), 1);
+                assert_eq!(tcs[0].id, "new");
+            }
+            other => panic!("expected ToolCalls, got {other:?}"),
+        }
+    }
 }

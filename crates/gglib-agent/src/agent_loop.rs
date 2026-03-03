@@ -60,9 +60,9 @@ use crate::util::emit_error_event;
 /// ```
 /// into:
 /// ```text
-/// return abort_internal(tx, msg).await;
+/// return fail_loop(tx, msg).await;
 /// ```
-async fn abort_internal<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T, AgentError> {
+async fn fail_loop<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T, AgentError> {
     emit_error_event(tx, &msg).await;
     Err(AgentError::Internal(msg))
 }
@@ -126,11 +126,11 @@ impl AgentLoop {
     ) -> Result<CollectedResponse, AgentError> {
         let stream = match self.llm.chat_stream(messages, tools).await {
             Ok(s) => s,
-            Err(e) => return abort_internal(tx, format!("LLM stream error: {e}")).await,
+            Err(e) => return fail_loop(tx, format!("LLM stream error: {e}")).await,
         };
         match collect_stream(stream, tx).await {
             Ok(r) => Ok(r),
-            Err(e) => abort_internal(tx, format!("stream collection error: {e}")).await,
+            Err(e) => fail_loop(tx, format!("stream collection error: {e}")).await,
         }
     }
 

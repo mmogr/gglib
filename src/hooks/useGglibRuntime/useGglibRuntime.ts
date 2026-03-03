@@ -19,6 +19,7 @@ import { mkUserMessage, mkAssistantMessage } from '../../types/messages';
 import { streamAgentChat } from './streamAgentChat';
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
+import { isAbortError } from '../../utils/errors';
 
 export interface UseGglibRuntimeOptions {
   conversationId?: number;
@@ -165,7 +166,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         supportsToolCalls,
       });
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isAbortError(error)) {
         appLogger.debug('hook.runtime', 'Generation aborted');
       } else {
         appLogger.error('hook.runtime', 'Error in agentic loop', { error });

@@ -131,6 +131,10 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         messages.push(AgentMessage::User { content: input });
 
         // ── 2–4. Run turn and update history ─────────
+        // Context pruning is handled by the agent loop itself (`prune_for_budget`
+        // is called before the first LLM call and after each tool-execution
+        // iteration).  The returned `output.history` is already within budget,
+        // so a redundant prune here is unnecessary.
         let turn_msgs = std::mem::take(&mut messages);
         messages = run_single_turn(&agent_loop, turn_msgs, config.clone(), args.verbose).await;
     }

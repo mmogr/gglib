@@ -23,6 +23,7 @@ import {
 import type { TurnMessage } from './buildTurnMessages';
 import { getToolRegistry } from '../../services/tools';
 import { getAuthenticatedFetchConfig } from '../../services/transport/api/client';
+import { isAbortError } from '../../utils/errors';
 
 // =============================================================================
 // Configuration
@@ -428,7 +429,7 @@ export function useDeepResearch(
           onError?.(new Error(result.error));
         }
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isAbortError(error)) {
           appLogger.debug('research.hook', '[useDeepResearch] Research aborted by user');
           // State is preserved, marked as incomplete
         } else {

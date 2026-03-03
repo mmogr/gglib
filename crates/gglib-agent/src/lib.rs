@@ -13,3 +13,4 @@ pub(crate) mod tool_execution;
 pub(crate) mod util;
 
 pub use agent_loop::AgentLoop;
+pub use stream_collector::{collect_stream, CollectedResponse, MAX_TOOL_CALL_INDEX};

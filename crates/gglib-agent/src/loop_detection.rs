@@ -39,6 +39,14 @@ use crate::fnv1a::fnv1a_64;
 /// Deeply-nested JSON arguments (e.g. from a hostile tool result fed back
 /// into tool arguments) would otherwise cause unbounded stack growth.  Values
 /// beyond this depth are replaced with the sentinel `"..."`.
+///
+/// **Truncation impact on hashing**: values deeper than this limit are
+/// collapsed to the same sentinel string, meaning structurally distinct
+/// deeply-nested arguments will produce **identical hashes**.  This is
+/// acceptable because the loop detector is a best-effort guard — a false
+/// positive (treating distinct deep arguments as a loop) is safe (it aborts
+/// the run), while a false negative cannot occur for shallow arguments which
+/// represent the vast majority of real tool calls.
 const MAX_REPR_DEPTH: usize = 16;
 
 /// Produce a **deterministic string representation** of a [`serde_json::Value`]
@@ -47,7 +55,9 @@ const MAX_REPR_DEPTH: usize = 16;
 /// Object keys are sorted recursively so that `{"b":2,"a":1}` and
 /// `{"a":1,"b":2}` produce identical output.  Array element order is
 /// preserved.  Recursion is capped at [`MAX_REPR_DEPTH`] to prevent
-/// stack overflow on adversarially nested inputs.
+/// stack overflow on adversarially nested inputs; values beyond that depth
+/// are replaced with the sentinel `"..."`, which means two deeply-nested
+/// values that differ only below depth 16 will hash identically.
 ///
 /// The output is **not** valid JSON — it is intentionally compact and only
 /// used as a pre-image for FNV-1a; never parsed or returned to callers.
