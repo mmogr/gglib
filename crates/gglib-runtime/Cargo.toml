@@ -13,7 +13,9 @@ prebuilt = []
 cli = ["prebuilt"]
 
 [dependencies]
+gglib-agent = { path = "../gglib-agent" }
 gglib-core = { path = "../gglib-core" }
+gglib-mcp = { path = "../gglib-mcp" }
 gglib-proxy = { path = "../gglib-proxy" }
 
 # Runtime dependencies

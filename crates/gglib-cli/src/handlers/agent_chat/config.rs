@@ -9,11 +9,9 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use gglib_agent::AgentLoop;
-use gglib_core::ports::{AgentLoopPort, LlmCompletionPort, ToolExecutorPort};
+use gglib_core::ports::AgentLoopPort;
 use gglib_core::{ProcessHandle, ServerConfig};
-use gglib_mcp::McpToolExecutorAdapter;
-use gglib_runtime::LlmCompletionAdapter;
+use gglib_runtime::compose_agent_loop;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::chat::ChatArgs;
@@ -49,14 +47,13 @@ pub async fn compose(
     } else {
         Some(args.tools.iter().cloned().collect())
     };
-    let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
+    let agent = compose_agent_loop(
         format!("http://127.0.0.1:{port}"),
         ctx.http_client.clone(),
         args.model.clone(),
-    ));
-    let tool_executor: Arc<dyn ToolExecutorPort> =
-        Arc::new(McpToolExecutorAdapter::new(Arc::clone(&ctx.mcp)));
-    let agent = AgentLoop::build(llm, tool_executor, tool_filter);
+        Arc::clone(&ctx.mcp),
+        tool_filter,
+    );
 
     Ok((agent, maybe_handle))
 }

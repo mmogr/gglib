@@ -1,8 +1,9 @@
 //! POST /api/agent/chat — server-side agentic loop with SSE streaming.
 //!
-//! The handler composes `LlmCompletionAdapter + McpToolExecutorAdapter +
-//! AgentLoop::build` inline, spawns the loop as a background task, and bridges
-//! the resulting `mpsc::Receiver<AgentEvent>` to an Axum [`Sse`] response.
+//! The handler calls [`compose_agent_loop`] to wire up the LLM adapter, MCP
+//! tool executor, and agent loop, spawns the loop as a background task, and
+//! bridges the resulting `mpsc::Receiver<AgentEvent>` to an Axum [`Sse`]
+//! response.
 //!
 //! # Cancellation
 //!
@@ -20,7 +21,6 @@ pub use dto::AgentChatRequest;
 
 use std::collections::HashSet;
 use std::convert::Infallible;
-use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
@@ -33,12 +33,10 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
-use gglib_agent::AgentLoop;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
-use gglib_core::ports::{AgentError, LlmCompletionPort, ToolExecutorPort};
-use gglib_mcp::McpToolExecutorAdapter;
-use gglib_runtime::LlmCompletionAdapter;
+use gglib_core::ports::AgentError;
+use gglib_runtime::compose_agent_loop;
 
 use guard::AgentTaskGuard;
 
@@ -84,14 +82,13 @@ pub async fn chat(
     validate_port(&state, req.port).await?;
 
     let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
-    let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
+    let agent_loop = compose_agent_loop(
         format!("http://127.0.0.1:{}", req.port),
         state.http_client.clone(),
         req.model.clone(),
-    ));
-    let tool_executor: Arc<dyn ToolExecutorPort> =
-        Arc::new(McpToolExecutorAdapter::new(state.mcp.clone()));
-    let agent_loop = AgentLoop::build(llm, tool_executor, tool_filter);
+        state.mcp.clone(),
+        tool_filter,
+    );
 
     let messages = req.messages;
     let config: AgentConfig = req.config.unwrap_or_default().into();

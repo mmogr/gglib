@@ -3,6 +3,7 @@
 
 pub mod assistant_ui;
 mod command;
+pub mod compose;
 mod health;
 pub mod health_monitor;
 pub mod llama;
@@ -35,6 +36,9 @@ pub use process::{
 
 // Re-export port implementations for runtime adapters
 pub use ports_impl::{CatalogPortImpl, LlmCompletionAdapter, RuntimePortImpl};
+
+// Re-export composition root factory
+pub use compose::compose_agent_loop;
 
 // Re-export system probe implementation
 pub use system::DefaultSystemProbe;
