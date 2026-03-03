@@ -4,8 +4,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use gglib_core::ports::ToolExecutorPort;
-use gglib_core::{ToolCall, ToolDefinition, ToolResult};
+
+use crate::domain::agent::{ToolCall, ToolDefinition, ToolResult};
+use crate::ports::ToolExecutorPort;
 
 use super::TOOL_NOT_AVAILABLE_MSG;
 

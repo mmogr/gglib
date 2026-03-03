@@ -3,12 +3,11 @@
 //!
 //! # Architectural placement
 //!
-//! These are *concrete implementations* (decorators), not pure ports or domain
-//! types, so they live here in `gglib-agent` (the orchestration layer) rather
-//! than in `gglib-core` (which contains only traits and domain models).
-//! Both downstream consumers — the Axum HTTP handler (`gglib-axum`) and the
-//! CLI agent handler (`gglib-cli`) — already depend on `gglib-agent`, so
-//! keeping the decorators here is DRY with zero extra dependency edges.
+//! These decorators live in `gglib-core::ports` because they depend only on the
+//! [`ToolExecutorPort`] trait and domain types (`ToolCall`, `ToolDefinition`,
+//! `ToolResult`) — all of which are defined here.  Placing them in `gglib-core`
+//! makes them available to any adapter crate without introducing an additional
+//! dependency on `gglib-agent`.
 //!
 //! # Security model
 //!

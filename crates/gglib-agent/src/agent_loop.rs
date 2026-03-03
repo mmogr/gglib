@@ -29,7 +29,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::ports::{
-    AgentError, AgentLoopPort, AgentRunOutput, LlmCompletionPort, ToolExecutorPort,
+    AgentError, AgentLoopPort, AgentRunOutput, EmptyToolExecutor, FilteredToolExecutor,
+    LlmCompletionPort, ToolExecutorPort,
 };
 use gglib_core::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult,
@@ -40,7 +41,6 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::context_pruning::prune_for_budget;
-use crate::filter::{EmptyToolExecutor, FilteredToolExecutor};
 use crate::loop_detection::LoopDetector;
 use crate::stagnation::StagnationDetector;
 use crate::stream_collector::collect_stream;

@@ -2,8 +2,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use gglib_core::ports::ToolExecutorPort;
-use gglib_core::{ToolCall, ToolDefinition, ToolResult};
+
+use crate::domain::agent::{ToolCall, ToolDefinition, ToolResult};
+use crate::ports::ToolExecutorPort;
 
 use super::TOOL_NOT_AVAILABLE_MSG;
 use super::empty::EmptyToolExecutor;
@@ -171,15 +172,4 @@ async fn empty_executor_execute_returns_error() {
         err.to_string().contains("any_tool"),
         "error message must include the tool name; got: {err}"
     );
-}
-
-#[test]
-fn empty_executor_derives_are_sound() {
-    // Exercises the Debug, Default, and Clone derives to ensure they
-    // compile and produce values that satisfy basic sanity checks.
-    let a = EmptyToolExecutor;
-    let b = a.clone();
-    // Debug must not panic.
-    let _ = format!("{a:?}");
-    let _ = format!("{b:?}");
 }
