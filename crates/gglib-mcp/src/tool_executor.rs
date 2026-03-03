@@ -105,23 +105,22 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         // Only qualified names are accepted: "{server_id}:{tool_name}".
         // The `:` separator is unambiguous because MCP tool names
         // (`[a-zA-Z0-9_-]+`) cannot contain `:`.
-        let (server_id, bare_name): (i64, &str) = if let Some((prefix, bare)) =
-            call.name.split_once(':')
-        {
-            let sid: i64 = prefix.parse().with_context(|| {
-                format!(
-                    "qualified tool name '{}' has a non-integer server prefix",
-                    call.name
-                )
-            })?;
-            (sid, bare)
-        } else {
-            return Err(anyhow!(
-                "tool name '{}' is unqualified; expected format is '<server_id>:<tool_name>' \
+        let (server_id, bare_name): (i64, &str) =
+            if let Some((prefix, bare)) = call.name.split_once(':') {
+                let sid: i64 = prefix.parse().with_context(|| {
+                    format!(
+                        "qualified tool name '{}' has a non-integer server prefix",
+                        call.name
+                    )
+                })?;
+                (sid, bare)
+            } else {
+                return Err(anyhow!(
+                    "tool name '{}' is unqualified; expected format is '<server_id>:<tool_name>' \
                  as produced by list_tools()",
-                call.name
-            ));
-        };
+                    call.name
+                ));
+            };
 
         // ---- Convert arguments Value → HashMap<String, Value> ---------------
         let arguments: HashMap<String, serde_json::Value> = match &call.arguments {
@@ -148,9 +147,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         let (content, success) = if result.success {
             let text = result.data.as_ref().map_or_else(
                 || "null".to_owned(),
-                |v| {
-                    v.as_str().map_or_else(|| v.to_string(), str::to_owned)
-                },
+                |v| v.as_str().map_or_else(|| v.to_string(), str::to_owned),
             );
             (text, true)
         } else {
