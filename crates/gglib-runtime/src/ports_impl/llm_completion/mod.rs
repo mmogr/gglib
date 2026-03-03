@@ -32,7 +32,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 
 use gglib_core::{
-    domain::agent::{AgentMessage, AssistantContent, LlmStreamEvent, ToolCall, ToolDefinition},
+    domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
     ports::LlmCompletionPort,
 };
 
@@ -129,28 +129,17 @@ fn message_to_openai(msg: &AgentMessage) -> Value {
         AgentMessage::User { content } => {
             json!({ "role": "user", "content": content })
         }
-        AgentMessage::Assistant { content } => match content {
-            AssistantContent::Content(text) => json!({
+        AgentMessage::Assistant { content } => {
+            let mut obj = json!({
                 "role": "assistant",
-                "content": text,
-            }),
-            AssistantContent::ToolCalls(tcs) => {
-                let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
-                json!({
-                    "role": "assistant",
-                    "content": serde_json::Value::Null,
-                    "tool_calls": calls,
-                })
+                "content": content.text.as_deref().map_or(Value::Null, |s| Value::String(s.to_owned())),
+            });
+            if !content.tool_calls.is_empty() {
+                let calls: Vec<Value> = content.tool_calls.iter().map(tool_call_to_openai).collect();
+                obj["tool_calls"] = Value::Array(calls);
             }
-            AssistantContent::Both(text, tcs) => {
-                let calls: Vec<Value> = tcs.iter().map(tool_call_to_openai).collect();
-                json!({
-                    "role": "assistant",
-                    "content": text,
-                    "tool_calls": calls,
-                })
-            }
-        },
+            obj
+        }
         AgentMessage::Tool {
             tool_call_id,
             content,

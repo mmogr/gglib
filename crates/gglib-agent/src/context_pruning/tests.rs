@@ -15,16 +15,22 @@ fn user(s: &str) -> AgentMessage {
 }
 fn assistant_text(s: &str) -> AgentMessage {
     AgentMessage::Assistant {
-        content: AssistantContent::Content(s.to_owned()),
+        content: AssistantContent {
+            text: Some(s.to_owned()),
+            tool_calls: vec![],
+        },
     }
 }
 fn assistant_with_calls(id: &str, name: &str) -> AgentMessage {
     AgentMessage::Assistant {
-        content: AssistantContent::ToolCalls(vec![ToolCall {
-            id: id.to_owned(),
-            name: name.to_owned(),
-            arguments: json!({}),
-        }]),
+        content: AssistantContent {
+            text: None,
+            tool_calls: vec![ToolCall {
+                id: id.to_owned(),
+                name: name.to_owned(),
+                arguments: json!({}),
+            }],
+        },
     }
 }
 fn tool_result(call_id: &str, content: &str) -> AgentMessage {
@@ -101,9 +107,7 @@ fn pass1_drops_orphaned_assistant_messages() {
     // call_0 was pruned → its matching assistant should also be gone.
     let has_call_0_assistant = result.iter().any(|m| {
         if let AgentMessage::Assistant { content } = m {
-            content
-                .tool_calls()
-                .is_some_and(|calls| calls.iter().any(|c| c.id == "call_0"))
+            content.tool_calls.iter().any(|c| c.id == "call_0")
         } else {
             false
         }
@@ -121,18 +125,21 @@ fn pass1_strips_pruned_call_ids_from_partially_surviving_assistant_message() {
     // the `tool_calls` list so the LLM never sees a reference to a missing
     // tool result.
     let assistant_multi = AgentMessage::Assistant {
-        content: AssistantContent::ToolCalls(vec![
-            ToolCall {
-                id: "tc_old".into(),
-                name: "t".into(),
-                arguments: json!({}),
-            },
-            ToolCall {
-                id: "tc_new".into(),
-                name: "t".into(),
-                arguments: json!({}),
-            },
-        ]),
+        content: AssistantContent {
+            text: None,
+            tool_calls: vec![
+                ToolCall {
+                    id: "tc_old".into(),
+                    name: "t".into(),
+                    arguments: json!({}),
+                },
+                ToolCall {
+                    id: "tc_new".into(),
+                    name: "t".into(),
+                    arguments: json!({}),
+                },
+            ],
+        },
     };
     let msgs = vec![
         system("sys"),
@@ -170,9 +177,17 @@ fn pass1_strips_pruned_call_ids_from_partially_surviving_assistant_message() {
         .iter()
         .filter_map(|m| {
             if let AgentMessage::Assistant { content } = m {
-                content
-                    .tool_calls()
-                    .map(|calls| calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>())
+                if content.tool_calls.is_empty() {
+                    None
+                } else {
+                    Some(
+                        content
+                            .tool_calls
+                            .iter()
+                            .map(|c| c.id.as_str())
+                            .collect::<Vec<_>>(),
+                    )
+                }
             } else {
                 None
             }

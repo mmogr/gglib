@@ -251,7 +251,10 @@ impl AgentLoopPort for AgentLoop {
                 // complete accumulated history and can pass it back unchanged
                 // as the `messages` argument for the next REPL turn.
                 messages.push(AgentMessage::Assistant {
-                    content: AssistantContent::Content(content.clone()),
+                    content: AssistantContent {
+                        text: Some(content.clone()),
+                        tool_calls: vec![],
+                    },
                 });
                 return Ok(AgentRunOutput {
                     answer: content,
@@ -360,10 +363,13 @@ fn append_iteration_messages(
     results: Vec<ToolResult>,
 ) {
     let assistant = AgentMessage::Assistant {
-        content: if content.is_empty() {
-            AssistantContent::ToolCalls(tool_calls)
-        } else {
-            AssistantContent::Both(content, tool_calls)
+        content: AssistantContent {
+            text: if content.is_empty() {
+                None
+            } else {
+                Some(content)
+            },
+            tool_calls,
         },
     };
     messages.push(assistant);

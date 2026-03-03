@@ -53,11 +53,14 @@ fn build_long_history(n_pairs: u32) -> Vec<AgentMessage> {
     ];
     for i in 0..n_pairs {
         messages.push(AgentMessage::Assistant {
-            content: AssistantContent::ToolCalls(vec![ToolCall {
-                id: format!("old_tc{i}"),
-                name: "search".into(),
-                arguments: json!({}),
-            }]),
+            content: AssistantContent {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: format!("old_tc{i}"),
+                    name: "search".into(),
+                    arguments: json!({}),
+                }],
+            },
         });
         messages.push(AgentMessage::Tool {
             tool_call_id: format!("old_tc{i}"),

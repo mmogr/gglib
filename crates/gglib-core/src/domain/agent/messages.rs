@@ -6,63 +6,38 @@ use super::tool_types::ToolCall;
 
 /// Content carried by an [`AgentMessage::Assistant`] turn.
 ///
-/// Enforces that an assistant message always has *at least* one of text or tool
-/// calls, making the vacuous all-`None` state impossible to construct.
+/// A flat struct with optional `text` and a (possibly empty) `tool_calls` vec.
+/// At the wire level, at least one of the two fields must be present — the
+/// hand-rolled [`Deserialize`] impl enforces this.
 ///
 /// # Serde
 ///
 /// Serializes/deserializes as a flat map so it can be `#[serde(flatten)]`-ed
 /// directly into the parent [`AgentMessage`] object:
 ///
-/// | Variant | JSON fields |
-/// |---------|-------------|
-/// | `Content(s)` | `"content": "…"` |
-/// | `ToolCalls(tcs)` | `"tool_calls": […]` |
-/// | `Both(s, tcs)` | `"content": "…", "tool_calls": […]` |
-///
-/// # Why not `#[serde(untagged)]`?
-///
-/// `#[serde(untagged)]` cannot enforce the “at least one field present”
-/// invariant: a JSON object `{}` (missing both `content` and `tool_calls`)
-/// would silently deserialise to an arbitrary variant rather than returning a
-/// meaningful error.  The hand-rolled [`Deserialize`] impl rejects that case
-/// with `"assistant message must have content or tool_calls"`.
-/// The [`Serialize`] impl mirrors the structure exactly so round-trips are
-/// lossless.
+/// | State | JSON fields |
+/// |-------|-------------|
+/// | text only | `"content": "..."` |
+/// | tool calls only | `"tool_calls": [...]` |
+/// | both | `"content": "...", "tool_calls": [...]` |
 #[derive(Debug, Clone)]
-pub enum AssistantContent {
-    /// Text response only (no tool calls).
-    Content(String),
-    /// Tool calls only (model produced no text preamble).
-    ToolCalls(Vec<ToolCall>),
-    /// Text preamble followed by tool calls.
-    Both(String, Vec<ToolCall>),
+pub struct AssistantContent {
+    /// Optional text content from the model.  `None` when the model produced
+    /// only tool calls with no text preamble.
+    pub text: Option<String>,
+    /// Tool calls requested by the model.  Empty when the model produced a
+    /// text-only response (final answer).
+    pub tool_calls: Vec<ToolCall>,
 }
 
 impl AssistantContent {
-    /// Return the text content if present.
-    pub const fn text(&self) -> Option<&str> {
-        match self {
-            Self::Content(s) | Self::Both(s, _) => Some(s.as_str()),
-            Self::ToolCalls(_) => None,
-        }
-    }
-
-    /// Return the tool calls if present.
-    pub const fn tool_calls(&self) -> Option<&[ToolCall]> {
-        match self {
-            Self::ToolCalls(tcs) | Self::Both(_, tcs) => Some(tcs.as_slice()),
-            Self::Content(_) => None,
-        }
-    }
-
-    /// Consume `self` and return a new variant with `calls` as the tool-call
+    /// Consume `self` and return a new value with `calls` as the tool-call
     /// list, preserving any existing text content.
     #[must_use]
     pub fn with_replaced_tool_calls(self, calls: Vec<ToolCall>) -> Self {
-        match self {
-            Self::Content(s) | Self::Both(s, _) => Self::Both(s, calls),
-            Self::ToolCalls(_) => Self::ToolCalls(calls),
+        Self {
+            tool_calls: calls,
+            ..self
         }
     }
 }
@@ -70,24 +45,17 @@ impl AssistantContent {
 impl Serialize for AssistantContent {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
-        match self {
-            Self::Content(text) => {
-                let mut m = serializer.serialize_map(Some(1))?;
-                m.serialize_entry("content", text)?;
-                m.end()
-            }
-            Self::ToolCalls(tcs) => {
-                let mut m = serializer.serialize_map(Some(1))?;
-                m.serialize_entry("tool_calls", tcs)?;
-                m.end()
-            }
-            Self::Both(text, tcs) => {
-                let mut m = serializer.serialize_map(Some(2))?;
-                m.serialize_entry("content", text)?;
-                m.serialize_entry("tool_calls", tcs)?;
-                m.end()
-            }
+        let has_text = self.text.is_some();
+        let has_calls = !self.tool_calls.is_empty();
+        let count = usize::from(has_text) + usize::from(has_calls);
+        let mut m = serializer.serialize_map(Some(count))?;
+        if let Some(text) = &self.text {
+            m.serialize_entry("content", text)?;
         }
+        if has_calls {
+            m.serialize_entry("tool_calls", &self.tool_calls)?;
+        }
+        m.end()
     }
 }
 
@@ -114,14 +82,16 @@ impl<'de> Deserialize<'de> for AssistantContent {
                         }
                     }
                 }
-                match (content, tool_calls) {
-                    (Some(s), None) => Ok(AssistantContent::Content(s)),
-                    (None, Some(tcs)) => Ok(AssistantContent::ToolCalls(tcs)),
-                    (Some(s), Some(tcs)) => Ok(AssistantContent::Both(s, tcs)),
-                    (None, None) => Err(serde::de::Error::custom(
+                let tool_calls = tool_calls.unwrap_or_default();
+                if content.is_none() && tool_calls.is_empty() {
+                    return Err(serde::de::Error::custom(
                         "assistant message must have `content` or `tool_calls`",
-                    )),
+                    ));
                 }
+                Ok(AssistantContent {
+                    text: content,
+                    tool_calls,
+                })
             }
         }
         deserializer.deserialize_map(V)
@@ -198,19 +168,19 @@ impl AgentMessage {
         match self {
             Self::System { content } | Self::User { content } => content.chars().count(),
             Self::Assistant { content } => {
-                content.text().map_or(0, |s| s.chars().count())
-                    + content.tool_calls().map_or(0, |tcs| {
-                        tcs.iter()
-                            .map(|c| {
-                                // Include `id` so the context-budget estimate
-                                // matches what llama-server actually tokenises
-                                // (a typical id like "call_abc123" is ~15 chars).
-                                c.id.chars().count()
-                                    + c.name.chars().count()
-                                    + c.arguments.to_string().chars().count()
-                            })
-                            .sum()
-                    })
+                content.text.as_ref().map_or(0, |s| s.chars().count())
+                    + content
+                        .tool_calls
+                        .iter()
+                        .map(|c| {
+                            // Include `id` so the context-budget estimate
+                            // matches what llama-server actually tokenises
+                            // (a typical id like "call_abc123" is ~15 chars).
+                            c.id.chars().count()
+                                + c.name.chars().count()
+                                + c.arguments.to_string().chars().count()
+                        })
+                        .sum::<usize>()
             }
             Self::Tool {
                 tool_call_id,
@@ -238,7 +208,10 @@ mod tests {
     #[test]
     fn assistant_content_only_omits_tool_calls() {
         let msg = AgentMessage::Assistant {
-            content: AssistantContent::Content("hi".into()),
+            content: AssistantContent {
+                text: Some("hi".into()),
+                tool_calls: vec![],
+            },
         };
         let json = serde_json::to_value(&msg).unwrap();
         assert_eq!(json["role"], "assistant");
@@ -250,11 +223,14 @@ mod tests {
     fn assistant_tool_calls_only_omits_content() {
         use serde_json::json;
         let msg = AgentMessage::Assistant {
-            content: AssistantContent::ToolCalls(vec![ToolCall {
-                id: "c1".into(),
-                name: "search".into(),
-                arguments: json!({}),
-            }]),
+            content: AssistantContent {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "c1".into(),
+                    name: "search".into(),
+                    arguments: json!({}),
+                }],
+            },
         };
         let json_val = serde_json::to_value(&msg).unwrap();
         assert_eq!(json_val["role"], "assistant");
@@ -263,19 +239,20 @@ mod tests {
     }
 
     /// Verify that the custom Serde deserializer reconstructs
-    /// [`AssistantContent::Both`] correctly on a round-trip.
+    /// [`AssistantContent`] correctly on a round-trip when both text and
+    /// tool calls are present.
     ///
     /// Some LLMs (e.g. models with parallel function calling) emit a non-empty
     /// `content` string alongside `tool_calls` in the same assistant message.
-    /// The round-trip must preserve both arms exactly.
+    /// The round-trip must preserve both fields exactly.
     #[test]
     fn assistant_both_round_trips() {
         use serde_json::json;
 
         let original = AgentMessage::Assistant {
-            content: AssistantContent::Both(
-                "thinking out loud".into(),
-                vec![
+            content: AssistantContent {
+                text: Some("thinking out loud".into()),
+                tool_calls: vec![
                     ToolCall {
                         id: "c1".into(),
                         name: "web_search".into(),
@@ -287,105 +264,93 @@ mod tests {
                         arguments: json!({ "path": "/tmp/x" }),
                     },
                 ],
-            ),
+            },
         };
 
-        // Serialise → deserialise.
+        // Serialise -> deserialise.
         let json_val = serde_json::to_value(&original).unwrap();
         assert_eq!(json_val["role"], "assistant");
         assert_eq!(
             json_val["content"], "thinking out loud",
-            "content arm must be present"
+            "content must be present"
         );
         assert_eq!(
             json_val["tool_calls"].as_array().unwrap().len(),
             2,
-            "tool_calls arm must be present with 2 entries"
+            "tool_calls must be present with 2 entries"
         );
 
         // Round-trip: deserialise back from the serialised value.
         let reconstructed: AgentMessage = serde_json::from_value(json_val).unwrap();
         if let AgentMessage::Assistant { content } = reconstructed {
-            if let AssistantContent::Both(text, calls) = content {
-                assert_eq!(text, "thinking out loud");
-                assert_eq!(calls.len(), 2);
-                assert_eq!(calls[0].id, "c1");
-                assert_eq!(calls[1].name, "read_file");
-            } else {
-                panic!("expected AssistantContent::Both, got something else");
-            }
+            assert_eq!(content.text.as_deref(), Some("thinking out loud"));
+            assert_eq!(content.tool_calls.len(), 2);
+            assert_eq!(content.tool_calls[0].id, "c1");
+            assert_eq!(content.tool_calls[1].name, "read_file");
         } else {
             panic!("expected AgentMessage::Assistant");
         }
     }
 
     #[test]
-    fn with_replaced_tool_calls_content_becomes_both() {
+    fn with_replaced_tool_calls_preserves_text() {
         use serde_json::json;
-        let original = AssistantContent::Content("hello".into());
+        let original = AssistantContent {
+            text: Some("hello".into()),
+            tool_calls: vec![],
+        };
         let calls = vec![ToolCall {
             id: "c1".into(),
             name: "search".into(),
             arguments: json!({}),
         }];
-        let result = original.with_replaced_tool_calls(calls.clone());
-        match result {
-            AssistantContent::Both(text, tcs) => {
-                assert_eq!(text, "hello");
-                assert_eq!(tcs.len(), 1);
-                assert_eq!(tcs[0].id, "c1");
-            }
-            other => panic!("expected Both, got {other:?}"),
-        }
+        let result = original.with_replaced_tool_calls(calls);
+        assert_eq!(result.text.as_deref(), Some("hello"));
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].id, "c1");
     }
 
     #[test]
-    fn with_replaced_tool_calls_both_replaces_calls() {
+    fn with_replaced_tool_calls_replaces_existing() {
         use serde_json::json;
-        let original = AssistantContent::Both(
-            "thinking".into(),
-            vec![ToolCall {
+        let original = AssistantContent {
+            text: Some("thinking".into()),
+            tool_calls: vec![ToolCall {
                 id: "old".into(),
                 name: "old_tool".into(),
                 arguments: json!({}),
             }],
-        );
+        };
         let new_calls = vec![ToolCall {
             id: "new".into(),
             name: "new_tool".into(),
             arguments: json!({"key": "val"}),
         }];
         let result = original.with_replaced_tool_calls(new_calls);
-        match result {
-            AssistantContent::Both(text, tcs) => {
-                assert_eq!(text, "thinking");
-                assert_eq!(tcs.len(), 1);
-                assert_eq!(tcs[0].name, "new_tool");
-            }
-            other => panic!("expected Both, got {other:?}"),
-        }
+        assert_eq!(result.text.as_deref(), Some("thinking"));
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].name, "new_tool");
     }
 
     #[test]
-    fn with_replaced_tool_calls_tool_calls_only_stays_tool_calls() {
+    fn with_replaced_tool_calls_no_text() {
         use serde_json::json;
-        let original = AssistantContent::ToolCalls(vec![ToolCall {
-            id: "old".into(),
-            name: "old".into(),
-            arguments: json!({}),
-        }]);
+        let original = AssistantContent {
+            text: None,
+            tool_calls: vec![ToolCall {
+                id: "old".into(),
+                name: "old".into(),
+                arguments: json!({}),
+            }],
+        };
         let new_calls = vec![ToolCall {
             id: "new".into(),
             name: "new".into(),
             arguments: json!({}),
         }];
         let result = original.with_replaced_tool_calls(new_calls);
-        match result {
-            AssistantContent::ToolCalls(tcs) => {
-                assert_eq!(tcs.len(), 1);
-                assert_eq!(tcs[0].id, "new");
-            }
-            other => panic!("expected ToolCalls, got {other:?}"),
-        }
+        assert!(result.text.is_none());
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].id, "new");
     }
 }

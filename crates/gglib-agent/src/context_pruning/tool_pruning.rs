@@ -52,10 +52,12 @@ pub(super) fn prune_tool_messages(
                 // For an Assistant message with tool calls: keep only if at least
                 // one call survives, but also strip the pruned call IDs so the
                 // context never contains references to missing tool results.
-                AgentMessage::Assistant { content } => match content.tool_calls() {
-                    None => Some(AgentMessage::Assistant { content }),
-                    Some(calls) => {
-                        let retained_calls: Vec<_> = calls
+                AgentMessage::Assistant { content } => {
+                    if content.tool_calls.is_empty() {
+                        Some(AgentMessage::Assistant { content })
+                    } else {
+                        let retained_calls: Vec<_> = content
+                            .tool_calls
                             .iter()
                             .filter(|c| kept_tool_call_ids.contains(&c.id))
                             .cloned()
@@ -74,7 +76,7 @@ pub(super) fn prune_tool_messages(
                             })
                         }
                     }
-                },
+                }
 
                 // System and User messages are always kept.
                 other => Some(other),

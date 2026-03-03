@@ -12,6 +12,8 @@
 //! | [`test_simple_tool_call_cycle`] | One tool call → final answer |
 //! | [`test_parallel_tool_calls`]    | Three tools in one batch → final answer |
 //! | [`test_tool_timeout`]           | Slow tool times out; loop recovers |
+//! | [`test_reasoning_delta_emitted`]| Reasoning block forwarded as event |
+//! | [`test_both_text_and_tool_calls_in_history`] | Text preamble + tool calls preserved |
 
 mod common;
 
@@ -23,7 +25,9 @@ use common::event_assertions::{
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition};
+use gglib_core::domain::agent::{
+    AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition,
+};
 use serde_json::json;
 use tokio::sync::mpsc;
 
@@ -276,4 +280,76 @@ async fn test_reasoning_delta_emitted() {
     );
 
     assert!(has_final_answer(&events), "missing FinalAnswer");
+}
+
+/// **Both text and tool calls preserved**: when the LLM emits a text preamble
+/// alongside tool calls, the returned `history` must contain an
+/// `AssistantContent` with **both** `text = Some(...)` and a non-empty
+/// `tool_calls` vec — verifying the struct fields survive the full loop.
+#[tokio::test]
+async fn test_both_text_and_tool_calls_in_history() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            // Iteration 1: text preamble + tool call
+            .push(MockLlmResponse {
+                reasoning: None,
+                content: Some("Let me search for that.".into()),
+                tool_calls: vec![ToolCall {
+                    id: "tc1".into(),
+                    name: "search".into(),
+                    arguments: json!({"q": "rust"}),
+                }],
+                finish_reason: "tool_calls".into(),
+            })
+            // Iteration 2: final answer (text only)
+            .push(MockLlmResponse::text("Found it!")),
+    );
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("search"),
+        MockToolBehavior::Immediate {
+            content: "result".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(64);
+
+    let output = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "Look it up".into(),
+            }],
+            AgentConfig::default(),
+            tx,
+        )
+        .await
+        .expect("agent loop should succeed");
+
+    let _events = collect_events(rx).await;
+
+    // Find the mid-loop assistant message that has both text and tool calls.
+    let both_msg = output.history.iter().find(|m| {
+        matches!(
+            m,
+            AgentMessage::Assistant {
+                content: AssistantContent {
+                    text: Some(_),
+                    tool_calls,
+                },
+            } if !tool_calls.is_empty()
+        )
+    });
+
+    assert!(
+        both_msg.is_some(),
+        "history must contain an assistant message with both text and tool_calls; history: {:?}",
+        output.history
+    );
+
+    if let Some(AgentMessage::Assistant { content }) = both_msg {
+        assert_eq!(content.text.as_deref(), Some("Let me search for that."));
+        assert_eq!(content.tool_calls.len(), 1);
+        assert_eq!(content.tool_calls[0].name, "search");
+    }
 }
