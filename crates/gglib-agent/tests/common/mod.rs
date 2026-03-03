@@ -1,4 +1,5 @@
 //! Common test infrastructure for `gglib-agent` tests.
+#![allow(dead_code)]
 //!
 //! - [`mock_tools`] — configurable [`ToolExecutorPort`] with per-tool
 //!   behaviour (instant, delayed, fail, infra-error) and call recording.

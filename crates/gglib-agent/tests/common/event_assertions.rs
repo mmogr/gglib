@@ -1,4 +1,5 @@
 //! Reusable predicates for asserting on [`AgentEvent`] slices.
+#![allow(dead_code)]
 //!
 //! Import with `use common::event_assertions::*;` in integration and unit
 //! test files.

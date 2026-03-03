@@ -171,8 +171,6 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn qualified_name_splits_on_colon_separator() {
         // execute() uses split_once(':') to parse the qualified form

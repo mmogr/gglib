@@ -56,6 +56,8 @@ mod tests {
     #[test]
     fn fnv1a_64_differs_from_32_bit_basis() {
         // Sanity check: the 64-bit offset basis is different from the 32-bit one.
-        assert_ne!(fnv1a_64("") as u32, 2_166_136_261_u32);
+        #[allow(clippy::cast_possible_truncation)]
+        let low32 = fnv1a_64("") as u32;
+        assert_ne!(low32, 2_166_136_261_u32);
     }
 }

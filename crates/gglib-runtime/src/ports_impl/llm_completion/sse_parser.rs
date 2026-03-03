@@ -53,7 +53,7 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     // events are silently dropped, and a `finish_reason: "stop"` in such a
     // frame would mean the stream never emits `Done`.
     let choices = &parsed["choices"];
-    if choices.as_array().map_or(true, |a| a.is_empty()) {
+    if choices.as_array().is_none_or(|a| a.is_empty()) {
         tracing::debug!(data = %data, "SSE frame has no 'choices' entries — skipping");
         return Ok(SseParseResult::Events(vec![]));
     }

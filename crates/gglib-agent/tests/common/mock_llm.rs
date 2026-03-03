@@ -1,4 +1,5 @@
 //! Mock implementation of [`LlmCompletionPort`] for integration testing.
+#![allow(dead_code)]
 //!
 //! Serves pre-scripted sequences of [`LlmStreamEvent`] values, one response
 //! per `chat_stream` call.  Build the response queue using the builder API:

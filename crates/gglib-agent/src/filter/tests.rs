@@ -177,7 +177,7 @@ async fn empty_executor_execute_returns_error() {
 fn empty_executor_derives_are_sound() {
     // Exercises the Debug, Default, and Clone derives to ensure they
     // compile and produce values that satisfy basic sanity checks.
-    let a = EmptyToolExecutor::default();
+    let a = EmptyToolExecutor;
     let b = a.clone();
     // Debug must not panic.
     let _ = format!("{a:?}");

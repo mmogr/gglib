@@ -232,7 +232,7 @@ async fn test_tool_timeout() {
     assert!(has_final_answer(&events), "missing FinalAnswer");
 }
 
-/// **ReasoningDelta forwarded**: the LLM emits a reasoning block before the
+/// **`ReasoningDelta` forwarded**: the LLM emits a reasoning block before the
 /// final text answer.  The agent loop must forward the reasoning as
 /// [`AgentEvent::ReasoningDelta`] and still produce the [`AgentEvent::FinalAnswer`].
 ///

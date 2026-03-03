@@ -103,7 +103,7 @@ fn pass1_drops_orphaned_assistant_messages() {
         if let AgentMessage::Assistant { content } = m {
             content
                 .tool_calls()
-                .map_or(false, |calls| calls.iter().any(|c| c.id == "call_0"))
+                .is_some_and(|calls| calls.iter().any(|c| c.id == "call_0"))
         } else {
             false
         }
@@ -271,8 +271,7 @@ fn pass2_reorders_interleaved_system_messages_to_front() {
     for (i, msg) in result.iter().enumerate().take(last_system_pos) {
         assert!(
             matches!(msg, AgentMessage::System { .. }),
-            "non-System message at position {i} precedes all System messages; got {:?}",
-            msg
+            "non-System message at position {i} precedes all System messages; got {msg:?}"
         );
     }
 }

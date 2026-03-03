@@ -1,4 +1,5 @@
 //! Mock implementation of [`ToolExecutorPort`] for integration testing.
+#![allow(dead_code)]
 //!
 //! Allows configuring per-tool behaviour and records all invocations so tests
 //! can assert on which tools were called and with what arguments.
