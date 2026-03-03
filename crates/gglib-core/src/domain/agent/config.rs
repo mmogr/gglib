@@ -239,7 +239,10 @@ mod tests {
 
     #[test]
     fn zero_max_iterations_rejected() {
-        let cfg = AgentConfig { max_iterations: 0, ..Default::default() };
+        let cfg = AgentConfig {
+            max_iterations: 0,
+            ..Default::default()
+        };
         assert_eq!(
             cfg.validated().unwrap_err(),
             AgentConfigError::MaxIterationsZero(0),
@@ -248,7 +251,10 @@ mod tests {
 
     #[test]
     fn zero_max_parallel_tools_rejected() {
-        let cfg = AgentConfig { max_parallel_tools: 0, ..Default::default() };
+        let cfg = AgentConfig {
+            max_parallel_tools: 0,
+            ..Default::default()
+        };
         assert_eq!(
             cfg.validated().unwrap_err(),
             AgentConfigError::MaxParallelToolsZero(0),
@@ -257,7 +263,10 @@ mod tests {
 
     #[test]
     fn tool_timeout_below_floor_rejected() {
-        let cfg = AgentConfig { tool_timeout_ms: MIN_TOOL_TIMEOUT_MS - 1, ..Default::default() };
+        let cfg = AgentConfig {
+            tool_timeout_ms: MIN_TOOL_TIMEOUT_MS - 1,
+            ..Default::default()
+        };
         assert_eq!(
             cfg.validated().unwrap_err(),
             AgentConfigError::ToolTimeoutTooLow(MIN_TOOL_TIMEOUT_MS - 1),
@@ -266,7 +275,10 @@ mod tests {
 
     #[test]
     fn tool_timeout_at_floor_accepted() {
-        let cfg = AgentConfig { tool_timeout_ms: MIN_TOOL_TIMEOUT_MS, ..Default::default() };
+        let cfg = AgentConfig {
+            tool_timeout_ms: MIN_TOOL_TIMEOUT_MS,
+            ..Default::default()
+        };
         assert!(cfg.validated().is_ok());
     }
 
