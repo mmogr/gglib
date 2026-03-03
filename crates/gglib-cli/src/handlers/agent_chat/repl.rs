@@ -187,10 +187,8 @@ async fn run_single_turn(
     // silently dropped and the task is fully cleaned up.
     let loop_result = handle.await;
 
-    if completed {
-        if let Ok(Some(new_messages)) = loop_result {
-            return new_messages;
-        }
+    if completed && let Ok(Some(new_messages)) = loop_result {
+        return new_messages;
     }
     system_fallback
 }
