@@ -141,10 +141,11 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // iteration).  The returned `output.history` is already within budget,
         // so a redundant prune here is unnecessary.
         //
-        // Clone the messages so the pre-turn snapshot survives a failed or
-        // cancelled turn.  On success the clone is replaced by the loop's
-        // output; on failure / Ctrl+C the original `messages` is intact.
-        messages = run_single_turn(&agent_loop, messages.clone(), config.clone(), args.verbose).await;
+        // Move `messages` into the turn; the function moves it into the
+        // spawned task and returns either the updated history (success) or
+        // the original snapshot (failure / Ctrl+C) — one clone total instead
+        // of the previous two.
+        messages = run_single_turn(&agent_loop, messages, config.clone(), args.verbose).await;
     }
 
     Ok(())
@@ -157,20 +158,24 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
 /// Run one agent turn: spawn the loop task, consume events, handle Ctrl+C,
 /// and return the updated conversation history.
 ///
+/// Takes ownership of `messages` to avoid a redundant clone at the call site.
+/// A single clone is made internally as a backup (`pre_turn`); the original
+/// is moved into the spawned task.
+///
 /// On success, returns the full `output.history` from the agent loop (which
 /// includes assistant + tool-result messages appended during the turn).
 ///
-/// On cancellation or agent error, returns the original `messages` unchanged
-/// so the user's prior conversation context is preserved.
+/// On cancellation or agent error, returns the `pre_turn` snapshot so the
+/// user's prior conversation context is preserved.
 async fn run_single_turn(
     agent_loop: &Arc<dyn AgentLoopPort>,
     messages: Vec<AgentMessage>,
     config: AgentConfig,
     verbose: bool,
 ) -> Vec<AgentMessage> {
-    // Keep a copy of the pre-turn messages so a failed or cancelled turn
-    // restores the exact conversation state (including the user message
-    // that triggered this turn).
+    // Single clone: keep a backup so a failed or cancelled turn restores the
+    // exact conversation state (including the user message that triggered
+    // this turn).  The original `messages` is moved into the spawned task.
     let pre_turn = messages.clone();
 
     let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
