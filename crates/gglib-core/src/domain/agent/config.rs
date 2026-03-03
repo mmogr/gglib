@@ -195,7 +195,7 @@ impl AgentConfig {
     /// # Errors
     ///
     /// Returns `Err(AgentConfigError)` if any field violates its invariant.
-    pub fn validated(self) -> Result<Self, AgentConfigError> {
+    pub const fn validated(self) -> Result<Self, AgentConfigError> {
         if self.max_iterations < 1 {
             return Err(AgentConfigError::MaxIterationsZero(self.max_iterations));
         }
@@ -239,8 +239,7 @@ mod tests {
 
     #[test]
     fn zero_max_iterations_rejected() {
-        let mut cfg = AgentConfig::default();
-        cfg.max_iterations = 0;
+        let cfg = AgentConfig { max_iterations: 0, ..Default::default() };
         assert_eq!(
             cfg.validated().unwrap_err(),
             AgentConfigError::MaxIterationsZero(0),
@@ -249,8 +248,7 @@ mod tests {
 
     #[test]
     fn zero_max_parallel_tools_rejected() {
-        let mut cfg = AgentConfig::default();
-        cfg.max_parallel_tools = 0;
+        let cfg = AgentConfig { max_parallel_tools: 0, ..Default::default() };
         assert_eq!(
             cfg.validated().unwrap_err(),
             AgentConfigError::MaxParallelToolsZero(0),
@@ -259,8 +257,7 @@ mod tests {
 
     #[test]
     fn tool_timeout_below_floor_rejected() {
-        let mut cfg = AgentConfig::default();
-        cfg.tool_timeout_ms = MIN_TOOL_TIMEOUT_MS - 1;
+        let cfg = AgentConfig { tool_timeout_ms: MIN_TOOL_TIMEOUT_MS - 1, ..Default::default() };
         assert_eq!(
             cfg.validated().unwrap_err(),
             AgentConfigError::ToolTimeoutTooLow(MIN_TOOL_TIMEOUT_MS - 1),
@@ -269,17 +266,18 @@ mod tests {
 
     #[test]
     fn tool_timeout_at_floor_accepted() {
-        let mut cfg = AgentConfig::default();
-        cfg.tool_timeout_ms = MIN_TOOL_TIMEOUT_MS;
+        let cfg = AgentConfig { tool_timeout_ms: MIN_TOOL_TIMEOUT_MS, ..Default::default() };
         assert!(cfg.validated().is_ok());
     }
 
     #[test]
     fn boundary_values_accepted() {
-        let mut cfg = AgentConfig::default();
-        cfg.max_iterations = 1;
-        cfg.max_parallel_tools = 1;
-        cfg.tool_timeout_ms = MIN_TOOL_TIMEOUT_MS;
+        let cfg = AgentConfig {
+            max_iterations: 1,
+            max_parallel_tools: 1,
+            tool_timeout_ms: MIN_TOOL_TIMEOUT_MS,
+            ..Default::default()
+        };
         assert!(cfg.validated().is_ok());
     }
 }
