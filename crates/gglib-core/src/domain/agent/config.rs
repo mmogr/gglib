@@ -5,6 +5,7 @@
 //! here ensures a single source of truth across all entry points.
 
 use serde::Serialize;
+use thiserror::Error;
 
 // =============================================================================
 // Ceiling constants — shared across HTTP and CLI callers
@@ -155,6 +156,61 @@ impl Default for AgentConfig {
     }
 }
 
+// =============================================================================
+// Validation
+// =============================================================================
+
+/// Error returned when [`AgentConfig::validated`] detects an invalid field.
+///
+/// Each variant names the exact invariant that was violated and carries the
+/// offending value so callers (HTTP handlers, CLI) can surface a precise
+/// diagnostic without re-inspecting the config.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum AgentConfigError {
+    /// `max_iterations` must be ≥ 1 — zero would make the loop exit
+    /// immediately as `MaxIterationsReached(0)` without ever calling the LLM.
+    #[error("max_iterations must be >= 1, got {0}")]
+    MaxIterationsZero(usize),
+
+    /// `max_parallel_tools` must be ≥ 1 — zero would deadlock the
+    /// `Semaphore` used for tool-call concurrency (no permit can ever be
+    /// acquired).
+    #[error("max_parallel_tools must be >= 1, got {0} (0 would deadlock the semaphore)")]
+    MaxParallelToolsZero(usize),
+
+    /// `tool_timeout_ms` must be ≥ [`MIN_TOOL_TIMEOUT_MS`] — a value below
+    /// the floor would silently time out every tool call, making tool
+    /// calling unusable without a clear error.
+    #[error("tool_timeout_ms must be >= {MIN_TOOL_TIMEOUT_MS}, got {0}")]
+    ToolTimeoutTooLow(u64),
+}
+
+impl AgentConfig {
+    /// Validate all fields that could cause the agent loop to malfunction.
+    ///
+    /// Call this after constructing an `AgentConfig` from untrusted input.
+    /// The [`Default`] implementation is always valid; this acts as a safety
+    /// net for values assembled by HTTP DTOs or CLI argument parsing.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(AgentConfigError)` if any field violates its invariant.
+    pub fn validated(self) -> Result<Self, AgentConfigError> {
+        if self.max_iterations < 1 {
+            return Err(AgentConfigError::MaxIterationsZero(self.max_iterations));
+        }
+        if self.max_parallel_tools < 1 {
+            return Err(AgentConfigError::MaxParallelToolsZero(
+                self.max_parallel_tools,
+            ));
+        }
+        if self.tool_timeout_ms < MIN_TOOL_TIMEOUT_MS {
+            return Err(AgentConfigError::ToolTimeoutTooLow(self.tool_timeout_ms));
+        }
+        Ok(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +230,56 @@ mod tests {
         );
         assert_eq!(cfg.prune_keep_tool_messages, 10);
         assert_eq!(cfg.prune_keep_tail_messages, 12);
+    }
+
+    #[test]
+    fn default_config_passes_validation() {
+        assert!(AgentConfig::default().validated().is_ok());
+    }
+
+    #[test]
+    fn zero_max_iterations_rejected() {
+        let mut cfg = AgentConfig::default();
+        cfg.max_iterations = 0;
+        assert_eq!(
+            cfg.validated().unwrap_err(),
+            AgentConfigError::MaxIterationsZero(0),
+        );
+    }
+
+    #[test]
+    fn zero_max_parallel_tools_rejected() {
+        let mut cfg = AgentConfig::default();
+        cfg.max_parallel_tools = 0;
+        assert_eq!(
+            cfg.validated().unwrap_err(),
+            AgentConfigError::MaxParallelToolsZero(0),
+        );
+    }
+
+    #[test]
+    fn tool_timeout_below_floor_rejected() {
+        let mut cfg = AgentConfig::default();
+        cfg.tool_timeout_ms = MIN_TOOL_TIMEOUT_MS - 1;
+        assert_eq!(
+            cfg.validated().unwrap_err(),
+            AgentConfigError::ToolTimeoutTooLow(MIN_TOOL_TIMEOUT_MS - 1),
+        );
+    }
+
+    #[test]
+    fn tool_timeout_at_floor_accepted() {
+        let mut cfg = AgentConfig::default();
+        cfg.tool_timeout_ms = MIN_TOOL_TIMEOUT_MS;
+        assert!(cfg.validated().is_ok());
+    }
+
+    #[test]
+    fn boundary_values_accepted() {
+        let mut cfg = AgentConfig::default();
+        cfg.max_iterations = 1;
+        cfg.max_parallel_tools = 1;
+        cfg.tool_timeout_ms = MIN_TOOL_TIMEOUT_MS;
+        assert!(cfg.validated().is_ok());
     }
 }

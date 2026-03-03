@@ -55,6 +55,13 @@ impl From<AgentRequestConfig> for AgentConfig {
             // unusable without a clear error.
             cfg.tool_timeout_ms = ms.clamp(MIN_TOOL_TIMEOUT_MS, MAX_TOOL_TIMEOUT_MS_CEILING);
         }
+        // Defense-in-depth: clamping above guarantees validity, but assert in
+        // debug builds so any future field additions that bypass clamping are
+        // caught immediately.
+        debug_assert!(
+            cfg.clone().validated().is_ok(),
+            "clamped AgentConfig must pass validation"
+        );
         cfg
     }
 }

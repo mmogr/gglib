@@ -36,7 +36,7 @@ use tokio::task::JoinHandle;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{
     AgentConfig, AgentEvent, AgentMessage, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
-    MAX_TOOL_TIMEOUT_MS_CEILING,
+    MAX_TOOL_TIMEOUT_MS_CEILING, MIN_TOOL_TIMEOUT_MS,
 };
 use gglib_core::ports::AgentLoopPort;
 
@@ -66,15 +66,20 @@ const REPL_HELP: &str = "\
 /// [`AgentLoop`] to implement [`Clone`].
 pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Result<()> {
     let mut config = AgentConfig::default();
-    // Clamp all user-supplied limits to the same ceilings as the HTTP handler
-    // so the CLI cannot be used to launch unconstrained loops.
-    config.max_iterations = args.max_iterations.min(MAX_ITERATIONS_CEILING);
+    // Clamp all user-supplied limits to the same [floor, ceiling] ranges as
+    // the HTTP handler so the CLI cannot produce an invalid config.
+    config.max_iterations = args.max_iterations.clamp(1, MAX_ITERATIONS_CEILING);
     if let Some(ms) = args.tool_timeout_ms {
-        config.tool_timeout_ms = ms.min(MAX_TOOL_TIMEOUT_MS_CEILING);
+        config.tool_timeout_ms = ms.clamp(MIN_TOOL_TIMEOUT_MS, MAX_TOOL_TIMEOUT_MS_CEILING);
     }
     if let Some(n) = args.max_parallel {
-        config.max_parallel_tools = n.min(MAX_PARALLEL_TOOLS_CEILING);
+        config.max_parallel_tools = n.clamp(1, MAX_PARALLEL_TOOLS_CEILING);
     }
+    // Defense-in-depth: clamping above guarantees validity, but validate so
+    // any future field additions that bypass clamping are caught immediately.
+    let config = config
+        .validated()
+        .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
 
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.

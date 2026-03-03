@@ -32,8 +32,9 @@ pub mod tool_types;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
 pub use config::{
-    AgentConfig, DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS, MAX_ITERATIONS_CEILING,
-    MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, MIN_TOOL_TIMEOUT_MS,
+    AgentConfig, AgentConfigError, DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS,
+    MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING,
+    MIN_TOOL_TIMEOUT_MS,
 };
 pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent};
 pub use messages::{AgentMessage, AssistantContent};
