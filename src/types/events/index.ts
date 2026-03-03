@@ -6,6 +6,7 @@ export type { ToolExecutionEvent, ToolStartEvent, ToolCompleteEvent, ToolErrorEv
 export type {
   AgentEvent,
   AgentTextDeltaEvent,
+  AgentReasoningDeltaEvent,
   AgentToolCallStartEvent,
   AgentToolCallCompleteEvent,
   AgentIterationCompleteEvent,

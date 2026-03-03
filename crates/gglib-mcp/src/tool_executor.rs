@@ -126,12 +126,8 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
         // ---- Convert arguments Value → HashMap<String, Value> ---------------
         let arguments: HashMap<String, serde_json::Value> = match &call.arguments {
             serde_json::Value::Object(map) => map.clone().into_iter().collect(),
-            serde_json::Value::Null => {
-                return Err(anyhow!(
-                    "tool '{}' arguments must be a JSON object; got null",
-                    call.name
-                ));
-            }
+            // Zero-argument tools: LLMs often emit `null` instead of `{}`.
+            serde_json::Value::Null => HashMap::new(),
             other => {
                 return Err(anyhow!(
                     "tool '{}' arguments must be a JSON object; got {}",

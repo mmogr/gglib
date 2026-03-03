@@ -22,7 +22,6 @@ use common::event_assertions::{collect_events, has_error_event};
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
 use common::mock_tools::{MockToolBehavior, MockToolExecutorPort};
 use gglib_agent::AgentLoop;
-use gglib_agent::TOOL_NOT_AVAILABLE_MSG;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolDefinition};
 use gglib_core::ports::AgentError;
 use serde_json::json;
@@ -174,7 +173,7 @@ async fn test_empty_tool_filter_exposes_no_tools() {
         "tool call must have success=false when empty filter is active"
     );
     assert!(
-        rejection.content.contains(TOOL_NOT_AVAILABLE_MSG),
+        rejection.content.contains("is not available in this session"),
         "rejection message should explain the tool is not available, got: {}",
         rejection.content
     );

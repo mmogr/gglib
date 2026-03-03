@@ -79,6 +79,10 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
       // excluded. The backend wire format has no `reasoning` role and the model
       // does not need its own CoT trace as context.
       const allToolCallParts = parts.filter(p => p.type === 'tool-call');
+      const reasoningCount = parts.filter(p => p.type === 'reasoning').length;
+      if (reasoningCount > 0) {
+        appLogger.debug('hook.runtime', 'convertToWireMessages: excluded reasoning parts (not sent to backend)', { reasoningCount });
+      }
       const completedToolCallParts = allToolCallParts.filter(
         (p): p is GglibToolCallPart & { toolCallId: string; toolName: string; result: unknown } =>
           p.type === 'tool-call' &&

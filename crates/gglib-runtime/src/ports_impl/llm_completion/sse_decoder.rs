@@ -19,7 +19,7 @@ use super::sse_parser::{SseParseResult, parse_sse_frame};
 /// # Usage
 ///
 /// ```ignore
-/// let mut decoder = SseStreamDecoder::new();
+/// let mut decoder = SseStreamDecoder::default();
 /// while let Some(chunk) = byte_stream.next().await { … }
 ///     let (events, stop) = decoder.feed_bytes(&chunk);
 ///     for event in events { … }
@@ -27,20 +27,12 @@ use super::sse_parser::{SseParseResult, parse_sse_frame};
 /// }
 /// if let Some(fallback) = decoder.finish() { … }
 /// ```
+#[derive(Default)]
 pub(crate) struct SseStreamDecoder {
     buf: String,
     /// Set to `true` once a [`LlmStreamEvent::Done`] has been yielded, so the
     /// `[DONE]` sentinel doesn't generate a duplicate.
     done_sent: bool,
-}
-
-impl SseStreamDecoder {
-    pub(crate) fn new() -> Self {
-        Self {
-            buf: String::new(),
-            done_sent: false,
-        }
-    }
 }
 
 impl SseStreamDecoder {
@@ -173,7 +165,7 @@ mod tests {
 
     #[test]
     fn text_delta_is_emitted() {
-        let mut dec = SseStreamDecoder::new();
+        let mut dec = SseStreamDecoder::default();
         let (events, stop) = collect_all(&mut dec, &text_delta_frame("hello"));
         assert!(!stop);
         assert!(
@@ -185,7 +177,7 @@ mod tests {
 
     #[test]
     fn done_sentinel_signals_stop_and_emits_fallback() {
-        let mut dec = SseStreamDecoder::new();
+        let mut dec = SseStreamDecoder::default();
         let (events, stop) = collect_all(&mut dec, done_frame());
         assert!(stop, "decoder should signal stop on [DONE]");
         assert!(
@@ -203,7 +195,7 @@ mod tests {
 
     #[test]
     fn finish_reason_then_done_no_duplicate_done() {
-        let mut dec = SseStreamDecoder::new();
+        let mut dec = SseStreamDecoder::default();
         let input = format!("{}{}", finish_reason_frame(), done_frame());
         let (events, stop) = collect_all(&mut dec, &input);
         assert!(stop);
@@ -216,7 +208,7 @@ mod tests {
 
     #[test]
     fn finish_emits_fallback_when_stream_ends_without_done() {
-        let mut dec = SseStreamDecoder::new();
+        let mut dec = SseStreamDecoder::default();
         // Feed a text delta but no Done frame.
         let _ = collect_all(&mut dec, &text_delta_frame("partial"));
         let fallback = dec.finish();
@@ -228,7 +220,7 @@ mod tests {
 
     #[test]
     fn finish_returns_none_when_done_already_sent() {
-        let mut dec = SseStreamDecoder::new();
+        let mut dec = SseStreamDecoder::default();
         let _ = collect_all(&mut dec, &finish_reason_frame());
         // done_sent is now true
         assert!(
@@ -239,7 +231,7 @@ mod tests {
 
     #[test]
     fn partial_line_buffered_until_newline_arrives() {
-        let mut dec = SseStreamDecoder::new();
+        let mut dec = SseStreamDecoder::default();
         let full_frame = text_delta_frame("world");
 
         // Split the frame across two feed calls.

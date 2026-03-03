@@ -156,7 +156,11 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         setCurrentStreamingAssistantMessageId,
         config: {
           ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
-          ...(maxStagnationSteps !== undefined && { max_stagnation_steps: maxStagnationSteps }),
+          // Note: maxStagnationSteps is intentionally NOT forwarded.
+          // PartialAgentConfig omits internal tuning parameters
+          // (max_stagnation_steps, context_budget_chars, etc.) to prevent
+          // resource exhaustion by untrusted callers; the backend's
+          // AgentConfig::default() values are used instead.
         },
         supportsToolCalls,
       });

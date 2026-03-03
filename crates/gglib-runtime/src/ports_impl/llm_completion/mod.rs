@@ -248,7 +248,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
 
         // Build the typed event stream from the raw SSE byte stream.
         let stream = async_stream::stream! {
-            let mut decoder = SseStreamDecoder::new();
+            let mut decoder = SseStreamDecoder::default();
             let mut byte_stream = std::pin::pin!(byte_stream);
 
             'outer: while let Some(chunk_result) = byte_stream.next().await {
