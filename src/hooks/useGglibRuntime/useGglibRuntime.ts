@@ -57,7 +57,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     conversationId,
     selectedServerPort,
     maxToolIterations,
-    maxStagnationSteps,
+    maxStagnationSteps: _maxStagnationSteps,
     onError,
     supportsToolCalls,
   } = options;
