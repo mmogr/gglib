@@ -2,9 +2,19 @@
  * React state mutation helpers for an in-flight agent assistant message.
  *
  * Each function takes `setMessages` and a `messageId` and applies a targeted
- * immutable update to the matching `GglibMessage` in state.  They are pure
- * named functions so they can be imported, tested, and re-used independently
- * of the main `streamAgentChat` orchestrator.
+ * update to the matching `GglibMessage` in state.  They are pure named
+ * functions so they can be imported, tested, and re-used independently of the
+ * main `streamAgentChat` orchestrator.
+ *
+ * ## Performance: in-place part mutation
+ *
+ * Delta functions (`applyTextDelta`, `applyReasoningDelta`) are called once
+ * per SSE token — potentially hundreds of times per second during fast
+ * streaming.  To avoid GC pressure and UI stuttering, `applyDeltaToLastPart`
+ * mutates the last element of the `parts` array **in place** rather than
+ * creating a new array on every token.  A shallow clone of the top-level
+ * `messages` array (via `prev.map`) is sufficient for React to detect the
+ * state change; the inner `parts` array identity is deliberately preserved.
  *
  * @module agentMessageState
  */
@@ -32,7 +42,12 @@ type DeltaPart = TextPart | ReasoningPart;
  * Append `delta` to the last part whose `type` matches `partType`, or push a
  * new part when no such part exists at the tail of the array.
  *
- * Returns a new array — `parts` is never mutated.
+ * **Mutation strategy:** When appending to an existing trailing part the
+ * function mutates `text` in place and returns the *same* array reference.
+ * The caller is responsible for creating a new top-level messages array
+ * (via `prev.map`) so that React detects the state change.  Only when a
+ * brand-new part is needed does the function allocate a new array via
+ * spread.
  *
  * This is the common kernel shared by {@link applyTextDelta} and
  * {@link applyReasoningDelta}; the only difference between those two callers
@@ -45,11 +60,9 @@ function applyDeltaToLastPart(
 ): GglibMessagePart[] {
   const last = parts.at(-1);
   if (last?.type === partType) {
-    const prev = last as DeltaPart;
-    return [
-      ...parts.slice(0, -1),
-      { ...prev, text: (prev.text ?? '') + delta },
-    ];
+    // Mutate in place — the caller already clones the messages array for React.
+    (last as DeltaPart).text = ((last as DeltaPart).text ?? '') + delta;
+    return parts;
   }
   return [...parts, { type: partType, text: delta } as GglibMessagePart];
 }
