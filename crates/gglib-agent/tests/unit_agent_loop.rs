@@ -173,7 +173,9 @@ async fn test_empty_tool_filter_exposes_no_tools() {
         "tool call must have success=false when empty filter is active"
     );
     assert!(
-        rejection.content.contains("is not available in this session"),
+        rejection
+            .content
+            .contains("is not available in this session"),
         "rejection message should explain the tool is not available, got: {}",
         rejection.content
     );

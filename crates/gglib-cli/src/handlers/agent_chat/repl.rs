@@ -195,7 +195,6 @@ async fn run_single_turn(
     system_fallback
 }
 
-
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
 /// arrives, rendering each event.
 ///

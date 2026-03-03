@@ -161,7 +161,10 @@ mod tests {
             count, max_steps, ..
         } = err
         {
-            assert_eq!(count, 2, "count should be 2 on the first repeat with max_steps=1");
+            assert_eq!(
+                count, 2,
+                "count should be 2 on the first repeat with max_steps=1"
+            );
             assert_eq!(max_steps, 1);
         } else {
             panic!("expected AgentError::StagnationDetected");
@@ -178,7 +181,14 @@ mod tests {
             .record(text, 0)
             .expect_err("max_steps=0 must reject the very first occurrence");
         assert!(
-            matches!(err, AgentError::StagnationDetected { count: 1, max_steps: 0, .. }),
+            matches!(
+                err,
+                AgentError::StagnationDetected {
+                    count: 1,
+                    max_steps: 0,
+                    ..
+                }
+            ),
             "expected StagnationDetected with count=1 and max_steps=0, got {err:?}"
         );
     }

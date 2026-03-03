@@ -12,10 +12,7 @@ use tracing::warn;
 
 /// Emergency tail-prune: keep all `System` messages (hoisted to front) and the
 /// last [`AgentConfig::prune_keep_tail_messages`] non-system messages.
-pub(super) fn prune_tail(
-    messages: Vec<AgentMessage>,
-    config: &AgentConfig,
-) -> Vec<AgentMessage> {
+pub(super) fn prune_tail(messages: Vec<AgentMessage>, config: &AgentConfig) -> Vec<AgentMessage> {
     let before_count = messages.len();
     let (system, non_system): (Vec<AgentMessage>, Vec<AgentMessage>) = messages
         .into_iter()

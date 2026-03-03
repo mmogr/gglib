@@ -5,9 +5,9 @@ use async_trait::async_trait;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{ToolCall, ToolDefinition, ToolResult};
 
+use super::TOOL_NOT_AVAILABLE_MSG;
 use super::empty::EmptyToolExecutor;
 use super::filtered::FilteredToolExecutor;
-use super::TOOL_NOT_AVAILABLE_MSG;
 
 // ------------------------------------------------------------------
 // Minimal stub executor
@@ -110,8 +110,7 @@ async fn execute_allowed_tool_succeeds() {
 async fn execute_disallowed_tool_returns_error() {
     let allowed: HashSet<String> = ["allowed_tool".to_owned()].into();
     let f = FilteredToolExecutor::new(
-        Arc::new(StubExecutor::new(&["allowed_tool", "secret_tool"]))
-            as Arc<dyn ToolExecutorPort>,
+        Arc::new(StubExecutor::new(&["allowed_tool", "secret_tool"])) as Arc<dyn ToolExecutorPort>,
         allowed,
     );
     let err = f.execute(&make_call("secret_tool")).await.unwrap_err();
@@ -125,8 +124,7 @@ async fn execute_rejects_tool_not_shown_by_list() {
     // Simulates an adversarial model synthesising a call it was never shown.
     let allowed: HashSet<String> = ["allowed_tool".to_owned()].into();
     let f = FilteredToolExecutor::new(
-        Arc::new(StubExecutor::new(&["allowed_tool", "other_tool"]))
-            as Arc<dyn ToolExecutorPort>,
+        Arc::new(StubExecutor::new(&["allowed_tool", "other_tool"])) as Arc<dyn ToolExecutorPort>,
         allowed,
     );
     let err = f.execute(&make_call("other_tool")).await.unwrap_err();
@@ -137,8 +135,7 @@ async fn execute_rejects_tool_not_shown_by_list() {
 async fn execute_allowed_tool_propagates_inner_error() {
     // When the inner executor returns Err for an *allowed* tool,
     // FilteredToolExecutor must propagate the error unchanged.
-    let inner =
-        StubExecutor::new(&["flaky_tool"]).with_error("flaky_tool", "infrastructure down");
+    let inner = StubExecutor::new(&["flaky_tool"]).with_error("flaky_tool", "infrastructure down");
     let allowed: HashSet<String> = ["flaky_tool".to_owned()].into();
     let f = FilteredToolExecutor::new(Arc::new(inner) as Arc<dyn ToolExecutorPort>, allowed);
     let err = f.execute(&make_call("flaky_tool")).await.unwrap_err();
