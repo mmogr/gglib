@@ -26,7 +26,7 @@ use super::tool_types::ToolCall;
 /// invariant: a JSON object `{}` (missing both `content` and `tool_calls`)
 /// would silently deserialise to an arbitrary variant rather than returning a
 /// meaningful error.  The hand-rolled [`Deserialize`] impl rejects that case
-/// with `"assistant message must have \`content\` or \`tool_calls\`"`.
+/// with `"assistant message must have content or tool_calls"`.
 /// The [`Serialize`] impl mirrors the structure exactly so round-trips are
 /// lossless.
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ pub enum AssistantContent {
 
 impl AssistantContent {
     /// Return the text content if present.
-    pub fn text(&self) -> Option<&str> {
+    pub const fn text(&self) -> Option<&str> {
         match self {
             Self::Content(s) | Self::Both(s, _) => Some(s.as_str()),
             Self::ToolCalls(_) => None,
@@ -49,7 +49,7 @@ impl AssistantContent {
     }
 
     /// Return the tool calls if present.
-    pub fn tool_calls(&self) -> Option<&[ToolCall]> {
+    pub const fn tool_calls(&self) -> Option<&[ToolCall]> {
         match self {
             Self::ToolCalls(tcs) | Self::Both(_, tcs) => Some(tcs.as_slice()),
             Self::Content(_) => None,
@@ -58,6 +58,7 @@ impl AssistantContent {
 
     /// Consume `self` and return a new variant with `calls` as the tool-call
     /// list, preserving any existing text content.
+    #[must_use]
     pub fn with_replaced_tool_calls(self, calls: Vec<ToolCall>) -> Self {
         match self {
             Self::Content(s) | Self::Both(s, _) => Self::Both(s, calls),

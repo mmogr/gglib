@@ -197,11 +197,6 @@ mod tests {
     fn agent_event_channel_capacity_is_sufficient_for_max_config() {
         use super::super::config::{MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING};
 
-        assert!(
-            AGENT_EVENT_CHANNEL_CAPACITY > 0,
-            "channel capacity must be positive"
-        );
-
         // Minimum structural events for a run at ceiling config
         // (no TextDelta headroom included — this is the hard lower bound).
         let structural_per_iter = MAX_PARALLEL_TOOLS_CEILING * 2 + 1;
