@@ -204,9 +204,15 @@ pub(crate) fn api_routes() -> Router<AppState> {
         // local cpal/rodio.  Desktop callers skip this endpoint entirely.
         .route("/voice/audio", get(handlers::voice_ws::audio_ws))
         // Agent (server-side agentic loop with SSE streaming)
-        // 4 MiB body limit — larger than the Axum default (2 MiB) because agent
-        // requests carry the full conversation history (all prior messages, tool
-        // results, and assistant turns), which grows with each session turn.
+        //
+        // Body limit: **4 MiB** (vs the Axum default of 2 MiB).
+        //
+        // Agent requests carry the full conversation history — every prior user
+        // message, assistant turn, and tool result.  A typical turn adds ~2-4 KB
+        // (prompt + tool JSON), so 4 MiB comfortably holds ~1 000 turns.  If you
+        // place a reverse proxy (nginx, Caddy, …) in front of this server, make
+        // sure its own body-size limit is at least 4 MiB as well, otherwise the
+        // proxy will reject long sessions before Axum ever sees them.
         .route(
             "/agent/chat",
             post(handlers::agent::chat).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),

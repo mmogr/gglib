@@ -14,6 +14,7 @@
 //! | [`test_tool_timeout`]           | Slow tool times out; loop recovers |
 //! | [`test_reasoning_delta_emitted`]| Reasoning block forwarded as event |
 //! | [`test_both_text_and_tool_calls_in_history`] | Text preamble + tool calls preserved |
+//! | [`test_tool_filter_restricts_visible_tools`] | `tool_filter` allowlist hides tools from LLM |
 
 mod common;
 
@@ -28,6 +29,7 @@ use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition,
 };
+use std::collections::HashSet;
 use serde_json::json;
 use tokio::sync::mpsc;
 
@@ -352,4 +354,77 @@ async fn test_both_text_and_tool_calls_in_history() {
         assert_eq!(content.tool_calls.len(), 1);
         assert_eq!(content.tool_calls[0].name, "search");
     }
+}
+
+// =============================================================================
+// Tool filter
+// =============================================================================
+
+/// **Tool filter restricts visible tools**: two tools are registered, but only
+/// one is in the `tool_filter` allowlist.  The LLM requests the allowed tool,
+/// the loop completes, and we verify the filtered-out tool never appeared in
+/// the tool-list seen by the LLM.
+///
+/// Exercises the `Some(allowed)` branch of [`AgentLoop::build`], which wraps
+/// the executor in a [`FilteredToolExecutor`].
+#[tokio::test]
+async fn test_tool_filter_restricts_visible_tools() {
+    // LLM calls the allowed tool, then produces a final answer.
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(MockLlmResponse::tool_call(
+                "tc1",
+                "search",
+                json!({"q": "rust"}),
+            ))
+            .push(MockLlmResponse::text("Done.")),
+    );
+
+    // Register two tools: "search" (allowed) and "write" (blocked).
+    let executor = MockToolExecutorPort::new()
+        .with_tool(
+            ToolDefinition::new("search").with_description("Search things"),
+            MockToolBehavior::Immediate {
+                content: "found it".into(),
+            },
+        )
+        .with_tool(
+            ToolDefinition::new("write").with_description("Write files"),
+            MockToolBehavior::Immediate {
+                content: "written".into(),
+            },
+        );
+    let call_log = Arc::clone(&executor.call_log);
+
+    // Only allow "search" through the filter.
+    let tool_filter = Some(HashSet::from(["search".to_string()]));
+    let agent = AgentLoop::build(llm, Arc::new(executor), tool_filter);
+    let (tx, rx) = mpsc::channel(64);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "Find info".into(),
+            }],
+            AgentConfig::default(),
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    // The loop completed successfully.
+    assert_eq!(result.unwrap().answer, "Done.");
+
+    // "search" was executed.
+    assert!(has_tool_start(&events, "search"));
+    assert!(has_tool_complete_with_success(&events, true));
+
+    // "write" was never executed.
+    assert!(!has_tool_start(&events, "write"));
+
+    // Only "search" appears in the call log.
+    let log = call_log.lock().await;
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0].0, "search");
 }

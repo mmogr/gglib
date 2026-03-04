@@ -106,6 +106,36 @@ export function applyReasoningDelta(
   );
 }
 
+/**
+ * Replace the text content of a message wholesale (not a delta append).
+ *
+ * Used by the `final_answer` handler to guarantee the complete answer text
+ * is present in the message even if individual `text_delta` events were lost
+ * in transit.  Finds the *last* text part and replaces its content, or
+ * pushes a new text part if none exists.
+ */
+export function setFullText(
+  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
+  messageId: string,
+  text: string,
+): void {
+  setMessages(prev =>
+    prev.map(m => {
+      if (m.id !== messageId) return m;
+      const parts = Array.isArray(m.content) ? ([...m.content] as GglibMessagePart[]) : [];
+      // Find the last text part and replace its content.
+      const lastTextIdx = parts.findLastIndex(p => p.type === 'text');
+      if (lastTextIdx >= 0) {
+        const updated = [...parts];
+        updated[lastTextIdx] = { ...updated[lastTextIdx], type: 'text', text } as GglibMessagePart;
+        return { ...m, content: updated as GglibContent };
+      }
+      // No text part exists yet — create one.
+      return { ...m, content: [...parts, { type: 'text', text } as GglibMessagePart] as GglibContent };
+    }),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Tool calls
 // ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ import {
   addToolCallPart,
   applyToolResult,
   finalizeMessageTiming,
+  setFullText,
 } from './agentMessageState';
 import { isAbortError } from '../../utils/errors';
 
@@ -206,7 +207,10 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     throw err;
   }
 
-  // Stream ended without a final_answer or error event — treat as complete.
+  // Stream ended without a final_answer or error event — the server shut down
+  // or the connection was dropped mid-stream.  Log a warning so the gap is
+  // visible in diagnostics, then finalize whatever partial message exists.
+  appLogger.warn('hook.runtime', 'streamAgentChat: SSE stream ended without final_answer or error event');
   cleanup();
 }
 
@@ -300,11 +304,12 @@ function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps: Dispa
       if (typeof event.content !== 'string') {
         appLogger.warn('hook.runtime', 'streamAgentChat: final_answer missing content string', { event });
       } else {
-        // Defensive flush: the complete answer text is redundant with the
-        // preceding text_delta events, but if any delta was lost in transit
-        // the message would be left with partial content.  Applying the full
-        // text here guarantees the final message is always complete.
-        applyTextDelta(setMessages, state.currentId, '');
+        // Defensive replacement: the complete answer text is redundant with
+        // the preceding text_delta events, but if any delta was lost in
+        // transit the message would be left with partial content.  Replacing
+        // the full text part here guarantees the final message is always
+        // complete — even after a lossy transport.
+        setFullText(setMessages, state.currentId, event.content);
       }
       if (timingTracker) timingTracker.onEndOfMessage(state.currentId);
       cleanup();

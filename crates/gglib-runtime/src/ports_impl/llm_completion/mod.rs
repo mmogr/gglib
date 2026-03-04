@@ -215,7 +215,6 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             std::time::Duration::from_secs(LLM_CONNECT_TIMEOUT_SECS),
             self.client
                 .post(&self.url)
-                .header("Content-Type", "application/json")
                 .json(&body)
                 .send(),
         )
