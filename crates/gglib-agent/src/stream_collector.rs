@@ -171,9 +171,25 @@ pub async fn collect_stream(
                 }
                 let p = &mut partials[index];
                 if let Some(id) = id {
+                    if let Some(ref existing) = p.id {
+                        warn!(
+                            tool_index = index,
+                            existing = %existing,
+                            new = %id,
+                            "ToolCallDelta overwrote existing id"
+                        );
+                    }
                     p.id = Some(id);
                 }
                 if let Some(name) = name {
+                    if let Some(ref existing) = p.name {
+                        warn!(
+                            tool_index = index,
+                            existing = %existing,
+                            new = %name,
+                            "ToolCallDelta overwrote existing name"
+                        );
+                    }
                     p.name = Some(name);
                 }
                 if let Some(args) = arguments {
@@ -279,6 +295,10 @@ async fn bail_stream<T>(tx: &mpsc::Sender<AgentEvent>, msg: String) -> Result<T>
 /// Extracted from the `format!` call at the `Done` assembly site to make the
 /// three-branch logic independently testable and avoid deep nesting.
 fn missing_fields_desc(id: Option<&str>, name: Option<&str>) -> &'static str {
+    debug_assert!(
+        id.is_none() || name.is_none(),
+        "missing_fields_desc called with both fields present"
+    );
     match (id, name) {
         (None, None) => "id and name",
         (None, Some(_)) => "id",

@@ -47,9 +47,10 @@ mod tests {
     }
 
     #[test]
-    fn fnv1a_64_known_empty_rounds_stable() {
+    fn fnv1a_64_is_deterministic_and_distinct() {
         // Hashing the same string twice must yield the same value.
         assert_eq!(fnv1a_64("hello"), fnv1a_64("hello"));
+        // Different inputs must produce different hashes.
         assert_ne!(fnv1a_64("hello"), fnv1a_64("world"));
     }
 

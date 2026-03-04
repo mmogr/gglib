@@ -196,6 +196,37 @@ pub enum AgentConfigError {
 }
 
 impl AgentConfig {
+    /// Build an `AgentConfig` from user-supplied overrides.
+    ///
+    /// Each `Some` value is clamped to the safe `[floor, ceiling]` range
+    /// before assignment; `None` fields retain their [`Default`] values.
+    /// The result is validated before returning.
+    ///
+    /// This is the **single entry-point** for both HTTP and CLI callers,
+    /// eliminating duplicated clamping logic at every call site.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(AgentConfigError)` if the clamped config violates any
+    /// invariant (defense-in-depth — should never happen given the clamping).
+    pub fn from_user_params(
+        max_iterations: Option<usize>,
+        max_parallel_tools: Option<usize>,
+        tool_timeout_ms: Option<u64>,
+    ) -> Result<Self, AgentConfigError> {
+        let mut cfg = Self::default();
+        if let Some(n) = max_iterations {
+            cfg.max_iterations = n.clamp(1, MAX_ITERATIONS_CEILING);
+        }
+        if let Some(n) = max_parallel_tools {
+            cfg.max_parallel_tools = n.clamp(1, MAX_PARALLEL_TOOLS_CEILING);
+        }
+        if let Some(ms) = tool_timeout_ms {
+            cfg.tool_timeout_ms = ms.clamp(MIN_TOOL_TIMEOUT_MS, MAX_TOOL_TIMEOUT_MS_CEILING);
+        }
+        cfg.validated()
+    }
+
     /// Validate all fields that could cause the agent loop to malfunction.
     ///
     /// Call this after constructing an `AgentConfig` from untrusted input.
@@ -205,7 +236,7 @@ impl AgentConfig {
     /// # Errors
     ///
     /// Returns `Err(AgentConfigError)` if any field violates its invariant.
-    pub const fn validated(self) -> Result<Self, AgentConfigError> {
+    pub fn validated(self) -> Result<Self, AgentConfigError> {
         if self.max_iterations < 1 {
             return Err(AgentConfigError::MaxIterationsZero(self.max_iterations));
         }
@@ -328,5 +359,42 @@ mod tests {
             ..Default::default()
         };
         assert!(cfg.validated().is_ok());
+    }
+
+    #[test]
+    fn from_user_params_clamps_and_validates() {
+        // All values within range → accepted as-is.
+        let cfg = AgentConfig::from_user_params(Some(10), Some(3), Some(5_000)).unwrap();
+        assert_eq!(cfg.max_iterations, 10);
+        assert_eq!(cfg.max_parallel_tools, 3);
+        assert_eq!(cfg.tool_timeout_ms, 5_000);
+    }
+
+    #[test]
+    fn from_user_params_clamps_extremes() {
+        // Zero iterations → clamped to 1.
+        let cfg = AgentConfig::from_user_params(Some(0), Some(0), Some(0)).unwrap();
+        assert_eq!(cfg.max_iterations, 1);
+        assert_eq!(cfg.max_parallel_tools, 1);
+        assert_eq!(cfg.tool_timeout_ms, MIN_TOOL_TIMEOUT_MS);
+    }
+
+    #[test]
+    fn from_user_params_clamps_above_ceiling() {
+        let cfg =
+            AgentConfig::from_user_params(Some(usize::MAX), Some(usize::MAX), Some(u64::MAX))
+                .unwrap();
+        assert_eq!(cfg.max_iterations, MAX_ITERATIONS_CEILING);
+        assert_eq!(cfg.max_parallel_tools, MAX_PARALLEL_TOOLS_CEILING);
+        assert_eq!(cfg.tool_timeout_ms, MAX_TOOL_TIMEOUT_MS_CEILING);
+    }
+
+    #[test]
+    fn from_user_params_none_keeps_defaults() {
+        let cfg = AgentConfig::from_user_params(None, None, None).unwrap();
+        let def = AgentConfig::default();
+        assert_eq!(cfg.max_iterations, def.max_iterations);
+        assert_eq!(cfg.max_parallel_tools, def.max_parallel_tools);
+        assert_eq!(cfg.tool_timeout_ms, def.tool_timeout_ms);
     }
 }

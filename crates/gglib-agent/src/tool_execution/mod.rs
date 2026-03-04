@@ -64,8 +64,10 @@ async fn execute_single_tool(
     // Acquire a concurrency permit before starting.
     // `wait_ms` below captures how long this took.
     let Ok(_permit) = sem.acquire_owned().await else {
-        // The semaphore was dropped (agent loop was shut down).
-        // Return a graceful failure instead of panicking inside spawn.
+        // `acquire_owned` returns `Err` only when `Semaphore::close()` has
+        // been called.  We never call `close()`, so this branch is
+        // unreachable in normal operation.  It exists as a safety net in
+        // case future refactors introduce explicit shutdown.
         return error_result("Tool execution aborted: concurrency gate closed".into());
     };
     let wait_ms = elapsed_ms(enqueue_time);

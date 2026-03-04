@@ -8,9 +8,10 @@
 //! `max_stagnation_steps` times **before** the current call, the loop is
 //! aborted with [`AgentError::StagnationDetected`].
 //!
-//! Stagnation detection is a safety net for models that get stuck in a
-//! repetitive non-tool-calling loop.  Tool-call loops are handled separately
-//! by [`crate::loop_detection::LoopDetector`].
+//! Stagnation detection runs on **every** iteration — both tool-calling and
+//! text-only — so it catches models that repeat the same text regardless of
+//! whether tools are invoked.  Tool-call loops are handled separately by
+//! [`crate::loop_detection::LoopDetector`].
 //!
 //! ## Oscillation detection
 //!

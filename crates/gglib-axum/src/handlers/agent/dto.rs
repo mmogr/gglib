@@ -3,10 +3,6 @@
 use serde::Deserialize;
 
 use gglib_core::domain::agent::{AgentConfig, AgentMessage};
-use gglib_core::{
-    MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING,
-    MIN_TOOL_TIMEOUT_MS,
-};
 
 /// User-facing configuration for a single agent chat request.
 ///
@@ -36,36 +32,12 @@ pub struct AgentRequestConfig {
 
 impl From<AgentRequestConfig> for AgentConfig {
     fn from(req: AgentRequestConfig) -> Self {
-        let AgentRequestConfig {
-            max_iterations,
-            max_parallel_tools,
-            tool_timeout_ms,
-        } = req;
-        let mut cfg = AgentConfig::default();
-        if let Some(n) = max_iterations {
-            // Clamp to [1, ceiling]: 0 would make the loop exit immediately as
-            // MaxIterationsReached(0) without ever running.
-            cfg.max_iterations = n.clamp(1, MAX_ITERATIONS_CEILING);
-        }
-        if let Some(n) = max_parallel_tools {
-            // Clamp to [1, ceiling]: Semaphore::new(0) would deadlock any
-            // iteration that produces tool calls — no permit can ever be acquired.
-            cfg.max_parallel_tools = n.clamp(1, MAX_PARALLEL_TOOLS_CEILING);
-        }
-        if let Some(ms) = tool_timeout_ms {
-            // Clamp to [MIN_TOOL_TIMEOUT_MS, ceiling]: 0 ms would silently
-            // time out every tool call immediately, making tool calling
-            // unusable without a clear error.
-            cfg.tool_timeout_ms = ms.clamp(MIN_TOOL_TIMEOUT_MS, MAX_TOOL_TIMEOUT_MS_CEILING);
-        }
-        // Defense-in-depth: clamping above guarantees validity, but assert in
-        // debug builds so any future field additions that bypass clamping are
-        // caught immediately.
-        debug_assert!(
-            cfg.clone().validated().is_ok(),
-            "clamped AgentConfig must pass validation"
-        );
-        cfg
+        AgentConfig::from_user_params(
+            req.max_iterations,
+            req.max_parallel_tools,
+            req.tool_timeout_ms,
+        )
+        .expect("clamped AgentConfig must pass validation")
     }
 }
 

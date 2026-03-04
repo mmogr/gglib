@@ -204,6 +204,7 @@ impl AgentLoop {
             execute_tools_parallel(&response.tool_calls, &self.tool_executor, config, tx).await;
 
         let tool_call_count = results.len();
+        let tool_failures = results.iter().filter(|r| !r.success).count();
         append_iteration_messages(messages, response.content, response.tool_calls, results);
 
         *messages = prune_for_budget(std::mem::take(messages), config);
@@ -218,6 +219,7 @@ impl AgentLoop {
         debug!(
             iteration,
             tool_results = tool_call_count,
+            tool_failures,
             "iteration complete"
         );
     }
@@ -250,11 +252,10 @@ impl AgentLoopPort for AgentLoop {
     ) -> Result<AgentRunOutput, AgentError> {
         // Validate unconditionally — the cost is four integer comparisons.
         // Invalid configs are a caller bug and must never silently proceed.
-        if let Err(e) = config.clone().validated() {
-            return Err(AgentError::Internal(format!(
-                "AgentConfig invariants violated: {e}"
-            )));
-        }
+        // `validated()` consumes and returns `config`, avoiding a redundant clone.
+        let config = config.validated().map_err(|e| {
+            AgentError::Internal(format!("AgentConfig invariants violated: {e}"))
+        })?;
 
         let mut guards = Guards::default();
 
@@ -285,14 +286,19 @@ impl AgentLoopPort for AgentLoop {
                 "LLM response received"
             );
 
+            // Guards run BEFORE the finalize check so that:
+            // - Stagnation catches repeated text on both tool-calling and
+            //   text-only iterations.
+            // - Loop detection catches repeated tool-call batches (skipped
+            //   when tool_calls is empty to avoid a degenerate signature).
+            guards
+                .check(&config, &response.content, &response.tool_calls, &tx)
+                .await?;
+
             if response.tool_calls.is_empty() {
                 return Self::finalize_answer(&mut messages, response.content, iteration, &tx)
                     .await;
             }
-
-            guards
-                .check(&config, &response.content, &response.tool_calls, &tx)
-                .await?;
 
             self.execute_tool_iteration(&mut messages, response, &config, iteration, &tx)
                 .await;
@@ -321,9 +327,15 @@ impl Guards {
     /// Check both stagnation and loop-detection guards against the current
     /// iteration's response.
     ///
-    /// Evaluates in order; returns on the first failure.  On failure, emits
-    /// an [`AgentEvent::Error`] on `tx` before returning so SSE consumers
-    /// always see the failure reason before the stream closes.
+    /// Stagnation is checked on **every** iteration — including ones that will
+    /// become the final answer — so the detector catches models that repeat
+    /// the same text regardless of whether tool calls are present.
+    ///
+    /// Loop detection is only checked when tool calls are present, since an
+    /// empty batch would produce a degenerate signature.
+    ///
+    /// On failure, emits an [`AgentEvent::Error`] on `tx` before returning so
+    /// SSE consumers always see the failure reason before the stream closes.
     async fn check(
         &mut self,
         config: &AgentConfig,
@@ -337,10 +349,12 @@ impl Guards {
                 return Err(e);
             }
         }
-        if let Some(max_steps) = config.max_repeated_batch_steps {
-            if let Err(e) = self.loop_detector.check(tool_calls, max_steps) {
-                emit_error_event(tx, &e.to_string()).await;
-                return Err(e);
+        if !tool_calls.is_empty() {
+            if let Some(max_steps) = config.max_repeated_batch_steps {
+                if let Err(e) = self.loop_detector.check(tool_calls, max_steps) {
+                    emit_error_event(tx, &e.to_string()).await;
+                    return Err(e);
+                }
             }
         }
         Ok(())

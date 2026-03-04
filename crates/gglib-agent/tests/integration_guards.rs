@@ -11,6 +11,7 @@
 //! | [`test_max_iterations_reached`]         | [`AgentConfig::max_iterations`] limit |
 //! | [`test_loop_detection`]                 | Repeated tool-call batch → [`AgentError::LoopDetected`] |
 //! | [`test_stagnation_detected_integration`] | Repeated text response → [`AgentError::StagnationDetected`] |
+//! | [`test_stagnation_fires_before_finalize`] | Stagnation catches repeated final answer |
 //! | [`test_too_many_tool_calls_integration`] | Oversized tool-call batch → [`AgentError::ParallelToolLimitExceeded`] |
 
 mod common;
@@ -294,5 +295,83 @@ async fn test_too_many_tool_calls_integration() {
     assert!(
         !has_final_answer(&events),
         "FinalAnswer must not be emitted when the batch is rejected"
+    );
+}
+
+/// **Stagnation fires before finalize**: A model produces repeated text with
+/// tool calls (building up the stagnation counter), then produces the same
+/// text WITHOUT tools.  Because guards run before the finalize check, the
+/// stagnation guard must fire on the text-only iteration, preventing a
+/// stagnated final answer from being accepted.
+///
+/// Uses `max_stagnation_steps: Some(1)` so the detector fires after the
+/// 2nd identical response (baseline + 1 repeat).
+#[tokio::test]
+async fn test_stagnation_fires_before_finalize() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            // Iteration 0: "Stuck" + tool call → stagnation records count=1 (ok)
+            .push(MockLlmResponse {
+                reasoning: None,
+                content: Some("Stuck".into()),
+                tool_calls: vec![ToolCall {
+                    id: "t0".into(),
+                    name: "do_thing".into(),
+                    arguments: json!({}),
+                }],
+                finish_reason: "tool_calls".into(),
+            })
+            // Iteration 1: "Stuck" (no tools) → stagnation records count=2 > max_steps=1 → error
+            // Without the guards-before-finalize restructure, this would be
+            // accepted as a FinalAnswer.
+            .push(MockLlmResponse::text("Stuck")),
+    );
+
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("do_thing"),
+        MockToolBehavior::Immediate {
+            content: "ok".into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(128);
+
+    let result = agent
+        .run(
+            vec![AgentMessage::User {
+                content: "go".into(),
+            }],
+            common::for_test(|c| {
+                c.max_stagnation_steps = Some(1);
+                c.max_repeated_batch_steps = None;
+                c.max_iterations = 10;
+            }),
+            tx,
+        )
+        .await;
+
+    let events = collect_events(rx).await;
+
+    assert!(
+        matches!(
+            result,
+            Err(AgentError::StagnationDetected {
+                max_steps: 1,
+                count: 2,
+                ..
+            })
+        ),
+        "expected StagnationDetected {{ max_steps: 1, count: 2 }}, got: {result:?}"
+    );
+
+    assert!(
+        has_error_event(&events),
+        "AgentEvent::Error must be emitted before stream closes on stagnation"
+    );
+
+    assert!(
+        !has_final_answer(&events),
+        "FinalAnswer must not be emitted when stagnation aborts a text-only iteration"
     );
 }
