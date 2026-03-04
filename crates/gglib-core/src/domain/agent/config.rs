@@ -192,7 +192,8 @@ pub enum AgentConfigError {
     /// `context_budget_chars` must be >= [`MIN_CONTEXT_BUDGET_CHARS`] — a value
     /// below the floor would cause the pruner to discard virtually all context.
     #[error("context_budget_chars must be >= {MIN_CONTEXT_BUDGET_CHARS}, got {0}")]
-    ContextBudgetTooLow(usize),}
+    ContextBudgetTooLow(usize),
+}
 
 impl AgentConfig {
     /// Validate all fields that could cause the agent loop to malfunction.

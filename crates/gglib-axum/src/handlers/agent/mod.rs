@@ -87,9 +87,7 @@ pub async fn chat(
         .clone()
         .try_acquire_owned()
         .map_err(|_| {
-            HttpError::TooManyRequests(
-                "all agent loop slots are in use; try again later".into(),
-            )
+            HttpError::TooManyRequests("all agent loop slots are in use; try again later".into())
         })?;
 
     validate_port(&state, req.port).await?;

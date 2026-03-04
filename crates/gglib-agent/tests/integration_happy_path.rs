@@ -29,8 +29,8 @@ use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition,
 };
-use std::collections::HashSet;
 use serde_json::json;
+use std::collections::HashSet;
 use tokio::sync::mpsc;
 
 // =============================================================================

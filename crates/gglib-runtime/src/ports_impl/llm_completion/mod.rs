@@ -213,10 +213,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         // gated here because prompt pre-fill can be arbitrarily long.
         let response = tokio::time::timeout(
             std::time::Duration::from_secs(LLM_CONNECT_TIMEOUT_SECS),
-            self.client
-                .post(&self.url)
-                .json(&body)
-                .send(),
+            self.client.post(&self.url).json(&body).send(),
         )
         .await
         .map_err(|_| {

@@ -204,12 +204,7 @@ impl AgentLoop {
             execute_tools_parallel(&response.tool_calls, &self.tool_executor, config, tx).await;
 
         let tool_call_count = results.len();
-        append_iteration_messages(
-            messages,
-            response.content,
-            response.tool_calls,
-            results,
-        );
+        append_iteration_messages(messages, response.content, response.tool_calls, results);
 
         *messages = prune_for_budget(std::mem::take(messages), config);
 
@@ -220,14 +215,17 @@ impl AgentLoop {
             })
             .await;
 
-        debug!(iteration, tool_results = tool_call_count, "iteration complete");
+        debug!(
+            iteration,
+            tool_results = tool_call_count,
+            "iteration complete"
+        );
     }
 }
 
 // =============================================================================
 // AgentLoopPort implementation
 // =============================================================================
-
 
 #[async_trait]
 impl AgentLoopPort for AgentLoop {
@@ -286,18 +284,16 @@ impl AgentLoopPort for AgentLoop {
             );
 
             if response.tool_calls.is_empty() {
-                return Self::finalize_answer(
-                    &mut messages, response.content, iteration, &tx,
-                ).await;
+                return Self::finalize_answer(&mut messages, response.content, iteration, &tx)
+                    .await;
             }
 
             guards
                 .check(&config, &response.content, &response.tool_calls, &tx)
                 .await?;
 
-            self.execute_tool_iteration(
-                &mut messages, response, &config, iteration, &tx,
-            ).await;
+            self.execute_tool_iteration(&mut messages, response, &config, iteration, &tx)
+                .await;
         }
 
         warn!(max = config.max_iterations, "agent loop hit max iterations");
