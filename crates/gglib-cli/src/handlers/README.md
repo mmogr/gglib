@@ -51,6 +51,7 @@ This module contains the **handler functions** that implement the actual logic f
 | [`verification.rs`](verification.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-verification-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-verification-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-verification-coverage.json) |
 | [`check_deps/`](check_deps/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-check_deps-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-check_deps-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-check_deps-coverage.json) |
 | [`download/`](download/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-coverage.json) |
+| [`agent_chat/`](agent_chat/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-agent_chat-coverage.json) |
 <!-- module-table:end -->
 
 ## Handler Organization
@@ -105,6 +106,11 @@ This module contains the **handler functions** that implement the actual logic f
 - **`check_deps/`** - Dependency checking
   - `check.rs` - Check system dependencies
   - `install.rs` - Install missing dependencies
+
+### Agentic Chat
+- **`agent_chat/`** - Interactive multi-turn agent REPL (`gglib chat --agent`)
+  - Drives the agentic loop via `AgentLoopPort`
+  - Streams tool-call and text events to the terminal
 
 ## Handler Pattern
 

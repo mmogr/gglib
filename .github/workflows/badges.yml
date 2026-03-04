@@ -258,13 +258,13 @@ jobs:
           
           # gglib-mcp modules  
           MCP_TEST="$(find artifacts -name 'rust-test-gglib-mcp.txt' -type f 2>/dev/null | head -1)"
-          for MODULE in client manager service path resolver; do
+          for MODULE in client manager service path resolver tool_executor; do
             extract_module_tests "$MCP_TEST" "$MODULE" "gglib-mcp-$MODULE"
           done
           
           # gglib-agent modules
           AGENT_TEST="$(find artifacts -name 'rust-test-gglib-agent.txt' -type f 2>/dev/null | head -1)"
-          for MODULE in agent_loop loop_detection stagnation stream_collector tool_execution context_pruning; do
+          for MODULE in agent_loop context_pruning fnv1a loop_detection stagnation stream_collector tool_execution util; do
             extract_module_tests "$AGENT_TEST" "$MODULE" "gglib-agent-$MODULE"
           done
           
@@ -547,16 +547,20 @@ jobs:
           
           # gglib-mcp modules
           MCP_LCOV="$(find artifacts -name 'gglib-mcp-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in client manager service path; do
+          for MODULE in client manager service path tool_executor; do
             extract_module_cov "$MCP_LCOV" "src/$MODULE.rs" "gglib-mcp-$MODULE"
           done
           # gglib-mcp resolver submodule (directory, not single file)
           extract_module_cov "$MCP_LCOV" "src/resolver/" "gglib-mcp-resolver"
           
-          # gglib-agent modules (each module is its own .rs file)
+          # gglib-agent file modules
           AGENT_LCOV="$(find artifacts -name 'gglib-agent-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in agent_loop loop_detection stagnation stream_collector tool_execution context_pruning; do
+          for MODULE in agent_loop fnv1a stream_collector util; do
             extract_module_cov "$AGENT_LCOV" "src/$MODULE.rs" "gglib-agent-$MODULE"
+          done
+          # gglib-agent directory modules
+          for MODULE in context_pruning loop_detection stagnation tool_execution; do
+            extract_module_cov "$AGENT_LCOV" "src/$MODULE/" "gglib-agent-$MODULE"
           done
           
           # gglib-gui modules
