@@ -381,9 +381,8 @@ mod tests {
 
     #[test]
     fn from_user_params_clamps_above_ceiling() {
-        let cfg =
-            AgentConfig::from_user_params(Some(usize::MAX), Some(usize::MAX), Some(u64::MAX))
-                .unwrap();
+        let cfg = AgentConfig::from_user_params(Some(usize::MAX), Some(usize::MAX), Some(u64::MAX))
+            .unwrap();
         assert_eq!(cfg.max_iterations, MAX_ITERATIONS_CEILING);
         assert_eq!(cfg.max_parallel_tools, MAX_PARALLEL_TOOLS_CEILING);
         assert_eq!(cfg.tool_timeout_ms, MAX_TOOL_TIMEOUT_MS_CEILING);

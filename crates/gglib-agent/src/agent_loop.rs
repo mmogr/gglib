@@ -253,9 +253,9 @@ impl AgentLoopPort for AgentLoop {
         // Validate unconditionally — the cost is four integer comparisons.
         // Invalid configs are a caller bug and must never silently proceed.
         // `validated()` consumes and returns `config`, avoiding a redundant clone.
-        let config = config.validated().map_err(|e| {
-            AgentError::Internal(format!("AgentConfig invariants violated: {e}"))
-        })?;
+        let config = config
+            .validated()
+            .map_err(|e| AgentError::Internal(format!("AgentConfig invariants violated: {e}")))?;
 
         let mut guards = Guards::default();
 
