@@ -30,6 +30,9 @@ loop detection) lives in the Rust `gglib-agent` crate.
 |---|---|
 | `useGglibRuntime.ts` | React hook; wires user input → `streamAgentChat` → message state |
 | `streamAgentChat.ts` | Backend SSE consumer; converts UI messages → wire format, processes events |
+| `agentMessageState.ts` | Pure state-mutation helpers for in-flight assistant messages |
+| `agentSseReader.ts` | Minimal POST-capable SSE reader (async generator) |
+| `wireMessages.ts` | `GglibMessage[]` → backend wire-format conversion |
 | `reasoningTiming.ts` | Tracks per-message reasoning segment durations |
 | `clock.ts` | Monotonic clock abstraction for timing |
 | `index.ts` | Public barrel export |

@@ -196,7 +196,7 @@ async fn test_tool_timeout() {
 
     let executor = MockToolExecutorPort::new().with_tool(
         ToolDefinition::new("slow_tool"),
-        // 5 000 ms far exceeds the 50 ms deadline — timeout will fire first.
+        // 5 000 ms far exceeds the 100 ms deadline — timeout will fire first.
         MockToolBehavior::Delayed {
             millis: 5_000,
             content: "this should never arrive".into(),
@@ -212,7 +212,7 @@ async fn test_tool_timeout() {
                 content: "run the slow tool".into(),
             }],
             common::for_test(|c| {
-                c.tool_timeout_ms = 50;
+                c.tool_timeout_ms = 100;
             }),
             tx,
         )

@@ -109,9 +109,15 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
   } = options;
 
   // Build agent config: use null to let the backend apply defaults unless
-  // the caller has overridden at least one field.
-  const agentConfig: Record<string, unknown> | null =
-    config && Object.keys(config).length > 0 ? { ...config } : null;
+  // the caller has overridden at least one field.  Strip `undefined` values
+  // so `{ max_iterations: undefined }` does not produce a spurious key.
+  const agentConfig: Record<string, unknown> | null = (() => {
+    if (!config) return null;
+    const defined = Object.fromEntries(
+      Object.entries(config).filter(([, v]) => v !== undefined),
+    );
+    return Object.keys(defined).length > 0 ? defined : null;
+  })();
 
   // Tool filter: empty array strips all tools when model is known to not
   // support tool-calling (explicit false only — null/undefined is permissive).
@@ -293,6 +299,12 @@ function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps: Dispa
     case 'final_answer': {
       if (typeof event.content !== 'string') {
         appLogger.warn('hook.runtime', 'streamAgentChat: final_answer missing content string', { event });
+      } else {
+        // Defensive flush: the complete answer text is redundant with the
+        // preceding text_delta events, but if any delta was lost in transit
+        // the message would be left with partial content.  Applying the full
+        // text here guarantees the final message is always complete.
+        applyTextDelta(setMessages, state.currentId, '');
       }
       if (timingTracker) timingTracker.onEndOfMessage(state.currentId);
       cleanup();

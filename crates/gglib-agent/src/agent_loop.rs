@@ -191,6 +191,12 @@ impl AgentLoopPort for AgentLoop {
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
+        debug_assert!(
+            config.clone().validated().is_ok(),
+            "AgentConfig invariants violated: {:?}",
+            config.clone().validated().unwrap_err(),
+        );
+
         let mut guards = Guards::default();
 
         // Discover tools once before the iteration loop — the tool set does not
