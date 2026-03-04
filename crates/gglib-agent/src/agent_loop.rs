@@ -162,11 +162,72 @@ impl AgentLoop {
         };
         Arc::new(Self::new(llm, executor))
     }
+
+    /// Emit a `FinalAnswer` event, append the assistant reply to `messages`,
+    /// and return `Ok(AgentRunOutput)`.
+    async fn finalize_answer(
+        messages: &mut Vec<AgentMessage>,
+        content: String,
+        iteration: usize,
+        tx: &mpsc::Sender<AgentEvent>,
+    ) -> Result<AgentRunOutput, AgentError> {
+        debug!("no tool calls; final answer reached");
+        let _ = tx
+            .send(AgentEvent::FinalAnswer {
+                content: content.clone(),
+            })
+            .await;
+        messages.push(AgentMessage::Assistant {
+            content: AssistantContent {
+                text: Some(content.clone()),
+                tool_calls: vec![],
+            },
+        });
+        Ok(AgentRunOutput {
+            answer: content,
+            history: std::mem::take(messages),
+            total_iterations: iteration + 1,
+        })
+    }
+
+    /// Execute tools, append assistant + tool-result messages, prune the
+    /// context budget, and emit `IterationComplete`.
+    async fn execute_tool_iteration(
+        &self,
+        messages: &mut Vec<AgentMessage>,
+        response: CollectedResponse,
+        config: &AgentConfig,
+        iteration: usize,
+        tx: &mpsc::Sender<AgentEvent>,
+    ) {
+        let results =
+            execute_tools_parallel(&response.tool_calls, &self.tool_executor, config, tx).await;
+
+        let tool_call_count = results.len();
+        append_iteration_messages(
+            messages,
+            response.content,
+            response.tool_calls,
+            results,
+        );
+
+        *messages = prune_for_budget(std::mem::take(messages), config);
+
+        let _ = tx
+            .send(AgentEvent::IterationComplete {
+                iteration: iteration + 1,
+                tool_calls: tool_call_count,
+            })
+            .await;
+
+        debug!(iteration, tool_results = tool_call_count, "iteration complete");
+    }
 }
 
 // =============================================================================
 // AgentLoopPort implementation
 // =============================================================================
+
 
 #[async_trait]
 impl AgentLoopPort for AgentLoop {
@@ -175,15 +236,13 @@ impl AgentLoopPort for AgentLoop {
     ///
     /// # Returns
     ///
-    /// - `Ok((final_answer, messages))` — the model produced a response without
-    ///   requesting further tool calls. `messages` is the full conversation
-    ///   history including every assistant and tool-result message appended
-    ///   during the loop, plus the final assistant reply.
+    /// - `Ok(AgentRunOutput)` — the model produced a response without
+    ///   requesting further tool calls.
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
     ///   without a final answer.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated more
     ///   than `config.max_repeated_batch_steps` times.
-    ///   - `Err(AgentError::StagnationDetected)` — the assistant repeated the same
+    /// - `Err(AgentError::StagnationDetected)` — the assistant repeated the same
     ///   text content for too many consecutive iterations.
     async fn run(
         &self,
@@ -191,38 +250,24 @@ impl AgentLoopPort for AgentLoop {
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
-        debug_assert!(
-            config.clone().validated().is_ok(),
-            "AgentConfig invariants violated: {:?}",
-            config.clone().validated().unwrap_err(),
-        );
+        if cfg!(debug_assertions) {
+            if let Err(e) = config.clone().validated() {
+                panic!("AgentConfig invariants violated: {e:?}");
+            }
+        }
 
         let mut guards = Guards::default();
 
-        // Discover tools once before the iteration loop — the tool set does not
-        // change during a single conversation, and calling list_tools() per
-        // iteration would add pointless overhead (and round-trips for MCP).
         let tools = self.tool_executor.list_tools().await;
         debug!(tool_count = tools.len(), "tools available");
 
-        // Prune the caller-supplied history once before the first LLM call so
-        // that oversized initial contexts are handled even when the model
-        // returns a final answer on the very first iteration (no append step).
         messages = prune_for_budget(messages, &config);
 
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
 
-            // ---- 1+2. LLM call and stream collection ----------------------
             let response = self.call_and_collect(&messages, &tools, &tx).await?;
 
-            // Guard: reject tool-call batches that exceed the configured
-            // concurrency cap.  (The stream collector applies a hard index cap
-            // during parsing; this check enforces the user-visible limit.)
-            //
-            // This is a model protocol violation, not an internal infrastructure
-            // failure, so it returns ParallelToolLimitExceeded rather than Internal —
-            // callers can distinguish and report it differently.
             if response.tool_calls.len() > config.max_parallel_tools {
                 let error = AgentError::ParallelToolLimitExceeded {
                     count: response.tool_calls.len(),
@@ -240,75 +285,21 @@ impl AgentLoopPort for AgentLoop {
                 "LLM response received"
             );
 
-            // ---- 3. No tool calls → final answer ----------------------------
-            // Checked BEFORE the stagnation guard: a model that says "I’m
-            // done" in the same wording as a prior non-final turn must not be
-            // penalised as stagnating — the absence of tool calls is the
-            // definitive signal that the loop completed normally.
             if response.tool_calls.is_empty() {
-                debug!("no tool calls; final answer reached");
-                let content = response.content;
-                let _ = tx
-                    .send(AgentEvent::FinalAnswer {
-                        content: content.clone(),
-                    })
-                    .await;
-                // Append the final assistant reply so callers receive the
-                // complete accumulated history and can pass it back unchanged
-                // as the `messages` argument for the next REPL turn.
-                messages.push(AgentMessage::Assistant {
-                    content: AssistantContent {
-                        text: Some(content.clone()),
-                        tool_calls: vec![],
-                    },
-                });
-                return Ok(AgentRunOutput {
-                    answer: content,
-                    history: messages,
-                    total_iterations: iteration + 1,
-                });
+                return Self::finalize_answer(
+                    &mut messages, response.content, iteration, &tx,
+                ).await;
             }
 
-            // ---- 4+5. Stagnation and loop-detection guards ------------------
             guards
                 .check(&config, &response.content, &response.tool_calls, &tx)
                 .await?;
 
-            // ---- 6. Parallel tool execution ---------------------------------
-            let results =
-                execute_tools_parallel(&response.tool_calls, &self.tool_executor, &config, &tx)
-                    .await;
-
-            // ---- 7. Append assistant + tool-result messages -----------------
-            // Capture len before consuming results so we can report the count
-            // in the IterationComplete event without keeping a reference.
-            let tool_call_count = results.len();
-            append_iteration_messages(
-                &mut messages,
-                response.content,
-                response.tool_calls,
-                results,
-            );
-
-            // ---- 8. Context budget pruning (applied after new messages added) --
-            messages = prune_for_budget(messages, &config);
-
-            // ---- 9. Emit iteration-complete event ---------------------------
-            let _ = tx
-                .send(AgentEvent::IterationComplete {
-                    iteration: iteration + 1,
-                    tool_calls: tool_call_count,
-                })
-                .await;
-
-            debug!(
-                iteration,
-                tool_results = tool_call_count,
-                "iteration complete"
-            );
+            self.execute_tool_iteration(
+                &mut messages, response, &config, iteration, &tx,
+            ).await;
         }
 
-        // Max iterations reached
         warn!(max = config.max_iterations, "agent loop hit max iterations");
         let error = AgentError::MaxIterationsReached(config.max_iterations);
         emit_error_event(&tx, &error.to_string()).await;

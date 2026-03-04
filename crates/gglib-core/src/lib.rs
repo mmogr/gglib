@@ -16,7 +16,7 @@ pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
     AssistantContent, ChatMessage, Conversation, ConversationUpdate, DEFAULT_MAX_ITERATIONS,
     DEFAULT_MAX_PARALLEL_TOOLS, LlmStreamEvent, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
-    MAX_TOOL_TIMEOUT_MS_CEILING, MIN_TOOL_TIMEOUT_MS, McpEnvEntry, McpServer, McpServerConfig,
+    MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry, McpServer, McpServerConfig,
     McpServerStatus, McpServerType, McpTool, McpToolResult, Message, MessageRole, Model,
     ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer, NewMessage, NewModel,
     RangeValues, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer, infer_from_chat_template,

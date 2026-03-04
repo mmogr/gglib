@@ -36,6 +36,12 @@ pub const MAX_TOOL_TIMEOUT_MS_CEILING: u64 = 60_000;
 /// but allows intentionally fast tools (health checks, no-ops in tests).
 pub const MIN_TOOL_TIMEOUT_MS: u64 = 100;
 
+/// Hard floor on `context_budget_chars` (100 characters).
+///
+/// A budget below this threshold would cause the pruner to discard virtually
+/// all context, leaving the LLM with no meaningful history to reason about.
+pub const MIN_CONTEXT_BUDGET_CHARS: usize = 100;
+
 /// Default value for [`AgentConfig::max_iterations`].
 ///
 /// Mirrors `DEFAULT_MAX_TOOL_ITERS = 25` from the TypeScript frontend.
@@ -183,7 +189,10 @@ pub enum AgentConfigError {
     /// calling unusable without a clear error.
     #[error("tool_timeout_ms must be >= {MIN_TOOL_TIMEOUT_MS}, got {0}")]
     ToolTimeoutTooLow(u64),
-}
+    /// `context_budget_chars` must be >= [`MIN_CONTEXT_BUDGET_CHARS`] — a value
+    /// below the floor would cause the pruner to discard virtually all context.
+    #[error("context_budget_chars must be >= {MIN_CONTEXT_BUDGET_CHARS}, got {0}")]
+    ContextBudgetTooLow(usize),}
 
 impl AgentConfig {
     /// Validate all fields that could cause the agent loop to malfunction.
@@ -206,6 +215,11 @@ impl AgentConfig {
         }
         if self.tool_timeout_ms < MIN_TOOL_TIMEOUT_MS {
             return Err(AgentConfigError::ToolTimeoutTooLow(self.tool_timeout_ms));
+        }
+        if self.context_budget_chars < MIN_CONTEXT_BUDGET_CHARS {
+            return Err(AgentConfigError::ContextBudgetTooLow(
+                self.context_budget_chars,
+            ));
         }
         Ok(self)
     }
@@ -283,11 +297,33 @@ mod tests {
     }
 
     #[test]
+    fn context_budget_below_floor_rejected() {
+        let cfg = AgentConfig {
+            context_budget_chars: MIN_CONTEXT_BUDGET_CHARS - 1,
+            ..Default::default()
+        };
+        assert_eq!(
+            cfg.validated().unwrap_err(),
+            AgentConfigError::ContextBudgetTooLow(MIN_CONTEXT_BUDGET_CHARS - 1),
+        );
+    }
+
+    #[test]
+    fn context_budget_at_floor_accepted() {
+        let cfg = AgentConfig {
+            context_budget_chars: MIN_CONTEXT_BUDGET_CHARS,
+            ..Default::default()
+        };
+        assert!(cfg.validated().is_ok());
+    }
+
+    #[test]
     fn boundary_values_accepted() {
         let cfg = AgentConfig {
             max_iterations: 1,
             max_parallel_tools: 1,
             tool_timeout_ms: MIN_TOOL_TIMEOUT_MS,
+            context_budget_chars: MIN_CONTEXT_BUDGET_CHARS,
             ..Default::default()
         };
         assert!(cfg.validated().is_ok());

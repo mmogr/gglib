@@ -148,3 +148,34 @@ async fn concurrency_limited_by_semaphore() {
         "peak concurrency {observed_peak} exceeded limit of 3"
     );
 }
+
+/// An executor that always returns `Err(...)`, simulating an infrastructure
+/// failure (e.g. network down, MCP server unreachable).
+struct ErrorExecutor;
+
+#[async_trait]
+impl ToolExecutorPort for ErrorExecutor {
+    async fn list_tools(&self) -> Vec<ToolDefinition> {
+        vec![]
+    }
+    async fn execute(&self, _tc: &ToolCall) -> Result<ToolResult> {
+        anyhow::bail!("infrastructure down")
+    }
+}
+
+#[tokio::test]
+async fn executor_error_produces_failure_result() {
+    let (tx, _rx) = mpsc::channel(32);
+    let executor: Arc<dyn ToolExecutorPort> = Arc::new(ErrorExecutor);
+    let calls = vec![call("err1", "broken_tool")];
+
+    let results = execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx).await;
+
+    assert_eq!(results.len(), 1);
+    assert!(!results[0].success, "result should indicate failure");
+    assert!(
+        results[0].content.contains("infrastructure down"),
+        "error message should propagate: got {:?}",
+        results[0].content,
+    );
+}

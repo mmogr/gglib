@@ -91,7 +91,7 @@ pub enum AgentEvent {
 /// - Accumulates [`ToolCallDelta`](LlmStreamEvent::ToolCallDelta) fragments
 ///   until the stream ends, then assembles them into [`ToolCall`] values.
 /// - Waits for [`Done`](LlmStreamEvent::Done) before triggering tool execution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LlmStreamEvent {
     /// An incremental text fragment from the model's response.
     TextDelta {
