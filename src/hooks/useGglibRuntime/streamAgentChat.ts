@@ -218,12 +218,12 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
 // Private helpers
 // ---------------------------------------------------------------------------
 
-interface DispatchState {
+export interface DispatchState {
   /** ID of the current in-progress assistant message. Mutated on iteration_complete. */
   currentId: string;
 }
 
-interface DispatchDeps {
+export interface DispatchDeps {
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>;
   timingTracker: ReasoningTimingTracker | undefined;
   makeNextMessage: (iter: number) => string;
@@ -237,8 +237,11 @@ interface DispatchDeps {
  *
  * @returns `true` when the stream is complete (`final_answer`), `false` to
  *          continue consuming.  Throws on `error` events (fatal backend failure).
+ *
+ * Exported for unit testing — callers outside this module should use
+ * {@link streamAgentChat} instead.
  */
-function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps: DispatchDeps): boolean {
+export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps: DispatchDeps): boolean {
   const { setMessages, timingTracker, makeNextMessage, cleanup } = deps;
 
   switch (event.type) {

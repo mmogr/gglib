@@ -248,10 +248,12 @@ impl AgentLoopPort for AgentLoop {
         config: AgentConfig,
         tx: mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
-        if cfg!(debug_assertions) {
-            if let Err(e) = config.clone().validated() {
-                panic!("AgentConfig invariants violated: {e:?}");
-            }
+        // Validate unconditionally — the cost is four integer comparisons.
+        // Invalid configs are a caller bug and must never silently proceed.
+        if let Err(e) = config.clone().validated() {
+            return Err(AgentError::Internal(format!(
+                "AgentConfig invariants violated: {e}"
+            )));
         }
 
         let mut guards = Guards::default();

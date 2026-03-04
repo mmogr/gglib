@@ -130,11 +130,21 @@ fn message_to_openai(msg: &AgentMessage) -> Value {
             json!({ "role": "user", "content": content })
         }
         AgentMessage::Assistant { content } => {
-            let mut obj = json!({
-                "role": "assistant",
-                "content": content.text.as_deref().map_or(Value::Null, |s| Value::String(s.to_owned())),
-            });
-            if !content.tool_calls.is_empty() {
+            // When tool_calls are present but text is None, omit the
+            // "content" field entirely rather than sending `"content": null`.
+            // Some LLM backends do not handle an explicit null well when
+            // tool_calls is populated.  When there are no tool_calls and
+            // text is None, we still send null to signal an empty reply.
+            let has_tool_calls = !content.tool_calls.is_empty();
+            let mut obj = if content.text.is_none() && has_tool_calls {
+                json!({ "role": "assistant" })
+            } else {
+                json!({
+                    "role": "assistant",
+                    "content": content.text.as_deref().map_or(Value::Null, |s| Value::String(s.to_owned())),
+                })
+            };
+            if has_tool_calls {
                 let calls: Vec<Value> =
                     content.tool_calls.iter().map(tool_call_to_openai).collect();
                 obj["tool_calls"] = Value::Array(calls);
