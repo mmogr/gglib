@@ -61,7 +61,11 @@ function applyDeltaToLastPart(
   const last = parts.at(-1);
   if (last?.type === partType) {
     // Mutate in place — the caller already clones the messages array for React.
-    (last as DeltaPart).text = ((last as DeltaPart).text ?? '') + delta;
+    // Cast through a mutable intermediate to bypass the readonly constraint on
+    // the imported assistant-ui part types (the readonly is on the array, not
+    // semantically on the field; mutation here is intentional — see module doc).
+    (last as { type: string; text: string }).text =
+      ((last as DeltaPart).text ?? '') + delta;
     return parts;
   }
   return [...parts, { type: partType, text: delta } as GglibMessagePart];
