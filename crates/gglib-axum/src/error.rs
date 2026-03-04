@@ -40,6 +40,10 @@ pub enum HttpError {
         reason: String,
     },
 
+    /// Too many concurrent requests (429).
+    #[error("Too many requests: {0}")]
+    TooManyRequests(String),
+
     /// Internal server error.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -86,6 +90,9 @@ impl IntoResponse for HttpError {
                     Some("LLAMA_SERVER_NOT_INSTALLED".to_string()),
                     Some(metadata_json),
                 )
+            }
+            HttpError::TooManyRequests(msg) => {
+                (StatusCode::TOO_MANY_REQUESTS, msg.clone(), None, None)
             }
             HttpError::Internal(msg) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, msg.clone(), None, None)

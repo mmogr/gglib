@@ -464,6 +464,7 @@ async fn main() -> anyhow::Result<()> {
                 base_port,
                 llama_server_path: llama_server_path()?,
                 max_concurrent: 4,
+                max_concurrent_agent_loops: 4,
                 static_dir: None,
                 cors: gglib_axum::CorsConfig::AllowAll,
             };

@@ -55,6 +55,12 @@ pub struct ServerConfig {
     pub llama_server_path: PathBuf,
     /// Maximum concurrent model servers.
     pub max_concurrent: usize,
+    /// Maximum concurrent agent loop sessions.
+    ///
+    /// Each `POST /api/agent/chat` request holds one permit for the lifetime
+    /// of its SSE stream.  When all permits are taken, new requests receive
+    /// `429 Too Many Requests` immediately rather than queuing.
+    pub max_concurrent_agent_loops: usize,
     /// Optional path to static assets for SPA serving.
     pub static_dir: Option<PathBuf>,
     /// CORS configuration.
@@ -69,6 +75,7 @@ impl ServerConfig {
             base_port: 9000,
             llama_server_path: llama_server_path()?,
             max_concurrent: 4,
+            max_concurrent_agent_loops: 4,
             static_dir: None,
             cors: CorsConfig::default(),
         })
@@ -122,6 +129,13 @@ pub struct AxumContext {
     /// Kept on `AxumContext` directly (not via `GuiBackend`) so that
     /// network-transport concerns stay out of the GUI facade.
     pub voice_registry: Arc<dyn RemoteAudioRegistry>,
+    /// Concurrency limiter for `POST /api/agent/chat` sessions.
+    ///
+    /// Each active agent SSE stream holds one permit.  When all permits are
+    /// taken the handler rejects new requests with 429 rather than queuing
+    /// them — preventing resource exhaustion from parallel loops that each
+    /// consume LLM inference time and tool I/O.
+    pub agent_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 /// Bootstrap the Axum server with all services.
@@ -291,6 +305,9 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         sse,
         http_client: Client::new(),
         voice_registry,
+        agent_semaphore: Arc::new(tokio::sync::Semaphore::new(
+            config.max_concurrent_agent_loops,
+        )),
     })
 }
 

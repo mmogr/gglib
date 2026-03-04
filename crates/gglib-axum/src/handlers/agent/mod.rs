@@ -79,6 +79,19 @@ pub async fn chat(
     State(state): State<AppState>,
     Json(req): Json<AgentChatRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
+    // Acquire a concurrency permit — reject immediately with 429 if all
+    // slots are occupied rather than queuing (each active agent loop
+    // consumes LLM inference time and tool I/O).
+    let permit = state
+        .agent_semaphore
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            HttpError::TooManyRequests(
+                "all agent loop slots are in use; try again later".into(),
+            )
+        })?;
+
     validate_port(&state, req.port).await?;
 
     let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
@@ -95,7 +108,12 @@ pub async fn chat(
 
     let (tx, rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
+    // Move the semaphore permit into the spawned task so it is held for the
+    // full duration of the agent loop.  When the task completes (or is
+    // aborted by AgentTaskGuard on client disconnect), the permit is dropped
+    // and the slot becomes available for new requests.
     let handle = tokio::spawn(async move {
+        let _permit = permit;
         match agent_loop.run(messages, config, tx).await {
             Ok(output) => {
                 tracing::debug!(

@@ -120,6 +120,7 @@ fn main() {
                 // The browser opens the WS audio endpoint only in web/embedded
                 // mode; there are no Tauri-specific voice command handlers anymore.
                 voice_registry: ctx.voice_service.clone() as Arc<dyn RemoteAudioRegistry>,
+                agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
             };
 
             // Start embedded API server with auth and ephemeral port
