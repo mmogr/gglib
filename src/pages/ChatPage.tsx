@@ -81,7 +81,6 @@ export default function ChatPage({
   const { settings } = useSettings();
   const titleGenerationPrompt = settings?.titleGenerationPrompt || DEFAULT_TITLE_GENERATION_PROMPT;
   const maxToolIterations = settings?.maxToolIterations ?? undefined;
-  const maxStagnationSteps = settings?.maxStagnationSteps ?? undefined;
 
   // Tool support capability for the active model.
   // Fetched once on mount (model identity is fixed for the lifetime of ChatPage).
@@ -109,7 +108,6 @@ export default function ChatPage({
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
     maxToolIterations,
-    maxStagnationSteps,
     supportsToolCalls,
   });
 

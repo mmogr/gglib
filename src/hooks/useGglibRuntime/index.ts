@@ -1,12 +1,9 @@
 /**
- * useGglibRuntime - Chat adapter for assistant-ui with SSE streaming and tool calling.
+ * useGglibRuntime - Chat adapter for assistant-ui with backend agentic loop.
  *
  * This module provides:
  * - `useGglibRuntime` - Main hook for creating the chat runtime
- * - `fetchAvailableServers` - Utility to list available llama-server instances
- * - `parseSSEStream` - SSE stream parser (exported for testing)
- * - `createToolCallAccumulator` - Tool call accumulator factory (exported for testing)
- * - `createThinkingContentHandler` - Thinking content handler factory (exported for testing)
+ * - `streamAgentChat` - Backend SSE consumer for /api/agent/chat
  *
  * @module useGglibRuntime
  */
@@ -17,6 +14,13 @@ export {
   type UseGglibRuntimeOptions,
   type UseGglibRuntimeReturn,
 } from './useGglibRuntime';
+
+// Backend SSE consumer
+export {
+  streamAgentChat,
+  type StreamAgentChatOptions,
+  type PartialAgentConfig,
+} from './streamAgentChat';
 
 // Message types (re-exported from types/messages)
 export type {
@@ -29,52 +33,5 @@ export type {
   GglibContent,
 } from '../../types/messages';
 
-// SSE parsing (exported for testing and potential reuse)
-export {
-  parseSSEStream,
-  type StreamDelta,
-  type ToolCallDelta,
-  type ToolCallFunctionDelta,
-} from './parseSSEStream';
-
-// Tool call accumulation (exported for testing)
-export {
-  createToolCallAccumulator,
-  type AccumulatedToolCall,
-  type ToolCallAccumulator,
-  type ToolCallAccumulatorState,
-} from './accumulateToolCalls';
-
-// Thinking content handling (exported for testing)
-export {
-  createThinkingContentHandler,
-  type ThinkingContentHandler,
-} from './thinkingContentHandler';
-
 // UI / conversation defaults
 export { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
-
-// Agent loop utilities (exported for testing and configuration)
-export {
-  DEFAULT_MAX_TOOL_ITERS,
-  type AgentLoopState,
-  type ToolDigest,
-  type ChatMessage,
-  toolSignature,
-  withRetry,
-  recordAssistantProgress,
-  checkToolLoop,
-  pruneForBudget,
-  summarizeToolResult,
-} from './agentLoop';
-
-// Prompt composition (exported for testing and reuse)
-export {
-  buildSystemPrompt,
-  injectPromptLayers,
-  createWorkingMemoryLayer,
-  TOOL_INSTRUCTIONS_LAYER,
-  FORMAT_REMINDER,
-  FORMAT_REMINDER_LAYER,
-  type PromptLayer,
-} from './promptBuilder';

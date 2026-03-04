@@ -238,6 +238,11 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         Arc::new(NoopEmitter),
     ));
 
+    // Validate configured servers and start any with auto_start enabled.
+    if let Err(e) = mcp.initialize().await {
+        tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
+    }
+
     // 5. Create download manager with injected dependencies
     let download_config = DownloadManagerConfig::new(models_resolution.path);
 
@@ -395,6 +400,11 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),
     ));
+
+    // Validate configured servers and start any with auto_start enabled.
+    if let Err(e) = mcp.initialize().await {
+        tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
+    }
 
     // 5. Create download manager with noop emitter (no AppHandle available yet)
     let download_config = DownloadManagerConfig::new(models_resolution.path);

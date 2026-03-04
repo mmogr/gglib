@@ -13,7 +13,9 @@ prebuilt = []
 cli = ["prebuilt"]
 
 [dependencies]
+gglib-agent = { path = "../gglib-agent" }
 gglib-core = { path = "../gglib-core" }
+gglib-mcp = { path = "../gglib-mcp" }
 gglib-proxy = { path = "../gglib-proxy" }
 
 # Runtime dependencies
@@ -24,7 +26,7 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 
 # HTTP client for health checks and downloads
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
+reqwest = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
@@ -32,7 +34,8 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 
 # Async utilities
-futures-util = "0.3"
+futures-core = { workspace = true }
+futures-util = { workspace = true }
 async-stream = "0.3"
 tokio-util = "0.7"
 

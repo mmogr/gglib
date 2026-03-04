@@ -77,12 +77,16 @@ export function extractNonTextContentParts(message: ThreadMessage): Serializable
     switch (part.type) {
       case 'tool-call': {
         const tc = part as Record<string, unknown>;
+        const tcArgs = tc.args !== undefined ? (tc.args as Record<string, unknown>) : undefined;
         parts.push({
           type: 'tool-call',
           toolCallId: (tc.toolCallId as string) ?? '',
           toolName: (tc.toolName as string) ?? '',
-          ...(tc.args !== undefined && { args: tc.args as Record<string, unknown> }),
-          ...(tc.argsText !== undefined && { argsText: tc.argsText as string }),
+          ...(tcArgs !== undefined && { args: tcArgs }),
+          // argsText is computed here at the persistence boundary rather than
+          // stored in React state — keeps state minimal and the serialised form
+          // always consistent with the current args value.
+          ...(tcArgs !== undefined && { argsText: JSON.stringify(tcArgs) }),
           ...(tc.result !== undefined && { result: tc.result }),
           ...(tc.isError !== undefined && { isError: tc.isError as boolean }),
         });

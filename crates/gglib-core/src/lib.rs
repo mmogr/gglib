@@ -13,10 +13,14 @@ pub mod utils;
 
 // Re-export commonly used types for convenience
 pub use domain::{
-    ChatMessage, Conversation, ConversationUpdate, McpEnvEntry, McpServer, McpServerConfig,
-    McpServerStatus, McpServerType, McpTool, McpToolResult, Message, MessageRole, Model,
-    ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer, NewMessage, NewModel,
-    RangeValues, UpdateMcpServer, infer_from_chat_template, transform_messages_for_capabilities,
+    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
+    AssistantContent, ChatMessage, Conversation, ConversationUpdate, DEFAULT_MAX_ITERATIONS,
+    DEFAULT_MAX_PARALLEL_TOOLS, LlmStreamEvent, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
+    MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry,
+    McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult, Message,
+    MessageRole, Model, ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer,
+    NewMessage, NewModel, RangeValues, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer,
+    infer_from_chat_template, transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,
@@ -25,21 +29,25 @@ pub use download::{
 };
 pub use events::{AppEvent, McpServerSummary, ModelSummary, ServerSnapshotEntry};
 pub use ports::{
-    AppEventBridge, AppEventEmitter, ChatHistoryError, ChatHistoryRepository, CompletedDownload,
-    CoreError, DownloadEventEmitterPort, DownloadManagerConfig, DownloadManagerPort,
-    DownloadRequest, DownloadStateRepositoryPort, GgufCapabilities, GgufMetadata, GgufParseError,
+    AgentError, AgentLoopPort, AgentRunOutput, AppEventBridge, AppEventEmitter, ChatHistoryError,
+    ChatHistoryRepository, CompletedDownload, CoreError, DownloadEventEmitterPort,
+    DownloadManagerConfig, DownloadManagerPort, DownloadRequest, DownloadStateRepositoryPort,
+    EmptyToolExecutor, FilteredToolExecutor, GgufCapabilities, GgufMetadata, GgufParseError,
     GgufParserPort, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
-    HfSearchOptions, HfSearchResult, McpErrorCategory, McpErrorInfo, McpRepositoryError,
-    McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository, NoopDownloadEmitter,
-    NoopEmitter, NoopGgufParser, ProcessError, ProcessHandle, ProcessRunner, QuantizationResolver,
-    Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig, ServerHealth,
-    SettingsRepository,
+    HfSearchOptions, HfSearchResult, LlmCompletionPort, McpErrorCategory, McpErrorInfo,
+    McpRepositoryError, McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository,
+    NoopDownloadEmitter, NoopEmitter, NoopGgufParser, ProcessError, ProcessHandle, ProcessRunner,
+    QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig,
+    ServerHealth, SettingsRepository, TOOL_NOT_AVAILABLE_MSG, ToolExecutorPort,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{
     DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT, Settings, SettingsError, SettingsUpdate,
     validate_settings,
 };
+
+// Re-export timing utility
+pub use utils::timing::elapsed_ms;
 
 // Re-export path utilities
 pub use paths::{

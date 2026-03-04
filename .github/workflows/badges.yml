@@ -15,6 +15,14 @@ concurrency:
   group: badges-${{ github.event.workflow_run.name }}
   cancel-in-progress: false
 
+# Single source of truth for the crate list used across all badge jobs.
+# Add new crates here; every loop below picks up the change automatically.
+env:
+  ALL_CRATES: >-
+    gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp
+    gglib-agent gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum
+    gglib-tauri gglib-build-info gglib-voice
+
 jobs:
   # =============================================================================
   # CI WORKFLOW: Update test badges and boundary badge
@@ -79,7 +87,7 @@ jobs:
           fi
           
           # --- Per-crate Rust tests ---
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info gglib-voice; do
+          for CRATE in $ALL_CRATES; do
             FILE="$(find artifacts -name "rust-test-$CRATE.txt" -type f 2>/dev/null | head -1)"
             if [ -n "$FILE" ] && [ -f "$FILE" ]; then
               echo "Parsing $CRATE test results"
@@ -250,8 +258,14 @@ jobs:
           
           # gglib-mcp modules  
           MCP_TEST="$(find artifacts -name 'rust-test-gglib-mcp.txt' -type f 2>/dev/null | head -1)"
-          for MODULE in client manager service path resolver; do
+          for MODULE in client manager service path resolver tool_executor; do
             extract_module_tests "$MCP_TEST" "$MODULE" "gglib-mcp-$MODULE"
+          done
+          
+          # gglib-agent modules
+          AGENT_TEST="$(find artifacts -name 'rust-test-gglib-agent.txt' -type f 2>/dev/null | head -1)"
+          for MODULE in agent_loop context_pruning fnv1a loop_detection stagnation stream_collector tool_execution util; do
+            extract_module_tests "$AGENT_TEST" "$MODULE" "gglib-agent-$MODULE"
           done
           
           # gglib-gui modules
@@ -407,7 +421,7 @@ jobs:
           fi
           
           # --- Per-crate Rust coverage ---
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info gglib-voice; do
+          for CRATE in $ALL_CRATES; do
             CRATE_LCOV="$(find artifacts -name "$CRATE-lcov.info" -type f 2>/dev/null | head -1)"
             if [ -n "$CRATE_LCOV" ] && [ -f "$CRATE_LCOV" ]; then
               echo "Parsing $CRATE coverage"
@@ -533,11 +547,21 @@ jobs:
           
           # gglib-mcp modules
           MCP_LCOV="$(find artifacts -name 'gglib-mcp-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in client manager service path; do
+          for MODULE in client manager service path tool_executor; do
             extract_module_cov "$MCP_LCOV" "src/$MODULE.rs" "gglib-mcp-$MODULE"
           done
           # gglib-mcp resolver submodule (directory, not single file)
           extract_module_cov "$MCP_LCOV" "src/resolver/" "gglib-mcp-resolver"
+          
+          # gglib-agent file modules
+          AGENT_LCOV="$(find artifacts -name 'gglib-agent-lcov.info' -type f 2>/dev/null | head -1)"
+          for MODULE in agent_loop fnv1a stream_collector util; do
+            extract_module_cov "$AGENT_LCOV" "src/$MODULE.rs" "gglib-agent-$MODULE"
+          done
+          # gglib-agent directory modules
+          for MODULE in context_pruning loop_detection stagnation tool_execution; do
+            extract_module_cov "$AGENT_LCOV" "src/$MODULE/" "gglib-agent-$MODULE"
+          done
           
           # gglib-gui modules
           GUI_LCOV="$(find artifacts -name 'gglib-gui-lcov.info' -type f 2>/dev/null | head -1)"
@@ -610,7 +634,7 @@ jobs:
           echo "Generating file-level coverage badges (dynamic discovery)..."
           
           # Dynamically discover and generate file-level coverage for each crate
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info gglib-voice; do
+          for CRATE in $ALL_CRATES; do
             LCOV_FILE="$(find artifacts -name "$CRATE-lcov.info" -type f 2>/dev/null | head -1)"
             if [ -n "$LCOV_FILE" ] && [ -f "$LCOV_FILE" ]; then
               echo "  Processing $CRATE file-level coverage..."
@@ -637,7 +661,7 @@ jobs:
           # Also generate 0% coverage badges for files that exist but aren't in lcov
           # This ensures all files shown in READMEs have coverage badges
           echo "Generating missing coverage badges (0% for untested files)..."
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info gglib-voice; do
+          for CRATE in $ALL_CRATES; do
             # Check out main to scan filesystem (we're on badges branch)
             git fetch origin main --depth=1 2>/dev/null || true
             
@@ -743,7 +767,7 @@ jobs:
           }
           
           # Generate per-crate LOC and complexity badges
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info gglib-voice; do
+          for CRATE in $ALL_CRATES; do
             if [ -d "crates/$CRATE" ]; then
               SCC_DATA=$(scc "crates/$CRATE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
               LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
@@ -934,7 +958,7 @@ jobs:
           }
           
           # Dynamically discover and generate file-level LOC/Complexity for each crate
-          for CRATE in gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum gglib-tauri gglib-build-info gglib-voice; do
+          for CRATE in $ALL_CRATES; do
             if [ -d "crates/$CRATE/src" ]; then
               echo "  Processing $CRATE file-level metrics..."
               

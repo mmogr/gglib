@@ -231,6 +231,13 @@ async fn main() -> anyhow::Result<()> {
             top_k,
             max_tokens,
             repeat_penalty,
+            agent,
+            port,
+            max_iterations,
+            tools,
+            tool_timeout_ms,
+            max_parallel,
+            model,
         } => {
             // NEW: Uses CliContext
             let args = handlers::chat::ChatArgs {
@@ -248,6 +255,14 @@ async fn main() -> anyhow::Result<()> {
                 top_k,
                 max_tokens,
                 repeat_penalty,
+                agent,
+                port,
+                max_iterations,
+                tools,
+                tool_timeout_ms,
+                max_parallel,
+                verbose: cli.verbose,
+                model,
             };
             handlers::chat::execute(&ctx, args).await?;
         }
@@ -449,6 +464,7 @@ async fn main() -> anyhow::Result<()> {
                 base_port,
                 llama_server_path: llama_server_path()?,
                 max_concurrent: 4,
+                max_concurrent_agent_loops: 4,
                 static_dir: None,
                 cors: gglib_axum::CorsConfig::AllowAll,
             };

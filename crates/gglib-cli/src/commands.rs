@@ -257,6 +257,30 @@ pub enum Commands {
         /// Repeat penalty (overrides model/global defaults)
         #[arg(long = "repeat-penalty")]
         repeat_penalty: Option<f32>,
+        /// Enable agentic mode: drives the backend agentic loop instead of llama-cli
+        #[arg(long)]
+        agent: bool,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum agent iterations before giving up (agentic mode only)
+        #[arg(long = "max-iterations", default_value = "25")]
+        max_iterations: usize,
+        /// Tool allowlist exposed to the model; may be repeated or comma-separated.
+        /// Omit to allow all tools. (agentic mode only, e.g. "mcp_search,builtin_time")
+        /// Note: the filter is evaluated once at session start. To change the
+        /// available tools mid-session, exit and restart with a new --tools list.
+        #[arg(long, value_delimiter = ',')]
+        tools: Vec<String>,
+        /// Per-tool execution timeout in milliseconds (agentic mode only)
+        #[arg(long = "tool-timeout-ms")]
+        tool_timeout_ms: Option<u64>,
+        /// Maximum number of tools executed in parallel per iteration (agentic mode only)
+        #[arg(long = "max-parallel")]
+        max_parallel: Option<usize>,
+        /// Model name forwarded to llama-server (agentic mode only; uses server default when omitted)
+        #[arg(long)]
+        model: Option<String>,
     },
 
     /// Ask a question with optional context from stdin or file

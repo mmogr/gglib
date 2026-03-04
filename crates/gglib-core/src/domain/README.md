@@ -21,6 +21,12 @@ These types form the heart of the hexagonal architecture — they have **no infr
 │                                      │                                              │
 │                                      ▼                                              │
 │  ┌──────────────────────────────────────────────────────────────────────────────┐   │
+│  │                         Agent Types (agent.rs)                               │   │
+│  │  AgentConfig, AgentMessage, AgentEvent, ToolCall, ToolResult, ToolDefinition │   │
+│  └──────────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                              │
+│                                      ▼                                              │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
 │  │                         MCP Types (mcp/)                                     │   │
 │  │  McpServer, McpServerConfig, McpTool, McpServerStatus                        │   │
 │  └──────────────────────────────────────────────────────────────────────────────┘   │
@@ -44,6 +50,12 @@ These types form the heart of the hexagonal architecture — they have **no infr
 | `Message` | A single chat message with role (system/user/assistant) |
 | `McpServer` | An MCP server configuration with connection details |
 | `GgufCapabilities` | Detected model capabilities (reasoning, tool-calling, vision) |
+| `AgentConfig` | Loop control parameters (max iterations, timeouts, context budget) |
+| `AgentMessage` | Typed conversation message enum (`System`/`User`/`Assistant`/`Tool`) |
+| `AgentEvent` | Observable SSE event emitted during an agentic loop run |
+| `ToolDefinition` | Adapter-neutral tool schema (adapters convert `McpTool → ToolDefinition`) |
+| `ToolCall` | A tool invocation requested by the LLM |
+| `ToolResult` | Outcome of a tool call — `success: false` is LLM context, not an error |
 
 ## Design Principles
 
@@ -60,6 +72,7 @@ These types form the heart of the hexagonal architecture — they have **no infr
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
+| [`agent.rs`](agent.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-coverage.json) |
 | [`capabilities.rs`](capabilities.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-capabilities-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-capabilities-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-capabilities-coverage.json) |
 | [`chat.rs`](chat.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-chat-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-chat-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-chat-coverage.json) |
 | [`gguf.rs`](gguf.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-gguf-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-gguf-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-gguf-coverage.json) |

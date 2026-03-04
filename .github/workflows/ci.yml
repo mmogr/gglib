@@ -133,6 +133,7 @@ jobs:
           cargo test -p gglib-hf --verbose 2>&1 | tee rust-test-gglib-hf.txt
           cargo test -p gglib-download --verbose 2>&1 | tee rust-test-gglib-download.txt
           cargo test -p gglib-mcp --verbose 2>&1 | tee rust-test-gglib-mcp.txt
+          cargo test -p gglib-agent --verbose 2>&1 | tee rust-test-gglib-agent.txt
           cargo test -p gglib-proxy --verbose 2>&1 | tee rust-test-gglib-proxy.txt
           cargo test -p gglib-runtime --verbose 2>&1 | tee rust-test-gglib-runtime.txt
           cargo test -p gglib-gui --verbose 2>&1 | tee rust-test-gglib-gui.txt
@@ -160,6 +161,7 @@ jobs:
             rust-test-gglib-hf.txt
             rust-test-gglib-download.txt
             rust-test-gglib-mcp.txt
+            rust-test-gglib-agent.txt
             rust-test-gglib-proxy.txt
             rust-test-gglib-runtime.txt
             rust-test-gglib-gui.txt

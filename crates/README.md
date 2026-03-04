@@ -35,6 +35,16 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 │  └─────────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
                                    │
+┌────────────────────────────────────────────────────────────────────────────┐
+│                          APPLICATION LAYER                                 │
+│                        ┌──────────────────┐                                │
+│                        │   gglib-agent    │                                │
+│                        │  Agentic loop    │                                │
+│                        │ (pure domain,    │                                │
+│                        │  port-injected)  │                                │
+│                        └────────┬─────────┘                                │
+└─────────────────────────────────┼──────────────────────────────────────────┘
+                                   │
                   ┌────────────────┼────────────────┐
                   │                │                │
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -62,12 +72,15 @@ Adapter Layer
     ↓
 Facade Layer (gglib-gui)
     ↓
-Core Layer (gglib-core)
-    ↓
-Infrastructure Layer
+Core Layer (gglib-core)    Core Layer (gglib-core)
+    ↓                              ↓
+Application Layer          Infrastructure Layer
+(gglib-agent)
 ```
 
-**Key Principle**: Infrastructure depends on core (via ports), never the reverse.
+**Key Principle**: Both the Application layer and the Infrastructure layer depend on
+`gglib-core` (via port traits), never the reverse. Adapters wire them together at
+the composition root.
 
 ## Crate Catalog
 
@@ -76,6 +89,12 @@ Infrastructure Layer
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
 | **[gglib-core](gglib-core/)** | Pure domain types, port traits, and application services. No infrastructure dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loc.json) |
+
+### Application Layer
+
+| Crate | Purpose | Lines of Code |
+|-------|---------|---------------|
+| **[gglib-agent](gglib-agent/)** | Pure-domain agentic loop (LLM→tool→LLM cycle). Depends only on `gglib-core`. No HTTP, no MCP internals, no database. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loc.json) |
 
 ### Infrastructure Layer
 
@@ -131,6 +150,27 @@ Infrastructure Layer
 - Keeps business logic pure and testable
 - Enables infrastructure to be swapped without affecting logic
 - Clear contracts via port traits
+
+### Application Layer: gglib-agent
+
+**What it contains:**
+- `AgentLoop` — concrete `AgentLoopPort` implementation driving the ReAct-lite LLM→tool→LLM cycle
+- Loop detection (FNV-1a batch-signature tracking, ported from TypeScript)
+- Text stagnation detection
+- Parallel tool execution with bounded concurrency and per-tool timeout
+- Streaming response collection (forwards `TextDelta` events in real-time)
+- Context budget pruning
+
+**What it DOES NOT contain:**
+- HTTP clients or any networking
+- MCP SDK internals
+- Database access
+- Any reference to specific adapter/infrastructure crates
+
+**Why this matters:**
+- The full agentic loop runs as pure Rust domain logic, fully unit-testable with mocks
+- Concrete `LlmCompletionPort` and `ToolExecutorPort` implementations are injected at composition root
+- Port-parity with the TypeScript frontend ensures consistent behaviour across transports
 
 ### Infrastructure Layer
 

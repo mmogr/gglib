@@ -15,13 +15,13 @@ use crate::bootstrap::CliContext;
 pub async fn execute_verify(ctx: &CliContext, model_id: i64, verbose: bool) -> Result<()> {
     // Get verification service
     let verification = ctx
-        .app()
+        .app
         .verification()
         .ok_or_else(|| anyhow::anyhow!("Verification service not available"))?;
 
     // Get model info for display
     let model = ctx
-        .app()
+        .app
         .models()
         .get_by_id(model_id)
         .await?
@@ -158,13 +158,13 @@ pub async fn execute_repair(
 ) -> Result<()> {
     // Get verification service
     let verification = ctx
-        .app()
+        .app
         .verification()
         .ok_or_else(|| anyhow::anyhow!("Verification service not available"))?;
 
     // Get model info for display
     let model = ctx
-        .app()
+        .app
         .models()
         .get_by_id(model_id)
         .await?

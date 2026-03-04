@@ -37,20 +37,9 @@ axum = { workspace = true }
 tower-http = { workspace = true }
 uuid = { workspace = true }
 tracing-subscriber = { workspace = true }
-futures-util = "0.3"
+futures-util = { workspace = true }
+futures-core = { workspace = true }
 tokio-stream = { version = "0.1", features = ["sync"] }
-
-# These will be uncommented as handlers are migrated:
-# serde_json = { workspace = true }
-# tracing-subscriber = { workspace = true }
-# async-trait = { workspace = true }
-# tower = "0.4"
-# hyper = { version = "1.0", features = ["client", "http1", "http2"] }
-# hyper-util = { version = "0.1", features = ["client-legacy", "http1", "http2", "tokio"] }
-# http-body-util = "0.1"
-# bytes = "1.5"
-# futures-util = "0.3"
-# tokio-stream = { version = "0.1.17", features = ["sync"] }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

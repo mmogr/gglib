@@ -150,6 +150,12 @@ main() {
     fi
     log ""
     
+    log "📦 gglib-agent (pure domain agentic loop - no adapters, no infra crates)"
+    if ! check_crate_deps "gglib-agent" "${DOMAIN_FORBIDDEN[@]}"; then
+        FAILED=1
+    fi
+    log ""
+    
     log "📦 gglib-runtime (process runner - no UI adapters)"
     if ! check_crate_deps "gglib-runtime" "${DOMAIN_FORBIDDEN[@]}"; then
         FAILED=1

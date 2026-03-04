@@ -5,12 +5,14 @@
 //!
 //! # Structure
 //!
+//! - `agent` - Agent loop types (`AgentConfig`, `AgentMessage`, `AgentEvent`, etc.)
 //! - `model` - Model types (`Model`, `NewModel`)
 //! - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 //! - `chat` - Chat conversation and message types
 //! - `gguf` - GGUF metadata and capability types
 //! - `capabilities` - Model capability detection and inference
 
+pub mod agent;
 pub mod capabilities;
 pub mod chat;
 pub mod gguf;
@@ -39,6 +41,14 @@ pub use chat::{
 pub use gguf::{
     CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata, ReasoningDetection,
     ToolCallingDetection,
+};
+
+// Re-export agent types at the domain level for convenience
+pub use agent::{
+    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
+    AssistantContent, DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS, LlmStreamEvent,
+    MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING,
+    MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, ToolCall, ToolDefinition, ToolResult,
 };
 
 // Re-export capability types at the domain level for convenience

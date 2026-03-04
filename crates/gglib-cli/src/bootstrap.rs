@@ -107,43 +107,14 @@ pub struct CliContext {
     pub model_repo: Arc<dyn ModelRepository>,
     /// Path to llama-server binary.
     pub llama_server_path: PathBuf,
-}
-
-impl CliContext {
-    /// Access the AppCore.
-    pub fn app(&self) -> &AppCore {
-        &self.app
-    }
-
-    /// Access the process runner for server operations.
-    pub fn runner(&self) -> &Arc<dyn ProcessRunner> {
-        &self.runner
-    }
-
-    /// Access the MCP service.
-    pub fn mcp(&self) -> &Arc<McpService> {
-        &self.mcp
-    }
-
-    /// Access the download manager.
-    pub fn downloads(&self) -> &Arc<dyn DownloadManagerPort> {
-        &self.downloads
-    }
-
-    /// Access the GGUF parser.
-    pub fn gguf_parser(&self) -> &Arc<dyn GgufParserPort> {
-        &self.gguf_parser
-    }
-
-    /// Access the model repository.
-    pub fn model_repo(&self) -> &Arc<dyn ModelRepository> {
-        &self.model_repo
-    }
-
-    /// Access the llama-server path.
-    pub fn llama_server_path(&self) -> &PathBuf {
-        &self.llama_server_path
-    }
+    /// Base port for allocating llama-server instances (from CLI `--base-port`).
+    pub base_port: u16,
+    /// Shared HTTP client for LLM adapter calls.
+    ///
+    /// Constructed once at bootstrap and cloned into each agent session so that
+    /// TCP connections to llama-server are pooled across REPL turns, matching
+    /// the connection-pooling behaviour of the Axum handler.
+    pub http_client: reqwest::Client,
 }
 
 /// Bootstrap the CLI application.
@@ -240,6 +211,8 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         gguf_parser,
         model_repo: repos.models,
         llama_server_path: config.llama_server_path,
+        base_port: config.base_port,
+        http_client: reqwest::Client::new(),
     })
 }
 
@@ -267,6 +240,8 @@ pub fn bootstrap_with(
         gguf_parser,
         model_repo,
         llama_server_path,
+        base_port: 9000,
+        http_client: reqwest::Client::new(),
     }
 }
 

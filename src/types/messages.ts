@@ -35,6 +35,29 @@ export type TextPart = Extract<MessagePart, { type: 'text' }>;
 export type ReasoningPart = Extract<MessagePart, { type: 'reasoning' }>;
 
 /**
+ * Extended tool-call part that adds gglib-specific timing metadata.
+ *
+ * `waitMs`     — wall-clock time from request dispatch to the first tool byte.
+ * `durationMs` — total execution time of the tool call.
+ *
+ * These fields are stamped onto the part by {@link applyToolResult} once the
+ * backend reports completion, allowing the UI to display timing information
+ * without a separate side-channel.
+ */
+export interface GglibToolCallPart extends ToolCallPart {
+  waitMs?: number;
+  durationMs?: number;
+}
+
+/**
+ * Union of all content parts that may appear in a GglibMessage.
+ *
+ * Replaces the raw `MessagePart` where gglib-specific extensions are needed,
+ * e.g. to allow `GglibToolCallPart` in an assistant message's content array.
+ */
+export type GglibMessagePart = Exclude<MessagePart, ToolCallPart> | GglibToolCallPart;
+
+/**
  * Custom metadata stored in message.metadata.custom
  */
 export type GglibMessageCustom = {
@@ -48,6 +71,8 @@ export type GglibMessageCustom = {
   isDeepResearch?: boolean;
   /** Whether this message originated from voice input/output */
   isVoice?: boolean;
+  /** Set once the final iteration is complete; triggers persisted transcript regeneration. */
+  timingFinalized?: boolean;
 };
 
 /**
@@ -79,6 +104,20 @@ export function mkAssistantMessage(
     createdAt: new Date(),
     ...(custom && { metadata: { custom } }),
   };
+}
+
+/**
+ * Extract content parts from a message's content field as a typed array.
+ *
+ * Consolidates the repeated `Array.isArray(content) ? content as GglibMessagePart[] : []`
+ * pattern into a single helper so call sites need no inline type assertions.
+ * The internal `as` cast is an unavoidable narrowing from
+ * `ThreadMessageLike['content']` (which uses `readonly Part[]`) to
+ * `GglibMessagePart[]`; it is sound because `GglibMessagePart` is a
+ * supertype of every member of `MessagePart`.
+ */
+export function extractParts(content: GglibMessage['content']): readonly GglibMessagePart[] {
+  return Array.isArray(content) ? (content as readonly GglibMessagePart[]) : [];
 }
 
 

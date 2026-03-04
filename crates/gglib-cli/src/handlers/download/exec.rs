@@ -68,7 +68,7 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     new_model.quantization = Some(result.quantization.clone());
     new_model.download_date = Some(Utc::now());
 
-    match ctx.app().models().add(new_model).await {
+    match ctx.app.models().add(new_model).await {
         Ok(model) => {
             println!("✓ Model registered in database:");
             println!("  ID: {}", model.id);

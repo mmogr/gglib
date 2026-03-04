@@ -10,6 +10,7 @@
 //! - Traits are minimal and CRUD-focused for repositories
 //! - Intent-based methods for process runner (not implementation-leaking)
 
+pub mod agent;
 pub mod chat_history;
 pub mod download;
 pub mod download_event_emitter;
@@ -18,6 +19,7 @@ pub mod download_state;
 pub mod event_emitter;
 pub mod gguf_parser;
 pub mod huggingface;
+pub mod llm_completion;
 pub mod mcp_dto;
 pub mod mcp_error;
 pub mod mcp_repository;
@@ -30,11 +32,19 @@ pub mod server_health;
 pub mod server_log_sink;
 pub mod settings_repository;
 pub mod system_probe;
+pub mod tool_executor_filter;
 pub mod tool_support;
 pub mod voice;
 
 use std::sync::Arc;
 use thiserror::Error;
+
+// Re-export agent port types for convenience
+pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
+// Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
+pub use llm_completion::LlmCompletionPort;
+// Re-export tool-executor filter decorators
+pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
 
 // Re-export repository traits for convenience
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};

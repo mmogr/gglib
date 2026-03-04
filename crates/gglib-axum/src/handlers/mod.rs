@@ -3,12 +3,14 @@
 //! Each submodule contains handlers for a specific API area.
 //! Handlers are thin wrappers that delegate to `GuiBackend`.
 
+pub mod agent;
 pub mod chat;
 pub mod downloads;
 pub mod events;
 pub mod hf;
 pub mod mcp;
 pub mod models;
+pub mod port_utils;
 pub mod proxy;
 pub mod servers;
 pub mod settings;

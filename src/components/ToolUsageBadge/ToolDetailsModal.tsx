@@ -12,7 +12,7 @@ import { formatToolDisplayName } from '../../services/tools/nameUtils';
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
 /**
- * Extends the base ToolCallPart with runtime fields stamped by runAgenticLoop
+ * Extends the base ToolCallPart with runtime fields stamped by streamAgentChat
  * as each tool settles. These fields are not part of the @assistant-ui/react
  * type surface because they are added dynamically.
  */

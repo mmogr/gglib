@@ -114,11 +114,13 @@ fn main() {
                 hf_client: ctx.hf_client.clone(),
                 runner: ctx.runner.clone(),
                 sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
+                http_client: reqwest::Client::new(),
                 // Desktop app: voice_registry is provided so the HTTP control
                 // plane can drive audio via LocalAudioSource/LocalAudioSink.
                 // The browser opens the WS audio endpoint only in web/embedded
                 // mode; there are no Tauri-specific voice command handlers anymore.
                 voice_registry: ctx.voice_service.clone() as Arc<dyn RemoteAudioRegistry>,
+                agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
             };
 
             // Start embedded API server with auth and ephemeral port

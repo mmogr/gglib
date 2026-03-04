@@ -12,6 +12,7 @@ use tokio_test as _;
 use anyhow as _;
 use dotenvy as _;
 use hf_hub as _;
+use rustyline as _;
 use tokio as _;
 use tracing as _;
 use tracing_subscriber as _;

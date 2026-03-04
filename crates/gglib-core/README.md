@@ -70,8 +70,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 </details>
 
 **Module Descriptions:**
-- **`domain/`** — Pure domain types: `Model`, `ModelFile`, `McpServer`, `Conversation`
-- **`ports/`** — Trait definitions (repository ports, HF client port, event emitter, `VoicePipelinePort` and `RemoteAudioRegistry` for voice operations)
+- **`domain/`** — Pure domain types: `Model`, `ModelFile`, `McpServer`, `Conversation`; and agent loop primitives: `AgentConfig`, `AgentMessage`, `AgentEvent`, `ToolDefinition`, `ToolCall`, `ToolResult`
+- **`ports/`** — Trait definitions (repository ports, HF client port, event emitter, `VoicePipelinePort` for voice, `AgentLoopPort` / `ToolExecutorPort` / `AgentError` for the backend agentic loop)
 - **`services/`** — Application use cases and business logic orchestration (model management, server lifecycle, chat history, settings, model verification & repair)
 - **`events/`** — Strongly-typed application events for UI/adapter notification
 - **`paths/`** — Path configuration and platform-specific directory handling

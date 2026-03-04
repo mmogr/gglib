@@ -38,7 +38,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [maxQueueSizeInput, setMaxQueueSizeInput] = useState("");
   const [titlePromptInput, setTitlePromptInput] = useState("");
   const [maxToolIterationsInput, setMaxToolIterationsInput] = useState("");
-  const [maxStagnationStepsInput, setMaxStagnationStepsInput] = useState("");
   const [showFitIndicators, setShowFitIndicators] = useState(true);
   const [defaultModelInput, setDefaultModelInput] = useState("");
   const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<InferenceConfig | undefined>(undefined);
@@ -69,7 +68,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() || "");
       setTitlePromptInput(settings.titleGenerationPrompt || "");
       setMaxToolIterationsInput(settings.maxToolIterations?.toString() || "");
-      setMaxStagnationStepsInput(settings.maxStagnationSteps?.toString() || "");
       setShowFitIndicators(settings.showMemoryFitIndicators !== false);
       setDefaultModelInput(settings.defaultModelId?.toString() || "");
       setInferenceDefaultsInput(settings.inferenceDefaults || undefined);
@@ -102,7 +100,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           maxDownloadQueueSize: parseNumericInput(maxQueueSizeInput),
           titleGenerationPrompt: titlePromptInput.trim() || null,
           maxToolIterations: parseNumericInput(maxToolIterationsInput),
-          maxStagnationSteps: parseNumericInput(maxStagnationStepsInput),
           showMemoryFitIndicators: showFitIndicators,
           defaultModelId: parseNumericInput(defaultModelInput),
           inferenceDefaults: inferenceDefaultsInput,
@@ -116,7 +113,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           updates.maxDownloadQueueSize !== undefined ||
           updates.titleGenerationPrompt !== undefined ||
           updates.maxToolIterations !== undefined ||
-          updates.maxStagnationSteps !== undefined ||
           updates.showMemoryFitIndicators !== undefined ||
           updates.defaultModelId !== undefined ||
           updates.inferenceDefaults !== undefined;
@@ -138,7 +134,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       maxQueueSizeInput,
       titlePromptInput,
       maxToolIterationsInput,
-      maxStagnationStepsInput,
       showFitIndicators,
       defaultModelInput,
       inferenceDefaultsInput,
@@ -243,8 +238,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setIsAdvancedOpen={setIsAdvancedOpen}
             maxToolIterationsInput={maxToolIterationsInput}
             setMaxToolIterationsInput={setMaxToolIterationsInput}
-            maxStagnationStepsInput={maxStagnationStepsInput}
-            setMaxStagnationStepsInput={setMaxStagnationStepsInput}
             titlePromptInput={titlePromptInput}
             setTitlePromptInput={setTitlePromptInput}
             inferenceDefaultsInput={inferenceDefaultsInput}

@@ -1,0 +1,27 @@
+[package]
+name = "gglib-agent"
+version.workspace = true
+edition.workspace = true
+description = "Pure-domain agentic loop for gglib (no HTTP/infra dependencies)"
+license.workspace = true
+publish = false
+
+[lib]
+name = "gglib_agent"
+path = "src/lib.rs"
+
+[dependencies]
+# Domain-only dependencies: no HTTP client, no MCP infrastructure.
+# Composition (wiring LlmCompletionAdapter + McpToolExecutorAdapter into
+# AgentLoop) is performed by each entrypoint crate (gglib-axum, gglib-cli).
+gglib-core   = { path = "../gglib-core" }
+tokio        = { workspace = true }
+futures-util = { workspace = true }
+futures-core = { workspace = true }
+async-trait  = { workspace = true }
+anyhow       = { workspace = true }
+tracing      = { workspace = true }
+serde_json   = { workspace = true }
+
+[lints]
+workspace = true

@@ -48,7 +48,7 @@ pub struct UpdateArgs {
 pub async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     // Get the existing model by ID
     let existing_model = ctx
-        .app()
+        .app
         .models()
         .get_by_id(args.id as i64)
         .await?
@@ -105,7 +105,7 @@ pub async fn execute(ctx: &CliContext, args: UpdateArgs) -> Result<()> {
     }
 
     // Apply the updates
-    ctx.app().models().update(&updated_model).await?;
+    ctx.app.models().update(&updated_model).await?;
 
     println!("✅ Model updated successfully!");
     Ok(())

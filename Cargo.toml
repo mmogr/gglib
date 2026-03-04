@@ -11,6 +11,7 @@ members = [
     "crates/gglib-mcp",
     "crates/gglib-proxy",
     "crates/gglib-runtime",
+    "crates/gglib-agent",
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
@@ -33,6 +34,12 @@ authors = ["mmogr"]
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
 tokio-test = "0.4"
+
+# Futures / async streams
+# Both crates are published in lock-step from the same futures-rs release; using
+# the same constraint here ensures Cargo always resolves them to the same version.
+futures-util = { version = "0.3" }
+futures-core = { version = "0.3" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -87,6 +94,7 @@ gglib-download = { path = "crates/gglib-download" }
 gglib-gguf = { path = "crates/gglib-gguf" }
 gglib-hf = { path = "crates/gglib-hf" }
 gglib-mcp = { path = "crates/gglib-mcp" }
+gglib-agent = { path = "crates/gglib-agent" }
 gglib-runtime = { path = "crates/gglib-runtime" }
 gglib-axum = { path = "crates/gglib-axum" }
 gglib-gui = { path = "crates/gglib-gui" }

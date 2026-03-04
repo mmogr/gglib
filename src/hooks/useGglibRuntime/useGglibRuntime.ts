@@ -16,15 +16,15 @@ import {
 } from '@assistant-ui/react';
 import type { GglibMessage, GglibContent } from '../../types/messages';
 import { mkUserMessage, mkAssistantMessage } from '../../types/messages';
-import { runAgenticLoop } from './runAgenticLoop';
+import { streamAgentChat } from './streamAgentChat';
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
+import { isAbortError } from '../../utils/errors';
 
 export interface UseGglibRuntimeOptions {
   conversationId?: number;
   selectedServerPort?: number;
   maxToolIterations?: number;
-  maxStagnationSteps?: number;
   onError?: (error: Error) => void;
   /**
    * Whether the active model supports tool/function calling.
@@ -57,7 +57,6 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     conversationId,
     selectedServerPort,
     maxToolIterations,
-    maxStagnationSteps,
     onError,
     supportsToolCalls,
   } = options;
@@ -143,23 +142,24 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     const turnId = crypto.randomUUID();
 
     try {
-      // Run agentic loop - creates assistant messages as needed
-      await runAgenticLoop({
+      // Run agentic loop against the backend SSE endpoint
+      await streamAgentChat({
         turnId,
         getMessages: () => messagesWithUserMessage,
         setMessages,
         selectedServerPort,
-        maxToolIterations,
-        maxStagnationSteps,
         abortSignal: abortController.signal,
         conversationId,
         mkAssistantMessage: (custom) => mkAssistantMessage({ ...custom, ...extraMeta }),
         timingTracker,
         setCurrentStreamingAssistantMessageId,
+        config: {
+          ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
+        },
         supportsToolCalls,
       });
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isAbortError(error)) {
         appLogger.debug('hook.runtime', 'Generation aborted');
       } else {
         appLogger.error('hook.runtime', 'Error in agentic loop', { error });

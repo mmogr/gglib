@@ -3,7 +3,7 @@
  *
  * These are fixed values (not environment configuration) shared across UI
  * components and the runtime layer.  Keeping them here prevents the runtime
- * hook module (`useGglibRuntime/agentLoop.ts`) from carrying UI-facing
+ * hook module (`useGglibRuntime/streamAgentChat.ts`) from carrying UI-facing
  * defaults, and gives consumers a single canonical source of truth.
  */
 
