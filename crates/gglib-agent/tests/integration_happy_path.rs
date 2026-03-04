@@ -424,7 +424,10 @@ async fn test_tool_filter_restricts_visible_tools() {
     assert!(!has_tool_start(&events, "write"));
 
     // Only "search" appears in the call log.
-    let log = call_log.lock().await;
-    assert_eq!(log.len(), 1);
-    assert_eq!(log[0].0, "search");
+    let (log_len, first_name) = {
+        let log = call_log.lock().await;
+        (log.len(), log[0].0.clone())
+    };
+    assert_eq!(log_len, 1);
+    assert_eq!(first_name, "search");
 }
