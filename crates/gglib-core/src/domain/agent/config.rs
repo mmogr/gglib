@@ -236,7 +236,7 @@ impl AgentConfig {
     /// # Errors
     ///
     /// Returns `Err(AgentConfigError)` if any field violates its invariant.
-    pub fn validated(self) -> Result<Self, AgentConfigError> {
+    pub const fn validated(self) -> Result<Self, AgentConfigError> {
         if self.max_iterations < 1 {
             return Err(AgentConfigError::MaxIterationsZero(self.max_iterations));
         }
