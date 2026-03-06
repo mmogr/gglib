@@ -147,7 +147,11 @@ impl<'a> SetupOps<'a> {
         // cargo/package manager) through a redundant wizard — llama.cpp and
         // the models directory are already configured by the build/install
         // process, so there is nothing for the wizard to do.
-        if !setup_completed && llama_installed && models_directory.exists && models_directory.writable {
+        if !setup_completed
+            && llama_installed
+            && models_directory.exists
+            && models_directory.writable
+        {
             setup_completed = true;
             let update = gglib_core::settings::SettingsUpdate {
                 setup_completed: Some(Some(true)),
