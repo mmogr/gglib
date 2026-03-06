@@ -639,7 +639,7 @@ const CompleteStep: FC<{ status: SetupStatus; onFinish: () => void }> = ({ statu
         <Icon icon={CheckCircle2} size={32} className="text-success" />
       </div>
       <h2 className="text-xl font-semibold text-text mb-2">You&apos;re all set!</h2>
-      <p className="text-text-secondary leading-relaxed max-w-md mx-auto">
+      <p className="text-text-secondary leading-relaxed max-w-[28rem] mx-auto">
         Your system is configured and ready to run local AI models. You can
         re-run this wizard anytime from Settings.
       </p>

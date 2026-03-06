@@ -34,7 +34,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           {title}
         </h3>
         {description && (
-          <p className="text-sm text-text-muted max-w-md">
+          <p className="text-sm text-text-muted max-w-[28rem]">
             {description}
           </p>
         )}
