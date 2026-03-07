@@ -855,7 +855,7 @@ fn save_prebuilt_config(gglib_dir: &Path, version: &str, platform: &str) -> Resu
         installed_at: chrono::Utc::now().to_rfc3339(),
     };
 
-    let config_path = gglib_dir.join("llama-config.json");
+    let config_path = gglib_dir.join(".llama").join("llama-config.json");
     let json = serde_json::to_string_pretty(&config)?;
     fs::write(&config_path, json)?;
 
