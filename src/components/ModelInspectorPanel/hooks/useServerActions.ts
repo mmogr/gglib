@@ -168,7 +168,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         await onStopServer(model.id);
       } catch (error) {
         appLogger.error('hook.ui', 'Failed to stop server', { error, modelId: model.id });
-        alert(`Failed to stop server: ${error}`);
+        showToast(`Failed to stop server: ${error}`, 'error');
       }
     }
   }, [model, isRunning, onStopServer]);
@@ -181,7 +181,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       closeDeleteModal();
     } catch (error) {
       appLogger.error('hook.ui', 'Failed to remove model', { error, modelId: model.id });
-      alert(`Failed to remove model: ${error}`);
+      showToast(`Failed to remove model: ${error}`, 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -212,7 +212,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
       resetEditState();
     } catch (error) {
       appLogger.error('hook.ui', 'Failed to update model', { error, modelId: model?.id });
-      alert(`Failed to update model: ${error}`);
+      showToast(`Failed to update model: ${error}`, 'error');
     }
   }, [model, editedName, editedQuantization, editedFilePath, editedInferenceDefaults, onUpdateModel, resetEditState]);
 
