@@ -653,16 +653,25 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
     download_with_progress(&client, &asset.browser_download_url, &zip_path).await?;
     println!();
 
-    // Extract binaries
-    extract_binaries(&zip_path, &bin_dir)?;
+    // Extract binaries; capture result so the downloads dir is cleaned up on
+    // both success and failure paths.
+    let post_download_result = async {
+        extract_binaries(&zip_path, &bin_dir)?;
 
-    // Windows: Also download CUDA runtime DLLs
-    #[cfg(target_os = "windows")]
-    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        // Windows: Also download CUDA runtime DLLs
+        #[cfg(target_os = "windows")]
+        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
 
-    // Clean up downloaded archive
-    let _ = fs::remove_file(&zip_path);
-    let _ = fs::remove_dir(&download_dir);
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+
+    // Always remove the entire downloads directory regardless of outcome.
+    // Using remove_dir_all so a partially-downloaded or leftover CUDA archive
+    // doesn't prevent the directory from being deleted.
+    let _ = fs::remove_dir_all(&download_dir);
+
+    post_download_result?;
 
     // Save a simple config indicating this was a pre-built install
     save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
@@ -736,16 +745,23 @@ pub async fn download_prebuilt_binaries_with_callback(
         download_with_progress(&client, &asset.browser_download_url, &zip_path).await?;
     }
 
-    // Extract binaries (quick operation, no progress needed)
-    extract_binaries(&zip_path, &bin_dir)?;
+    // Extract binaries; capture result so the downloads dir is cleaned up on
+    // both success and failure paths.
+    let post_download_result = async {
+        extract_binaries(&zip_path, &bin_dir)?;
 
-    // Windows: Also download CUDA runtime DLLs
-    #[cfg(target_os = "windows")]
-    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        // Windows: Also download CUDA runtime DLLs
+        #[cfg(target_os = "windows")]
+        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
 
-    // Clean up downloaded archive
-    let _ = fs::remove_file(&zip_path);
-    let _ = fs::remove_dir(&download_dir);
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+
+    // Always remove the entire downloads directory regardless of outcome.
+    let _ = fs::remove_dir_all(&download_dir);
+
+    post_download_result?;
 
     // Save a simple config indicating this was a pre-built install
     save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
@@ -810,16 +826,23 @@ pub async fn download_prebuilt_binaries_with_boxed_callback(
     )
     .await?;
 
-    // Extract binaries (quick operation, no progress needed)
-    extract_binaries(&zip_path, &bin_dir)?;
+    // Extract binaries; capture result so the downloads dir is cleaned up on
+    // both success and failure paths.
+    let post_download_result = async {
+        extract_binaries(&zip_path, &bin_dir)?;
 
-    // Windows: Also download CUDA runtime DLLs
-    #[cfg(target_os = "windows")]
-    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        // Windows: Also download CUDA runtime DLLs
+        #[cfg(target_os = "windows")]
+        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
 
-    // Clean up downloaded archive
-    let _ = fs::remove_file(&zip_path);
-    let _ = fs::remove_dir(&download_dir);
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+
+    // Always remove the entire downloads directory regardless of outcome.
+    let _ = fs::remove_dir_all(&download_dir);
+
+    post_download_result?;
 
     // Save a simple config indicating this was a pre-built install
     save_prebuilt_config(&gglib_dir, &release.tag_name, &_description)?;
