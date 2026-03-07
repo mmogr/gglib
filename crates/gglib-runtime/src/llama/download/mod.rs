@@ -382,10 +382,12 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
             .path()
             .context("Failed to get entry path")?
             .into_owned();
-        let entry_name = path.to_string_lossy();
-
-        // Binaries live in build/bin/ inside the archive
-        if !entry_name.contains("build/bin/") {
+        // Modern llama.cpp release archives have the structure:
+        //   llama-b<tag>/<filename>
+        // Keep only files that are exactly one level deep (skip the top-level
+        // directory entry itself and any files nested deeper).
+        let components: Vec<_> = path.components().collect();
+        if components.len() != 2 {
             continue;
         }
 
