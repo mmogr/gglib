@@ -80,7 +80,7 @@ impl<'a> SetupOps<'a> {
             .get()
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to get settings: {e}")))?;
-        let setup_completed = settings.setup_completed.unwrap_or(false);
+        let mut setup_completed = settings.setup_completed.unwrap_or(false);
 
         // Check llama installation
         let llama_installed = gglib_runtime::llama::check_llama_installed();
@@ -141,6 +141,26 @@ impl<'a> SetupOps<'a> {
         } else {
             None
         };
+
+        // Auto-complete setup if the system is already functional.
+        // This avoids forcing users who build from source (or install via
+        // cargo/package manager) through a redundant wizard — llama.cpp and
+        // the models directory are already configured by the build/install
+        // process, so there is nothing for the wizard to do.
+        if !setup_completed
+            && llama_installed
+            && models_directory.exists
+            && models_directory.writable
+        {
+            setup_completed = true;
+            let update = gglib_core::settings::SettingsUpdate {
+                setup_completed: Some(Some(true)),
+                ..Default::default()
+            };
+            // Best-effort persist — a failure here must not block the user
+            // from reaching the app.
+            let _ = self.deps.settings().update(update).await;
+        }
 
         Ok(SetupStatus {
             setup_completed,
