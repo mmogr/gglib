@@ -8,6 +8,7 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { cn } from '../utils/cn';
 import { Stack, Label } from './primitives';
+import { useToastContext } from '../contexts/ToastContext';
 
 interface ProxyStatus {
   running: boolean;
@@ -44,6 +45,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { showToast } = useToastContext();
 
   useEffect(() => {
     loadStatus();
@@ -70,7 +72,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
       await setProxyState(true, proxyStatus.port);
       await loadStatus();
     } catch (err) {
-      alert(`Failed to start proxy: ${err}`);
+      showToast(`Failed to start proxy: ${err}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
       await setProxyState(false, null);
       await loadStatus();
     } catch (err) {
-      alert(`Failed to stop proxy: ${err}`);
+      showToast(`Failed to stop proxy: ${err}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -92,7 +94,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const copyProxyUrl = () => {
     const url = `http://${config.host}:${status.port}/v1`;
     navigator.clipboard.writeText(url);
-    alert("Proxy URL copied to clipboard!");
+    showToast('Proxy URL copied to clipboard!', 'success');
   };
 
   const buttonClasses = cn(
