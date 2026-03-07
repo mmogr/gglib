@@ -935,8 +935,7 @@ mod tests {
         // including a symlink entry whose target is not in the archive (dangling).
         // Real macOS llama.cpp releases contain such versioned-dylib symlinks.
         {
-            let archive_file =
-                File::create(&archive_path).expect("failed to create archive file");
+            let archive_file = File::create(&archive_path).expect("failed to create archive file");
             let gz = GzEncoder::new(archive_file, Compression::fast());
             let mut tar = Builder::new(gz);
 
@@ -968,9 +967,7 @@ mod tests {
             link_header.set_entry_type(tar::EntryType::Symlink);
             link_header.set_size(0);
             link_header.set_mode(0o777);
-            link_header
-                .set_link_name("libggml-metal.0.dylib")
-                .unwrap();
+            link_header.set_link_name("libggml-metal.0.dylib").unwrap();
             link_header.set_cksum();
             tar.append_data(&mut link_header, "llama-b9999/libggml.dylib", &b""[..])
                 .unwrap();
