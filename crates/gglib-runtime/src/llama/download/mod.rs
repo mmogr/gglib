@@ -647,14 +647,14 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
     let gglib_dir = path_err(data_root())?;
     let download_dir = gglib_dir.join("downloads");
     let zip_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join("bin");
+    let bin_dir = gglib_dir.join(".llama").join("bin");
 
     // Download the archive
     download_with_progress(&client, &asset.browser_download_url, &zip_path).await?;
     println!();
 
     // Extract binaries
-    extract_binaries(&zip_path, &bin_dir)?;
+    extract_binaries(&zip_path, &bin_dir)?
 
     // Windows: Also download CUDA runtime DLLs
     #[cfg(target_os = "windows")]
@@ -727,7 +727,7 @@ pub async fn download_prebuilt_binaries_with_callback(
     let gglib_dir = path_err(data_root())?;
     let download_dir = gglib_dir.join("downloads");
     let zip_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join("bin");
+    let bin_dir = gglib_dir.join(".llama").join("bin");
 
     // Download the archive
     if let Some(callback) = progress_callback {
@@ -799,7 +799,7 @@ pub async fn download_prebuilt_binaries_with_boxed_callback(
     let gglib_dir = path_err(data_root())?;
     let download_dir = gglib_dir.join("downloads");
     let zip_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join("bin");
+    let bin_dir = gglib_dir.join(".llama").join("bin");
 
     // Download the archive with boxed callback
     download_with_boxed_callback(
