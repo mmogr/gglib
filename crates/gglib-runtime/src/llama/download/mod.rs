@@ -654,7 +654,7 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
     println!();
 
     // Extract binaries
-    extract_binaries(&zip_path, &bin_dir)?
+    extract_binaries(&zip_path, &bin_dir)?;
 
     // Windows: Also download CUDA runtime DLLs
     #[cfg(target_os = "windows")]
@@ -876,5 +876,66 @@ mod tests {
             PrebuiltAvailability::Available { .. } => {}
             PrebuiltAvailability::NotAvailable { .. } => {}
         }
+    }
+
+    /// Verify that `extract_binaries_tar_gz` correctly handles modern llama.cpp
+    /// release archives where binaries live one level inside a versioned directory
+    /// (e.g. `llama-b8223/llama-server`, `llama-b8223/llama-cli`).
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn test_extract_binaries_tar_gz_modern_layout() {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use tar::Builder;
+
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let archive_path = tmp.path().join("llama-b9999-bin-test.tar.gz");
+        let bin_dir = tmp.path().join("bin");
+
+        // Build a minimal tar.gz with the modern llama-b<tag>/<file> layout.
+        {
+            let archive_file =
+                File::create(&archive_path).expect("failed to create archive file");
+            let gz = GzEncoder::new(archive_file, Compression::fast());
+            let mut tar = Builder::new(gz);
+
+            let entries: &[(&str, &[u8])] = &[
+                ("llama-b9999/llama-server", b"#!/bin/sh\necho server"),
+                ("llama-b9999/llama-cli", b"#!/bin/sh\necho cli"),
+                (
+                    "llama-b9999/libggml-metal.0.dylib",
+                    b"\x7fELF placeholder dylib",
+                ),
+                // Top-level directory entry — must be skipped
+                ("llama-b9999/", b""),
+            ];
+
+            for (name, content) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(content.len() as u64);
+                header.set_mode(0o755);
+                header.set_cksum();
+                tar.append_data(&mut header, name, *content as &[u8])
+                    .unwrap();
+            }
+            tar.finish().unwrap();
+        }
+
+        extract_binaries_tar_gz(&archive_path, &bin_dir)
+            .expect("extract_binaries_tar_gz should succeed with modern archive layout");
+
+        assert!(
+            bin_dir.join("llama-server").exists(),
+            "llama-server should be extracted"
+        );
+        assert!(
+            bin_dir.join("llama-cli").exists(),
+            "llama-cli should be extracted"
+        );
+        // Shared library should also be present
+        assert!(
+            bin_dir.join("libggml-metal.0.dylib").exists(),
+            "dylib should be extracted"
+        );
     }
 }
