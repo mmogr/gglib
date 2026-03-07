@@ -27,6 +27,22 @@ export const ConfirmProvider: FC<{ children: ReactNode }> = ({ children }) => {
     };
   }, []);
 
+  // Guard against browser back/forward navigation while dialog is open.
+  // The app has no URL router (navigation is state-based), so the back button
+  // would navigate away entirely — but popstate also fires for programmatic
+  // history.back() calls and any future URL routing added to the app.
+  useEffect(() => {
+    const handlePopState = () => {
+      if (resolveRef.current !== null) {
+        resolveRef.current(false);
+        resolveRef.current = null;
+        setState((s) => ({ ...s, open: false }));
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
     // Guard: if a dialog is already open, reject the new call rather than
     // silently orphaning the pending promise.
