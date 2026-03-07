@@ -917,7 +917,9 @@ mod tests {
 
     /// Verify that `extract_binaries_tar_gz` correctly handles modern llama.cpp
     /// release archives where binaries live one level inside a versioned directory
-    /// (e.g. `llama-b8223/llama-server`, `llama-b8223/llama-cli`).
+    /// (e.g. `llama-b8223/llama-server`, `llama-b8223/llama-cli`), and that
+    /// dangling dylib symlinks (versioned aliases present in real macOS archives)
+    /// do not cause a spurious "No such file or directory" error.
     #[test]
     #[cfg(feature = "prebuilt")]
     fn test_extract_binaries_tar_gz_modern_layout() {
@@ -929,13 +931,16 @@ mod tests {
         let archive_path = tmp.path().join("llama-b9999-bin-test.tar.gz");
         let bin_dir = tmp.path().join("bin");
 
-        // Build a minimal tar.gz with the modern llama-b<tag>/<file> layout.
+        // Build a minimal tar.gz with the modern llama-b<tag>/<file> layout,
+        // including a symlink entry whose target is not in the archive (dangling).
+        // Real macOS llama.cpp releases contain such versioned-dylib symlinks.
         {
             let archive_file =
                 File::create(&archive_path).expect("failed to create archive file");
             let gz = GzEncoder::new(archive_file, Compression::fast());
             let mut tar = Builder::new(gz);
 
+            // Regular files
             let entries: &[(&str, &[u8])] = &[
                 ("llama-b9999/llama-server", b"#!/bin/sh\necho server"),
                 ("llama-b9999/llama-cli", b"#!/bin/sh\necho cli"),
@@ -943,7 +948,7 @@ mod tests {
                     "llama-b9999/libggml-metal.0.dylib",
                     b"\x7fELF placeholder dylib",
                 ),
-                // Top-level directory entry — must be skipped
+                // Top-level directory entry — must be skipped by component-count guard
                 ("llama-b9999/", b""),
             ];
 
@@ -955,11 +960,27 @@ mod tests {
                 tar.append_data(&mut header, name, *content as &[u8])
                     .unwrap();
             }
+
+            // Symlink entry: libggml.dylib -> libggml-metal.0.dylib
+            // The target is NOT included in this archive (dangling symlink).
+            // Before the symlink_metadata fix this caused ENOENT via fs::metadata.
+            let mut link_header = tar::Header::new_gnu();
+            link_header.set_entry_type(tar::EntryType::Symlink);
+            link_header.set_size(0);
+            link_header.set_mode(0o777);
+            link_header
+                .set_link_name("libggml-metal.0.dylib")
+                .unwrap();
+            link_header.set_cksum();
+            tar.append_data(&mut link_header, "llama-b9999/libggml.dylib", &b""[..])
+                .unwrap();
+
             tar.finish().unwrap();
         }
 
+        // Must not fail — the dangling symlink must be handled gracefully.
         extract_binaries_tar_gz(&archive_path, &bin_dir)
-            .expect("extract_binaries_tar_gz should succeed with modern archive layout");
+            .expect("extract_binaries_tar_gz should succeed even with dangling symlink entries");
 
         assert!(
             bin_dir.join("llama-server").exists(),
@@ -969,10 +990,14 @@ mod tests {
             bin_dir.join("llama-cli").exists(),
             "llama-cli should be extracted"
         );
-        // Shared library should also be present
         assert!(
             bin_dir.join("libggml-metal.0.dylib").exists(),
             "dylib should be extracted"
+        );
+        // The symlink itself should be present (its target being missing is fine)
+        assert!(
+            bin_dir.join("libggml.dylib").symlink_metadata().is_ok(),
+            "symlink entry should be extracted"
         );
     }
 }
