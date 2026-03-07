@@ -340,8 +340,8 @@ async fn download_with_boxed_callback(
 
 /// Extract all files from the archive (zip or tar.gz).
 ///
-/// For macOS/Linux: tar.gz archives with binaries in build/bin/
-/// For Windows: zip archives with binaries at root level
+/// For macOS/Linux: tar.gz archives with binaries in a versioned top-level directory
+/// (e.g. `llama-b<tag>/<file>`). For Windows: zip archives with binaries at root level.
 ///
 /// This includes the main binaries (llama-server, llama-cli) and all required
 /// shared libraries (.dylib on macOS, .dll on Windows, .so on Linux).
@@ -382,10 +382,12 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
             .path()
             .context("Failed to get entry path")?
             .into_owned();
-        let entry_name = path.to_string_lossy();
-
-        // Binaries live in build/bin/ inside the archive
-        if !entry_name.contains("build/bin/") {
+        // Modern llama.cpp release archives have the structure:
+        //   llama-b<tag>/<filename>
+        // Keep only files that are exactly one level deep (skip the top-level
+        // directory entry itself and any files nested deeper).
+        let components: Vec<_> = path.components().collect();
+        if components.len() != 2 {
             continue;
         }
 
@@ -409,9 +411,17 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&dest_path)?.permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&dest_path, perms)?;
+            // Use symlink_metadata (lstat) so we don't follow symlink entries to
+            // targets that may not yet be extracted, which would return ENOENT.
+            // Symlinks cannot be chmod'd on macOS/Linux so we skip them.
+            let meta = fs::symlink_metadata(&dest_path)
+                .with_context(|| format!("Failed to read metadata: {}", file_name))?;
+            if !meta.file_type().is_symlink() {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&dest_path, perms)
+                    .with_context(|| format!("Failed to set permissions: {}", file_name))?;
+            }
         }
 
         if required_binaries.contains(&file_name.as_str()) {
@@ -487,9 +497,14 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&dest_path)?.permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&dest_path, perms)?;
+            let meta = fs::symlink_metadata(&dest_path)
+                .with_context(|| format!("Failed to read metadata: {}", file_name))?;
+            if !meta.file_type().is_symlink() {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&dest_path, perms)
+                    .with_context(|| format!("Failed to set permissions: {}", file_name))?;
+            }
         }
 
         if required_binaries.contains(&file_name) {
@@ -645,22 +660,31 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
     let gglib_dir = path_err(data_root())?;
     let download_dir = gglib_dir.join("downloads");
     let zip_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join("bin");
+    let bin_dir = gglib_dir.join(".llama").join("bin");
 
     // Download the archive
     download_with_progress(&client, &asset.browser_download_url, &zip_path).await?;
     println!();
 
-    // Extract binaries
-    extract_binaries(&zip_path, &bin_dir)?;
+    // Extract binaries; capture result so the downloads dir is cleaned up on
+    // both success and failure paths.
+    let post_download_result = async {
+        extract_binaries(&zip_path, &bin_dir)?;
 
-    // Windows: Also download CUDA runtime DLLs
-    #[cfg(target_os = "windows")]
-    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        // Windows: Also download CUDA runtime DLLs
+        #[cfg(target_os = "windows")]
+        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
 
-    // Clean up downloaded archive
-    let _ = fs::remove_file(&zip_path);
-    let _ = fs::remove_dir(&download_dir);
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+
+    // Always remove the entire downloads directory regardless of outcome.
+    // Using remove_dir_all so a partially-downloaded or leftover CUDA archive
+    // doesn't prevent the directory from being deleted.
+    let _ = fs::remove_dir_all(&download_dir);
+
+    post_download_result?;
 
     // Save a simple config indicating this was a pre-built install
     save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
@@ -725,7 +749,7 @@ pub async fn download_prebuilt_binaries_with_callback(
     let gglib_dir = path_err(data_root())?;
     let download_dir = gglib_dir.join("downloads");
     let zip_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join("bin");
+    let bin_dir = gglib_dir.join(".llama").join("bin");
 
     // Download the archive
     if let Some(callback) = progress_callback {
@@ -734,16 +758,23 @@ pub async fn download_prebuilt_binaries_with_callback(
         download_with_progress(&client, &asset.browser_download_url, &zip_path).await?;
     }
 
-    // Extract binaries (quick operation, no progress needed)
-    extract_binaries(&zip_path, &bin_dir)?;
+    // Extract binaries; capture result so the downloads dir is cleaned up on
+    // both success and failure paths.
+    let post_download_result = async {
+        extract_binaries(&zip_path, &bin_dir)?;
 
-    // Windows: Also download CUDA runtime DLLs
-    #[cfg(target_os = "windows")]
-    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        // Windows: Also download CUDA runtime DLLs
+        #[cfg(target_os = "windows")]
+        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
 
-    // Clean up downloaded archive
-    let _ = fs::remove_file(&zip_path);
-    let _ = fs::remove_dir(&download_dir);
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+
+    // Always remove the entire downloads directory regardless of outcome.
+    let _ = fs::remove_dir_all(&download_dir);
+
+    post_download_result?;
 
     // Save a simple config indicating this was a pre-built install
     save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
@@ -797,7 +828,7 @@ pub async fn download_prebuilt_binaries_with_boxed_callback(
     let gglib_dir = path_err(data_root())?;
     let download_dir = gglib_dir.join("downloads");
     let zip_path = download_dir.join(&asset.name);
-    let bin_dir = gglib_dir.join("bin");
+    let bin_dir = gglib_dir.join(".llama").join("bin");
 
     // Download the archive with boxed callback
     download_with_boxed_callback(
@@ -808,16 +839,23 @@ pub async fn download_prebuilt_binaries_with_boxed_callback(
     )
     .await?;
 
-    // Extract binaries (quick operation, no progress needed)
-    extract_binaries(&zip_path, &bin_dir)?;
+    // Extract binaries; capture result so the downloads dir is cleaned up on
+    // both success and failure paths.
+    let post_download_result = async {
+        extract_binaries(&zip_path, &bin_dir)?;
 
-    // Windows: Also download CUDA runtime DLLs
-    #[cfg(target_os = "windows")]
-    download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        // Windows: Also download CUDA runtime DLLs
+        #[cfg(target_os = "windows")]
+        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
 
-    // Clean up downloaded archive
-    let _ = fs::remove_file(&zip_path);
-    let _ = fs::remove_dir(&download_dir);
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+
+    // Always remove the entire downloads directory regardless of outcome.
+    let _ = fs::remove_dir_all(&download_dir);
+
+    post_download_result?;
 
     // Save a simple config indicating this was a pre-built install
     save_prebuilt_config(&gglib_dir, &release.tag_name, &_description)?;
@@ -853,9 +891,10 @@ fn save_prebuilt_config(gglib_dir: &Path, version: &str, platform: &str) -> Resu
         installed_at: chrono::Utc::now().to_rfc3339(),
     };
 
-    let config_path = gglib_dir.join("llama-config.json");
+    let config_path = gglib_dir.join(".llama").join("llama-config.json");
     let json = serde_json::to_string_pretty(&config)?;
-    fs::write(&config_path, json)?;
+    fs::write(&config_path, &json)
+        .with_context(|| format!("Failed to write llama config: {}", config_path.display()))?;
 
     Ok(())
 }
@@ -874,5 +913,88 @@ mod tests {
             PrebuiltAvailability::Available { .. } => {}
             PrebuiltAvailability::NotAvailable { .. } => {}
         }
+    }
+
+    /// Verify that `extract_binaries_tar_gz` correctly handles modern llama.cpp
+    /// release archives where binaries live one level inside a versioned directory
+    /// (e.g. `llama-b8223/llama-server`, `llama-b8223/llama-cli`), and that
+    /// dangling dylib symlinks (versioned aliases present in real macOS archives)
+    /// do not cause a spurious "No such file or directory" error.
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn test_extract_binaries_tar_gz_modern_layout() {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use tar::Builder;
+
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let archive_path = tmp.path().join("llama-b9999-bin-test.tar.gz");
+        let bin_dir = tmp.path().join("bin");
+
+        // Build a minimal tar.gz with the modern llama-b<tag>/<file> layout,
+        // including a symlink entry whose target is not in the archive (dangling).
+        // Real macOS llama.cpp releases contain such versioned-dylib symlinks.
+        {
+            let archive_file = File::create(&archive_path).expect("failed to create archive file");
+            let gz = GzEncoder::new(archive_file, Compression::fast());
+            let mut tar = Builder::new(gz);
+
+            // Regular files
+            let entries: &[(&str, &[u8])] = &[
+                ("llama-b9999/llama-server", b"#!/bin/sh\necho server"),
+                ("llama-b9999/llama-cli", b"#!/bin/sh\necho cli"),
+                (
+                    "llama-b9999/libggml-metal.0.dylib",
+                    b"\x7fELF placeholder dylib",
+                ),
+                // Top-level directory entry — must be skipped by component-count guard
+                ("llama-b9999/", b""),
+            ];
+
+            for (name, content) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(content.len() as u64);
+                header.set_mode(0o755);
+                header.set_cksum();
+                tar.append_data(&mut header, name, *content as &[u8])
+                    .unwrap();
+            }
+
+            // Symlink entry: libggml.dylib -> libggml-metal.0.dylib
+            // The target is NOT included in this archive (dangling symlink).
+            // Before the symlink_metadata fix this caused ENOENT via fs::metadata.
+            let mut link_header = tar::Header::new_gnu();
+            link_header.set_entry_type(tar::EntryType::Symlink);
+            link_header.set_size(0);
+            link_header.set_mode(0o777);
+            link_header.set_link_name("libggml-metal.0.dylib").unwrap();
+            link_header.set_cksum();
+            tar.append_data(&mut link_header, "llama-b9999/libggml.dylib", &b""[..])
+                .unwrap();
+
+            tar.finish().unwrap();
+        }
+
+        // Must not fail — the dangling symlink must be handled gracefully.
+        extract_binaries_tar_gz(&archive_path, &bin_dir)
+            .expect("extract_binaries_tar_gz should succeed even with dangling symlink entries");
+
+        assert!(
+            bin_dir.join("llama-server").exists(),
+            "llama-server should be extracted"
+        );
+        assert!(
+            bin_dir.join("llama-cli").exists(),
+            "llama-cli should be extracted"
+        );
+        assert!(
+            bin_dir.join("libggml-metal.0.dylib").exists(),
+            "dylib should be extracted"
+        );
+        // The symlink itself should be present (its target being missing is fine)
+        assert!(
+            bin_dir.join("libggml.dylib").symlink_metadata().is_ok(),
+            "symlink entry should be extracted"
+        );
     }
 }
