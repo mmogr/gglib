@@ -340,8 +340,8 @@ async fn download_with_boxed_callback(
 
 /// Extract all files from the archive (zip or tar.gz).
 ///
-/// For macOS/Linux: tar.gz archives with binaries in build/bin/
-/// For Windows: zip archives with binaries at root level
+/// For macOS/Linux: tar.gz archives with binaries in a versioned top-level directory
+/// (e.g. `llama-b<tag>/<file>`). For Windows: zip archives with binaries at root level.
 ///
 /// This includes the main binaries (llama-server, llama-cli) and all required
 /// shared libraries (.dylib on macOS, .dll on Windows, .so on Linux).
@@ -411,9 +411,17 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&dest_path)?.permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&dest_path, perms)?;
+            // Use symlink_metadata (lstat) so we don't follow symlink entries to
+            // targets that may not yet be extracted, which would return ENOENT.
+            // Symlinks cannot be chmod'd on macOS/Linux so we skip them.
+            let meta = fs::symlink_metadata(&dest_path)
+                .with_context(|| format!("Failed to read metadata: {}", file_name))?;
+            if !meta.file_type().is_symlink() {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&dest_path, perms)
+                    .with_context(|| format!("Failed to set permissions: {}", file_name))?;
+            }
         }
 
         if required_binaries.contains(&file_name.as_str()) {
@@ -489,9 +497,14 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&dest_path)?.permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&dest_path, perms)?;
+            let meta = fs::symlink_metadata(&dest_path)
+                .with_context(|| format!("Failed to read metadata: {}", file_name))?;
+            if !meta.file_type().is_symlink() {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&dest_path, perms)
+                    .with_context(|| format!("Failed to set permissions: {}", file_name))?;
+            }
         }
 
         if required_binaries.contains(&file_name) {
@@ -880,7 +893,8 @@ fn save_prebuilt_config(gglib_dir: &Path, version: &str, platform: &str) -> Resu
 
     let config_path = gglib_dir.join(".llama").join("llama-config.json");
     let json = serde_json::to_string_pretty(&config)?;
-    fs::write(&config_path, json)?;
+    fs::write(&config_path, &json)
+        .with_context(|| format!("Failed to write llama config: {}", config_path.display()))?;
 
     Ok(())
 }
