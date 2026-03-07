@@ -1,4 +1,4 @@
-import { FC, useRef } from "react";
+import { FC, useCallback, useRef } from "react";
 import { Modal } from "./Modal";
 import { Button } from "./Button";
 
@@ -30,13 +30,10 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
 }) => {
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
-  const handleOpenAutoFocus =
-    variant === "danger"
-      ? (e: Event) => {
-          e.preventDefault();
-          cancelButtonRef.current?.focus();
-        }
-      : undefined;
+  const focusCancel = useCallback((e: Event) => {
+    e.preventDefault();
+    cancelButtonRef.current?.focus();
+  }, []);
 
   return (
     <Modal
@@ -46,7 +43,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
       description={description}
       size="sm"
       preventClose={isLoading}
-      onOpenAutoFocus={handleOpenAutoFocus}
+      onOpenAutoFocus={variant === "danger" ? focusCancel : undefined}
       footer={
         <>
           <Button

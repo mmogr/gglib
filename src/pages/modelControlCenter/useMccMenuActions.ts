@@ -160,5 +160,6 @@ export function useMccMenuActions({
     openChatSession,
     onOpenServeModal,
     showToast,
+    confirm,
   ]);
 }

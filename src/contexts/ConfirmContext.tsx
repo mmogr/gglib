@@ -28,6 +28,11 @@ export const ConfirmProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, []);
 
   const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
+    // Guard: if a dialog is already open, reject the new call rather than
+    // silently orphaning the pending promise.
+    if (resolveRef.current !== null) {
+      return Promise.resolve(false);
+    }
     return new Promise<boolean>((resolve) => {
       resolveRef.current = resolve;
       setState({ open: true, opts });
