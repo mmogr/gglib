@@ -13,6 +13,7 @@ import { verifyModel, checkModelUpdates, repairModel, type VerificationReport, t
 import { getTransport } from '../services/transport';
 import type { VerificationEvent } from '../services/transport/types/events';
 import { appLogger } from '../services/platform';
+import { useConfirmContext } from '../contexts/ConfirmContext';
 
 interface VerificationModalProps {
   modelId: number;
@@ -30,6 +31,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { confirm } = useConfirmContext();
 
   useEffect(() => {
     if (!open) return;
@@ -91,11 +93,13 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
       ? report.shards.filter(s => s.health.type === 'corrupt' || s.health.type === 'missing').length
       : updateResult?.details?.changed_shards ?? 0;
 
-    const confirmed = window.confirm(
-      mode === 'update'
-        ? `This will download ${shardCount} updated shard(s) for "${modelName}". Continue?`
-        : `This will re-download ${shardCount} corrupt shard(s) for "${modelName}". Continue?`
-    );
+    const confirmed = await confirm({
+      title: mode === 'update' ? 'Download updates?' : 'Re-download corrupt shards?',
+      description: mode === 'update'
+        ? `This will download ${shardCount} updated shard(s) for "${modelName}".`
+        : `This will re-download ${shardCount} corrupt shard(s) for "${modelName}".`,
+      confirmLabel: mode === 'update' ? 'Download' : 'Re-download',
+    });
     if (!confirmed) return;
 
     setRepairing(true);
