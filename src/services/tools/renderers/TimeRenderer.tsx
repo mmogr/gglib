@@ -1,4 +1,3 @@
-import React from 'react';
 import type { ToolResultRenderer } from '../types';
 import { fallbackRenderer } from './FallbackRenderer';
 
