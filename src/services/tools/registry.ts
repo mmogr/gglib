@@ -313,21 +313,10 @@ export class ToolRegistry {
     for (const [name, tool] of this.tools) {
       if (tool.source === source) {
         this.tools.delete(name);
+        this._nameMap.delete(name); // clean up any name-mapping for this key
         count++;
       }
     }
-
-    // Clean up reverse name-map entries for this server.
-    // Extract serverId from 'mcp:${serverId}' source string.
-    if (source.startsWith('mcp:')) {
-      const serverId = source.slice('mcp:'.length);
-      for (const [key, value] of this._nameMap.entries()) {
-        if (value.serverId === serverId) {
-          this._nameMap.delete(key);
-        }
-      }
-    }
-
     return count;
   }
 
