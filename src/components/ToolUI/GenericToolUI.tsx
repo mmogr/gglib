@@ -10,13 +10,13 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Clock3,
   Loader2,
   Wrench,
   XCircle,
 } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
+import { ToolResultDisplay } from './ToolResultDisplay';
 
 /**
  * Status indicator component
@@ -142,11 +142,7 @@ export const GenericToolUI = makeAssistantToolUI<
 
           {/* Show result when complete */}
           {status.type === 'complete' && result !== undefined && (
-            <JsonViewer
-              data={result}
-              label="Result"
-              defaultExpanded={true}
-            />
+            <ToolResultDisplay toolName={toolName} result={result} />
           )}
 
           {/* Show spinner when running */}
@@ -161,80 +157,6 @@ export const GenericToolUI = makeAssistantToolUI<
           {status.type === 'incomplete' && status.reason === 'error' && (
             <div className="px-3 py-2 bg-[rgba(239,68,68,0.1)] rounded-sm text-[#f87171] text-xs">
               Tool execution was interrupted or failed.
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  },
-});
-
-/**
- * Specialized tool UI for time-related results.
- * Shows a formatted clock display.
- */
-export const TimeToolUI = makeAssistantToolUI<
-  { timezone?: string; format?: string },
-  { time: string | number; timezone: string; format: string }
->({
-  toolName: 'get_current_time',
-  render: ({ args, status, result }) => {
-    const displayName = 'Get Current Time';
-
-    let displayStatus: 'running' | 'complete' | 'error' | 'incomplete' = 'running';
-    if (status.type === 'complete') {
-      const hasError = result && typeof result === 'object' && 'error' in result;
-      displayStatus = hasError ? 'error' : 'complete';
-    } else if (status.type === 'incomplete') {
-      displayStatus = status.reason === 'error' ? 'error' : 'incomplete';
-    }
-
-    return (
-      <div className="bg-background-secondary border border-border rounded-lg my-2 overflow-hidden text-[13px]">
-        <div className="flex items-center gap-2 px-3 py-2.5 bg-background-tertiary border-b border-border">
-          <span className="text-base" aria-hidden>
-            <Icon icon={Clock3} size={14} />
-          </span>
-          <span className="font-semibold text-text flex-1">{displayName}</span>
-          <StatusBadge status={displayStatus} />
-        </div>
-
-        <div className="p-3">
-          {/* Show timezone argument if provided */}
-          {args?.timezone && (
-            <div className="flex items-center gap-2 mb-2">
-              <span className="font-medium text-text-secondary">Timezone:</span>
-              <span className="text-text font-mono">{args.timezone}</span>
-            </div>
-          )}
-
-          {/* Show formatted time when complete */}
-          {status.type === 'complete' && result && !('error' in result) && (
-            <div className="text-center py-3">
-              <div className="text-lg font-semibold text-text mb-2 font-mono">
-                {typeof result.time === 'number'
-                  ? result.time.toString()
-                  : result.time}
-              </div>
-              <div className="flex justify-center gap-4 text-[11px] text-text-muted">
-                <span>Timezone: {result.timezone}</span>
-                <span>Format: {result.format}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Show error */}
-          {status.type === 'complete' && result && 'error' in result && (
-            <div className="px-3 py-2 bg-[rgba(239,68,68,0.1)] rounded-sm text-[#f87171] text-xs">
-              {(result as { error: string }).error}
-            </div>
-          )}
-
-          {/* Show spinner when running */}
-          {status.type === 'running' && (
-            <div className="flex items-center gap-2 py-2 text-text-secondary">
-              <span className="w-4 h-4 border-2 border-border border-t-primary rounded-full animate-spin-360"></span>
-              <span>Fetching time...</span>
             </div>
           )}
         </div>

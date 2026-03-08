@@ -8,6 +8,7 @@ import { cn } from '../../utils/cn';
 import { Stack } from '../primitives';
 import { getToolRegistry } from '../../services/tools/registry';
 import { formatToolDisplayName } from '../../services/tools/nameUtils';
+import { ToolResultDisplay } from '../ToolUI/ToolResultDisplay';
 
 type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call' }>;
 
@@ -103,13 +104,10 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
       <div className="flex flex-col gap-sm max-h-[55vh] overflow-auto pr-[2px]">
         {toolCalls.map((call, index) => {
           const argsId = `args-${index}`;
-          const resultId = `result-${index}`;
           const argsExpanded = expandedSections.has(argsId);
-          const resultExpanded = expandedSections.has(resultId);
 
           const formattedArgs = JSON.stringify(call.args, null, 2);
           const result = 'result' in call ? call.result : null;
-          const formattedResult = result ? JSON.stringify(result, null, 2) : 'No result';
           const durationMs = (call as AugmentedToolCallPart).durationMs;
 
           const StatusIcon = getStatusIcon(call);
@@ -164,33 +162,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                 {argsExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-[0.9rem] leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedArgs}</pre>}
               </Stack>
 
-              <Stack gap="xs">
-                <div className="flex items-center gap-xs w-full bg-background border border-border rounded-lg py-2 px-3 cursor-pointer transition-[border-color,background] duration-150 hover:border-primary hover:bg-background-tertiary" onClick={() => toggleSection(resultId)} role="button" tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      toggleSection(resultId);
-                    }
-                  }}
-                >
-                  <ChevronRight className={cn('text-text-secondary transition-transform duration-200', resultExpanded && 'rotate-90')} size={14} />
-                  <span className="flex-1 text-left font-semibold text-text">Result</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="ml-auto text-text-secondary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      copyToClipboard(formattedResult, resultId);
-                    }}
-                    leftIcon={<Icon icon={copiedId === resultId ? Check : Clipboard} size={14} />}
-                  >
-                    {copiedId === resultId ? 'Copied' : 'Copy'}
-                  </Button>
-                </div>
-                {resultExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-[0.9rem] leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedResult}</pre>}
-              </Stack>
+              <ToolResultDisplay toolName={call.toolName} result={result} />
             </div>
           );
         })}
