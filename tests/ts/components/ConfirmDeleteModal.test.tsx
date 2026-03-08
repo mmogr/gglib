@@ -32,19 +32,20 @@ describe('ConfirmDeleteModal', () => {
     it('renders the modal when isOpen is true', () => {
       render(<ConfirmDeleteModal {...defaultProps} />);
       
-      expect(screen.getByText('Delete Message?')).toBeInTheDocument();
+      expect(screen.getByText('Delete this message?')).toBeInTheDocument();
     });
 
     it('renders the delete icon', () => {
       render(<ConfirmDeleteModal {...defaultProps} />);
       
-      expect(screen.getByText('🗑️')).toBeInTheDocument();
+      // Icon is rendered as an SVG (Lucide Trash2), not emoji text
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
     });
 
     it('renders the description text', () => {
       render(<ConfirmDeleteModal {...defaultProps} />);
       
-      expect(screen.getByText('This will permanently delete this message.')).toBeInTheDocument();
+      expect(screen.getByText('This action is permanent.')).toBeInTheDocument();
     });
 
     it('renders Cancel and Delete buttons', () => {

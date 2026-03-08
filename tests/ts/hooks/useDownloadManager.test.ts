@@ -66,13 +66,16 @@ describe('useDownloadManager', () => {
 
     act(() => {
       mockSubscribeHandler?.({
-        type: 'download_progress',
-        id: 'model1',
-        downloaded: 10,
-        total: 100,
-        speed_bps: 5,
-        eta_seconds: 18,
-        percentage: 10,
+        type: 'download',
+        event: {
+          type: 'download_progress',
+          id: 'model1',
+          downloaded: 10,
+          total: 100,
+          speed_bps: 5,
+          eta_seconds: 18,
+          percentage: 10,
+        },
       });
     });
 
@@ -80,7 +83,10 @@ describe('useDownloadManager', () => {
     expect(result.current.currentProgress?.percentage).toBe(10);
 
     act(() => {
-      mockSubscribeHandler?.({ type: 'download_completed', id: 'model1', message: 'done' });
+      mockSubscribeHandler?.({
+        type: 'download',
+        event: { type: 'download_completed', id: 'model1', message: 'done' },
+      });
     });
 
     await act(async () => {
@@ -112,7 +118,7 @@ describe('useDownloadManager', () => {
 
     await waitFor(() => expect(mockQueueDownload).toHaveBeenCalledWith({ modelId: 'm2', quantization: 'q4' }));
     expect(result.current.queueStatus?.pending?.length).toBe(1);
-    expect(result.current.queueLength).toBe(2); // current + pending
+    expect(result.current.queueLength).toBe(1); // pending only (activeId set via SSE, not queue refresh)
   });
 
   it('cleans up subscription on unmount', async () => {

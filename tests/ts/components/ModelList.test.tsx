@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ModelList from '../../../src/components/ModelList';
 import { removeModel } from '../../../src/services/clients/models';
@@ -16,11 +16,17 @@ vi.mock('../../../src/services/clients/servers', () => ({
   serveModel: vi.fn(),
 }));
 
-// Mock window.confirm and window.alert
+// Mock context providers used by ModelList
 const mockConfirm = vi.fn();
-const mockAlert = vi.fn();
-const originalConfirm = window.confirm;
-const originalAlert = window.alert;
+const mockShowToast = vi.fn();
+
+vi.mock('../../../src/contexts/ConfirmContext', () => ({
+  useConfirmContext: () => ({ confirm: mockConfirm }),
+}));
+
+vi.mock('../../../src/contexts/ToastContext', () => ({
+  useToastContext: () => ({ showToast: mockShowToast }),
+}));
 
 describe('ModelList', () => {
   const mockOnRefresh = vi.fn();
@@ -29,13 +35,13 @@ describe('ModelList', () => {
   const createModel = (overrides: Partial<GgufModel> = {}): GgufModel => ({
     id: 1,
     name: 'TestModel',
-    file_path: '/path/to/model.gguf',
-    param_count_b: 7.0,
+    filePath: '/path/to/model.gguf',
+    paramCountB: 7.0,
     architecture: 'llama',
     quantization: 'Q4_K_M',
-    context_length: 4096,
-    added_at: '2024-01-15T10:00:00Z',
-    hf_repo_id: 'user/repo',
+    contextLength: 4096,
+    addedAt: '2024-01-15T10:00:00Z',
+    hfRepoId: 'user/repo',
     ...overrides,
   });
 
@@ -49,13 +55,6 @@ describe('ModelList', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    window.confirm = mockConfirm;
-    window.alert = mockAlert;
-  });
-
-  afterEach(() => {
-    window.confirm = originalConfirm;
-    window.alert = originalAlert;
   });
 
   describe('rendering', () => {
@@ -89,7 +88,7 @@ describe('ModelList', () => {
     });
 
     it('renders formatted size for models < 1B', () => {
-      const smallModel = createModel({ param_count_b: 0.5 });
+      const smallModel = createModel({ paramCountB: 0.5 });
       render(<ModelList {...defaultProps} models={[smallModel]} />);
       
       expect(screen.getByText('500M')).toBeInTheDocument();
@@ -110,7 +109,7 @@ describe('ModelList', () => {
     it('renders HuggingFace repo ID', () => {
       render(<ModelList {...defaultProps} />);
       
-      expect(screen.getByText('📦 user/repo')).toBeInTheDocument();
+      expect(screen.getByText('user/repo')).toBeInTheDocument();
     });
 
     it('renders dash for missing architecture', () => {
@@ -162,7 +161,7 @@ describe('ModelList', () => {
     it('enables refresh button when not loading', () => {
       render(<ModelList {...defaultProps} />);
       
-      const refreshButton = screen.getByText('🔄 Refresh');
+      const refreshButton = screen.getByRole('button', { name: /^refresh$/i });
       expect(refreshButton).not.toBeDisabled();
     });
   });
@@ -208,7 +207,7 @@ describe('ModelList', () => {
     it('calls onRefresh when refresh button clicked', () => {
       render(<ModelList {...defaultProps} />);
       
-      const refreshButton = screen.getByText('🔄 Refresh');
+      const refreshButton = screen.getByRole('button', { name: /^refresh$/i });
       fireEvent.click(refreshButton);
       
       expect(mockOnRefresh).toHaveBeenCalledTimes(1);
@@ -216,28 +215,36 @@ describe('ModelList', () => {
   });
 
   describe('remove model', () => {
-    it('shows confirmation dialog before removing', () => {
-      mockConfirm.mockReturnValue(false);
+    it('shows confirmation dialog before removing', async () => {
+      mockConfirm.mockResolvedValue(false);
       render(<ModelList {...defaultProps} />);
       
       const removeButton = screen.getByTitle('Remove model');
       fireEvent.click(removeButton);
       
-      expect(mockConfirm).toHaveBeenCalledWith('Are you sure you want to remove "TestModel"?');
+      await waitFor(() => {
+        expect(mockConfirm).toHaveBeenCalledWith({
+          title: 'Remove "TestModel"?',
+          description: 'This will permanently delete the model file.',
+          confirmLabel: 'Remove',
+          variant: 'danger',
+        });
+      });
     });
 
-    it('does not remove model when confirmation cancelled', () => {
-      mockConfirm.mockReturnValue(false);
+    it('does not remove model when confirmation cancelled', async () => {
+      mockConfirm.mockResolvedValue(false);
       render(<ModelList {...defaultProps} />);
       
       const removeButton = screen.getByTitle('Remove model');
       fireEvent.click(removeButton);
       
+      await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
       expect(removeModel).not.toHaveBeenCalled();
     });
 
     it('calls removeModel when confirmed', async () => {
-      mockConfirm.mockReturnValue(true);
+      mockConfirm.mockResolvedValue(true);
       vi.mocked(removeModel).mockResolvedValue(undefined);
       
       render(<ModelList {...defaultProps} />);
@@ -251,7 +258,7 @@ describe('ModelList', () => {
     });
 
     it('calls onModelRemoved after successful removal', async () => {
-      mockConfirm.mockReturnValue(true);
+      mockConfirm.mockResolvedValue(true);
       vi.mocked(removeModel).mockResolvedValue(undefined);
       
       render(<ModelList {...defaultProps} />);
@@ -265,7 +272,7 @@ describe('ModelList', () => {
     });
 
     it('shows alert on removal error', async () => {
-      mockConfirm.mockReturnValue(true);
+      mockConfirm.mockResolvedValue(true);
       vi.mocked(removeModel).mockRejectedValue(new Error('Removal failed'));
       
       render(<ModelList {...defaultProps} />);
@@ -274,12 +281,12 @@ describe('ModelList', () => {
       fireEvent.click(removeButton);
       
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('Failed to remove model: Error: Removal failed');
+        expect(mockShowToast).toHaveBeenCalledWith('Failed to remove model: Error: Removal failed', 'error');
       });
     });
 
     it('does not call onModelRemoved on removal error', async () => {
-      mockConfirm.mockReturnValue(true);
+      mockConfirm.mockResolvedValue(true);
       vi.mocked(removeModel).mockRejectedValue(new Error('Removal failed'));
       
       render(<ModelList {...defaultProps} />);
@@ -288,7 +295,7 @@ describe('ModelList', () => {
       fireEvent.click(removeButton);
       
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalled();
       });
       
       expect(mockOnModelRemoved).not.toHaveBeenCalled();
@@ -368,7 +375,7 @@ describe('ModelList', () => {
       
       expect(screen.getByText('Start Model Server')).toBeInTheDocument();
       
-      const cancelButton = screen.getByText('Cancel');
+      const cancelButton = screen.getByRole('button', { name: 'Cancel' });
       fireEvent.click(cancelButton);
       
       expect(screen.queryByText('Start Model Server')).not.toBeInTheDocument();
@@ -380,7 +387,12 @@ describe('ModelList', () => {
       const serveButton = screen.getByTitle('Serve model');
       fireEvent.click(serveButton);
       
-      const closeButton = screen.getByText('✕');
+      expect(screen.getByText('Start Model Server')).toBeInTheDocument();
+      
+      // The X close button is unlabelled — locate it via the modal header
+      const modalHeading = screen.getByText('Start Model Server');
+      const headerContainer = modalHeading.parentElement!;
+      const closeButton = within(headerContainer).getByRole('button');
       fireEvent.click(closeButton);
       
       expect(screen.queryByText('Start Model Server')).not.toBeInTheDocument();
@@ -400,7 +412,7 @@ describe('ModelList', () => {
       await waitFor(() => {
         expect(serveModel).toHaveBeenCalledWith({
           id: 1,
-          context_length: 4096,
+          contextLength: 4096,
           mlock: false,
           jinja: false, // No agent/reasoning tags, so jinja defaults to false
         });
@@ -424,7 +436,7 @@ describe('ModelList', () => {
       await waitFor(() => {
         expect(serveModel).toHaveBeenCalledWith({
           id: 1,
-          context_length: 8192,
+          contextLength: 8192,
           mlock: false,
           jinja: false, // No agent/reasoning tags
         });
@@ -461,7 +473,7 @@ describe('ModelList', () => {
       fireEvent.click(startButton);
       
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('Failed to serve model: Error: Serve failed');
+        expect(mockShowToast).toHaveBeenCalledWith('Failed to serve model: Error: Serve failed', 'error');
       });
     });
 
@@ -481,7 +493,8 @@ describe('ModelList', () => {
       fireEvent.click(startButton);
       
       await waitFor(() => {
-        expect(screen.getByText('Loading model...')).toBeInTheDocument();
+        // Button renders a spinner (no text) while serving
+        expect(screen.queryByText('Start Server')).not.toBeInTheDocument();
       });
       
       resolveServe!();
@@ -507,7 +520,7 @@ describe('ModelList', () => {
       fireEvent.click(serveButton);
       
       // Verify agent badge is shown
-      expect(screen.getByText('🔧 Agent')).toBeInTheDocument();
+      expect(screen.getByText('Agent')).toBeInTheDocument();
       
       const startButton = screen.getByText('Start Server');
       fireEvent.click(startButton);
@@ -515,7 +528,7 @@ describe('ModelList', () => {
       await waitFor(() => {
         expect(serveModel).toHaveBeenCalledWith({
           id: 1,
-          context_length: 4096,
+          contextLength: 4096,
           mlock: false,
           jinja: true, // Auto-enabled for agent tag
         });
@@ -532,7 +545,7 @@ describe('ModelList', () => {
       fireEvent.click(serveButton);
       
       // Verify reasoning badge is shown
-      expect(screen.getByText('🧠 Reasoning')).toBeInTheDocument();
+      expect(screen.getByText('Reasoning')).toBeInTheDocument();
       
       const startButton = screen.getByText('Start Server');
       fireEvent.click(startButton);
@@ -540,7 +553,7 @@ describe('ModelList', () => {
       await waitFor(() => {
         expect(serveModel).toHaveBeenCalledWith({
           id: 1,
-          context_length: 4096,
+          contextLength: 4096,
           mlock: false,
           jinja: true, // Auto-enabled for reasoning tag
         });
@@ -554,8 +567,8 @@ describe('ModelList', () => {
       const serveButton = screen.getByTitle('Serve model');
       fireEvent.click(serveButton);
       
-      expect(screen.getByText('🧠 Reasoning')).toBeInTheDocument();
-      expect(screen.getByText('🔧 Agent')).toBeInTheDocument();
+      expect(screen.getByText('Reasoning')).toBeInTheDocument();
+      expect(screen.getByText('Agent')).toBeInTheDocument();
     });
   });
 });
