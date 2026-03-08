@@ -134,6 +134,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/downloads/failed/clear",
             post(handlers::downloads::clear_failed),
         )
+        // Built-in tools API
+        .route("/builtin/tools", get(handlers::builtin::list_builtin_tools))
         // MCP API
         .route(
             "/mcp/servers",
