@@ -4,6 +4,7 @@
  */
 
 import { getToolRegistry } from '../registry';
+import { timeRenderer } from '../renderers/TimeRenderer';
 
 // Import built-in tools
 import * as time from './time';
@@ -17,7 +18,7 @@ export function registerBuiltinTools(): void {
 
   // Only register if not already registered (idempotent)
   if (!registry.has('get_current_time')) {
-    registry.register(time.definition, time.execute);
+    registry.register(time.definition, time.execute, 'builtin', timeRenderer);
   }
 }
 
