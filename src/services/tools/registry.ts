@@ -7,6 +7,7 @@ import type {
   ToolDefinition,
   ToolExecutor,
   ToolResult,
+  ToolResultRenderer,
   RegisteredTool,
   ParsedToolCall,
 } from './types';
@@ -25,6 +26,7 @@ export type ToolSource =
  */
 interface RegisteredToolWithSource extends RegisteredTool {
   source: ToolSource;
+  renderer?: ToolResultRenderer;
 }
 
 /**
@@ -59,14 +61,15 @@ export class ToolRegistry {
    * @param definition - OpenAI-compatible tool definition
    * @param execute - Function to execute when tool is called
    * @param source - Source identifier for the tool (default: 'builtin')
+   * @param renderer - Optional renderer for displaying results in the chat UI
    * @throws Error if tool with same name already exists
    */
-  register(definition: ToolDefinition, execute: ToolExecutor, source: ToolSource = 'builtin'): void {
+  register(definition: ToolDefinition, execute: ToolExecutor, source: ToolSource = 'builtin', renderer?: ToolResultRenderer): void {
     const name = definition.function.name;
     if (this.tools.has(name)) {
       throw new Error(`Tool "${name}" is already registered`);
     }
-    this.tools.set(name, { definition, execute, source });
+    this.tools.set(name, { definition, execute, source, renderer });
     // Newly registered tools are disabled by default.
     // Intentionally do not mutate enable-state here so that if a tool is
     // re-registered after being enabled (e.g., MCP resync), it stays enabled.
@@ -121,13 +124,15 @@ export class ToolRegistry {
    * @param parameters - JSON Schema for parameters (optional)
    * @param execute - Executor function
    * @param source - Source identifier for the tool (default: 'builtin')
+   * @param renderer - Optional renderer for displaying results in the chat UI
    */
   registerFunction(
     name: string,
     description: string,
     parameters: ToolDefinition['function']['parameters'] | undefined,
     execute: ToolExecutor,
-    source: ToolSource = 'builtin'
+    source: ToolSource = 'builtin',
+    renderer?: ToolResultRenderer
   ): void {
     this.register(
       {
@@ -139,7 +144,8 @@ export class ToolRegistry {
         },
       },
       execute,
-      source
+      source,
+      renderer
     );
   }
 
@@ -205,6 +211,14 @@ export class ToolRegistry {
    */
   getExecutor(name: string): ToolExecutor | undefined {
     return this.tools.get(name)?.execute;
+  }
+
+  /**
+   * Get the registered renderer for a tool, if one was provided.
+   * Returns undefined for tools without a renderer or unknown tool names.
+   */
+  getRenderer(toolName: string): ToolResultRenderer | undefined {
+    return this.tools.get(toolName)?.renderer;
   }
 
   /**
