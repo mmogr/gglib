@@ -10,8 +10,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use gglib_core::ModelRegistrar;
 use gglib_core::ports::{
-    AppEventBridge, DownloadManagerConfig, DownloadManagerPort, HfClientPort, ModelRepository,
-    ProcessRunner,
+    AppEventBridge, AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, HfClientPort,
+    ModelRepository, ProcessRunner,
 };
 use gglib_core::services::AppCore;
 use gglib_db::{CoreFactory, setup_database};
@@ -292,6 +292,23 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         let gui = Arc::clone(&gui);
         async move {
             gui.emit_initial_snapshot().await;
+        }
+    });
+
+    // Spawn proxy crash watcher — emits ProxyCrashed when the task exits unexpectedly.
+    // Uses the watch channel from ProxySupervisor (zero polling).
+    tokio::spawn({
+        let mut rx = gui.proxy_exit_receiver();
+        let sse = Arc::clone(&sse);
+        async move {
+            // Skip the initial value; only react to actual changes.
+            while rx.changed().await.is_ok() {
+                let status = rx.borrow().clone();
+                if status == gglib_runtime::proxy::ProxyStatus::Crashed {
+                    tracing::warn!("Proxy crash detected by watcher — emitting ProxyCrashed event");
+                    sse.emit(gglib_core::events::AppEvent::proxy_crashed());
+                }
+            }
         }
     });
 

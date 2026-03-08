@@ -479,6 +479,13 @@ impl GuiBackend {
         self.proxy_ops().status().await
     }
 
+    /// Get a watch receiver for proxy exit notifications.
+    ///
+    /// Used by the crash watcher to detect proxy crashes without polling.
+    pub fn proxy_exit_receiver(&self) -> tokio::sync::watch::Receiver<ProxyStatus> {
+        self.deps.proxy_supervisor.exit_receiver()
+    }
+
     // =========================================================================
     // Voice operations
     // =========================================================================

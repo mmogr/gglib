@@ -4,6 +4,7 @@ use axum::{Json, extract::State};
 
 use crate::{error::HttpError, state::AppState};
 use gglib_core::paths::llama_server_path;
+use gglib_core::ports::AppEventEmitter;
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 
@@ -100,14 +101,26 @@ pub async fn start(
         }
     }
 
-    Ok(Json(fetch_status(&state).await))
+    let status = fetch_status(&state).await;
+
+    // Emit proxy started event if proxy is now running
+    if status.running {
+        if let Some(port) = status.port {
+            state.sse.emit(gglib_core::events::AppEvent::proxy_started(port));
+        }
+    }
+
+    Ok(Json(status))
 }
 
 /// Stop the proxy (idempotent).
 pub async fn stop(State(state): State<AppState>) -> Result<Json<ProxyStatus>, HttpError> {
     // Idempotent: if not running (Conflict), treat as success
     match state.gui.proxy_stop().await {
-        Ok(()) => {}
+        Ok(()) => {
+            // Emit proxy stopped event on clean shutdown
+            state.sse.emit(gglib_core::events::AppEvent::proxy_stopped());
+        }
         Err(e) => {
             let http: HttpError = e.into();
             if !matches!(http, HttpError::Conflict(_)) {
