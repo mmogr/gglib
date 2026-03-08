@@ -36,7 +36,7 @@ pub struct CombinedToolExecutor {
 
 impl CombinedToolExecutor {
     /// Wrap an existing `McpService` handle.
-    pub fn new(mcp: Arc<McpService>) -> Self {
+    pub const fn new(mcp: Arc<McpService>) -> Self {
         Self {
             builtin: BuiltinToolExecutorAdapter,
             mcp: McpToolExecutorAdapter::new(mcp),
@@ -48,7 +48,7 @@ impl CombinedToolExecutor {
 impl ToolExecutorPort for CombinedToolExecutor {
     async fn list_tools(&self) -> Vec<ToolDefinition> {
         let (builtin, mcp) = tokio::join!(self.builtin.list_tools(), self.mcp.list_tools());
-        [builtin, mcp].concat()
+        builtin.into_iter().chain(mcp).collect()
     }
 
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {

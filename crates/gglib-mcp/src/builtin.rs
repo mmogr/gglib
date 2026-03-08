@@ -108,8 +108,8 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
         };
 
         let content = match bare {
-            "get_current_time" => get_current_time(&args)?,
-            _ => return Err(anyhow!("unknown builtin tool '{}'", bare)),
+            "get_current_time" => get_current_time(&args),
+            _ => return Err(anyhow!("unknown builtin tool '{bare}'")),
         };
 
         Ok(ToolResult {
@@ -128,7 +128,7 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
 ///
 /// The JSON shape matches `TimeResult` in `TimeRenderer.tsx` so the frontend
 /// renderer can display it without any extra parsing conventions.
-fn get_current_time(args: &HashMap<String, Value>) -> anyhow::Result<Value> {
+fn get_current_time(args: &HashMap<String, Value>) -> Value {
     let tz_name = args
         .get("timezone")
         .and_then(Value::as_str)
@@ -148,11 +148,11 @@ fn get_current_time(args: &HashMap<String, Value>) -> anyhow::Result<Value> {
         _ => Value::String(now_local.format("%A, %B %e, %Y %H:%M:%S %Z").to_string()),
     };
 
-    Ok(json!({
+    json!({
         "time": time_value,
         "timezone": tz.name(),
         "format": format,
-    }))
+    })
 }
 
 // =============================================================================
