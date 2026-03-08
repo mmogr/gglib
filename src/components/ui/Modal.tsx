@@ -22,7 +22,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   description?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   /** Content pinned below the scroll area, outside overflow-y-auto. Rendered inside a flex row with border-t. */
   footer?: ReactNode;
   /** Extra classes merged onto the body wrapper (e.g. "p-0" to remove default padding). Uses tailwind-merge so "p-0" correctly overrides "p-lg". */
@@ -31,6 +31,8 @@ interface ModalProps {
   footerClassName?: string;
   size?: "sm" | "md" | "lg";
   preventClose?: boolean;
+  /** Override default Radix focus behaviour on open (e.g. to focus a specific button). */
+  onOpenAutoFocus?: (e: Event) => void;
 }
 
 const sizeClassMap: Record<NonNullable<ModalProps["size"]>, string> = {
@@ -50,6 +52,7 @@ export const Modal: FC<ModalProps> = ({
   footerClassName,
   size = "md",
   preventClose = false,
+  onOpenAutoFocus,
 }) => {
   const descriptionId = useId();
   const hasDescription = description !== undefined && description !== null;
@@ -69,6 +72,7 @@ export const Modal: FC<ModalProps> = ({
             sizeClassMap[size],
           )}
           aria-describedby={hasDescription ? descriptionId : undefined}
+          onOpenAutoFocus={onOpenAutoFocus}
           onPointerDownOutside={(event) => {
             if (preventClose) event.preventDefault();
           }}
@@ -98,7 +102,9 @@ export const Modal: FC<ModalProps> = ({
               Dialog content
             </DialogPrimitive.Description>
           )}
-          <div className={cn("p-lg overflow-y-auto flex-1 min-h-0", bodyClassName)}>{children}</div>
+          {children != null && (
+            <div className={cn("p-lg overflow-y-auto flex-1 min-h-0", bodyClassName)}>{children}</div>
+          )}
           {footer != null && (
             <div className={cn("flex items-center justify-end gap-md p-lg border-t border-border shrink-0", footerClassName)}>
               {footer}

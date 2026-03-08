@@ -16,6 +16,7 @@ import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
 import { useVoiceModeContext } from '../contexts/VoiceModeContext';
 import { useToastContext } from '../contexts/ToastContext';
+import { useConfirmContext } from '../contexts/ConfirmContext';
 import { useServerState } from '../services/serverEvents';
 import { getServerToolSupport } from '../services/clients/servers';
 import {
@@ -76,6 +77,7 @@ export default function ChatPage({
 
   // Toast notifications
   const { showToast } = useToastContext();
+  const { confirm } = useConfirmContext();
 
   // Settings for title generation prompt and agent loop
   const { settings } = useSettings();
@@ -308,7 +310,12 @@ export default function ChatPage({
 
   // Conversation handlers
   const handleDeleteConversation = async (conversationId: number) => {
-    const shouldDelete = window.confirm('Delete this conversation? This cannot be undone.');
+    const shouldDelete = await confirm({
+      title: 'Delete this conversation?',
+      description: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
     if (!shouldDelete) return;
 
     try {
@@ -383,7 +390,11 @@ export default function ChatPage({
 
   const handleClearConversation = async () => {
     if (!activeConversation) return;
-    const confirmed = window.confirm('Start a fresh copy of this conversation?');
+    const confirmed = await confirm({
+      title: 'Start a fresh copy?',
+      description: 'The current conversation will be deleted and replaced with a new copy.',
+      confirmLabel: 'Start fresh',
+    });
     if (!confirmed) return;
 
     try {

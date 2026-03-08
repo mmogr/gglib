@@ -14,6 +14,8 @@ import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Row } from "./primitives";
 import { Input } from "./ui/Input";
+import { useConfirmContext } from "../contexts/ConfirmContext";
+import { useToastContext } from "../contexts/ToastContext";
 
 interface ModelListProps {
   models: GgufModel[];
@@ -126,10 +128,18 @@ const ModelList: FC<ModelListProps> = ({
     return servingModel ? shouldAutoEnableJinja(servingModel) : false;
   }, [servingModel]);
 
+  const { confirm } = useConfirmContext();
+  const { showToast } = useToastContext();
+
   const handleRemove = async (model: GgufModel) => {
     if (!model.id) return;
-    
-    const confirmed = window.confirm(`Are you sure you want to remove "${model.name}"?`);
+
+    const confirmed = await confirm({
+      title: `Remove "${model.name}"?`,
+      description: 'This will permanently delete the model file.',
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
     if (!confirmed) return;
 
     try {
@@ -137,7 +147,7 @@ const ModelList: FC<ModelListProps> = ({
       await removeModel(model.id);
       onModelRemoved();
     } catch (err) {
-      alert(`Failed to remove model: ${err}`);
+      showToast(`Failed to remove model: ${err}`, 'error');
     } finally {
       setRemoving(null);
     }
@@ -198,7 +208,7 @@ const ModelList: FC<ModelListProps> = ({
         }
       }
       
-      alert(`Failed to serve model: ${err}`);
+      showToast(`Failed to serve model: ${err}`, 'error');
     } finally {
       setIsServing(false);
     }

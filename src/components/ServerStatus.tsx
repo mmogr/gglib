@@ -8,6 +8,7 @@ import type { ProxyStatus } from "../services/transport/types/proxy";
 import { Icon } from "./ui/Icon";
 import { Stack } from './primitives';
 import { cn } from "../utils/cn";
+import { useToastContext } from '../contexts/ToastContext';
 
 interface ServerStatusProps {
   onOpenChat?: (port: number, modelName: string) => void;
@@ -22,6 +23,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
   const [servers, setServers] = useState<ServerInfo[]>([]);
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToastContext();
 
   const loadStatus = async () => {
     try {
@@ -53,7 +55,7 @@ const ServerStatus: FC<ServerStatusProps> = ({ onOpenChat }) => {
       await safeStopServer(modelId);
       await loadStatus();
     } catch (err) {
-      alert(`Failed to stop server: ${err}`);
+      showToast(`Failed to stop server: ${err}`, 'error');
     }
   };
 

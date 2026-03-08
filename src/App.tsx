@@ -9,6 +9,7 @@ import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
+import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { VoiceModeProvider } from "./contexts/VoiceModeContext";
 import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
@@ -213,14 +214,18 @@ function App() {
   if (!setupDone) {
     return (
       <ToastProvider>
-        <SetupWizard onComplete={() => setSetupDone(true)} />
+        <ConfirmProvider>
+          <SetupWizard onComplete={() => setSetupDone(true)} />
+        </ConfirmProvider>
       </ToastProvider>
     );
   }
 
   return (
     <ToastProvider>
-      <AppContent />
+      <ConfirmProvider>
+        <AppContent />
+      </ConfirmProvider>
     </ToastProvider>
   );
 }

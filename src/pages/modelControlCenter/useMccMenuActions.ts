@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { syncMenuStateSilent } from '../../services/platform';
 import type { ServerInfo } from '../../types';
 import type { SidebarTabId } from '../../components/ModelLibraryPanel/SidebarTabs';
@@ -52,6 +53,7 @@ export function useMccMenuActions({
   onOpenServeModal,
   showToast,
 }: UseMccMenuActionsArgs) {
+  const { confirm } = useConfirmContext();
   useEffect(() => {
     if (!onRegisterMenuActions) return;
 
@@ -117,9 +119,12 @@ export function useMccMenuActions({
         const modelName = selectedModel?.name || 'this model';
         
         // Show confirmation dialog
-        const confirmed = window.confirm(
-          `Are you sure you want to remove "${modelName}" from the library?\n\nThis will not delete the model file from disk.`
-        );
+        const confirmed = await confirm({
+          title: `Remove "${modelName}"?`,
+          description: 'This will not delete the model file from disk.',
+          confirmLabel: 'Remove',
+          variant: 'danger',
+        });
         
         if (!confirmed) return;
         
@@ -155,5 +160,6 @@ export function useMccMenuActions({
     openChatSession,
     onOpenServeModal,
     showToast,
+    confirm,
   ]);
 }

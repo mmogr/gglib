@@ -19,6 +19,8 @@ import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Stack } from './primitives';
 import { cn } from "../utils/cn";
+import { useConfirmContext } from "../contexts/ConfirmContext";
+import { useToastContext } from "../contexts/ToastContext";
 
 const statusBadge = "inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full";
 
@@ -45,6 +47,9 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+
+  const { confirm } = useConfirmContext();
+  const { showToast } = useToastContext();
 
   const handleStart = useCallback(
     async (info: McpServerInfo) => {
@@ -84,9 +89,12 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
     async (info: McpServerInfo) => {
       const id = info.server.id;
 
-      const confirmed = window.confirm(
-        `Remove MCP server "${info.server.name}"? This cannot be undone.`
-      );
+      const confirmed = await confirm({
+        title: `Remove "${info.server.name}"?`,
+        description: 'This cannot be undone.',
+        confirmLabel: 'Remove',
+        variant: 'danger',
+      });
       if (!confirmed) return;
 
       setActionError(null);
@@ -112,31 +120,15 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
         const result = await resolveMcpServerPath(id);
         
         if (result.success) {
-          // Success! Show toast and refresh
-          alert(`✓ Resolved: ${result.resolved_path}`);
-          // The list will auto-refresh via useMcpServers hook
+          showToast(`Resolved: ${result.resolved_path}`, 'success');
         } else {
-          // Show detailed error with attempts
-          const attemptsText = result.attempts
-            .slice(0, 8)
-            .map(a => `  ✗ ${a.candidate}: ${a.outcome}`)
-            .join('\n');
-          
-          const allNotFound = result.attempts.every(a => 
+          const allNotFound = result.attempts.every(a =>
             a.outcome.toLowerCase().includes('not found')
           );
-          
-          const installHint = allNotFound 
-            ? '\n\n• Install Node.js if not installed (includes npm/npx)'
-            : '';
-          
-          const suggestedFix = result.suggested_fix 
-            ? `\n\nSuggested fix: ${result.suggested_fix}`
-            : '';
-          
-          alert(
-            `Could not resolve executable:\n\n${attemptsText}${suggestedFix}${installHint}`
-          );
+          const parts: string[] = ['Could not resolve executable.'];
+          if (result.suggested_fix) parts.push(`Suggested fix: ${result.suggested_fix}`);
+          if (allNotFound) parts.push('Install Node.js if not installed (includes npm/npx).');
+          setActionError(parts.join(' '));
         }
       } catch (e) {
         setActionError(e instanceof Error ? e.message : "Auto-fix failed");
