@@ -21,6 +21,7 @@ import React from 'react';
 
 import { appLogger } from '../../services/platform';
 import { getAuthenticatedFetchConfig } from '../../services/transport/api/client';
+import { getToolRegistry } from '../../services/tools';
 import type { GglibMessage, GglibMessageCustom } from '../../types/messages';
 import type { AgentEvent } from '../../types/events/agentEvent';
 import type { ReasoningTimingTracker } from './reasoningTiming';
@@ -120,9 +121,31 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     return Object.keys(defined).length > 0 ? defined : null;
   })();
 
-  // Tool filter: empty array strips all tools when model is known to not
-  // support tool-calling (explicit false only — null/undefined is permissive).
-  const toolFilter: string[] | null = supportsToolCalls === false ? [] : null;
+  // Tool filter: when the model supports tool calls, forward the explicit list
+  // of enabled tools in backend qualified-name format ("serverId:originalName").
+  // An empty array strips all tools (model known not to support tool-calling).
+  // null means "no filter" — never sent when we have registry entries.
+  let toolFilter: string[] | null;
+  if (supportsToolCalls === false) {
+    toolFilter = [];
+  } else {
+    const registry = getToolRegistry();
+    const enabled = registry.getEnabledDefinitions();
+    if (enabled.length === 0) {
+      toolFilter = null;
+    } else {
+      toolFilter = enabled.map((def) => {
+        const sanitized = def.function.name;
+        const serverId = registry.getServerId(sanitized);
+        const original = registry.getOriginalName(sanitized);
+        if (serverId !== undefined && original !== undefined) {
+          return `${serverId}:${original}`;
+        }
+        // Fallback for tools registered via register() without a name mapping
+        return sanitized;
+      });
+    }
+  }
 
   // ── Authenticate and resolve backend base URL ─────────────────────────────
   const { baseUrl, headers: authHeaders } = await getAuthenticatedFetchConfig();

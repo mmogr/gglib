@@ -2,7 +2,9 @@
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
 
+pub mod builtin;
 pub(crate) mod client;
+pub mod combined;
 pub(crate) mod manager;
 pub(crate) mod path;
 pub mod resolver;
@@ -18,5 +20,7 @@ pub use gglib_core::{
 pub use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
 
 // Re-export this crate's public types
+pub use builtin::BuiltinToolExecutorAdapter;
+pub use combined::CombinedToolExecutor;
 pub use service::{McpServerInfo, McpService};
 pub use tool_executor::McpToolExecutorAdapter;

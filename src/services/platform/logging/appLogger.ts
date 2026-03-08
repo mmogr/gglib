@@ -38,6 +38,7 @@ export type AppLogCategory =
   // Services
   | 'service.download'
   | 'service.server'
+  | 'service.builtin'
   | 'service.mcp'
   | 'service.chat'
   | 'service.settings'

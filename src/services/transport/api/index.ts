@@ -9,6 +9,7 @@ import * as settings from './settings';
 import * as servers from './servers';
 import * as proxy from './proxy';
 import * as downloads from './downloads';
+import * as builtin from './builtin';
 import * as mcp from './mcp';
 import * as chat from './chat';
 import * as verification from './verification';
@@ -27,6 +28,7 @@ export function createApiTransport() {
     ...servers,
     ...proxy,
     ...downloads,
+    ...builtin,
     ...mcp,
     ...chat,
     ...verification,
