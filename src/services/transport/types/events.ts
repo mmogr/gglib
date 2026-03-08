@@ -188,6 +188,15 @@ export type VoiceEvent =
     };
 
 // ============================================================================
+// Proxy Events
+// ============================================================================
+
+export type ProxyEvent =
+  | { type: 'proxy_started'; port: number }
+  | { type: 'proxy_stopped' }
+  | { type: 'proxy_crashed' };
+
+// ============================================================================
 // App Event Map
 // ============================================================================
 
@@ -204,6 +213,7 @@ export interface AppEventMap {
   'log': LogEvent;
   'verification': VerificationEvent;
   'voice': VoiceEvent;
+  'proxy': ProxyEvent;
 }
 
 export type AppEventType = keyof AppEventMap;

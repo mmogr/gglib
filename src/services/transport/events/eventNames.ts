@@ -84,6 +84,15 @@ export const VOICE_EVENT_NAMES = [
 ] as const;
 
 /**
+ * Proxy-related event names.
+ */
+export const PROXY_EVENT_NAMES = [
+  'proxy:started',
+  'proxy:stopped',
+  'proxy:crashed',
+] as const;
+
+/**
  * Type helper to extract event name literals.
  */
 export type DownloadEventName = typeof DOWNLOAD_EVENT_NAMES[number];
@@ -93,3 +102,4 @@ export type McpEventName = typeof MCP_EVENT_NAMES[number];
 export type ModelEventName = typeof MODEL_EVENT_NAMES[number];
 export type VerificationEventName = typeof VERIFICATION_EVENT_NAMES[number];
 export type VoiceEventName = typeof VOICE_EVENT_NAMES[number];
+export type ProxyEventName = typeof PROXY_EVENT_NAMES[number];
