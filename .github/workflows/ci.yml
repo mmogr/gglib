@@ -63,7 +63,7 @@ jobs:
         run: ./scripts/check_transport_branching.sh
 
   test:
-    name: Test
+    name: Test (Rust)
     runs-on: ubuntu-latest
     needs: [clippy]
     steps:
@@ -145,9 +145,6 @@ jobs:
       - name: Run doctests
         run: cargo test --doc --verbose
 
-      - name: Run TypeScript tests
-        run: npm run test:run -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt || true
-
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -169,6 +166,32 @@ jobs:
             rust-test-gglib-axum.txt
             rust-test-gglib-tauri.txt
             rust-test-gglib-voice.txt
+          retention-days: 30
+
+  test-frontend:
+    name: Test (Frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run TypeScript tests
+        run: npm run test:run -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ts-test-results
+          path: |
             ts-test-output.txt
             ts-test-results.json
           retention-days: 30
@@ -286,7 +309,7 @@ jobs:
     name: CI Success
     runs-on: ubuntu-latest
     if: always()
-    needs: [boundaries, enforcement, test, clippy, fmt, cli-cross-os]
+    needs: [boundaries, enforcement, test, test-frontend, clippy, fmt, cli-cross-os]
     steps:
       - name: Check all jobs succeeded
         run: |
