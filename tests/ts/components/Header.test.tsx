@@ -44,10 +44,11 @@ describe('Header', () => {
       expect(screen.getByText('GGLib')).toBeInTheDocument();
     });
 
-    it('renders the logo emoji', () => {
+    it('renders the logo icon', () => {
       render(<Header {...defaultProps} />);
       
-      expect(screen.getByText('🦀')).toBeInTheDocument();
+      // Logo is a Lucide Library SVG icon, not emoji text
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('GGLib');
     });
 
     it('renders the settings button in desktop nav', () => {
@@ -161,14 +162,14 @@ describe('Header', () => {
     it('shows server status in mobile menu', () => {
       render(<Header {...defaultProps} servers={mockServers} />);
       
-      // Mobile menu item shows server count
-      expect(screen.getByText('🖥️ 2 Running')).toBeInTheDocument();
+      // Mobile menu item shows server count (no emoji prefix)
+      expect(screen.getByText('2 Running')).toBeInTheDocument();
     });
 
     it('shows "No Servers" in mobile menu when no servers', () => {
       render(<Header {...defaultProps} servers={[]} />);
       
-      expect(screen.getByText('🖥️ No Servers')).toBeInTheDocument();
+      expect(screen.getByText('No Servers')).toBeInTheDocument();
     });
   });
 

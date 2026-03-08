@@ -10,7 +10,6 @@ import {
   removeMcpServer,
   startMcpServer,
   stopMcpServer,
-  listMcpTools,
   callMcpTool,
   createStdioConfig,
   createSseConfig,
@@ -34,7 +33,6 @@ describe('mcp client', () => {
     removeMcpServer: vi.fn(),
     startMcpServer: vi.fn(),
     stopMcpServer: vi.fn(),
-    listMcpTools: vi.fn(),
     callMcpTool: vi.fn(),
   };
 
@@ -114,16 +112,6 @@ describe('mcp client', () => {
       await stopMcpServer(1);
 
       expect(mockTransport.stopMcpServer).toHaveBeenCalledWith(1);
-    });
-
-    it('listMcpTools delegates to transport', async () => {
-      const mockTools = [{ name: 'tool1' }, { name: 'tool2' }];
-      mockTransport.listMcpTools.mockResolvedValue(mockTools);
-
-      const result = await listMcpTools();
-
-      expect(mockTransport.listMcpTools).toHaveBeenCalled();
-      expect(result).toBe(mockTools);
     });
 
     it('callMcpTool delegates to transport', async () => {

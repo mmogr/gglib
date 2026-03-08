@@ -20,9 +20,10 @@ vi.mock('../../../src/services/clients/mcp', () => ({
   callMcpTool: vi.fn(),
 }));
 
-// Mock syncAllMcpTools
+// Mock syncAllMcpTools and syncBuiltinTools
 vi.mock('../../../src/services/tools', () => ({
   syncAllMcpTools: vi.fn().mockResolvedValue(undefined),
+  syncBuiltinTools: vi.fn().mockResolvedValue(undefined),
 }));
 
 import {
@@ -34,7 +35,7 @@ import {
   stopMcpServer,
   callMcpTool,
 } from '../../../src/services/clients/mcp';
-import { syncAllMcpTools } from '../../../src/services/tools';
+import { syncAllMcpTools, syncBuiltinTools } from '../../../src/services/tools';
 
 // ==========================================================================
 // Test Fixtures

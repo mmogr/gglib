@@ -14,7 +14,7 @@ describe('Tauri serve_model IPC Contract', () => {
   it('should construct exact payload shape { id, request }', () => {
     const config: ServeConfig = {
       id: 123,
-      context_length: 4096,
+      contextLength: 4096,
       port: MOCK_PROXY_PORT,
       mlock: false,
       jinja: true,
@@ -34,11 +34,11 @@ describe('Tauri serve_model IPC Contract', () => {
     
     // Assert request has correct structure (matches StartServerRequest)
     expect(payload.request).toEqual({
-      context_length: 4096,
+      contextLength: 4096,
       port: MOCK_PROXY_PORT,
       mlock: false,
       jinja: true,
-      reasoning_format: undefined,
+      reasoningFormat: undefined,
     });
   });
 
@@ -55,18 +55,18 @@ describe('Tauri serve_model IPC Contract', () => {
 
     expect(payload.id).toBe(456);
     expect(payload.request).toEqual({
-      context_length: undefined,
+      contextLength: undefined,
       port: undefined,
       mlock: false, // Default value
       jinja: undefined,
-      reasoning_format: undefined,
+      reasoningFormat: undefined,
     });
   });
 
   it('should handle fully-populated config', () => {
     const fullConfig: ServeConfig = {
       id: 789,
-      context_length: 8192,
+      contextLength: 8192,
       port: 9090,
       mlock: true,
       jinja: false,
@@ -78,18 +78,18 @@ describe('Tauri serve_model IPC Contract', () => {
     };
 
     expect(payload.request).toEqual({
-      context_length: 8192,
+      contextLength: 8192,
       port: 9090,
       mlock: true,
       jinja: false,
-      reasoning_format: undefined,
+      reasoningFormat: undefined,
     });
   });
 
-  it('should use snake_case field names matching Rust serde', () => {
+  it('should use camelCase field names matching Rust serde (rename_all = "camelCase")', () => {
     const config: ServeConfig = {
       id: 1,
-      context_length: 2048,
+      contextLength: 2048,
     };
 
     const payload = {
@@ -97,19 +97,19 @@ describe('Tauri serve_model IPC Contract', () => {
       request: toStartServerRequest(config),
     };
 
-    // Verify snake_case (not camelCase)
-    expect('context_length' in payload.request).toBe(true);
-    expect('reasoning_format' in payload.request).toBe(true);
+    // Verify camelCase (Rust #[serde(rename_all = "camelCase")] sends camelCase over IPC)
+    expect('contextLength' in payload.request).toBe(true);
+    expect('reasoningFormat' in payload.request).toBe(true);
     
-    // Should NOT have camelCase variants
-    expect('contextLength' in payload.request).toBe(false);
-    expect('reasoningFormat' in payload.request).toBe(false);
+    // Should NOT have snake_case variants
+    expect('context_length' in payload.request).toBe(false);
+    expect('reasoning_format' in payload.request).toBe(false);
   });
 
   it('should omit id from request object', () => {
     const config: ServeConfig = {
       id: 999,
-      context_length: 1024,
+      contextLength: 1024,
     };
 
     const request = toStartServerRequest(config);
@@ -122,7 +122,7 @@ describe('Tauri serve_model IPC Contract', () => {
     // Test that the type system prevents ctx_size from being used
     const config: ServeConfig = {
       id: 100,
-      context_length: 4096,
+      contextLength: 4096,
       // ctx_size is no longer a valid field
     };
 
@@ -132,7 +132,7 @@ describe('Tauri serve_model IPC Contract', () => {
     expect('ctx_size' in request).toBe(false);
     expect('ctxSize' in request).toBe(false);
     
-    // Only context_length should be present
-    expect(request.context_length).toBe(4096);
+    // contextLength (camelCase) should be present
+    expect(request.contextLength).toBe(4096);
   });
 });

@@ -66,6 +66,7 @@ describe('extractNonTextContentParts', () => {
         toolCallId: 'tc-1',
         toolName: 'get_weather',
         args: { location: 'Paris' },
+        argsText: '{"location":"Paris"}',
       },
     ]);
   });
