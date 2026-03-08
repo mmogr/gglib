@@ -104,10 +104,10 @@ pub async fn start(
     let status = fetch_status(&state).await;
 
     // Emit proxy started event if proxy is now running
-    if status.running {
-        if let Some(port) = status.port {
-            state.sse.emit(gglib_core::events::AppEvent::proxy_started(port));
-        }
+    if status.running && let Some(port) = status.port {
+        state
+            .sse
+            .emit(gglib_core::events::AppEvent::proxy_started(port));
     }
 
     Ok(Json(status))
@@ -119,7 +119,9 @@ pub async fn stop(State(state): State<AppState>) -> Result<Json<ProxyStatus>, Ht
     match state.gui.proxy_stop().await {
         Ok(()) => {
             // Emit proxy stopped event on clean shutdown
-            state.sse.emit(gglib_core::events::AppEvent::proxy_stopped());
+            state
+                .sse
+                .emit(gglib_core::events::AppEvent::proxy_stopped());
         }
         Err(e) => {
             let http: HttpError = e.into();
