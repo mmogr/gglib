@@ -37,9 +37,9 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
-  const renderer = getToolRegistry().getRenderer(toolName) ?? fallbackRenderer;
-
   const { summary, body } = React.useMemo(() => {
+    // React owns the memoization. If the parent passes unstable result references, it will re-render.
+    const renderer = getToolRegistry().getRenderer(toolName) ?? fallbackRenderer;
     const computedSummary = safeRenderSummary(renderer, result, toolName);
     const computedBody = (() => {
       try {
@@ -49,7 +49,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
       }
     })();
     return { summary: computedSummary, body: computedBody };
-  }, [renderer, toolName, result, toolCallId]);
+  }, [toolName, result, toolCallId]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -63,7 +63,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }).catch(() => {});
   };
 
   return (

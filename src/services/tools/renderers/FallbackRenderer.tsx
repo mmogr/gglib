@@ -6,7 +6,6 @@ const SUMMARY_MAX_LENGTH = 80;
 
 /**
  * Collapsible JSON viewer for arbitrary data.
- * Exported so GenericToolUI can use it for the args section too.
  */
 export const JsonViewer: React.FC<{
   data: unknown;

@@ -1,3 +1,4 @@
+import type { FC, ReactNode } from 'react';
 import { JsonViewer } from './FallbackRenderer';
 import { SortableTable } from '../../../components/ToolUI/SortableTable';
 import type { JSONSchema, JSONSchemaProperty } from '../types';
@@ -14,7 +15,7 @@ function isSafeUrl(value: unknown): value is string {
   return typeof value === 'string' && /^https?:\/\//i.test(value);
 }
 
-function renderPrimitive(data: unknown, schema: JSONSchemaProperty | JSONSchema): React.ReactNode {
+function renderPrimitive(data: unknown, schema: JSONSchemaProperty | JSONSchema): ReactNode {
   // date-time: try parsing as a date
   if (schema.type === 'string' && 'format' in schema && schema.format === 'date-time') {
     try {
@@ -61,7 +62,7 @@ function renderPrimitive(data: unknown, schema: JSONSchemaProperty | JSONSchema)
  * - Numbers → toLocaleString
  * - Deep nesting (level > MAX_LEVEL) → JsonViewer fallback
  */
-export const SchemaBasedView: React.FC<SchemaBasedViewProps> = ({ data, schema, level = 0 }) => {
+export const SchemaBasedView: FC<SchemaBasedViewProps> = ({ data, schema, level = 0 }) => {
   // Depth guard: avoid runaway recursion on deeply nested schemas
   if (level > MAX_LEVEL) {
     return <JsonViewer data={data} label="Result" />;

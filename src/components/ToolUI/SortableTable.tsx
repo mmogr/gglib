@@ -12,6 +12,15 @@ export interface SortableTableProps {
 
 type SortDir = 'asc' | 'desc';
 
+const SortIcon: React.FC<{ col: string; sortKey: string | null; sortDir: SortDir }> = ({
+  col,
+  sortKey,
+  sortDir,
+}) => {
+  if (sortKey !== col) return <Icon icon={ChevronsUpDown} size={11} className="opacity-40" />;
+  return <Icon icon={sortDir === 'asc' ? ChevronUp : ChevronDown} size={11} />;
+};
+
 function compareValues(a: unknown, b: unknown, dir: SortDir): number {
   // Both numeric → numericcompare
   if (typeof a === 'number' && typeof b === 'number') {
@@ -90,11 +99,6 @@ export const SortableTable: React.FC<SortableTableProps> = ({ rows, columns: col
     }
   };
 
-  const SortIcon: React.FC<{ col: string }> = ({ col }) => {
-    if (sortKey !== col) return <Icon icon={ChevronsUpDown} size={11} className="opacity-40" />;
-    return <Icon icon={sortDir === 'asc' ? ChevronUp : ChevronDown} size={11} />;
-  };
-
   if (columns.length === 0) return null;
 
   return (
@@ -115,7 +119,7 @@ export const SortableTable: React.FC<SortableTableProps> = ({ rows, columns: col
               >
                 <span className="inline-flex items-center gap-1">
                   {col}
-                  <SortIcon col={col} />
+                  <SortIcon col={col} sortKey={sortKey} sortDir={sortDir} />
                 </span>
               </th>
             ))}
