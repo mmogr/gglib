@@ -104,7 +104,9 @@ pub async fn start(
     let status = fetch_status(&state).await;
 
     // Emit proxy started event if proxy is now running
-    if status.running && let Some(port) = status.port {
+    if status.running
+        && let Some(port) = status.port
+    {
         state
             .sse
             .emit(gglib_core::events::AppEvent::proxy_started(port));
