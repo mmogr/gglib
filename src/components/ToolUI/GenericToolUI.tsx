@@ -107,7 +107,7 @@ export const GenericToolUI = makeAssistantToolUI<
   unknown
 >({
   toolName: '*', // Matches any tool
-  render: ({ toolName, args, status, result }) => {
+  render: ({ toolName, args, status, result, toolCallId }) => {
     // Determine display status
     let displayStatus: 'running' | 'complete' | 'error' | 'incomplete' = 'running';
     if (status.type === 'complete') {
@@ -142,7 +142,7 @@ export const GenericToolUI = makeAssistantToolUI<
 
           {/* Show result when complete */}
           {status.type === 'complete' && result !== undefined && (
-            <ToolResultDisplay toolName={toolName} result={result} />
+            <ToolResultDisplay toolName={toolName} result={result} toolCallId={toolCallId} />
           )}
 
           {/* Show spinner when running */}
