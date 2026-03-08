@@ -47,8 +47,7 @@ impl CombinedToolExecutor {
 #[async_trait]
 impl ToolExecutorPort for CombinedToolExecutor {
     async fn list_tools(&self) -> Vec<ToolDefinition> {
-        let (builtin, mcp) =
-            tokio::join!(self.builtin.list_tools(), self.mcp.list_tools());
+        let (builtin, mcp) = tokio::join!(self.builtin.list_tools(), self.mcp.list_tools());
         [builtin, mcp].concat()
     }
 

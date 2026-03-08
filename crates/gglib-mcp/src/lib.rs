@@ -3,8 +3,8 @@
 #![deny(unused_crate_dependencies)]
 
 pub mod builtin;
-pub mod combined;
 pub(crate) mod client;
+pub mod combined;
 pub(crate) mod manager;
 pub(crate) mod path;
 pub mod resolver;

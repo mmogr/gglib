@@ -88,10 +88,12 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
     }
 
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-        let bare = call
-            .name
-            .strip_prefix(BUILTIN_PREFIX)
-            .ok_or_else(|| anyhow!("builtin executor received name without prefix: '{}'", call.name))?;
+        let bare = call.name.strip_prefix(BUILTIN_PREFIX).ok_or_else(|| {
+            anyhow!(
+                "builtin executor received name without prefix: '{}'",
+                call.name
+            )
+        })?;
 
         let args: HashMap<String, Value> = match &call.arguments {
             Value::Object(map) => map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
@@ -101,7 +103,7 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
                     "tool '{}' arguments must be a JSON object; got {}",
                     call.name,
                     other
-                ))
+                ));
             }
         };
 
@@ -136,9 +138,7 @@ fn get_current_time(args: &HashMap<String, Value>) -> anyhow::Result<Value> {
         .and_then(Value::as_str)
         .unwrap_or("human");
 
-    let tz: Tz = tz_name
-        .parse()
-        .unwrap_or(Tz::UTC);
+    let tz: Tz = tz_name.parse().unwrap_or(Tz::UTC);
 
     let now_local = Utc::now().with_timezone(&tz);
 
