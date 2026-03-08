@@ -46,6 +46,9 @@ function normalizeSnapshot(data: Record<string, unknown>): ServerEvent | null {
         if (!modelId) return null;
 
         const port = typeof entry.port === 'number' ? entry.port : undefined;
+        const modelName = typeof entry.modelName === 'string' ? entry.modelName
+          : typeof entry.model_name === 'string' ? entry.model_name
+          : undefined;
 
         const startedAtRaw =
           typeof entry.startedAt === 'number'
@@ -63,7 +66,7 @@ function normalizeSnapshot(data: Record<string, unknown>): ServerEvent | null {
               : Date.now());
 
         // Snapshot only lists running servers.
-        return { modelId, status: 'running' as const, port, updatedAt };
+        return { modelId, status: 'running' as const, port, updatedAt, modelName };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null),
   };
@@ -104,6 +107,9 @@ function normalizeLifecycle(
   if (!modelId) return null;
 
   const port = typeof data.port === 'number' ? data.port : undefined;
+  const modelName = typeof data.modelName === 'string' ? data.modelName
+    : typeof data.model_name === 'string' ? data.model_name
+    : undefined;
 
   const updatedAt =
     typeof data.updatedAt === 'number'
@@ -112,11 +118,11 @@ function normalizeLifecycle(
         ? data.updated_at
         : Date.now();
 
-  if (kind === 'running') return { type: 'running', modelId, port, updatedAt };
-  if (kind === 'stopped') return { type: 'stopped', modelId, port, updatedAt };
+  if (kind === 'running') return { type: 'running', modelId, port, updatedAt, modelName };
+  if (kind === 'stopped') return { type: 'stopped', modelId, port, updatedAt, modelName };
 
   // server:error may omit modelId on the Rust side; ignore in that case.
-  return { type: 'crashed', modelId, port, updatedAt };
+  return { type: 'crashed', modelId, port, updatedAt, modelName };
 }
 
 /**
