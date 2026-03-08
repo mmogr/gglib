@@ -22,7 +22,7 @@ import type {
   UpdateMcpServer,
   McpServerId,
 } from "../services/clients/mcp";
-import { syncAllMcpTools } from "../services/tools";
+import { syncAllMcpTools, syncBuiltinTools } from "../services/tools";
 
 interface UseMcpServersResult {
   /** List of all MCP servers with their status */
@@ -88,9 +88,11 @@ export function useMcpServers(): UseMcpServersResult {
     }
   }, []);
 
-  // Initial load
+  // Initial load: list servers and sync built-in tools from backend
   useEffect(() => {
     refresh();
+    // Fire-and-forget; errors are logged inside syncBuiltinTools
+    syncBuiltinTools().catch(() => void 0);
   }, [refresh]);
 
   const addServer = useCallback(

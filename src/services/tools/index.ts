@@ -51,12 +51,8 @@ export {
   notifyMcpToolsChanged,
 } from './mcpIntegration';
 
-// Register built-in tools on import
-import { registerBuiltinTools } from './builtin';
-registerBuiltinTools();
-
-// Re-export builtin tools for direct access
-export { registerBuiltinTools } from './builtin';
+// Re-export built-in integration
+export { syncBuiltinTools } from './builtinIntegration';
 
 // Re-export name utilities
 export {

@@ -10,6 +10,7 @@ export * from './ids';
 export * from './common';
 
 // Re-export sub-interface types
+export * from './builtin';
 export * from './models';
 export * from './tags';
 export * from './settings';
@@ -34,6 +35,7 @@ import type { EventsTransport } from './events';
 import type { ChatTransport } from './chat';
 import type { VerificationTransport } from './verification';
 import type { VoiceTransport } from './voice';
+import type { BuiltinTransport } from './builtin';
 
 /**
  * Unified transport interface.
@@ -55,4 +57,5 @@ export interface Transport
     EventsTransport,
     ChatTransport,
     VerificationTransport,
-    VoiceTransport {}
+    VoiceTransport,
+    BuiltinTransport {}
