@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use gglib_agent::AgentLoop;
 use gglib_core::ports::{AgentLoopPort, LlmCompletionPort, ToolExecutorPort};
-use gglib_mcp::{McpService, McpToolExecutorAdapter};
+use gglib_mcp::{CombinedToolExecutor, McpService};
 use reqwest::Client;
 
 use crate::LlmCompletionAdapter;
@@ -45,6 +45,6 @@ pub fn compose_agent_loop(
         http_client,
         model,
     ));
-    let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(McpToolExecutorAdapter::new(mcp));
+    let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(CombinedToolExecutor::new(mcp));
     AgentLoop::build(llm, tool_executor, tool_filter)
 }
