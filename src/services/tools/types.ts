@@ -3,6 +3,8 @@
  * These types match the Rust proxy/models.rs types for OpenAI API compatibility.
  */
 
+import type { ReactNode } from 'react';
+
 // =============================================================================
 // Tool Definition Types (for declaring tools)
 // =============================================================================
@@ -74,6 +76,17 @@ export type ToolExecutor = (
 ) => Promise<ToolResult> | ToolResult;
 
 /**
+ * Interface for rendering a tool result in the chat UI.
+ * Implementors are plain objects, not React components.
+ */
+export interface ToolResultRenderer {
+  /** Render the full result as a React node for display in the chat. */
+  renderResult(data: unknown, toolName: string): ReactNode;
+  /** Render a compact plain-text summary (used in collapsed headers). Must not throw. */
+  renderSummary?(data: unknown, toolName: string): string;
+}
+
+/**
  * A registered tool with its definition and executor.
  */
 export interface RegisteredTool {
@@ -81,6 +94,8 @@ export interface RegisteredTool {
   definition: ToolDefinition;
   /** Function to execute when the tool is called */
   execute: ToolExecutor;
+  /** Optional renderer for displaying results in the chat UI */
+  renderer?: ToolResultRenderer;
 }
 
 // =============================================================================

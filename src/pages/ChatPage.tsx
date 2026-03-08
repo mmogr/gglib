@@ -6,7 +6,7 @@ import { ConversationListPanel } from '../components/ConversationListPanel';
 import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
-import { GenericToolUI, TimeToolUI } from '../components/ToolUI';
+import { GenericToolUI } from '../components/ToolUI';
 import { VoiceOverlay } from '../components/VoiceOverlay';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -440,7 +440,6 @@ export default function ChatPage({
       {/* Chat Tab Content - always mounted, hidden when not active */}
       <AssistantRuntimeProvider runtime={runtime}>
         {/* Tool UI Components - render tool calls in chat messages */}
-        <TimeToolUI />
         <GenericToolUI />
         
         <div

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerMcpTools, unregisterMcpTools, getMcpSource } from '../../../../src/services/tools/mcpIntegration';
 import { resetToolRegistry, getToolRegistry } from '../../../../src/services/tools/registry';
+import { mcpGenericRenderer } from '../../../../src/services/tools/renderers';
 import type { McpTool } from '../../../../src/services/clients/mcp';
 
 // =============================================================================
@@ -168,6 +169,26 @@ describe('registerMcpTools', () => {
       'get data!',  // raw name, not 'mcp_my_server_get_data'
       {},
     );
+  });
+
+  // ── Renderer assignment ────────────────────────────────────────────────────
+
+  it('assigns mcpGenericRenderer to tools without an output_schema', () => {
+    registerMcpTools('srv1', [makeTool('get_weather')]);
+    const registry = getToolRegistry();
+    expect(registry.getRenderer('mcp_srv1_get_weather')).toBe(mcpGenericRenderer);
+  });
+
+  it('assigns a schema renderer (not mcpGenericRenderer) to tools with an output_schema', () => {
+    const toolWithSchema: McpTool = {
+      ...makeTool('search_results'),
+      output_schema: { type: 'object', properties: { items: { type: 'array' } } },
+    };
+    registerMcpTools('srv1', [toolWithSchema]);
+    const registry = getToolRegistry();
+    const renderer = registry.getRenderer('mcp_srv1_search_results');
+    expect(renderer).toBeDefined();
+    expect(renderer).not.toBe(mcpGenericRenderer);
   });
 });
 
