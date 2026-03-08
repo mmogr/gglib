@@ -9,6 +9,7 @@ import { fallbackRenderer } from '../../services/tools/renderers';
 export interface ToolResultDisplayProps {
   toolName: string;
   result: unknown;
+  toolCallId?: string;
 }
 
 function safeRenderSummary(renderer: ToolResultRenderer, result: unknown, toolName: string): string {
@@ -32,24 +33,23 @@ function safeRenderSummary(renderer: ToolResultRenderer, result: unknown, toolNa
  * This is the single source of truth for result rendering across
  * GenericToolUI (inline chat bubble) and ToolDetailsModal.
  */
-export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, result }) => {
+export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, result, toolCallId }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
   const renderer = getToolRegistry().getRenderer(toolName) ?? fallbackRenderer;
 
-  const summary = React.useMemo(
-    () => safeRenderSummary(renderer, result, toolName),
-    [renderer, result, toolName],
-  );
-
-  const body = React.useMemo(() => {
-    try {
-      return renderer.renderResult(result, toolName);
-    } catch {
-      return fallbackRenderer.renderResult(result, toolName);
-    }
-  }, [renderer, result, toolName]);
+  const { summary, body } = React.useMemo(() => {
+    const computedSummary = safeRenderSummary(renderer, result, toolName);
+    const computedBody = (() => {
+      try {
+        return renderer.renderResult(result, toolName);
+      } catch {
+        return fallbackRenderer.renderResult(result, toolName);
+      }
+    })();
+    return { summary: computedSummary, body: computedBody };
+  }, [renderer, toolName, result, toolCallId]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();

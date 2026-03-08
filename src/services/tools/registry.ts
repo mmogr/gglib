@@ -88,6 +88,7 @@ export class ToolRegistry {
    * @param definition   - ToolDefinition whose function.name must equal sanitizedName
    * @param execute      - Executor (must call MCP with originalName, not sanitizedName)
    * @param source       - Tool source (e.g. 'mcp:server-id')
+   * @param renderer     - Optional renderer for displaying results in the chat UI
    */
   registerWithNameMapping(
     originalName: string,
@@ -96,9 +97,10 @@ export class ToolRegistry {
     definition: ToolDefinition,
     execute: ToolExecutor,
     source: ToolSource,
+    renderer?: ToolResultRenderer,
   ): void {
     this._nameMap.set(sanitizedName, { originalName, serverId });
-    this.register(definition, execute, source);
+    this.register(definition, execute, source, renderer);
   }
 
   /**

@@ -162,7 +162,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                 {argsExpanded && <pre className="m-0 p-3 bg-background border border-border rounded-lg font-mono text-[0.9rem] leading-normal text-text overflow-x-auto whitespace-pre max-h-[300px]">{formattedArgs}</pre>}
               </Stack>
 
-              <ToolResultDisplay toolName={call.toolName} result={result} />
+              <ToolResultDisplay toolName={call.toolName} result={result} toolCallId={call.toolCallId} />
             </div>
           );
         })}

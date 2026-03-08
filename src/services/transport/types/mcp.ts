@@ -92,6 +92,9 @@ export interface McpTool {
   name: string;
   description?: string;
   input_schema?: Record<string, unknown>;
+  /** Optional JSON Schema describing the tool's output. Present only when the
+   * MCP server declares it. Used to auto-generate a structured result renderer. */
+  output_schema?: Record<string, unknown>;
 }
 
 /**
