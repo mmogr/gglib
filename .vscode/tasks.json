@@ -64,6 +64,23 @@
 			}
 		},
 		{
+			"label": "🧪 Run Frontend Tests",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"test:run"
+			],
+			"group": "test",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"focus": false,
+				"clear": true
+			}
+		},
+		{
 			"label": "🧪 Run Tests (Lib Only)",
 			"type": "shell",
 			"command": "cargo",
@@ -387,8 +404,7 @@
 				"🔍 Check Formatting",
 				"� Check Boundaries",
 				"�📎 Clippy (Strict)",
-				"🧪 Run All Tests",
-				"🚀 Build (Release)"
+				"🧪 Run All Tests",				"🧪 Run Frontend Tests",				"🚀 Build (Release)"
 			],
 			"dependsOrder": "sequence",
 			"group": "none",
