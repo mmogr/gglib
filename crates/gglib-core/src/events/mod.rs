@@ -263,6 +263,19 @@ pub enum AppEvent {
         /// Progress percentage (`0.0`–`100.0`; `0.0` when total is unknown).
         percent: f64,
     },
+
+    // ========== Proxy Events ==========
+    /// The OpenAI-compatible proxy has started.
+    ProxyStarted {
+        /// Port the proxy is listening on.
+        port: u16,
+    },
+
+    /// The proxy has been stopped (clean shutdown).
+    ProxyStopped,
+
+    /// The proxy crashed (task exited without cancellation).
+    ProxyCrashed,
 }
 
 impl AppEvent {
@@ -294,6 +307,9 @@ impl AppEvent {
             Self::VoiceAudioLevel { .. } => "voice:audio-level",
             Self::VoiceError { .. } => "voice:error",
             Self::VoiceModelDownloadProgress { .. } => "voice:model-download-progress",
+            Self::ProxyStarted { .. } => "proxy:started",
+            Self::ProxyStopped => "proxy:stopped",
+            Self::ProxyCrashed => "proxy:crashed",
         }
     }
 }
@@ -334,6 +350,23 @@ impl AppEvent {
         Self::VoiceError {
             message: message.into(),
         }
+    }
+}
+
+impl AppEvent {
+    /// Create a [`ProxyStarted`] event.
+    pub const fn proxy_started(port: u16) -> Self {
+        Self::ProxyStarted { port }
+    }
+
+    /// Create a [`ProxyStopped`] event.
+    pub const fn proxy_stopped() -> Self {
+        Self::ProxyStopped
+    }
+
+    /// Create a [`ProxyCrashed`] event.
+    pub const fn proxy_crashed() -> Self {
+        Self::ProxyCrashed
     }
 }
 

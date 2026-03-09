@@ -11,8 +11,9 @@ import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
 import { VoiceModeProvider } from "./contexts/VoiceModeContext";
-import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, setProxyState, appLogger } from "./services/platform";
+import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
+import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
 import { getSetupStatus } from "./services/transport/api/setup";
 
@@ -56,10 +57,14 @@ function AppContent() {
     }
   }, [llamaLoading, llamaStatus]);
 
-  // Initialize server lifecycle events (Tauri or SSE based on platform)
+  // Initialize server and proxy lifecycle events
   useEffect(() => {
     initServerEvents();
-    return () => cleanupServerEvents();
+    initProxyEvents();
+    return () => {
+      cleanupServerEvents();
+      cleanupProxyEvents();
+    };
   }, []);
 
   // Close modal when installation completes
@@ -102,7 +107,6 @@ function AppContent() {
       [MENU_EVENTS.PROXY_STOPPED]: async () => {
         try {
           await stopProxy();
-          await setProxyState(false, null);
           showToast('Proxy stopped', 'success');
         } catch (error) {
           showToast('Failed to stop proxy', 'error');
@@ -112,7 +116,6 @@ function AppContent() {
       [MENU_EVENTS.START_PROXY]: async () => {
         try {
           const status = await startProxy();
-          await setProxyState(true, status.port);
           showToast(`Proxy started on port ${status.port}`, 'success');
         } catch (error) {
           showToast('Failed to start proxy', 'error');

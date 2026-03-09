@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use anyhow::Result as AnyResult;
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, watch};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -116,6 +116,8 @@ impl Default for ProxyConfig {
 pub struct ProxySupervisor {
     /// Internal state protected by async mutex.
     handle: Mutex<Option<ProxyHandle>>,
+    /// Watch channel for broadcasting proxy status changes (exit events).
+    exit_tx: watch::Sender<ProxyStatus>,
 }
 
 impl Default for ProxySupervisor {
@@ -128,9 +130,20 @@ impl ProxySupervisor {
     /// Create a new ProxySupervisor.
     #[must_use]
     pub fn new() -> Self {
+        let (exit_tx, _) = watch::channel(ProxyStatus::Stopped);
         Self {
             handle: Mutex::new(None),
+            exit_tx,
         }
+    }
+
+    /// Get a watch receiver for proxy exit notifications.
+    ///
+    /// The receiver yields the new `ProxyStatus` whenever the proxy task exits
+    /// (either clean stop or crash). Callers should skip the initial value and
+    /// only react to `changed()` notifications.
+    pub fn exit_receiver(&self) -> watch::Receiver<ProxyStatus> {
+        self.exit_tx.subscribe()
     }
 
     /// Start the proxy server.
@@ -190,9 +203,12 @@ impl ProxySupervisor {
         // Create cancellation token
         let cancel_token = CancellationToken::new();
         let cancel_clone = cancel_token.clone();
+        let cancel_for_exit = cancel_token.clone();
         let default_ctx = config.default_context;
+        let exit_tx = self.exit_tx.clone();
 
         // Spawn the proxy task - calls real gglib_proxy::serve
+        // Wraps the inner task to publish exit status on the watch channel.
         let join_handle: JoinHandle<AnyResult<()>> = tokio::spawn(async move {
             debug!(
                 addr = %bound_addr,
@@ -200,14 +216,24 @@ impl ProxySupervisor {
                 "Proxy task starting"
             );
 
-            gglib_proxy::serve(
+            let result = gglib_proxy::serve(
                 listener,
                 default_ctx,
                 runtime_port,
                 catalog_port,
                 cancel_clone,
             )
-            .await
+            .await;
+
+            // Publish exit status: cancelled = Stopped, otherwise = Crashed
+            let exit_status = if cancel_for_exit.is_cancelled() {
+                ProxyStatus::Stopped
+            } else {
+                ProxyStatus::Crashed
+            };
+            let _ = exit_tx.send(exit_status);
+
+            result
         });
 
         // Store the handle

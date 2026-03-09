@@ -1,21 +1,14 @@
-import { FC, useState, useEffect, useRef } from "react";
+import { FC, useState, useRef } from "react";
 import { ClipboardCopy, Power, Repeat2 } from "lucide-react";
-import { getProxyStatus, startProxy, stopProxy } from "../services/clients/servers";
-import { setProxyState } from "../services/platform";
+import { startProxy, stopProxy } from "../services/clients/servers";
 import { useClickOutside } from "../hooks/useClickOutside";
+import { useProxyState } from "../services/proxyRegistry";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { cn } from '../utils/cn';
 import { Stack, Label } from './primitives';
 import { useToastContext } from '../contexts/ToastContext';
-
-interface ProxyStatus {
-  running: boolean;
-  port: number;
-  current_model?: string;
-  model_port?: number;
-}
 
 interface ProxyConfig {
   host: string;
@@ -36,7 +29,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
   statusDotActiveClassName,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [status, setStatus] = useState<ProxyStatus>({ running: false, port: 8080 });
+  const proxyState = useProxyState();
   const [config, setConfig] = useState<ProxyConfig>({
     host: "127.0.0.1",
     port: 8080,
@@ -47,30 +40,13 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToastContext();
 
-  useEffect(() => {
-    loadStatus();
-    const interval = setInterval(loadStatus, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
   // Close dropdown when clicking outside
   useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
-
-  const loadStatus = async () => {
-    try {
-      const proxyStatus = await getProxyStatus();
-      setStatus(proxyStatus);
-    } catch {
-      setStatus({ running: false, port: config.port });
-    }
-  };
 
   const handleStart = async () => {
     try {
       setLoading(true);
-      const proxyStatus = await startProxy(config);
-      await setProxyState(true, proxyStatus.port);
-      await loadStatus();
+      await startProxy(config);
     } catch (err) {
       showToast(`Failed to start proxy: ${err}`, 'error');
     } finally {
@@ -82,8 +58,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
     try {
       setLoading(true);
       await stopProxy();
-      await setProxyState(false, null);
-      await loadStatus();
     } catch (err) {
       showToast(`Failed to stop proxy: ${err}`, 'error');
     } finally {
@@ -92,19 +66,19 @@ const ProxyControl: FC<ProxyControlProps> = ({
   };
 
   const copyProxyUrl = () => {
-    const url = `http://${config.host}:${status.port}/v1`;
+    const url = `http://${config.host}:${proxyState.port ?? config.port}/v1`;
     navigator.clipboard.writeText(url);
     showToast('Proxy URL copied to clipboard!', 'success');
   };
 
   const buttonClasses = cn(
     buttonClassName ?? 'flex items-center gap-sm px-base py-sm bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.2)] rounded-md text-white cursor-pointer text-sm font-medium transition-all relative hover:bg-[rgba(255,255,255,0.15)]',
-    status.running && (buttonActiveClassName ?? 'bg-[rgba(76,175,80,0.3)] border-[rgba(76,175,80,0.5)]'),
+    proxyState.running && (buttonActiveClassName ?? 'bg-[rgba(76,175,80,0.3)] border-[rgba(76,175,80,0.5)]'),
   );
 
   const dotClasses = cn(
     statusDotClassName ?? 'w-2 h-2 rounded-full bg-success animate-pulse',
-    status.running && statusDotActiveClassName,
+    proxyState.running && statusDotActiveClassName,
   );
 
   return (
@@ -118,7 +92,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
           <Icon icon={Repeat2} size={16} />
         </span>
         <span className="proxy-label">Proxy</span>
-        {status.running && <span className={dotClasses}></span>}
+        {proxyState.running && <span className={dotClasses}></span>}
       </button>
 
       {isOpen && (
@@ -127,21 +101,21 @@ const ProxyControl: FC<ProxyControlProps> = ({
             <h3 className="m-0 text-lg text-text">OpenAI Proxy</h3>
             <span className={cn(
               'px-md py-xs rounded-lg text-xs font-semibold uppercase',
-              status.running
+              proxyState.running
                 ? 'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-success'
                 : 'bg-[color-mix(in_srgb,var(--color-danger)_15%,transparent)] text-danger'
             )}>
-              {status.running ? 'Running' : 'Stopped'}
+              {proxyState.running ? 'Running' : 'Stopped'}
             </span>
           </div>
 
-          {status.running ? (
+          {proxyState.running ? (
             <>
               <div className="mb-base">
                 <Stack gap="xs" className="mb-sm">
                   <Label size="xs" muted>URL:</Label>
                   <div className="flex gap-sm items-center">
-                    <code className="flex-1 bg-surface-elevated p-sm rounded-base text-sm border border-border font-mono">http://{config.host}:{status.port}/v1</code>
+                    <code className="flex-1 bg-surface-elevated p-sm rounded-base text-sm border border-border font-mono">http://{config.host}:{proxyState.port ?? config.port}/v1</code>
                     <Button 
                       variant="ghost"
                       size="sm"
@@ -154,12 +128,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     </Button>
                   </div>
                 </Stack>
-                {status.current_model && (
-                  <Stack gap="xs">
-                    <Label size="xs" muted>Current Model:</Label>
-                    <span>{status.current_model}</span>
-                  </Stack>
-                )}
               </div>
 
               <Button

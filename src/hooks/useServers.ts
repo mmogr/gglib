@@ -1,43 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
-import { listServers } from '../services/clients/servers';
+import { useCallback } from 'react';
+import { useAllServerStates } from '../services/serverRegistry';
 import { safeStopServer } from '../services/server/safeActions';
 import { ServerInfo } from '../types';
 
+/**
+ * Hook providing running server list from the event-driven registry.
+ *
+ * Replaces the old polling hook. State is kept current by server lifecycle
+ * events flowing through serverRegistry — no setInterval needed.
+ *
+ * `loadServers` is retained as a no-op for callers that still pass it, but
+ * it is no longer necessary since the registry is event-driven.
+ */
 export function useServers() {
-  const [servers, setServers] = useState<ServerInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const serverStates = useAllServerStates();
 
-  const loadServers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const serverList = await listServers() as ServerInfo[];
-      setServers(serverList);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`Failed to load servers: ${errorMessage}`);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadServers();
-    // Poll every 3 seconds
-    const interval = setInterval(loadServers, 3000);
-    return () => clearInterval(interval);
-  }, [loadServers]);
+  const servers: ServerInfo[] = serverStates.map((s) => ({
+    modelId: Number(s.modelId),
+    modelName: s.modelName ?? `Model ${s.modelId}`,
+    port: s.port ?? 0,
+    status: s.status,
+  }));
 
   const stopServer = useCallback(async (modelId: number) => {
     await safeStopServer(modelId);
-    await loadServers();
-  }, [loadServers]);
+  }, []);
+
+  // No-op — registry is event-driven, manual refresh is unnecessary.
+  const loadServers = useCallback(async () => {}, []);
 
   return {
     servers,
-    loading,
-    error,
+    loading: false,
+    error: null as string | null,
     loadServers,
     stopServer,
   };

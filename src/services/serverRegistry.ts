@@ -30,6 +30,8 @@ export interface ServerState {
   updatedAt: number;
   /** Server health status from continuous monitoring */
   health?: ServerHealthStatus;
+  /** Model name for display purposes */
+  modelName?: string;
 }
 
 export interface ServerStateInfo {
@@ -38,14 +40,16 @@ export interface ServerStateInfo {
   port?: number;
   updatedAt: number;
   health?: ServerHealthStatus;
+  /** Model name for display purposes */
+  modelName?: string;
 }
 
 export type ServerEvent =
   | { type: 'snapshot'; servers: ServerStateInfo[] }
-  | { type: 'running'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'stopping'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'stopped'; modelId: string; port?: number; updatedAt: number }
-  | { type: 'crashed'; modelId: string; port?: number; updatedAt: number }
+  | { type: 'running'; modelId: string; port?: number; updatedAt: number; modelName?: string }
+  | { type: 'stopping'; modelId: string; port?: number; updatedAt: number; modelName?: string }
+  | { type: 'stopped'; modelId: string; port?: number; updatedAt: number; modelName?: string }
+  | { type: 'crashed'; modelId: string; port?: number; updatedAt: number; modelName?: string }
   | { type: 'server_health_changed'; modelId: string; status: ServerHealthStatus; detail?: string; updatedAt: number };
 
 // ============================================================================
@@ -54,6 +58,13 @@ export type ServerEvent =
 
 const state = new Map<string, ServerState>();
 const listeners = new Set<() => void>();
+
+// Memoization for getAllRunningServerInfos — ensures useSyncExternalStore
+// receives a stable reference when nothing has changed (two distinct [] instances
+// are not Object.is-equal, which would trigger an infinite re-render loop).
+let snapshotVersion = 0;
+let cachedInfosVersion = -1;
+let cachedInfos: ServerStateInfo[] = [];
 
 // ============================================================================
 // Registry API
@@ -88,6 +99,7 @@ export function subscribe(listener: () => void): () => void {
  * Notify all listeners of a state change.
  */
 function notifyListeners(): void {
+  snapshotVersion++;
   listeners.forEach((listener) => listener());
 }
 
@@ -112,6 +124,7 @@ export function ingestServerEvent(evt: ServerEvent): void {
             port: server.port,
             updatedAt: server.updatedAt,
             health: server.health,
+            modelName: server.modelName ?? existing?.modelName,
           });
         }
       }
@@ -131,6 +144,7 @@ export function ingestServerEvent(evt: ServerEvent): void {
           updatedAt: evt.updatedAt,
           // Clear health on lifecycle transitions (will be updated by health monitor)
           health: evt.type === 'running' ? { status: 'healthy' } : undefined,
+          modelName: evt.modelName ?? existing?.modelName,
         });
         notifyListeners();
       }
@@ -219,4 +233,38 @@ export function useIsServerRunning(modelId: string | number): boolean {
 export function useServerHealth(modelId: string | number): ServerHealthStatus | undefined {
   const state = useServerState(modelId);
   return state?.health;
+}
+
+/**
+ * React hook to subscribe to all server states.
+ *
+ * Returns an array of ServerStateInfo for all running servers
+ * (filters out stopped/crashed entries). Re-renders when any server state changes.
+ */
+export function useAllServerStates(): ServerStateInfo[] {
+  return useSyncExternalStore(
+    subscribe,
+    getAllRunningServerInfos,
+    getAllRunningServerInfos,
+  );
+}
+
+function getAllRunningServerInfos(): ServerStateInfo[] {
+  if (cachedInfosVersion === snapshotVersion) return cachedInfos;
+  const result: ServerStateInfo[] = [];
+  for (const [modelId, s] of state) {
+    if (s.status === 'running') {
+      result.push({
+        modelId,
+        status: s.status,
+        port: s.port,
+        updatedAt: s.updatedAt,
+        health: s.health,
+        modelName: s.modelName,
+      });
+    }
+  }
+  cachedInfos = result;
+  cachedInfosVersion = snapshotVersion;
+  return cachedInfos;
 }

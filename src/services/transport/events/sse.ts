@@ -192,6 +192,7 @@ function getEventCategory(outerType: string): AppEventType | null {
   if (outerType === 'log' || outerType.startsWith('log_')) return 'log';
   if (outerType.startsWith('verification_') || outerType.startsWith('verification:')) return 'verification';
   if (outerType.startsWith('voice_')) return 'voice';
+  if (outerType.startsWith('proxy_')) return 'proxy';
   return null;
 }
 

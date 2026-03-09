@@ -9,6 +9,7 @@ import type { Unsubscribe, EventHandler } from '../types/common';
 import type { AppEventType, AppEventMap } from '../types/events';
 import {
   DOWNLOAD_EVENT_NAMES,
+  PROXY_EVENT_NAMES,
   SERVER_EVENT_NAMES,
   LOG_EVENT_NAMES,
   VERIFICATION_EVENT_NAMES,
@@ -25,6 +26,7 @@ const TAURI_EVENT_NAMES: Record<AppEventType, readonly string[]> = {
   'server': SERVER_EVENT_NAMES,
   'download': DOWNLOAD_EVENT_NAMES,
   'log': LOG_EVENT_NAMES,
+  'proxy': PROXY_EVENT_NAMES,
   'verification': VERIFICATION_EVENT_NAMES,
   'voice': VOICE_EVENT_NAMES,
 };
