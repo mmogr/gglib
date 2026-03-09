@@ -26,26 +26,26 @@ function SidebarTabs<T extends string = SidebarTabId>({
   rightContent,
 }: SidebarTabsProps<T>) {
   return (
-    <div className="flex items-center justify-between gap-md pb-md border-b border-border mb-md max-mobile:flex-wrap">
-      <div className="flex gap-xs flex-1 min-w-0 max-mobile:w-full max-mobile:order-2" role="tablist">
+    <div className="flex flex-wrap items-center justify-between gap-md pb-md border-b border-border mb-md mobile:flex-nowrap">
+      <div className="flex gap-xs w-full order-2 mobile:flex-1 mobile:w-auto mobile:order-none" role="tablist">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             role="tab"
             aria-selected={activeTab === tab.id}
             className={cn(
-              'flex items-center gap-xs px-md py-sm bg-transparent border-none border-b-2 border-b-transparent text-text-muted cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:text-text hover:bg-background-hover max-mobile:flex-1 max-mobile:justify-center max-mobile:px-xs max-mobile:py-sm',
+              'flex items-center gap-xs px-xs py-sm bg-transparent border-none border-b-2 border-b-transparent text-text-muted cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:text-text hover:bg-background-hover flex-1 justify-center mobile:flex-initial mobile:justify-start mobile:px-md',
               activeTab === tab.id && 'text-primary border-b-primary',
             )}
             onClick={() => onTabChange(tab.id)}
           >
-            {tab.icon && <span className="text-base flex items-center justify-center [&>svg]:w-4 [&>svg]:h-4 max-mobile:hidden">{tab.icon}</span>}
+            {tab.icon && <span className="hidden mobile:flex text-base items-center justify-center [&>svg]:w-4 [&>svg]:h-4">{tab.icon}</span>}
             <span className="overflow-hidden text-ellipsis">{tab.label}</span>
           </button>
         ))}
       </div>
       {rightContent && (
-        <div className="flex items-center gap-md shrink-0 ml-md max-mobile:order-1 max-mobile:ml-auto">
+        <div className="flex items-center gap-md order-1 ml-auto mobile:order-none mobile:ml-md mobile:shrink-0">
           {rightContent}
         </div>
       )}
