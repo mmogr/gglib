@@ -59,6 +59,13 @@ export type ServerEvent =
 const state = new Map<string, ServerState>();
 const listeners = new Set<() => void>();
 
+// Memoization for getAllRunningServerInfos — ensures useSyncExternalStore
+// receives a stable reference when nothing has changed (two distinct [] instances
+// are not Object.is-equal, which would trigger an infinite re-render loop).
+let snapshotVersion = 0;
+let cachedInfosVersion = -1;
+let cachedInfos: ServerStateInfo[] = [];
+
 // ============================================================================
 // Registry API
 // ============================================================================
@@ -92,6 +99,7 @@ export function subscribe(listener: () => void): () => void {
  * Notify all listeners of a state change.
  */
 function notifyListeners(): void {
+  snapshotVersion++;
   listeners.forEach((listener) => listener());
 }
 
@@ -242,6 +250,7 @@ export function useAllServerStates(): ServerStateInfo[] {
 }
 
 function getAllRunningServerInfos(): ServerStateInfo[] {
+  if (cachedInfosVersion === snapshotVersion) return cachedInfos;
   const result: ServerStateInfo[] = [];
   for (const [modelId, s] of state) {
     if (s.status === 'running') {
@@ -255,5 +264,7 @@ function getAllRunningServerInfos(): ServerStateInfo[] {
       });
     }
   }
-  return result;
+  cachedInfos = result;
+  cachedInfosVersion = snapshotVersion;
+  return cachedInfos;
 }
