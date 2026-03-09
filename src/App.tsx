@@ -16,6 +16,7 @@ import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
 import { getSetupStatus } from "./services/transport/api/setup";
+import { syncBuiltinTools } from "./services/tools";
 
 /**
  * Inner app component that consumes ToastContext.
@@ -65,6 +66,11 @@ function AppContent() {
       cleanupServerEvents();
       cleanupProxyEvents();
     };
+  }, []);
+
+  // Sync built-in tool definitions from the backend into the tool registry
+  useEffect(() => {
+    syncBuiltinTools().catch(() => void 0);
   }, []);
 
   // Close modal when installation completes
