@@ -101,7 +101,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   // Error state
   if (error) {
     return (
-      <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border bg-surface">
+      <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
         <div className="p-base border-b border-border bg-background shrink-0">
           <SidebarTabs
             tabs={SIDEBAR_TABS}
@@ -146,7 +146,7 @@ const ModelLibraryPanel: FC<ModelLibraryPanelProps> = ({
   );
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border bg-surface">
+    <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
       <div className="p-base border-b border-border bg-background shrink-0">
         <SidebarTabs
           tabs={SIDEBAR_TABS}
