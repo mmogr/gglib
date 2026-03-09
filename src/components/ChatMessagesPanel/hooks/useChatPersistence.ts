@@ -3,8 +3,7 @@ import type { ThreadRuntime, ThreadMessageLike } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
 import { getMessages, deleteMessage } from '../../../services/clients/chat';
 import type { ConversationSummary } from '../../../services/clients/chat';
-import { reconstructContent } from '../../../utils/messages';
-import type { SerializableContentPart } from '../../../utils/messages';
+import { buildLoadedMessage } from '../../../hooks/useChatPersistence/buildLoadedMessage';
 
 /**
  * Options for the useChatPersistence hook.
@@ -90,38 +89,9 @@ export function useChatPersistence({
 
         const initialMessages: ThreadMessageLike[] = [
           ...systemPromptMessage,
-          ...messages.map<ThreadMessageLike>((message) => {
-            // Restore metadata including research state for deep research messages
-            const metadata = message.metadata;
-            const isDeepResearch = metadata?.isDeepResearch === true;
-
-            // Reconstruct structured content from metadata if available
-            const storedParts = metadata?.contentParts as SerializableContentPart[] | undefined;
-            const content = reconstructContent(message.content, storedParts);
-            
-            return {
-              id: `db-${message.id}`,
-              role: message.role,
-              content,
-              createdAt: new Date(message.created_at),
-              // Include metadata with dbId for future updates and research state for rendering
-              metadata: isDeepResearch
-                ? {
-                    custom: {
-                      dbId: message.id,
-                      conversationId: message.conversation_id,
-                      isDeepResearch: true,
-                      researchState: metadata.researchState,
-                    },
-                  }
-                : {
-                    custom: {
-                      dbId: message.id,
-                      conversationId: message.conversation_id,
-                    },
-                  },
-            };
-          }),
+          ...messages.map<ThreadMessageLike>((message) =>
+            buildLoadedMessage(message, activeConversationId)
+          ),
         ];
 
         // Build position -> DB ID mapping for edit detection and delete counting
@@ -296,15 +266,9 @@ export function useMessageDelete({
 
       const reloadedMessages: ThreadMessageLike[] = [
         ...systemPromptMessage,
-        ...messages.map<ThreadMessageLike>((message) => {
-          const storedParts = message.metadata?.contentParts as SerializableContentPart[] | undefined;
-          return {
-            id: `db-${message.id}`,
-            role: message.role,
-            content: reconstructContent(message.content, storedParts),
-            createdAt: new Date(message.created_at),
-          };
-        }),
+        ...messages.map<ThreadMessageLike>((message) =>
+          buildLoadedMessage(message, activeConversationId)
+        ),
       ];
 
       // Rebuild position mapping
