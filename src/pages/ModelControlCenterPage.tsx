@@ -9,7 +9,7 @@ import { useDownloadSystemStatus } from '../hooks/useDownloadSystemStatus';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
-import ResizeHandle from '../components/ResizeHandle';
+import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useMccFilters } from './modelControlCenter/useMccFilters';
 import { useMccLayout } from './modelControlCenter/useMccLayout';
 import { useMccMenuActions } from './modelControlCenter/useMccMenuActions';
@@ -228,15 +228,12 @@ export default function ModelControlCenterPage({
 
   return (
     <div className="flex flex-col w-full min-h-full overflow-auto md:h-full md:min-h-0 md:overflow-hidden">
-      <div 
+      <TwoPanelLayout
         ref={layoutRef}
-        className="flex flex-col overflow-visible md:grid md:grid-cols-2 md:gap-0 md:h-full md:overflow-hidden"
-        style={{
-          gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%`
-        }}
-      >
-        {/* Left Panel: Model Library */}
-        <div className="relative flex flex-col overflow-hidden md:h-full md:min-h-0">
+        className="overflow-visible"
+        leftWidth={leftPanelWidth}
+        onResizeStart={handleMouseDown}
+        left={
           <ModelLibraryPanel
             models={filteredModels}
             selectedModelId={selectedModelId}
@@ -261,42 +258,40 @@ export default function ModelControlCenterPage({
             activeTab={sidebarTab}
             onTabChange={handleSidebarTabChange}
           />
-          <ResizeHandle onMouseDown={handleMouseDown} />
-        </div>
-
-        {/* Right Panel: Model Inspector */}
-        <div className="relative flex flex-col overflow-hidden gap-0 md:h-full md:min-h-0">
-          {/* Global Download Status - always visible regardless of selected tab/model */}
-          {!downloadDismissed && (
-            <GlobalDownloadStatus
-              progress={currentProgress}
+        }
+        rightClassName="gap-0"
+        right={
+          <>
+            {!downloadDismissed && (
+              <GlobalDownloadStatus
+                progress={currentProgress}
+                queueStatus={queueStatus}
+                downloadUiState={downloadUiState}
+                lastQueueSummary={lastQueueSummary}
+                onCancel={cancelDownload}
+                onDismissSummary={clearQueueSummary}
+                onRefreshQueue={refreshQueue}
+              />
+            )}
+            <ModelInspectorPanel
+              model={selectedModel}
+              selectedHfModel={selectedHfModel}
+              onStartServer={loadServers}
+              onServerStarted={handleServerStarted}
+              onStopServer={stopServer}
+              servers={servers}
+              onRemoveModel={removeModel}
+              onUpdateModel={updateModel}
+              onAddTag={addTagToModel}
+              onRemoveTag={removeTagFromModel}
+              getModelTags={getModelTags}
+              onRefresh={handleRefreshAll}
               queueStatus={queueStatus}
-              downloadUiState={downloadUiState}
-              lastQueueSummary={lastQueueSummary}
-              onCancel={cancelDownload}
-              onDismissSummary={clearQueueSummary}
-              onRefreshQueue={refreshQueue}
+              onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
             />
-          )}
-          
-          <ModelInspectorPanel
-            model={selectedModel}
-            selectedHfModel={selectedHfModel}
-            onStartServer={loadServers}
-            onServerStarted={handleServerStarted}
-            onStopServer={stopServer}
-            servers={servers}
-            onRemoveModel={removeModel}
-            onUpdateModel={updateModel}
-            onAddTag={addTagToModel}
-            onRemoveTag={removeTagFromModel}
-            getModelTags={getModelTags}
-            onRefresh={handleRefreshAll}
-            queueStatus={queueStatus}
-            onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
-          />
-        </div>
-      </div>
+          </>
+        }
+      />
     </div>
   );
 }
