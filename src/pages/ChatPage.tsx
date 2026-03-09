@@ -8,6 +8,7 @@ import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI } from '../components/ToolUI';
 import { VoiceOverlay } from '../components/VoiceOverlay';
+import ResizeHandle from '../components/ResizeHandle';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
@@ -466,7 +467,7 @@ export default function ChatPage({
               activeTab={activeTab}
               onTabChange={setActiveTab}
             />
-            <div className="hidden md:block absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary" onMouseDown={handleMouseDown} />
+            <ResizeHandle onMouseDown={handleMouseDown} />
           </div>
 
           {/* Right Panel: Chat Messages */}
@@ -522,7 +523,7 @@ export default function ChatPage({
             activeTab={activeTab}
             onTabChange={setActiveTab}
           />
-          <div className="hidden md:block absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary" onMouseDown={handleMouseDown} />
+          <ResizeHandle onMouseDown={handleMouseDown} />
         </div>
 
         {/* Right Panel: Server Logs */}

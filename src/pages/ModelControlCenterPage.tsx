@@ -9,6 +9,7 @@ import { useDownloadSystemStatus } from '../hooks/useDownloadSystemStatus';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
+import ResizeHandle from '../components/ResizeHandle';
 import { useMccFilters } from './modelControlCenter/useMccFilters';
 import { useMccLayout } from './modelControlCenter/useMccLayout';
 import { useMccMenuActions } from './modelControlCenter/useMccMenuActions';
@@ -260,10 +261,7 @@ export default function ModelControlCenterPage({
             activeTab={sidebarTab}
             onTabChange={handleSidebarTabChange}
           />
-          <div 
-            className="hidden md:block absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary" 
-            onMouseDown={handleMouseDown}
-          />
+          <ResizeHandle onMouseDown={handleMouseDown} />
         </div>
 
         {/* Right Panel: Model Inspector */}
