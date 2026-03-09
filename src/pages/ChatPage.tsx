@@ -451,7 +451,7 @@ export default function ChatPage({
           style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
         >
           {/* Left Panel: Conversation List */}
-          <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:max-h-[40vh] max-md:border-b max-md:border-border">
+          <div className="relative flex flex-col max-h-[40vh] border-b border-border overflow-hidden md:max-h-none md:h-full md:min-h-0 md:border-b-0">
             <ConversationListPanel
               conversations={conversations}
               activeConversationId={activeConversationId}
@@ -466,7 +466,7 @@ export default function ChatPage({
               activeTab={activeTab}
               onTabChange={setActiveTab}
             />
-            <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" onMouseDown={handleMouseDown} />
+            <div className="hidden md:block absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary" onMouseDown={handleMouseDown} />
           </div>
 
           {/* Right Panel: Chat Messages */}
@@ -511,7 +511,7 @@ export default function ChatPage({
         style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
       >
         {/* Left Panel: Server Info */}
-        <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:max-h-[40vh] max-md:border-b max-md:border-border">
+        <div className="relative flex flex-col max-h-[40vh] border-b border-border overflow-hidden md:max-h-none md:h-full md:min-h-0 md:border-b-0">
           <ConsoleInfoPanel
             modelId={modelId}
             modelName={modelName}
@@ -522,7 +522,7 @@ export default function ChatPage({
             activeTab={activeTab}
             onTabChange={setActiveTab}
           />
-          <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" onMouseDown={handleMouseDown} />
+          <div className="hidden md:block absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary" onMouseDown={handleMouseDown} />
         </div>
 
         {/* Right Panel: Server Logs */}

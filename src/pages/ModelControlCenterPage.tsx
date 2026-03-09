@@ -226,16 +226,16 @@ export default function ModelControlCenterPage({
   }
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden max-md:h-auto max-md:min-h-full max-md:overflow-auto">
+    <div className="flex flex-col w-full min-h-full overflow-auto md:h-full md:min-h-0 md:overflow-hidden">
       <div 
         ref={layoutRef}
-        className="grid grid-cols-2 gap-0 h-full overflow-hidden max-md:flex max-md:flex-col max-md:h-auto max-md:overflow-visible"
+        className="flex flex-col overflow-visible md:grid md:grid-cols-2 md:gap-0 md:h-full md:overflow-hidden"
         style={{
           gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%`
         }}
       >
         {/* Left Panel: Model Library */}
-        <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:min-h-auto max-md:h-auto">
+        <div className="relative flex flex-col overflow-hidden md:h-full md:min-h-0">
           <ModelLibraryPanel
             models={filteredModels}
             selectedModelId={selectedModelId}
@@ -261,13 +261,13 @@ export default function ModelControlCenterPage({
             onTabChange={handleSidebarTabChange}
           />
           <div 
-            className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" 
+            className="hidden md:block absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary" 
             onMouseDown={handleMouseDown}
           />
         </div>
 
         {/* Right Panel: Model Inspector */}
-        <div className="relative flex flex-col h-full min-h-0 overflow-hidden gap-0 max-md:min-h-auto max-md:h-auto">
+        <div className="relative flex flex-col overflow-hidden gap-0 md:h-full md:min-h-0">
           {/* Global Download Status - always visible regardless of selected tab/model */}
           {!downloadDismissed && (
             <GlobalDownloadStatus

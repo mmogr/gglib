@@ -72,7 +72,7 @@ const ConsoleLogPanel: FC<ConsoleLogPanelProps> = ({ serverPort }) => {
   }, [isAutoScroll, setIsAutoScroll]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface">
+    <div className="flex flex-col overflow-y-auto overflow-x-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
       <div className="p-base border-b border-border bg-background shrink-0">
         <div className="flex items-center justify-between gap-md">
           <h3 className="m-0 text-base font-semibold text-text">Server Output</h3>
