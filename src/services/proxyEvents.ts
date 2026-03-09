@@ -5,12 +5,17 @@
  * Proxy always uses HTTP/axum (no Tauri commands), so events are
  * SSE-only on both web and desktop — no platform branching needed.
  *
+ * Uses subscribeSseEvent directly (not subscribeToEvent) because in Tauri
+ * the platform-selected transport routes to Tauri IPC, which never receives
+ * proxy events. The Rust backend emits proxy events exclusively via
+ * SseBroadcaster, not TauriEventEmitter.
+ *
  * Hydration race fix: subscribe FIRST, then fetch initial status.
  * An eventVersion guard drops stale hydration data if a real event
  * arrived before the fetch response.
  */
 
-import { subscribeToEvent } from './clients/events';
+import { subscribeSseEvent } from './transport/events/sse';
 import { getProxyStatus } from './clients/servers';
 import { ingestProxyEvent, resetProxyState } from './proxyRegistry';
 import type { Unsubscribe } from './transport/types/common';
@@ -29,7 +34,7 @@ export function initProxyEvents(): void {
   eventVersion = 0;
 
   // 1. Subscribe FIRST so no events are missed during hydration fetch
-  unsubscribe = subscribeToEvent('proxy', (evt: ProxyEvent) => {
+  unsubscribe = subscribeSseEvent('proxy', (evt: ProxyEvent) => {
     eventVersion++;
     ingestProxyEvent(evt);
   });
