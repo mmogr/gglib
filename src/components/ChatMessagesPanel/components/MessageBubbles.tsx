@@ -143,7 +143,7 @@ export const AssistantMessageBubble: React.FC = () => {
     const isResearchRunning = researchState.phase !== 'complete' && researchState.phase !== 'error';
     
     return (
-      <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border mr-xl max-tablet:mr-0">
+      <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
         <div className="flex items-center gap-sm">
           <div className="text-lg" aria-hidden>
             <Icon icon={Bot} size={18} />
@@ -176,7 +176,7 @@ export const AssistantMessageBubble: React.FC = () => {
 
   // Standard assistant message rendering
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border mr-xl max-tablet:mr-0">
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
           <Icon icon={isVoice ? Volume2 : Bot} size={18} />
@@ -235,7 +235,7 @@ export const UserMessageBubble: React.FC = () => {
   };
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base ml-xl bg-primary/10 border border-primary max-tablet:ml-0">
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-primary/10 border border-primary phone:ml-xl">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
           <Icon icon={isVoice ? Mic : UserIcon} size={18} />
@@ -287,7 +287,7 @@ export const EditComposer: React.FC = () => {
   }).format(message.createdAt ?? new Date());
 
   return (
-    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md ml-xl bg-primary/10 border-2 border-primary max-tablet:ml-0">
+    <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-md bg-primary/10 border-2 border-primary phone:ml-xl">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
           <Icon icon={UserIcon} size={18} />
