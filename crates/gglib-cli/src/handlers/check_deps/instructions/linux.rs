@@ -279,7 +279,23 @@ fn print_gpu_notes(distro: &LinuxDistro) {
 
     println!();
     println!("  {}AMD GPU:{}", BOLD, RESET);
-    println!("  Install ROCm:");
+    println!("  Install Vulkan drivers for GPU acceleration:");
+
+    match distro {
+        LinuxDistro::Debian => {
+            print_command("sudo apt install mesa-vulkan-drivers vulkan-tools");
+        }
+        LinuxDistro::Fedora => {
+            print_command("sudo dnf install mesa-vulkan-drivers vulkan-tools");
+        }
+        LinuxDistro::Arch => {
+            print_command("sudo pacman -S vulkan-radeon vulkan-tools");
+        }
+        _ => {}
+    }
+
+    println!();
+    println!("  Alternatively, install ROCm:");
     println!("  https://rocm.docs.amd.com/projects/install-on-linux/en/latest/");
 
     match distro {

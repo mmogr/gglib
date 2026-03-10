@@ -81,6 +81,8 @@ pub enum Acceleration {
     Metal,
     /// CUDA acceleration (NVIDIA)
     Cuda,
+    /// Vulkan acceleration (AMD, Intel, NVIDIA via portable GPU API)
+    Vulkan,
     /// CPU only (no acceleration)
     Cpu,
 }
@@ -91,6 +93,7 @@ impl Acceleration {
         match self {
             Acceleration::Metal => "Metal",
             Acceleration::Cuda => "CUDA",
+            Acceleration::Vulkan => "Vulkan",
             Acceleration::Cpu => "CPU",
         }
     }
@@ -100,6 +103,7 @@ impl Acceleration {
         match self {
             Acceleration::Metal => vec!["-DGGML_METAL=ON"],
             Acceleration::Cuda => vec!["-DGGML_CUDA=ON"],
+            Acceleration::Vulkan => vec!["-DGGML_VULKAN=ON"],
             Acceleration::Cpu => vec![],
         }
     }
@@ -113,11 +117,13 @@ impl std::fmt::Display for Acceleration {
 
 /// Detect the optimal acceleration type for the current system
 pub fn detect_optimal_acceleration() -> Acceleration {
-    // Priority: Metal (macOS) > CUDA (NVIDIA) > CPU
+    // Priority: Metal (macOS) > CUDA (NVIDIA) > Vulkan > CPU
     if cfg!(target_os = "macos") && has_metal_support() {
         Acceleration::Metal
     } else if has_cuda_toolkit() {
         Acceleration::Cuda
+    } else if has_vulkan_runtime() {
+        Acceleration::Vulkan
     } else {
         Acceleration::Cpu
     }
@@ -150,6 +156,53 @@ fn has_cuda_toolkit() -> bool {
     // Check if nvcc (CUDA compiler) is available in PATH
     // This is the definitive check - if nvcc isn't in PATH, the build will fail
     Command::new("nvcc").arg("--version").output().is_ok()
+}
+
+/// Check if a Vulkan runtime is available for GPU acceleration.
+///
+/// This checks for the Vulkan loader library and development headers
+/// needed to build llama.cpp with `-DGGML_VULKAN=ON`.
+fn has_vulkan_runtime() -> bool {
+    // macOS uses Metal, not Vulkan
+    if cfg!(target_os = "macos") {
+        return false;
+    }
+
+    // Check if vulkaninfo can run (most reliable indicator)
+    if Command::new("vulkaninfo")
+        .arg("--summary")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    // Fall back to checking for the Vulkan loader library
+    #[cfg(target_os = "linux")]
+    {
+        use std::path::Path;
+        if Path::new("/usr/lib/x86_64-linux-gnu/libvulkan.so.1").exists()
+            || Path::new("/usr/lib64/libvulkan.so.1").exists()
+            || Path::new("/usr/lib/libvulkan.so.1").exists()
+        {
+            return true;
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(sys_root) = std::env::var("SystemRoot") {
+            let vulkan_dll = std::path::Path::new(&sys_root)
+                .join("System32")
+                .join("vulkan-1.dll");
+            if vulkan_dll.exists() {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 /// Get the CUDA installation path if available
@@ -499,6 +552,7 @@ mod tests {
     fn test_acceleration_display() {
         assert_eq!(Acceleration::Metal.display_name(), "Metal");
         assert_eq!(Acceleration::Cuda.display_name(), "CUDA");
+        assert_eq!(Acceleration::Vulkan.display_name(), "Vulkan");
         assert_eq!(Acceleration::Cpu.display_name(), "CPU");
     }
 
@@ -506,6 +560,7 @@ mod tests {
     fn test_acceleration_cmake_flags() {
         assert_eq!(Acceleration::Metal.cmake_flags(), vec!["-DGGML_METAL=ON"]);
         assert_eq!(Acceleration::Cuda.cmake_flags(), vec!["-DGGML_CUDA=ON"]);
+        assert_eq!(Acceleration::Vulkan.cmake_flags(), vec!["-DGGML_VULKAN=ON"]);
         assert!(Acceleration::Cpu.cmake_flags().is_empty());
     }
 
@@ -515,7 +570,7 @@ mod tests {
         let accel = detect_optimal_acceleration();
         assert!(matches!(
             accel,
-            Acceleration::Metal | Acceleration::Cuda | Acceleration::Cpu
+            Acceleration::Metal | Acceleration::Cuda | Acceleration::Vulkan | Acceleration::Cpu
         ));
     }
 

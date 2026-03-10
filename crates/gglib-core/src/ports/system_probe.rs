@@ -112,6 +112,7 @@ mod tests {
                 has_nvidia_gpu: false,
                 cuda_version: None,
                 has_metal: true,
+                has_vulkan: false,
             },
             memory: SystemMemoryInfo {
                 total_ram_bytes: 16 * 1024 * 1024 * 1024,

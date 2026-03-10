@@ -15,6 +15,9 @@ pub enum LlamaCommand {
         /// Build with Metal support (macOS only)
         #[arg(long)]
         metal: bool,
+        /// Build with Vulkan support (AMD/Intel GPUs)
+        #[arg(long)]
+        vulkan: bool,
         /// Build CPU-only version
         #[arg(long)]
         cpu_only: bool,
@@ -43,6 +46,9 @@ pub enum LlamaCommand {
         /// Build with Metal support (macOS only)
         #[arg(long)]
         metal: bool,
+        /// Build with Vulkan support (AMD/Intel GPUs)
+        #[arg(long)]
+        vulkan: bool,
         /// Build CPU-only version
         #[arg(long)]
         cpu_only: bool,

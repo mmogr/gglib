@@ -32,6 +32,7 @@ fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
 pub async fn handle_install(
     cuda: bool,
     metal: bool,
+    vulkan: bool,
     cpu_only: bool,
     force: bool,
     build_from_source: bool,
@@ -55,7 +56,7 @@ pub async fn handle_install(
     // Determine installation method
     let should_build = build_from_source
         || !is_prebuilt_binary()  // Running from source repo
-        || cuda || metal || cpu_only  // User specified acceleration flags
+        || cuda || metal || vulkan || cpu_only  // User specified acceleration flags
         || matches!(check_prebuilt_availability(), PrebuiltAvailability::NotAvailable { .. });
 
     if !should_build {
@@ -73,13 +74,14 @@ pub async fn handle_install(
     }
 
     // Build from source
-    build_from_source_impl(cuda, metal, cpu_only, force).await
+    build_from_source_impl(cuda, metal, vulkan, cpu_only, force).await
 }
 
 /// Build llama.cpp from source (the original installation logic)
 async fn build_from_source_impl(
     cuda: bool,
     metal: bool,
+    vulkan: bool,
     cpu_only: bool,
     force: bool,
 ) -> Result<()> {
@@ -88,7 +90,7 @@ async fn build_from_source_impl(
     println!();
 
     // Step 2: Determine acceleration
-    let acceleration = determine_acceleration(cuda, metal, cpu_only)?;
+    let acceleration = determine_acceleration(cuda, metal, vulkan, cpu_only)?;
     println!("Selected acceleration: {}", acceleration.display_name());
     println!();
 
@@ -141,8 +143,8 @@ async fn build_from_source_impl(
 }
 
 /// Determine which acceleration to use
-fn determine_acceleration(cuda: bool, metal: bool, cpu_only: bool) -> Result<Acceleration> {
-    let flags_set = [cuda, metal, cpu_only].iter().filter(|&&x| x).count();
+fn determine_acceleration(cuda: bool, metal: bool, vulkan: bool, cpu_only: bool) -> Result<Acceleration> {
+    let flags_set = [cuda, metal, vulkan, cpu_only].iter().filter(|&&x| x).count();
 
     if flags_set > 1 {
         bail!("Only one acceleration flag can be specified");
@@ -158,6 +160,8 @@ fn determine_acceleration(cuda: bool, metal: bool, cpu_only: bool) -> Result<Acc
         Ok(Acceleration::Metal)
     } else if cuda {
         Ok(Acceleration::Cuda)
+    } else if vulkan {
+        Ok(Acceleration::Vulkan)
     } else {
         // Auto-detect
         Ok(detect_optimal_acceleration())

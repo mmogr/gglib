@@ -7,6 +7,7 @@
 export interface GpuInfo {
   hasMetal: boolean;
   hasNvidia: boolean;
+  hasVulkan: boolean;
   cudaVersion?: string | null;
 }
 

@@ -40,6 +40,7 @@ pub struct SetupStatus {
 pub struct GpuInfoDto {
     pub has_metal: bool,
     pub has_nvidia: bool,
+    pub has_vulkan: bool,
     pub cuda_version: Option<String>,
 }
 
@@ -99,6 +100,7 @@ impl<'a> SetupOps<'a> {
         let gpu_info = GpuInfoDto {
             has_metal: gpu_info_raw.has_metal,
             has_nvidia: gpu_info_raw.has_nvidia_gpu,
+            has_vulkan: gpu_info_raw.has_vulkan,
             cuda_version: gpu_info_raw.cuda_version,
         };
 

@@ -10,6 +10,9 @@ detect_gpu_flags() {
         CUDA_VERSION=$(nvcc --version | grep "release" | sed -n 's/.*release \([0-9.]*\).*/\1/p')
         echo "🚀 CUDA $CUDA_VERSION detected: Installing with CUDA support" >&2
         echo "--cuda"
+    elif command -v vulkaninfo >/dev/null 2>&1 && vulkaninfo --summary >/dev/null 2>&1; then
+        echo "🎮 Vulkan detected: Installing with Vulkan support" >&2
+        echo "--vulkan"
     else
         echo "💻 No GPU acceleration detected: Installing CPU-only version" >&2
         echo "--cpu-only"

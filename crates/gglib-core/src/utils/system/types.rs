@@ -75,6 +75,8 @@ pub struct GpuInfo {
     pub cuda_version: Option<String>,
     /// On macOS (Metal always available).
     pub has_metal: bool,
+    /// Vulkan runtime available (AMD, Intel, NVIDIA via Mesa/drivers).
+    pub has_vulkan: bool,
 }
 
 /// System memory information for model fit calculations.

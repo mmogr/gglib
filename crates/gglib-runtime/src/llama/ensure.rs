@@ -66,7 +66,7 @@ async fn ensure_for_source_build() -> Result<()> {
     println!();
 
     // Call the install handler - force build from source since we're in source build mode
-    handle_install(false, false, false, false, true).await?;
+    handle_install(false, false, false, false, false, true).await?;
 
     Ok(())
 }
@@ -106,7 +106,7 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
                     println!();
 
                     // Fall back to building from source
-                    handle_install(false, false, false, false, true).await
+                    handle_install(false, false, false, false, false, true).await
                 }
             }
         }
@@ -135,7 +135,7 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
             println!("Building llama.cpp from source (auto-detecting hardware)...");
             println!();
 
-            handle_install(false, false, false, false, true).await
+            handle_install(false, false, false, false, false, true).await
         }
     }
 }
