@@ -32,7 +32,7 @@ import { formatBytes } from '../../utils/format';
 import type { SetupStatus, LlamaInstallProgress } from '../../types/setup';
 import {
   getSetupStatus,
-  installLlama,
+  streamLlamaInstall,
   setupPython,
 } from '../../services/transport/api/setup';
 import { updateSettings } from '../../services/transport/api/settings';
@@ -377,7 +377,7 @@ const LlamaInstallStep: FC<{
     setInstallError(null);
     setProgress(null);
 
-    const abort = installLlama(
+    const abort = streamLlamaInstall(
       (p) => setProgress(p),
       () => {
         setInstalling(false);

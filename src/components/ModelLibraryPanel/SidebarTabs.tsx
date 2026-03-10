@@ -34,7 +34,7 @@ function SidebarTabs<T extends string = SidebarTabId>({
             role="tab"
             aria-selected={activeTab === tab.id}
             className={cn(
-              'flex items-center gap-xs px-xs py-sm bg-transparent border-none border-b-2 border-b-transparent text-text-muted cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:text-text hover:bg-background-hover flex-1 justify-center mobile:flex-initial mobile:justify-start mobile:px-md',
+              'flex items-center gap-xs px-xs py-sm bg-transparent border-none border-b-2 border-b-transparent text-text-muted cursor-pointer text-sm font-medium transition-all whitespace-nowrap hover:text-text hover:bg-background-hover flex-1 justify-center min-h-[44px] mobile:flex-initial mobile:justify-start mobile:px-md',
               activeTab === tab.id && 'text-primary border-b-primary',
             )}
             onClick={() => onTabChange(tab.id)}
