@@ -350,6 +350,7 @@ print_install_instructions() {
     local need_build_tools=false
     local need_gtk=false
     local need_cuda=false
+    local need_glslc=false
     local cuda_not_in_path=false
     
     # Check if CUDA is installed but not in PATH (Linux/Windows only)
@@ -375,6 +376,7 @@ print_install_instructions() {
             git|make|gcc|g++|pkg-config|libssl-dev|cmake|libclang-dev|libsqlite3-dev) need_build_tools=true ;;
             patchelf|webkit2gtk-4.1|librsvg|libappindicator-gtk3) need_gtk=true ;;
             CUDA|GPU) need_cuda=true ;;
+            glslc) need_glslc=true ;;
         esac
     done
     
@@ -577,6 +579,37 @@ print_install_instructions() {
         ((step++))
     fi
     
+    # 6. glslc (Vulkan shader compiler)
+    if [ "$need_glslc" = true ]; then
+        echo -e "${BOLD}${step}. Install glslc (SPIR-V shader compiler for Vulkan):${RESET}"
+        case "$os" in
+            linux)
+                case "$distro" in
+                    debian)
+                        echo -e "   ${YELLOW}# Ubuntu/Debian:${RESET}"
+                        echo "   sudo apt install -y glslc"
+                        ;;
+                    fedora)
+                        echo -e "   ${YELLOW}# Fedora:${RESET}"
+                        echo "   sudo dnf install -y glslc"
+                        ;;
+                    arch)
+                        echo -e "   ${YELLOW}# Arch Linux:${RESET}"
+                        echo "   sudo pacman -S shaderc"
+                        ;;
+                    *)
+                        echo -e "   ${YELLOW}Install the 'glslc' or 'shaderc' package from your package manager${RESET}"
+                        ;;
+                esac
+                ;;
+            windows)
+                echo -e "   ${YELLOW}Install the Vulkan SDK from: https://vulkan.lunarg.com/sdk/home${RESET}"
+                ;;
+        esac
+        echo ""
+        ((step++))
+    fi
+    
     # Quick install summary
     echo -e "${BOLD}Quick Install (copy-paste):${RESET}"
     
@@ -765,9 +798,20 @@ main() {
             printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "CUDA Toolkit" "✗" "NOT INSTALLED" "NVIDIA GPU detected but CUDA toolkit not installed"
         fi
         MISSING_REQUIRED+=("CUDA")
+    elif (command_exists vulkaninfo && vulkaninfo --summary >/dev/null 2>&1) || \
+         [ -f "/usr/lib/x86_64-linux-gnu/libvulkan.so.1" ] || \
+         [ -f "/usr/lib/libvulkan.so.1" ]; then
+        printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan" "✓" "available" "Vulkan GPU acceleration (AMD/Intel)"
+        PRESENT_REQUIRED+=("Vulkan")
+        if command_exists glslc; then
+            printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "glslc" "✓" "installed" "SPIR-V shader compiler (required for Vulkan build)"
+            PRESENT_REQUIRED+=("glslc")
+        else
+            printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "SPIR-V shader compiler (required for Vulkan build)"
+            MISSING_REQUIRED+=("glslc")
+        fi
     elif [ "$os" = "linux" ] || [ "$os" = "windows" ]; then
-        printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "GPU" "✗" "MISSING" "No GPU detected - CUDA (Linux/Windows) or Metal (macOS) required"
-        MISSING_REQUIRED+=("GPU")
+        printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "GPU" "○" "none" "No GPU detected - will use CPU inference (optional)"
     fi
     
     echo ""
