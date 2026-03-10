@@ -66,7 +66,10 @@ pub fn print_gpu_status(probe: &dyn SystemProbePort) {
         println!("  {}✓ GPU acceleration available{}", GREEN, RESET);
     } else if gpu_info.has_vulkan {
         println!("  {}✓ Vulkan GPU detected{}", GREEN, RESET);
-        println!("  {}✓ GPU acceleration available via Vulkan{}", GREEN, RESET);
+        println!(
+            "  {}✓ GPU acceleration available via Vulkan{}",
+            GREEN, RESET
+        );
     } else {
         println!(
             "  {}○ No dedicated GPU detected - CPU inference will be used{}",

@@ -143,8 +143,16 @@ async fn build_from_source_impl(
 }
 
 /// Determine which acceleration to use
-fn determine_acceleration(cuda: bool, metal: bool, vulkan: bool, cpu_only: bool) -> Result<Acceleration> {
-    let flags_set = [cuda, metal, vulkan, cpu_only].iter().filter(|&&x| x).count();
+fn determine_acceleration(
+    cuda: bool,
+    metal: bool,
+    vulkan: bool,
+    cpu_only: bool,
+) -> Result<Acceleration> {
+    let flags_set = [cuda, metal, vulkan, cpu_only]
+        .iter()
+        .filter(|&&x| x)
+        .count();
 
     if flags_set > 1 {
         bail!("Only one acceleration flag can be specified");

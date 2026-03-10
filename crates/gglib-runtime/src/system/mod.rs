@@ -247,24 +247,18 @@ impl SystemProbePort for DefaultSystemProbe {
 
         if gpu_info.has_vulkan {
             deps.push(
-                Dependency::optional(
-                    "Vulkan",
-                    "GPU acceleration via Vulkan (AMD, Intel, NVIDIA)",
-                )
-                .with_status(DependencyStatus::Present {
-                    version: "available".to_string(),
-                }),
+                Dependency::optional("Vulkan", "GPU acceleration via Vulkan (AMD, Intel, NVIDIA)")
+                    .with_status(DependencyStatus::Present {
+                        version: "available".to_string(),
+                    }),
             );
         } else if !gpu_info.has_metal {
             // Only suggest Vulkan on non-macOS (macOS uses Metal)
             #[cfg(not(target_os = "macos"))]
             deps.push(
-                Dependency::optional(
-                    "Vulkan",
-                    "Install Vulkan drivers for GPU acceleration",
-                )
-                .with_hint("apt install mesa-vulkan-drivers vulkan-tools")
-                .with_status(DependencyStatus::Optional),
+                Dependency::optional("Vulkan", "Install Vulkan drivers for GPU acceleration")
+                    .with_hint("apt install mesa-vulkan-drivers vulkan-tools")
+                    .with_status(DependencyStatus::Optional),
             );
         }
 
