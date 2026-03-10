@@ -3,19 +3,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export interface UseMccLayoutResult {
   leftPanelWidth: number;
   layoutRef: React.RefObject<HTMLDivElement | null>;
-  handleMouseDown: (e: React.MouseEvent) => void;
+  handlePointerDown: (e: React.PointerEvent) => void;
+  handleKeyboardResize: (delta: number) => void;
 }
+
+const MIN_WIDTH = 25;
+const MAX_WIDTH = 60;
 
 export function useMccLayout(): UseMccLayoutResult {
   const [leftPanelWidth, setLeftPanelWidth] = useState(45);
   const layoutRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+  }, []);
+
+  const handleKeyboardResize = useCallback((delta: number) => {
+    setLeftPanelWidth(prev => Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, prev + delta)));
   }, []);
 
   useEffect(() => {
@@ -30,7 +38,7 @@ export function useMccLayout(): UseMccLayoutResult {
         const rect = layoutRef.current.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const percentage = (x / rect.width) * 100;
-        const newLeftWidth = Math.max(25, Math.min(60, percentage));
+        const newLeftWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, percentage));
         setLeftPanelWidth(newLeftWidth);
       });
     };
@@ -52,5 +60,5 @@ export function useMccLayout(): UseMccLayoutResult {
     };
   }, []);
 
-  return { leftPanelWidth, layoutRef, handleMouseDown };
+  return { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize };
 }

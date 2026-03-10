@@ -261,11 +261,15 @@ export default function ChatPage({
   });
 
   // Handle resize
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+  }, []);
+
+  const handleKeyboardResize = useCallback((delta: number) => {
+    setLeftPanelWidth(prev => Math.max(20, Math.min(50, prev + delta)));
   }, []);
 
   useEffect(() => {
@@ -450,7 +454,8 @@ export default function ChatPage({
             activeTab !== 'chat' && "hidden"
           )}
           leftWidth={leftPanelWidth}
-          onResizeStart={handleMouseDown}
+          onResizeStart={handlePointerDown}
+          onKeyboardResize={handleKeyboardResize}
           leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
           left={
             <ConversationListPanel
@@ -507,7 +512,8 @@ export default function ChatPage({
           activeTab !== 'console' && "hidden"
         )}
         leftWidth={leftPanelWidth}
-        onResizeStart={handleMouseDown}
+        onResizeStart={handlePointerDown}
+        onKeyboardResize={handleKeyboardResize}
         leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
         left={
           <ConsoleInfoPanel

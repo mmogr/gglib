@@ -1,10 +1,11 @@
-import { forwardRef, MouseEventHandler, ReactNode } from 'react';
+import { forwardRef, PointerEventHandler, ReactNode } from 'react';
 import ResizeHandle from './ResizeHandle';
 import { cn } from '../utils/cn';
 
 interface TwoPanelLayoutProps {
   leftWidth: number;
-  onResizeStart: MouseEventHandler<HTMLDivElement>;
+  onResizeStart: PointerEventHandler<HTMLDivElement>;
+  onKeyboardResize?: (delta: number) => void;
   left: ReactNode;
   right: ReactNode;
   className?: string;
@@ -17,7 +18,7 @@ interface TwoPanelLayoutProps {
  * Stacks vertically on mobile, switches to a side-by-side grid at md:.
  */
 const TwoPanelLayout = forwardRef<HTMLDivElement, TwoPanelLayoutProps>(
-  ({ leftWidth, onResizeStart, left, right, className, leftClassName, rightClassName }, ref) => (
+  ({ leftWidth, onResizeStart, onKeyboardResize, left, right, className, leftClassName, rightClassName }, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -28,7 +29,7 @@ const TwoPanelLayout = forwardRef<HTMLDivElement, TwoPanelLayoutProps>(
     >
       <div className={cn('relative flex flex-col overflow-hidden md:h-full md:min-h-0', leftClassName)}>
         {left}
-        <ResizeHandle onMouseDown={onResizeStart} />
+        <ResizeHandle onPointerDown={onResizeStart} onKeyboardResize={onKeyboardResize} />
       </div>
       <div className={cn('relative flex flex-col overflow-hidden md:h-full md:min-h-0', rightClassName)}>
         {right}

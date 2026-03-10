@@ -99,7 +99,7 @@ export default function ModelControlCenterPage({
   const openServeModalRef = useRef<(() => void) | null>(null);
   
   // Panel width state (percentages) - now just two columns
-  const { leftPanelWidth, layoutRef, handleMouseDown } = useMccLayout();
+  const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = useMccLayout();
 
   const openChatSession = useCallback(
     (modelId: number, view: 'chat' | 'console') => {
@@ -232,7 +232,8 @@ export default function ModelControlCenterPage({
         ref={layoutRef}
         className="overflow-visible"
         leftWidth={leftPanelWidth}
-        onResizeStart={handleMouseDown}
+        onResizeStart={handlePointerDown}
+        onKeyboardResize={handleKeyboardResize}
         left={
           <ModelLibraryPanel
             models={filteredModels}
