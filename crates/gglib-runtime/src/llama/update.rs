@@ -2,7 +2,7 @@
 
 use super::build::build_llama_cpp;
 use super::config::BuildConfig;
-use super::detect::Acceleration;
+use super::detect::{Acceleration, detect_optimal_acceleration};
 use super::install::install_binary;
 use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_cli_path, llama_config_path, llama_cpp_dir, llama_server_path};
@@ -139,11 +139,11 @@ pub async fn handle_update() -> Result<()> {
         match config.acceleration.as_str() {
             "Metal" => Acceleration::Metal,
             "CUDA" => Acceleration::Cuda,
-            _ => Acceleration::Cpu,
+            "Vulkan" => Acceleration::Vulkan,
+            _ => detect_optimal_acceleration()?,
         }
     } else {
-        use super::detect::detect_optimal_acceleration;
-        detect_optimal_acceleration()
+        detect_optimal_acceleration()?
     };
 
     println!("Updating llama.cpp...");

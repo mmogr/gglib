@@ -403,11 +403,11 @@ async fn main() -> anyhow::Result<()> {
             LlamaCommand::Install {
                 cuda,
                 metal,
-                cpu_only,
+                vulkan,
                 force,
                 build,
             } => {
-                handle_install(cuda, metal, cpu_only, force, build).await?;
+                handle_install(cuda, metal, vulkan, force, build).await?;
             }
             LlamaCommand::CheckUpdates => {
                 handle_check_updates().await?;
@@ -421,9 +421,9 @@ async fn main() -> anyhow::Result<()> {
             LlamaCommand::Rebuild {
                 cuda,
                 metal,
-                cpu_only,
+                vulkan,
             } => {
-                handle_rebuild(cuda, metal, cpu_only).await?;
+                handle_rebuild(cuda, metal, vulkan).await?;
             }
             LlamaCommand::Uninstall { force } => {
                 handle_uninstall(force).await?;

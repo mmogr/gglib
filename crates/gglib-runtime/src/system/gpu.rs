@@ -13,11 +13,13 @@ pub fn detect_gpu_info() -> GpuInfo {
     let has_metal = cfg!(target_os = "macos");
     let has_nvidia_gpu = detect_nvidia_hardware();
     let cuda_version = check_cuda();
+    let has_vulkan = detect_vulkan_runtime();
 
     GpuInfo {
         has_nvidia_gpu,
         cuda_version,
         has_metal,
+        has_vulkan,
     }
 }
 
@@ -88,6 +90,59 @@ pub fn check_cuda() -> Option<String> {
     }
 
     None
+}
+
+/// Detect if a Vulkan runtime is available on the system.
+///
+/// Checks for the Vulkan loader library (`libvulkan.so.1` on Linux,
+/// `vulkan-1.dll` on Windows) and optionally `vulkaninfo` for validation.
+fn detect_vulkan_runtime() -> bool {
+    // macOS uses Metal, not Vulkan
+    #[cfg(target_os = "macos")]
+    {
+        false
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Check if vulkaninfo can run (most reliable)
+        if Command::new("vulkaninfo")
+            .arg("--summary")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            return true;
+        }
+
+        // Fall back to checking for the Vulkan loader library
+        #[cfg(target_os = "linux")]
+        {
+            use std::path::Path;
+            // Check common library paths
+            if Path::new("/usr/lib/x86_64-linux-gnu/libvulkan.so.1").exists()
+                || Path::new("/usr/lib64/libvulkan.so.1").exists()
+                || Path::new("/usr/lib/libvulkan.so.1").exists()
+            {
+                return true;
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // Vulkan loader is typically at System32/vulkan-1.dll
+            if let Ok(sys_root) = std::env::var("SystemRoot") {
+                let vulkan_dll = std::path::Path::new(&sys_root)
+                    .join("System32")
+                    .join("vulkan-1.dll");
+                if vulkan_dll.exists() {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
 }
 
 /// Get NVIDIA GPU VRAM in bytes using nvidia-smi.

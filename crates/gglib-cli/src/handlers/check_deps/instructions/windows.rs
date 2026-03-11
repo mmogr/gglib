@@ -91,6 +91,9 @@ pub fn print_instructions(missing: &[&Dependency]) {
     println!("  https://developer.nvidia.com/cuda-downloads");
     println!();
     println!("  {}AMD GPU:{}", BOLD, RESET);
-    println!("  Install ROCm for Windows (if supported):");
+    println!("  Install Vulkan drivers (usually included with GPU drivers).");
+    println!("  Verify with: vulkaninfo --summary");
+    println!();
+    println!("  Alternatively, install ROCm for Windows (if supported):");
     println!("  https://rocm.docs.amd.com/");
 }

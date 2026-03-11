@@ -15,9 +15,9 @@ pub enum LlamaCommand {
         /// Build with Metal support (macOS only)
         #[arg(long)]
         metal: bool,
-        /// Build CPU-only version
+        /// Build with Vulkan support (AMD/Intel GPUs)
         #[arg(long)]
-        cpu_only: bool,
+        vulkan: bool,
         /// Force rebuild even if already installed
         #[arg(short, long)]
         force: bool,
@@ -43,9 +43,9 @@ pub enum LlamaCommand {
         /// Build with Metal support (macOS only)
         #[arg(long)]
         metal: bool,
-        /// Build CPU-only version
+        /// Build with Vulkan support (AMD/Intel GPUs)
         #[arg(long)]
-        cpu_only: bool,
+        vulkan: bool,
     },
 
     /// Remove llama.cpp installation

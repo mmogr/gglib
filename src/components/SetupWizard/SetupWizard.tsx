@@ -275,9 +275,11 @@ const WelcomeStep: FC<{ status: SetupStatus; onNext: () => void }> = ({ status, 
             ? 'Apple Metal'
             : status.gpuInfo.hasNvidia
               ? `NVIDIA${status.gpuInfo.cudaVersion ? ` (CUDA ${status.gpuInfo.cudaVersion})` : ''}`
-              : 'CPU only'
+              : status.gpuInfo.hasVulkan
+                ? 'Vulkan'
+                : 'CPU only'
         }
-        variant={status.gpuInfo.hasMetal || status.gpuInfo.hasNvidia ? 'success' : 'neutral'}
+        variant={status.gpuInfo.hasMetal || status.gpuInfo.hasNvidia || status.gpuInfo.hasVulkan ? 'success' : 'neutral'}
       />
       <InfoCard
         icon={HardDrive}

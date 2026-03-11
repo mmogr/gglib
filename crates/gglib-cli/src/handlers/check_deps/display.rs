@@ -64,11 +64,18 @@ pub fn print_gpu_status(probe: &dyn SystemProbePort) {
     } else if gpu_info.has_metal {
         println!("  {}✓ Metal GPU detected (Apple Silicon){}", GREEN, RESET);
         println!("  {}✓ GPU acceleration available{}", GREEN, RESET);
+    } else if gpu_info.has_vulkan {
+        println!("  {}✓ Vulkan GPU detected{}", GREEN, RESET);
+        println!(
+            "  {}✓ GPU acceleration available via Vulkan{}",
+            GREEN, RESET
+        );
     } else {
         println!(
-            "  {}○ No dedicated GPU detected - CPU inference will be used{}",
-            YELLOW, RESET
+            "  {}✗ No supported GPU detected (Metal/CUDA/Vulkan required){}",
+            RED, RESET
         );
+        println!("  {}  CPU-only inference is not supported{}", RED, RESET);
     }
 }
 
