@@ -49,10 +49,10 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
           <div className="mt-1 whitespace-pre-wrap">{downloadSystemError}</div>
         </div>
       )}
-      <div className="flex flex-wrap gap-sm py-sm border-b border-border shrink-0 max-mobile:flex-col max-mobile:flex-nowrap">
+      <div className="flex flex-col gap-sm py-sm border-b border-border shrink-0 mobile:flex-row mobile:flex-wrap">
         <button
           className={cn(
-            'flex-auto min-w-0 bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis whitespace-nowrap px-xs py-sm hover:bg-background-hover max-mobile:w-full max-mobile:text-center max-mobile:whitespace-normal',
+            'flex-auto min-w-0 bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis px-xs py-sm hover:bg-background-hover w-full text-center whitespace-normal mobile:w-auto mobile:text-left mobile:whitespace-nowrap',
             activeSubTab === 'browse' && 'bg-primary text-white border-primary',
           )}
           onClick={() => handleSubTabChange('browse')}
@@ -61,7 +61,7 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
         </button>
         <button
           className={cn(
-            'flex-auto min-w-0 bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis whitespace-nowrap px-xs py-sm hover:bg-background-hover max-mobile:w-full max-mobile:text-center max-mobile:whitespace-normal',
+            'flex-auto min-w-0 bg-background border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all overflow-hidden text-ellipsis px-xs py-sm hover:bg-background-hover w-full text-center whitespace-normal mobile:w-auto mobile:text-left mobile:whitespace-nowrap',
             activeSubTab === 'add' && 'bg-primary text-white border-primary',
           )}
           onClick={() => handleSubTabChange('add')}

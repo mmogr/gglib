@@ -29,7 +29,7 @@ import {
 } from './components';
 import { Input } from '../ui/Input';
 
-const panelContainer = "flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface";
+const panelContainer = "flex flex-col overflow-y-auto overflow-x-hidden relative flex-1 bg-surface md:h-full md:min-h-0";
 
 const circleIconBtn = "flex items-center justify-center w-button-height-base h-button-height-base p-0 rounded-full border border-border bg-background-elevated cursor-pointer transition-all hover:enabled:border-border-hover hover:enabled:bg-background-hover disabled:opacity-50 disabled:cursor-not-allowed";
 

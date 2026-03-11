@@ -73,14 +73,14 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVer
       <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover gap-sm">
         <button
           onClick={() => onVerify(model)}
-          className="p-sm border-none rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center"
+          className="p-sm border-none rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center min-h-[44px] min-w-[44px]"
           title="Verify model integrity"
         >
           <Icon icon={Shield} size={16} />
         </button>
         <button
           onClick={() => onCheckUpdates(model)}
-          className="p-sm border-none rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center"
+          className="p-sm border-none rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center min-h-[44px] min-w-[44px]"
           title="Check for updates on HuggingFace"
           disabled={!model.hfRepoId}
         >
@@ -88,14 +88,14 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVer
         </button>
         <button
           onClick={() => onServe(model)}
-          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center bg-[rgba(34,197,94,0.15)] text-success border border-[rgba(34,197,94,0.3)] hover:bg-[rgba(34,197,94,0.25)] hover:shadow-[0_2px_10px_rgba(34,197,94,0.2)]"
+          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center min-h-[44px] min-w-[44px] bg-[rgba(34,197,94,0.15)] text-success border border-[rgba(34,197,94,0.3)] hover:bg-[rgba(34,197,94,0.25)] hover:shadow-[0_2px_10px_rgba(34,197,94,0.2)]"
           title="Serve model"
         >
           <Icon icon={Rocket} size={16} />
         </button>
         <button
           onClick={() => onRemove(model)}
-          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center bg-[rgba(239,68,68,0.15)] text-danger border border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.25)] hover:shadow-[0_2px_10px_rgba(239,68,68,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center min-h-[44px] min-w-[44px] bg-[rgba(239,68,68,0.15)] text-danger border border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.25)] hover:shadow-[0_2px_10px_rgba(239,68,68,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={removing === model.id}
           title="Remove model"
         >

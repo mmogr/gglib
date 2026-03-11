@@ -8,6 +8,7 @@ import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI } from '../components/ToolUI';
 import { VoiceOverlay } from '../components/VoiceOverlay';
+import TwoPanelLayout from '../components/TwoPanelLayout';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
@@ -260,11 +261,15 @@ export default function ChatPage({
   });
 
   // Handle resize
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+  }, []);
+
+  const handleKeyboardResize = useCallback((delta: number) => {
+    setLeftPanelWidth(prev => Math.max(20, Math.min(50, prev + delta)));
   }, []);
 
   useEffect(() => {
@@ -442,16 +447,17 @@ export default function ChatPage({
         {/* Tool UI Components - render tool calls in chat messages */}
         <GenericToolUI />
         
-        <div
+        <TwoPanelLayout
           ref={activeTab === 'chat' ? layoutRef : undefined}
           className={cn(
-            "grid flex-1 min-h-0 gap-0",
+            "flex-1 min-h-0",
             activeTab !== 'chat' && "hidden"
           )}
-          style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
-        >
-          {/* Left Panel: Conversation List */}
-          <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:max-h-[40vh] max-md:border-b max-md:border-border">
+          leftWidth={leftPanelWidth}
+          onResizeStart={handlePointerDown}
+          onKeyboardResize={handleKeyboardResize}
+          leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
+          left={
             <ConversationListPanel
               conversations={conversations}
               activeConversationId={activeConversationId}
@@ -466,11 +472,8 @@ export default function ChatPage({
               activeTab={activeTab}
               onTabChange={setActiveTab}
             />
-            <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" onMouseDown={handleMouseDown} />
-          </div>
-
-          {/* Right Panel: Chat Messages */}
-          <div className="relative flex flex-col h-full min-h-0 overflow-hidden">
+          }
+          right={
             <ChatMessagesPanel
               key={activeConversationId ?? "none"}
               activeConversation={activeConversation}
@@ -494,24 +497,25 @@ export default function ChatPage({
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
             />
-          </div>
-        </div>
+          }
+        />
 
         {/* Voice overlay (floating controls when voice mode is active) */}
         <VoiceOverlay voice={voice} onTranscript={handleVoiceTranscript} />
       </AssistantRuntimeProvider>
 
       {/* Console Tab Content - always mounted, hidden when not active */}
-      <div
+      <TwoPanelLayout
         ref={activeTab === 'console' ? layoutRef : undefined}
         className={cn(
-          "grid flex-1 min-h-0 gap-0",
+          "flex-1 min-h-0",
           activeTab !== 'console' && "hidden"
         )}
-        style={{ gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%` }}
-      >
-        {/* Left Panel: Server Info */}
-        <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:max-h-[40vh] max-md:border-b max-md:border-border">
+        leftWidth={leftPanelWidth}
+        onResizeStart={handlePointerDown}
+        onKeyboardResize={handleKeyboardResize}
+        leftClassName="max-h-[40vh] border-b border-border md:max-h-none md:border-b-0"
+        left={
           <ConsoleInfoPanel
             modelId={modelId}
             modelName={modelName}
@@ -522,14 +526,9 @@ export default function ChatPage({
             activeTab={activeTab}
             onTabChange={setActiveTab}
           />
-          <div className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" onMouseDown={handleMouseDown} />
-        </div>
-
-        {/* Right Panel: Server Logs */}
-        <div className="relative flex flex-col h-full min-h-0 overflow-hidden">
-          <ConsoleLogPanel serverPort={serverPort} />
-        </div>
-      </div>
+        }
+        right={<ConsoleLogPanel serverPort={serverPort} />}
+      />
 
       {/* New Conversation Modal */}
       {isNewConversationModalOpen && (

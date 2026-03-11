@@ -51,9 +51,9 @@ const Header: FC<HeaderProps> = ({
             <span>GGLib</span>
           </h1>
         </div>
-        <div className="flex items-center gap-base tablet:relative" ref={menuRef}>
+        <div className="relative flex items-center gap-base" ref={menuRef}>
           {/* Desktop navigation */}
-          <div className="flex items-center gap-base tablet:hidden">
+          <div className="hidden md:flex items-center gap-base">
             {/* Server status button with popover */}
             <div className="relative">
               <button
@@ -103,7 +103,7 @@ const Header: FC<HeaderProps> = ({
           {/* Mobile menu toggle */}
           <button
             type="button"
-            className="hidden tablet:flex items-center justify-center w-[var(--button-height-base)] h-[var(--button-height-base)] p-0 rounded-full border border-border bg-background-elevated text-inherit text-lg cursor-pointer transition-all hover:border-border-hover hover:bg-background-hover"
+            className="flex md:hidden items-center justify-center w-[var(--button-height-base)] h-[var(--button-height-base)] p-0 rounded-full border border-border bg-background-elevated text-inherit text-lg cursor-pointer transition-all hover:border-border-hover hover:bg-background-hover"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isMobileMenuOpen}

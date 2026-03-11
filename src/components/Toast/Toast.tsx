@@ -95,7 +95,7 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismis
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-lg right-lg z-notification flex flex-col gap-sm max-w-[400px] pointer-events-none max-xs:left-md max-xs:right-md max-xs:bottom-md max-xs:max-w-none" aria-label="Notifications">
+    <div className="fixed bottom-md left-md right-md z-notification flex flex-col gap-sm pointer-events-none mobile:bottom-lg mobile:right-lg mobile:left-auto mobile:max-w-[400px]" aria-label="Notifications">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
