@@ -77,12 +77,7 @@ pub async fn handle_install(
 }
 
 /// Build llama.cpp from source (the original installation logic)
-async fn build_from_source_impl(
-    cuda: bool,
-    metal: bool,
-    vulkan: bool,
-    force: bool,
-) -> Result<()> {
+async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bool) -> Result<()> {
     // Step 1: Check dependencies
     check_dependencies()?;
     println!();
@@ -141,15 +136,8 @@ async fn build_from_source_impl(
 }
 
 /// Determine which acceleration to use
-fn determine_acceleration(
-    cuda: bool,
-    metal: bool,
-    vulkan: bool,
-) -> Result<Acceleration> {
-    let flags_set = [cuda, metal, vulkan]
-        .iter()
-        .filter(|&&x| x)
-        .count();
+fn determine_acceleration(cuda: bool, metal: bool, vulkan: bool) -> Result<Acceleration> {
+    let flags_set = [cuda, metal, vulkan].iter().filter(|&&x| x).count();
 
     if flags_set > 1 {
         bail!("Only one acceleration flag can be specified");

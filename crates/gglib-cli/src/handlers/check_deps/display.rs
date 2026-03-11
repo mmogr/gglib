@@ -75,10 +75,7 @@ pub fn print_gpu_status(probe: &dyn SystemProbePort) {
             "  {}✗ No supported GPU detected (Metal/CUDA/Vulkan required){}",
             RED, RESET
         );
-        println!(
-            "  {}  CPU-only inference is not supported{}",
-            RED, RESET
-        );
+        println!("  {}  CPU-only inference is not supported{}", RED, RESET);
     }
 }
 
