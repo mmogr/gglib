@@ -67,6 +67,12 @@ export class ToolRegistry {
   register(definition: ToolDefinition, execute: ToolExecutor, source: ToolSource = 'builtin', renderer?: ToolResultRenderer): void {
     const name = definition.function.name;
     if (this.tools.has(name)) {
+      // Allow silent re-registration from the same source (idempotent sync)
+      const existing = this.tools.get(name)!;
+      if (existing.source === source) {
+        this.tools.set(name, { definition, execute, source, renderer });
+        return;
+      }
       throw new Error(`Tool "${name}" is already registered`);
     }
     this.tools.set(name, { definition, execute, source, renderer });

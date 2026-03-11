@@ -9,6 +9,7 @@ import { useDownloadSystemStatus } from '../hooks/useDownloadSystemStatus';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
+import TwoPanelLayout from '../components/TwoPanelLayout';
 import { useMccFilters } from './modelControlCenter/useMccFilters';
 import { useMccLayout } from './modelControlCenter/useMccLayout';
 import { useMccMenuActions } from './modelControlCenter/useMccMenuActions';
@@ -98,7 +99,7 @@ export default function ModelControlCenterPage({
   const openServeModalRef = useRef<(() => void) | null>(null);
   
   // Panel width state (percentages) - now just two columns
-  const { leftPanelWidth, layoutRef, handleMouseDown } = useMccLayout();
+  const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = useMccLayout();
 
   const openChatSession = useCallback(
     (modelId: number, view: 'chat' | 'console') => {
@@ -226,16 +227,14 @@ export default function ModelControlCenterPage({
   }
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden max-md:h-auto max-md:min-h-full max-md:overflow-auto">
-      <div 
+    <div className="flex flex-col w-full min-h-full overflow-auto md:h-full md:min-h-0 md:overflow-hidden">
+      <TwoPanelLayout
         ref={layoutRef}
-        className="grid grid-cols-2 gap-0 h-full overflow-hidden max-md:flex max-md:flex-col max-md:h-auto max-md:overflow-visible"
-        style={{
-          gridTemplateColumns: `${leftPanelWidth}% ${100 - leftPanelWidth}%`
-        }}
-      >
-        {/* Left Panel: Model Library */}
-        <div className="relative flex flex-col h-full min-h-0 overflow-hidden max-md:min-h-auto max-md:h-auto">
+        className="overflow-visible"
+        leftWidth={leftPanelWidth}
+        onResizeStart={handlePointerDown}
+        onKeyboardResize={handleKeyboardResize}
+        left={
           <ModelLibraryPanel
             models={filteredModels}
             selectedModelId={selectedModelId}
@@ -260,45 +259,40 @@ export default function ModelControlCenterPage({
             activeTab={sidebarTab}
             onTabChange={handleSidebarTabChange}
           />
-          <div 
-            className="absolute top-0 right-[-2px] w-1 h-full cursor-col-resize bg-transparent z-base transition duration-200 hover:bg-primary active:bg-primary max-md:hidden" 
-            onMouseDown={handleMouseDown}
-          />
-        </div>
-
-        {/* Right Panel: Model Inspector */}
-        <div className="relative flex flex-col h-full min-h-0 overflow-hidden gap-0 max-md:min-h-auto max-md:h-auto">
-          {/* Global Download Status - always visible regardless of selected tab/model */}
-          {!downloadDismissed && (
-            <GlobalDownloadStatus
-              progress={currentProgress}
+        }
+        rightClassName="gap-0"
+        right={
+          <>
+            {!downloadDismissed && (
+              <GlobalDownloadStatus
+                progress={currentProgress}
+                queueStatus={queueStatus}
+                downloadUiState={downloadUiState}
+                lastQueueSummary={lastQueueSummary}
+                onCancel={cancelDownload}
+                onDismissSummary={clearQueueSummary}
+                onRefreshQueue={refreshQueue}
+              />
+            )}
+            <ModelInspectorPanel
+              model={selectedModel}
+              selectedHfModel={selectedHfModel}
+              onStartServer={loadServers}
+              onServerStarted={handleServerStarted}
+              onStopServer={stopServer}
+              servers={servers}
+              onRemoveModel={removeModel}
+              onUpdateModel={updateModel}
+              onAddTag={addTagToModel}
+              onRemoveTag={removeTagFromModel}
+              getModelTags={getModelTags}
+              onRefresh={handleRefreshAll}
               queueStatus={queueStatus}
-              downloadUiState={downloadUiState}
-              lastQueueSummary={lastQueueSummary}
-              onCancel={cancelDownload}
-              onDismissSummary={clearQueueSummary}
-              onRefreshQueue={refreshQueue}
+              onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
             />
-          )}
-          
-          <ModelInspectorPanel
-            model={selectedModel}
-            selectedHfModel={selectedHfModel}
-            onStartServer={loadServers}
-            onServerStarted={handleServerStarted}
-            onStopServer={stopServer}
-            servers={servers}
-            onRemoveModel={removeModel}
-            onUpdateModel={updateModel}
-            onAddTag={addTagToModel}
-            onRemoveTag={removeTagFromModel}
-            getModelTags={getModelTags}
-            onRefresh={handleRefreshAll}
-            queueStatus={queueStatus}
-            onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
-          />
-        </div>
-      </div>
+          </>
+        }
+      />
     </div>
   );
 }

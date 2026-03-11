@@ -24,7 +24,7 @@ export async function getSetupStatus(): Promise<SetupStatus> {
  * @param onError Called when installation fails
  * @returns An abort function to cancel the installation
  */
-export function installLlama(
+export function streamLlamaInstall(
   onProgress: (progress: LlamaInstallProgress) => void,
   onComplete: () => void,
   onError: (error: string) => void,

@@ -63,7 +63,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
     : conversations;
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden border-r border-border relative flex-1 bg-surface max-md:h-auto max-md:max-h-none max-md:border-r-0 max-md:border-b max-md:border-border">
+    <div className="flex flex-col overflow-y-auto overflow-x-hidden border-b border-border relative flex-1 bg-surface md:h-full md:min-h-0 md:border-b-0 md:border-r">
       <div className="p-base border-b border-border bg-background shrink-0">
         {/* View Tabs */}
         <div className="mb-md">
@@ -74,12 +74,12 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
           />
         </div>
 
-        <div className="flex justify-between items-start gap-md max-mobile:flex-col max-mobile:gap-sm">
+        <div className="flex flex-col gap-sm mobile:flex-row mobile:justify-between mobile:items-start mobile:gap-md">
           <Stack gap="xs" className="min-w-0">
             <span className="text-xs uppercase tracking-[1px] text-text-muted">Chatting with</span>
             <h2 className="text-lg font-semibold m-0 text-text overflow-hidden text-ellipsis whitespace-nowrap">{modelName}</h2>
           </Stack>
-          <div className="flex gap-sm items-center shrink-0 max-mobile:w-full max-mobile:justify-between">
+          <div className="flex gap-sm items-center w-full justify-between mobile:w-auto mobile:shrink-0">
             <Button
               variant="primary"
               size="sm"

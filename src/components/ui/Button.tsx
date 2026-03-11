@@ -29,15 +29,15 @@ const variantStyles: Record<ButtonVariant, string> = {
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-sm",
-  md: "h-10 px-4 text-sm",
-  lg: "h-11 px-5 text-base",
+  sm: "h-9 px-3 text-sm",
+  md: "h-11 px-4 text-sm",
+  lg: "h-12 px-5 text-base",
 };
 
 const iconOnlySizeStyles: Record<ButtonSize, string> = {
-  sm: "h-8 w-8 p-0",
-  md: "h-10 w-10 p-0",
-  lg: "h-11 w-11 p-0",
+  sm: "h-9 w-9 p-0",
+  md: "h-11 w-11 p-0",
+  lg: "h-12 w-12 p-0",
 };
 
 const Spinner = () => (

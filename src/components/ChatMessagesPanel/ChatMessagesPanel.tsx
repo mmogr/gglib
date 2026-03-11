@@ -553,10 +553,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Render
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden relative flex-1 max-md:h-auto max-md:max-h-none bg-surface">
+    <div className="flex flex-col overflow-y-auto overflow-x-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
       {/* Header */}
-      <div className="p-base border-b border-border bg-background shrink-0 flex justify-between items-center gap-md max-tablet:flex-wrap">
-        <div className="flex items-center gap-sm min-w-0 flex-1 max-tablet:basis-full">
+      <div className="p-base border-b border-border bg-background shrink-0 flex flex-wrap justify-between items-center gap-md phone:flex-nowrap">
+        <div className="flex items-center gap-sm min-w-0 basis-full phone:basis-auto phone:flex-1">
           {isRenaming ? (
             <Input
               className="text-lg font-semibold bg-background border border-primary rounded-sm py-xs px-sm text-text min-w-[150px]"

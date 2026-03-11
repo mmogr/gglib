@@ -137,12 +137,11 @@
   --shadow-2xl: var(--shadow-2xl);
 
   /* ---------- Custom Breakpoints ---------- */
-  /* NOTE: --breakpoint-sm (40rem/640px) and --breakpoint-md (48rem/768px)
-     are Tailwind defaults. We add custom ones for non-standard media queries
-     without overriding the defaults. */
-  --breakpoint-xs: 30rem;          /* 480px */
-  --breakpoint-mobile: 31.25rem;   /* 500px */
-  --breakpoint-tablet: 37.5rem;    /* 600px */
+  /* Tailwind defaults: sm (40rem/640px), md (48rem/768px), lg (64rem/1024px).
+     md is the primary mobile↔desktop layout split used across the app.
+     Custom tokens below handle fine-grained small-screen adjustments. */
+  --breakpoint-mobile: 30rem;      /* 480px — standard phone → phablet */
+  --breakpoint-phone: 37.5rem;     /* 600px — phablet → tablet */
 
   /* ---------- Custom Animations ---------- */
   --animate-modal-slide-in: modal-slide-in 0.2s ease-out;
@@ -333,6 +332,12 @@
   /* Button reset (Tailwind preflight covers font/color/bg, but not cursor) */
   button {
     cursor: pointer;
+  }
+
+  /* Focus-visible ring for all native button elements */
+  button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   /* Scrollbar */
