@@ -275,7 +275,7 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-14
           - target: x86_64-pc-windows-msvc
-            os: windows-latest
+            os: windows-2022
 
     steps:
       - name: 🧪 Test Mode Banner
@@ -311,12 +311,6 @@ jobs:
             librsvg2-dev \
             libasound2-dev \
             pkg-config
-
-      - name: Pin CMake 3.30 (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: lukka/get-cmake@latest
-        with:
-          cmakeVersion: '3.30.8'
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -356,7 +350,7 @@ jobs:
           npm run build
 
       - name: Set Windows linker args (sherpa-onnx ETW symbols)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         shell: pwsh
         run: |
           echo "RUSTFLAGS=$env:RUSTFLAGS -C link-arg=Advapi32.lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -365,7 +359,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }} -p gglib-cli
 
       - name: Package binary (Unix)
-        if: matrix.os != 'windows-latest'
+        if: matrix.os != 'windows-2022'
         run: |
           mkdir -p package
           cp target/${{ matrix.target }}/release/gglib package/
@@ -375,7 +369,7 @@ jobs:
           cd ..
 
       - name: Package binary (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         run: |
           mkdir package
           copy target\${{ matrix.target }}\release\gglib.exe package\
@@ -385,7 +379,7 @@ jobs:
           cd ..
 
       - name: Upload binary to release (Unix)
-        if: matrix.os != 'windows-latest' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        if: matrix.os != 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ needs.check-version.outputs.new-version }}
@@ -394,7 +388,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload binary to release (Windows)
-        if: matrix.os == 'windows-latest' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        if: matrix.os == 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ needs.check-version.outputs.new-version }}
@@ -416,7 +410,7 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-14
           - target: x86_64-pc-windows-msvc
-            os: windows-latest
+            os: windows-2022
 
     steps:
       - name: 🧪 Test Mode Banner
@@ -441,12 +435,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pin CMake 3.30 (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: lukka/get-cmake@latest
-        with:
-          cmakeVersion: '3.30.8'
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -465,13 +453,13 @@ jobs:
           node-version: '20'
 
       - name: Install frontend dependencies (Unix)
-        if: matrix.os != 'windows-latest'
+        if: matrix.os != 'windows-2022'
         run: |
           rm -rf node_modules package-lock.json
           npm install
 
       - name: Install frontend dependencies (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         run: |
           if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
           if (Test-Path package-lock.json) { Remove-Item -Force package-lock.json }
@@ -493,7 +481,7 @@ jobs:
             pkg-config
 
       - name: Set Windows linker args (sherpa-onnx ETW symbols)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         shell: pwsh
         run: |
           echo "RUSTFLAGS=$env:RUSTFLAGS -C link-arg=Advapi32.lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -501,7 +489,7 @@ jobs:
       - name: Build Tauri app
         run: |
           echo "Building Tauri app for ${{ matrix.target }}"
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+          if [ "${{ matrix.os }}" == "windows-2022" ]; then
             npm run tauri:build -- --target ${{ matrix.target }} --bundles nsis
           elif [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
             npm run tauri:build -- --target ${{ matrix.target }} --bundles appimage,deb,rpm
@@ -511,7 +499,7 @@ jobs:
         shell: bash
         
       - name: Debug build output (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         run: |
           Write-Output "=== BUILD - Checking output structure ==="
           Write-Output "Contents of target:"
@@ -541,7 +529,7 @@ jobs:
         shell: pwsh
 
       - name: Debug build output (Unix)
-        if: matrix.os != 'windows-latest'
+        if: matrix.os != 'windows-2022'
         run: |
           echo "=== BUILD - Checking output structure ==="
           echo "Contents of target:"
@@ -612,7 +600,7 @@ jobs:
           fi
 
       - name: Prepare GUI binary for packaging (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         run: |
           mkdir gui-release
           copy target\${{ matrix.target }}\release\gglib-app.exe gui-release\
@@ -629,7 +617,7 @@ jobs:
           cd ..
 
       - name: Package GUI binary (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         run: |
           cd gui-release
           7z a ..\gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip *
@@ -645,7 +633,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload GUI binary to release (Windows)
-        if: matrix.os == 'windows-latest' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        if: matrix.os == 'windows-2022' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ needs.check-version.outputs.new-version }}
