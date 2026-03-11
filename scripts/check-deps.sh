@@ -811,7 +811,8 @@ main() {
             MISSING_REQUIRED+=("glslc")
         fi
     elif [ "$os" = "linux" ] || [ "$os" = "windows" ]; then
-        printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "GPU" "○" "none" "No GPU detected - will use CPU inference (optional)"
+        printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "GPU" "✗" "MISSING" "No GPU detected - CUDA (NVIDIA), Vulkan (AMD/Intel), or Metal (macOS) required"
+        MISSING_REQUIRED+=("GPU")
     fi
     
     echo ""

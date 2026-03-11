@@ -72,8 +72,12 @@ pub fn print_gpu_status(probe: &dyn SystemProbePort) {
         );
     } else {
         println!(
-            "  {}○ No dedicated GPU detected - CPU inference will be used{}",
-            YELLOW, RESET
+            "  {}✗ No supported GPU detected (Metal/CUDA/Vulkan required){}",
+            RED, RESET
+        );
+        println!(
+            "  {}  CPU-only inference is not supported{}",
+            RED, RESET
         );
     }
 }
