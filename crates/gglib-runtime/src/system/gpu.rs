@@ -100,7 +100,7 @@ fn detect_vulkan_runtime() -> bool {
     // macOS uses Metal, not Vulkan
     #[cfg(target_os = "macos")]
     {
-        return false;
+        false
     }
 
     #[cfg(not(target_os = "macos"))]
