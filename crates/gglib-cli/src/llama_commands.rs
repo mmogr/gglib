@@ -18,9 +18,6 @@ pub enum LlamaCommand {
         /// Build with Vulkan support (AMD/Intel GPUs)
         #[arg(long)]
         vulkan: bool,
-        /// Build CPU-only version
-        #[arg(long)]
-        cpu_only: bool,
         /// Force rebuild even if already installed
         #[arg(short, long)]
         force: bool,
@@ -49,9 +46,6 @@ pub enum LlamaCommand {
         /// Build with Vulkan support (AMD/Intel GPUs)
         #[arg(long)]
         vulkan: bool,
-        /// Build CPU-only version
-        #[arg(long)]
-        cpu_only: bool,
     },
 
     /// Remove llama.cpp installation
