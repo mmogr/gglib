@@ -13,8 +13,6 @@ export interface UsePanelResizeResult {
   handleKeyboardResize: (delta: number) => void;
 }
 
-const KEYBOARD_STEP = 2;
-
 /**
  * Manages drag-to-resize state for a two-panel layout.
  * Uses the Pointer Events API (pointermove/pointerup) throughout to avoid
@@ -74,5 +72,3 @@ export function usePanelResize({ initial, min, max }: UsePanelResizeConfig): Use
 
   return { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize };
 }
-
-export { KEYBOARD_STEP };

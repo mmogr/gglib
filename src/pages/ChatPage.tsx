@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { usePanelResize } from '../hooks/usePanelResize';
 import { type ChatPageTabId } from './chatTabs';
 import { appLogger } from '../services/platform';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
@@ -72,9 +73,7 @@ export default function ChatPage({
   const persistedMessageIds = useRef<Set<string>>(new Set());
   
   // Panel width for resize
-  const [leftPanelWidth, setLeftPanelWidth] = useState(35);
-  const layoutRef = useRef<HTMLDivElement>(null);
-  const isDraggingRef = useRef(false);
+  const { leftPanelWidth, layoutRef, handlePointerDown, handleKeyboardResize } = usePanelResize({ initial: 35, min: 20, max: 50 });
 
   // Toast notifications
   const { showToast } = useToastContext();
@@ -259,59 +258,6 @@ export default function ChatPage({
     setChatError,
     timingTracker,
   });
-
-  // Handle resize
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    isDraggingRef.current = true;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, []);
-
-  const handleKeyboardResize = useCallback((delta: number) => {
-    setLeftPanelWidth(prev => Math.max(20, Math.min(50, prev + delta)));
-  }, []);
-
-  useEffect(() => {
-    let rafId: number | null = null;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current || !layoutRef.current) return;
-
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-
-      rafId = requestAnimationFrame(() => {
-        if (!layoutRef.current) return;
-        const rect = layoutRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const percentage = (x / rect.width) * 100;
-        const newLeftWidth = Math.max(20, Math.min(50, percentage));
-        setLeftPanelWidth(newLeftWidth);
-      });
-    };
-
-    const handleMouseUp = () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      isDraggingRef.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
 
   // Conversation handlers
   const handleDeleteConversation = async (conversationId: number) => {
