@@ -4,7 +4,7 @@
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
-use anyhow::Result;
+use anyhow::{Result, bail};
 use std::process::Command;
 #[cfg(target_os = "linux")]
 use tracing::warn;
@@ -115,17 +115,24 @@ impl std::fmt::Display for Acceleration {
     }
 }
 
-/// Detect the optimal acceleration type for the current system
-pub fn detect_optimal_acceleration() -> Acceleration {
-    // Priority: Metal (macOS) > CUDA (NVIDIA) > Vulkan > CPU
+/// Detect the optimal acceleration type for the current system.
+///
+/// Returns an error if no supported GPU acceleration (Metal, CUDA, or Vulkan) is found.
+/// CPU-only inference is not supported.
+pub fn detect_optimal_acceleration() -> Result<Acceleration> {
+    // Priority: Metal (macOS) > CUDA (NVIDIA) > Vulkan
     if cfg!(target_os = "macos") && has_metal_support() {
-        Acceleration::Metal
+        Ok(Acceleration::Metal)
     } else if has_cuda_toolkit() {
-        Acceleration::Cuda
+        Ok(Acceleration::Cuda)
     } else if has_vulkan_runtime() {
-        Acceleration::Vulkan
+        Ok(Acceleration::Vulkan)
     } else {
-        Acceleration::Cpu
+        bail!(
+            "No supported GPU acceleration found.\n\
+             gglib requires Metal (macOS), CUDA (NVIDIA), or Vulkan (AMD/Intel) for inference.\n\
+             CPU-only inference is not supported."
+        )
     }
 }
 
@@ -566,12 +573,18 @@ mod tests {
 
     #[test]
     fn test_detect_optimal_acceleration() {
-        // Just ensure it doesn't panic
-        let accel = detect_optimal_acceleration();
-        assert!(matches!(
-            accel,
-            Acceleration::Metal | Acceleration::Cuda | Acceleration::Vulkan | Acceleration::Cpu
-        ));
+        // Either detects a supported GPU or returns an error - never falls back to CPU
+        match detect_optimal_acceleration() {
+            Ok(accel) => {
+                assert!(matches!(
+                    accel,
+                    Acceleration::Metal | Acceleration::Cuda | Acceleration::Vulkan
+                ));
+            }
+            Err(_) => {
+                // No supported GPU on this machine - this is the correct behavior
+            }
+        }
     }
 
     #[test]
