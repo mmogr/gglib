@@ -1,6 +1,6 @@
 {
   "name": "gglib-gui",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Modern GUI for GGLib GGUF Model Manager",
   "author": "mmogr",
   "license": "GPLv3",
