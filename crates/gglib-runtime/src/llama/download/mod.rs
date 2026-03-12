@@ -6,7 +6,7 @@
 //! Platform support:
 //! - macOS ARM64: Metal-enabled pre-built binaries
 //! - macOS x64: Metal-enabled pre-built binaries
-//! - Windows x64: CUDA-enabled pre-built binaries
+//! - Windows x64: CUDA or Vulkan pre-built binaries (selected at runtime via GPU detection)
 //! - Linux x64: CPU pre-built binaries (CUDA requires building from source)
 
 #[cfg(feature = "prebuilt")]
@@ -94,8 +94,13 @@ pub enum PrebuiltAvailability {
 
 /// Check if pre-built llama.cpp binaries are available for the current platform.
 ///
-/// Returns `Available` with asset pattern for macOS (Metal) and Windows (CUDA).
-/// Returns `NotAvailable` for Linux (no CUDA pre-built available).
+/// On Windows x64 the GPU is probed at runtime:
+/// - NVIDIA + CUDA → CUDA 12.4 binary
+/// - Vulkan runtime present → Vulkan binary
+/// - Neither → `NotAvailable`
+///
+/// Returns `Available` with asset pattern for macOS (Metal), Windows (CUDA/Vulkan),
+/// and Linux (CPU).
 #[cfg(feature = "prebuilt")]
 pub fn check_prebuilt_availability() -> PrebuiltAvailability {
     #[cfg(target_os = "macos")]
@@ -126,9 +131,22 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
     {
         #[cfg(target_arch = "x86_64")]
         {
-            PrebuiltAvailability::Available {
-                asset_pattern: "bin-win-cuda-12.4-x64.zip".to_string(),
-                description: "Windows x64 (CUDA 12.4)".to_string(),
+            let gpu = crate::system::gpu::detect_gpu_info();
+            if gpu.has_nvidia_gpu && gpu.cuda_version.is_some() {
+                PrebuiltAvailability::Available {
+                    asset_pattern: "bin-win-cuda-12.4-x64.zip".to_string(),
+                    description: "Windows x64 (CUDA 12.4)".to_string(),
+                }
+            } else if gpu.has_vulkan {
+                PrebuiltAvailability::Available {
+                    asset_pattern: "bin-win-vulkan-x64.zip".to_string(),
+                    description: "Windows x64 (Vulkan)".to_string(),
+                }
+            } else {
+                PrebuiltAvailability::NotAvailable {
+                    reason: "No supported GPU backend detected (requires CUDA or Vulkan)"
+                        .to_string(),
+                }
             }
         }
         #[cfg(not(target_arch = "x86_64"))]
