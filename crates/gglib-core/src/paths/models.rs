@@ -9,7 +9,8 @@ use std::path::PathBuf;
 use super::error::PathError;
 use super::platform::normalize_user_path;
 
-/// Default relative location for downloaded models under the user's home directory.
+/// Default relative location for downloaded models on non-Windows platforms.
+#[cfg(not(target_os = "windows"))]
 pub const DEFAULT_MODELS_DIR_RELATIVE: &str = ".local/share/llama_models";
 
 /// How the models directory was derived.
@@ -19,7 +20,8 @@ pub enum ModelsDirSource {
     Explicit,
     /// The path came from environment variables / `.env`.
     EnvVar,
-    /// Fallback default (`~/.local/share/llama_models`).
+    /// Fallback default (`~/.local/share/llama_models` on Linux/macOS,
+    /// `%LOCALAPPDATA%\llama_models` on Windows).
     Default,
 }
 
@@ -34,10 +36,19 @@ pub struct ModelsDirResolution {
 
 /// Return the platform-specific default models directory.
 ///
-/// Defaults to `~/.local/share/llama_models`.
+/// - **Windows**: `%LOCALAPPDATA%\llama_models` (e.g. `C:\Users\name\AppData\Local\llama_models`)
+/// - **macOS / Linux**: `~/.local/share/llama_models`
 pub fn default_models_dir() -> Result<PathBuf, PathError> {
-    let home = dirs::home_dir().ok_or(PathError::NoHomeDir)?;
-    Ok(home.join(DEFAULT_MODELS_DIR_RELATIVE))
+    #[cfg(target_os = "windows")]
+    {
+        let local_app_data = dirs::data_local_dir().ok_or(PathError::NoDataDir)?;
+        Ok(local_app_data.join("llama_models"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let home = dirs::home_dir().ok_or(PathError::NoHomeDir)?;
+        Ok(home.join(DEFAULT_MODELS_DIR_RELATIVE))
+    }
 }
 
 /// Resolve the models directory from an explicit override, env var, or default.
@@ -76,9 +87,28 @@ mod tests {
     use serial_test::serial;
 
     #[test]
-    fn test_default_models_dir_contains_relative() {
+    fn test_default_models_dir_platform_path() {
         let dir = default_models_dir().unwrap();
-        assert!(dir.to_string_lossy().contains(DEFAULT_MODELS_DIR_RELATIVE));
+        let path_str = dir.to_string_lossy();
+        // On Windows the path should be under %LOCALAPPDATA% and use native
+        // separators throughout — no forward-slash fragments.
+        #[cfg(target_os = "windows")]
+        {
+            assert!(
+                path_str.contains("llama_models"),
+                "Expected 'llama_models' in path: {path_str}"
+            );
+            assert!(
+                !path_str.contains('/'),
+                "Path must not contain forward slashes on Windows: {path_str}"
+            );
+        }
+        // On non-Windows the path should sit under ~/.local/share/llama_models.
+        #[cfg(not(target_os = "windows"))]
+        assert!(
+            path_str.contains(DEFAULT_MODELS_DIR_RELATIVE),
+            "Expected '{DEFAULT_MODELS_DIR_RELATIVE}' in path: {path_str}"
+        );
     }
 
     #[test]
