@@ -1,6 +1,7 @@
 import { createContext, FC, ReactNode, useCallback, useContext, useState } from 'react';
 import type { ToastData, ToastType } from '../components/Toast';
 
+const MAX_TOASTS = 5;
 let toastIdCounter = 0;
 
 /**
@@ -28,13 +29,12 @@ export const ToastProvider: FC<ToastProviderProps> = ({ children }) => {
 
   const showToast = useCallback((message: string, type: ToastType = 'info', duration?: number) => {
     const id = `toast-${++toastIdCounter}`;
-    const newToast: ToastData = {
-      id,
-      message,
-      type,
-      duration,
-    };
-    setToasts((prev) => [...prev, newToast]);
+    const newToast: ToastData = { id, message, type, duration };
+    setToasts((prev) => {
+      if (prev.length < MAX_TOASTS) return [...prev, newToast];
+      const [oldest, ...rest] = prev;
+      return [{ ...oldest, isDismissing: true }, ...rest, newToast];
+    });
   }, []);
 
   const dismissToast = useCallback((id: string) => {

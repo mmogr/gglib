@@ -10,6 +10,7 @@ export interface ToastData {
   message: string;
   type: ToastType;
   duration?: number;
+  isDismissing?: boolean;
 }
 
 interface ToastItemProps {
