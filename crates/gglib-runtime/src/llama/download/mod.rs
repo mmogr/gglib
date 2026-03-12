@@ -92,6 +92,30 @@ pub enum PrebuiltAvailability {
     },
 }
 
+/// Map a detected [`GpuInfo`] to the appropriate Windows x64 pre-built variant.
+///
+/// Extracted as a standalone function so it can be unit-tested with
+/// arbitrary [`GpuInfo`] values without triggering real hardware probes.
+#[cfg(feature = "prebuilt")]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn windows_availability_for_gpu(gpu: &gglib_core::utils::system::GpuInfo) -> PrebuiltAvailability {
+    if gpu.has_nvidia_gpu && gpu.cuda_version.is_some() {
+        PrebuiltAvailability::Available {
+            asset_pattern: "bin-win-cuda-12.4-x64.zip".to_string(),
+            description: "Windows x64 (CUDA 12.4)".to_string(),
+        }
+    } else if gpu.has_vulkan {
+        PrebuiltAvailability::Available {
+            asset_pattern: "bin-win-vulkan-x64.zip".to_string(),
+            description: "Windows x64 (Vulkan)".to_string(),
+        }
+    } else {
+        PrebuiltAvailability::NotAvailable {
+            reason: "No supported GPU backend detected (requires CUDA or Vulkan)".to_string(),
+        }
+    }
+}
+
 /// Check if pre-built llama.cpp binaries are available for the current platform.
 ///
 /// On Windows x64 the GPU is probed at runtime:
@@ -132,22 +156,7 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
         #[cfg(target_arch = "x86_64")]
         {
             let gpu = crate::system::gpu::detect_gpu_info();
-            if gpu.has_nvidia_gpu && gpu.cuda_version.is_some() {
-                PrebuiltAvailability::Available {
-                    asset_pattern: "bin-win-cuda-12.4-x64.zip".to_string(),
-                    description: "Windows x64 (CUDA 12.4)".to_string(),
-                }
-            } else if gpu.has_vulkan {
-                PrebuiltAvailability::Available {
-                    asset_pattern: "bin-win-vulkan-x64.zip".to_string(),
-                    description: "Windows x64 (Vulkan)".to_string(),
-                }
-            } else {
-                PrebuiltAvailability::NotAvailable {
-                    reason: "No supported GPU backend detected (requires CUDA or Vulkan)"
-                        .to_string(),
-                }
-            }
+            windows_availability_for_gpu(&gpu)
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
@@ -940,6 +949,114 @@ mod tests {
             PrebuiltAvailability::Available { .. } => {}
             PrebuiltAvailability::NotAvailable { .. } => {}
         }
+    }
+
+    // ---- windows_availability_for_gpu unit tests ----
+    // These run on all platforms because windows_availability_for_gpu is a pure
+    // function that takes a GpuInfo value — no Windows-only cfg guard needed.
+
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn test_windows_gpu_cuda_selects_cuda_binary() {
+        use gglib_core::utils::system::GpuInfo;
+        let gpu = GpuInfo {
+            has_nvidia_gpu: true,
+            cuda_version: Some("12.4".to_string()),
+            has_metal: false,
+            has_vulkan: false,
+        };
+        let result = windows_availability_for_gpu(&gpu);
+        match result {
+            PrebuiltAvailability::Available {
+                asset_pattern,
+                description,
+            } => {
+                assert!(
+                    asset_pattern.contains("cuda"),
+                    "Expected CUDA asset, got: {asset_pattern}"
+                );
+                assert!(
+                    description.contains("CUDA"),
+                    "Expected CUDA description, got: {description}"
+                );
+            }
+            PrebuiltAvailability::NotAvailable { reason } => {
+                panic!("Expected Available for CUDA GPU, got NotAvailable: {reason}");
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn test_windows_gpu_vulkan_only_selects_vulkan_binary() {
+        use gglib_core::utils::system::GpuInfo;
+        let gpu = GpuInfo {
+            has_nvidia_gpu: false,
+            cuda_version: None,
+            has_metal: false,
+            has_vulkan: true,
+        };
+        let result = windows_availability_for_gpu(&gpu);
+        match result {
+            PrebuiltAvailability::Available {
+                asset_pattern,
+                description,
+            } => {
+                assert!(
+                    asset_pattern.contains("vulkan"),
+                    "Expected Vulkan asset, got: {asset_pattern}"
+                );
+                assert!(
+                    description.contains("Vulkan"),
+                    "Expected Vulkan description, got: {description}"
+                );
+            }
+            PrebuiltAvailability::NotAvailable { reason } => {
+                panic!("Expected Available for Vulkan GPU, got NotAvailable: {reason}");
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn test_windows_gpu_nvidia_without_cuda_falls_back_to_vulkan() {
+        use gglib_core::utils::system::GpuInfo;
+        // NVIDIA hardware present but CUDA toolkit not installed; Vulkan is available.
+        let gpu = GpuInfo {
+            has_nvidia_gpu: true,
+            cuda_version: None,
+            has_metal: false,
+            has_vulkan: true,
+        };
+        let result = windows_availability_for_gpu(&gpu);
+        match result {
+            PrebuiltAvailability::Available { asset_pattern, .. } => {
+                assert!(
+                    asset_pattern.contains("vulkan"),
+                    "Should prefer Vulkan when CUDA toolkit absent, got: {asset_pattern}"
+                );
+            }
+            PrebuiltAvailability::NotAvailable { reason } => {
+                panic!("Expected Available (Vulkan fallback), got NotAvailable: {reason}");
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "prebuilt")]
+    fn test_windows_gpu_no_gpu_returns_not_available() {
+        use gglib_core::utils::system::GpuInfo;
+        let gpu = GpuInfo {
+            has_nvidia_gpu: false,
+            cuda_version: None,
+            has_metal: false,
+            has_vulkan: false,
+        };
+        let result = windows_availability_for_gpu(&gpu);
+        assert!(
+            matches!(result, PrebuiltAvailability::NotAvailable { .. }),
+            "Expected NotAvailable when no GPU backends present"
+        );
     }
 
     /// Verify that `extract_binaries_tar_gz` correctly handles modern llama.cpp
