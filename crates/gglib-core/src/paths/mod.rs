@@ -42,9 +42,9 @@ pub use llama::{
 };
 
 // Models directory
-pub use models::{ModelsDirResolution, ModelsDirSource, default_models_dir, resolve_models_dir};
 #[cfg(not(target_os = "windows"))]
 pub use models::DEFAULT_MODELS_DIR_RELATIVE;
+pub use models::{ModelsDirResolution, ModelsDirSource, default_models_dir, resolve_models_dir};
 
 // PID tracking
 pub use pids::pids_dir;
