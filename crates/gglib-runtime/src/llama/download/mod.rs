@@ -689,9 +689,12 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
     let post_download_result = async {
         extract_binaries(&zip_path, &bin_dir)?;
 
-        // Windows: Also download CUDA runtime DLLs
+        // Windows + CUDA only: also download the CUDA runtime DLLs.
+        // Vulkan builds bundle everything they need inside the main zip.
         #[cfg(target_os = "windows")]
-        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        if asset_pattern.contains("cuda") {
+            download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        }
 
         Ok::<_, anyhow::Error>(())
     }
@@ -781,9 +784,12 @@ pub async fn download_prebuilt_binaries_with_callback(
     let post_download_result = async {
         extract_binaries(&zip_path, &bin_dir)?;
 
-        // Windows: Also download CUDA runtime DLLs
+        // Windows + CUDA only: also download the CUDA runtime DLLs.
+        // Vulkan builds bundle everything they need inside the main zip.
         #[cfg(target_os = "windows")]
-        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        if asset_pattern.contains("cuda") {
+            download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        }
 
         Ok::<_, anyhow::Error>(())
     }
@@ -862,9 +868,12 @@ pub async fn download_prebuilt_binaries_with_boxed_callback(
     let post_download_result = async {
         extract_binaries(&zip_path, &bin_dir)?;
 
-        // Windows: Also download CUDA runtime DLLs
+        // Windows + CUDA only: also download the CUDA runtime DLLs.
+        // Vulkan builds bundle everything they need inside the main zip.
         #[cfg(target_os = "windows")]
-        download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        if asset_pattern.contains("cuda") {
+            download_cuda_runtime(&client, &release, &bin_dir, &download_dir).await?;
+        }
 
         Ok::<_, anyhow::Error>(())
     }
