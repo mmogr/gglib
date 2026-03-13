@@ -6,8 +6,8 @@ use super::detect::{Acceleration, detect_optimal_acceleration};
 use super::install::install_binary;
 use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_cli_path, llama_config_path, llama_cpp_dir, llama_server_path};
+use gglib_core::utils::process::cmd;
 use std::io::{self, Write};
-use std::process::Command;
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -50,17 +50,17 @@ pub async fn handle_check_updates() -> Result<()> {
     println!("Checking for updates...");
 
     // Fetch latest from remote
-    let status = Command::new("git")
+    let status = cmd("git")
         .args(["-C", llama_dir.to_str().unwrap(), "fetch", "origin"])
         .status()
-        .context("Failed to fetch updates")?;
+        .context("Failed to fetch updates")?
 
     if !status.success() {
         bail!("Failed to fetch updates from remote");
     }
 
     // Check if we're behind
-    let output = Command::new("git")
+    let output = cmd("git")
         .args([
             "-C",
             llama_dir.to_str().unwrap(),
@@ -69,7 +69,7 @@ pub async fn handle_check_updates() -> Result<()> {
             "HEAD..origin/master",
         ])
         .output()
-        .context("Failed to check for updates")?;
+        .context("Failed to check for updates")?
 
     let commits_behind = String::from_utf8_lossy(&output.stdout)
         .trim()
@@ -82,7 +82,7 @@ pub async fn handle_check_updates() -> Result<()> {
     }
 
     // Get latest commit info
-    let output = Command::new("git")
+    let output = cmd("git")
         .args([
             "-C",
             llama_dir.to_str().unwrap(),
@@ -93,7 +93,7 @@ pub async fn handle_check_updates() -> Result<()> {
             "HEAD..origin/master",
         ])
         .output()
-        .context("Failed to get commit log")?;
+        .context("Failed to get commit log")?
 
     let commits = String::from_utf8_lossy(&output.stdout);
 
@@ -175,7 +175,7 @@ pub async fn handle_update() -> Result<()> {
     // Pull latest changes
     println!();
     println!("Pulling latest changes...");
-    let status = Command::new("git")
+    let status = cmd("git")
         .args([
             "-C",
             llama_dir.to_str().unwrap(),
@@ -184,7 +184,7 @@ pub async fn handle_update() -> Result<()> {
             "master",
         ])
         .status()
-        .context("Failed to pull updates")?;
+        .context("Failed to pull updates")?
 
     if !status.success() {
         bail!("Failed to pull updates");
@@ -193,7 +193,7 @@ pub async fn handle_update() -> Result<()> {
     println!("✓ Repository updated");
 
     // Get new version info
-    let output = Command::new("git")
+    let output = cmd("git")
         .args([
             "-C",
             llama_dir.to_str().unwrap(),
@@ -202,13 +202,13 @@ pub async fn handle_update() -> Result<()> {
             "HEAD",
         ])
         .output()
-        .context("Failed to get commit hash")?;
+        .context("Failed to get commit hash")?
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    let output = Command::new("git")
+    let output = cmd("git")
         .args(["-C", llama_dir.to_str().unwrap(), "rev-parse", "HEAD"])
         .output()
-        .context("Failed to get commit SHA")?;
+        .context("Failed to get commit SHA")?
     let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Rebuild

@@ -5,7 +5,7 @@
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::{Result, bail};
-use std::process::Command;
+use gglib_core::utils::process::cmd;
 #[cfg(target_os = "linux")]
 use tracing::warn;
 
@@ -35,7 +35,7 @@ fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
 /// Get CUDA version as a tuple (major, minor).
 #[cfg(target_os = "linux")]
 fn get_cuda_version_tuple() -> Option<(u32, u32)> {
-    let output = Command::new("nvcc").arg("--version").output().ok()?;
+    let output = cmd("nvcc").arg("--version").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -59,7 +59,7 @@ fn get_cuda_version_tuple() -> Option<(u32, u32)> {
 /// Get GCC version as a tuple (major, minor).
 #[cfg(target_os = "linux")]
 fn get_gcc_version_tuple() -> Option<(u32, u32)> {
-    let output = Command::new("gcc").arg("--version").output().ok()?;
+    let output = cmd("gcc").arg("--version").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -146,7 +146,7 @@ fn has_metal_support() -> bool {
         }
 
         // Check macOS version for Intel Macs (Metal requires 10.13+)
-        if let Ok(output) = Command::new("sw_vers").arg("-productVersion").output()
+        if let Ok(output) = cmd("sw_vers").arg("-productVersion").output()
             && let Ok(version) = String::from_utf8(output.stdout)
             && let Some(major) = version.split('.').next()
             && let Ok(major_num) = major.trim().parse::<u32>()
@@ -162,7 +162,7 @@ fn has_metal_support() -> bool {
 fn has_cuda_toolkit() -> bool {
     // Check if nvcc (CUDA compiler) is available in PATH
     // This is the definitive check - if nvcc isn't in PATH, the build will fail
-    Command::new("nvcc").arg("--version").output().is_ok()
+    cmd("nvcc").arg("--version").output().is_ok()
 }
 
 /// Check if a Vulkan runtime is available for GPU acceleration.
@@ -176,7 +176,7 @@ fn has_vulkan_runtime() -> bool {
     }
 
     // Check if vulkaninfo can run (most reliable indicator)
-    if Command::new("vulkaninfo")
+    if cmd("vulkaninfo")
         .arg("--summary")
         .output()
         .map(|o| o.status.success())
@@ -275,7 +275,7 @@ pub fn get_cuda_path() -> Option<String> {
 
 /// Check if git is installed
 pub fn has_git() -> Result<Option<String>> {
-    match Command::new("git").arg("--version").output() {
+    match cmd("git").arg("--version").output() {
         Ok(output) if output.status.success() => {
             let version = String::from_utf8_lossy(&output.stdout);
             let version = version
@@ -291,7 +291,7 @@ pub fn has_git() -> Result<Option<String>> {
 
 /// Check if cmake is installed
 pub fn has_cmake() -> Result<Option<String>> {
-    match Command::new("cmake").arg("--version").output() {
+    match cmd("cmake").arg("--version").output() {
         Ok(output) if output.status.success() => {
             let version = String::from_utf8_lossy(&output.stdout);
             // Extract version number from first line
@@ -319,7 +319,7 @@ pub fn has_cpp_compiler() -> Result<Option<String>> {
     };
 
     for compiler in compilers {
-        match Command::new(compiler).arg("--version").output() {
+        match cmd(compiler).arg("--version").output() {
             Ok(output) if output.status.success() => {
                 let version = String::from_utf8_lossy(&output.stdout);
                 let first_line = version.lines().next().unwrap_or("unknown");
@@ -369,12 +369,12 @@ pub fn select_cuda_compiler_for_build() -> Result<(String, Option<(u32, u32)>)> 
 
         // Check for clang first (best CUDA compatibility)
         // Clang is generally compatible with all CUDA versions, so we skip validation
-        if Command::new("clang").arg("--version").output().is_ok() {
+        if cmd("clang").arg("--version").output().is_ok() {
             return Ok(("clang".to_string(), None));
         }
 
         // Check for gcc-12 (CUDA 13.x compatible)
-        if Command::new("gcc-12").arg("--version").output().is_ok() {
+        if cmd("gcc-12").arg("--version").output().is_ok() {
             let version_str = get_specific_gcc_version("gcc-12")?;
             // If version parsing fails, return None - validation will be skipped
             let version = parse_version_tuple(&version_str);
@@ -382,7 +382,7 @@ pub fn select_cuda_compiler_for_build() -> Result<(String, Option<(u32, u32)>)> 
         }
 
         // Check for gcc-11 (CUDA 11.x compatible)
-        if Command::new("gcc-11").arg("--version").output().is_ok() {
+        if cmd("gcc-11").arg("--version").output().is_ok() {
             let version_str = get_specific_gcc_version("gcc-11")?;
             // If version parsing fails, return None - validation will be skipped
             let version = parse_version_tuple(&version_str);
@@ -393,7 +393,7 @@ pub fn select_cuda_compiler_for_build() -> Result<(String, Option<(u32, u32)>)> 
     // On all platforms, check for clang (if not already checked on Linux)
     #[cfg(not(target_os = "linux"))]
     {
-        if Command::new("clang").arg("--version").output().is_ok() {
+        if cmd("clang").arg("--version").output().is_ok() {
             return Ok(("clang".to_string(), None));
         }
     }
@@ -407,7 +407,7 @@ pub fn select_cuda_compiler_for_build() -> Result<(String, Option<(u32, u32)>)> 
 /// Get version of a specific gcc binary
 #[cfg(target_os = "linux")]
 fn get_specific_gcc_version(gcc_cmd: &str) -> Result<String> {
-    let output = Command::new(gcc_cmd)
+    let output = cmd(gcc_cmd)
         .arg("--version")
         .output()
         .with_context(|| format!("Failed to run {}", gcc_cmd))?;

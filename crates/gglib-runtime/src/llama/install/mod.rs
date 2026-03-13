@@ -13,9 +13,9 @@ use gglib_core::paths::{
     llama_server_path,
 };
 use indicatif::{ProgressBar, ProgressStyle};
+use gglib_core::utils::process::cmd;
 use std::fs;
 use std::io::{self, Write};
-use std::process::Command;
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -206,7 +206,7 @@ fn clone_llama_cpp(llama_dir: &std::path::Path) -> Result<(String, String)> {
         fs::create_dir_all(parent).context("Failed to create parent directory")?;
     }
 
-    let status = Command::new("git")
+    let status = cmd("git")
         .args([
             "clone",
             "--depth=1",
@@ -214,7 +214,7 @@ fn clone_llama_cpp(llama_dir: &std::path::Path) -> Result<(String, String)> {
             llama_dir.to_str().unwrap(),
         ])
         .status()
-        .context("Failed to run git clone")?;
+        .context("Failed to run git clone")?
 
     pb.finish_and_clear();
 
@@ -230,15 +230,15 @@ fn clone_llama_cpp(llama_dir: &std::path::Path) -> Result<(String, String)> {
 /// Get version and commit info from repository
 fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
     // Get commit SHA
-    let output = Command::new("git")
+    let output = cmd("git")
         .args(["-C", llama_dir.to_str().unwrap(), "rev-parse", "HEAD"])
         .output()
-        .context("Failed to get commit SHA")?;
+        .context("Failed to get commit SHA")?
 
     let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Get short version
-    let output = Command::new("git")
+    let output = cmd("git")
         .args([
             "-C",
             llama_dir.to_str().unwrap(),
@@ -247,7 +247,7 @@ fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
             "HEAD",
         ])
         .output()
-        .context("Failed to get short commit hash")?;
+        .context("Failed to get short commit hash")?
 
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
 

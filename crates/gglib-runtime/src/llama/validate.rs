@@ -3,8 +3,8 @@
 use super::config::BuildConfig;
 use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_config_path, llama_server_path};
+use gglib_core::utils::process::cmd;
 use std::path::Path;
-use std::process::Command;
 
 /// Validate that the llama-server binary is functional
 pub fn validate_llama_binary(path: &Path) -> Result<()> {
@@ -39,7 +39,7 @@ fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
         }
     }
 
-    let output = Command::new(path)
+    let output = cmd(path)
         .arg("--version")
         .output()
         .with_context(|| format!("Failed to execute {}", binary_name))?;
@@ -105,7 +105,7 @@ pub async fn handle_status() -> Result<()> {
     }
 
     // Get binary version
-    if let Ok(output) = Command::new(&binary_path).arg("--version").output()
+    if let Ok(output) = cmd(&binary_path).arg("--version").output()
         && output.status.success()
     {
         let version = String::from_utf8_lossy(&output.stdout);
