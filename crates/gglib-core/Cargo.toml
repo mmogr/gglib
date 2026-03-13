@@ -17,7 +17,7 @@ chrono = { workspace = true }
 dirs = { workspace = true }
 bitflags = { version = "2.6", features = ["serde"] }
 uuid = { version = "1.11", features = ["serde", "v4"] }
-tokio = { workspace = true, features = ["sync", "fs", "rt"] }
+tokio = { workspace = true, features = ["process", "sync", "fs", "rt"] }
 tracing = { workspace = true }
 sha2 = "0.10"
 futures-core = "0.3"
