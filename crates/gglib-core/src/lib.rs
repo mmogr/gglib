@@ -50,11 +50,13 @@ pub use settings::{
 pub use utils::timing::elapsed_ms;
 
 // Re-export path utilities
+#[cfg(not(target_os = "windows"))]
+pub use paths::DEFAULT_MODELS_DIR_RELATIVE;
 pub use paths::{
-    DEFAULT_MODELS_DIR_RELATIVE, DirectoryCreationStrategy, ModelsDirResolution, ModelsDirSource,
-    PathError, data_root, database_path, default_models_dir, ensure_directory, env_file_path,
-    is_prebuilt_binary, llama_cli_path, llama_config_path, llama_cpp_dir, llama_server_path,
-    persist_env_value, persist_models_dir, resolve_models_dir, resource_root, verify_writable,
+    DirectoryCreationStrategy, ModelsDirResolution, ModelsDirSource, PathError, data_root,
+    database_path, default_models_dir, ensure_directory, env_file_path, is_prebuilt_binary,
+    llama_cli_path, llama_config_path, llama_cpp_dir, llama_server_path, persist_env_value,
+    persist_models_dir, resolve_models_dir, resource_root, verify_writable,
 };
 
 // Silence unused dev-dependency warnings until we add mock-based tests
