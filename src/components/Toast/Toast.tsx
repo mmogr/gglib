@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
+import { useToastTimer } from '../../hooks/useToastTimer';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -10,6 +11,7 @@ export interface ToastData {
   message: string;
   type: ToastType;
   duration?: number;
+  isDismissing?: boolean;
 }
 
 interface ToastItemProps {
@@ -18,28 +20,23 @@ interface ToastItemProps {
 }
 
 const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
-  const [isExiting, setIsExiting] = useState(false);
+  const handleExpire = useCallback(() => onDismiss(toast.id), [toast.id, onDismiss]);
+  const { isExiting, setIsExiting, pause, resume } = useToastTimer(toast.duration ?? 4000, handleExpire);
 
+  // When the context marks this toast for graceful removal, trigger exit animation.
   useEffect(() => {
-    const duration = toast.duration ?? 4000;
-    const exitTimer = setTimeout(() => {
+    if (toast.isDismissing) {
+      pause();
       setIsExiting(true);
-    }, duration - 300); // Start exit animation before removal
+      const t = setTimeout(() => onDismiss(toast.id), 300);
+      return () => clearTimeout(t);
+    }
+  }, [toast.isDismissing, toast.id, onDismiss, pause, setIsExiting]);
 
-    const removeTimer = setTimeout(() => {
-      onDismiss(toast.id);
-    }, duration);
-
-    return () => {
-      clearTimeout(exitTimer);
-      clearTimeout(removeTimer);
-    };
-  }, [toast.id, toast.duration, onDismiss]);
-
-  const handleClick = useCallback(() => {
+  const handleDismiss = useCallback(() => {
     setIsExiting(true);
     setTimeout(() => onDismiss(toast.id), 300);
-  }, [toast.id, onDismiss]);
+  }, [toast.id, onDismiss, setIsExiting]);
 
   const icon = {
     success: CheckCircle2,
@@ -51,16 +48,20 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
   return (
     <div
       className={cn(
-        'flex items-center gap-sm px-md py-sm rounded-base bg-surface border border-border shadow-[0_8px_24px_rgba(0,0,0,0.22)] text-sm cursor-pointer pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1',
+        'flex items-center gap-sm px-md py-sm rounded-base bg-surface border border-border shadow-[0_8px_24px_rgba(0,0,0,0.22)] text-sm pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
         toast.type === 'success' && 'border-[#10b981] bg-[linear-gradient(135deg,rgba(16,185,129,0.08)_0%,var(--color-surface)_100%)]',
         toast.type === 'error' && 'border-[#ef4444] bg-[linear-gradient(135deg,rgba(239,68,68,0.08)_0%,var(--color-surface)_100%)]',
         toast.type === 'info' && 'border-primary bg-[linear-gradient(135deg,rgba(99,102,241,0.12)_0%,var(--color-surface)_100%)]',
         toast.type === 'warning' && 'border-[#f59e0b] bg-[linear-gradient(135deg,rgba(245,158,11,0.12)_0%,var(--color-surface)_100%)]',
         isExiting && 'animate-toast-exit',
       )}
-      onClick={handleClick}
-      role="alert"
-      aria-live="polite"
+      role={toast.type === 'error' || toast.type === 'warning' ? 'alert' : 'status'}
+      tabIndex={0}
+      onMouseEnter={pause}
+      onMouseLeave={resume}
+      onFocus={pause}
+      onBlur={resume}
+      onKeyDown={(e) => e.key === 'Escape' && handleDismiss()}
     >
       <span className={cn(
         'text-base font-bold shrink-0 w-5 h-5 flex items-center justify-center',
@@ -75,10 +76,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
       <button
         className="bg-transparent border-none text-text-muted text-lg cursor-pointer p-0 leading-none opacity-70 transition-opacity duration-200 ease-out shrink-0 hover:opacity-100"
         aria-label="Dismiss notification"
-        onClick={(event) => {
-          event.stopPropagation();
-          handleClick();
-        }}
+        onClick={handleDismiss}
       >
         <Icon icon={X} size={14} />
       </button>
