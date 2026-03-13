@@ -6,9 +6,10 @@
 use crate::llama::{LlamaServerError, resolve_llama_server};
 use crate::process::spawn_stream_reader;
 use gglib_core::ports::{ServerConfig, ServerLogSinkPort};
+use gglib_core::utils::process::async_cmd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::process::{Child, Command};
+use tokio::process::Child;
 use tracing::{debug, warn};
 
 /// Select the llama-server path to use.
@@ -106,7 +107,7 @@ pub fn build_and_spawn(
             }
         })?;
 
-    let mut cmd = Command::new(validated_path);
+    let mut cmd = async_cmd(validated_path);
     cmd.arg("-m")
         .arg(&config.model_path)
         .arg("--host")

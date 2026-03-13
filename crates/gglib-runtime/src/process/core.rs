@@ -14,7 +14,7 @@ use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::process::Command;
+use gglib_core::utils::process::async_cmd;
 use tracing::{debug, warn};
 
 /// GUI-oriented process lifecycle manager.
@@ -104,7 +104,7 @@ impl GuiProcessCore {
         jinja: bool,
         reasoning_format: Option<String>,
     ) -> Result<tokio::process::Child> {
-        let mut cmd = Command::new(&self.llama_server_path);
+        let mut cmd = async_cmd(&self.llama_server_path);
         cmd.arg("-m")
             .arg(model_path)
             .arg("--host")
