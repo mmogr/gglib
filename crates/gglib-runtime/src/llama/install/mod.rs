@@ -12,10 +12,10 @@ use gglib_core::paths::{
     gglib_data_dir, is_prebuilt_binary, llama_cli_path, llama_config_path, llama_cpp_dir,
     llama_server_path,
 };
+use gglib_core::utils::process::cmd;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 use std::io::{self, Write};
-use std::process::Command;
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -206,7 +206,7 @@ fn clone_llama_cpp(llama_dir: &std::path::Path) -> Result<(String, String)> {
         fs::create_dir_all(parent).context("Failed to create parent directory")?;
     }
 
-    let status = Command::new("git")
+    let status = cmd("git")
         .args([
             "clone",
             "--depth=1",
@@ -230,7 +230,7 @@ fn clone_llama_cpp(llama_dir: &std::path::Path) -> Result<(String, String)> {
 /// Get version and commit info from repository
 fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
     // Get commit SHA
-    let output = Command::new("git")
+    let output = cmd("git")
         .args(["-C", llama_dir.to_str().unwrap(), "rev-parse", "HEAD"])
         .output()
         .context("Failed to get commit SHA")?;
@@ -238,7 +238,7 @@ fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
     let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Get short version
-    let output = Command::new("git")
+    let output = cmd("git")
         .args([
             "-C",
             llama_dir.to_str().unwrap(),

@@ -1,5 +1,6 @@
 //! Utility modules for gglib-core.
 
+pub mod process;
 pub mod shard_filename;
 pub mod system;
 pub mod timing;

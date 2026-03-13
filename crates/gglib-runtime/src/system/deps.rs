@@ -2,7 +2,7 @@
 //!
 //! These functions check for specific system libraries using pkg-config.
 
-use std::process::Command;
+use gglib_core::utils::process::cmd;
 
 /// Check if libssl-dev is installed by checking for OpenSSL with pkg-config.
 pub fn check_libssl() -> Option<String> {
@@ -34,7 +34,7 @@ pub fn check_libcurl() -> Option<String> {
 #[cfg(target_os = "linux")]
 pub fn check_libclang() -> Option<String> {
     // Method 1: Try llvm-config
-    if let Ok(output) = Command::new("llvm-config").arg("--libdir").output()
+    if let Ok(output) = cmd("llvm-config").arg("--libdir").output()
         && output.status.success()
     {
         let libdir = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -47,7 +47,7 @@ pub fn check_libclang() -> Option<String> {
                 let name_str = name.to_string_lossy();
                 if name_str.starts_with("libclang") && name_str.contains(".so") {
                     // Get LLVM version for display
-                    if let Ok(ver_output) = Command::new("llvm-config").arg("--version").output()
+                    if let Ok(ver_output) = cmd("llvm-config").arg("--version").output()
                         && ver_output.status.success()
                     {
                         return Some(
@@ -102,7 +102,7 @@ pub fn check_libclang() -> Option<String> {
 
 /// Check for a library using pkg-config.
 pub fn check_pkg_config_lib(lib_name: &str) -> Option<String> {
-    let output = Command::new("pkg-config")
+    let output = cmd("pkg-config")
         .args(["--modversion", lib_name])
         .output()
         .ok()?;

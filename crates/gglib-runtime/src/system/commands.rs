@@ -2,21 +2,21 @@
 //!
 //! These functions check if tools exist and extract their version strings.
 
-use std::process::Command;
+use gglib_core::utils::process::cmd;
 
 /// Check if a command exists in the system PATH.
 #[cfg(test)]
-fn command_exists(cmd: &str) -> bool {
-    Command::new("which")
-        .arg(cmd)
+fn command_exists(program: &str) -> bool {
+    cmd("which")
+        .arg(program)
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
 }
 
 /// Get the version of a command by running it with --version.
-pub fn get_command_version(cmd: &str, version_flag: &str) -> Option<String> {
-    let output = Command::new(cmd).arg(version_flag).output().ok()?;
+pub fn get_command_version(program: &str, version_flag: &str) -> Option<String> {
+    let output = cmd(program).arg(version_flag).output().ok()?;
 
     if !output.status.success() {
         return None;

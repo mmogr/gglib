@@ -11,10 +11,10 @@ use super::shutdown::shutdown_child;
 use super::types::{RunningProcess, ServerInfo, SpawnConfig};
 use crate::pidfile::{delete_pidfile, write_pidfile};
 use anyhow::{Result, anyhow};
+use gglib_core::utils::process::async_cmd;
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::process::Command;
 use tracing::{debug, warn};
 
 /// GUI-oriented process lifecycle manager.
@@ -104,7 +104,7 @@ impl GuiProcessCore {
         jinja: bool,
         reasoning_format: Option<String>,
     ) -> Result<tokio::process::Child> {
-        let mut cmd = Command::new(&self.llama_server_path);
+        let mut cmd = async_cmd(&self.llama_server_path);
         cmd.arg("-m")
             .arg(model_path)
             .arg("--host")

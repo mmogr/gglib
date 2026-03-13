@@ -10,9 +10,9 @@
 
 use std::path::Path;
 
+use gglib_core::utils::process::async_cmd;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
-use tokio::process::Command;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 
@@ -114,7 +114,7 @@ async fn run_download_process(
     env: &PythonEnvironment,
     request: &FastDownloadRequest<'_>,
 ) -> Result<(), PythonBridgeError> {
-    let mut cmd = Command::new(env.python_path());
+    let mut cmd = async_cmd(env.python_path());
     cmd.arg(env.script_path())
         .arg("--repo-id")
         .arg(request.repo_id)

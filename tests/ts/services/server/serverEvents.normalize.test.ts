@@ -35,6 +35,7 @@ describe('serverEvents.normalize', () => {
       servers: [
         {
           modelId: '1',
+          modelName: 'M',
           status: 'running',
           port: MOCK_PROXY_PORT,
           updatedAt: 1_700_000_000_000,
