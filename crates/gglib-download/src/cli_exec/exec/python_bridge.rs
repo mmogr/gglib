@@ -10,9 +10,9 @@
 
 use std::path::Path;
 
+use gglib_core::utils::process::async_cmd;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
-use gglib_core::utils::process::async_cmd;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 

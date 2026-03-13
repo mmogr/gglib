@@ -12,8 +12,8 @@ use gglib_core::paths::{
     gglib_data_dir, is_prebuilt_binary, llama_cli_path, llama_config_path, llama_cpp_dir,
     llama_server_path,
 };
-use indicatif::{ProgressBar, ProgressStyle};
 use gglib_core::utils::process::cmd;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 use std::io::{self, Write};
 
