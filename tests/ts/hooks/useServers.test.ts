@@ -1,182 +1,105 @@
 /**
  * Tests for useServers hook.
+ *
+ * useServers is event-driven (backed by serverRegistry), not polling-based.
+ * Tests cover: registry state mapping, static interface contracts, and
+ * delegation to safeStopServer.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import { useServers } from '../../../src/hooks/useServers';
-import { ServerInfo } from '../../../src/types';
+import type { ServerStateInfo } from '../../../src/services/serverRegistry';
 import { MOCK_BASE_PORT } from '../fixtures/ports';
 
-// Mock the servers client functions
-vi.mock('../../../src/services/clients/servers', () => ({
-  listServers: vi.fn(),
+// useAllServerStates is the sole data source — mock the registry.
+vi.mock('../../../src/services/serverRegistry', () => ({
+  useAllServerStates: vi.fn(),
 }));
 
-// Mock the safe actions
+// Mock safe actions for stopServer delegation.
 vi.mock('../../../src/services/server/safeActions', () => ({
   safeStopServer: vi.fn(),
 }));
 
-import { listServers } from '../../../src/services/clients/servers';
+import { useAllServerStates } from '../../../src/services/serverRegistry';
 import { safeStopServer } from '../../../src/services/server/safeActions';
 
-const mockServers: ServerInfo[] = [
-  {
-    model_id: 1,
-    model_name: 'llama-7b',
-    port: MOCK_BASE_PORT,
-    status: 'running',
-  },
-  {
-    model_id: 2,
-    model_name: 'mistral-7b',
-    port: MOCK_BASE_PORT + 1,
-    status: 'running',
-  },
+const mockRegistryState: ServerStateInfo[] = [
+  { modelId: '1', modelName: 'llama-7b', port: MOCK_BASE_PORT, status: 'running', updatedAt: 1 },
+  { modelId: '2', modelName: 'mistral-7b', port: MOCK_BASE_PORT + 1, status: 'running', updatedAt: 2 },
 ];
 
 describe('useServers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-    vi.mocked(listServers).mockResolvedValue(mockServers);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('loads servers on mount', async () => {
-    vi.useRealTimers(); // Use real timers for this test
-
-    const { result } = renderHook(() => useServers());
-
-    // Initially loading
-    expect(result.current.loading).toBe(true);
-    expect(result.current.servers).toEqual([]);
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.servers).toEqual(mockServers);
-    expect(result.current.error).toBeNull();
-    expect(listServers).toHaveBeenCalled();
-  });
-
-  it('handles error when loading servers fails', async () => {
-    vi.useRealTimers();
-    const error = new Error('Connection refused');
-    vi.mocked(listServers).mockRejectedValue(error);
-
-    const { result } = renderHook(() => useServers());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.error).toBe('Failed to load servers: Connection refused');
-    expect(result.current.servers).toEqual([]);
-  });
-
-  it('polls servers every 3 seconds', async () => {
-    const { result } = renderHook(() => useServers());
-
-    // Wait for initial load
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-
-    expect(listServers).toHaveBeenCalledTimes(1);
-
-    // Advance timer by 3 seconds
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
-    });
-
-    expect(listServers).toHaveBeenCalledTimes(2);
-
-    // Advance by another 3 seconds
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
-    });
-
-    expect(listServers).toHaveBeenCalledTimes(3);
-  });
-
-  it('cleans up interval on unmount', async () => {
-    const { unmount } = renderHook(() => useServers());
-
-    // Wait for initial load
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-
-    expect(listServers).toHaveBeenCalledTimes(1);
-
-    // Unmount the hook
-    unmount();
-
-    // Advance timer - should not trigger more calls
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(6000);
-    });
-
-    // Should still be 1 call (no more after unmount)
-    expect(listServers).toHaveBeenCalledTimes(1);
-  });
-
-  it('stops a server and reloads the list', async () => {
-    vi.useRealTimers();
+    vi.mocked(useAllServerStates).mockReturnValue(mockRegistryState);
     vi.mocked(safeStopServer).mockResolvedValue(undefined);
+  });
 
+  it('returns servers mapped from registry state', () => {
     const { result } = renderHook(() => useServers());
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
+    expect(result.current.servers).toEqual([
+      { modelId: 1, modelName: 'llama-7b', port: MOCK_BASE_PORT, status: 'running' },
+      { modelId: 2, modelName: 'mistral-7b', port: MOCK_BASE_PORT + 1, status: 'running' },
+    ]);
+  });
 
-    const callCountBefore = vi.mocked(listServers).mock.calls.length;
+  it('loading is always false (event-driven, no async fetch)', () => {
+    const { result } = renderHook(() => useServers());
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('error is always null (errors handled by registry, not hook)', () => {
+    const { result } = renderHook(() => useServers());
+    expect(result.current.error).toBeNull();
+  });
+
+  it('reflects updated registry state on re-render', () => {
+    const updated: ServerStateInfo[] = [
+      { modelId: '3', modelName: 'gemma-7b', port: MOCK_BASE_PORT + 2, status: 'running', updatedAt: 3 },
+    ];
+
+    const { result, rerender } = renderHook(() => useServers());
+    expect(result.current.servers).toHaveLength(2);
+
+    vi.mocked(useAllServerStates).mockReturnValue(updated);
+    rerender();
+
+    expect(result.current.servers).toHaveLength(1);
+    expect(result.current.servers[0].modelId).toBe(3);
+  });
+
+  it('stopServer delegates to safeStopServer', async () => {
+    const { result } = renderHook(() => useServers());
 
     await act(async () => {
       await result.current.stopServer(1);
     });
 
     expect(safeStopServer).toHaveBeenCalledWith(1);
-    // Should have reloaded servers
-    expect(listServers).toHaveBeenCalledTimes(callCountBefore + 1);
+    expect(safeStopServer).toHaveBeenCalledTimes(1);
   });
 
-  it('manually reloads servers', async () => {
-    vi.useRealTimers();
-
+  it('loadServers is a no-op that resolves cleanly', async () => {
     const { result } = renderHook(() => useServers());
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    const callCountBefore = vi.mocked(listServers).mock.calls.length;
-
+    // loadServers is intentionally a no-op; the registry is event-driven.
     await act(async () => {
       await result.current.loadServers();
     });
 
-    expect(listServers).toHaveBeenCalledTimes(callCountBefore + 1);
+    expect(vi.mocked(useAllServerStates)).toHaveBeenCalled();
   });
 
-  it('handles empty server list', async () => {
-    vi.useRealTimers();
-    vi.mocked(listServers).mockResolvedValue([]);
+  it('handles empty server list', () => {
+    vi.mocked(useAllServerStates).mockReturnValue([]);
 
     const { result } = renderHook(() => useServers());
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
     expect(result.current.servers).toEqual([]);
+    expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });
 });
