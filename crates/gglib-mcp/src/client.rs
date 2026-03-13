@@ -4,6 +4,7 @@
 //! Reference: <https://spec.modelcontextprotocol.io/>
 #![allow(dead_code)] // Some protocol fields/methods not yet used by callers
 
+use gglib_core::utils::process::cmd;
 use gglib_core::{McpTool, McpToolResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -169,7 +170,7 @@ impl McpClient {
         // Build effective PATH for child process
         let effective_path = crate::path::build_effective_path(exe_path, path_extra);
 
-        let mut command = std::process::Command::new(exe_path);
+        let mut command = cmd(exe_path);
         command
             .args(args)
             .stdin(Stdio::piped())
