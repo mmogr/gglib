@@ -4,8 +4,8 @@
 //! and memory detection, implementing the runtime side of the
 //! `SystemProbePort` contract.
 
+use gglib_core::utils::process::cmd;
 use gglib_core::utils::system::{GpuInfo, SystemMemoryInfo};
-use std::process::Command;
 use sysinfo::System;
 
 /// Detect GPU hardware and acceleration software.
@@ -26,7 +26,7 @@ pub fn detect_gpu_info() -> GpuInfo {
 /// Detect if NVIDIA GPU hardware is present (regardless of CUDA installation).
 fn detect_nvidia_hardware() -> bool {
     // Try nvidia-smi (most reliable if NVIDIA drivers are installed)
-    if Command::new("nvidia-smi")
+    if cmd("nvidia-smi")
         .arg("--list-gpus")
         .output()
         .map(|o| o.status.success())
@@ -38,7 +38,7 @@ fn detect_nvidia_hardware() -> bool {
     // Try lspci on Linux
     #[cfg(target_os = "linux")]
     {
-        if Command::new("lspci")
+        if cmd("lspci")
             .output()
             .map(|output| {
                 output.status.success()
@@ -55,7 +55,7 @@ fn detect_nvidia_hardware() -> bool {
     // Try wmic on Windows
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = Command::new("wmic")
+        if let Ok(output) = cmd("wmic")
             .args(["path", "win32_VideoController", "get", "name"])
             .output()
         {
@@ -74,7 +74,7 @@ fn detect_nvidia_hardware() -> bool {
 /// Check if NVIDIA CUDA toolkit is installed.
 pub fn check_cuda() -> Option<String> {
     // Try nvcc first (CUDA compiler)
-    if let Ok(output) = Command::new("nvcc").arg("--version").output()
+    if let Ok(output) = cmd("nvcc").arg("--version").output()
         && output.status.success()
     {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -106,7 +106,7 @@ fn detect_vulkan_runtime() -> bool {
     #[cfg(not(target_os = "macos"))]
     {
         // Check if vulkaninfo can run (most reliable)
-        if Command::new("vulkaninfo")
+        if cmd("vulkaninfo")
             .arg("--summary")
             .output()
             .map(|o| o.status.success())
@@ -147,7 +147,7 @@ fn detect_vulkan_runtime() -> bool {
 
 /// Get NVIDIA GPU VRAM in bytes using nvidia-smi.
 pub fn get_nvidia_vram_bytes() -> Option<u64> {
-    let output = Command::new("nvidia-smi")
+    let output = cmd("nvidia-smi")
         .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
         .output()
         .ok()?;
