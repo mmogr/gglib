@@ -8,6 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use gglib_core::paths::data_root;
+use gglib_core::utils::process::async_cmd;
 use thiserror::Error;
 use tokio::process::Command;
 
@@ -206,7 +207,7 @@ impl PythonEnvironment {
             self.env_dir.display()
         );
 
-        let mut cmd = Command::new(&bootstrap);
+        let mut cmd = async_cmd(&bootstrap);
         apply_python_subprocess_isolation(&mut cmd);
         let status = cmd
             .arg("-m")
@@ -361,7 +362,7 @@ async fn find_bootstrap_python_validated() -> Result<PathBuf, EnvSetupError> {
 
 /// Run a Python command and check for success.
 async fn run_python_command(python: &Path, args: &[&str]) -> Result<(), EnvSetupError> {
-    let mut cmd = Command::new(python);
+    let mut cmd = async_cmd(python);
     apply_python_subprocess_isolation(&mut cmd);
     cmd.args(args);
 
@@ -423,7 +424,7 @@ fn apply_python_subprocess_isolation(cmd: &mut Command) {
 ///
 /// Returns the resolved `sys.executable` string on success.
 async fn validate_python_interpreter(python: &Path) -> Result<String, EnvSetupError> {
-    let mut cmd = Command::new(python);
+    let mut cmd = async_cmd(python);
     apply_python_subprocess_isolation(&mut cmd);
     cmd.arg("-c")
         .arg("import encodings, sys; print(sys.executable)");
@@ -554,7 +555,7 @@ mod tests {
         };
 
         // Create a command with a "dirty" environment simulating a conda/virtualenv shell
-        let mut cmd = Command::new(python);
+        let mut cmd = async_cmd(python);
 
         // Simulate polluted environment by setting variables on the Command
         cmd.env("PYTHONHOME", "/fake/python/home")
