@@ -778,13 +778,12 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.16.2"
+version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03e45a4a8926227e4197636ba97a9fc9b00477e9f4bd711395687c5f0734bec4"
+checksum = "d64e8af5551369d19cf50138de61f1c42074ab970f74e99be916646777f8fc87"
 dependencies = [
  "encode_unicode",
  "libc",
- "once_cell",
  "unicode-width 0.2.2",
  "windows-sys 0.61.2",
 ]
@@ -1918,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1932,7 +1931,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -1961,7 +1960,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1997,14 +1996,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2033,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2056,7 +2055,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2076,7 +2075,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2102,7 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -2114,7 +2113,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gui"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "async-trait",
  "dirs",
@@ -2135,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2152,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2168,7 +2167,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2187,7 +2186,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2219,7 +2218,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2243,7 +2242,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-voice"
-version = "0.5.10"
+version = "0.5.11"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3671,7 +3670,7 @@ version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25470f23803092da7d239834776d653104d551bc4d7eacaf31e6837854b8e9eb"
 dependencies = [
- "console 0.16.2",
+ "console 0.16.3",
  "portable-atomic",
  "unicode-width 0.2.2",
  "unit-prefix",
@@ -7716,9 +7715,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.22"
+version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f30143827ddab0d256fd843b7a66d164e9f271cfa0dde49142c5ca0ca291f1e"
+checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
 dependencies = [
  "matchers",
  "nu-ansi-term",
