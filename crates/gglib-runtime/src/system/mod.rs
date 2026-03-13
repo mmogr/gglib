@@ -6,7 +6,7 @@
 
 mod commands;
 mod deps;
-mod gpu;
+pub(crate) mod gpu;
 
 use gglib_core::ports::SystemProbePort;
 use gglib_core::utils::system::{Dependency, DependencyStatus, GpuInfo, SystemMemoryInfo};
