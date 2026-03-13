@@ -53,7 +53,7 @@ pub async fn handle_check_updates() -> Result<()> {
     let status = cmd("git")
         .args(["-C", llama_dir.to_str().unwrap(), "fetch", "origin"])
         .status()
-        .context("Failed to fetch updates")?
+        .context("Failed to fetch updates")?;
 
     if !status.success() {
         bail!("Failed to fetch updates from remote");
@@ -69,7 +69,7 @@ pub async fn handle_check_updates() -> Result<()> {
             "HEAD..origin/master",
         ])
         .output()
-        .context("Failed to check for updates")?
+        .context("Failed to check for updates")?;
 
     let commits_behind = String::from_utf8_lossy(&output.stdout)
         .trim()
@@ -93,7 +93,7 @@ pub async fn handle_check_updates() -> Result<()> {
             "HEAD..origin/master",
         ])
         .output()
-        .context("Failed to get commit log")?
+        .context("Failed to get commit log")?;
 
     let commits = String::from_utf8_lossy(&output.stdout);
 
@@ -184,7 +184,7 @@ pub async fn handle_update() -> Result<()> {
             "master",
         ])
         .status()
-        .context("Failed to pull updates")?
+        .context("Failed to pull updates")?;
 
     if !status.success() {
         bail!("Failed to pull updates");
@@ -202,13 +202,13 @@ pub async fn handle_update() -> Result<()> {
             "HEAD",
         ])
         .output()
-        .context("Failed to get commit hash")?
+        .context("Failed to get commit hash")?;
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     let output = cmd("git")
         .args(["-C", llama_dir.to_str().unwrap(), "rev-parse", "HEAD"])
         .output()
-        .context("Failed to get commit SHA")?
+        .context("Failed to get commit SHA")?;
     let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Rebuild

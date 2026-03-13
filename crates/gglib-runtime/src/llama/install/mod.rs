@@ -214,7 +214,7 @@ fn clone_llama_cpp(llama_dir: &std::path::Path) -> Result<(String, String)> {
             llama_dir.to_str().unwrap(),
         ])
         .status()
-        .context("Failed to run git clone")?
+        .context("Failed to run git clone")?;
 
     pb.finish_and_clear();
 
@@ -233,7 +233,7 @@ fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
     let output = cmd("git")
         .args(["-C", llama_dir.to_str().unwrap(), "rev-parse", "HEAD"])
         .output()
-        .context("Failed to get commit SHA")?
+        .context("Failed to get commit SHA")?;
 
     let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
@@ -247,7 +247,7 @@ fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
             "HEAD",
         ])
         .output()
-        .context("Failed to get short commit hash")?
+        .context("Failed to get short commit hash")?;
 
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
 

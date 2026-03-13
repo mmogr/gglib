@@ -22,6 +22,7 @@ use std::ffi::OsStr;
 /// let output = cmd("nvidia-smi").arg("--list-gpus").output()?;
 /// ```
 pub fn cmd(program: impl AsRef<OsStr>) -> std::process::Command {
+    #[allow(unused_mut)]
     let mut c = std::process::Command::new(program);
     #[cfg(windows)]
     {
@@ -43,6 +44,7 @@ pub fn cmd(program: impl AsRef<OsStr>) -> std::process::Command {
 /// let child = async_cmd("llama-server").arg("--port").arg("8080").spawn()?;
 /// ```
 pub fn async_cmd(program: impl AsRef<OsStr>) -> tokio::process::Command {
+    #[allow(unused_mut)]
     let mut c = tokio::process::Command::new(program);
     #[cfg(windows)]
     {
