@@ -323,3 +323,19 @@ jobs:
             exit 1
           fi
           echo "All CI jobs passed successfully"
+
+  release:
+    name: Release
+    needs: [ci-success]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      pages: write
+      id-token: write
+      deployments: write
+    uses: ./.github/workflows/release.yml
+    with:
+      test_run: false
+    secrets: inherit
