@@ -327,7 +327,7 @@ jobs:
   release:
     name: Release
     needs: [ci-success]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && needs.ci-success.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
       issues: write
