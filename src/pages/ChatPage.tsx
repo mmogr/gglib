@@ -393,12 +393,10 @@ export default function ChatPage({
         {/* Tool UI Components - render tool calls in chat messages */}
         <GenericToolUI />
         
+        <div className={cn("flex-1 flex flex-col min-h-0", activeTab !== 'chat' && "hidden")}>
         <TwoPanelLayout
           ref={activeTab === 'chat' ? layoutRef : undefined}
-          className={cn(
-            "flex-1 min-h-0",
-            activeTab !== 'chat' && "hidden"
-          )}
+          className="h-full"
           leftWidth={leftPanelWidth}
           onResizeStart={handlePointerDown}
           onKeyboardResize={handleKeyboardResize}
@@ -445,18 +443,17 @@ export default function ChatPage({
             />
           }
         />
+        </div>
 
         {/* Voice overlay (floating controls when voice mode is active) */}
         <VoiceOverlay voice={voice} onTranscript={handleVoiceTranscript} />
       </AssistantRuntimeProvider>
 
       {/* Console Tab Content - always mounted, hidden when not active */}
+      <div className={cn("flex-1 flex flex-col min-h-0", activeTab !== 'console' && "hidden")}>
       <TwoPanelLayout
         ref={activeTab === 'console' ? layoutRef : undefined}
-        className={cn(
-          "flex-1 min-h-0",
-          activeTab !== 'console' && "hidden"
-        )}
+        className="h-full"
         leftWidth={leftPanelWidth}
         onResizeStart={handlePointerDown}
         onKeyboardResize={handleKeyboardResize}
@@ -475,6 +472,7 @@ export default function ChatPage({
         }
         right={<ConsoleLogPanel serverPort={serverPort} />}
       />
+      </div>
 
       {/* New Conversation Modal */}
       {isNewConversationModalOpen && (
