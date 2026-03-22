@@ -13,6 +13,8 @@ use super::sandboxing::{is_binary, resolve_sandboxed_path};
 /// Returns a human-readable error string on failure (not anyhow) so the
 /// agent loop receives a graceful tool-error message.
 pub fn read_file(args: &HashMap<String, Value>, sandbox_root: &Path) -> Result<String, String> {
+    const MAX_CHARS: usize = 100_000;
+
     let path = args
         .get("path")
         .and_then(Value::as_str)
@@ -21,17 +23,12 @@ pub fn read_file(args: &HashMap<String, Value>, sandbox_root: &Path) -> Result<S
     let resolved = resolve_sandboxed_path(sandbox_root, path)?;
 
     if is_binary(&resolved) {
-        return Err(format!(
-            "file '{}' appears to be binary — skipped",
-            path
-        ));
+        return Err(format!("file '{path}' appears to be binary — skipped"));
     }
 
-    let content = fs::read_to_string(&resolved)
-        .map_err(|e| format!("failed to read '{}': {e}", path))?;
+    let content =
+        fs::read_to_string(&resolved).map_err(|e| format!("failed to read '{path}': {e}"))?;
 
-    // Truncate large files to avoid blowing up context
-    const MAX_CHARS: usize = 100_000;
     if content.len() > MAX_CHARS {
         Ok(format!(
             "{}\n\n[truncated — file exceeds {} characters]",

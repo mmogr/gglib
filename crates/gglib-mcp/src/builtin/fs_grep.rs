@@ -13,10 +13,9 @@ use super::sandboxing::{is_binary, resolve_sandboxed_path};
 /// Does a case-insensitive substring search across all text files under
 /// the given path (default: sandbox root).  Returns matching lines with
 /// file paths and line numbers.
-pub fn grep_search(
-    args: &HashMap<String, Value>,
-    sandbox_root: &Path,
-) -> Result<String, String> {
+pub fn grep_search(args: &HashMap<String, Value>, sandbox_root: &Path) -> Result<String, String> {
+    const MAX_MATCHES: usize = 200;
+
     let pattern = args
         .get("pattern")
         .and_then(Value::as_str)
@@ -26,33 +25,41 @@ pub fn grep_search(
         return Err("'pattern' must not be empty".to_string());
     }
 
-    let search_path = args
-        .get("path")
-        .and_then(Value::as_str)
-        .unwrap_or(".");
+    let search_path = args.get("path").and_then(Value::as_str).unwrap_or(".");
 
     let resolved = resolve_sandboxed_path(sandbox_root, search_path)?;
 
     let pattern_lower = pattern.to_lowercase();
     let mut matches = Vec::new();
 
-    const MAX_MATCHES: usize = 200;
-
     if resolved.is_file() {
-        search_file(&resolved, sandbox_root, &pattern_lower, &mut matches, MAX_MATCHES);
+        search_file(
+            &resolved,
+            sandbox_root,
+            &pattern_lower,
+            &mut matches,
+            MAX_MATCHES,
+        );
     } else if resolved.is_dir() {
-        walk_dir(&resolved, sandbox_root, &pattern_lower, &mut matches, MAX_MATCHES);
+        walk_dir(
+            &resolved,
+            sandbox_root,
+            &pattern_lower,
+            &mut matches,
+            MAX_MATCHES,
+        );
     } else {
-        return Err(format!("'{}' is not a file or directory", search_path));
+        return Err(format!("'{search_path}' is not a file or directory"));
     }
 
     if matches.is_empty() {
-        Ok(format!("no matches found for '{}'", pattern))
+        Ok(format!("no matches found for '{pattern}'"))
     } else {
         let truncated = matches.len() >= MAX_MATCHES;
         let mut result = matches.join("\n");
         if truncated {
-            result.push_str(&format!("\n\n[results truncated at {} matches]", MAX_MATCHES));
+            use std::fmt::Write;
+            let _ = write!(result, "\n\n[results truncated at {MAX_MATCHES} matches]");
         }
         Ok(result)
     }
@@ -91,13 +98,7 @@ fn search_file(
 }
 
 /// Recursively walk a directory searching files.
-fn walk_dir(
-    dir: &Path,
-    sandbox_root: &Path,
-    pattern: &str,
-    matches: &mut Vec<String>,
-    max: usize,
-) {
+fn walk_dir(dir: &Path, sandbox_root: &Path, pattern: &str, matches: &mut Vec<String>, max: usize) {
     // Skip common noise directories
     const SKIP_DIRS: &[&str] = &[
         "node_modules",
@@ -114,8 +115,8 @@ fn walk_dir(
         return;
     };
 
-    let mut sorted: Vec<_> = entries.filter_map(|e| e.ok()).collect();
-    sorted.sort_by_key(|e| e.file_name());
+    let mut sorted: Vec<_> = entries.filter_map(std::result::Result::ok).collect();
+    sorted.sort_by_key(std::fs::DirEntry::file_name);
 
     for entry in sorted {
         if matches.len() >= max {
@@ -208,8 +209,7 @@ mod tests {
         fs::write(dir.path().join("a.rs"), "fn hello() {}\n").unwrap();
         fs::write(dir.path().join("b.rs"), "fn hello() {}\n").unwrap();
 
-        let result =
-            grep_search(&args_with_pattern_and_path("hello", "a.rs"), dir.path()).unwrap();
+        let result = grep_search(&args_with_pattern_and_path("hello", "a.rs"), dir.path()).unwrap();
         assert!(result.contains("a.rs"));
         // Should not contain b.rs since we targeted a.rs only
         assert!(!result.contains("b.rs"));

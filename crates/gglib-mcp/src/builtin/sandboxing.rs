@@ -25,9 +25,7 @@ pub fn resolve_sandboxed_path(sandbox_root: &Path, user_path: &str) -> Result<Pa
 
     // Build candidate: if absolute, strip the leading `/` and join to sandbox root
     let candidate = if raw.is_absolute() {
-        let relative = raw
-            .strip_prefix("/")
-            .unwrap_or(raw);
+        let relative = raw.strip_prefix("/").unwrap_or(raw);
         sandbox_root.join(relative)
     } else {
         sandbox_root.join(raw)
@@ -43,10 +41,7 @@ pub fn resolve_sandboxed_path(sandbox_root: &Path, user_path: &str) -> Result<Pa
         .map_err(|e| format!("path '{}' does not exist: {e}", candidate.display()))?;
 
     if !canon_candidate.starts_with(&canon_root) {
-        return Err(format!(
-            "path '{}' is outside the sandbox",
-            user_path
-        ));
+        return Err(format!("path '{user_path}' is outside the sandbox"));
     }
 
     Ok(canon_candidate)

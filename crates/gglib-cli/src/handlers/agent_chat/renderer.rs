@@ -68,7 +68,10 @@ fn format_grep_search(content: &str) -> String {
     if content.starts_with("no matches") {
         return "no matches".to_string();
     }
-    let match_count = content.lines().filter(|l| !l.starts_with("[results")).count();
+    let match_count = content
+        .lines()
+        .filter(|l| !l.starts_with("[results"))
+        .count();
     let truncated = content.contains("[results truncated");
     let first = content.lines().next().unwrap_or("");
     let preview = truncate_string(first, 50);

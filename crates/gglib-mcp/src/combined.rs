@@ -44,7 +44,7 @@ impl CombinedToolExecutor {
     }
 
     /// Wrap with filesystem tools sandboxed to `root`.
-    pub fn with_sandbox(mcp: Arc<McpService>, root: std::path::PathBuf) -> Self {
+    pub const fn with_sandbox(mcp: Arc<McpService>, root: std::path::PathBuf) -> Self {
         Self {
             builtin: BuiltinToolExecutorAdapter::with_sandbox(root),
             mcp: McpToolExecutorAdapter::new(mcp),

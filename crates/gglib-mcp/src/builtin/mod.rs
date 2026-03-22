@@ -34,9 +34,9 @@ pub const BUILTIN_PREFIX: &str = "builtin:";
 
 /// Executor for built-in tools.
 ///
-/// When `sandbox_root` is set, filesystem tools (read_file, list_directory,
-/// grep_search) are available and confined to that directory. When `None`,
-/// only non-filesystem tools (get_current_time) are exposed.
+/// When `sandbox_root` is set, filesystem tools (`read_file`, `list_directory`,
+/// `grep_search`) are available and confined to that directory. When `None`,
+/// only non-filesystem tools (`get_current_time`) are exposed.
 #[derive(Debug, Default, Clone)]
 pub struct BuiltinToolExecutorAdapter {
     sandbox_root: Option<PathBuf>,
@@ -44,7 +44,7 @@ pub struct BuiltinToolExecutorAdapter {
 
 impl BuiltinToolExecutorAdapter {
     /// Create an adapter with filesystem tools sandboxed to `root`.
-    pub fn with_sandbox(root: PathBuf) -> Self {
+    pub const fn with_sandbox(root: PathBuf) -> Self {
         Self {
             sandbox_root: Some(root),
         }
@@ -203,9 +203,10 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
                 })
             }
             "read_file" | "list_directory" | "grep_search" => {
-                let root = self.sandbox_root.as_ref().ok_or_else(|| {
-                    anyhow!("filesystem tools require a sandbox root")
-                })?;
+                let root = self
+                    .sandbox_root
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("filesystem tools require a sandbox root"))?;
                 let result = match bare {
                     "read_file" => fs_read::read_file(&args, root),
                     "list_directory" => fs_list::list_directory(&args, root),

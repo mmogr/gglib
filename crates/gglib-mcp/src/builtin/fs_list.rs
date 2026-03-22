@@ -16,15 +16,12 @@ pub fn list_directory(
     args: &HashMap<String, Value>,
     sandbox_root: &Path,
 ) -> Result<String, String> {
-    let path = args
-        .get("path")
-        .and_then(Value::as_str)
-        .unwrap_or(".");
+    let path = args.get("path").and_then(Value::as_str).unwrap_or(".");
 
     let resolved = resolve_sandboxed_path(sandbox_root, path)?;
 
     if !resolved.is_dir() {
-        return Err(format!("'{}' is not a directory", path));
+        return Err(format!("'{path}' is not a directory"));
     }
 
     let include_hidden = args
@@ -35,7 +32,7 @@ pub fn list_directory(
     let mut entries: Vec<String> = Vec::new();
 
     let read_dir = std::fs::read_dir(&resolved)
-        .map_err(|e| format!("failed to read directory '{}': {e}", path))?;
+        .map_err(|e| format!("failed to read directory '{path}': {e}"))?;
 
     for entry in read_dir {
         let entry = entry.map_err(|e| format!("directory entry error: {e}"))?;
@@ -47,7 +44,7 @@ pub fn list_directory(
 
         let file_type = entry
             .file_type()
-            .map_err(|e| format!("cannot determine type of '{}': {e}", name))?;
+            .map_err(|e| format!("cannot determine type of '{name}': {e}"))?;
 
         if file_type.is_dir() {
             entries.push(format!("{name}/"));

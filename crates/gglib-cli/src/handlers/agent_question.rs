@@ -30,10 +30,7 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
     let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
 
     let params = AgentSessionParams {
-        model_identifier: args
-            .model
-            .clone()
-            .unwrap_or_else(|| String::new()),
+        model_identifier: args.model.clone().unwrap_or_default(),
         ctx_size: args.ctx_size.clone(),
         port: args.port,
         tools: args.tools.clone(),
@@ -80,15 +77,9 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
     .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
     // Build messages
-    let mut messages = vec![
-        AgentMessage::System {
-            content: format!(
-                "{}\n\nWorking directory: {}",
-                SYSTEM_PROMPT,
-                cwd.display()
-            ),
-        },
-    ];
+    let mut messages = vec![AgentMessage::System {
+        content: format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display()),
+    }];
 
     // Construct user message with optional piped context
     let user_content = build_user_message(&args.question, args.verbose)?;
@@ -99,9 +90,7 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
     // Run the agent loop
     let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let agent_clone = Arc::clone(&agent);
-    let handle = tokio::spawn(async move {
-        agent_clone.run(messages, config, tx).await
-    });
+    let handle = tokio::spawn(async move { agent_clone.run(messages, config, tx).await });
 
     // Drain events with Ctrl+C support
     let completed = tokio::select! {
@@ -118,10 +107,10 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
     let _ = handle.await;
 
     // Stop auto-started server
-    if let Some(ref server_handle) = maybe_handle {
-        if let Err(e) = ctx.runner.stop(server_handle).await {
-            tracing::warn!("failed to stop llama-server: {e}");
-        }
+    if let Some(ref server_handle) = maybe_handle
+        && let Err(e) = ctx.runner.stop(server_handle).await
+    {
+        tracing::warn!("failed to stop llama-server: {e}");
     }
 
     if !completed {
@@ -142,7 +131,11 @@ fn build_user_message(question: &str, verbose: bool) -> Result<String> {
             .lock()
             .read_to_string(&mut buffer)
             .map_err(|e| anyhow!("failed to read from stdin: {e}"))?;
-        if buffer.is_empty() { None } else { Some(buffer) }
+        if buffer.is_empty() {
+            None
+        } else {
+            Some(buffer)
+        }
     } else {
         None
     };
@@ -170,5 +163,3 @@ fn build_user_message(question: &str, verbose: bool) -> Result<String> {
 
     Ok(user_message)
 }
-
-

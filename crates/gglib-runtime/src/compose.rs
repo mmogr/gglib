@@ -53,7 +53,14 @@ pub fn compose_agent_loop_sandboxed(
     tool_filter: Option<HashSet<String>>,
     sandbox_root: PathBuf,
 ) -> Arc<dyn AgentLoopPort> {
-    compose_agent_loop_inner(base_url, http_client, model, mcp, tool_filter, Some(sandbox_root))
+    compose_agent_loop_inner(
+        base_url,
+        http_client,
+        model,
+        mcp,
+        tool_filter,
+        Some(sandbox_root),
+    )
 }
 
 fn compose_agent_loop_inner(
