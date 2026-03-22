@@ -279,8 +279,13 @@ async fn main() -> anyhow::Result<()> {
             top_k,
             max_tokens,
             repeat_penalty,
+            agent,
+            port,
+            max_iterations,
+            tools,
+            tool_timeout_ms,
+            max_parallel,
         } => {
-            // Ask a question with optional piped/file context
             let args = handlers::question::QuestionArgs {
                 question,
                 model,
@@ -294,14 +299,18 @@ async fn main() -> anyhow::Result<()> {
                 top_k,
                 max_tokens,
                 repeat_penalty,
-                agent: false,
-                port: None,
-                max_iterations: 25,
-                tools: Vec::new(),
-                tool_timeout_ms: None,
-                max_parallel: None,
+                agent,
+                port,
+                max_iterations,
+                tools,
+                tool_timeout_ms,
+                max_parallel,
             };
-            handlers::question::execute(&ctx, args).await?;
+            if args.agent {
+                handlers::agent_question::execute(&ctx, &args).await?;
+            } else {
+                handlers::question::execute(&ctx, args).await?;
+            }
         }
         Commands::Download {
             model_id,
