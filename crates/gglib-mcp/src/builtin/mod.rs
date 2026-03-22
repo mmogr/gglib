@@ -10,12 +10,12 @@
 //! qualified with the numeric server id (e.g. `"3:read_file"`).
 //! [`CombinedToolExecutor`] routes calls with the `"builtin:"` prefix here.
 
+mod time;
+
 use std::collections::HashMap;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use chrono::Utc;
-use chrono_tz::Tz;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{McpTool, ToolCall, ToolDefinition, ToolResult};
 use serde_json::{Value, json};
@@ -29,8 +29,8 @@ pub const BUILTIN_PREFIX: &str = "builtin:";
 
 /// Stateless executor for built-in tools.
 ///
-/// All tool implementations are pure functions that take a JSON argument map
-/// and return a JSON value.  No I/O, no heap allocation beyond the result.
+/// All tool implementations live in sub-modules and are dispatched by name
+/// in the [`ToolExecutorPort::execute`] implementation.
 #[derive(Debug, Default, Clone)]
 pub struct BuiltinToolExecutorAdapter;
 
@@ -95,20 +95,10 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
             )
         })?;
 
-        let args: HashMap<String, Value> = match &call.arguments {
-            Value::Object(map) => map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-            Value::Null => HashMap::new(),
-            other => {
-                return Err(anyhow!(
-                    "tool '{}' arguments must be a JSON object; got {}",
-                    call.name,
-                    other
-                ));
-            }
-        };
+        let args = parse_args(call)?;
 
         let content = match bare {
-            "get_current_time" => get_current_time(&args),
+            "get_current_time" => time::get_current_time(&args),
             _ => return Err(anyhow!("unknown builtin tool '{bare}'")),
         };
 
@@ -121,38 +111,23 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
 }
 
 // =============================================================================
-// Tool implementations
+// Shared helpers
 // =============================================================================
 
-/// Returns the current time as `{ time, timezone, format }`.
+/// Parse a [`ToolCall`]'s arguments into a `HashMap`.
 ///
-/// The JSON shape matches `TimeResult` in `TimeRenderer.tsx` so the frontend
-/// renderer can display it without any extra parsing conventions.
-fn get_current_time(args: &HashMap<String, Value>) -> Value {
-    let tz_name = args
-        .get("timezone")
-        .and_then(Value::as_str)
-        .unwrap_or("UTC");
-    let format = args
-        .get("format")
-        .and_then(Value::as_str)
-        .unwrap_or("human");
-
-    let tz: Tz = tz_name.parse().unwrap_or(Tz::UTC);
-
-    let now_local = Utc::now().with_timezone(&tz);
-
-    let time_value: Value = match format {
-        "iso" => Value::String(now_local.to_rfc3339()),
-        "unix" => Value::Number(Utc::now().timestamp().into()),
-        _ => Value::String(now_local.format("%A, %B %e, %Y %H:%M:%S %Z").to_string()),
-    };
-
-    json!({
-        "time": time_value,
-        "timezone": tz.name(),
-        "format": format,
-    })
+/// Accepts a JSON object or null (empty map).  Returns an error for any
+/// other JSON type.
+pub(crate) fn parse_args(call: &ToolCall) -> anyhow::Result<HashMap<String, Value>> {
+    match &call.arguments {
+        Value::Object(map) => Ok(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()),
+        Value::Null => Ok(HashMap::new()),
+        other => Err(anyhow!(
+            "tool '{}' arguments must be a JSON object; got {}",
+            call.name,
+            other
+        )),
+    }
 }
 
 // =============================================================================
