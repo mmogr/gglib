@@ -18,6 +18,7 @@
 
 pub mod add;
 pub mod agent_chat;
+pub mod agent_question;
 pub mod chat;
 pub mod check_deps;
 pub mod config;

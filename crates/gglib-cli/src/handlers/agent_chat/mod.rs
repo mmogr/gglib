@@ -20,7 +20,7 @@ use crate::handlers::chat::ChatArgs;
 /// Called from [`crate::handlers::chat::execute`] when `args.agent` is `true`.
 /// Manages the server lifecycle (auto-start / stop) around the REPL session.
 pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
-    let (agent, maybe_handle) = config::compose(ctx, args).await?;
+    let (agent, maybe_handle) = config::compose(ctx, &args.into(), None).await?;
 
     let result = repl::run_repl(agent, args).await;
 

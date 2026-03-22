@@ -36,9 +36,17 @@ pub struct CombinedToolExecutor {
 
 impl CombinedToolExecutor {
     /// Wrap an existing `McpService` handle.
-    pub const fn new(mcp: Arc<McpService>) -> Self {
+    pub fn new(mcp: Arc<McpService>) -> Self {
         Self {
-            builtin: BuiltinToolExecutorAdapter,
+            builtin: BuiltinToolExecutorAdapter::default(),
+            mcp: McpToolExecutorAdapter::new(mcp),
+        }
+    }
+
+    /// Wrap with filesystem tools sandboxed to `root`.
+    pub const fn with_sandbox(mcp: Arc<McpService>, root: std::path::PathBuf) -> Self {
+        Self {
+            builtin: BuiltinToolExecutorAdapter::with_sandbox(root),
             mcp: McpToolExecutorAdapter::new(mcp),
         }
     }

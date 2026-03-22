@@ -66,6 +66,9 @@ echo "segfault at 0x0" | gglib q "I got this error: {}. What does it mean?"
 
 # Read context from a file instead of stdin
 gglib q --file Cargo.toml "what dependencies does this project use?"
+
+# Agentic mode: let the model explore the codebase with filesystem tools
+gglib q --agent "How is error handling structured in this project?"
 ```
 
 Works with any command that produces text. If you can `cat` it, you can ask a local model about it.

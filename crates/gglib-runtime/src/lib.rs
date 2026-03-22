@@ -38,7 +38,7 @@ pub use process::{
 pub use ports_impl::{CatalogPortImpl, LlmCompletionAdapter, RuntimePortImpl};
 
 // Re-export composition root factory
-pub use compose::compose_agent_loop;
+pub use compose::{compose_agent_loop, compose_agent_loop_sandboxed};
 
 // Re-export system probe implementation
 pub use system::DefaultSystemProbe;

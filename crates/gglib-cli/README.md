@@ -106,6 +106,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `serve <id>` | Start llama-server for a model |
 | `chat <id>` | Start interactive llama-cli chat |
 | `question <text>` | Ask a question (with optional piped context) |
+| `question --agent <text>` | Agentic question with filesystem tools |
 | `proxy` | Start the OpenAI-compatible proxy |
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |
@@ -139,6 +140,12 @@ gglib q --verbose --file CODE.rs "Explain this"
 
 # Cleaner output for scripting (no prompt echo, no timings)
 gglib q -Q "What is 2+2?"
+
+# Agentic mode: multi-step exploration with filesystem tools
+gglib q --agent "How is error handling structured in this project?"
+
+# Agentic mode with piped context
+git diff | gglib q --agent "Review these changes for potential issues"
 ```
 
 **Set a default model** to avoid using `--model` every time:
