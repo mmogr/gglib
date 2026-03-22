@@ -14,8 +14,8 @@ use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 
 use crate::bootstrap::CliContext;
-use crate::handlers::agent_chat::config::{AgentSessionParams, compose_sandboxed};
-use crate::handlers::agent_chat::renderer::render_event;
+use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
+use crate::handlers::agent_chat::renderer::drain_event_stream;
 use crate::handlers::question::QuestionArgs;
 
 /// System prompt for the agentic question mode.
@@ -70,7 +70,7 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
         params
     };
 
-    let (agent, maybe_handle) = compose_sandboxed(ctx, &params, cwd.clone()).await?;
+    let (agent, maybe_handle) = compose(ctx, &params, Some(cwd.clone())).await?;
 
     let config = AgentConfig::from_user_params(
         Some(args.max_iterations),
@@ -106,7 +106,7 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
     // Drain events with Ctrl+C support
     let completed = tokio::select! {
         biased;
-        result = drain_events(&mut rx, args.verbose) => result,
+        result = drain_event_stream(&mut rx, args.verbose) => result,
         _ = tokio::signal::ctrl_c() => {
             handle.abort();
             while rx.try_recv().is_ok() {}
@@ -171,17 +171,4 @@ fn build_user_message(question: &str, verbose: bool) -> Result<String> {
     Ok(user_message)
 }
 
-/// Drain the event stream, rendering each event.
-async fn drain_events(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
-    let mut had_text_delta = false;
-    while let Some(event) = rx.recv().await {
-        render_event(&event, verbose, had_text_delta);
-        if matches!(event, AgentEvent::TextDelta { .. }) {
-            had_text_delta = true;
-        }
-        if matches!(event, AgentEvent::FinalAnswer { .. }) {
-            return true;
-        }
-    }
-    false
-}
+

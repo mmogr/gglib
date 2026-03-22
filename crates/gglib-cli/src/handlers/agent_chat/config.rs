@@ -62,9 +62,13 @@ impl From<&ChatArgs> for AgentSessionParams {
 /// - `maybe_handle` is `Some(handle)` when we auto-started a llama-server.
 ///   The caller **must** call `ctx.runner.stop(&handle)` when the session ends.
 /// - `maybe_handle` is `None` when the caller supplied a port (reuse).
+///
+/// When `sandbox_root` is `Some`, filesystem tools are restricted to that
+/// directory.  Pass `None` for an unsandboxed session.
 pub async fn compose(
     ctx: &CliContext,
     params: &AgentSessionParams,
+    sandbox_root: Option<PathBuf>,
 ) -> Result<(Arc<dyn AgentLoopPort>, Option<ProcessHandle>)> {
     // 1. Resolve the LLM port — reuse or auto-start.
     let (port, maybe_handle) = resolve_port(ctx, params).await?;
@@ -83,42 +87,24 @@ pub async fn compose(
     } else {
         Some(params.tools.iter().cloned().collect())
     };
-    let agent = compose_agent_loop(
-        format!("http://127.0.0.1:{port}"),
-        ctx.http_client.clone(),
-        params.model_name.clone(),
-        Arc::clone(&ctx.mcp),
-        tool_filter,
-    );
-
-    Ok((agent, maybe_handle))
-}
-
-/// Like [`compose`] but with filesystem tools sandboxed to `sandbox_root`.
-pub async fn compose_sandboxed(
-    ctx: &CliContext,
-    params: &AgentSessionParams,
-    sandbox_root: PathBuf,
-) -> Result<(Arc<dyn AgentLoopPort>, Option<ProcessHandle>)> {
-    let (port, maybe_handle) = resolve_port(ctx, params).await?;
-
-    if let Err(e) = ctx.mcp.initialize().await {
-        tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
-    }
-
-    let tool_filter = if params.tools.is_empty() {
-        None
-    } else {
-        Some(params.tools.iter().cloned().collect())
+    let base_url = format!("http://127.0.0.1:{port}");
+    let agent = match sandbox_root {
+        Some(root) => compose_agent_loop_sandboxed(
+            base_url,
+            ctx.http_client.clone(),
+            params.model_name.clone(),
+            Arc::clone(&ctx.mcp),
+            tool_filter,
+            root,
+        ),
+        None => compose_agent_loop(
+            base_url,
+            ctx.http_client.clone(),
+            params.model_name.clone(),
+            Arc::clone(&ctx.mcp),
+            tool_filter,
+        ),
     };
-    let agent = compose_agent_loop_sandboxed(
-        format!("http://127.0.0.1:{port}"),
-        ctx.http_client.clone(),
-        params.model_name.clone(),
-        Arc::clone(&ctx.mcp),
-        tool_filter,
-        sandbox_root,
-    );
 
     Ok((agent, maybe_handle))
 }

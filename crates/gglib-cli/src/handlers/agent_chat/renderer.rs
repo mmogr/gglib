@@ -13,6 +13,7 @@
 use std::io::{self, Write as _};
 
 use gglib_core::domain::agent::AgentEvent;
+use tokio::sync::mpsc;
 
 use crate::presentation::tables::truncate_string;
 
@@ -83,6 +84,41 @@ pub fn render_event(event: &AgentEvent, verbose: bool, had_text_delta: bool) {
             eprintln!("\n  ❌  {message}");
         }
     }
+}
+
+/// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
+/// arrives, rendering each event.
+///
+/// Returns `true` only when the turn completed with a [`AgentEvent::FinalAnswer`]
+/// event.  Returns `false` when the channel closes without one (e.g. the loop
+/// hit max iterations or stagnated).  Cancellation (Ctrl+C) is handled by the
+/// caller via `tokio::select!`; this function has no side effects beyond
+/// rendering.
+///
+/// The caller **must** gate any history update on the return value: history
+/// from a failed or incomplete turn must not replace the previous context.
+pub async fn drain_event_stream(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
+    let mut had_text_delta = false;
+    while let Some(event) = rx.recv().await {
+        render_event(&event, verbose, had_text_delta);
+        if matches!(event, AgentEvent::TextDelta { .. }) {
+            had_text_delta = true;
+        }
+
+        if let AgentEvent::FinalAnswer { .. } = event {
+            // `FinalAnswer` is always the last event emitted before the loop
+            // drops its `Sender`.  Any events after this would be a protocol
+            // violation and are intentionally dropped.
+            debug_assert!(
+                rx.try_recv().is_err(),
+                "events after FinalAnswer violate agent protocol"
+            );
+            return true;
+        }
+    }
+    // Channel closed without a FinalAnswer — the loop ended with an error
+    // (max iterations, stagnation, etc.).  The caller must not update history.
+    false
 }
 
 // =============================================================================
