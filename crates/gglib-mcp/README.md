@@ -19,6 +19,7 @@ This crate provides MCP server lifecycle management, including:
 - **JSON-RPC 2.0 protocol client** for communicating with MCP servers
 - **Server lifecycle management** (start, stop, status tracking)
 - **Tool discovery and invocation** via the MCP protocol
+- **In-process builtin tools** (filesystem, time) with optional sandbox
 
 ## Internal Structure
 
@@ -36,6 +37,17 @@ This crate provides MCP server lifecycle management, including:
 │                                                             │
 │  McpClient (protocol)                                       │
 │    └── JSON-RPC 2.0, stdio transport                        │
+│                                                             │
+│  CombinedToolExecutor (tool dispatch)                       │
+│    ├── MCP tools  → McpService                              │
+│    └── Builtin tools → BuiltinToolExecutorAdapter           │
+│                                                             │
+│  builtin/ (in-process tools)                                │
+│    ├── time.rs: current-time tool                           │
+│    ├── fs_read.rs: read_file (sandboxed)                    │
+│    ├── fs_list.rs: list_directory (sandboxed)               │
+│    ├── fs_grep.rs: grep_search (sandboxed)                  │
+│    └── sandboxing.rs: path validation & jail                │
 │                                                             │
 │  resolver/ (path resolution)                                │
 │    ├── types: Result/Error/Attempt types                    │
@@ -99,10 +111,12 @@ This enables:
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`client.rs`](src/client.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-client-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-client-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-client-coverage.json) |
+| [`combined.rs`](src/combined.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-combined-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-combined-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-combined-coverage.json) |
 | [`manager.rs`](src/manager.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-manager-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-manager-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-manager-coverage.json) |
 | [`path.rs`](src/path.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-path-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-path-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-path-coverage.json) |
 | [`service.rs`](src/service.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-service-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-service-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-service-coverage.json) |
 | [`tool_executor.rs`](src/tool_executor.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-tool_executor-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-tool_executor-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-tool_executor-coverage.json) |
+| [`builtin/`](src/builtin/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-builtin-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-builtin-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-builtin-coverage.json) |
 | [`resolver/`](src/resolver/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-resolver-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-resolver-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-resolver-coverage.json) |
 <!-- module-table:end -->
 
@@ -113,6 +127,8 @@ This enables:
 - **`manager.rs`** — Server process lifecycle management (start/stop/status)
 - **`service.rs`** — High-level facade for MCP operations (CRUD + lifecycle)
 - **`path.rs`** — Path validation and PATH environment variable utilities
+- **`combined.rs`** — Unified tool executor dispatching to MCP and builtin tools
+- **`builtin/`** — In-process builtin tools (filesystem, time) with optional sandbox
 - **`resolver/`** — Cross-platform executable path resolution with 6-step search strategy
 
 

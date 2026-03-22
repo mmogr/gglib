@@ -47,10 +47,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │  │  endpoints  │     │   probes    │     │  chat UI    │                            │
 │  └─────────────┘     └─────────────┘     └─────────────┘                            │
 │                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐                                                │
-│  │ command.rs  │     │process_core │                                                │
-│  │ Cmd builder │     │ Core types  │                                                │
-│  └─────────────┘     └─────────────┘                                                │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
+│  │ command.rs  │     │process_core │     │ compose.rs  │                            │
+│  │ Cmd builder │     │ Core types  │     │ Agent loop  │                            │
+│  └─────────────┘     └─────────────┘     │ composition │                            │
+│                                          └─────────────┘                            │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                           │
@@ -69,6 +70,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
 | [`command.rs`](src/command.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-command-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-command-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-command-coverage.json) |
+| [`compose.rs`](src/compose.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-compose-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-compose-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-compose-coverage.json) |
 | [`health_monitor.rs`](src/health_monitor.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-health_monitor-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-health_monitor-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-health_monitor-coverage.json) |
 | [`health.rs`](src/health.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-health-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-health-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-health-coverage.json) |
 | [`process_core.rs`](src/process_core.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process_core-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process_core-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process_core-coverage.json) |
@@ -89,6 +91,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`health_monitor.rs`** — Continuous health monitoring for processes
 - **`health.rs`** — Health check endpoint polling
 - **`process_core.rs`** — Core process types and abstractions
+- **`compose.rs`** — Agent loop composition root (wires LLM adapter + tool executors)
 - **`runner.rs`** — High-level runner facade for llama operations
 - **`llama/`** — llama-server and llama-cli process management
 - **`proxy/`** — Proxy supervisor and routing logic
