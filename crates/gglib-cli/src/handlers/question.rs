@@ -12,50 +12,32 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::paths::llama_cli_path;
 use gglib_runtime::llama::{ContextResolution, LlamaCommandBuilder, resolve_context_size};
 
+/// Arguments for the question command.
+pub struct QuestionArgs {
+    pub question: String,
+    pub model: Option<String>,
+    pub file: Option<String>,
+    pub ctx_size: Option<String>,
+    pub mlock: bool,
+    pub verbose: bool,
+    pub quiet: bool,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub top_k: Option<i32>,
+    pub max_tokens: Option<u32>,
+    pub repeat_penalty: Option<f32>,
+    pub agent: bool,
+    pub port: Option<u16>,
+    pub max_iterations: usize,
+    pub tools: Vec<String>,
+    pub tool_timeout_ms: Option<u64>,
+    pub max_parallel: Option<usize>,
+}
+
 /// Execute the question command.
-///
-/// This command allows asking a question with or without context from stdin or file.
-/// If stdin is piped or --file is provided, it will be used as context.
-/// The `{}` placeholder in the question will be replaced with the input,
-/// or if no placeholder exists, the input will be prepended to the question.
-///
-/// # Arguments
-///
-/// * `ctx` - The CLI context providing access to AppCore
-/// * `question` - The question to ask
-/// * `model` - Optional model identifier (ID or name)
-/// * `file` - Optional file path to read context from
-/// * `ctx_size` - Optional context size override
-/// * `mlock` - Whether to enable memory lock
-/// * `verbose` - Whether to print the constructed prompt
-/// * `quiet` - Whether to suppress llama-cli banner
-/// * `temperature` - Optional temperature override
-/// * `top_p` - Optional top-p override
-/// * `top_k` - Optional top-k override
-/// * `max_tokens` - Optional max-tokens override
-/// * `repeat_penalty` - Optional repeat-penalty override
-///
-/// # Returns
-///
-/// Returns `Result<()>` indicating success or failure.
-#[allow(clippy::too_many_arguments)]
-pub async fn execute(
-    ctx: &CliContext,
-    question: String,
-    model: Option<String>,
-    file: Option<String>,
-    ctx_size: Option<String>,
-    mlock: bool,
-    verbose: bool,
-    quiet: bool,
-    temperature: Option<f32>,
-    top_p: Option<f32>,
-    top_k: Option<i32>,
-    max_tokens: Option<u32>,
-    repeat_penalty: Option<f32>,
-) -> Result<()> {
+pub async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> {
     // Get context from file or piped stdin
-    let context_input = if let Some(file_path) = &file {
+    let context_input = if let Some(file_path) = &args.file {
         // Read from file
         let content = fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read file: {}", file_path))?;
@@ -78,13 +60,13 @@ pub async fn execute(
     };
 
     // Resolve the model: --model flag -> settings default -> error
-    let model = resolve_model(ctx, model.as_deref()).await?;
+    let model = resolve_model(ctx, args.model.as_deref()).await?;
 
     // Build the prompt based on whether we have context input
-    let prompt = build_prompt(&question, context_input.as_deref())?;
+    let prompt = build_prompt(&args.question, context_input.as_deref())?;
 
     // Print prompt if verbose mode
-    if verbose {
+    if args.verbose {
         eprintln!("─── Constructed Prompt ───");
         eprintln!("{}", prompt);
         eprintln!("─── End Prompt ───\n");
@@ -92,15 +74,15 @@ pub async fn execute(
 
     // Calculate intelligent context size
     let context_resolution =
-        calculate_context_size(&prompt, ctx_size.as_deref(), model.context_length)?;
+        calculate_context_size(&prompt, args.ctx_size.as_deref(), model.context_length)?;
 
     // Build request-level inference config from CLI args
     let mut inference_config = InferenceConfig {
-        temperature,
-        top_p,
-        top_k,
-        max_tokens,
-        repeat_penalty,
+        temperature: args.temperature,
+        top_p: args.top_p,
+        top_k: args.top_k,
+        max_tokens: args.max_tokens,
+        repeat_penalty: args.repeat_penalty,
     };
 
     // Apply 3-level hierarchy: request -> model -> global -> hardcoded defaults
@@ -125,7 +107,7 @@ pub async fn execute(
     // Build and execute the command
     let mut cmd = LlamaCommandBuilder::new(&llama_cli_path, &model.file_path)
         .context_resolution(context_resolution)
-        .mlock(mlock)
+        .mlock(args.mlock)
         .inference_config(inference_config)
         .build();
 
@@ -133,7 +115,7 @@ pub async fn execute(
     cmd.arg("-p").arg(&prompt).arg("--single-turn");
 
     // Add quiet mode flags (cleaner output for scripting)
-    if quiet {
+    if args.quiet {
         cmd.arg("--no-display-prompt")
             .arg("--log-disable")
             .arg("--no-show-timings")
