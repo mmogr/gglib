@@ -23,9 +23,15 @@ pub fn resolve_sandboxed_path(sandbox_root: &Path, user_path: &str) -> Result<Pa
 
     let raw = Path::new(user_path);
 
-    // Build candidate: if absolute, strip the leading `/` and join to sandbox root
+    // Build candidate: if absolute, strip the root components and rebase
+    // inside sandbox_root so that `/etc/passwd` or `C:\secret` are treated
+    // as relative paths within the sandbox.
     let candidate = if raw.is_absolute() {
-        let relative = raw.strip_prefix("/").unwrap_or(raw);
+        use std::path::Component;
+        let relative: PathBuf = raw
+            .components()
+            .filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir))
+            .collect();
         sandbox_root.join(relative)
     } else {
         sandbox_root.join(raw)
@@ -127,5 +133,45 @@ mod tests {
         let txt = dir.path().join("text.txt");
         fs::write(&txt, "hello world").unwrap();
         assert!(!is_binary(&txt));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_escape_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create a symlink inside the sandbox pointing outside
+        let link = dir.path().join("escape");
+        std::os::unix::fs::symlink("/tmp", &link).unwrap();
+        let result = resolve_sandboxed_path(dir.path(), "escape");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn backslash_dotdot_does_not_escape() {
+        // On Unix, backslashes are literal filename characters, not separators.
+        // On Windows, canonicalize + starts_with catches the escape.
+        let dir = tempfile::tempdir().unwrap();
+        let child = dir.path().join("sub");
+        fs::create_dir(&child).unwrap();
+        let result = resolve_sandboxed_path(&child, r"..\..\..\etc\passwd");
+        // Must either error or resolve inside the sandbox — never outside.
+        match result {
+            Err(_) => {} // expected: path doesn't exist (treated as literal or escaped)
+            Ok(p) => assert!(p.starts_with(child.canonicalize().unwrap())),
+        }
+    }
+
+    #[test]
+    fn whitespace_only_path_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = resolve_sandboxed_path(dir.path(), "   ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn dot_resolves_to_sandbox_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let resolved = resolve_sandboxed_path(dir.path(), ".").unwrap();
+        assert_eq!(resolved, dir.path().canonicalize().unwrap());
     }
 }
