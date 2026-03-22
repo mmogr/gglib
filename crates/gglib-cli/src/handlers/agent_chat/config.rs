@@ -6,12 +6,13 @@
 //! must stop when the session ends (`Some` only when we auto-started the
 //! server).  [`AgentConfig`] is built inline by the caller from the same args.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::{ProcessHandle, ServerConfig};
-use gglib_runtime::compose_agent_loop;
+use gglib_runtime::{compose_agent_loop, compose_agent_loop_sandboxed};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::chat::ChatArgs;
@@ -88,6 +89,35 @@ pub async fn compose(
         params.model_name.clone(),
         Arc::clone(&ctx.mcp),
         tool_filter,
+    );
+
+    Ok((agent, maybe_handle))
+}
+
+/// Like [`compose`] but with filesystem tools sandboxed to `sandbox_root`.
+pub async fn compose_sandboxed(
+    ctx: &CliContext,
+    params: &AgentSessionParams,
+    sandbox_root: PathBuf,
+) -> Result<(Arc<dyn AgentLoopPort>, Option<ProcessHandle>)> {
+    let (port, maybe_handle) = resolve_port(ctx, params).await?;
+
+    if let Err(e) = ctx.mcp.initialize().await {
+        tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
+    }
+
+    let tool_filter = if params.tools.is_empty() {
+        None
+    } else {
+        Some(params.tools.iter().cloned().collect())
+    };
+    let agent = compose_agent_loop_sandboxed(
+        format!("http://127.0.0.1:{port}"),
+        ctx.http_client.clone(),
+        params.model_name.clone(),
+        Arc::clone(&ctx.mcp),
+        tool_filter,
+        sandbox_root,
     );
 
     Ok((agent, maybe_handle))

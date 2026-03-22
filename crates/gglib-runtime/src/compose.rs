@@ -14,6 +14,7 @@
 //! ensures both entry points apply the same defaults and wiring order.
 
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use gglib_agent::AgentLoop;
@@ -46,5 +47,24 @@ pub fn compose_agent_loop(
         model,
     ));
     let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(CombinedToolExecutor::new(mcp));
+    AgentLoop::build(llm, tool_executor, tool_filter)
+}
+
+/// Like [`compose_agent_loop`] but with filesystem tools sandboxed to `sandbox_root`.
+pub fn compose_agent_loop_sandboxed(
+    base_url: String,
+    http_client: Client,
+    model: Option<String>,
+    mcp: Arc<McpService>,
+    tool_filter: Option<HashSet<String>>,
+    sandbox_root: PathBuf,
+) -> Arc<dyn AgentLoopPort> {
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
+        base_url,
+        http_client,
+        model,
+    ));
+    let tool_executor: Arc<dyn ToolExecutorPort> =
+        Arc::new(CombinedToolExecutor::with_sandbox(mcp, sandbox_root));
     AgentLoop::build(llm, tool_executor, tool_filter)
 }
