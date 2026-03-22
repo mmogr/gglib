@@ -12,10 +12,73 @@
 
 use std::io::{self, Write as _};
 
-use gglib_core::domain::agent::AgentEvent;
+use gglib_core::domain::agent::{AgentEvent, ToolResult};
 use tokio::sync::mpsc;
 
 use crate::presentation::tables::truncate_string;
+
+// =============================================================================
+// Tool result formatters
+// =============================================================================
+
+/// Format a tool result with a tool-specific summary instead of a generic
+/// truncation.  Builtin filesystem tools get richer output; everything else
+/// falls back to the standard 80-char preview.
+fn format_tool_result(tool_name: &str, result: &ToolResult) -> String {
+    if !result.success {
+        return truncate_string(&result.content, 80);
+    }
+
+    match tool_name {
+        "builtin:read_file" => format_read_file(&result.content),
+        "builtin:list_directory" => format_list_directory(&result.content),
+        "builtin:grep_search" => format_grep_search(&result.content),
+        _ => truncate_string(&result.content, 80),
+    }
+}
+
+/// `read_file` → show line count and a compact preview of the first few lines.
+fn format_read_file(content: &str) -> String {
+    let line_count = content.lines().count();
+    let truncated = content.contains("[truncated");
+
+    let first_line = content.lines().next().unwrap_or("");
+    let preview = truncate_string(first_line, 50);
+
+    if truncated {
+        format!("{line_count}+ lines (truncated)  {preview}")
+    } else {
+        format!("{line_count} lines  {preview}")
+    }
+}
+
+/// `list_directory` → show entry count.
+fn format_list_directory(content: &str) -> String {
+    if content == "(empty directory)" {
+        return "(empty directory)".to_string();
+    }
+    let count = content.lines().count();
+    let dirs = content.lines().filter(|l| l.ends_with('/')).count();
+    let files = count - dirs;
+    format!("{count} entries ({files} files, {dirs} dirs)")
+}
+
+/// `grep_search` → show match count and first match preview.
+fn format_grep_search(content: &str) -> String {
+    if content.starts_with("no matches") {
+        return "no matches".to_string();
+    }
+    let match_count = content.lines().filter(|l| !l.starts_with("[results")).count();
+    let truncated = content.contains("[results truncated");
+    let first = content.lines().next().unwrap_or("");
+    let preview = truncate_string(first, 50);
+
+    if truncated {
+        format!("{match_count}+ matches  {preview}")
+    } else {
+        format!("{match_count} matches  {preview}")
+    }
+}
 
 // =============================================================================
 // Public API
@@ -50,13 +113,14 @@ pub fn render_event(event: &AgentEvent, verbose: bool, had_text_delta: bool) {
         }
 
         AgentEvent::ToolCallComplete {
+            tool_name,
             result,
             execute_duration_ms,
             ..
         } => {
             let icon = if result.success { "✓" } else { "✗" };
-            let preview = truncate_string(&result.content, 80);
-            eprintln!("  {icon}  {execute_duration_ms}ms  {preview}");
+            let summary = format_tool_result(tool_name, result);
+            eprintln!("  {icon}  {execute_duration_ms}ms  {summary}");
         }
 
         AgentEvent::IterationComplete {
@@ -176,6 +240,7 @@ mod tests {
     #[test]
     fn tool_call_complete_does_not_panic() {
         smoke(AgentEvent::ToolCallComplete {
+            tool_name: "some_tool".into(),
             result: ToolResult {
                 tool_call_id: "c1".into(),
                 content: "output".into(),
@@ -183,6 +248,77 @@ mod tests {
             },
             wait_ms: 0,
             execute_duration_ms: 5,
+        });
+    }
+
+    #[test]
+    fn read_file_render_shows_line_count() {
+        // Should not panic and format nicely
+        smoke(AgentEvent::ToolCallComplete {
+            tool_name: "builtin:read_file".into(),
+            result: ToolResult {
+                tool_call_id: "c2".into(),
+                content: "line 1\nline 2\nline 3\n".into(),
+                success: true,
+            },
+            wait_ms: 0,
+            execute_duration_ms: 10,
+        });
+    }
+
+    #[test]
+    fn list_directory_render_shows_counts() {
+        smoke(AgentEvent::ToolCallComplete {
+            tool_name: "builtin:list_directory".into(),
+            result: ToolResult {
+                tool_call_id: "c3".into(),
+                content: "file.rs\ndir/\nother.txt\n".into(),
+                success: true,
+            },
+            wait_ms: 0,
+            execute_duration_ms: 3,
+        });
+    }
+
+    #[test]
+    fn grep_search_render_shows_match_count() {
+        smoke(AgentEvent::ToolCallComplete {
+            tool_name: "builtin:grep_search".into(),
+            result: ToolResult {
+                tool_call_id: "c4".into(),
+                content: "src/main.rs:1:fn main() {}\nsrc/lib.rs:5:fn helper() {}\n".into(),
+                success: true,
+            },
+            wait_ms: 0,
+            execute_duration_ms: 20,
+        });
+    }
+
+    #[test]
+    fn grep_no_matches_render() {
+        smoke(AgentEvent::ToolCallComplete {
+            tool_name: "builtin:grep_search".into(),
+            result: ToolResult {
+                tool_call_id: "c5".into(),
+                content: "no matches found for 'xyz'".into(),
+                success: true,
+            },
+            wait_ms: 0,
+            execute_duration_ms: 15,
+        });
+    }
+
+    #[test]
+    fn failed_tool_falls_back_to_truncation() {
+        smoke(AgentEvent::ToolCallComplete {
+            tool_name: "builtin:read_file".into(),
+            result: ToolResult {
+                tool_call_id: "c6".into(),
+                content: "file 'nope.txt' does not exist".into(),
+                success: false,
+            },
+            wait_ms: 0,
+            execute_duration_ms: 1,
         });
     }
 }

@@ -98,6 +98,7 @@ async fn execute_single_tool(
     // Notify that execution is complete.
     let _ = tx
         .send(AgentEvent::ToolCallComplete {
+            tool_name: tc.name.clone(),
             result: tool_result.clone(),
             wait_ms,
             execute_duration_ms: duration_ms,

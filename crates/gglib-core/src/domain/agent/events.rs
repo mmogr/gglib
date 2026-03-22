@@ -46,6 +46,8 @@ pub enum AgentEvent {
 
     /// A tool execution has completed (success or failure).
     ToolCallComplete {
+        /// Name of the tool that was executed.
+        tool_name: String,
         /// The outcome of the tool execution.
         result: ToolResult,
         /// Time spent waiting for a concurrency permit (semaphore), in milliseconds.
