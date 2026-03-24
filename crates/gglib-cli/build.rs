@@ -18,5 +18,5 @@ fn main() {
         .to_string_lossy()
         .to_string();
 
-    println!("cargo:rustc-env=GGLIB_REPO_ROOT={}", workspace_root);
+    println!("cargo:rustc-env=GGLIB_REPO_ROOT={workspace_root}");
 }

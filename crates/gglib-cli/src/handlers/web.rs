@@ -20,7 +20,7 @@ use anyhow::Result;
 /// * `base_port`  — Starting port range for llama-server subprocess allocation.
 /// * `api_only`   — When `true`, skip static-file serving regardless of flags.
 /// * `static_dir` — Explicit path to a built frontend; takes priority over
-///                  auto-discovery when `api_only` is `false`.
+///   auto-discovery when `api_only` is `false`.
 pub async fn execute(
     port: u16,
     base_port: u16,

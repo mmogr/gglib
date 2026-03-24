@@ -23,7 +23,7 @@ use gglib_runtime::DefaultSystemProbe;
 /// * `ctx`     — Shared reference to the fully-composed CLI context.
 /// * `command` — The command to execute, as parsed by Clap.
 /// * `verbose` — Value of the global `--verbose` flag; forwarded only to
-///               handlers that expose a verbosity knob.
+///   handlers that expose a verbosity knob.
 pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Result<()> {
     match command {
         // ── System / introspection ──────────────────────────────────────────
