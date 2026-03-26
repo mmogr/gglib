@@ -96,7 +96,7 @@ fn launch(repo_root: &std::path::Path) -> Result<()> {
         println!();
         println!("To build the GUI, run: make build-tauri");
         println!("Or: npm run tauri:build");
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
