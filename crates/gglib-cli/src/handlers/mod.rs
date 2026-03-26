@@ -18,14 +18,18 @@
 
 pub mod add;
 pub mod agent_chat;
+pub mod assistant_ui;
 pub mod chat;
 pub mod check_deps;
 pub mod config;
 pub mod download;
+pub mod gui;
 pub mod list;
+pub mod llama;
 pub mod paths;
 pub mod question;
 pub mod remove;
 pub mod serve;
 pub mod update;
 pub mod verification;
+pub mod web;
