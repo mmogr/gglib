@@ -132,11 +132,11 @@ pub async fn execute_tools_parallel(
 
     for (i, tc) in calls.iter().enumerate() {
         let tc = tc.clone();
-        let sem = Arc::clone(&semaphore);
+        let task_sem = Arc::clone(&semaphore);
         let executor = Arc::clone(executor);
         let tx = tx.clone();
         set.spawn(async move {
-            let result = execute_single_tool(tc, executor, sem, tx, timeout_ms).await;
+            let result = execute_single_tool(tc, executor, task_sem, tx, timeout_ms).await;
             (i, result)
         });
     }
