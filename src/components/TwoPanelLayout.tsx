@@ -11,6 +11,12 @@ interface TwoPanelLayoutProps {
   className?: string;
   leftClassName?: string;
   rightClassName?: string;
+  /**
+   * When true, hides the layout at all breakpoints.
+   * Uses both `hidden` and `md:hidden` so tailwind-merge can remove
+   * the responsive `md:grid` base class, preventing cascade conflicts.
+   */
+  isHidden?: boolean;
 }
 
 /**
@@ -18,11 +24,12 @@ interface TwoPanelLayoutProps {
  * Stacks vertically on mobile, switches to a side-by-side grid at md:.
  */
 const TwoPanelLayout = forwardRef<HTMLDivElement, TwoPanelLayoutProps>(
-  ({ leftWidth, onResizeStart, onKeyboardResize, left, right, className, leftClassName, rightClassName }, ref) => (
+  ({ leftWidth, onResizeStart, onKeyboardResize, left, right, className, leftClassName, rightClassName, isHidden }, ref) => (
     <div
       ref={ref}
       className={cn(
         'flex flex-col md:grid md:grid-cols-2 md:gap-0 md:h-full md:overflow-hidden',
+        isHidden && 'hidden md:hidden',
         className,
       )}
       style={{ gridTemplateColumns: `${leftWidth}% ${100 - leftWidth}%` }}
