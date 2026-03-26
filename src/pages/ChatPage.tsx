@@ -30,7 +30,6 @@ import {
   DEFAULT_TITLE_GENERATION_PROMPT,
 } from '../services/clients/chat';
 import type { ConversationSummary } from '../services/clients/chat';
-import { cn } from '../utils/cn';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 
@@ -395,10 +394,8 @@ export default function ChatPage({
         
         <TwoPanelLayout
           ref={activeTab === 'chat' ? layoutRef : undefined}
-          className={cn(
-            "flex-1 min-h-0",
-            activeTab !== 'chat' && "hidden"
-          )}
+          isHidden={activeTab !== 'chat'}
+          className="flex-1 min-h-0"
           leftWidth={leftPanelWidth}
           onResizeStart={handlePointerDown}
           onKeyboardResize={handleKeyboardResize}
@@ -453,10 +450,8 @@ export default function ChatPage({
       {/* Console Tab Content - always mounted, hidden when not active */}
       <TwoPanelLayout
         ref={activeTab === 'console' ? layoutRef : undefined}
-        className={cn(
-          "flex-1 min-h-0",
-          activeTab !== 'console' && "hidden"
-        )}
+        isHidden={activeTab !== 'console'}
+        className="flex-1 min-h-0"
         leftWidth={leftPanelWidth}
         onResizeStart={handlePointerDown}
         onKeyboardResize={handleKeyboardResize}
