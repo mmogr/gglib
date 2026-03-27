@@ -1,6 +1,7 @@
 //! Update command for llama.cpp.
 
 use super::build::build_llama_cpp;
+use super::build_events::BuildEvent;
 use super::config::BuildConfig;
 use super::detect::{Acceleration, detect_optimal_acceleration};
 use super::install::install_binary;
@@ -8,6 +9,7 @@ use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_cli_path, llama_config_path, llama_cpp_dir, llama_server_path};
 use gglib_core::utils::process::cmd;
 use std::io::{self, Write};
+use tokio::sync::mpsc;
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -212,7 +214,8 @@ pub async fn handle_update() -> Result<()> {
     let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Rebuild
-    build_llama_cpp(&llama_dir, acceleration)?;
+    let (build_tx, _build_rx) = mpsc::channel::<BuildEvent>(64);
+    build_llama_cpp(&llama_dir, acceleration, &build_tx)?;
 
     // Install binaries
     install_binary(&llama_dir, "llama-server", &binary_path)?;
