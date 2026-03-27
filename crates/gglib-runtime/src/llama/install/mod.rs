@@ -8,7 +8,7 @@
 //!
 //! | Consumer | Output                                                             |
 //! |----------|--------------------------------------------------------------------|           
-//! | CLI      | `indicatif` progress bar (Phase E, via `consume_build_events_cli`) |
+//! | CLI      | `indicatif` spinner + progress bar (via `consume_build_events_cli`) |
 //! | Axum     | SSE stream at `POST /api/system/build-llama-from-source`           |
 //! | Tauri    | `llama-build-progress` event to WebView                            |
 //!
@@ -176,12 +176,98 @@ pub async fn run_llama_source_build(
     Ok(())
 }
 
-/// Consumes [`BuildEvent`] values from the build pipeline channel.
+/// Consumes [`BuildEvent`] values from the build pipeline channel and renders
+/// them as `indicatif` spinners and progress bars.
 ///
-/// Phase E will replace this stub with full `indicatif` progress-bar rendering.
+/// A single `Option<ProgressBar>` tracks the active indicator. Phases are
+/// strictly sequential so there is never more than one active bar at a time.
 async fn consume_build_events_cli(mut rx: mpsc::Receiver<BuildEvent>) {
-    // Phase E stub: drain events until the indicatif renderer is implemented.
-    while rx.recv().await.is_some() {}
+    use indicatif::{ProgressBar, ProgressStyle};
+    use std::time::Duration;
+
+    let spinner_style = ProgressStyle::default_spinner()
+        .template("{spinner:.green} [{elapsed_precise}] {msg}")
+        .expect("valid spinner template");
+
+    let bar_style = ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
+        .expect("valid bar template")
+        .progress_chars("#>-");
+
+    let mut active: Option<ProgressBar> = None;
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            BuildEvent::PhaseStarted { phase } => {
+                // Clean up any previous indicator before starting a new one.
+                if let Some(pb) = active.take() {
+                    pb.finish_and_clear();
+                }
+                let pb = match phase {
+                    BuildPhase::Compile => {
+                        // Length unknown until the first Progress event.
+                        let pb = ProgressBar::new(0);
+                        pb.set_style(bar_style.clone());
+                        pb.set_message("Compiling...");
+                        pb
+                    }
+                    BuildPhase::DependencyCheck => {
+                        // CLI performs its own dep-check output before the channel
+                        // opens, so no indicatif bar is needed here.
+                        continue;
+                    }
+                    _ => {
+                        let msg = match phase {
+                            BuildPhase::CloneOrUpdateRepo => "Cloning llama.cpp repository...",
+                            BuildPhase::Configure => "Configuring with CMake...",
+                            BuildPhase::InstallBinaries => "Installing binaries...",
+                            _ => unreachable!(),
+                        };
+                        let pb = ProgressBar::new_spinner();
+                        pb.set_style(spinner_style.clone());
+                        pb.set_message(msg);
+                        pb.enable_steady_tick(Duration::from_millis(100));
+                        pb
+                    }
+                };
+                active = Some(pb);
+            }
+            BuildEvent::PhaseCompleted { .. } => {
+                if let Some(pb) = active.take() {
+                    pb.finish_and_clear();
+                }
+            }
+            BuildEvent::Progress { current, total } => {
+                if let Some(pb) = &active {
+                    pb.set_length(total);
+                    pb.set_position(current);
+                }
+            }
+            BuildEvent::Log { message } => {
+                if let Some(pb) = &active {
+                    pb.println(&message);
+                } else {
+                    println!("{}", message);
+                }
+            }
+            BuildEvent::Completed { version, acceleration } => {
+                if let Some(pb) = active.take() {
+                    pb.finish_and_clear();
+                }
+                println!();
+                println!("✓ llama.cpp installed successfully!");
+                println!("  Version:       {}", version);
+                println!("  Acceleration:  {}", acceleration);
+                println!("You can now use 'gglib serve', 'gglib proxy', and 'gglib chat'.");
+            }
+            BuildEvent::Failed { message } => {
+                if let Some(pb) = active.take() {
+                    pb.finish_and_clear();
+                }
+                eprintln!("✗ Build failed: {}", message);
+            }
+        }
+    }
 }
 
 /// CLI-only wrapper for the source-build pipeline.
@@ -223,13 +309,8 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
         cli_path,
         tx,
     ));
-    // Phase E will replace this stub with full indicatif rendering.
     consume_build_events_cli(rx).await;
     build.await??;
-
-    println!();
-    println!("✓ llama.cpp installed successfully!");
-    println!("You can now use 'gglib serve', 'gglib proxy', and 'gglib chat'.");
 
     Ok(())
 }
@@ -380,9 +461,6 @@ pub(super) fn install_binary(
     binary_name: &str,
     destination: &std::path::Path,
 ) -> Result<()> {
-    println!();
-    println!("Installing {} binary...", binary_name);
-
     let binary_src_root = llama_dir.join("build");
 
     #[cfg(target_os = "windows")]
@@ -410,8 +488,6 @@ pub(super) fn install_binary(
         perms.set_mode(0o755);
         fs::set_permissions(destination, perms)?;
     }
-
-    println!("✓ {} installed to: {}", binary_name, destination.display());
 
     Ok(())
 }
