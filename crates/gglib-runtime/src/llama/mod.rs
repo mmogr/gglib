@@ -29,6 +29,7 @@
 pub mod args;
 #[cfg(feature = "cli")]
 mod build;
+pub mod build_events;
 mod config;
 mod deps;
 mod detect;
@@ -57,6 +58,9 @@ pub use server_availability::{LlamaServerError, LlamaServerResult, resolve_llama
 // Progress and prompt traits
 pub use progress::{NoopProgress, ProgressReporter};
 pub use prompt::{AutoConfirmPrompt, InstallPrompt, NonInteractivePrompt};
+
+// Build pipeline event types
+pub use build_events::{BuildEvent, BuildPhase};
 
 #[cfg(feature = "cli")]
 pub use progress::CliProgress;
