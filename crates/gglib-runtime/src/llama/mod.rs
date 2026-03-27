@@ -79,6 +79,8 @@ pub use validate::{handle_status, validate_llama_binary, validate_llama_cli_bina
 #[cfg(feature = "cli")]
 pub use install::handle_install;
 #[cfg(feature = "cli")]
+pub use install::run_llama_source_build;
+#[cfg(feature = "cli")]
 pub use uninstall::{handle_rebuild, handle_uninstall};
 #[cfg(feature = "cli")]
 pub use update::{handle_check_updates, handle_update};
