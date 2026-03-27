@@ -1,8 +1,18 @@
 //! Build orchestration for llama.cpp with progress tracking.
 //!
-//! Note: CXXFLAGS="-O2" is set during cmake configure and build to work around
-//! GCC 15.2.1 segfault bug during optimization passes (particularly -O3).
-//! This is a known compiler issue affecting chat.cpp and other files.
+//! `CXXFLAGS` is merged (read-then-append) during both the cmake configure and build
+//! phases to carry two flags:
+//!
+//! - `-O1` — works around a GCC 15.2.1 ICE (internal compiler error) that fires during
+//!   higher optimisation passes on `chat.cpp` and related files.
+//! - `-Wno-missing-noreturn` — suppresses the warning flood from `common/jinja/runtime.h`,
+//!   whose virtual `throw`-only methods AppleClang flags as candidates for `[[noreturn]]`.
+//!   Because many translation units include the header and jobs run in parallel, the warning
+//!   fires hundreds of times and corrupts `indicatif` progress-bar output.
+//!
+//! `CFLAGS` receives only `-O1`; `-Wmissing-noreturn` is a C++-only diagnostic.
+//! Any `CXXFLAGS`/`CFLAGS` already present in the caller's environment are preserved
+//! (see [`merge_flags`]).
 
 use super::detect::{Acceleration, get_cuda_path, get_num_cores, validate_cuda_gcc_compatibility};
 
@@ -74,9 +84,10 @@ fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleratio
 
     let mut cmd = Command::new("cmake");
 
-    // Work around GCC 15.2.1 segfault bug by reducing optimization level
-    cmd.env("CXXFLAGS", "-O1");
-    cmd.env("CFLAGS", "-O1");
+    // Merge into any CXXFLAGS/CFLAGS already set by the caller's environment.
+    // -O1: GCC 15.2.1 ICE workaround. -Wno-missing-noreturn: suppress upstream warning flood.
+    cmd.env("CXXFLAGS", merge_flags("CXXFLAGS", "-O1 -Wno-missing-noreturn"));
+    cmd.env("CFLAGS", merge_flags("CFLAGS", "-O1"));
 
     // Compiler selection priority (platform-specific):
     // Linux CUDA builds: Clang (best) > GCC 12/11 (compatible) > system GCC
@@ -237,9 +248,14 @@ fn build_project(build_dir: &Path, acceleration: Acceleration) -> Result<()> {
             .progress_chars("#>-")
     );
 
+    // Merge into any CXXFLAGS/CFLAGS already set by the caller's environment.
+    // -O1: GCC 15.2.1 ICE workaround. -Wno-missing-noreturn: suppress upstream warning flood.
+    let cxxflags = merge_flags("CXXFLAGS", "-O1 -Wno-missing-noreturn");
+    let cflags = merge_flags("CFLAGS", "-O1");
+
     let mut child = Command::new("cmake")
-        .env("CXXFLAGS", "-O1") // Work around GCC 15.2.1 segfault bug
-        .env("CFLAGS", "-O1") // Work around GCC 15.2.1 segfault bug
+        .env("CXXFLAGS", cxxflags)
+        .env("CFLAGS", cflags)
         .args([
             "--build",
             build_dir.to_str().unwrap(),
@@ -354,6 +370,14 @@ fn build_parallelism(acceleration: Acceleration) -> usize {
 }
 
 /// Parse build progress from `CMake` output
+/// Merges `extra` flags into an environment variable, preserving any value
+/// already set by the caller's environment. Returns the combined string with
+/// a single space separator; leading/trailing whitespace is trimmed.
+fn merge_flags(var: &str, extra: &str) -> String {
+    let existing = std::env::var(var).unwrap_or_default();
+    format!("{existing} {extra}").trim().to_owned()
+}
+
 fn parse_build_progress(line: &str, total_files: &mut usize) -> Option<usize> {
     // Match "[ 50%]" pattern
     if let Some(start) = line.find('[')
