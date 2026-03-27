@@ -1,6 +1,7 @@
 //! Installation command for llama.cpp.
 
 use super::build::build_llama_cpp;
+use super::build_events::BuildEvent;
 use super::config::BuildConfig;
 use super::deps::check_dependencies;
 use super::detect::{Acceleration, detect_optimal_acceleration};
@@ -16,6 +17,7 @@ use gglib_core::utils::process::cmd;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 use std::io::{self, Write};
+use tokio::sync::mpsc;
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -110,7 +112,8 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     };
 
     // Step 5: Build llama.cpp
-    build_llama_cpp(&llama_dir, acceleration)?;
+    let (build_tx, _build_rx) = mpsc::channel::<BuildEvent>(64);
+    build_llama_cpp(&llama_dir, acceleration, &build_tx)?;
 
     // Step 6: Install binary
     let server_path = path_err(llama_server_path())?;
