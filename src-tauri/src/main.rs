@@ -219,6 +219,7 @@ fn main() {
             // OS integration: llama.cpp binary management
             commands::llama::check_llama_status,
             commands::llama::install_llama,
+            commands::llama::build_llama_from_source,
             // Research logs: file persistence for debugging
             commands::research_logs::init_research_logs,
             commands::research_logs::append_research_log,

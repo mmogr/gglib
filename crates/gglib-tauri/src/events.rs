@@ -25,6 +25,10 @@ pub mod names {
     // Llama installation events
     pub const LLAMA_INSTALL_PROGRESS: &str = "llama-install-progress";
 
+    /// Emitted during a llama.cpp source build (cmake + make).
+    /// Payload is a serialised [`BuildEvent`](gglib_runtime::llama::BuildEvent).
+    pub const LLAMA_BUILD_PROGRESS: &str = "llama-build-progress";
+
     // Menu action events (menu -> frontend)
     pub const MENU_ADD_MODEL_FILE: &str = "menu:add-model-file";
     pub const MENU_SHOW_DOWNLOADS: &str = "menu:show-downloads";
