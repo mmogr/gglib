@@ -1,8 +1,35 @@
-//! Build orchestration for llama.cpp with progress tracking.
+//! Build orchestration for llama.cpp.
 //!
-//! Note: CXXFLAGS="-O2" is set during cmake configure and build to work around
-//! GCC 15.2.1 segfault bug during optimization passes (particularly -O3).
-//! This is a known compiler issue affecting chat.cpp and other files.
+//! [`build_llama_cpp`] emits [`BuildEvent`] values over a
+//! `tokio::sync::mpsc::Sender<BuildEvent>` so that callers can render progress
+//! without this module knowing anything about terminals, HTTP, or Tauri.
+//!
+//! ## I/O Model
+//!
+//! All subprocess output is routed through the `tokio::sync::mpsc::Sender<BuildEvent>`
+//! channel supplied by the caller. The build functions do not write to the terminal
+//! directly; the caller is responsible for adapting the event stream to its preferred
+//! output (CLI spinner, SSE frames, Tauri events, etc.).
+//!
+//! ## Threading model
+//!
+//! The subprocess reader threads are spawned with [`std::thread::spawn`] and call
+//! `tx.blocking_send()`. This is safe because the threads are OS threads, not
+//! Tokio tasks — there is no risk of blocking the async executor.
+//!
+//! ## Compiler flags
+//!
+//! `CXXFLAGS` is merged (read-then-append) during both the cmake configure and build
+//! phases to carry two flags:
+//!
+//! - `-O1` — works around a GCC 15.2.1 ICE (internal compiler error) that fires during
+//!   higher optimisation passes on `chat.cpp` and related files.
+//! - `-Wno-missing-noreturn` — suppresses the warning flood from `common/jinja/runtime.h`,
+//!   whose virtual `throw`-only methods AppleClang flags as candidates for `[[noreturn]]`.
+//!
+//! `CFLAGS` receives only `-O1`; `-Wmissing-noreturn` is a C++-only diagnostic.
+//! Any `CXXFLAGS`/`CFLAGS` already present in the caller's environment are preserved
+//! (see [`merge_flags`]).
 
 use super::detect::{Acceleration, get_cuda_path, get_num_cores, validate_cuda_gcc_compatibility};
 
@@ -11,46 +38,44 @@ use super::detect::select_cuda_compiler_for_build;
 
 use anyhow::{Context, Result, bail};
 
-use indicatif::{ProgressBar, ProgressStyle};
+use super::build_events::{BuildEvent, BuildPhase};
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::mpsc as std_mpsc;
 use std::thread;
+use tokio::sync::mpsc;
 
-/// Build llama.cpp with the specified acceleration
-pub fn build_llama_cpp(llama_dir: &Path, acceleration: Acceleration) -> Result<()> {
-    println!();
-    println!(
-        "Building llama.cpp with {} support...",
-        acceleration.display_name()
-    );
-    println!();
-
+/// Build llama.cpp from source, emitting [`BuildEvent`] values over `tx`.
+///
+/// Callers supply a sender so that progress can be rendered by any surface
+/// (CLI progress bar, Axum SSE, Tauri event) without this function knowing
+/// which interface is consuming the stream.
+pub fn build_llama_cpp(
+    llama_dir: &Path,
+    acceleration: Acceleration,
+    tx: &mpsc::Sender<BuildEvent>,
+) -> Result<()> {
     let build_dir = llama_dir.join("build");
     std::fs::create_dir_all(&build_dir).context("Failed to create build directory")?;
 
-    // Step 1: CMake Configure
-    configure_cmake(llama_dir, &build_dir, acceleration)?;
-
-    // Step 2: Build
-    build_project(&build_dir, acceleration)?;
-
-    println!();
-    println!("✓ Build completed successfully");
+    configure_cmake(llama_dir, &build_dir, acceleration, tx)?;
+    build_project(&build_dir, acceleration, tx)?;
 
     Ok(())
 }
 
-/// Run `CMake` configuration
-fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleration) -> Result<()> {
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} [{elapsed_precise}] {msg}")
-            .unwrap(),
-    );
-    pb.set_message("Configuring with CMake...");
+/// Run `CMake` configuration, emitting a [`BuildEvent::PhaseStarted`] at the start
+/// and [`BuildEvent::Log`] for each non-empty subprocess output line.
+fn configure_cmake(
+    llama_dir: &Path,
+    build_dir: &Path,
+    acceleration: Acceleration,
+    tx: &mpsc::Sender<BuildEvent>,
+) -> Result<()> {
+    let _ = tx.blocking_send(BuildEvent::PhaseStarted {
+        phase: BuildPhase::Configure,
+    });
 
     let mut args = vec![
         "-S",
@@ -58,10 +83,6 @@ fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleratio
         "-B",
         build_dir.to_str().unwrap(),
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_FLAGS=-O1 -g0", // Use -O1 to work around GCC 15.2.1 ICE
-        "-DCMAKE_C_FLAGS=-O1 -g0",   // Use -O1 to work around GCC 15.2.1 ICE
-        "-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG", // Override Release flags
-        "-DCMAKE_C_FLAGS_RELEASE=-O1 -DNDEBUG", // Override Release flags
         "-DGGML_METAL_EMBED_LIBRARY=ON",
         "-DLLAMA_BUILD_SERVER=ON",
         "-DLLAMA_BUILD_EXAMPLES=OFF", // Skip examples to avoid GCC bug in some files
@@ -74,9 +95,13 @@ fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleratio
 
     let mut cmd = Command::new("cmake");
 
-    // Work around GCC 15.2.1 segfault bug by reducing optimization level
-    cmd.env("CXXFLAGS", "-O1");
-    cmd.env("CFLAGS", "-O1");
+    // Merge into any CXXFLAGS/CFLAGS already set by the caller's environment.
+    // -O1: GCC 15.2.1 ICE workaround. -Wno-missing-noreturn: suppress upstream warning flood.
+    cmd.env(
+        "CXXFLAGS",
+        merge_flags("CXXFLAGS", "-O1 -Wno-missing-noreturn"),
+    );
+    cmd.env("CFLAGS", merge_flags("CFLAGS", "-O1"));
 
     // Compiler selection priority (platform-specific):
     // Linux CUDA builds: Clang (best) > GCC 12/11 (compatible) > system GCC
@@ -103,15 +128,22 @@ fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleratio
                 if compiler.contains("clang") {
                     cmd.env("CC", "clang");
                     cmd.env("CXX", "clang++");
-                    pb.println("Using clang/clang++ for CUDA build (best compatibility)");
+                    let _ = tx.blocking_send(BuildEvent::Log {
+                        message: "Using clang/clang++ for CUDA build (best compatibility)"
+                            .to_string(),
+                    });
                 } else if compiler == "gcc-12" {
                     cmd.env("CC", "gcc-12");
                     cmd.env("CXX", "g++-12");
-                    pb.println("Using gcc-12/g++-12 for CUDA compatibility");
+                    let _ = tx.blocking_send(BuildEvent::Log {
+                        message: "Using gcc-12/g++-12 for CUDA compatibility".to_string(),
+                    });
                 } else if compiler == "gcc-11" {
                     cmd.env("CC", "gcc-11");
                     cmd.env("CXX", "g++-11");
-                    pb.println("Using gcc-11/g++-11 for CUDA compatibility");
+                    let _ = tx.blocking_send(BuildEvent::Log {
+                        message: "Using gcc-11/g++-11 for CUDA compatibility".to_string(),
+                    });
                 }
                 // If "gcc" (system default), don't set explicitly
             } else {
@@ -141,7 +173,9 @@ fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleratio
     // For CUDA builds, set CUDA paths explicitly
     let cuda_args = if matches!(acceleration, Acceleration::Cuda) {
         if let Some(cuda_path) = get_cuda_path() {
-            pb.println(format!("Using CUDA installation at: {}", cuda_path));
+            let _ = tx.blocking_send(BuildEvent::Log {
+                message: format!("Using CUDA installation at: {}", cuda_path),
+            });
 
             // Set environment variables for FindCUDAToolkit
             cmd.env("CUDAToolkit_ROOT", &cuda_path);
@@ -171,18 +205,17 @@ fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleratio
         .spawn()
         .context("Failed to run CMake")?;
 
-    // Capture and display output
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
 
-    let (tx, rx) = mpsc::channel();
-    let tx2 = tx.clone();
+    let (line_tx, line_rx) = std_mpsc::channel();
+    let line_tx2 = line_tx.clone();
 
     // Read stdout
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().map_while(Result::ok) {
-            let _ = tx.send(line);
+            let _ = line_tx.send(line);
         }
     });
 
@@ -190,56 +223,50 @@ fn configure_cmake(llama_dir: &Path, build_dir: &Path, acceleration: Acceleratio
     thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().map_while(Result::ok) {
-            let _ = tx2.send(line);
+            let _ = line_tx2.send(line);
         }
     });
 
-    // Update spinner with output
-    while let Ok(line) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
+    while let Ok(line) = line_rx.recv() {
         if !line.trim().is_empty() {
-            pb.println(&line);
+            let _ = tx.blocking_send(BuildEvent::Log { message: line });
         }
-        pb.tick();
     }
 
     let status = child.wait().context("Failed to wait for CMake")?;
 
-    // Drain any remaining output in the channel before finishing
-    // This prevents losing error messages due to race conditions
-    while let Ok(line) = rx.recv_timeout(std::time::Duration::from_millis(50)) {
-        if !line.trim().is_empty() {
-            pb.println(&line);
-        }
-    }
-
-    pb.finish_and_clear();
+    let _ = tx.blocking_send(BuildEvent::PhaseCompleted {
+        phase: BuildPhase::Configure,
+    });
 
     if !status.success() {
         bail!("CMake configuration failed");
     }
 
-    println!("✓ CMake configuration complete");
     Ok(())
 }
 
-/// Build the project with progress tracking
-fn build_project(build_dir: &Path, acceleration: Acceleration) -> Result<()> {
-    println!();
+/// Run `cmake --build`, emitting [`BuildEvent::Progress`] and [`BuildEvent::Log`]
+/// events as compilation proceeds.
+fn build_project(
+    build_dir: &Path,
+    acceleration: Acceleration,
+    tx: &mpsc::Sender<BuildEvent>,
+) -> Result<()> {
+    let _ = tx.blocking_send(BuildEvent::PhaseStarted {
+        phase: BuildPhase::Compile,
+    });
 
     let num_cores = build_parallelism(acceleration);
-    println!("Building with {} parallel jobs...", num_cores);
 
-    let pb = ProgressBar::new(100);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}")
-            .unwrap()
-            .progress_chars("#>-")
-    );
+    // Merge into any CXXFLAGS/CFLAGS already set by the caller's environment.
+    // -O1: GCC 15.2.1 ICE workaround. -Wno-missing-noreturn: suppress upstream warning flood.
+    let cxxflags = merge_flags("CXXFLAGS", "-O1 -Wno-missing-noreturn");
+    let cflags = merge_flags("CFLAGS", "-O1");
 
     let mut child = Command::new("cmake")
-        .env("CXXFLAGS", "-O1") // Work around GCC 15.2.1 segfault bug
-        .env("CFLAGS", "-O1") // Work around GCC 15.2.1 segfault bug
+        .env("CXXFLAGS", cxxflags)
+        .env("CFLAGS", cflags)
         .args([
             "--build",
             build_dir.to_str().unwrap(),
@@ -256,14 +283,14 @@ fn build_project(build_dir: &Path, acceleration: Acceleration) -> Result<()> {
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
 
-    let (tx, rx) = mpsc::channel();
-    let tx2 = tx.clone();
+    let (line_tx, line_rx) = std_mpsc::channel();
+    let line_tx2 = line_tx.clone();
 
     // Read stdout
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().map_while(Result::ok) {
-            let _ = tx.send(line);
+            let _ = line_tx.send(line);
         }
     });
 
@@ -271,7 +298,7 @@ fn build_project(build_dir: &Path, acceleration: Acceleration) -> Result<()> {
     thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().map_while(Result::ok) {
-            let _ = tx2.send(line);
+            let _ = line_tx2.send(line);
         }
     });
 
@@ -279,16 +306,16 @@ fn build_project(build_dir: &Path, acceleration: Acceleration) -> Result<()> {
     let mut total_files = 100; // Default estimate
 
     // Process output and update progress
-    while let Ok(line) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
-        pb.tick();
-
+    while let Ok(line) = line_rx.recv() {
         // Parse build progress from output
         // Look for patterns like "[ 50%]" or "[150/200]"
         if let Some(progress) = parse_build_progress(&line, &mut total_files)
             && progress > last_progress
         {
-            pb.set_length(total_files as u64);
-            pb.set_position(progress as u64);
+            let _ = tx.blocking_send(BuildEvent::Progress {
+                current: progress as u64,
+                total: total_files as u64,
+            });
             last_progress = progress;
         }
 
@@ -302,27 +329,20 @@ fn build_project(build_dir: &Path, acceleration: Acceleration) -> Result<()> {
             || line_lower.contains("undefined reference")
             || line_lower.contains("cannot find")
         {
-            pb.println(&line);
+            let _ = tx.blocking_send(BuildEvent::Log { message: line });
         }
     }
 
     let status = child.wait().context("Failed to wait for build")?;
 
-    // Drain any remaining output after process exits
-    while let Ok(line) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
-        let line_lower = line.to_ascii_lowercase();
-        if line_lower.contains("error") || line_lower.contains("fatal") {
-            eprintln!("{}", line);
-        }
-    }
-
-    pb.finish_and_clear();
+    let _ = tx.blocking_send(BuildEvent::PhaseCompleted {
+        phase: BuildPhase::Compile,
+    });
 
     if !status.success() {
         bail!("Build failed (exit code: {})", status.code().unwrap_or(-1));
     }
 
-    println!("✓ Compilation complete");
     Ok(())
 }
 
@@ -353,7 +373,14 @@ fn build_parallelism(acceleration: Acceleration) -> usize {
     }
 }
 
-/// Parse build progress from `CMake` output
+/// Merges `extra` into the named environment variable, preserving any value
+/// already set by the caller's environment. Returns the combined string with
+/// a single space separator; leading/trailing whitespace is trimmed.
+fn merge_flags(var: &str, extra: &str) -> String {
+    let existing = std::env::var(var).unwrap_or_default();
+    format!("{existing} {extra}").trim().to_owned()
+}
+
 fn parse_build_progress(line: &str, total_files: &mut usize) -> Option<usize> {
     // Match "[ 50%]" pattern
     if let Some(start) = line.find('[')

@@ -21,10 +21,6 @@ Handles compiling llama.cpp from source with appropriate acceleration flags.
 3. Progress bar shows compilation status
 4. Validate built binaries
 
-## Note
-
-`CXXFLAGS="-O2"` is set to work around a GCC 15.2.1 segfault bug during optimization passes.
-
 <!-- module-docs:end -->
 
 <details>

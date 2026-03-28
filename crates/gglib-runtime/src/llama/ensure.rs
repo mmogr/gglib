@@ -1,11 +1,14 @@
 use anyhow::Result;
-use gglib_core::paths::{is_prebuilt_binary, llama_cli_path, llama_server_path};
+use gglib_core::paths::{is_prebuilt_binary, llama_cli_path, llama_cpp_dir, llama_server_path};
 use std::io::{self, Write};
+use tokio::sync::mpsc;
 
+use super::build_events::BuildEvent;
+use super::detect::detect_optimal_acceleration;
 use super::download::{
     PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries,
 };
-use super::install::handle_install;
+use super::install::run_llama_source_build;
 
 // Helper to convert PathError to anyhow::Error
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -65,8 +68,8 @@ async fn ensure_for_source_build() -> Result<()> {
     println!("Building llama.cpp from source (auto-detecting hardware)...");
     println!();
 
-    // Call the install handler - force build from source since we're in source build mode
-    handle_install(false, false, false, false, true).await?;
+    // Run source build - acceleration is auto-detected
+    install_from_source().await?;
 
     Ok(())
 }
@@ -106,7 +109,7 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
                     println!();
 
                     // Fall back to building from source
-                    handle_install(false, false, false, false, true).await
+                    install_from_source().await
                 }
             }
         }
@@ -135,9 +138,48 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
             println!("Building llama.cpp from source (auto-detecting hardware)...");
             println!();
 
-            handle_install(false, false, false, false, true).await
+            install_from_source().await
         }
     }
+}
+
+/// Runs a source build and streams events as simple text output.
+///
+/// Used by the ensure flow which handles its own user prompts; indicatif
+/// is intentionally omitted here so this remains surface-agnostic.
+async fn install_from_source() -> Result<()> {
+    let acceleration = detect_optimal_acceleration()?;
+    let llama_dir = path_err(llama_cpp_dir())?;
+    let server_path = path_err(llama_server_path())?;
+    let cli_path = path_err(llama_cli_path())?;
+
+    let (tx, mut rx) = mpsc::channel::<BuildEvent>(64);
+    let build = tokio::spawn(run_llama_source_build(
+        acceleration,
+        llama_dir,
+        server_path,
+        cli_path,
+        tx,
+    ));
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            BuildEvent::PhaseStarted { phase } => println!("→ {:?}", phase),
+            BuildEvent::Log { message } => println!("  {}", message),
+            BuildEvent::Progress { current, total } => {
+                println!("  [{}/{}] Compiling...", current, total);
+            }
+            BuildEvent::PhaseCompleted { .. } => {}
+            BuildEvent::Completed { version, .. } => {
+                println!("✓ Build complete ({})", version);
+            }
+            BuildEvent::Failed { message } => {
+                eprintln!("✗ Build failed: {}", message);
+            }
+        }
+    }
+
+    build.await?
 }
 
 /// Print required build tools for building from source.

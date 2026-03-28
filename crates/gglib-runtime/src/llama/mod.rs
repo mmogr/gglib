@@ -29,6 +29,7 @@
 pub mod args;
 #[cfg(feature = "cli")]
 mod build;
+pub mod build_events;
 mod config;
 mod deps;
 mod detect;
@@ -58,6 +59,12 @@ pub use server_availability::{LlamaServerError, LlamaServerResult, resolve_llama
 pub use progress::{NoopProgress, ProgressReporter};
 pub use prompt::{AutoConfirmPrompt, InstallPrompt, NonInteractivePrompt};
 
+// Build pipeline event types
+pub use build_events::{BuildEvent, BuildPhase};
+
+#[cfg(feature = "cli")]
+pub use deps::{check_dependencies, check_disk_space};
+
 #[cfg(feature = "cli")]
 pub use progress::CliProgress;
 
@@ -73,9 +80,9 @@ pub use validate::{handle_status, validate_llama_binary, validate_llama_cli_bina
 
 // Installation (CLI only)
 #[cfg(feature = "cli")]
-pub use install::handle_install;
+pub use install::run_llama_source_build;
 #[cfg(feature = "cli")]
-pub use uninstall::{handle_rebuild, handle_uninstall};
+pub use uninstall::handle_uninstall;
 #[cfg(feature = "cli")]
 pub use update::{handle_check_updates, handle_update};
 

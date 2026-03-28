@@ -1,10 +1,12 @@
 //! llama.cpp installation and status commands.
 
 use crate::app::events::{emit_or_log, names};
+use gglib_core::paths::{llama_cli_path, llama_cpp_dir, llama_server_path};
 use gglib_download::ProgressThrottle;
 use gglib_runtime::llama::{
-    PrebuiltAvailability, check_llama_installed, check_prebuilt_availability,
-    download_prebuilt_binaries_with_boxed_callback,
+    BuildEvent, PrebuiltAvailability, check_llama_installed, check_prebuilt_availability,
+    detect_optimal_acceleration, download_prebuilt_binaries_with_boxed_callback,
+    run_llama_source_build,
 };
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
@@ -24,6 +26,45 @@ pub struct LlamaInstallEvent {
     pub total: u64,
     pub percentage: f64,
     pub message: String,
+}
+
+/// Trigger a llama.cpp source build and stream progress as Tauri events.
+///
+/// Emits `llama-build-progress` events to the frontend throughout the build.
+/// Each event payload is a serialised [`BuildEvent`]:
+///
+/// | Variant          | JSON shape                                              |
+/// |------------------|---------------------------------------------------------|
+/// | `PhaseStarted`   | `{ "type": "phase_started", "phase": "..." }`          |
+/// | `Log`            | `{ "type": "log", "message": "..." }`                  |
+/// | `Progress`       | `{ "type": "progress", "current": N, "total": N }`     |
+/// | `PhaseCompleted` | `{ "type": "phase_completed", "phase": "..." }`        |
+/// | `Completed`      | `{ "type": "completed", "version": "...", "acceleration": "..." }` |
+/// | `Failed`         | `{ "type": "failed", "message": "..." }`               |
+///
+/// Returns an error string if path resolution, acceleration detection, or the
+/// build itself fails.
+#[tauri::command]
+pub async fn build_llama_from_source(app: AppHandle) -> Result<(), String> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<BuildEvent>(64);
+
+    let llama_dir = llama_cpp_dir().map_err(|e| e.to_string())?;
+    let server_path = llama_server_path().map_err(|e| e.to_string())?;
+    let cli_path = llama_cli_path().map_err(|e| e.to_string())?;
+    let acceleration = detect_optimal_acceleration().map_err(|e| e.to_string())?;
+
+    let build_handle = tokio::spawn(async move {
+        run_llama_source_build(acceleration, llama_dir, server_path, cli_path, tx).await
+    });
+
+    while let Some(event) = rx.recv().await {
+        emit_or_log(&app, names::LLAMA_BUILD_PROGRESS, event);
+    }
+
+    build_handle
+        .await
+        .map_err(|e| format!("Build task panicked: {e}"))?
+        .map_err(|e| e.to_string())
 }
 
 /// Check if llama.cpp is installed.

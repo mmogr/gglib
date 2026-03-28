@@ -4,18 +4,6 @@ use anyhow::Result;
 use gglib_core::paths::gglib_data_dir;
 use std::io::{self, Write};
 
-use super::handle_install;
-
-/// Handle the rebuild command.
-///
-/// Rebuilds llama.cpp from source with the specified acceleration options.
-/// This always forces a fresh build, ignoring any cached binaries.
-pub async fn handle_rebuild(cuda: bool, metal: bool, vulkan: bool) -> Result<()> {
-    // Rebuild always builds from source (that's the point of rebuild)
-    // force=true, build=true
-    handle_install(cuda, metal, vulkan, true, true).await
-}
-
 /// Handle the uninstall command.
 ///
 /// Removes the llama.cpp installation including binaries and configuration.
