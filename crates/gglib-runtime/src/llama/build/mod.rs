@@ -4,6 +4,13 @@
 //! `tokio::sync::mpsc::Sender<BuildEvent>` so that callers can render progress
 //! without this module knowing anything about terminals, HTTP, or Tauri.
 //!
+//! ## I/O Model
+//!
+//! All subprocess output is routed through the `tokio::sync::mpsc::Sender<BuildEvent>`
+//! channel supplied by the caller. The build functions do not write to the terminal
+//! directly; the caller is responsible for adapting the event stream to its preferred
+//! output (CLI spinner, SSE frames, Tauri events, etc.).
+//!
 //! ## Threading model
 //!
 //! The subprocess reader threads are spawned with [`std::thread::spawn`] and call
