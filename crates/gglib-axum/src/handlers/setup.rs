@@ -13,7 +13,9 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_core::paths::{llama_cli_path, llama_cpp_dir, llama_server_path};
 use gglib_gui::setup::SetupStatus;
-use gglib_runtime::llama::{Acceleration, BuildEvent, detect_optimal_acceleration, run_llama_source_build};
+use gglib_runtime::llama::{
+    Acceleration, BuildEvent, detect_optimal_acceleration, run_llama_source_build,
+};
 
 /// Get the full system setup status for the first-run wizard.
 pub async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, HttpError> {
@@ -120,21 +122,33 @@ pub async fn build_llama_from_source(
         let llama_dir = match llama_cpp_dir() {
             Ok(p) => p,
             Err(e) => {
-                let _ = tx.send(BuildEvent::Failed { message: e.to_string() }).await;
+                let _ = tx
+                    .send(BuildEvent::Failed {
+                        message: e.to_string(),
+                    })
+                    .await;
                 return;
             }
         };
         let server_path = match llama_server_path() {
             Ok(p) => p,
             Err(e) => {
-                let _ = tx.send(BuildEvent::Failed { message: e.to_string() }).await;
+                let _ = tx
+                    .send(BuildEvent::Failed {
+                        message: e.to_string(),
+                    })
+                    .await;
                 return;
             }
         };
         let cli_path = match llama_cli_path() {
             Ok(p) => p,
             Err(e) => {
-                let _ = tx.send(BuildEvent::Failed { message: e.to_string() }).await;
+                let _ = tx
+                    .send(BuildEvent::Failed {
+                        message: e.to_string(),
+                    })
+                    .await;
                 return;
             }
         };
@@ -147,17 +161,24 @@ pub async fn build_llama_from_source(
             _ => match detect_optimal_acceleration() {
                 Ok(a) => a,
                 Err(e) => {
-                    let _ = tx.send(BuildEvent::Failed { message: e.to_string() }).await;
+                    let _ = tx
+                        .send(BuildEvent::Failed {
+                            message: e.to_string(),
+                        })
+                        .await;
                     return;
                 }
             },
         };
 
         if let Err(e) =
-            run_llama_source_build(acceleration, llama_dir, server_path, cli_path, tx.clone())
-                .await
+            run_llama_source_build(acceleration, llama_dir, server_path, cli_path, tx.clone()).await
         {
-            let _ = tx.send(BuildEvent::Failed { message: e.to_string() }).await;
+            let _ = tx
+                .send(BuildEvent::Failed {
+                    message: e.to_string(),
+                })
+                .await;
         }
     });
 

@@ -14,9 +14,9 @@ use gglib_core::paths::{
     gglib_data_dir, is_prebuilt_binary, llama_cli_path, llama_cpp_dir, llama_server_path,
 };
 use gglib_runtime::llama::{
-    Acceleration, BuildEvent, BuildPhase, check_dependencies, check_disk_space,
-    check_prebuilt_availability, detect_optimal_acceleration, download_prebuilt_binaries,
-    run_llama_source_build, PrebuiltAvailability,
+    Acceleration, BuildEvent, BuildPhase, PrebuiltAvailability, check_dependencies,
+    check_disk_space, check_prebuilt_availability, detect_optimal_acceleration,
+    download_prebuilt_binaries, run_llama_source_build,
 };
 
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {

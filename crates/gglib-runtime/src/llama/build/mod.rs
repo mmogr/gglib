@@ -97,7 +97,10 @@ fn configure_cmake(
 
     // Merge into any CXXFLAGS/CFLAGS already set by the caller's environment.
     // -O1: GCC 15.2.1 ICE workaround. -Wno-missing-noreturn: suppress upstream warning flood.
-    cmd.env("CXXFLAGS", merge_flags("CXXFLAGS", "-O1 -Wno-missing-noreturn"));
+    cmd.env(
+        "CXXFLAGS",
+        merge_flags("CXXFLAGS", "-O1 -Wno-missing-noreturn"),
+    );
     cmd.env("CFLAGS", merge_flags("CFLAGS", "-O1"));
 
     // Compiler selection priority (platform-specific):
