@@ -18,7 +18,7 @@ gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: Parser inje
 gglib-gui = { path = "../gglib-gui" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-mcp = { path = "../gglib-mcp" }
-gglib-runtime = { path = "../gglib-runtime" }
+gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
 gglib-voice = { path = "../gglib-voice" }  # Composition root: constructs VoiceService and injects into GuiDeps
 
 # Shared deps
