@@ -1,12 +1,16 @@
 //! Observable events for the llama.cpp source-build pipeline.
 //!
-//! [`BuildEvent`] is produced by the build-from-source pipeline and consumed by:
+//! [`BuildEvent`] is produced by the build-from-source pipeline and consumed by three
+//! surfaces, each adapting the event stream to its own output medium:
 //!
-//! | Consumer | Output                                                          |
-//! |----------|-----------------------------------------------------------------|
-//! | CLI      | `indicatif` spinner + progress bar                              |
-//! | Axum     | SSE stream at `GET /api/system/build-llama-from-source`         |
-//! | Tauri    | `llama-build-progress` event to WebView                         |
+//! | Consumer    | Crate        | Output                                                                    |
+//! |-------------|--------------|--------------------------------------------------------------------------|
+//! | CLI         | `gglib-cli`  | `indicatif` spinner + progress bar via `consume_build_events_cli`         |
+//! | REST / SSE  | `gglib-axum` | Server-Sent Events at `POST /api/system/build-llama-from-source`          |
+//! | Desktop GUI | `gglib-tauri`| Tauri event `llama-build-progress` emitted to the WebView                 |
+//!
+//! The sender end is a `tokio::sync::mpsc::Sender<BuildEvent>` with capacity 64.
+//! When the sender is dropped the consumer loop terminates naturally.
 //!
 //! The event type is **not** feature-gated: all three surfaces import [`BuildEvent`]
 //! and [`BuildPhase`] unconditionally. Only the pipeline that *produces* the events
