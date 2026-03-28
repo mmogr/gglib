@@ -24,6 +24,7 @@ reqwest = { workspace = true }
 
 # CLI-specific dependencies
 clap = { version = "4.0", features = ["derive", "env"] }
+indicatif = { workspace = true }
 chrono = { workspace = true }
 hf-hub = { workspace = true }
 thiserror = { workspace = true }

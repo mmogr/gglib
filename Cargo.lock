@@ -2019,6 +2019,7 @@ dependencies = [
  "gglib-mcp",
  "gglib-runtime",
  "hf-hub",
+ "indicatif 0.18.4",
  "reqwest 0.13.2",
  "rustyline",
  "tempfile",

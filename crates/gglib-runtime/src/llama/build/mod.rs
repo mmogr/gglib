@@ -83,10 +83,6 @@ fn configure_cmake(
         "-B",
         build_dir.to_str().unwrap(),
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_CXX_FLAGS=-O1 -g0", // Use -O1 to work around GCC 15.2.1 ICE
-        "-DCMAKE_C_FLAGS=-O1 -g0",   // Use -O1 to work around GCC 15.2.1 ICE
-        "-DCMAKE_CXX_FLAGS_RELEASE=-O1 -DNDEBUG", // Override Release flags
-        "-DCMAKE_C_FLAGS_RELEASE=-O1 -DNDEBUG", // Override Release flags
         "-DGGML_METAL_EMBED_LIBRARY=ON",
         "-DLLAMA_BUILD_SERVER=ON",
         "-DLLAMA_BUILD_EXAMPLES=OFF", // Skip examples to avoid GCC bug in some files
@@ -228,21 +224,13 @@ fn configure_cmake(
         }
     });
 
-    while let Ok(line) = line_rx.recv_timeout(std::time::Duration::from_millis(100)) {
+    while let Ok(line) = line_rx.recv() {
         if !line.trim().is_empty() {
             let _ = tx.blocking_send(BuildEvent::Log { message: line });
         }
     }
 
     let status = child.wait().context("Failed to wait for CMake")?;
-
-    // Drain any remaining output in the channel before finishing
-    // This prevents losing error messages due to race conditions
-    while let Ok(line) = line_rx.recv_timeout(std::time::Duration::from_millis(50)) {
-        if !line.trim().is_empty() {
-            let _ = tx.blocking_send(BuildEvent::Log { message: line });
-        }
-    }
 
     let _ = tx.blocking_send(BuildEvent::PhaseCompleted {
         phase: BuildPhase::Configure,
@@ -315,7 +303,7 @@ fn build_project(
     let mut total_files = 100; // Default estimate
 
     // Process output and update progress
-    while let Ok(line) = line_rx.recv_timeout(std::time::Duration::from_millis(100)) {
+    while let Ok(line) = line_rx.recv() {
         // Parse build progress from output
         // Look for patterns like "[ 50%]" or "[150/200]"
         if let Some(progress) = parse_build_progress(&line, &mut total_files)
@@ -343,14 +331,6 @@ fn build_project(
     }
 
     let status = child.wait().context("Failed to wait for build")?;
-
-    // Drain any remaining output after process exits
-    while let Ok(line) = line_rx.recv_timeout(std::time::Duration::from_millis(100)) {
-        let line_lower = line.to_ascii_lowercase();
-        if line_lower.contains("error") || line_lower.contains("fatal") {
-            let _ = tx.blocking_send(BuildEvent::Log { message: line });
-        }
-    }
 
     let _ = tx.blocking_send(BuildEvent::PhaseCompleted {
         phase: BuildPhase::Compile,
@@ -390,8 +370,7 @@ fn build_parallelism(acceleration: Acceleration) -> usize {
     }
 }
 
-/// Parse build progress from `CMake` output
-/// Merges `extra` flags into an environment variable, preserving any value
+/// Merges `extra` into the named environment variable, preserving any value
 /// already set by the caller's environment. Returns the combined string with
 /// a single space separator; leading/trailing whitespace is trimmed.
 fn merge_flags(var: &str, extra: &str) -> String {

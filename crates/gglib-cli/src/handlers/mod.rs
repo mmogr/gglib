@@ -26,6 +26,7 @@ pub mod download;
 pub mod gui;
 pub mod list;
 pub mod llama;
+pub mod llama_install;
 pub mod paths;
 pub mod question;
 pub mod remove;
