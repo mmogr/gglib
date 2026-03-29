@@ -18,19 +18,19 @@ export const Card: React.FC<CardProps> = ({
   variant = 'default',
   padding = 'base',
 }) => {
-  const baseClasses = 'rounded-lg';
+  const baseClasses = 'rounded-md';
   
   const variantClasses = {
     default: 'bg-surface border border-border',
-    elevated: 'bg-surface shadow-md',
+    elevated: 'bg-surface border border-border shadow-md',
     outlined: 'border-2 border-border',
   };
 
   const paddingClasses = {
     none: '',
-    sm: 'p-3',
-    base: 'p-4',
-    lg: 'p-6',
+    sm: 'p-sm',
+    base: 'p-base',
+    lg: 'p-lg',
   };
 
   return (
