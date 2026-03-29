@@ -553,7 +553,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Render
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col overflow-y-auto overflow-x-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
+    <div className="flex flex-col overflow-hidden relative flex-1 bg-surface md:h-full md:min-h-0">
       {/* Header */}
       <div className="p-base border-b border-border bg-background shrink-0 flex flex-wrap justify-between items-center gap-md phone:flex-nowrap">
         <div className="flex items-center gap-sm min-w-0 basis-full phone:basis-auto phone:flex-1">
