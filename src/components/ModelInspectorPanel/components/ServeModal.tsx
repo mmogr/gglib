@@ -144,7 +144,7 @@ export const ServeModal: FC<ServeModalProps> = ({
         </div>
 
         {hasAgentTag && (
-          <div className="flex flex-col gap-sm py-sm px-md rounded-md border border-border bg-[rgba(59,130,246,0.08)] text-text text-sm mb-md" role="status">
+          <div className="flex flex-col gap-sm py-sm px-md rounded-md border border-border bg-primary-subtle text-text text-sm mb-md" role="status">
             <div className="font-semibold">Agent tag detected</div>
             <p>
               Jinja templates {jinjaOverride === false 

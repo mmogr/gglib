@@ -13,8 +13,8 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ lastReasoning }) => {
   if (!lastReasoning) return null;
 
   return (
-    <div className="px-3 py-2 bg-background-secondary rounded text-xs text-text-secondary italic border-l-2 border-[#60a5fa]/30">
-    <div className="flex items-center gap-1 mb-1 text-[#60a5fa] font-medium not-italic">
+    <div className="px-3 py-2 bg-background-secondary rounded text-xs text-text-secondary italic border-l-2 border-primary-border">
+    <div className="flex items-center gap-1 mb-1 text-primary-light font-medium not-italic">
       <Icon icon={Brain} size={12} />
       Thinking
     </div>

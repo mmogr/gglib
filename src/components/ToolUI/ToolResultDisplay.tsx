@@ -91,7 +91,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
           className={cn(
             'shrink-0 inline-flex items-center justify-center w-6 h-6 rounded transition-colors duration-150',
             'text-text-muted hover:text-text hover:bg-background-tertiary',
-            copied && 'text-[#4ade80]',
+            copied && 'text-success',
           )}
           onClick={handleCopy}
           onKeyDown={(e) => {

@@ -215,7 +215,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
           {/* Tool support badge - only show when loaded and supported */}
           {!loadingToolSupport && toolSupport?.supports_tool_calls && (
             <span 
-              className="inline-flex items-center gap-1 px-sm py-xs bg-[rgba(37,99,235,0.15)] text-primary-light rounded-base text-xs font-medium cursor-help transition-colors duration-150 ease-linear hover:bg-[rgba(37,99,235,0.25)]"
+              className="inline-flex items-center gap-1 px-sm py-xs bg-primary-subtle text-primary-light rounded-base text-xs font-medium cursor-help transition-colors duration-150 ease-linear hover:bg-primary/20"
               title={getToolSupportTooltip()}
             >
               <span aria-hidden>
@@ -262,7 +262,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
         )}
 
         {quantError && (
-          <div className="p-lg text-center text-error bg-[rgba(239,68,68,0.1)] rounded-lg">{quantError}</div>
+          <div className="p-lg text-center text-danger bg-danger-subtle rounded-lg">{quantError}</div>
         )}
 
         {!loadingQuants && !quantError && quantizations.length === 0 && (

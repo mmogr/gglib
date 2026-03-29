@@ -39,7 +39,7 @@ export function ToolSupportIndicator({
       <span
         className={cn(
           'inline-flex items-center gap-1 py-[2px] px-2 text-[11px] font-medium rounded-[10px] shrink-0',
-          'bg-[#10b981]/15 text-[#10b981]',
+          'bg-success-subtle text-success border border-success-border',
           className,
         )}
         title={
@@ -58,7 +58,7 @@ export function ToolSupportIndicator({
     <span
       className={cn(
         'inline-flex items-center gap-1 py-[2px] px-2 text-[11px] font-medium rounded-[10px] shrink-0',
-        'bg-[#f59e0b]/15 text-[#f59e0b]',
+        'bg-warning-subtle text-warning border border-warning-border',
         className,
       )}
       title="This model does not support tool/function calling — tools are disabled for this chat"

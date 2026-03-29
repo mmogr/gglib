@@ -65,7 +65,7 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVer
       <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover">{formatParamCount(model.paramCountB, model.expertUsedCount, model.expertCount)}</div>
       <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover">{model.architecture || "—"}</div>
       <div className="py-base border-b border-border-light flex items-center transition-colors duration-200 group-hover:bg-background-hover">
-        <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-primary border border-[rgba(59,130,246,0.3)]">
+        <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-primary border border-primary-border">
           {model.quantization || "—"}
         </span>
       </div>
@@ -88,14 +88,14 @@ const ModelRow: FC<ModelRowProps> = ({ model, removing, onServe, onRemove, onVer
         </button>
         <button
           onClick={() => onServe(model)}
-          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center min-h-[44px] min-w-[44px] bg-[rgba(34,197,94,0.15)] text-success border border-[rgba(34,197,94,0.3)] hover:bg-[rgba(34,197,94,0.25)] hover:shadow-[0_2px_10px_rgba(34,197,94,0.2)]"
+          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center min-h-[44px] min-w-[44px] bg-success-subtle text-success border border-success-border hover:bg-success/20 hover:shadow-[0_2px_10px_rgba(34,197,94,0.2)]"
           title="Serve model"
         >
           <Icon icon={Rocket} size={16} />
         </button>
         <button
           onClick={() => onRemove(model)}
-          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center min-h-[44px] min-w-[44px] bg-[rgba(239,68,68,0.15)] text-danger border border-[rgba(239,68,68,0.3)] hover:bg-[rgba(239,68,68,0.25)] hover:shadow-[0_2px_10px_rgba(239,68,68,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-sm rounded-base cursor-pointer text-base transition-all duration-200 flex items-center justify-center min-h-[44px] min-w-[44px] bg-danger-subtle text-danger border border-danger-border hover:bg-danger/20 hover:shadow-[0_2px_10px_rgba(239,68,68,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={removing === model.id}
           title="Remove model"
         >
@@ -219,7 +219,7 @@ const ModelList: FC<ModelListProps> = ({
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center p-xl gap-md">
-        <p className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-md p-base text-danger flex items-start gap-sm">Error: {error}</p>
+        <p className="bg-danger-subtle border border-danger-border rounded-md p-base text-danger flex items-start gap-sm">Error: {error}</p>
         <button onClick={onRefresh} className="px-md py-sm bg-transparent border border-border rounded-base text-text cursor-pointer text-sm hover:border-primary transition-colors duration-200">
           Retry
         </button>
@@ -297,7 +297,7 @@ const ModelList: FC<ModelListProps> = ({
                 <Row gap="sm" className="capability-badges mb-4">
                   {hasTag(servingModel, 'reasoning') && (
                     <span 
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-[#f3e8ff] text-[#7c3aed]"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-primary-subtle text-primary-light border border-primary-border"
                       title="Model supports chain-of-thought reasoning with thinking tags"
                     >
                       <Icon icon={Brain} size={14} />
@@ -306,7 +306,7 @@ const ModelList: FC<ModelListProps> = ({
                   )}
                   {hasTag(servingModel, 'agent') && (
                     <span 
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-[#dbeafe] text-[#2563eb]"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-primary-subtle text-primary-light border border-primary-border"
                       title="Model supports tool/function calling for agentic workflows"
                     >
                       <Icon icon={Wrench} size={14} />
@@ -354,7 +354,7 @@ const ModelList: FC<ModelListProps> = ({
                   />
                   <span>Enable Jinja templates</span>
                   {jinjaAutoEnabled && (
-                    <span className="text-xs text-[var(--color-text-secondary)] italic">
+                    <span className="text-xs text-text-secondary italic">
                       (auto-enabled for this model)
                     </span>
                   )}

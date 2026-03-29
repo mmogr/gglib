@@ -3,37 +3,32 @@
 use gglib_core::ports::SystemProbePort;
 use gglib_core::utils::system::{Dependency, DependencyStatus};
 
-// ANSI color codes
-const GREEN: &str = "\x1b[32m";
-const RED: &str = "\x1b[31m";
-const YELLOW: &str = "\x1b[33m";
-const BOLD: &str = "\x1b[1m";
-const RESET: &str = "\x1b[0m";
+use crate::presentation::style::{BOLD, DANGER, RESET, SUCCESS, WARNING};
 
 /// Print a single dependency row in the status table.
 pub fn print_dependency(dep: &Dependency) {
     let status_str = match &dep.status {
         DependencyStatus::Present { version } => {
             if version.is_empty() {
-                format!("{}✓ installed{}", GREEN, RESET)
+                format!("{}✓ installed{}", SUCCESS, RESET)
             } else {
-                format!("{}✓ v{}{}", GREEN, version, RESET)
+                format!("{}✓ v{}{}", SUCCESS, version, RESET)
             }
         }
         DependencyStatus::Missing => {
             if dep.required {
-                format!("{}✗ missing{}", RED, RESET)
+                format!("{}✗ missing{}", DANGER, RESET)
             } else {
-                format!("{}○ missing{}", YELLOW, RESET)
+                format!("{}○ missing{}", WARNING, RESET)
             }
         }
         DependencyStatus::Optional => {
-            format!("{}○ optional{}", YELLOW, RESET)
+            format!("{}○ optional{}", WARNING, RESET)
         }
     };
 
     let req_indicator = if dep.required {
-        format!("{}*{}", RED, RESET)
+        format!("{}*{}", DANGER, RESET)
     } else {
         " ".to_string()
     };
@@ -52,30 +47,30 @@ pub fn print_gpu_status(probe: &dyn SystemProbePort) {
     println!("{}", "-".repeat(40));
 
     if gpu_info.has_nvidia_gpu {
-        println!("  {}✓ NVIDIA GPU detected{}", GREEN, RESET);
+        println!("  {}✓ NVIDIA GPU detected{}", SUCCESS, RESET);
         if let Some(ref cuda_ver) = gpu_info.cuda_version {
-            println!("  {}✓ CUDA available (v{}){}", GREEN, cuda_ver, RESET);
+            println!("  {}✓ CUDA available (v{}){}", SUCCESS, cuda_ver, RESET);
         } else {
             println!(
                 "  {}! CUDA not found - install CUDA toolkit for GPU acceleration{}",
-                YELLOW, RESET
+                WARNING, RESET
             );
         }
     } else if gpu_info.has_metal {
-        println!("  {}✓ Metal GPU detected (Apple Silicon){}", GREEN, RESET);
-        println!("  {}✓ GPU acceleration available{}", GREEN, RESET);
+        println!("  {}✓ Metal GPU detected (Apple Silicon){}", SUCCESS, RESET);
+        println!("  {}✓ GPU acceleration available{}", SUCCESS, RESET);
     } else if gpu_info.has_vulkan {
-        println!("  {}✓ Vulkan GPU detected{}", GREEN, RESET);
+        println!("  {}✓ Vulkan GPU detected{}", SUCCESS, RESET);
         println!(
             "  {}✓ GPU acceleration available via Vulkan{}",
-            GREEN, RESET
+            SUCCESS, RESET
         );
     } else {
         println!(
             "  {}✗ No supported GPU detected (Metal/CUDA/Vulkan required){}",
-            RED, RESET
+            DANGER, RESET
         );
-        println!("  {}  CPU-only inference is not supported{}", RED, RESET);
+        println!("  {}  CPU-only inference is not supported{}", DANGER, RESET);
     }
 }
 

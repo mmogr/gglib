@@ -110,9 +110,9 @@ const ToolRow: React.FC<{ row: ToolRowData }> = ({ row }) => (
   <div
     className={cn(
       'flex items-center gap-2 py-[3px] px-2 rounded-md text-[12px]',
-      row.state === 'running' && 'text-[#60a5fa]',
-      row.state === 'complete' && 'text-[#4ade80]',
-      row.state === 'error' && 'text-[#f87171]',
+      row.state === 'running' && 'text-primary-light',
+      row.state === 'complete' && 'text-success',
+      row.state === 'error' && 'text-danger',
     )}
   >
     {row.state === 'running' && (
@@ -220,7 +220,7 @@ const ToolExecutionProgress: React.FC = () => {
         />
         <span>{headerLabel}</span>
         {runningCount > 0 && (
-          <Icon icon={Loader2} size={12} className="animate-spin ml-1 text-[#60a5fa]" />
+          <Icon icon={Loader2} size={12} className="animate-spin ml-1 text-primary-light" />
         )}
       </button>
 

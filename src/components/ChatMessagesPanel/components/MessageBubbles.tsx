@@ -27,7 +27,7 @@ import { cn } from '../../../utils/cn';
 
 /** Shared styling for small action buttons in message bubble footers. */
 const ACTION_BTN =
-  'bg-transparent border-none cursor-pointer py-[4px] px-[8px] rounded-sm text-[14px] opacity-70 transition-all duration-150 hover:opacity-100 hover:bg-[var(--color-surface-hover,rgba(255,255,255,0.1))]';
+  'bg-transparent border-none cursor-pointer py-xs px-sm rounded-base text-sm opacity-70 transition-all duration-150 hover:opacity-100 hover:bg-surface-elevated';
 
 /**
  * Extract research state from message metadata (if present).
@@ -93,7 +93,7 @@ const SpeakButton: React.FC<{ message: ReturnType<typeof useMessage> }> = ({ mes
 
   return (
     <button
-      className={cn(ACTION_BTN, 'hover:text-[var(--color-accent,#89b4fa)] disabled:opacity-35 disabled:cursor-not-allowed')}
+      className={cn(ACTION_BTN, 'hover:text-accent disabled:opacity-35 disabled:cursor-not-allowed')}
       onClick={handleSpeak}
       disabled={busy}
       title={busy ? 'TTS is busy' : 'Read aloud'}
@@ -258,7 +258,7 @@ export const UserMessageBubble: React.FC = () => {
         <Button
           variant="ghost"
           size="sm"
-          className={cn(ACTION_BTN, 'hover:!bg-[rgba(243,139,168,0.2)]')}
+          className={cn(ACTION_BTN, 'hover:!bg-danger-subtle hover:!text-danger hover:!opacity-100')}
           onClick={handleDelete}
           title="Delete message"
           aria-label="Delete message"

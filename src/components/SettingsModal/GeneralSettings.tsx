@@ -131,7 +131,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
           <span
             className={cn(
               'px-2 py-[2px] rounded-base text-sm',
-              info.exists ? 'bg-[rgba(16,185,129,0.15)] text-[#10b981]' : 'bg-[rgba(245,158,11,0.15)] text-[#f59e0b]',
+              info.exists ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning',
             )}
             aria-label={info.exists ? "Directory exists" : "Directory will be created (warning)"}
           >
@@ -140,7 +140,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
           <span
             className={cn(
               'px-2 py-[2px] rounded-base text-sm',
-              info.writable ? 'bg-[rgba(16,185,129,0.15)] text-[#10b981]' : 'bg-[rgba(239,68,68,0.15)] text-[#ef4444]',
+              info.writable ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger',
             )}
             aria-label={info.writable ? "Writable" : "Not writable (error)"}
           >
@@ -325,8 +325,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         </div>
       )}
 
-      {error && <p className="text-[#ef4444] text-sm" role="alert">{error}</p>}
-      {successMessage && <p className="text-[#10b981] text-sm" role="status" aria-live="polite">{successMessage}</p>}
+      {error && <p className="text-danger text-sm" role="alert">{error}</p>}
+      {successMessage && <p className="text-success text-sm" role="status" aria-live="polite">{successMessage}</p>}
 
       {/* Setup Wizard */}
       <div className="border-t border-border my-md" />

@@ -203,11 +203,11 @@ const ResearchPlanSection: React.FC<ResearchPlanSectionProps> = ({
                   }
                 }}
                 placeholder="Type your question..."
-                className="flex-1 px-2 py-1 text-xs text-text bg-background-secondary border border-[#60a5fa] rounded outline-none placeholder:text-text-muted"
+                className="flex-1 px-2 py-1 text-xs text-text bg-background-secondary border border-primary-border rounded outline-none placeholder:text-text-muted"
                 autoFocus
               />
               <button
-                className="flex items-center justify-center w-6 h-6 p-0 text-[#60a5fa] bg-[rgba(96,165,250,0.1)] border border-[#60a5fa] rounded cursor-pointer transition-all duration-150 ease-out hover:enabled:bg-[rgba(96,165,250,0.2)] disabled:opacity-40 disabled:cursor-default"
+                className="flex items-center justify-center w-6 h-6 p-0 text-primary-light bg-primary-subtle border border-primary-border rounded cursor-pointer transition-all duration-150 ease-out hover:enabled:bg-primary/20 disabled:opacity-40 disabled:cursor-default"
                 onClick={handleAddQuestion}
                 disabled={!newQuestionText.trim()}
                 title="Add question"
@@ -275,7 +275,7 @@ const ResearchPlanSection: React.FC<ResearchPlanSectionProps> = ({
             <button
               className={cn(
                 ACTION_BTN_STYLES,
-                'text-[#f87171] hover:text-[#f87171] hover:bg-[rgba(248,113,113,0.1)] hover:border-[rgba(248,113,113,0.3)]',
+                'text-danger hover:text-danger hover:bg-danger-subtle hover:border-danger-border',
               )}
               onClick={handleSkipAll}
               title="Skip all remaining questions"
@@ -350,7 +350,7 @@ const ResearchPlanSection: React.FC<ResearchPlanSectionProps> = ({
                 {/* Expand button */}
                 {canExpand && (
                   <button
-                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-[rgba(96,165,250,0.15)] hover:text-[#60a5fa] active:bg-[rgba(96,165,250,0.25)]"
+                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-primary-subtle hover:text-primary-light active:bg-primary/20"
                     onClick={() => handleExpand(question.id)}
                     title="Ask AI to break this into sub-questions"
                     type="button"
@@ -365,7 +365,7 @@ const ResearchPlanSection: React.FC<ResearchPlanSectionProps> = ({
                 {/* Force-answer / Synthesize button - for in-progress questions */}
                 {canForceAnswer && (
                   <button
-                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-[rgba(251,191,36,0.15)] hover:text-[#fbbf24] active:bg-[rgba(251,191,36,0.25)]"
+                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-warning-subtle hover:text-warning active:bg-warning/20"
                     onClick={() => handleForceAnswer(question.id)}
                     title={`Generate answer now with ${relevantFactCount > 0 ? relevantFactCount : facts.length} facts`}
                     type="button"
@@ -380,7 +380,7 @@ const ResearchPlanSection: React.FC<ResearchPlanSectionProps> = ({
                 {/* Skip button */}
                 {showSkipButton && (
                   <button
-                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-[rgba(251,146,60,0.15)] hover:text-[#fb923c] active:bg-[rgba(251,146,60,0.25)] disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:hover:bg-transparent disabled:hover:text-text-muted"
+                    className="shrink-0 flex items-center justify-center w-6 h-6 border-none rounded bg-transparent text-text-muted cursor-pointer opacity-0 transition-all duration-150 ease-out group-hover:opacity-100 hover:bg-warning-subtle hover:text-warning active:bg-warning/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:hover:bg-transparent disabled:hover:text-text-muted"
                     onClick={() => handleSkip(question.id)}
                     title={isCompleted ? "Question was skipped" : "Skip this question"}
                     type="button"
@@ -390,7 +390,7 @@ const ResearchPlanSection: React.FC<ResearchPlanSectionProps> = ({
                   </button>
                 )}
                 {pendingSkips.has(question.id) && (
-                  <div className="flex items-center justify-center w-6 h-6 text-[#fb923c]">
+                  <div className="flex items-center justify-center w-6 h-6 text-warning">
                     <Icon icon={Loader2} size={12} className="animate-spin" />
                   </div>
                 )}

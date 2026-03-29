@@ -117,8 +117,8 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
               <div className="flex items-center gap-sm">
                 <span className={cn(
                   'w-5 h-5 inline-flex items-center justify-center rounded-full bg-background-tertiary border border-border text-text',
-                  StatusIcon === XCircle && 'text-[#ef4444] border-[rgba(239,68,68,0.35)]',
-                  StatusIcon === CheckCircle2 && 'text-[#16a34a] border-[rgba(22,163,74,0.35)]',
+                  StatusIcon === XCircle && 'text-danger border-danger-border',
+                  StatusIcon === CheckCircle2 && 'text-success border-success-border',
                   StatusIcon === Loader2 && 'text-text-secondary',
                 )}>
                   <Icon icon={StatusIcon} size={16} className={StatusIcon === Loader2 ? 'animate-spin' : ''} />

@@ -15,16 +15,22 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const baseStyles =
-  "inline-flex items-center justify-center gap-2 rounded-base border border-transparent text-sm font-medium transition-colors duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-60 disabled:cursor-not-allowed";
+  "inline-flex items-center justify-center gap-2 rounded-base border border-transparent text-sm font-medium transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-60 disabled:cursor-not-allowed";
 
 const variantStyles: Record<ButtonVariant, string> = {
+  // Level 1 — Primary CTA. One per surface maximum.
   primary: "bg-primary text-white hover:bg-primary-hover",
-  secondary: "bg-background-secondary text-text border-border hover:border-primary",
-  ghost: "bg-transparent text-text hover:bg-background-tertiary",
-  outline: "bg-transparent text-text border-border hover:border-primary",
-  danger: "bg-danger text-white hover:bg-danger-hover",
-  success: "bg-success text-white hover:bg-success-hover",
-  warning: "bg-warning text-white hover:bg-warning-hover",
+  // Level 2 — Default action. Lifts off the page surface with a visible border.
+  secondary: "bg-surface-elevated border-border text-text hover:bg-surface-hover hover:border-border-hover",
+  // Level 3 — Emphasis without fill. Stronger rest border than secondary, fills on hover.
+  outline: "bg-transparent border-border-hover text-text hover:bg-surface-elevated hover:border-primary",
+  // Level 4 — Truly minimal. No border, no fill; only hover reveals the surface.
+  ghost: "bg-transparent text-text-secondary border-transparent hover:text-text hover:bg-surface-elevated",
+  // Semantic tints — soft warning state; reserves solid fills for destructive confirms.
+  danger: "bg-danger-subtle text-danger border-danger-border hover:bg-danger/20",
+  success: "bg-success-subtle text-success border-success-border hover:bg-success/20",
+  warning: "bg-warning-subtle text-warning border-warning-border hover:bg-warning/20",
+  // Inline text link — no background, no border.
   link: "bg-transparent text-primary h-auto p-0 hover:underline hover:text-primary-hover",
 };
 

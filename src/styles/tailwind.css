@@ -27,14 +27,22 @@
   --color-primary-hover: var(--color-primary-hover);
   --color-primary-light: var(--color-primary-light);
   --color-primary-dark: var(--color-primary-dark);
+  --color-primary-subtle: var(--color-primary-subtle);
+  --color-primary-border: var(--color-primary-border);
 
   /* Semantic */
   --color-success: var(--color-success);
   --color-success-hover: var(--color-success-hover);
+  --color-success-subtle: var(--color-success-subtle);
+  --color-success-border: var(--color-success-border);
   --color-warning: var(--color-warning);
   --color-warning-hover: var(--color-warning-hover);
+  --color-warning-subtle: var(--color-warning-subtle);
+  --color-warning-border: var(--color-warning-border);
   --color-danger: var(--color-danger);
   --color-danger-hover: var(--color-danger-hover);
+  --color-danger-subtle: var(--color-danger-subtle);
+  --color-danger-border: var(--color-danger-border);
   --color-info: var(--color-info);
 
   /* Backgrounds */
@@ -51,6 +59,7 @@
   --color-surface: var(--color-surface);
   --color-surface-elevated: var(--color-surface-elevated);
   --color-surface-hover: var(--color-surface-hover);
+  --color-surface-raised: var(--color-surface-raised);
 
   /* Borders */
   --color-border: var(--color-border);

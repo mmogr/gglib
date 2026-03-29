@@ -45,7 +45,7 @@ const GatheredFactsSection: React.FC<GatheredFactsSectionProps> = ({ facts }) =>
         {displayedFacts.map(fact => (
           <div
             key={fact.id}
-            className="px-2.5 py-2 bg-background-tertiary rounded-md border-l-[3px] border-l-transparent data-[confidence=high]:border-l-[#4ade80] data-[confidence=medium]:border-l-[#facc15] data-[confidence=low]:border-l-[#f87171]"
+            className="px-2.5 py-2 bg-background-tertiary rounded-md border-l-[3px] border-l-transparent data-[confidence=high]:border-l-success data-[confidence=medium]:border-l-warning data-[confidence=low]:border-l-danger"
             data-confidence={fact.confidence}
           >
             <div className="text-[13px] text-text leading-[1.4]">{fact.claim}</div>
@@ -54,7 +54,7 @@ const GatheredFactsSection: React.FC<GatheredFactsSectionProps> = ({ facts }) =>
                 href={fact.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[#60a5fa] no-underline max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap hover:underline"
+                className="flex items-center gap-1 text-primary-light no-underline max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap hover:underline"
                 title={fact.sourceUrl}
               >
                 <Icon icon={ExternalLink} size={10} />

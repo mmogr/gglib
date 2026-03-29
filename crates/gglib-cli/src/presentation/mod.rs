@@ -11,6 +11,7 @@
 //! - Domain transforms belong in core services or CLI-local view-model helpers
 
 pub mod model_display;
+pub mod style;
 pub mod tables;
 
 // Re-export commonly used items

@@ -22,7 +22,7 @@ const KnowledgeGapsSection: React.FC<KnowledgeGapsSectionProps> = ({ gaps }) => 
       </div>
       <div className="flex flex-wrap gap-1.5">
         {gaps.map((gap, idx) => (
-          <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-[rgba(234,179,8,0.1)] border border-[rgba(234,179,8,0.3)] rounded text-[11px] text-[#facc15]">
+          <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-warning-subtle border border-warning-border rounded text-[11px] text-warning">
             <Icon icon={AlertTriangle} size={10} />
             {gap}
           </span>

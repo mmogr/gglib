@@ -110,13 +110,13 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
   // Show an unsupported-platform warning banner when audio I/O is unavailable.
   if (!isAudioSupported) {
     return (
-      <div className="fixed bottom-lg left-1/2 -translate-x-1/2 flex items-center gap-sm px-md py-sm bg-surface border border-[var(--color-warning,#f9e2af)] rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] z-[1000] min-w-[320px] max-w-[600px] backdrop-blur-[8px]">
+      <div className="fixed bottom-lg left-1/2 -translate-x-1/2 flex items-center gap-sm px-md py-sm bg-surface border border-warning-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] z-[1000] min-w-[320px] max-w-[600px] backdrop-blur-[8px]">
         <span className="text-[1.1em]">⚠️</span>
         <span className="text-sm text-text-secondary flex-1">
           Voice mode requires HTTPS and microphone access (<code>getUserMedia</code>).
         </span>
         <button
-          className="bg-transparent border-none text-[var(--color-error,#f38ba8)] cursor-pointer p-[2px] text-[0.7rem] shrink-0"
+          className="bg-transparent border-none text-danger cursor-pointer p-[2px] text-[0.7rem] shrink-0"
           onClick={() => stop?.()}
           title="Close voice mode"
         >
@@ -142,7 +142,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {/* Audio level visualizer */}
       <div className="flex-1 h-1 bg-border rounded-sm overflow-hidden min-w-[60px]">
         <div
-          className="h-full bg-[var(--color-accent,#89b4fa)] rounded-sm transition-[width] duration-[50ms] ease-out"
+          className="h-full bg-accent rounded-sm transition-[width] duration-[50ms] ease-out"
           style={{ width: `${Math.min(audioLevel * 100, 100)}%` }}
         />
       </div>
@@ -151,9 +151,9 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {mode === 'ptt' && modelsReady && (
         <button
           className={cn(
-            'px-sm py-xs border border-border rounded-md bg-[var(--color-surface-elevated,#2a2a3e)] text-text cursor-pointer text-sm whitespace-nowrap transition-all duration-100 select-none',
-            'hover:bg-[var(--color-surface-hover,#353550)]',
-            isPttHeld && 'bg-[rgba(243,139,168,0.2)] border-[var(--color-error,#f38ba8)] shadow-[0_0_8px_rgba(243,139,168,0.3)]',
+            'px-sm py-xs border border-border rounded-md bg-surface-elevated text-text cursor-pointer text-sm whitespace-nowrap transition-all duration-100 select-none',
+            'hover:bg-surface-hover',
+            isPttHeld && 'bg-danger-subtle border-danger-border shadow-[0_0_8px_rgba(243,139,168,0.3)]',
           )}
           onMouseDown={handlePttMouseDown}
           onMouseUp={handlePttMouseUp}
@@ -167,7 +167,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
       {/* Stop speaking button */}
       {isSpeaking && (
         <button
-          className="px-sm py-xs border border-border rounded-md bg-[var(--color-surface-elevated,#2a2a3e)] text-text cursor-pointer text-sm whitespace-nowrap hover:bg-[var(--color-surface-hover,#353550)]"
+          className="px-sm py-xs border border-border rounded-md bg-surface-elevated text-text cursor-pointer text-sm whitespace-nowrap hover:bg-surface-hover"
           onClick={() => stopSpeaking?.()}
           title="Stop speaking"
         >
@@ -177,38 +177,38 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({ voice, onTranscript }) => 
 
       {/* TTS generating indicator */}
       {isTtsGenerating && !isSpeaking && (
-        <span className="flex items-center gap-1.5 text-xs text-[var(--color-accent,#89b4fa)] whitespace-nowrap">
-          <span className="inline-block w-3 h-3 border-2 border-border border-t-[var(--color-accent,#89b4fa)] rounded-full animate-spin-360 shrink-0" />
+        <span className="flex items-center gap-1.5 text-xs text-accent whitespace-nowrap">
+          <span className="inline-block w-3 h-3 border-2 border-border border-t-accent rounded-full animate-spin-360 shrink-0" />
           Generating speech…
         </span>
       )}
 
       {/* Models auto-loading indicator (animated) */}
       {showAutoLoading && (
-        <span className="flex items-center gap-1.5 text-xs text-[var(--color-accent,#89b4fa)] whitespace-nowrap">
-          <span className="inline-block w-3 h-3 border-2 border-border border-t-[var(--color-accent,#89b4fa)] rounded-full animate-spin-360 shrink-0" />
+        <span className="flex items-center gap-1.5 text-xs text-accent whitespace-nowrap">
+          <span className="inline-block w-3 h-3 border-2 border-border border-t-accent rounded-full animate-spin-360 shrink-0" />
           Loading models…
         </span>
       )}
 
       {/* Models not loaded warning (only if NOT currently loading) */}
       {!modelsReady && !showAutoLoading && (
-        <span className="text-xs text-[var(--color-warning,#fab387)] whitespace-nowrap">
+        <span className="text-xs text-warning whitespace-nowrap">
           Models not loaded — open Voice settings
         </span>
       )}
 
       {/* Error display */}
       {error && (
-        <div className="flex items-center gap-xs text-xs text-[var(--color-error,#f38ba8)] max-w-[200px]">
+        <div className="flex items-center gap-xs text-xs text-danger max-w-[200px]">
           <span className="overflow-hidden text-ellipsis whitespace-nowrap">{error}</span>
-          <button className="bg-transparent border-none text-[var(--color-error,#f38ba8)] cursor-pointer p-[2px] text-[0.7rem] shrink-0" onClick={() => clearError?.()}>✕</button>
+          <button className="bg-transparent border-none text-danger cursor-pointer p-[2px] text-[0.7rem] shrink-0" onClick={() => clearError?.()}>✕</button>
         </div>
       )}
 
       {/* Close voice mode */}
       <button
-        className="bg-transparent border-none text-text-secondary cursor-pointer p-1 text-[0.9rem] shrink-0 rounded-sm hover:text-text hover:bg-[var(--color-surface-hover,#353550)]"
+        className="bg-transparent border-none text-text-secondary cursor-pointer p-1 text-[0.9rem] shrink-0 rounded-sm hover:text-text hover:bg-surface-hover"
         onClick={() => stop?.()}
         title="Close voice mode"
       >

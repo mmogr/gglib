@@ -12,14 +12,22 @@
   --color-primary-hover: #2563eb;
   --color-primary-light: #60a5fa;
   --color-primary-dark: #1e40af;
+  --color-primary-subtle: rgba(59, 130, 246, 0.12);
+  --color-primary-border: rgba(59, 130, 246, 0.28);
   
   /* Semantic Colors */
   --color-success: #10b981;
   --color-success-hover: #059669;
+  --color-success-subtle: rgba(16, 185, 129, 0.12);
+  --color-success-border: rgba(16, 185, 129, 0.28);
   --color-warning: #f59e0b;
   --color-warning-hover: #d97706;
+  --color-warning-subtle: rgba(245, 158, 11, 0.12);
+  --color-warning-border: rgba(245, 158, 11, 0.28);
   --color-danger: #ef4444;
   --color-danger-hover: #dc2626;
+  --color-danger-subtle: rgba(239, 68, 68, 0.12);
+  --color-danger-border: rgba(239, 68, 68, 0.28);
   --color-info: #3b82f6;
   
   /* Neutral Colors - Dark Theme */
@@ -34,6 +42,8 @@
   --color-surface: #1a1a1a;
   --color-surface-elevated: #252525;
   --color-surface-hover: #2a2a2a;
+  /* Alias: fixes broken bg-surface-raised references in components */
+  --color-surface-raised: var(--color-surface-elevated);
   
   /* Border Colors */
   --color-border: #333333;

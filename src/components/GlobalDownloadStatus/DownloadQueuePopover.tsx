@@ -198,7 +198,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
               </div>
               <div className="flex items-center gap-xs flex-wrap">
                 {item.shard_count > 1 && (
-                  <span className="text-xs bg-[rgba(139,92,246,0.15)] text-[#a78bfa] px-[6px] py-[1px] rounded-sm font-medium">
+                  <span className="text-xs bg-primary-subtle text-primary-light px-[6px] py-[1px] rounded-sm font-medium">
                     {item.shard_count} parts
                   </span>
                 )}
@@ -207,7 +207,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             
             {/* Cancel button */}
             <button
-              className="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-sm text-text-secondary cursor-pointer opacity-60 shrink-0 text-[12px] transition-all duration-150 hover:not-disabled:bg-[rgba(248,113,113,0.15)] hover:not-disabled:text-[#f87171] hover:not-disabled:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
+              className="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-sm text-text-secondary cursor-pointer opacity-60 shrink-0 text-[12px] transition-all duration-150 hover:not-disabled:bg-danger-subtle hover:not-disabled:text-danger hover:not-disabled:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
               onClick={() => handleCancel(item)}
               disabled={isProcessing}
               title="Remove from queue"

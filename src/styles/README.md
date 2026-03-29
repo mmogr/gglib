@@ -48,8 +48,18 @@ Tokens follow a **semantic layering** approach:
 ### Migration Path
 
 - **Phase 0**: All tokens defined, gaps filled
-- **Phase 4**: Token hygiene audit, no raw hex colors in components
+- **Phase 4**: Token hygiene audit — ✅ **COMPLETE**. All semantic subtle-tint and border tokens added (`--color-{primary,success,warning,danger}-subtle` and `--color-{primary,success,warning,danger}-border`). Surface alias `--color-surface-raised` added. Bridged to Tailwind @theme.
 - **Phase 5**: Enforce via linting
+
+### Component Color Rule (enforced as of Phase 4)
+
+> **No raw `rgba()` or `#hex` color values in component files.**
+>
+> All color references must use one of:
+> - A Tailwind semantic utility class (e.g. `bg-danger-subtle`, `text-success`, `border-primary-border`)
+> - A CSS variable reference (e.g. `var(--color-danger-subtle)`) — only when a Tailwind utility is unavailable
+
+Inline arbitrary values like `bg-[rgba(239,68,68,0.15)]` or `text-[#ef4444]` are **banned**. Add tokens to `variables.css` instead.
 
 ---
 
@@ -111,7 +121,7 @@ Tokens follow a **semantic layering** approach:
 | **Phase 1** | `Button`, `Icon` (final versions) | `buttons.css`, all `.btn` class usages |
 | **Phase 2** | `Input`, `Select`, `Textarea`, form components | `forms.css`, all `.form-input` usages, CSS Module form clones |
 | **Phase 3** | Layout primitives (Stack, Grid, Container) | Inline layout styles, god components split |
-| **Phase 4** | Token-aligned color system | Raw hex colors in components |
+| **Phase 4** | Token-aligned color system | Raw hex colors in components — ✅ **COMPLETE** |
 | **Phase 5** | Final cleanup | Any remaining CSS Modules not justified, dead CSS |
 
 ### Why No Compatibility?

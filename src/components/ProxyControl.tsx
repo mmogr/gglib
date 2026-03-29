@@ -72,8 +72,8 @@ const ProxyControl: FC<ProxyControlProps> = ({
   };
 
   const buttonClasses = cn(
-    buttonClassName ?? 'flex items-center gap-sm px-base py-sm bg-[rgba(255,255,255,0.1)] border border-[rgba(255,255,255,0.2)] rounded-md text-white cursor-pointer text-sm font-medium transition-all relative hover:bg-[rgba(255,255,255,0.15)]',
-    proxyState.running && (buttonActiveClassName ?? 'bg-[rgba(76,175,80,0.3)] border-[rgba(76,175,80,0.5)]'),
+    buttonClassName ?? 'flex items-center gap-sm px-base py-sm bg-surface-elevated border border-border rounded-md text-text cursor-pointer text-sm font-medium transition-all relative hover:bg-surface-hover hover:border-border-hover',
+    proxyState.running && (buttonActiveClassName ?? 'bg-success-subtle border-success-border text-success'),
   );
 
   const dotClasses = cn(

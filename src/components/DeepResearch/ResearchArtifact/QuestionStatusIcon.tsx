@@ -15,11 +15,11 @@ const QuestionStatusIcon: React.FC<QuestionStatusIconProps> = ({ status }) => {
     case 'pending':
       return <Icon icon={Circle} size={16} className="text-text-muted" />;
     case 'in-progress':
-      return <Icon icon={Loader2} size={16} className="text-[#60a5fa] animate-research-pulse" />;
+      return <Icon icon={Loader2} size={16} className="text-primary-light animate-research-pulse" />;
     case 'answered':
-      return <Icon icon={CircleCheck} size={16} className="text-[#4ade80]" />;
+      return <Icon icon={CircleCheck} size={16} className="text-success" />;
     case 'blocked':
-      return <Icon icon={CircleX} size={16} className="text-[#f87171]" />;
+      return <Icon icon={CircleX} size={16} className="text-danger" />;
   }
 };
 
