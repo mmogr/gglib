@@ -74,10 +74,10 @@ const ToolUsageBadge: React.FC = () => {
       <button
         className={cn(
           'inline-flex items-center gap-1 py-[2px] px-2 text-[11px] font-medium border-none rounded-[10px] cursor-pointer transition-all duration-150 ml-2 hover:scale-105 hover:shadow-[0_2px_4px_rgba(0,0,0,0.1)] active:scale-[0.98]',
-          status === 'running' && 'bg-[#3b82f6] text-white hover:bg-[#2563eb] animate-pulse',
-          status === 'success' && 'bg-[#10b981] text-white hover:bg-[#059669]',
-          status === 'error' && 'bg-[#ef4444] text-white hover:bg-[#dc2626]',
-          status === 'mixed' && 'bg-[#f59e0b] text-white hover:bg-[#d97706]',
+          status === 'running' && 'bg-primary-subtle text-primary border border-primary-border hover:bg-primary/20 animate-pulse',
+          status === 'success' && 'bg-success-subtle text-success border border-success-border hover:bg-success/20',
+          status === 'error' && 'bg-danger-subtle text-danger border border-danger-border hover:bg-danger/20',
+          status === 'mixed' && 'bg-warning-subtle text-warning border border-warning-border hover:bg-warning/20',
         )}
         onClick={() => setIsModalOpen(true)}
         title="Click to view tool execution details"

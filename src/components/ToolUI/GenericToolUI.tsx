@@ -25,10 +25,10 @@ const StatusBadge: React.FC<{
   status: 'running' | 'complete' | 'error' | 'incomplete';
 }> = ({ status }) => {
   const statusConfig = {
-    running: { icon: Loader2, label: 'Running', className: 'bg-[rgba(59,130,246,0.2)] text-[#60a5fa]' },
-    complete: { icon: CheckCircle2, label: 'Complete', className: 'bg-[rgba(34,197,94,0.2)] text-[#4ade80]' },
-    error: { icon: XCircle, label: 'Error', className: 'bg-[rgba(239,68,68,0.2)] text-[#f87171]' },
-    incomplete: { icon: AlertTriangle, label: 'Incomplete', className: 'bg-[rgba(234,179,8,0.2)] text-[#facc15]' },
+    running: { icon: Loader2, label: 'Running', className: 'bg-primary-subtle text-primary-light border border-primary-border' },
+    complete: { icon: CheckCircle2, label: 'Complete', className: 'bg-success-subtle text-success border border-success-border' },
+    error: { icon: XCircle, label: 'Error', className: 'bg-danger-subtle text-danger border border-danger-border' },
+    incomplete: { icon: AlertTriangle, label: 'Incomplete', className: 'bg-warning-subtle text-warning border border-warning-border' },
   };
 
   const config = statusConfig[status];
@@ -155,7 +155,7 @@ export const GenericToolUI = makeAssistantToolUI<
 
           {/* Show error for incomplete with error */}
           {status.type === 'incomplete' && status.reason === 'error' && (
-            <div className="px-3 py-2 bg-[rgba(239,68,68,0.1)] rounded-sm text-[#f87171] text-xs">
+            <div className="px-3 py-2 bg-danger-subtle rounded-sm text-danger text-xs">
               Tool execution was interrupted or failed.
             </div>
           )}

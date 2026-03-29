@@ -49,10 +49,10 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
     <div
       className={cn(
         'flex items-center gap-sm px-md py-sm rounded-base bg-surface border border-border shadow-[0_8px_24px_rgba(0,0,0,0.22)] text-sm pointer-events-auto animate-toast-enter transition-[transform,opacity] duration-300 ease-out hover:-translate-x-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
-        toast.type === 'success' && 'border-[#10b981] bg-[linear-gradient(135deg,rgba(16,185,129,0.08)_0%,var(--color-surface)_100%)]',
-        toast.type === 'error' && 'border-[#ef4444] bg-[linear-gradient(135deg,rgba(239,68,68,0.08)_0%,var(--color-surface)_100%)]',
-        toast.type === 'info' && 'border-primary bg-[linear-gradient(135deg,rgba(99,102,241,0.12)_0%,var(--color-surface)_100%)]',
-        toast.type === 'warning' && 'border-[#f59e0b] bg-[linear-gradient(135deg,rgba(245,158,11,0.12)_0%,var(--color-surface)_100%)]',
+        toast.type === 'success' && 'border-success-border bg-success-subtle',
+        toast.type === 'error' && 'border-danger-border bg-danger-subtle',
+        toast.type === 'info' && 'border-primary-border bg-primary-subtle',
+        toast.type === 'warning' && 'border-warning-border bg-warning-subtle',
         isExiting && 'animate-toast-exit',
       )}
       role={toast.type === 'error' || toast.type === 'warning' ? 'alert' : 'status'}
@@ -65,10 +65,10 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
     >
       <span className={cn(
         'text-base font-bold shrink-0 w-5 h-5 flex items-center justify-center',
-        toast.type === 'success' && 'text-[#10b981]',
-        toast.type === 'error' && 'text-[#ef4444]',
+        toast.type === 'success' && 'text-success',
+        toast.type === 'error' && 'text-danger',
         toast.type === 'info' && 'text-primary',
-        toast.type === 'warning' && 'text-[#f59e0b]',
+        toast.type === 'warning' && 'text-warning',
       )}>
         <Icon icon={icon} size={16} />
       </span>

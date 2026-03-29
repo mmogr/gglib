@@ -24,7 +24,7 @@ import { useToastContext } from "../contexts/ToastContext";
 
 const statusBadge = "inline-flex items-center px-sm py-0.5 text-xs font-semibold rounded-full";
 
-const errorBox = "p-md bg-[rgba(239,68,68,0.15)] text-[#ef4444] rounded-base text-sm";
+const errorBox = "p-md bg-danger-subtle text-danger border border-danger-border rounded-base text-sm";
 
 interface McpServersPanelProps {
   onAddServer?: () => void;
@@ -141,13 +141,13 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
 
   const getStatusBadge = (info: McpServerInfo) => {
     if (isServerRunning(info)) {
-      return <span className={cn(statusBadge, "bg-[rgba(16,185,129,0.15)] text-[#10b981]")}>Running</span>;
+      return <span className={cn(statusBadge, "bg-success-subtle text-success")}>Running</span>;
     }
     if (hasServerError(info)) {
-      return <span className={cn(statusBadge, "bg-[rgba(239,68,68,0.15)] text-[#ef4444]")}>Error</span>;
+      return <span className={cn(statusBadge, "bg-danger-subtle text-danger")}>Error</span>;
     }
     if (info.status === "starting") {
-      return <span className={cn(statusBadge, "bg-[rgba(245,158,11,0.15)] text-[#f59e0b]")}>Starting...</span>;
+      return <span className={cn(statusBadge, "bg-warning-subtle text-warning")}>Starting...</span>;
     }
     return <span className={cn(statusBadge, "bg-background-tertiary text-text-secondary")}>Stopped</span>;
   };
@@ -240,7 +240,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       {info.server.server_type === "stdio" ? "Stdio" : "SSE"}
                     </span>
                     {!info.server.is_valid && (
-                      <span className="inline-flex items-center gap-1 px-sm py-0.5 bg-[#fef3c7] text-[#d97706] text-xs font-medium rounded-sm cursor-help" title={info.server.last_error || "Invalid configuration"}>
+                      <span className="inline-flex items-center gap-1 px-sm py-0.5 bg-warning-subtle text-warning text-xs font-medium rounded-sm cursor-help" title={info.server.last_error || "Invalid configuration"}>
                         <Icon icon={AlertTriangle} size={14} />
                         <span className="ml-1.5">Needs relink</span>
                       </span>
@@ -255,7 +255,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       <code className="font-mono text-xs text-text-secondary overflow-hidden text-ellipsis whitespace-nowrap">{info.server.config.url}</code>
                     )}
                     {!info.server.is_valid && info.server.last_error && (
-                      <div className="text-xs text-[#dc2626] mt-xs p-xs bg-[#fef2f2] rounded-sm border-l-2 border-[#dc2626]">
+                      <div className="text-xs text-danger mt-xs p-xs bg-danger-subtle rounded-sm border-l-2 border-danger-border">
                         {info.server.last_error}
                       </div>
                     )}
@@ -264,19 +264,19 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                     <div className="flex flex-wrap items-center gap-xs mt-xs">
                       <span className="text-xs text-text-secondary">Tools:</span>
                       {info.tools.slice(0, 5).map((tool) => (
-                        <span key={tool.name} className="inline-flex px-sm py-0.5 bg-[rgba(99,102,241,0.15)] text-primary text-xs rounded-sm">
+                        <span key={tool.name} className="inline-flex px-sm py-0.5 bg-primary-subtle text-primary text-xs rounded-sm">
                           {tool.name}
                         </span>
                       ))}
                       {info.tools.length > 5 && (
-                        <span className="inline-flex px-sm py-0.5 bg-[rgba(99,102,241,0.15)] text-primary text-xs rounded-sm">
+                        <span className="inline-flex px-sm py-0.5 bg-primary-subtle text-primary text-xs rounded-sm">
                           +{info.tools.length - 5} more
                         </span>
                       )}
                     </div>
                   )}
                   {hasServerError(info) && (
-                    <div className="text-xs text-[#ef4444] mt-xs">
+                    <div className="text-xs text-danger mt-xs">
                       {getServerErrorMessage(info)}
                     </div>
                   )}

@@ -63,7 +63,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
     <div
       className={cn(
         'bg-background-secondary border border-border rounded-xl my-3 overflow-hidden text-[13px] max-w-full',
-        'data-[running=true]:border-[rgba(59,130,246,0.4)] data-[running=true]:shadow-[0_0_0_1px_rgba(59,130,246,0.1)]',
+        'data-[running=true]:border-primary-border data-[running=true]:shadow-[0_0_0_1px_rgba(59,130,246,0.1)]',
         className,
       )}
       data-running={isRunning}
@@ -96,7 +96,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
               {phaseConfig.label}
             </span>
             {effectiveState.maxRounds > 1 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl text-[10px] font-semibold bg-[rgba(100,116,139,0.2)] text-[#94a3b8] ml-1.5">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl text-[10px] font-semibold bg-surface-hover text-text-secondary ml-1.5">
                 Round {effectiveState.currentRound}/{effectiveState.maxRounds}
               </span>
             )}
@@ -109,7 +109,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
 
           <div className="flex items-center gap-1.5 mt-1 text-xs text-text-secondary">
             {isRunning && (
-              <Icon icon={Loader2} size={12} className="animate-spin text-[#60a5fa]" />
+              <Icon icon={Loader2} size={12} className="animate-spin text-primary-light" />
             )}
             <span>{liveActivity}</span>
           </div>
@@ -158,7 +158,7 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
                 key={idx}
                 className={cn(
                   "text-[11px] text-text-secondary font-mono whitespace-nowrap overflow-hidden text-ellipsis transition-opacity duration-200 ease-out before:content-['›'] before:mr-1.5 before:text-text-muted",
-                  isSkipped && "text-text-muted italic before:content-['⊘'] before:text-[rgba(251,146,60,0.6)]",
+                  isSkipped && "text-text-muted italic before:content-['⊘'] before:text-warning/60",
                 )}
                 style={{ opacity: 0.5 + (idx / effectiveState.activityLog.length) * 0.5 }}
               >
@@ -325,8 +325,8 @@ export const ResearchArtifact: React.FC<ResearchArtifactProps> = ({
               {/* Error message if failed */}
               {effectiveState.phase === 'error' && effectiveState.errorMessage && (
                 <div className="px-3.5 py-3 border-b border-border last:border-b-0">
-                  <div className="px-3 py-2.5 bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] rounded-md">
-                    <div className="text-[11px] font-semibold text-[#f87171] mb-1.5">Error</div>
+                  <div className="px-3 py-2.5 bg-danger-subtle border border-danger-border rounded-md">
+                    <div className="text-[11px] font-semibold text-danger mb-1.5">Error</div>
                     <div className="text-xs text-text leading-[1.4]">
                       {effectiveState.errorMessage}
                     </div>

@@ -73,7 +73,7 @@ const Header: FC<HeaderProps> = ({
               >
                 <Monitor className="w-[18px] h-[18px]" aria-hidden />
                 {hasRunningServers && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-[9px] bg-[#10b981] text-white text-[11px] font-semibold flex items-center justify-center shadow-[0_0_6px_rgba(16,185,129,0.6)]">{serverCount}</span>
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-[9px] bg-success text-white text-[11px] font-semibold flex items-center justify-center shadow-[0_0_6px_rgba(16,185,129,0.6)]">{serverCount}</span>
                 )}
               </button>
               <RunsPopover

@@ -84,7 +84,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               {uniqueTotal === 1 ? 'Download Complete' : `${uniqueTotal} Downloads Complete`}
             </span>
           </div>
-          <Stack gap="xs" className="p-sm bg-surface-raised rounded-base max-h-[120px] overflow-y-auto">
+          <Stack gap="xs" className="p-sm bg-surface-elevated rounded-base max-h-[120px] overflow-y-auto">
             {displayItems.length > 0 ? (
               <>
                 {displayItems.map((item, idx) => (
@@ -119,7 +119,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               {totalAttempts} total attempts
             </div>
           )}
-          <button className="self-end bg-[rgba(16,185,129,0.15)] text-success border border-[rgba(16,185,129,0.3)] rounded-base px-[1.25rem] py-[0.4rem] text-sm font-semibold cursor-pointer transition-all hover:bg-[rgba(74,222,128,0.25)] hover:border-[rgba(74,222,128,0.5)]" onClick={onDismissSummary}>
+          <button className="self-end bg-success-subtle text-success border border-success-border rounded-base px-[1.25rem] py-[0.4rem] text-sm font-semibold cursor-pointer transition-all hover:bg-success/20" onClick={onDismissSummary}>
             OK
           </button>
         </div>
@@ -147,7 +147,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
             {queueCount > 0 && (
               <div className="relative">
                 <button
-                  className="bg-[rgba(34,211,238,0.15)] text-primary text-xs font-medium px-[0.5rem] py-[0.15rem] rounded-sm border-none cursor-pointer transition-all hover:bg-[rgba(34,211,238,0.25)]"
+                  className="bg-primary-subtle text-primary text-xs font-medium px-[0.5rem] py-[0.15rem] rounded-sm border-none cursor-pointer transition-all hover:bg-primary/20"
                   onClick={() => setIsQueuePopoverOpen((prev) => !prev)}
                   title="Click to view and manage queue"
                 >
@@ -164,7 +164,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
           </div>
           {currentId && (
             <button 
-              className="bg-[rgba(239,68,68,0.15)] text-danger border border-[rgba(239,68,68,0.3)] rounded-base px-[0.75rem] py-[0.3rem] text-sm font-medium cursor-pointer transition-all hover:bg-[rgba(239,68,68,0.25)] hover:border-[rgba(239,68,68,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[rgba(239,68,68,0.1)] disabled:border-[rgba(239,68,68,0.2)]"
+              className="bg-danger-subtle text-danger border border-danger-border rounded-base px-[0.75rem] py-[0.3rem] text-sm font-medium cursor-pointer transition-all hover:bg-danger/20 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => onCancel(currentId)}
               disabled={isCancelling}
             >
@@ -178,7 +178,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
         </div>
 
         <div className="flex items-center gap-sm">
-          <div className="flex-1 h-2 bg-surface-raised rounded-sm overflow-hidden">
+          <div className="flex-1 h-2 bg-surface-elevated rounded-sm overflow-hidden">
             <div
               className={cn(
                 'h-full bg-linear-to-r from-primary to-info rounded-sm transition-[width] duration-200 ease-linear',
@@ -207,7 +207,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
         </div>
 
         {isSharded && shard && (
-          <div className="bg-surface-raised rounded-base p-sm mt-xs">
+          <div className="bg-surface-elevated rounded-base p-sm mt-xs">
             <div className="flex items-center justify-between mb-xs">
               <span className="text-xs font-medium text-warning">
                 Shard {shard.index + 1}/{shard.total}
@@ -218,7 +218,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
                 </span>
               )}
             </div>
-            <div className="h-1 bg-[rgba(255,255,255,0.1)] rounded-[2px] overflow-hidden">
+            <div className="h-1 bg-surface-hover rounded-[2px] overflow-hidden">
               <div
                 className="h-full bg-warning rounded-[2px] transition-[width] duration-200 ease-linear"
                 style={{

@@ -158,7 +158,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
         )}
       </div>
 
-      {error ? <div className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
+      {error ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
 
       {installing ? renderProgress() : null}
     </>
@@ -186,7 +186,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
         </div>
       </div>
 
-      {error && !installing ? <div className="bg-[rgba(239,68,68,0.1)] border border-danger rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
+      {error && !installing ? <div className="bg-danger-subtle border border-danger-border rounded-lg py-3 px-4 text-danger text-[0.95rem]">{error}</div> : null}
 
       {renderProgress()}
 

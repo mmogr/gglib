@@ -272,7 +272,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             </Stack>
 
             {error && (
-              <div className="p-md bg-[rgba(239,68,68,0.15)] text-[#ef4444] rounded-base text-sm" role="alert">
+              <div className="p-md bg-danger-subtle text-danger border border-danger-border rounded-base text-sm" role="alert">
                 {error}
               </div>
             )}

@@ -64,9 +64,9 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
             key={model.id || model.name}
             className={cn(
               "py-md px-base border-b border-border cursor-pointer transition duration-200 w-full hover:bg-background-hover",
-              isSelected && !isRunning && "bg-[rgba(59,130,246,0.2)] border-l-[3px] border-l-primary",
+              isSelected && !isRunning && "bg-primary-subtle border-l-[3px] border-l-primary",
               isRunning && !isSelected && "border-l-[3px] border-l-success",
-              isRunning && isSelected && "border-l-[3px] border-l-primary bg-[linear-gradient(90deg,rgba(59,130,246,0.2)_0%,rgba(59,130,246,0.15)_100%)]"
+              isRunning && isSelected && "border-l-[3px] border-l-primary bg-primary-subtle"
             )}
             onClick={() => onSelectModel(model.id!)}
           >
@@ -83,7 +83,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                   <span className="inline-flex items-center">{model.architecture}</span>
                 )}
                 {model.quantization && (
-                  <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-primary border border-[rgba(59,130,246,0.3)]">{model.quantization}</span>
+                  <span className="py-xs px-sm bg-background rounded-sm text-xs font-medium text-primary border border-primary-border">{model.quantization}</span>
                 )}
               </div>
             </div>

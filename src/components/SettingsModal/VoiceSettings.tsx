@@ -184,7 +184,7 @@ export const VoiceSettings: FC<VoiceSettingsProps> = ({ onClose }) => {
     <div className="flex flex-col gap-md">
       {/* Error display */}
       {voice?.error && (
-        <div className="text-[#ef4444] text-sm">
+        <div className="text-danger text-sm">
           {voice.error}
           <button onClick={() => voice?.clearError()} className="ml-2 cursor-pointer bg-transparent border-none text-inherit">✕</button>
         </div>

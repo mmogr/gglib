@@ -59,13 +59,13 @@ export const DeepResearchToggle: React.FC<DeepResearchToggleProps> = ({
     
     return (
       <div className={cn('flex items-center gap-2', className)}>
-        <div className="flex items-center gap-1.5 py-1 px-2 bg-[rgba(59,130,246,0.1)] rounded text-[11px] text-[#60a5fa]">
+        <div className="flex items-center gap-1.5 py-1 px-2 bg-primary-subtle rounded text-[11px] text-primary-light">
           <Icon icon={Loader2} size={12} className="animate-spin" />
           <span>Researching...</span>
         </div>
         {canWrapUp && (
           <button
-            className="flex items-center gap-1.5 py-1.5 px-3 bg-[rgba(34,197,94,0.15)] border border-[rgba(34,197,94,0.4)] rounded-md text-[#4ade80] text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-[rgba(34,197,94,0.25)] hover:border-[rgba(34,197,94,0.6)]"
+            className="flex items-center gap-1.5 py-1.5 px-3 bg-success-subtle border border-success-border rounded-md text-success text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-success/20"
             onClick={onWrapUp}
             title="Wrap up research early (synthesize now)"
             type="button"
@@ -78,7 +78,7 @@ export const DeepResearchToggle: React.FC<DeepResearchToggleProps> = ({
         )}
         {onStop && (
           <button
-            className="flex items-center gap-1.5 py-1.5 px-3 bg-[rgba(239,68,68,0.15)] border border-[rgba(239,68,68,0.4)] rounded-md text-[#f87171] text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-[rgba(239,68,68,0.25)] hover:border-[rgba(239,68,68,0.6)]"
+            className="flex items-center gap-1.5 py-1.5 px-3 bg-danger-subtle border border-danger-border rounded-md text-danger text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-danger/20"
             onClick={onStop}
             title="Stop research"
             type="button"
@@ -100,11 +100,11 @@ export const DeepResearchToggle: React.FC<DeepResearchToggleProps> = ({
         <button
           className={cn(
             'flex items-center gap-1.5 py-1.5 px-3 border rounded-md text-xs font-medium cursor-pointer transition-all duration-200 whitespace-nowrap',
-            'bg-[var(--bg-secondary,#1e1e1e)] border-[var(--border-color,#333)] text-[var(--text-secondary,#a0a0a0)]',
-            'hover:not-disabled:bg-[var(--bg-tertiary,#252525)] hover:not-disabled:border-[var(--border-hover,#444)] hover:not-disabled:text-[var(--text-primary,#e0e0e0)]',
+            'bg-surface-elevated border-border text-text-secondary',
+            'hover:not-disabled:bg-surface-hover hover:not-disabled:border-border-hover hover:not-disabled:text-text',
             'disabled:opacity-50 disabled:cursor-not-allowed',
-            'data-[active=true]:bg-gradient-to-br data-[active=true]:from-[rgba(99,102,241,0.2)] data-[active=true]:to-[rgba(139,92,246,0.2)] data-[active=true]:border-[rgba(99,102,241,0.5)] data-[active=true]:text-[#a5b4fc]',
-            'data-[active=true]:hover:not-disabled:from-[rgba(99,102,241,0.3)] data-[active=true]:hover:not-disabled:to-[rgba(139,92,246,0.3)] data-[active=true]:hover:not-disabled:border-[rgba(99,102,241,0.6)]',
+            'data-[active=true]:bg-primary-subtle data-[active=true]:border-primary-border data-[active=true]:text-primary-light',
+            'data-[active=true]:hover:not-disabled:bg-primary/20 data-[active=true]:hover:not-disabled:border-primary',
           )}
           onClick={onToggle}
           data-active={isEnabled}
@@ -120,7 +120,7 @@ export const DeepResearchToggle: React.FC<DeepResearchToggleProps> = ({
           </span>
         </button>
         {disabled && disabledReason && (
-          <span className="absolute bottom-full left-1/2 -translate-x-1/2 py-1.5 px-2.5 bg-[var(--bg-primary,#161616)] border border-[var(--border-color,#333)] rounded text-[11px] text-[var(--text-secondary,#a0a0a0)] whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-[opacity,visibility] duration-200 pointer-events-none z-[100] mb-1">
+          <span className="absolute bottom-full left-1/2 -translate-x-1/2 py-1.5 px-2.5 bg-background border border-border rounded text-[11px] text-text-secondary whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-[opacity,visibility] duration-200 pointer-events-none z-[100] mb-1">
             {disabledReason}
           </span>
         )}
