@@ -17,12 +17,7 @@ use gglib_download::cli_exec::ensure_fast_helper_ready;
 use display::{print_dependency, print_gpu_status};
 use instructions::print_installation_instructions;
 
-// ANSI color codes for better UX
-const GREEN: &str = "\x1b[32m";
-const RED: &str = "\x1b[31m";
-const BLUE: &str = "\x1b[34m";
-const BOLD: &str = "\x1b[1m";
-const RESET: &str = "\x1b[0m";
+use crate::presentation::style::{BOLD, DANGER, INFO, RESET, SUCCESS};
 
 /// Execute the check-deps command.
 ///
@@ -39,7 +34,7 @@ const RESET: &str = "\x1b[0m";
 /// Returns `Ok(())` if all required dependencies are present.
 /// Returns an error if any required dependencies are missing.
 pub async fn execute(probe: &dyn SystemProbePort) -> Result<()> {
-    println!("{}{}Checking system dependencies...{}\n", BOLD, BLUE, RESET);
+    println!("{}{}Checking system dependencies...{}\n", BOLD, INFO, RESET);
 
     let dependencies = probe.check_all_dependencies();
 
@@ -70,7 +65,7 @@ pub async fn execute(probe: &dyn SystemProbePort) -> Result<()> {
     if missing_required.is_empty() {
         println!(
             "{}✓ All required dependencies are installed!{} ({}/{})",
-            GREEN, RESET, present_required, total_required
+            SUCCESS, RESET, present_required, total_required
         );
 
         println!(
@@ -80,16 +75,16 @@ pub async fn execute(probe: &dyn SystemProbePort) -> Result<()> {
         ensure_fast_helper_ready()
             .await
             .context("Failed to set up the Python fast download helper")?;
-        println!("{}✓ Fast download helper ready{}", GREEN, RESET);
+        println!("{}✓ Fast download helper ready{}", SUCCESS, RESET);
 
         print_gpu_status(probe);
 
-        println!("\n{}You can now run: {}make setup{}", BOLD, BLUE, RESET);
+        println!("\n{}You can now run: {}make setup{}", BOLD, INFO, RESET);
         Ok(())
     } else {
         println!(
             "{}✗ {} required dependencies are missing.{} ({}/{})",
-            RED,
+            DANGER,
             missing_required.len(),
             RESET,
             present_required,
