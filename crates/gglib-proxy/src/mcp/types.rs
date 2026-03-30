@@ -244,18 +244,15 @@ mod tests {
         assert_eq!(req.method, "initialize");
         assert!(req.id.is_some());
 
-        let params: InitializeParams =
-            serde_json::from_value(req.params.unwrap()).unwrap();
+        let params: InitializeParams = serde_json::from_value(req.params.unwrap()).unwrap();
         assert_eq!(params.protocol_version, "2025-03-26");
         assert_eq!(params.client_info.unwrap().name, "OpenWebUI");
     }
 
     #[test]
     fn serialize_success_response() {
-        let resp = JsonRpcResponse::success(
-            Value::Number(1.into()),
-            serde_json::json!({"status": "ok"}),
-        );
+        let resp =
+            JsonRpcResponse::success(Value::Number(1.into()), serde_json::json!({"status": "ok"}));
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"result\""));
         assert!(!json.contains("\"error\""));

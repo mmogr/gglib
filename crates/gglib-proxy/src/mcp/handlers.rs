@@ -15,11 +15,11 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use futures_util::stream;
 use serde_json::Value;
 use tracing::{debug, error, warn};
@@ -107,7 +107,10 @@ pub(crate) async fn delete_mcp(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let session_id = match headers.get(MCP_SESSION_HEADER).and_then(|v| v.to_str().ok()) {
+    let session_id = match headers
+        .get(MCP_SESSION_HEADER)
+        .and_then(|v| v.to_str().ok())
+    {
         Some(id) => id,
         None => return StatusCode::BAD_REQUEST,
     };
@@ -183,7 +186,11 @@ async fn handle_tools_list(mcp: &gglib_mcp::McpService, id: Value) -> Response {
 
 /// Handle `tools/call` — resolve the qualified name, invoke the tool,
 /// and return the result as an SSE stream.
-async fn handle_tools_call(mcp: &gglib_mcp::McpService, id: Value, params: Option<Value>) -> Response {
+async fn handle_tools_call(
+    mcp: &gglib_mcp::McpService,
+    id: Value,
+    params: Option<Value>,
+) -> Response {
     // Parse params
     let call_params: ToolsCallParams = match params {
         Some(v) => match serde_json::from_value(v) {
@@ -212,7 +219,10 @@ async fn handle_tools_call(mcp: &gglib_mcp::McpService, id: Value, params: Optio
             return json_rpc_error_response(
                 StatusCode::OK,
                 id,
-                JsonRpcError::new(INVALID_PARAMS, format!("Unknown tool: {}", call_params.name)),
+                JsonRpcError::new(
+                    INVALID_PARAMS,
+                    format!("Unknown tool: {}", call_params.name),
+                ),
             );
         }
     };
@@ -246,7 +256,11 @@ async fn handle_tools_call(mcp: &gglib_mcp::McpService, id: Value, params: Optio
                     content_type: "text".to_string(),
                     text,
                 }],
-                is_error: if tool_result.success { None } else { Some(true) },
+                is_error: if tool_result.success {
+                    None
+                } else {
+                    Some(true)
+                },
             };
             JsonRpcResponse::success(id, serde_json::to_value(call_result).unwrap())
         }
@@ -285,7 +299,9 @@ async fn handle_notification(
     request: &JsonRpcRequest,
 ) -> Response {
     if request.method == "notifications/initialized"
-        && let Some(sid) = headers.get(MCP_SESSION_HEADER).and_then(|v| v.to_str().ok())
+        && let Some(sid) = headers
+            .get(MCP_SESSION_HEADER)
+            .and_then(|v| v.to_str().ok())
     {
         sessions.mark_initialized(sid).await;
         debug!(session_id = sid, "MCP session marked initialized");
@@ -322,7 +338,10 @@ async fn require_session(
     headers: &HeaderMap,
     id: &Value,
 ) -> Result<(), Response> {
-    match headers.get(MCP_SESSION_HEADER).and_then(|v| v.to_str().ok()) {
+    match headers
+        .get(MCP_SESSION_HEADER)
+        .and_then(|v| v.to_str().ok())
+    {
         Some(sid) if sessions.validate_session(sid).await => Ok(()),
         Some(_) => {
             // Session expired or unknown → client must re-initialize
@@ -341,9 +360,12 @@ async fn require_session(
 }
 
 /// Build a flattened tool list and server-id-to-name mapping.
-async fn build_tool_list(mcp: &gglib_mcp::McpService) -> (Vec<(i64, gglib_core::McpTool)>, HashMap<i64, String>) {
+async fn build_tool_list(
+    mcp: &gglib_mcp::McpService,
+) -> (Vec<(i64, gglib_core::McpTool)>, HashMap<i64, String>) {
     let servers = mcp.list_servers().await.unwrap_or_default();
-    let server_names: HashMap<i64, String> = servers.iter().map(|s| (s.id, s.name.clone())).collect();
+    let server_names: HashMap<i64, String> =
+        servers.iter().map(|s| (s.id, s.name.clone())).collect();
 
     let all_tools = mcp.list_all_tools().await;
     let flat: Vec<(i64, gglib_core::McpTool)> = all_tools
@@ -458,10 +480,7 @@ mod tests {
         let sessions = super::super::session::SessionManager::new();
         let sid = sessions.create_session().await;
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "mcp-session-id",
-            HeaderValue::from_str(&sid).unwrap(),
-        );
+        headers.insert("mcp-session-id", HeaderValue::from_str(&sid).unwrap());
         let id = Value::Number(1.into());
 
         let result = require_session(&sessions, &headers, &id).await;

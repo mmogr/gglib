@@ -12,12 +12,10 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::ports::{
-    CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort, ModelSummary,
-    RunningTarget, ModelCatalogPort,
+    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
+    ModelSummary, RunningTarget,
 };
-use gglib_core::{
-    McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter,
-};
+use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
 
 // ─── Mock ports ────────────────────────────────────────────────────────────
@@ -140,11 +138,7 @@ async fn get_mcp_returns_405() {
     let (base_url, cancel) = start_proxy().await;
     let client = Client::new();
 
-    let resp = client
-        .get(format!("{base_url}/mcp"))
-        .send()
-        .await
-        .unwrap();
+    let resp = client.get(format!("{base_url}/mcp")).send().await.unwrap();
 
     assert_eq!(resp.status(), 405);
 
