@@ -2,6 +2,7 @@
 #![deny(unsafe_code)]
 
 pub mod forward;
+pub mod mcp;
 pub mod models;
 pub mod server;
 
