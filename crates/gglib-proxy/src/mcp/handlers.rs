@@ -367,3 +367,104 @@ async fn resolve_tool_name(mcp: &gglib_mcp::McpService, qualified: &str) -> Opti
 fn json_rpc_error_response(status: StatusCode, id: Value, error: JsonRpcError) -> Response {
     (status, Json(JsonRpcResponse::error(id, error))).into_response()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+    use http_body_util::BodyExt;
+
+    #[test]
+    fn validate_origin_allows_no_origin_header() {
+        let headers = HeaderMap::new();
+        assert!(validate_origin(&headers).is_ok());
+    }
+
+    #[test]
+    fn validate_origin_allows_localhost() {
+        for origin in [
+            "http://localhost",
+            "http://localhost:3000",
+            "https://localhost:8443",
+            "http://127.0.0.1:9887",
+            "https://127.0.0.1",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("origin", HeaderValue::from_str(origin).unwrap());
+            assert!(
+                validate_origin(&headers).is_ok(),
+                "expected {origin} to be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_origin_rejects_external_origins() {
+        for origin in [
+            "https://evil.example.com",
+            "http://attacker.io",
+            "https://192.168.1.1:8080",
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("origin", HeaderValue::from_str(origin).unwrap());
+            assert!(
+                validate_origin(&headers).is_err(),
+                "expected {origin} to be rejected"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn json_rpc_error_response_has_correct_structure() {
+        let resp = json_rpc_error_response(
+            StatusCode::BAD_REQUEST,
+            Value::Number(42.into()),
+            JsonRpcError::new(PARSE_ERROR, "bad input"),
+        );
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let parsed: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed["jsonrpc"], "2.0");
+        assert_eq!(parsed["id"], 42);
+        assert_eq!(parsed["error"]["code"], -32700);
+        assert_eq!(parsed["error"]["message"], "bad input");
+        assert!(parsed.get("result").is_none());
+    }
+
+    #[tokio::test]
+    async fn session_manager_require_session_rejects_missing_header() {
+        let sessions = super::super::session::SessionManager::new();
+        let headers = HeaderMap::new();
+        let id = Value::Number(1.into());
+
+        let result = require_session(&sessions, &headers, &id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn session_manager_require_session_rejects_unknown_session() {
+        let sessions = super::super::session::SessionManager::new();
+        let mut headers = HeaderMap::new();
+        headers.insert("mcp-session-id", HeaderValue::from_static("unknown-id"));
+        let id = Value::Number(1.into());
+
+        let result = require_session(&sessions, &headers, &id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn session_manager_require_session_accepts_valid_session() {
+        let sessions = super::super::session::SessionManager::new();
+        let sid = sessions.create_session().await;
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "mcp-session-id",
+            HeaderValue::from_str(&sid).unwrap(),
+        );
+        let id = Value::Number(1.into());
+
+        let result = require_session(&sessions, &headers, &id).await;
+        assert!(result.is_ok());
+    }
+}
