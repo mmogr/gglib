@@ -358,12 +358,12 @@ impl fmt::Debug for ProxySupervisor {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use gglib_core::NoopEmitter;
+    use gglib_core::domain::mcp::{McpServer, NewMcpServer};
     use gglib_core::ports::{
         CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
     };
-    use gglib_core::NoopEmitter;
     use gglib_core::ports::{McpRepositoryError, McpServerRepository};
-    use gglib_core::domain::mcp::{McpServer, NewMcpServer};
 
     /// Empty MCP repository for testing — all reads return empty/not-found.
     #[derive(Debug)]
@@ -486,7 +486,9 @@ mod tests {
         // Can't start again
         let (runtime2, catalog2) = make_ports();
         assert!(matches!(
-            supervisor.start(config, runtime2, catalog2, make_mcp()).await,
+            supervisor
+                .start(config, runtime2, catalog2, make_mcp())
+                .await,
             Err(SupervisorError::AlreadyRunning(_))
         ));
 
@@ -525,7 +527,10 @@ mod tests {
 
         // Start again (should work)
         let (runtime2, catalog2) = make_ports();
-        let addr2 = supervisor.start(config, runtime2, catalog2, make_mcp()).await.unwrap();
+        let addr2 = supervisor
+            .start(config, runtime2, catalog2, make_mcp())
+            .await
+            .unwrap();
 
         // Different port (both were 0 -> random)
         // Note: Could technically get same port, but very unlikely
