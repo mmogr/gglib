@@ -79,9 +79,9 @@ pub async fn start_proxy_standalone(
         tracing::warn!("MCP initialization completed with errors: {e}");
     }
 
-    // Gather MCP tool count for banner
+    // Gather MCP counts for banner
+    let server_count = mcp.list_servers().await.map(|s| s.len()).unwrap_or(0);
     let tools = mcp.list_all_tools().await;
-    let server_count = tools.len();
     let tool_count: usize = tools.iter().map(|(_, v)| v.len()).sum();
 
     // Show startup banner
