@@ -7,11 +7,12 @@
 //!
 //! # Module layout
 //!
-//! | Module    | Responsibility                                    |
-//! |-----------|---------------------------------------------------|
-//! | `types`   | JSON-RPC 2.0 and MCP wire types (serde structs)   |
-//! | `session` | `Mcp-Session-Id` tracking and validation          |
-//! | `handlers`| Axum route handlers (added in a later commit)     |
+//! | Module     | Responsibility                                    |
+//! |------------|---------------------------------------------------|
+//! | `types`    | JSON-RPC 2.0 and MCP wire types (serde structs)   |
+//! | `session`  | `Mcp-Session-Id` tracking and validation          |
+//! | `handlers` | Axum route handlers for POST/GET/DELETE `/mcp`    |
 
+pub mod handlers;
 pub mod session;
 pub mod types;

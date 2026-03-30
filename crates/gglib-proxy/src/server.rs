@@ -22,20 +22,23 @@ use gglib_core::ports::{ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
 use gglib_mcp::McpService;
 
 use crate::forward::forward_chat_completion;
+use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
+use crate::mcp::session::SessionManager;
 use crate::models::{ChatCompletionRequest, ErrorResponse, ModelsResponse};
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]
-struct AppState {
+pub(crate) struct AppState {
     /// HTTP client for forwarding requests to llama-server.
     client: Client,
     /// Port for managing model runtime.
     runtime_port: Arc<dyn ModelRuntimePort>,
     /// Port for listing and resolving models.
     catalog_port: Arc<dyn ModelCatalogPort>,
-    /// MCP service for tool gateway (used by MCP handlers in a later commit).
-    #[allow(dead_code)]
-    mcp: Arc<McpService>,
+    /// MCP service for tool gateway.
+    pub(crate) mcp: Arc<McpService>,
+    /// Session manager for MCP Streamable HTTP sessions.
+    pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
     default_ctx: u64,
 }
@@ -75,6 +78,7 @@ pub async fn serve(
         runtime_port,
         catalog_port,
         mcp,
+        sessions: SessionManager::new(),
         default_ctx,
     };
 
@@ -82,10 +86,12 @@ pub async fn serve(
         .route("/health", get(health_check))
         .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
+        .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
         .with_state(state);
 
     info!("Proxy listening on {addr}");
     info!("Configure OpenWebUI to use: http://{addr}/v1");
+    info!("MCP Streamable HTTP endpoint: http://{addr}/mcp");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(cancel.cancelled_owned())
