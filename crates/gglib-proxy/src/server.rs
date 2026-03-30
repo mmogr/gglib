@@ -19,6 +19,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
+use gglib_mcp::McpService;
 
 use crate::forward::forward_chat_completion;
 use crate::models::{ChatCompletionRequest, ErrorResponse, ModelsResponse};
@@ -32,6 +33,9 @@ struct AppState {
     runtime_port: Arc<dyn ModelRuntimePort>,
     /// Port for listing and resolving models.
     catalog_port: Arc<dyn ModelCatalogPort>,
+    /// MCP service for tool gateway (used by MCP handlers in a later commit).
+    #[allow(dead_code)]
+    mcp: Arc<McpService>,
     /// Default context size when not specified in request.
     default_ctx: u64,
 }
@@ -46,6 +50,7 @@ struct AppState {
 /// * `default_ctx` - Default context size for models
 /// * `runtime_port` - Port for managing model runtime
 /// * `catalog_port` - Port for listing and resolving models
+/// * `mcp` - MCP service for tool gateway
 /// * `cancel` - Cancellation token for graceful shutdown
 ///
 /// # Returns
@@ -56,6 +61,7 @@ pub async fn serve(
     default_ctx: u64,
     runtime_port: Arc<dyn ModelRuntimePort>,
     catalog_port: Arc<dyn ModelCatalogPort>,
+    mcp: Arc<McpService>,
     cancel: CancellationToken,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
@@ -68,6 +74,7 @@ pub async fn serve(
         client,
         runtime_port,
         catalog_port,
+        mcp,
         default_ctx,
     };
 

@@ -72,6 +72,7 @@ impl GuiBackend {
         ProxyOps::new(
             self.deps.proxy_supervisor.clone(),
             self.deps.model_repo.clone(),
+            self.deps.mcp.clone(),
         )
     }
 

@@ -2175,6 +2175,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "gglib-core",
+ "gglib-mcp",
  "reqwest 0.13.2",
  "serde",
  "serde_json",

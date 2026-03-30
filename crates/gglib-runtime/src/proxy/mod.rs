@@ -23,6 +23,7 @@ use std::sync::Arc;
 use crate::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use crate::process::ProcessManager;
 use gglib_core::ports::{ModelCatalogPort, ModelRepository};
+use gglib_mcp::McpService;
 
 /// Start the OpenAI-compatible proxy as a standalone server (CLI usage).
 ///
@@ -37,6 +38,7 @@ use gglib_core::ports::{ModelCatalogPort, ModelRepository};
 /// * `llama_server_path` - Path to llama-server binary
 /// * `model_repo` - Model repository for catalog access
 /// * `default_context` - Default context size for models
+/// * `mcp` - MCP service for tool gateway
 pub async fn start_proxy_standalone(
     host: String,
     port: u16,
@@ -44,6 +46,7 @@ pub async fn start_proxy_standalone(
     llama_server_path: PathBuf,
     model_repo: Arc<dyn ModelRepository>,
     default_context: u64,
+    mcp: Arc<McpService>,
 ) -> Result<()> {
     // Create catalog port from model repository
     let catalog_port: Arc<dyn ModelCatalogPort> =
@@ -71,6 +74,16 @@ pub async fn start_proxy_standalone(
         default_context,
     };
 
+    // Initialize MCP service (validates servers and auto-starts enabled ones)
+    if let Err(e) = mcp.initialize().await {
+        tracing::warn!("MCP initialization completed with errors: {e}");
+    }
+
+    // Gather MCP tool count for banner
+    let tools = mcp.list_all_tools().await;
+    let server_count = tools.len();
+    let tool_count: usize = tools.iter().map(|(_, v)| v.len()).sum();
+
     // Show startup banner
     println!();
     println!("  🚀 gglib proxy starting...");
@@ -79,18 +92,22 @@ pub async fn start_proxy_standalone(
     println!("  Port:            {}", port);
     println!("  Llama base port: {}", llama_base_port);
     println!("  Default context: {}", default_context);
+    println!("  MCP servers:     {}", server_count);
+    println!("  MCP tools:       {}", tool_count);
     println!();
 
     let addr = supervisor
-        .start(config, runtime_port, catalog_port)
+        .start(config, runtime_port, catalog_port, mcp)
         .await
         .map_err(|e| anyhow!("{e}"))?;
     tracing::info!("Proxy started on {addr}");
 
-    // Show success message with configuration URL
+    // Show success message with configuration URLs
     println!("  ✓ Proxy started successfully on {}", addr);
     println!();
-    println!("  Configure OpenWebUI to use: http://{}/v1", addr);
+    println!("  Configure OpenWebUI:");
+    println!("    OpenAI API: http://{}/v1", addr);
+    println!("    MCP Tools:  http://{}/mcp", addr);
     println!();
     println!("  Press Ctrl+C to stop");
     println!();

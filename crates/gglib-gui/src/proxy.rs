@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use gglib_core::ports::{ModelCatalogPort, ModelRepository, ModelRuntimePort};
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
+use gglib_mcp::McpService;
 use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use gglib_runtime::process::ProcessManager;
 use gglib_runtime::proxy::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
@@ -62,14 +63,20 @@ pub(crate) fn resolve_llama_base_port(
 pub struct ProxyOps {
     supervisor: Arc<ProxySupervisor>,
     model_repo: Arc<dyn ModelRepository>,
+    mcp: Arc<McpService>,
 }
 
 impl ProxyOps {
     /// Create proxy operations with the required dependencies.
-    pub fn new(supervisor: Arc<ProxySupervisor>, model_repo: Arc<dyn ModelRepository>) -> Self {
+    pub fn new(
+        supervisor: Arc<ProxySupervisor>,
+        model_repo: Arc<dyn ModelRepository>,
+        mcp: Arc<McpService>,
+    ) -> Self {
         Self {
             supervisor,
             model_repo,
+            mcp,
         }
     }
 
@@ -115,7 +122,7 @@ impl ProxyOps {
 
         // Start the proxy
         self.supervisor
-            .start(config, runtime, catalog)
+            .start(config, runtime, catalog, self.mcp.clone())
             .await
             .map_err(|e| match e {
                 SupervisorError::AlreadyRunning(addr) => {

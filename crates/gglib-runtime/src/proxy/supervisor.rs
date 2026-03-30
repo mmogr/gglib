@@ -23,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_mcp::McpService;
 
 /// Handle to a running proxy server.
 struct ProxyHandle {
@@ -156,6 +157,7 @@ impl ProxySupervisor {
     /// * `config` - Proxy configuration (host, port, default_context)
     /// * `runtime_port` - Port for managing model runtime
     /// * `catalog_port` - Port for listing and resolving models
+    /// * `mcp` - MCP service for tool gateway
     ///
     /// # Errors
     ///
@@ -165,6 +167,7 @@ impl ProxySupervisor {
         config: ProxyConfig,
         runtime_port: Arc<dyn ModelRuntimePort>,
         catalog_port: Arc<dyn ModelCatalogPort>,
+        mcp: Arc<McpService>,
     ) -> Result<SocketAddr, SupervisorError> {
         let mut guard = self.handle.lock().await;
 
@@ -221,6 +224,7 @@ impl ProxySupervisor {
                 default_ctx,
                 runtime_port,
                 catalog_port,
+                mcp,
                 cancel_clone,
             )
             .await;
