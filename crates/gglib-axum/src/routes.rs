@@ -40,65 +40,14 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 /// but WITHOUT `.with_state()` applied. The caller must apply `.with_state()` before
 /// nesting. All endpoints are defined without the `/api` prefix since this router
 /// will be nested under `/api` by the caller.
+///
+/// Routes are organized into domain groups:
+/// - `/models/*`  — CRUD, tags, verification, downloads, HuggingFace discovery
+/// - `/config/*`  — settings, system setup
 pub(crate) fn api_routes() -> Router<AppState> {
     Router::new()
-        // Models API
-        .route(
-            "/models",
-            get(handlers::models::list).post(handlers::models::add),
-        )
-        .route(
-            "/models/{id}",
-            get(handlers::models::get)
-                .put(handlers::models::update)
-                .delete(handlers::models::remove),
-        )
-        .route(
-            "/models/{id}/tags",
-            get(handlers::models::get_model_tags).post(handlers::models::add_tag_body),
-        )
-        .route(
-            "/models/{id}/tags/{tag}",
-            post(handlers::models::add_tag).delete(handlers::models::remove_tag),
-        )
-        .route(
-            "/models/filter-options",
-            get(handlers::models::filter_options),
-        )
-        // Model Verification API
-        .route("/models/{id}/verify", post(handlers::verification::verify))
-        .route(
-            "/models/{id}/updates",
-            get(handlers::verification::check_updates),
-        )
-        .route("/models/{id}/repair", post(handlers::verification::repair))
-        // Tags API
-        .route("/tags", get(handlers::models::list_tags))
-        .route("/tags/{tag}/models", get(handlers::models::get_by_tag))
-        // Settings API
-        .route(
-            "/settings",
-            get(handlers::settings::get)
-                .put(handlers::settings::update)
-                .patch(handlers::settings::update),
-        )
-        .route("/system/memory", get(handlers::settings::memory))
-        // Setup wizard API
-        .route("/system/setup-status", get(handlers::setup::status))
-        .route(
-            "/system/install-llama",
-            post(handlers::setup::install_llama),
-        )
-        .route(
-            "/system/build-llama-from-source",
-            post(handlers::setup::build_llama_from_source),
-        )
-        .route("/system/setup-python", post(handlers::setup::setup_python))
-        .route(
-            "/system/models-directory",
-            get(handlers::settings::models_directory)
-                .put(handlers::settings::update_models_directory),
-        )
+        .nest("/models", model_routes())
+        .nest("/config", config_routes())
         // Servers API
         .route("/servers", get(handlers::servers::list))
         .route("/servers/start", post(handlers::servers::start_body))
@@ -116,27 +65,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route(
             "/servers/{port}/logs/stream",
             get(handlers::servers::stream_logs),
-        )
-        // Downloads API
-        .route("/downloads", get(handlers::downloads::list))
-        .route(
-            "/downloads/queue",
-            get(handlers::downloads::list).post(handlers::downloads::queue),
-        )
-        .route("/downloads/{id}", delete(handlers::downloads::remove))
-        .route("/downloads/{id}/cancel", post(handlers::downloads::cancel))
-        .route("/downloads/reorder", post(handlers::downloads::reorder))
-        .route(
-            "/downloads/reorder-full",
-            post(handlers::downloads::reorder_full),
-        )
-        .route(
-            "/downloads/shard-group/{id}/cancel",
-            post(handlers::downloads::cancel_shard_group),
-        )
-        .route(
-            "/downloads/failed/clear",
-            post(handlers::downloads::clear_failed),
         )
         // Built-in tools API
         .route("/builtin/tools", get(handlers::builtin::list_builtin_tools))
@@ -161,17 +89,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/status", get(handlers::proxy::status))
         .route("/proxy/start", post(handlers::proxy::start))
         .route("/proxy/stop", post(handlers::proxy::stop))
-        // Hugging Face API (strip /api prefix since we're nested under /api)
-        .route("/hf/search", post(handlers::hf::search))
-        .route("/hf/model/{*model_id}", get(handlers::hf::model_summary))
-        .route(
-            "/hf/quantizations/{model_id}",
-            get(handlers::hf::quantizations),
-        )
-        .route(
-            "/hf/tool-support/{model_id}",
-            get(handlers::hf::tool_support),
-        )
         // Events (SSE)
         .route("/events", get(handlers::events::stream))
         // Voice API
@@ -205,9 +122,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/voice/speak", post(handlers::voice::speak))
         .route("/voice/stop-speaking", post(handlers::voice::stop_speaking))
         // WebSocket audio data plane
-        // Browser opens this WS *before* POST /voice/start to register remote
-        // audio; the pipeline then uses WebSocketAudioSource/Sink instead of
-        // local cpal/rodio.  Desktop callers skip this endpoint entirely.
         .route("/voice/audio", get(handlers::voice_ws::audio_ws))
         // Agent (server-side agentic loop with SSE streaming)
         //
@@ -225,6 +139,130 @@ pub(crate) fn api_routes() -> Router<AppState> {
         )
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
+}
+
+/// Model domain routes: CRUD, tags, verification, downloads, HuggingFace.
+///
+/// Nested under `/api/models` by the caller.
+fn model_routes() -> Router<AppState> {
+    Router::new()
+        // CRUD
+        .route(
+            "/",
+            get(handlers::model::models::list).post(handlers::model::models::add),
+        )
+        .route(
+            "/{id}",
+            get(handlers::model::models::get)
+                .put(handlers::model::models::update)
+                .delete(handlers::model::models::remove),
+        )
+        // Tags
+        .route(
+            "/{id}/tags",
+            get(handlers::model::models::get_model_tags).post(handlers::model::models::add_tag_body),
+        )
+        .route(
+            "/{id}/tags/{tag}",
+            post(handlers::model::models::add_tag).delete(handlers::model::models::remove_tag),
+        )
+        .route("/tags", get(handlers::model::models::list_tags))
+        .route("/tags/{tag}", get(handlers::model::models::get_by_tag))
+        .route(
+            "/filter-options",
+            get(handlers::model::models::filter_options),
+        )
+        // Verification
+        .route("/{id}/verify", post(handlers::model::verification::verify))
+        .route(
+            "/{id}/updates",
+            get(handlers::model::verification::check_updates),
+        )
+        .route("/{id}/repair", post(handlers::model::verification::repair))
+        // Downloads
+        .route("/downloads", get(handlers::model::downloads::list))
+        .route(
+            "/downloads/queue",
+            get(handlers::model::downloads::list).post(handlers::model::downloads::queue),
+        )
+        .route(
+            "/downloads/{id}",
+            delete(handlers::model::downloads::remove),
+        )
+        .route(
+            "/downloads/{id}/cancel",
+            post(handlers::model::downloads::cancel),
+        )
+        .route(
+            "/downloads/reorder",
+            post(handlers::model::downloads::reorder),
+        )
+        .route(
+            "/downloads/reorder-full",
+            post(handlers::model::downloads::reorder_full),
+        )
+        .route(
+            "/downloads/shard-group/{id}/cancel",
+            post(handlers::model::downloads::cancel_shard_group),
+        )
+        .route(
+            "/downloads/failed/clear",
+            post(handlers::model::downloads::clear_failed),
+        )
+        // HuggingFace discovery
+        .route("/hf/search", post(handlers::model::hf::search))
+        .route(
+            "/hf/model/{*model_id}",
+            get(handlers::model::hf::model_summary),
+        )
+        .route(
+            "/hf/quantizations/{model_id}",
+            get(handlers::model::hf::quantizations),
+        )
+        .route(
+            "/hf/tool-support/{model_id}",
+            get(handlers::model::hf::tool_support),
+        )
+}
+
+/// Config and system routes: settings, setup wizard.
+///
+/// Nested under `/api/config` by the caller.
+fn config_routes() -> Router<AppState> {
+    Router::new()
+        // Settings
+        .route(
+            "/settings",
+            get(handlers::config::settings::get)
+                .put(handlers::config::settings::update)
+                .patch(handlers::config::settings::update),
+        )
+        // System
+        .route(
+            "/system/memory",
+            get(handlers::config::settings::memory),
+        )
+        .route(
+            "/system/models-directory",
+            get(handlers::config::settings::models_directory)
+                .put(handlers::config::settings::update_models_directory),
+        )
+        .route(
+            "/system/setup-status",
+            get(handlers::config::setup::status),
+        )
+        .route(
+            "/system/install-llama",
+            post(handlers::config::setup::install_llama),
+        )
+        .route(
+            "/system/build-llama-from-source",
+            post(handlers::config::setup::build_llama_from_source),
+        )
+        .route(
+            "/system/setup-python",
+            post(handlers::config::setup::setup_python),
+        )
 }
 
 /// Create the main Axum router with all API routes.
