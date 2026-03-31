@@ -1,230 +1,54 @@
 //! Main commands enum and primary subcommands.
 //!
-//! This module defines the available commands for the CLI tool.
+//! This module defines the top-level commands for the CLI tool.
+//! Model management lives under [`ModelCommand`] and configuration
+//! under [`ConfigCommand`]; inference commands stay top-level for
+//! ergonomic direct access.
 
 use clap::Subcommand;
 
-use crate::assistant_ui_commands::AssistantUiCommand;
 use crate::config_commands::ConfigCommand;
-use crate::llama_commands::LlamaCommand;
 use crate::mcp_commands::McpCommand;
+use crate::model_commands::ModelCommand;
+use crate::shared_args::{ContextArgs, SamplingArgs};
 
-/// Available commands for the GGUF library management tool.
-///
-/// Each command represents a different operation that can be performed
-/// on GGUF models in the local library.
+/// Top-level commands for the GGUF library management tool.
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Check system dependencies required for gglib
-    CheckDeps,
-
-    /// Show resolved paths for all gglib directories
-    Paths,
-
-    /// Add a GGUF model to the database
-    Add {
-        /// Path to GGUF file to add
-        file_path: String,
+    /// Manage GGUF models (add, list, remove, download, verify, …)
+    Model {
+        #[command(subcommand)]
+        command: ModelCommand,
     },
 
-    /// Download a GGUF model from HuggingFace Hub
-    Download {
-        /// HuggingFace model repository (e.g., "microsoft/DialoGPT-medium")
-        model_id: String,
-        /// Specific quantization to download (e.g., "Q4_K_M", "F16")
-        #[arg(short, long)]
-        quantization: Option<String>,
-        /// List available quantizations for the model
-        #[arg(long)]
-        list_quants: bool,
-        /// Skip adding to database after download (models are registered by default)
-        #[arg(long)]
-        skip_db: bool,
-        /// HuggingFace token for private models
-        #[arg(long)]
-        token: Option<String>,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
-    },
-
-    /// Check for updates to downloaded models
-    CheckUpdates {
-        /// Check specific model by ID
-        #[arg(short, long)]
-        model_id: Option<u32>,
-        /// Check all models
-        #[arg(long)]
-        all: bool,
-    },
-
-    /// Update a model to the latest version
-    UpdateModel {
-        /// ID of the model to update
-        model_id: u32,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
-    },
-
-    /// Verify model integrity by computing SHA256 hashes
-    Verify {
-        /// ID of the model to verify
-        model_id: i64,
-        /// Show detailed progress for each shard
-        #[arg(short, long)]
-        verbose: bool,
-    },
-
-    /// Repair a corrupt model by re-downloading failed shards
-    Repair {
-        /// ID of the model to repair
-        model_id: i64,
-        /// Specific shard indices to repair (comma-separated, e.g., "0,2,5")
-        #[arg(short, long)]
-        shards: Option<String>,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
-    },
-
-    /// Search HuggingFace Hub for GGUF models
-    Search {
-        /// Search query (model name, author, or keywords)
-        query: String,
-        /// Limit number of results
-        #[arg(short, long, default_value = "10")]
-        limit: u32,
-        /// Sort by: "downloads", "created", "likes", "updated"
-        #[arg(short, long, default_value = "downloads")]
-        sort: String,
-        /// Only show models with GGUF files
-        #[arg(long)]
-        gguf_only: bool,
-    },
-
-    /// Browse popular GGUF models on HuggingFace Hub
-    Browse {
-        /// Category to browse: "popular", "recent", "trending"
-        #[arg(default_value = "popular")]
-        category: String,
-        /// Limit number of results
-        #[arg(short, long, default_value = "20")]
-        limit: u32,
-        /// Filter by model size (e.g., "7B", "13B", "70B")
-        #[arg(long)]
-        size: Option<String>,
-    },
-
-    /// List all GGUF models in the database
-    List,
-
-    /// Remove a GGUF model from the database
-    Remove {
-        /// Name or ID of the model to remove
-        identifier: String,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
-    },
-
-    /// Update model metadata in the database
-    Update {
-        /// ID of the model to update
-        id: u32,
-        /// New name for the model
-        #[arg(short, long)]
-        name: Option<String>,
-        /// Update parameter count (in billions)
-        #[arg(short, long)]
-        param_count: Option<f64>,
-        /// Update architecture
-        #[arg(short, long)]
-        architecture: Option<String>,
-        /// Update quantization type
-        #[arg(short, long)]
-        quantization: Option<String>,
-        /// Update context length
-        #[arg(short, long)]
-        context_length: Option<u64>,
-        /// Add or update metadata (format: key=value)
-        #[arg(short, long, action = clap::ArgAction::Append)]
-        metadata: Vec<String>,
-        /// Remove specific metadata keys (comma-separated)
-        #[arg(long)]
-        remove_metadata: Option<String>,
-        /// Replace entire metadata instead of merging
-        #[arg(long)]
-        replace_metadata: bool,
-        /// Set default temperature for this model (0.0-2.0)
-        #[arg(long)]
-        temperature: Option<f32>,
-        /// Set default top-p for this model (0.0-1.0)
-        #[arg(long = "top-p")]
-        top_p: Option<f32>,
-        /// Set default top-k for this model
-        #[arg(long = "top-k")]
-        top_k: Option<i32>,
-        /// Set default max-tokens for this model
-        #[arg(long = "max-tokens")]
-        max_tokens: Option<u32>,
-        /// Set default repeat-penalty for this model
-        #[arg(long = "repeat-penalty")]
-        repeat_penalty: Option<f32>,
-        /// Clear all inference parameter defaults (revert to inherit mode)
-        #[arg(long)]
-        clear_inference_defaults: bool,
-        /// Show preview without applying changes
-        #[arg(long)]
-        dry_run: bool,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+    /// Manage configuration, tooling, and system settings
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
     },
 
     /// Serve a GGUF model with llama-server
     Serve {
         /// ID of the model to serve
         id: u32,
-        /// Context size (use 'max' to auto-detect from model metadata)
-        #[arg(short, long)]
-        ctx_size: Option<String>,
-        /// Enable memory lock
-        #[arg(long)]
-        mlock: bool,
+        #[command(flatten)]
+        context: ContextArgs,
         /// Force-enable Jinja template parsing for chat templates
         #[arg(long)]
         jinja: bool,
         /// Port to serve on
         #[arg(short, long, default_value = "8080")]
         port: u16,
-        /// Temperature for sampling (0.0-2.0, overrides model/global defaults)
-        #[arg(long)]
-        temperature: Option<f32>,
-        /// Top-p sampling (0.0-1.0, overrides model/global defaults)
-        #[arg(long = "top-p")]
-        top_p: Option<f32>,
-        /// Top-k sampling (overrides model/global defaults)
-        #[arg(long = "top-k")]
-        top_k: Option<i32>,
-        /// Maximum tokens to generate (overrides model/global defaults)
-        #[arg(long = "max-tokens")]
-        max_tokens: Option<u32>,
-        /// Repeat penalty (overrides model/global defaults)
-        #[arg(long = "repeat-penalty")]
-        repeat_penalty: Option<f32>,
+        #[command(flatten)]
+        sampling: SamplingArgs,
     },
 
     /// Chat with a model directly via llama-cli
     Chat {
         /// Name or ID of the model to chat with
         identifier: String,
-        /// Context size (use 'max' to auto-detect from model metadata)
-        #[arg(short, long)]
-        ctx_size: Option<String>,
-        /// Enable memory lock
-        #[arg(long)]
-        mlock: bool,
+        #[command(flatten)]
+        context: ContextArgs,
         /// Override the chat template name bundled with llama-cli
         #[arg(long = "chat-template")]
         chat_template: Option<String>,
@@ -243,21 +67,8 @@ pub enum Commands {
         /// Use simplified IO mode (better for piping/limited terminals)
         #[arg(long = "simple-io")]
         simple_io: bool,
-        /// Temperature for sampling (0.0-2.0, overrides model/global defaults)
-        #[arg(long)]
-        temperature: Option<f32>,
-        /// Top-p sampling (0.0-1.0, overrides model/global defaults)
-        #[arg(long = "top-p")]
-        top_p: Option<f32>,
-        /// Top-k sampling (overrides model/global defaults)
-        #[arg(long = "top-k")]
-        top_k: Option<i32>,
-        /// Maximum tokens to generate (overrides model/global defaults)
-        #[arg(long = "max-tokens")]
-        max_tokens: Option<u32>,
-        /// Repeat penalty (overrides model/global defaults)
-        #[arg(long = "repeat-penalty")]
-        repeat_penalty: Option<f32>,
+        #[command(flatten)]
+        sampling: SamplingArgs,
         /// Enable agentic mode: drives the backend agentic loop instead of llama-cli
         #[arg(long)]
         agent: bool,
@@ -298,33 +109,16 @@ pub enum Commands {
         /// Read context from file instead of stdin
         #[arg(short, long)]
         file: Option<String>,
-        /// Context size (use 'max' to auto-detect from model metadata)
-        #[arg(short, long)]
-        ctx_size: Option<String>,
-        /// Enable memory lock
-        #[arg(long)]
-        mlock: bool,
+        #[command(flatten)]
+        context: ContextArgs,
         /// Show the constructed prompt before sending
         #[arg(long)]
         verbose: bool,
         /// Cleaner output for scripting (no prompt echo, no timings)
         #[arg(long, short = 'Q')]
         quiet: bool,
-        /// Temperature for sampling (0.0-2.0, overrides model/global defaults)
-        #[arg(long)]
-        temperature: Option<f32>,
-        /// Top-p for nucleus sampling (0.0-1.0, overrides model/global defaults)
-        #[arg(long = "top-p")]
-        top_p: Option<f32>,
-        /// Top-k for sampling (overrides model/global defaults)
-        #[arg(long = "top-k")]
-        top_k: Option<i32>,
-        /// Maximum tokens to generate (overrides model/global defaults)
-        #[arg(long = "max-tokens")]
-        max_tokens: Option<u32>,
-        /// Repeat penalty (overrides model/global defaults)
-        #[arg(long = "repeat-penalty")]
-        repeat_penalty: Option<f32>,
+        #[command(flatten)]
+        sampling: SamplingArgs,
     },
 
     /// Launch the Tauri desktop GUI
@@ -373,27 +167,9 @@ pub enum Commands {
         default_context: u64,
     },
 
-    /// Manage llama.cpp installation and updates
-    Llama {
-        #[command(subcommand)]
-        command: LlamaCommand,
-    },
-
     /// Manage MCP (Model Context Protocol) tool servers
     Mcp {
         #[command(subcommand)]
         command: McpCommand,
-    },
-
-    /// Manage assistant-ui installation and updates
-    AssistantUi {
-        #[command(subcommand)]
-        command: AssistantUiCommand,
-    },
-
-    /// Manage persistent configuration (models directory, etc.)
-    Config {
-        #[command(subcommand)]
-        command: ConfigCommand,
     },
 }

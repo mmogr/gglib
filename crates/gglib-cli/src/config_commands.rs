@@ -1,11 +1,15 @@
-//! Configuration management subcommands.
+//! Configuration, tooling, and system management subcommands.
 //!
-//! This module defines the configuration-related commands for managing
-//! models directory and application settings.
+//! This module defines commands for managing application settings,
+//! models directory, llama.cpp toolchain, assistant-ui, system
+//! dependency checks, and resolved path inspection.
 
 use clap::Subcommand;
 
-/// Configuration management commands.
+use crate::assistant_ui_commands::AssistantUiCommand;
+use crate::llama_commands::LlamaCommand;
+
+/// Configuration and system management commands.
 #[derive(Subcommand)]
 pub enum ConfigCommand {
     /// View or set the default model (shorthand for settings get/set-default-model)
@@ -26,6 +30,20 @@ pub enum ConfigCommand {
         #[command(subcommand)]
         command: SettingsCommand,
     },
+    /// Manage llama.cpp installation and updates
+    Llama {
+        #[command(subcommand)]
+        command: LlamaCommand,
+    },
+    /// Manage assistant-ui installation and updates
+    AssistantUi {
+        #[command(subcommand)]
+        command: AssistantUiCommand,
+    },
+    /// Check system dependencies required for gglib
+    CheckDeps,
+    /// Show resolved paths for all gglib directories
+    Paths,
 }
 
 /// Models directory command variants.
