@@ -80,7 +80,7 @@ check-rust:
 check-deps: check-deps-bootstrap
 	@echo ""
 	@echo "Running detailed dependency verification..."
-	@$(CARGO) run -p gglib-cli --quiet -- check-deps
+	@$(CARGO) run -p gglib-cli --quiet -- config check-deps
 
 # Default target
 help:
