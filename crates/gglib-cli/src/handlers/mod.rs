@@ -27,6 +27,7 @@ pub mod gui;
 pub mod list;
 pub mod llama;
 pub mod llama_install;
+pub mod mcp_cli;
 pub mod paths;
 pub mod question;
 pub mod remove;

@@ -2175,13 +2175,17 @@ dependencies = [
  "bytes",
  "futures-util",
  "gglib-core",
+ "gglib-mcp",
+ "http-body-util",
  "reqwest 0.13.2",
  "serde",
  "serde_json",
  "tokio",
  "tokio-test",
  "tokio-util",
+ "tower",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

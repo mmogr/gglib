@@ -7,6 +7,7 @@ use clap::Subcommand;
 use crate::assistant_ui_commands::AssistantUiCommand;
 use crate::config_commands::ConfigCommand;
 use crate::llama_commands::LlamaCommand;
+use crate::mcp_commands::McpCommand;
 
 /// Available commands for the GGUF library management tool.
 ///
@@ -353,7 +354,10 @@ pub enum Commands {
         static_dir: Option<std::path::PathBuf>,
     },
 
-    /// Start OpenAI-compatible proxy for automatic model swapping
+    /// Start OpenAI-compatible proxy with MCP tool gateway
+    ///
+    /// Serves /v1 chat completions and /mcp (MCP Streamable HTTP) from a single port.
+    /// Configure OpenWebUI with the /v1 base URL and connect MCP tools via /mcp.
     Proxy {
         /// Host to bind to
         #[arg(long, default_value = "127.0.0.1")]
@@ -373,6 +377,12 @@ pub enum Commands {
     Llama {
         #[command(subcommand)]
         command: LlamaCommand,
+    },
+
+    /// Manage MCP (Model Context Protocol) tool servers
+    Mcp {
+        #[command(subcommand)]
+        command: McpCommand,
     },
 
     /// Manage assistant-ui installation and updates

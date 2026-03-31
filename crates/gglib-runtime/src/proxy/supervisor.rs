@@ -23,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_mcp::McpService;
 
 /// Handle to a running proxy server.
 struct ProxyHandle {
@@ -156,6 +157,7 @@ impl ProxySupervisor {
     /// * `config` - Proxy configuration (host, port, default_context)
     /// * `runtime_port` - Port for managing model runtime
     /// * `catalog_port` - Port for listing and resolving models
+    /// * `mcp` - MCP service for tool gateway
     ///
     /// # Errors
     ///
@@ -165,6 +167,7 @@ impl ProxySupervisor {
         config: ProxyConfig,
         runtime_port: Arc<dyn ModelRuntimePort>,
         catalog_port: Arc<dyn ModelCatalogPort>,
+        mcp: Arc<McpService>,
     ) -> Result<SocketAddr, SupervisorError> {
         let mut guard = self.handle.lock().await;
 
@@ -221,6 +224,7 @@ impl ProxySupervisor {
                 default_ctx,
                 runtime_port,
                 catalog_port,
+                mcp,
                 cancel_clone,
             )
             .await;
@@ -354,9 +358,41 @@ impl fmt::Debug for ProxySupervisor {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use gglib_core::NoopEmitter;
+    use gglib_core::domain::mcp::{McpServer, NewMcpServer};
     use gglib_core::ports::{
         CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
     };
+    use gglib_core::ports::{McpRepositoryError, McpServerRepository};
+
+    /// Empty MCP repository for testing — all reads return empty/not-found.
+    #[derive(Debug)]
+    struct EmptyMcpRepo;
+
+    #[async_trait]
+    impl McpServerRepository for EmptyMcpRepo {
+        async fn insert(&self, _: NewMcpServer) -> Result<McpServer, McpRepositoryError> {
+            Err(McpRepositoryError::Internal("not implemented".into()))
+        }
+        async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
+            Err(McpRepositoryError::NotFound(id.to_string()))
+        }
+        async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
+            Err(McpRepositoryError::NotFound(name.to_string()))
+        }
+        async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
+            Ok(vec![])
+        }
+        async fn update(&self, _: &McpServer) -> Result<(), McpRepositoryError> {
+            Err(McpRepositoryError::Internal("not implemented".into()))
+        }
+        async fn delete(&self, id: i64) -> Result<(), McpRepositoryError> {
+            Err(McpRepositoryError::NotFound(id.to_string()))
+        }
+        async fn update_last_connected(&self, id: i64) -> Result<(), McpRepositoryError> {
+            Err(McpRepositoryError::NotFound(id.to_string()))
+        }
+    }
 
     /// Mock runtime port for testing.
     #[derive(Debug)]
@@ -413,6 +449,13 @@ mod tests {
         (Arc::new(MockRuntimePort), Arc::new(MockCatalogPort))
     }
 
+    fn make_mcp() -> Arc<McpService> {
+        Arc::new(McpService::new(
+            Arc::new(EmptyMcpRepo),
+            Arc::new(NoopEmitter::new()),
+        ))
+    }
+
     #[tokio::test]
     async fn test_supervisor_lifecycle() {
         let supervisor = ProxySupervisor::new();
@@ -427,8 +470,9 @@ mod tests {
             default_context: 4096,
         };
         let (runtime, catalog) = make_ports();
+        let mcp = make_mcp();
         let addr = supervisor
-            .start(config.clone(), runtime.clone(), catalog.clone())
+            .start(config.clone(), runtime.clone(), catalog.clone(), mcp)
             .await
             .unwrap();
         assert_ne!(addr.port(), 0);
@@ -442,7 +486,9 @@ mod tests {
         // Can't start again
         let (runtime2, catalog2) = make_ports();
         assert!(matches!(
-            supervisor.start(config, runtime2, catalog2).await,
+            supervisor
+                .start(config, runtime2, catalog2, make_mcp())
+                .await,
             Err(SupervisorError::AlreadyRunning(_))
         ));
 
@@ -472,7 +518,7 @@ mod tests {
         // Start
         let (runtime, catalog) = make_ports();
         let addr1 = supervisor
-            .start(config.clone(), runtime, catalog)
+            .start(config.clone(), runtime, catalog, make_mcp())
             .await
             .unwrap();
 
@@ -481,7 +527,10 @@ mod tests {
 
         // Start again (should work)
         let (runtime2, catalog2) = make_ports();
-        let addr2 = supervisor.start(config, runtime2, catalog2).await.unwrap();
+        let addr2 = supervisor
+            .start(config, runtime2, catalog2, make_mcp())
+            .await
+            .unwrap();
 
         // Different port (both were 0 -> random)
         // Note: Could technically get same port, but very unlikely

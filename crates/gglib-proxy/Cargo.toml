@@ -14,6 +14,9 @@ default = []
 # Core domain types and ports (NO runtime, NO sqlx)
 gglib-core = { path = "../gglib-core" }
 
+# MCP service for tool gateway
+gglib-mcp = { path = "../gglib-mcp" }
+
 # HTTP server
 axum = { workspace = true }
 tokio = { version = "1.0", features = ["full"] }
@@ -38,8 +41,13 @@ tracing = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+# Session ID generation
+uuid = { workspace = true, features = ["v4"] }
+
 # Async trait support
 async-trait = "0.1"
 
 [dev-dependencies]
 tokio-test = "0.4"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

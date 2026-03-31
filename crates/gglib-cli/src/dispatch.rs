@@ -276,8 +276,6 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             llama_port,
             default_context,
         } => {
-            // Only the llama-server path and model repository are needed from
-            // the context; the rest of the proxy configuration comes from CLI args.
             gglib_runtime::proxy::start_proxy_standalone(
                 host,
                 port,
@@ -285,8 +283,12 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 ctx.llama_server_path.clone(),
                 ctx.model_repo.clone(),
                 default_context,
+                ctx.mcp.clone(),
             )
             .await?;
+        }
+        Commands::Mcp { command } => {
+            handlers::mcp_cli::dispatch(ctx, command).await?;
         }
         Commands::AssistantUi { command } => {
             handlers::assistant_ui::dispatch(command)?;
