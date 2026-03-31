@@ -14,6 +14,25 @@ use crate::commands::Commands;
 #[command(name = "gglib")]
 #[command(about = "Manage and run local GGUF models")]
 #[command(version = gglib_build_info::LONG_VERSION)]
+#[command(subcommand_help_heading = "Commands")]
+#[command(disable_help_subcommand = true)]
+#[command(
+    help_template = "{before-help}{name} {version}\n{about-with-newline}\n\
+{usage-heading} {usage}\n\n\
+Management (use <command> --help to see subcommands):\n  \
+model           Manage GGUF models (add, list, remove, download, verify, \u{2026})\n  \
+config          Manage configuration, tooling, and system settings\n  \
+mcp             Manage MCP (Model Context Protocol) tool servers\n\n\
+Inference:\n  \
+serve           Serve a GGUF model with llama-server\n  \
+chat            Chat with a model directly via llama-cli\n  \
+question        Ask a question with optional context from stdin or file\n\n\
+Interfaces:\n  \
+gui             Launch the Tauri desktop GUI\n  \
+web             Start the web-based GUI server\n  \
+proxy           Start OpenAI-compatible proxy with MCP tool gateway\n\n\
+Options:\n{options}{after-help}"
+)]
 pub struct Cli {
     /// Override the models directory for this invocation
     #[arg(long = "models-dir", global = true)]

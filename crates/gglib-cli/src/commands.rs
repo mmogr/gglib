@@ -15,19 +15,31 @@ use crate::shared_args::{ContextArgs, SamplingArgs};
 /// Top-level commands for the GGUF library management tool.
 #[derive(Subcommand)]
 pub enum Commands {
+    // ── Management (these have subcommands — use `<command> --help`) ────
     /// Manage GGUF models (add, list, remove, download, verify, …)
+    #[command(display_order = 1)]
     Model {
         #[command(subcommand)]
         command: ModelCommand,
     },
 
     /// Manage configuration, tooling, and system settings
+    #[command(display_order = 2)]
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
     },
 
+    /// Manage MCP (Model Context Protocol) tool servers
+    #[command(display_order = 3)]
+    Mcp {
+        #[command(subcommand)]
+        command: McpCommand,
+    },
+
+    // ── Inference ────────────────────────────────────────────────────────
     /// Serve a GGUF model with llama-server
+    #[command(display_order = 10)]
     Serve {
         /// ID of the model to serve
         id: u32,
@@ -44,6 +56,7 @@ pub enum Commands {
     },
 
     /// Chat with a model directly via llama-cli
+    #[command(display_order = 11)]
     Chat {
         /// Name or ID of the model to chat with
         identifier: String,
@@ -97,6 +110,7 @@ pub enum Commands {
 
     /// Ask a question with optional context from stdin or file
     #[command(
+        display_order = 12,
         alias = "q",
         after_help = "EXAMPLES:\n    gglib q \"What is Rust?\"\n    cat file.txt | gglib q \"Summarize this\"\n    gglib q --file README.md \"Explain this project\"\n    echo \"Paris, Tokyo\" | gglib q \"List these cities: {}\""
     )]
@@ -121,7 +135,9 @@ pub enum Commands {
         sampling: SamplingArgs,
     },
 
+    // ── Interfaces ──────────────────────────────────────────────────────
     /// Launch the Tauri desktop GUI
+    #[command(display_order = 20)]
     Gui {
         /// Run in development mode with hot-reload (requires Node.js and npm)
         #[arg(long)]
@@ -129,6 +145,7 @@ pub enum Commands {
     },
 
     /// Start the web-based GUI server
+    #[command(display_order = 21)]
     Web {
         /// Port to serve the web GUI on
         #[arg(short, long, env = "VITE_GGLIB_WEB_PORT", default_value = "9887")]
@@ -152,6 +169,7 @@ pub enum Commands {
     ///
     /// Serves /v1 chat completions and /mcp (MCP Streamable HTTP) from a single port.
     /// Configure OpenWebUI with the /v1 base URL and connect MCP tools via /mcp.
+    #[command(display_order = 22)]
     Proxy {
         /// Host to bind to
         #[arg(long, default_value = "127.0.0.1")]
@@ -167,9 +185,4 @@ pub enum Commands {
         default_context: u64,
     },
 
-    /// Manage MCP (Model Context Protocol) tool servers
-    Mcp {
-        #[command(subcommand)]
-        command: McpCommand,
-    },
 }
