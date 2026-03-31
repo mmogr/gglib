@@ -35,5 +35,5 @@ else
     exit 1
 fi
 
-echo "Running: $GGLIB_BIN llama install $GPU_FLAGS"
-$GGLIB_BIN llama install $GPU_FLAGS
+echo "Running: $GGLIB_BIN config llama install $GPU_FLAGS"
+$GGLIB_BIN config llama install $GPU_FLAGS
