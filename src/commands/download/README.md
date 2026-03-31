@@ -34,7 +34,7 @@ When a GGUF file is downloaded and added to the database, `model_ops.rs` automat
 
 ### Fast-path helper overview
 
-The download flow always invokes `scripts/hf_xet_downloader.py` inside the managed Miniconda environment (`<data_root>/.conda/gglib-hf-xet`). `gglib check-deps`/`make setup` ensure that environment exists with `huggingface_hub>=1.1.5` and `hf_xet>=0.6`. The helper pulls GGUF blobs via Xet storage and emits newline-delimited JSON progress that ties back into the existing `ProgressCallback` plumbing.
+The download flow always invokes `scripts/hf_xet_downloader.py` inside the managed Miniconda environment (`<data_root>/.conda/gglib-hf-xet`). `gglib config check-deps`/`make setup` ensure that environment exists with `huggingface_hub>=1.1.5` and `hf_xet>=0.6`. The helper pulls GGUF blobs via Xet storage and emits newline-delimited JSON progress that ties back into the existing `ProgressCallback` plumbing.
 
 Fast mode is now mandatory: if the helper is missing or fails, the command returns an error with remediation steps and does not fall back to the legacy Rust HTTP downloader.
 

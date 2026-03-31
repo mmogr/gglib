@@ -138,7 +138,7 @@ pub async fn execute_verify(ctx: &CliContext, model_id: i64, verbose: bool) -> R
     ) {
         println!();
         println!(
-            "⚠️  Model has integrity issues. Run 'gglib repair {}' to fix.",
+            "⚠️  Model has integrity issues. Run 'gglib model repair {}' to fix.",
             model_id
         );
         std::process::exit(1);
@@ -217,7 +217,7 @@ pub async fn execute_repair(
     println!();
     println!("Note: The model files have been queued for re-download.");
     println!(
-        "      Use 'gglib verify {}' to check status after download completes.",
+        "      Use 'gglib model verify {}' to check status after download completes.",
         model_id
     );
 

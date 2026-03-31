@@ -83,7 +83,7 @@ async fn check_model_update(model: &gglib_core::domain::Model, hf_repo: &str) ->
                     println!("  🔄 Update available!");
                     println!("    Current SHA: {}", &stored_sha[..8]);
                     println!("    Latest SHA:  {}", &latest_sha[..8]);
-                    println!("    Use: gglib update-model {} to update", model.id);
+                    println!("    Use: gglib model upgrade {} to update", model.id);
                 }
             } else {
                 println!("  ⚠️  No commit SHA stored, cannot check for updates");

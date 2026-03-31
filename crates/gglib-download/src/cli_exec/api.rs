@@ -70,7 +70,7 @@ pub async fn list_quantizations(
 
                         println!("\nTo download a specific quantization, use:");
                         for quant in &quantizations {
-                            println!("  gglib download {} -q {}", model_id, quant.name);
+                            println!("  gglib model download {} -q {}", model_id, quant.name);
                         }
                     }
                 }
@@ -226,8 +226,8 @@ pub async fn search_models(query: String, limit: u32, sort: String, gguf_only: b
         println!();
     }
 
-    println!("💡 To download a model: gglib download <model_id>");
-    println!("💡 To list quantizations: gglib download <model_id> --list-quants");
+    println!("💡 To download a model: gglib model download <model_id>");
+    println!("💡 To list quantizations: gglib model download <model_id> --list-quants");
 
     Ok(())
 }
@@ -303,8 +303,8 @@ pub async fn browse_models(category: String, limit: u32, size: Option<String>) -
         println!();
     }
 
-    println!("💡 To download a model: gglib download <model_id>");
-    println!("💡 To see all quantizations: gglib download <model_id> --list-quants");
+    println!("💡 To download a model: gglib model download <model_id>");
+    println!("💡 To see all quantizations: gglib model download <model_id> --list-quants");
 
     Ok(())
 }

@@ -43,23 +43,23 @@ For an overview of all interfaces (CLI, Desktop GUI, Web UI), see the main [READ
 
 ### Model Management
 
-#### `add <file_path>`
+#### `model add <file_path>`
 Add a GGUF model to the database.
 
 **Example:**
 ```bash
-gglib add /path/to/model.gguf
+gglib model add /path/to/model.gguf
 ```
 
-#### `list`
+#### `model list`
 List all models in the database.
 
 **Example:**
 ```bash
-gglib list
+gglib model list
 ```
 
-#### `remove <identifier> [--force]`
+#### `model remove <identifier> [--force]`
 Remove a model by name or ID.
 
 **Options:**
@@ -67,10 +67,10 @@ Remove a model by name or ID.
 
 **Example:**
 ```bash
-gglib remove 1 --force
+gglib model remove 1 --force
 ```
 
-#### `update <id> [OPTIONS]`
+#### `model update <id> [OPTIONS]`
 Update model metadata.
 
 **Options:**
@@ -87,7 +87,7 @@ Update model metadata.
 
 **Example:**
 ```bash
-gglib update 1 --name "Llama 2 7B" --metadata "use-case=chat"
+gglib model update 1 --name "Llama 2 7B" --metadata "use-case=chat"
 ```
 
 ### Model Operations
@@ -144,7 +144,7 @@ gglib proxy --host 0.0.0.0 --port 8080 --llama-port 5500
 
 ### HuggingFace Hub Integration
 
-#### `download <repo_id> [OPTIONS]`
+#### `model download <repo_id> [OPTIONS]`
 Download a model from HuggingFace Hub.
 
 **Options:**
@@ -157,16 +157,16 @@ Download a model from HuggingFace Hub.
 **Example:**
 ```bash
 # List available quantizations
-gglib download microsoft/DialoGPT-medium --list-quants
+gglib model download microsoft/DialoGPT-medium --list-quants
 
 # Download specific quantization (auto-registered in database)
-gglib download microsoft/DialoGPT-medium --quantization Q4_K_M
+gglib model download microsoft/DialoGPT-medium --quantization Q4_K_M
 
 # Download without registering in database
-gglib download microsoft/DialoGPT-medium -q Q4_K_M --skip-db
+gglib model download microsoft/DialoGPT-medium -q Q4_K_M --skip-db
 ```
 
-#### `search <query> [OPTIONS]`
+#### `model search <query> [OPTIONS]`
 Search for GGUF models on HuggingFace Hub.
 
 **Options:**
@@ -176,10 +176,10 @@ Search for GGUF models on HuggingFace Hub.
 
 **Example:**
 ```bash
-gglib search "llama 7b gguf" --limit 5 --sort downloads
+gglib model search "llama 7b gguf" --limit 5 --sort downloads
 ```
 
-#### `browse <category> [OPTIONS]`
+#### `model browse <category> [OPTIONS]`
 Browse popular GGUF models on HuggingFace Hub.
 
 **Options:**
@@ -193,11 +193,11 @@ Browse popular GGUF models on HuggingFace Hub.
 
 **Example:**
 ```bash
-gglib browse popular --limit 10
-gglib browse recent --size 7B
+gglib model browse popular --limit 10
+gglib model browse recent --size 7B
 ```
 
-#### `check-updates [OPTIONS]`
+#### `model check-updates [OPTIONS]`
 Check for updates to downloaded models.
 
 **Options:**
@@ -206,10 +206,10 @@ Check for updates to downloaded models.
 
 **Example:**
 ```bash
-gglib check-updates --all
+gglib model check-updates --all
 ```
 
-#### `update-model <model_id> [--force]`
+#### `model upgrade <model_id> [--force]`
 Update a model to the latest version from HuggingFace Hub.
 
 **Options:**
@@ -217,7 +217,7 @@ Update a model to the latest version from HuggingFace Hub.
 
 **Example:**
 ```bash
-gglib update-model 1
+gglib model upgrade 1
 ```
 
 ### User Interfaces
@@ -357,7 +357,7 @@ Check system dependencies required for gglib.
 
 **Example:**
 ```bash
-gglib check-deps
+gglib config check-deps
 ```
 
 #### `config models-dir <action>`

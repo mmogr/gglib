@@ -59,7 +59,7 @@ Search HuggingFace Hub for GGUF models.
 
 **Example:**
 ```bash
-gglib search "llama 7b" --limit 5 --sort downloads
+gglib model search "llama 7b" --limit 5 --sort downloads
 ```
 
 ### `browse`
@@ -78,8 +78,8 @@ Browse popular GGUF models by category.
 
 **Example:**
 ```bash
-gglib browse popular --limit 10
-gglib browse recent --size 7B
+gglib model browse popular --limit 10
+gglib model browse recent --size 7B
 ```
 
 ### `download` (exec)
@@ -104,13 +104,13 @@ Download a model from HuggingFace Hub.
 **Example:**
 ```bash
 # List available quantizations
-gglib download microsoft/DialoGPT-medium --list-quants
+gglib model download microsoft/DialoGPT-medium --list-quants
 
 # Download specific quantization
-gglib download microsoft/DialoGPT-medium -q Q4_K_M
+gglib model download microsoft/DialoGPT-medium -q Q4_K_M
 
 # Download without database registration
-gglib download microsoft/DialoGPT-medium -q Q4_K_M --skip-db
+gglib model download microsoft/DialoGPT-medium -q Q4_K_M --skip-db
 ```
 
 ### `check-updates`
@@ -124,8 +124,8 @@ Check if downloaded models have updates on HuggingFace Hub.
 
 **Example:**
 ```bash
-gglib check-updates --all
-gglib check-updates --model-id 1
+gglib model check-updates --all
+gglib model check-updates --model-id 1
 ```
 
 ### `update-model`
@@ -145,8 +145,8 @@ Update a model to the latest version from HuggingFace Hub.
 
 **Example:**
 ```bash
-gglib update-model 1
-gglib update-model 1 --force
+gglib model upgrade 1
+gglib model upgrade 1 --force
 ```
 
 ## Architecture Details

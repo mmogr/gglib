@@ -66,11 +66,11 @@ The commands module contains Tauri command handlers for **OS integration only**.
 The following functionality is served via HTTP API endpoints:
 - `/api/models` - Model CRUD operations
 - `/api/servers` - llama-server lifecycle management
-- `/api/downloads` - Download queue and progress
-- `/api/huggingface` - HuggingFace Hub search and metadata
-- `/api/tags` - Model tagging and filtering
+- `/api/models/downloads` - Download queue and progress
+- `/api/models/hf` - HuggingFace Hub search and metadata
+- `/api/models/tags` - Model tagging and filtering
 - `/api/proxy` - OpenAI-compatible proxy control
-- `/api/settings` - User preferences
+- `/api/config/settings` - User preferences
 - `/api/mcp` - MCP server management
 - `/api/chat` - Chat history and conversations
 

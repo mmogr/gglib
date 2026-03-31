@@ -85,7 +85,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`sse.rs`** — Server-Sent Events utilities for streaming
 - **`ws_audio.rs`** — `WebSocketAudioSource` and `WebSocketAudioSink`: mpsc-backed `AudioSource`/`AudioSink` implementations that bridge browser PCM16 LE audio over a WebSocket binary channel
 - **`dto/`** — Request/response DTOs for API endpoints
-- **`handlers/verification.rs`** — Model verification, update checking, and repair endpoints
+- **`handlers/model/`** — Model CRUD, verification, downloads, HuggingFace discovery handlers
+- **`handlers/config/`** — Settings and system setup handlers
 - **`handlers/voice.rs`** — 19 thin Axum handlers for voice data/config operations and audio control endpoints
 - **`handlers/voice_ws.rs`** — WebSocket upgrade handler (`GET /api/voice/audio`): registers `WebSocketAudioSource`/`WebSocketAudioSink` with `VoiceService`, spawns ingest/egress tasks
 
@@ -98,9 +99,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `DELETE` | `/api/models/:id` | Remove a model |
 | `POST` | `/api/serve/:id` | Start llama-server |
 | `DELETE` | `/api/serve/:id` | Stop llama-server |
-| `POST` | `/api/hf/search` | Search HuggingFace |
-| `POST` | `/api/download` | Queue a download |
-| `GET` | `/api/download/:id` | Get download status |
+| `POST` | `/api/models/hf/search` | Search HuggingFace |
+| `POST` | `/api/models/downloads/queue` | Queue a download |
+| `GET` | `/api/models/downloads` | Get download status |
+| `GET` | `/api/config/settings` | Get application settings |
+| `PUT` | `/api/config/settings` | Update application settings |
 | `GET` | `/api/mcp/servers` | List MCP servers |
 | `POST` | `/api/mcp/servers/:id/start` | Start MCP server |
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |

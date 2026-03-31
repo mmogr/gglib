@@ -31,7 +31,7 @@ pub async fn execute(ctx: &CliContext) -> Result<()> {
 
     if models.is_empty() {
         println!("No models found in the database.");
-        println!("Use 'gglib add <file_path>' to add your first model.");
+        println!("Use 'gglib model add <file_path>' to add your first model.");
         return Ok(());
     }
 
