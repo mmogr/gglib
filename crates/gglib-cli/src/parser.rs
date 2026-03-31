@@ -41,7 +41,14 @@ mod tests {
     #[test]
     fn test_global_args() {
         use clap::Parser;
-        let cli = Cli::parse_from(["gglib", "--verbose", "--models-dir", "/tmp/models", "model", "list"]);
+        let cli = Cli::parse_from([
+            "gglib",
+            "--verbose",
+            "--models-dir",
+            "/tmp/models",
+            "model",
+            "list",
+        ]);
         assert!(cli.verbose);
         assert_eq!(cli.models_dir, Some("/tmp/models".to_string()));
     }

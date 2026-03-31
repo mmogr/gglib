@@ -160,7 +160,8 @@ fn model_routes() -> Router<AppState> {
         // Tags
         .route(
             "/{id}/tags",
-            get(handlers::model::models::get_model_tags).post(handlers::model::models::add_tag_body),
+            get(handlers::model::models::get_model_tags)
+                .post(handlers::model::models::add_tag_body),
         )
         .route(
             "/{id}/tags/{tag}",
@@ -238,19 +239,13 @@ fn config_routes() -> Router<AppState> {
                 .patch(handlers::config::settings::update),
         )
         // System
-        .route(
-            "/system/memory",
-            get(handlers::config::settings::memory),
-        )
+        .route("/system/memory", get(handlers::config::settings::memory))
         .route(
             "/system/models-directory",
             get(handlers::config::settings::models_directory)
                 .put(handlers::config::settings::update_models_directory),
         )
-        .route(
-            "/system/setup-status",
-            get(handlers::config::setup::status),
-        )
+        .route("/system/setup-status", get(handlers::config::setup::status))
         .route(
             "/system/install-llama",
             post(handlers::config::setup::install_llama),

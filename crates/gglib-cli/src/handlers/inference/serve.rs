@@ -11,7 +11,10 @@ use gglib_runtime::llama::{
     LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size, resolve_llama_server,
 };
 
-use super::shared::{log_command_execution, log_context_info, log_inference_info, log_mlock_info, resolve_inference_config};
+use super::shared::{
+    log_command_execution, log_context_info, log_inference_info, log_mlock_info,
+    resolve_inference_config,
+};
 
 /// Execute the serve command.
 ///
@@ -29,7 +32,10 @@ pub async fn execute(
 
     // Resolve and validate llama-server binary path
     let llama_path = resolve_llama_server().map_err(|e| {
-        anyhow::anyhow!("{}\n\nTo install llama.cpp, run:\n  gglib config llama install", e)
+        anyhow::anyhow!(
+            "{}\n\nTo install llama.cpp, run:\n  gglib config llama install",
+            e
+        )
     })?;
 
     // Look up the model using CliContext

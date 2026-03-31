@@ -8,9 +8,7 @@ use std::process::Stdio;
 use crate::bootstrap::CliContext;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 use gglib_core::paths::llama_cli_path;
-use gglib_runtime::llama::{
-    LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size,
-};
+use gglib_runtime::llama::{LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size};
 
 use super::shared::{
     log_command_execution, log_context_info, log_inference_info, log_mlock_info,
