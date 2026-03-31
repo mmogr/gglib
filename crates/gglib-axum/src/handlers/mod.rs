@@ -1,21 +1,20 @@
 //! HTTP request handlers for the Axum web server.
 //!
-//! Each submodule contains handlers for a specific API area.
-//! Handlers are thin wrappers that delegate to `GuiBackend`.
+//! Handlers are organized into domain-scoped subdirectories:
+//! - [`model`]  — CRUD, verification, downloads, HuggingFace discovery
+//! - [`config`] — settings, system setup
+//!
+//! Top-level modules for other domains:
 
 pub mod agent;
 pub mod builtin;
 pub mod chat;
-pub mod downloads;
+pub mod config;
 pub mod events;
-pub mod hf;
 pub mod mcp;
-pub mod models;
+pub mod model;
 pub mod port_utils;
 pub mod proxy;
 pub mod servers;
-pub mod settings;
-pub mod setup;
-pub mod verification;
 pub mod voice;
 pub mod voice_ws;
