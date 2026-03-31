@@ -151,7 +151,10 @@ async fn remove(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
 
     if !force {
-        println!("Server: {} (id: {}, type: {:?})", server.name, server.id, server.server_type);
+        println!(
+            "Server: {} (id: {}, type: {:?})",
+            server.name, server.id, server.server_type
+        );
         if !input::prompt_confirmation("Remove this MCP server?")? {
             println!("Cancelled.");
             return Ok(());
@@ -173,10 +176,7 @@ async fn start(ctx: &CliContext, identifier: &str) -> Result<()> {
         tools.len()
     );
     for tool in &tools {
-        let desc = tool
-            .description
-            .as_deref()
-            .unwrap_or("(no description)");
+        let desc = tool.description.as_deref().unwrap_or("(no description)");
         println!("   • {} — {}", tool.name, truncate_string(desc, 60));
     }
 
@@ -206,7 +206,10 @@ async fn tools(ctx: &CliContext, identifier: &str) -> Result<()> {
     let tools = ctx.mcp.list_server_tools(server.id).await?;
 
     if tools.is_empty() {
-        println!("No tools available for '{}' (is the server running?).", server.name);
+        println!(
+            "No tools available for '{}' (is the server running?).",
+            server.name
+        );
         return Ok(());
     }
 
@@ -215,11 +218,12 @@ async fn tools(ctx: &CliContext, identifier: &str) -> Result<()> {
     print_separator(75);
 
     for tool in &tools {
-        let desc = tool
-            .description
-            .as_deref()
-            .unwrap_or("(no description)");
-        println!("{:<30} {}", truncate_string(&tool.name, 29), truncate_string(desc, 44));
+        let desc = tool.description.as_deref().unwrap_or("(no description)");
+        println!(
+            "{:<30} {}",
+            truncate_string(&tool.name, 29),
+            truncate_string(desc, 44)
+        );
     }
 
     Ok(())
@@ -245,10 +249,7 @@ async fn test(ctx: &CliContext, identifier: &str) -> Result<()> {
         tools.len()
     );
     for tool in &tools {
-        let desc = tool
-            .description
-            .as_deref()
-            .unwrap_or("(no description)");
+        let desc = tool.description.as_deref().unwrap_or("(no description)");
         println!("   • {} — {}", tool.name, truncate_string(desc, 60));
     }
 
@@ -258,10 +259,7 @@ async fn test(ctx: &CliContext, identifier: &str) -> Result<()> {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /// Resolve a server identifier (numeric ID or name) to an `McpServer`.
-async fn resolve_server(
-    ctx: &CliContext,
-    identifier: &str,
-) -> Result<gglib_core::McpServer> {
+async fn resolve_server(ctx: &CliContext, identifier: &str) -> Result<gglib_core::McpServer> {
     // Try as numeric ID first
     if let Ok(id) = identifier.parse::<i64>() {
         return ctx
