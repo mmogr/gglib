@@ -287,6 +287,9 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             )
             .await?;
         }
+        Commands::Mcp { command } => {
+            handlers::mcp_cli::dispatch(ctx, command).await?;
+        }
         Commands::AssistantUi { command } => {
             handlers::assistant_ui::dispatch(command)?;
         }

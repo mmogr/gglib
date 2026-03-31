@@ -7,6 +7,7 @@ use clap::Subcommand;
 use crate::assistant_ui_commands::AssistantUiCommand;
 use crate::config_commands::ConfigCommand;
 use crate::llama_commands::LlamaCommand;
+use crate::mcp_commands::McpCommand;
 
 /// Available commands for the GGUF library management tool.
 ///
@@ -376,6 +377,12 @@ pub enum Commands {
     Llama {
         #[command(subcommand)]
         command: LlamaCommand,
+    },
+
+    /// Manage MCP (Model Context Protocol) tool servers
+    Mcp {
+        #[command(subcommand)]
+        command: McpCommand,
     },
 
     /// Manage assistant-ui installation and updates
