@@ -6,8 +6,8 @@
  * in gglib-core::contracts::http.
  */
 
-// Hugging Face routes
-export const HF_SEARCH_PATH = '/api/hf/search';
-export const HF_MODEL_PATH = '/api/hf/model';
-export const HF_QUANTIZATIONS_PATH = '/api/hf/quantizations';
-export const HF_TOOL_SUPPORT_PATH = '/api/hf/tool-support';
+// Hugging Face routes (nested under /api/models/hf)
+export const HF_SEARCH_PATH = '/api/models/hf/search';
+export const HF_MODEL_PATH = '/api/models/hf/model';
+export const HF_QUANTIZATIONS_PATH = '/api/models/hf/quantizations';
+export const HF_TOOL_SUPPORT_PATH = '/api/models/hf/tool-support';

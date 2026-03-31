@@ -11,7 +11,7 @@ import type { SetupStatus, LlamaInstallProgress } from '../../../types/setup';
  * Get the current system setup status.
  */
 export async function getSetupStatus(): Promise<SetupStatus> {
-  return get<SetupStatus>('/api/system/setup-status');
+  return get<SetupStatus>('/api/config/system/setup-status');
 }
 
 /**
@@ -34,7 +34,7 @@ export function streamLlamaInstall(
   const headers = getAuthHeaders();
 
   // Use fetch directly for SSE streaming (POST request)
-  fetch(`${baseUrl}/api/system/install-llama`, {
+  fetch(`${baseUrl}/api/config/system/install-llama`, {
     method: 'POST',
     headers: {
       ...headers,
@@ -99,5 +99,5 @@ export function streamLlamaInstall(
  * Set up the Python fast-download helper environment.
  */
 export async function setupPython(): Promise<void> {
-  return post<void>('/api/system/setup-python');
+  return post<void>('/api/config/system/setup-python');
 }
