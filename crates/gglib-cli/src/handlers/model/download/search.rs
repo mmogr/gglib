@@ -115,8 +115,8 @@ pub async fn execute(query: String, limit: u32, sort: String, gguf_only: bool) -
         println!();
     }
 
-    println!("💡 To download a model: gglib download <model_id>");
-    println!("💡 To list quantizations: gglib download <model_id> --list-quants");
+    println!("💡 To download a model: gglib model download <model_id>");
+    println!("💡 To list quantizations: gglib model download <model_id> --list-quants");
 
     Ok(())
 }

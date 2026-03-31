@@ -37,7 +37,7 @@ pub async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<
         Some(m) => m,
         None => {
             println!("No model found matching: '{identifier}'");
-            println!("Use 'gglib list' to see available models.");
+            println!("Use 'gglib model list' to see available models.");
             return Ok(());
         }
     };

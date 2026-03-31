@@ -85,8 +85,8 @@ pub async fn execute(category: String, limit: u32, size: Option<String>) -> Resu
         println!();
     }
 
-    println!("💡 To download a model: gglib download <model_id>");
-    println!("💡 To see all quantizations: gglib download <model_id> --list-quants");
+    println!("💡 To download a model: gglib model download <model_id>");
+    println!("💡 To see all quantizations: gglib model download <model_id> --list-quants");
 
     Ok(())
 }
