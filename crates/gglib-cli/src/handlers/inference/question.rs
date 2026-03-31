@@ -15,6 +15,7 @@ use gglib_runtime::llama::{ContextResolution, LlamaCommandBuilder, resolve_conte
 use super::shared::resolve_inference_config;
 
 /// Execute the question command.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     ctx: &CliContext,
     question: String,
