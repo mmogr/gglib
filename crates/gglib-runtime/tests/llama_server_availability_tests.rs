@@ -51,7 +51,7 @@ fn test_error_messages_include_install_instructions() {
         let err_msg = err.to_string();
         // Should mention install command or be a path resolution error
         assert!(
-            err_msg.contains("gglib llama install")
+            err_msg.contains("gglib config llama install")
                 || err_msg.contains("install")
                 || err_msg.contains("Path")
         );

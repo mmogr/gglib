@@ -268,7 +268,7 @@ Install and build llama.cpp with automatic hardware detection.
 
 **Example:**
 ```bash
-gglib llama install
+gglib config llama install
 ```
 
 #### `llama status`
@@ -276,7 +276,7 @@ Show llama.cpp installation status and build information.
 
 **Example:**
 ```bash
-gglib llama status
+gglib config llama status
 ```
 
 #### `llama check-updates`
@@ -284,7 +284,7 @@ Check if a newer version of llama.cpp is available.
 
 **Example:**
 ```bash
-gglib llama check-updates
+gglib config llama check-updates
 ```
 
 #### `llama update`
@@ -292,7 +292,7 @@ Update llama.cpp to the latest version and rebuild.
 
 **Example:**
 ```bash
-gglib llama update
+gglib config llama update
 ```
 
 #### `llama rebuild [OPTIONS]`
@@ -305,7 +305,7 @@ Rebuild llama.cpp with different acceleration options.
 
 **Example:**
 ```bash
-gglib llama rebuild --cuda
+gglib config llama rebuild --cuda
 ```
 
 #### `llama uninstall`
@@ -313,7 +313,7 @@ Remove llama.cpp installation.
 
 **Example:**
 ```bash
-gglib llama uninstall
+gglib config llama uninstall
 ```
 
 ### assistant-ui Management
@@ -323,7 +323,7 @@ Install assistant-ui npm dependencies.
 
 **Example:**
 ```bash
-gglib assistant-ui install
+gglib config assistant-ui install
 ```
 
 #### `assistant-ui status`
@@ -331,7 +331,7 @@ Show assistant-ui installation status.
 
 **Example:**
 ```bash
-gglib assistant-ui status
+gglib config assistant-ui status
 ```
 
 #### `assistant-ui update`
@@ -339,7 +339,7 @@ Update assistant-ui dependencies.
 
 **Example:**
 ```bash
-gglib assistant-ui update
+gglib config assistant-ui update
 ```
 
 ### System
@@ -349,7 +349,7 @@ Show resolved paths for all gglib directories (models, database, config, etc.).
 
 **Example:**
 ```bash
-gglib paths
+gglib config paths
 ```
 
 #### `check-deps`

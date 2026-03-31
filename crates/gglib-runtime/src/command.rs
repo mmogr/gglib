@@ -86,12 +86,12 @@ pub fn build_and_spawn(
                             legacy.display()
                         ));
                     }
-                    msg.push_str("\n\nPlease install llama.cpp by running:\n  gglib llama install");
+                    msg.push_str("\n\nPlease install llama.cpp by running:\n  gglib config llama install");
                     anyhow::anyhow!("{}", msg)
                 }
                 LlamaServerError::NotExecutable { path } => {
                     anyhow::anyhow!(
-                        "llama-server binary exists but is not executable: {}\n\nPlease check file permissions or reinstall with:\n  gglib llama install",
+                        "llama-server binary exists but is not executable: {}\n\nPlease check file permissions or reinstall with:\n  gglib config llama install",
                         path.display()
                     )
                 }

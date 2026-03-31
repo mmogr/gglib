@@ -11,7 +11,7 @@ use thiserror::Error;
 pub enum LlamaError {
     // === Installation & Detection ===
     /// Llama binaries are not installed
-    #[error("llama.cpp is not installed. Run 'gglib llama install' to install it.")]
+    #[error("llama.cpp is not installed. Run 'gglib config llama install' to install it.")]
     NotInstalled,
 
     /// Binary exists but is not functional

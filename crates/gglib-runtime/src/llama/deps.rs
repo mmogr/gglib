@@ -109,7 +109,7 @@ fn print_installation_instructions() {
     }
 
     println!();
-    println!("After installing, run 'gglib llama install' again.");
+    println!("After installing, run 'gglib config llama install' again.");
 }
 
 /// Check available disk space

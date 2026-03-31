@@ -11,7 +11,7 @@ use thiserror::Error;
 pub enum LlamaServerError {
     /// The llama-server binary was not found at the expected location.
     #[error(
-        "llama-server binary not found at: {path}\n\nPlease install llama.cpp by running:\n  gglib llama install"
+        "llama-server binary not found at: {path}\n\nPlease install llama.cpp by running:\n  gglib config llama install"
     )]
     NotFound {
         /// The path where the binary was expected
@@ -22,7 +22,7 @@ pub enum LlamaServerError {
 
     /// The binary exists but is not executable (permission denied).
     #[error(
-        "llama-server binary exists but is not executable: {path}\n\nPlease check file permissions or reinstall with:\n  gglib llama install"
+        "llama-server binary exists but is not executable: {path}\n\nPlease check file permissions or reinstall with:\n  gglib config llama install"
     )]
     NotExecutable {
         /// The path to the non-executable binary

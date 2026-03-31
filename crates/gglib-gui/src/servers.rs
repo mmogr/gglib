@@ -289,7 +289,7 @@ impl<'a> ServerOps<'a> {
                 GuiError::LlamaServerNotInstalled {
                     expected_path,
                     legacy_path,
-                    suggested_command: "gglib llama install".to_string(),
+                    suggested_command: "gglib config llama install".to_string(),
                     reason,
                 }
             } else {
