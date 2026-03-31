@@ -4,34 +4,19 @@
 //!
 //! This module contains the command execution logic for CLI commands.
 //!
-//! Handlers follow the canonical pattern:
-//! - Signature: `pub async fn execute(ctx: &CliContext, ...) -> Result<()>`
-//! - Thin wrappers that:
-//!   1. Parse/validate CLI-specific input
-//!   2. Call AppCore methods
-//!   3. Format output for the terminal
+//! Handlers are organized into domain-scoped subdirectories:
+//! - [`config`]    — settings, llama management, assistant-ui, paths, dep checks
+//! - [`inference`] — serve, chat, question (shared resolve & logging)
+//! - [`model`]     — add, list, remove, update, download, verify, search, browse
 //!
-//! Handlers should NOT:
-//! - Access repositories directly
-//! - Contain business logic
-//! - Manage database connections
+//! Top-level handlers for commands that stand alone:
+//! - [`gui`]       — Tauri desktop GUI launcher
+//! - [`web`]       — Axum web-server GUI launcher
 
-pub mod add;
 pub mod agent_chat;
-pub mod assistant_ui;
-pub mod chat;
-pub mod check_deps;
 pub mod config;
-pub mod download;
 pub mod gui;
-pub mod list;
-pub mod llama;
-pub mod llama_install;
+pub mod inference;
 pub mod mcp_cli;
-pub mod paths;
-pub mod question;
-pub mod remove;
-pub mod serve;
-pub mod update;
-pub mod verification;
+pub mod model;
 pub mod web;

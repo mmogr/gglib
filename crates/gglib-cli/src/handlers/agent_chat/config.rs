@@ -14,7 +14,7 @@ use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_runtime::compose_agent_loop;
 
 use crate::bootstrap::CliContext;
-use crate::handlers::chat::ChatArgs;
+use crate::handlers::inference::chat::ChatArgs;
 
 // =============================================================================
 // Public API
@@ -85,7 +85,7 @@ async fn resolve_port(ctx: &CliContext, args: &ChatArgs) -> Result<(u16, Option<
 
     // Parse an explicit numeric ctx_size; ignore "max" (pass None, let the
     // runner use the model's native context length).
-    let context_size = args.ctx_size.as_deref().and_then(|s| s.parse::<u64>().ok());
+    let context_size = args.context.ctx_size.as_deref().and_then(|s| s.parse::<u64>().ok());
 
     let mut server_config = ServerConfig::new(
         model.id,

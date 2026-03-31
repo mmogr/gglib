@@ -13,7 +13,7 @@ pub mod repl;
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::handlers::chat::ChatArgs;
+use crate::handlers::inference::chat::ChatArgs;
 
 /// Entry point: start the interactive agentic REPL.
 ///

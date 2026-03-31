@@ -1,11 +1,13 @@
-//! Config command handler.
+//! Settings, default-model, and models-directory handlers.
 //!
-//! Handles configuration management including models directory and settings.
+//! These three sub-handlers were the original `config` dispatch targets.
+//! They now live inside the `config/` directory alongside llama, assistant-ui,
+//! check-deps, and paths.
 
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::config_commands::{ConfigCommand, ModelsDirCommand, SettingsCommand};
+use crate::config_commands::{ModelsDirCommand, SettingsCommand};
 use crate::utils::input::prompt_string_with_default;
 use gglib_core::paths::{
     DirectoryCreationStrategy, default_models_dir, ensure_directory, persist_models_dir,
@@ -13,34 +15,12 @@ use gglib_core::paths::{
 };
 use gglib_core::{Settings, SettingsUpdate, validate_settings};
 
-/// Execute the config command.
-///
-/// Dispatches to the appropriate subcommand handler.
-///
-/// # Arguments
-///
-/// * `ctx` - The CLI context providing access to AppCore
-/// * `command` - The config subcommand to execute
-///
-/// # Returns
-///
-/// Returns `Result<()>` indicating the success or failure of the operation.
-pub async fn execute(ctx: &CliContext, command: ConfigCommand) -> Result<()> {
-    match command {
-        ConfigCommand::Default { identifier, clear } => {
-            handle_default_model(ctx, identifier, clear).await
-        }
-        ConfigCommand::ModelsDir { command } => handle_models_dir(command),
-        ConfigCommand::Settings { command } => handle_settings(ctx, command).await,
-    }
-}
-
 /// Handle the `config default` command for managing the default model.
 ///
 /// - No args: show current default
 /// - With identifier: set as default
 /// - With --clear: remove default
-async fn handle_default_model(
+pub async fn handle_default_model(
     ctx: &CliContext,
     identifier: Option<String>,
     clear: bool,
@@ -89,7 +69,7 @@ async fn handle_default_model(
     Ok(())
 }
 
-fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
+pub fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
     match command {
         ModelsDirCommand::Show => {
             let resolved = resolve_models_dir(None)?;
@@ -133,7 +113,7 @@ fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
     }
 }
 
-async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<()> {
+pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<()> {
     match command {
         SettingsCommand::Show => {
             let settings = ctx.app.settings().get().await?;

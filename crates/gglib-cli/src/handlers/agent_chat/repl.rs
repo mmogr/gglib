@@ -37,7 +37,7 @@ use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::AgentLoopPort;
 
-use crate::handlers::chat::ChatArgs;
+use crate::handlers::inference::chat::ChatArgs;
 
 use super::renderer::render_event;
 
