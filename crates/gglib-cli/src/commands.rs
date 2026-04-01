@@ -184,5 +184,4 @@ pub enum Commands {
         #[arg(long, default_value = "4096")]
         default_context: u64,
     },
-
 }
