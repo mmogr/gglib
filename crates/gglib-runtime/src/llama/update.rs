@@ -6,7 +6,7 @@ use super::config::BuildConfig;
 use super::detect::{Acceleration, detect_optimal_acceleration};
 use super::install::install_binary;
 use anyhow::{Context, Result, bail};
-use gglib_core::paths::{llama_cli_path, llama_config_path, llama_cpp_dir, llama_server_path};
+use gglib_core::paths::{llama_config_path, llama_cpp_dir, llama_server_path};
 use gglib_core::utils::process::cmd;
 use std::io::{self, Write};
 use tokio::sync::mpsc;
@@ -115,7 +115,6 @@ pub async fn handle_check_updates() -> Result<()> {
 pub async fn handle_update() -> Result<()> {
     let llama_dir = path_err(llama_cpp_dir())?;
     let binary_path = path_err(llama_server_path())?;
-    let cli_path = path_err(llama_cli_path())?;
 
     if !binary_path.exists() {
         println!("llama.cpp is not installed.");
@@ -219,7 +218,6 @@ pub async fn handle_update() -> Result<()> {
 
     // Install binaries
     install_binary(&llama_dir, "llama-server", &binary_path)?;
-    install_binary(&llama_dir, "llama-cli", &cli_path)?;
 
     // Save new configuration
     let config = BuildConfig::new(version.clone(), commit_sha, acceleration);

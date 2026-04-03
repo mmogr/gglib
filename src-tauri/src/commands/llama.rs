@@ -1,7 +1,7 @@
 //! llama.cpp installation and status commands.
 
 use crate::app::events::{emit_or_log, names};
-use gglib_core::paths::{llama_cli_path, llama_cpp_dir, llama_server_path};
+use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_download::ProgressThrottle;
 use gglib_runtime::llama::{
     BuildEvent, PrebuiltAvailability, check_llama_installed, check_prebuilt_availability,
@@ -50,11 +50,10 @@ pub async fn build_llama_from_source(app: AppHandle) -> Result<(), String> {
 
     let llama_dir = llama_cpp_dir().map_err(|e| e.to_string())?;
     let server_path = llama_server_path().map_err(|e| e.to_string())?;
-    let cli_path = llama_cli_path().map_err(|e| e.to_string())?;
     let acceleration = detect_optimal_acceleration().map_err(|e| e.to_string())?;
 
     let build_handle = tokio::spawn(async move {
-        run_llama_source_build(acceleration, llama_dir, server_path, cli_path, tx).await
+        run_llama_source_build(acceleration, llama_dir, server_path, tx).await
     });
 
     while let Some(event) = rx.recv().await {

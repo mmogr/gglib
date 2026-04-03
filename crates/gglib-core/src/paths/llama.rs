@@ -1,6 +1,6 @@
 //! Llama.cpp binary path resolution.
 //!
-//! Provides paths to the managed llama-server and llama-cli binaries,
+//! Provides paths to the managed llama-server binary,
 //! as well as the llama.cpp repository and configuration files.
 
 use std::path::PathBuf;
@@ -25,19 +25,6 @@ pub fn llama_server_path() -> Result<PathBuf, PathError> {
 
     #[cfg(not(target_os = "windows"))]
     let binary_name = "llama-server";
-
-    Ok(gglib_dir.join("bin").join(binary_name))
-}
-
-/// Get the path to the managed llama-cli binary.
-pub fn llama_cli_path() -> Result<PathBuf, PathError> {
-    let gglib_dir = gglib_data_dir()?;
-
-    #[cfg(target_os = "windows")]
-    let binary_name = "llama-cli.exe";
-
-    #[cfg(not(target_os = "windows"))]
-    let binary_name = "llama-cli";
 
     Ok(gglib_dir.join("bin").join(binary_name))
 }
@@ -69,18 +56,5 @@ mod tests {
 
         #[cfg(not(target_os = "windows"))]
         assert!(path.to_string_lossy().ends_with("llama-server"));
-    }
-
-    #[test]
-    fn test_llama_cli_path() {
-        let result = llama_cli_path();
-        assert!(result.is_ok());
-
-        let path = result.unwrap();
-        #[cfg(target_os = "windows")]
-        assert!(path.to_string_lossy().ends_with("llama-cli.exe"));
-
-        #[cfg(not(target_os = "windows"))]
-        assert!(path.to_string_lossy().ends_with("llama-cli"));
     }
 }

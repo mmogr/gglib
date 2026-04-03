@@ -10,9 +10,7 @@ use std::io::{self, Write};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use gglib_core::paths::{
-    gglib_data_dir, is_prebuilt_binary, llama_cli_path, llama_cpp_dir, llama_server_path,
-};
+use gglib_core::paths::{gglib_data_dir, is_prebuilt_binary, llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, BuildPhase, PrebuiltAvailability, check_dependencies,
     check_disk_space, check_prebuilt_availability, detect_optimal_acceleration,
@@ -39,16 +37,12 @@ pub async fn handle_install(
 ) -> Result<()> {
     // Check if already installed
     let server_path = path_err(llama_server_path())?;
-    let cli_path = path_err(llama_cli_path())?;
-    if server_path.exists() && cli_path.exists() && !force {
+    if server_path.exists() && !force {
         let install_dir = server_path
             .parent()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| server_path.display().to_string());
-        println!(
-            "llama-server and llama-cli are already installed in: {}",
-            install_dir
-        );
+        println!("llama-server is already installed in: {}", install_dir);
         println!("Use --force to rebuild or refresh binaries.");
         return Ok(());
     }
@@ -112,13 +106,11 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     // Steps 4-7: delegate to the pure streaming core.
     let llama_dir = path_err(llama_cpp_dir())?;
     let server_path = path_err(llama_server_path())?;
-    let cli_path = path_err(llama_cli_path())?;
     let (tx, rx) = mpsc::channel::<BuildEvent>(64);
     let build = tokio::spawn(run_llama_source_build(
         acceleration,
         llama_dir,
         server_path,
-        cli_path,
         tx,
     ));
     consume_build_events_cli(rx).await;
@@ -167,7 +159,7 @@ fn print_preflight_info(acceleration: &Acceleration) -> Result<()> {
         "  2. Configure with CMake ({} enabled)",
         acceleration.display_name()
     );
-    println!("  3. Compile llama-server and llama-cli (~3-5 minutes)");
+    println!("  3. Compile llama-server (~3-5 minutes)");
 
     let gglib_dir = path_err(gglib_data_dir())?;
     println!("  4. Install to {}", gglib_dir.join("bin").display());

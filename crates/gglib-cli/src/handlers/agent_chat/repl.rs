@@ -39,7 +39,8 @@ use gglib_core::ports::AgentLoopPort;
 
 use crate::handlers::inference::chat::ChatArgs;
 
-use super::renderer::render_event;
+use super::persistence::Conversation;
+use super::renderer::drain_event_stream;
 
 // =============================================================================
 // Help text
@@ -61,20 +62,17 @@ const REPL_HELP: &str = "\
 /// Takes the agent loop as `Arc<dyn AgentLoopPort>` so the REPL can cheaply
 /// clone the reference for each spawned per-turn task without requiring
 /// [`AgentLoop`] to implement [`Clone`].
-pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Result<()> {
+pub async fn run_repl(
+    agent_loop: Arc<dyn AgentLoopPort>,
+    args: &ChatArgs,
+    persistence: Option<Conversation<'_>>,
+) -> Result<()> {
     let config = AgentConfig::from_user_params(
         Some(args.max_iterations),
         args.max_parallel,
         args.tool_timeout_ms,
     )
     .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
-
-    // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
-    // on each turn while retaining readline history across turns.
-    let editor: Arc<Mutex<DefaultEditor>> =
-        Arc::new(Mutex::new(DefaultEditor::new().map_err(|e| {
-            anyhow::anyhow!("failed to initialise readline editor: {e}")
-        })?));
 
     // Conversation history shared across turns.
     let mut messages: Vec<AgentMessage> = Vec::new();
@@ -83,6 +81,30 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
             content: system.clone(),
         });
     }
+
+    run_repl_with_history(agent_loop, messages, config, args.verbose, persistence).await
+}
+
+/// Run the interactive agent REPL with a pre-populated conversation history.
+///
+/// This is the core REPL implementation.  [`run_repl`] delegates here after
+/// building the initial message list and config from [`ChatArgs`].  It is
+/// also called directly by `gglib q --agent` to transition from a single-turn
+/// question into an interactive session, carrying the full conversation
+/// history forward.
+pub async fn run_repl_with_history(
+    agent_loop: Arc<dyn AgentLoopPort>,
+    mut messages: Vec<AgentMessage>,
+    config: AgentConfig,
+    verbose: bool,
+    mut persistence: Option<Conversation<'_>>,
+) -> Result<()> {
+    // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
+    // on each turn while retaining readline history across turns.
+    let editor: Arc<Mutex<DefaultEditor>> =
+        Arc::new(Mutex::new(DefaultEditor::new().map_err(|e| {
+            anyhow::anyhow!("failed to initialise readline editor: {e}")
+        })?));
 
     println!("Agentic chat ready. Type /help for help, /quit to exit.");
 
@@ -133,7 +155,12 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // spawned task and returns either the updated history (success) or
         // the original snapshot (failure / Ctrl+C) — one clone total instead
         // of the previous two.
-        messages = run_single_turn(&agent_loop, messages, config.clone(), args.verbose).await;
+        messages = run_single_turn(&agent_loop, messages, config.clone(), verbose).await;
+
+        // Persist new messages (best-effort).
+        if let Some(ref mut conv) = persistence {
+            conv.save_new(&messages).await;
+        }
     }
 
     Ok(())
@@ -180,7 +207,7 @@ async fn run_single_turn(
 
     let completed = tokio::select! {
         biased;
-        result = drain_event_stream(&mut rx, verbose) => result,
+        result = drain_event_stream(&mut rx, verbose, false) => result,
         _ = tokio::signal::ctrl_c() => {
             handle.abort();
             while rx.try_recv().is_ok() {}
@@ -197,39 +224,4 @@ async fn run_single_turn(
         return new_messages;
     }
     pre_turn
-}
-
-/// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
-/// arrives, rendering each event.
-///
-/// Returns `true` only when the turn completed with a [`AgentEvent::FinalAnswer`]
-/// event.  Returns `false` when the channel closes without one (e.g. the loop
-/// hit max iterations or stagnated).  Cancellation (Ctrl+C) is handled by the
-/// caller via `tokio::select!`; this function has no side effects beyond
-/// rendering.
-///
-/// The caller **must** gate any history update on the return value: history
-/// from a failed or incomplete turn must not replace the previous context.
-async fn drain_event_stream(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
-    let mut had_text_delta = false;
-    while let Some(event) = rx.recv().await {
-        render_event(&event, verbose, had_text_delta);
-        if matches!(event, AgentEvent::TextDelta { .. }) {
-            had_text_delta = true;
-        }
-
-        if let AgentEvent::FinalAnswer { .. } = event {
-            // `FinalAnswer` is always the last event emitted before the loop
-            // drops its `Sender`.  Any events after this would be a protocol
-            // violation and are intentionally dropped.
-            debug_assert!(
-                rx.try_recv().is_err(),
-                "events after FinalAnswer violate agent protocol"
-            );
-            return true;
-        }
-    }
-    // Channel closed without a FinalAnswer — the loop ended with an error
-    // (max iterations, stagnation, etc.).  The caller must not update history.
-    false
 }

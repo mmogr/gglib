@@ -11,10 +11,9 @@ import { useEffect, useRef, useState } from 'react';
 import { appLogger } from '../../services/platform';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { getMessages, saveMessage, updateMessage, deleteMessage } from '../../services/clients/chat';
-import type { ChatMessage } from '../../services/clients/chat';
 import { threadMessageToTranscriptMarkdown } from '../../utils/messages';
 import type { ReasoningTimingTracker } from '../useGglibRuntime/reasoningTiming';
-import { buildLoadedMessage } from './buildLoadedMessage';
+import { buildLoadedMessage, foldToolMessages } from './buildLoadedMessage';
 import { buildSaveMetadata } from './buildSaveMetadata';
 
 function getDbId(m: ThreadMessageLike): number | undefined {
@@ -86,6 +85,9 @@ export function useChatPersistence({
         const dbMessages = await getMessages(activeConversationId);
         if (cancelled) return;
 
+        // Fold CLI agent tool rows into assistant contentParts.
+        const folded = foldToolMessages(dbMessages);
+
         const prompt = systemPrompt?.trim();
         const systemMessage: ThreadMessageLike[] = prompt
           ? [{
@@ -98,7 +100,7 @@ export function useChatPersistence({
 
         const loadedMessages: ThreadMessageLike[] = [
           ...systemMessage,
-          ...dbMessages.map<ThreadMessageLike>((msg) =>
+          ...folded.map<ThreadMessageLike>((msg) =>
             buildLoadedMessage(msg, activeConversationId)
           ),
         ];
@@ -207,7 +209,7 @@ export function useChatPersistence({
           try {
             const dbId = await saveMessage(
               conversationId,
-              m.role as ChatMessage['role'],
+              m.role as 'user' | 'assistant' | 'system',
               text,
               buildSaveMetadata(m),
             );

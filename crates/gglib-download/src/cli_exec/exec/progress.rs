@@ -185,6 +185,7 @@ impl PlainProgress {
     }
 
     fn update(&mut self, label: Option<&str>, downloaded: u64, total: u64) {
+        use std::fmt::Write;
         const MIN_INTERVAL: Duration = Duration::from_millis(250);
         let now = Instant::now();
         let elapsed_since_last = now.duration_since(self.last_emit);
@@ -236,11 +237,9 @@ impl PlainProgress {
 
         let mut line = String::from("⚡ Fast download");
         if let Some(name) = label.filter(|name| !name.is_empty()) {
-            use std::fmt::Write;
             let _ = write!(line, " [{name}]");
         }
         if total > 0 {
-            use std::fmt::Write;
             if downloaded == 0 {
                 let _ = write!(line, ": Preparing... ({total_str} {total_unit})");
             } else {
@@ -250,7 +249,6 @@ impl PlainProgress {
                 );
             }
         } else {
-            use std::fmt::Write;
             let _ = write!(line, ": {downloaded_str} {down_unit} downloaded");
         }
 

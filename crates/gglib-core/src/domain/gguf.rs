@@ -123,7 +123,7 @@ pub enum GgufValue {
     F32(f32),
     Bool(bool),
     String(String),
-    Array(Vec<GgufValue>),
+    Array(Vec<Self>),
     U64(u64),
     I64(i64),
     F64(f64),

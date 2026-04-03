@@ -16,7 +16,7 @@ use crate::error::GuiError;
 pub struct SetupStatus {
     /// Whether the setup wizard has been completed previously.
     pub setup_completed: bool,
-    /// Whether llama-server and llama-cli binaries are installed.
+    /// Whether llama-server binary is installed.
     pub llama_installed: bool,
     /// Whether pre-built binaries can be downloaded for this platform.
     pub llama_can_download: bool,

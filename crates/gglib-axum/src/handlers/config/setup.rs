@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_core::paths::{llama_cli_path, llama_cpp_dir, llama_server_path};
+use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_gui::setup::SetupStatus;
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, detect_optimal_acceleration, run_llama_source_build,
@@ -141,17 +141,6 @@ pub async fn build_llama_from_source(
                 return;
             }
         };
-        let cli_path = match llama_cli_path() {
-            Ok(p) => p,
-            Err(e) => {
-                let _ = tx
-                    .send(BuildEvent::Failed {
-                        message: e.to_string(),
-                    })
-                    .await;
-                return;
-            }
-        };
 
         let acceleration = match req.acceleration.as_deref() {
             Some("metal") => Acceleration::Metal,
@@ -172,7 +161,7 @@ pub async fn build_llama_from_source(
         };
 
         if let Err(e) =
-            run_llama_source_build(acceleration, llama_dir, server_path, cli_path, tx.clone()).await
+            run_llama_source_build(acceleration, llama_dir, server_path, tx.clone()).await
         {
             let _ = tx
                 .send(BuildEvent::Failed {

@@ -101,10 +101,18 @@ This module contains the **handler functions** that implement the actual logic f
   - `check.rs` - Check system dependencies
   - `install.rs` - Install missing dependencies
 
-### Agentic Chat
+### Agentic
 - **`agent_chat/`** - Interactive multi-turn agent REPL (`gglib chat --agent`)
   - Drives the agentic loop via `AgentLoopPort`
   - Streams tool-call and text events to the terminal
+
+- **`agent_question.rs`** - Single-turn agentic question (`gglib q --agent`)
+  - Sandboxes filesystem tools to the current working directory
+  - Runs one agent turn, drains events, and exits
+
+### Question
+- **`question.rs`** - Shared argument types for the question command
+  - `QuestionArgs` struct used by both standard and agentic question handlers
 
 ## Handler Pattern
 

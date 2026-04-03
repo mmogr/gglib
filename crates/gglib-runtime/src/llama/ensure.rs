@@ -1,5 +1,5 @@
 use anyhow::Result;
-use gglib_core::paths::{is_prebuilt_binary, llama_cli_path, llama_cpp_dir, llama_server_path};
+use gglib_core::paths::{is_prebuilt_binary, llama_cpp_dir, llama_server_path};
 use std::io::{self, Write};
 use tokio::sync::mpsc;
 
@@ -17,24 +17,22 @@ fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
 
 /// Ensure that llama.cpp binaries are installed.
 ///
-/// Checks for the existence of `llama-server` and `llama-cli`.
-/// If missing, automatically installs them using the appropriate method:
+/// Checks for the existence of `llama-server`.
+/// If missing, automatically installs using the appropriate method:
 ///
 /// - **Source build** (repo detected): Build from source (existing behavior)
 /// - **Pre-built binary + macOS/Windows**: Download pre-built binaries (fast)
 /// - **Pre-built binary + Linux**: Build from source (CUDA requires compilation)
 pub async fn ensure_llama_initialized() -> Result<()> {
     let server_path = path_err(llama_server_path())?;
-    let cli_path = path_err(llama_cli_path())?;
 
-    if server_path.exists() && cli_path.exists() {
+    if server_path.exists() {
         return Ok(());
     }
 
     println!();
     println!("⚠️  llama.cpp binaries not found.");
     println!("   Server path: {}", server_path.display());
-    println!("   CLI path:    {}", cli_path.display());
     println!();
 
     // Determine installation method based on context
@@ -151,14 +149,12 @@ async fn install_from_source() -> Result<()> {
     let acceleration = detect_optimal_acceleration()?;
     let llama_dir = path_err(llama_cpp_dir())?;
     let server_path = path_err(llama_server_path())?;
-    let cli_path = path_err(llama_cli_path())?;
 
     let (tx, mut rx) = mpsc::channel::<BuildEvent>(64);
     let build = tokio::spawn(run_llama_source_build(
         acceleration,
         llama_dir,
         server_path,
-        cli_path,
         tx,
     ));
 

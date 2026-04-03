@@ -47,10 +47,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │  │  endpoints  │     │   probes    │     │  chat UI    │                            │
 │  └─────────────┘     └─────────────┘     └─────────────┘                            │
 │                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐                                                │
-│  │ command.rs  │     │process_core │                                                │
-│  │ Cmd builder │     │ Core types  │                                                │
-│  └─────────────┘     └─────────────┘                                                │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
+│  │ command.rs  │     │process_core │     │ compose.rs  │                            │
+│  │ Cmd builder │     │ Core types  │     │ Agent loop  │                            │
+│  └─────────────┘     └─────────────┘     │ composition │                            │
+│                                          └─────────────┘                            │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                           │
@@ -90,6 +91,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`health_monitor.rs`** — Continuous health monitoring for processes
 - **`health.rs`** — Health check endpoint polling
 - **`process_core.rs`** — Core process types and abstractions
+- **`compose.rs`** — Agent loop composition root (wires LLM adapter + tool executors)
 - **`runner.rs`** — High-level runner facade for llama operations
 - **`llama/`** — llama-server and llama-cli process management
 - **`proxy/`** — Proxy supervisor and routing logic

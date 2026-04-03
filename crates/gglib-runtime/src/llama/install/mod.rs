@@ -55,7 +55,6 @@ pub async fn run_llama_source_build(
     acceleration: Acceleration,
     llama_dir: PathBuf,
     server_path: PathBuf,
-    cli_path: PathBuf,
     tx: mpsc::Sender<BuildEvent>,
 ) -> Result<()> {
     // Step 1: Clone or reuse repository.
@@ -85,13 +84,11 @@ pub async fn run_llama_source_build(
         let tx_clone = tx.clone();
         let dir = llama_dir.clone();
         let sp = server_path.clone();
-        let cp = cli_path.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let _ = tx_clone.blocking_send(BuildEvent::PhaseStarted {
                 phase: BuildPhase::InstallBinaries,
             });
             install_binary(&dir, "llama-server", &sp)?;
-            install_binary(&dir, "llama-cli", &cp)?;
             let _ = tx_clone.blocking_send(BuildEvent::PhaseCompleted {
                 phase: BuildPhase::InstallBinaries,
             });
