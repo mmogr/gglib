@@ -112,7 +112,7 @@ pub enum Commands {
     #[command(
         display_order = 12,
         alias = "q",
-        after_help = "EXAMPLES:\n    gglib q \"What is Rust?\"\n    cat file.txt | gglib q \"Summarize this\"\n    gglib q --file README.md \"Explain this project\"\n    echo \"Paris, Tokyo\" | gglib q \"List these cities: {}\""
+        after_help = "EXAMPLES:\n    gglib q \"What is Rust?\"\n    cat file.txt | gglib q \"Summarize this\"\n    gglib q --file README.md \"Explain this project\"\n    echo \"Paris, Tokyo\" | gglib q \"List these cities: {}\"\n    gglib q --agent \"How is error handling done in this project?\"\n    cat file.rs | gglib q --agent \"Explain this code in depth\""
     )]
     Question {
         /// Question to ask (use {} as placeholder for piped/file input)
@@ -133,6 +133,24 @@ pub enum Commands {
         quiet: bool,
         #[command(flatten)]
         sampling: SamplingArgs,
+        /// Enable agentic mode: multi-step exploration with filesystem tools
+        #[arg(long)]
+        agent: bool,
+        /// Port of a running llama-server to reuse (agentic mode only)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum agent iterations (agentic mode only)
+        #[arg(long = "max-iterations", default_value = "25")]
+        max_iterations: usize,
+        /// Tool allowlist (agentic mode only; empty = all tools)
+        #[arg(long, value_delimiter = ',')]
+        tools: Vec<String>,
+        /// Per-tool execution timeout in milliseconds (agentic mode only)
+        #[arg(long = "tool-timeout-ms")]
+        tool_timeout_ms: Option<u64>,
+        /// Maximum number of tools executed in parallel per iteration (agentic mode only)
+        #[arg(long = "max-parallel")]
+        max_parallel: Option<usize>,
     },
 
     // ── Interfaces ──────────────────────────────────────────────────────
