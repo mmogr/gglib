@@ -69,13 +69,6 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
     )
     .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
 
-    // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
-    // on each turn while retaining readline history across turns.
-    let editor: Arc<Mutex<DefaultEditor>> =
-        Arc::new(Mutex::new(DefaultEditor::new().map_err(|e| {
-            anyhow::anyhow!("failed to initialise readline editor: {e}")
-        })?));
-
     // Conversation history shared across turns.
     let mut messages: Vec<AgentMessage> = Vec::new();
     if let Some(ref system) = args.system_prompt {
@@ -83,6 +76,29 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
             content: system.clone(),
         });
     }
+
+    run_repl_with_history(agent_loop, messages, config, args.verbose).await
+}
+
+/// Run the interactive agent REPL with a pre-populated conversation history.
+///
+/// This is the core REPL implementation.  [`run_repl`] delegates here after
+/// building the initial message list and config from [`ChatArgs`].  It is
+/// also called directly by `gglib q --agent` to transition from a single-turn
+/// question into an interactive session, carrying the full conversation
+/// history forward.
+pub async fn run_repl_with_history(
+    agent_loop: Arc<dyn AgentLoopPort>,
+    mut messages: Vec<AgentMessage>,
+    config: AgentConfig,
+    verbose: bool,
+) -> Result<()> {
+    // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
+    // on each turn while retaining readline history across turns.
+    let editor: Arc<Mutex<DefaultEditor>> =
+        Arc::new(Mutex::new(DefaultEditor::new().map_err(|e| {
+            anyhow::anyhow!("failed to initialise readline editor: {e}")
+        })?));
 
     println!("Agentic chat ready. Type /help for help, /quit to exit.");
 
@@ -133,7 +149,7 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         // spawned task and returns either the updated history (success) or
         // the original snapshot (failure / Ctrl+C) — one clone total instead
         // of the previous two.
-        messages = run_single_turn(&agent_loop, messages, config.clone(), args.verbose).await;
+        messages = run_single_turn(&agent_loop, messages, config.clone(), verbose).await;
     }
 
     Ok(())

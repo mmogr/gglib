@@ -2,9 +2,11 @@
 //!
 //! Composes an agent loop with filesystem tools sandboxed to the current
 //! working directory, sends a single user message, drains the event stream,
-//! and exits.
+//! and optionally transitions into an interactive REPL session if the user
+//! wants to continue the conversation.
 
 use std::env;
+use std::io::{self, IsTerminal, Write};
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
@@ -16,7 +18,7 @@ use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use crate::bootstrap::CliContext;
 use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
 use crate::handlers::agent_chat::renderer::drain_event_stream;
-use crate::handlers::question::QuestionArgs;
+use crate::handlers::agent_chat::repl::run_repl_with_history;
 
 /// System prompt for the agentic question mode.
 const SYSTEM_PROMPT: &str = "\
@@ -25,16 +27,28 @@ You are an expert code analyst. You have access to filesystem tools \
 directory. Use them to explore the codebase and answer the question \
 thoroughly. Be direct and concise.";
 
-/// Run a single-turn agentic question.
-pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
+/// Run a single-turn agentic question, with optional continuation into chat.
+#[allow(clippy::too_many_arguments)]
+pub async fn execute(
+    ctx: &CliContext,
+    question: String,
+    model_arg: Option<String>,
+    port: Option<u16>,
+    max_iterations: usize,
+    tools: Vec<String>,
+    tool_timeout_ms: Option<u64>,
+    max_parallel: Option<usize>,
+    verbose: bool,
+    quiet: bool,
+) -> Result<()> {
     let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
 
     let params = AgentSessionParams {
-        model_identifier: args.model.clone().unwrap_or_default(),
-        ctx_size: args.ctx_size.clone(),
-        port: args.port,
-        tools: args.tools.clone(),
-        model_name: args.model.clone(),
+        model_identifier: model_arg.clone().unwrap_or_default(),
+        ctx_size: None,
+        port,
+        tools: tools.clone(),
+        model_name: model_arg.clone(),
     };
 
     // If no model was specified, look up the default from settings
@@ -69,12 +83,8 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
 
     let (agent, maybe_handle) = compose(ctx, &params, Some(cwd.clone())).await?;
 
-    let config = AgentConfig::from_user_params(
-        Some(args.max_iterations),
-        args.max_parallel,
-        args.tool_timeout_ms,
-    )
-    .map_err(|e| anyhow!("invalid agent config: {e}"))?;
+    let config = AgentConfig::from_user_params(Some(max_iterations), max_parallel, tool_timeout_ms)
+        .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
     // Build messages
     let mut messages = vec![AgentMessage::System {
@@ -82,7 +92,7 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
     }];
 
     // Construct user message with optional piped context
-    let user_content = build_user_message(&args.question, args.verbose)?;
+    let user_content = build_user_message(&question, verbose)?;
     messages.push(AgentMessage::User {
         content: user_content,
     });
@@ -90,12 +100,22 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
     // Run the agent loop
     let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
     let agent_clone = Arc::clone(&agent);
-    let handle = tokio::spawn(async move { agent_clone.run(messages, config, tx).await });
+    let messages_for_task = messages;
+    let config_clone = config.clone();
+    let handle = tokio::spawn(async move {
+        match agent_clone.run(messages_for_task, config_clone, tx).await {
+            Ok(output) => Some(output.history),
+            Err(e) => {
+                tracing::debug!("agent loop ended: {e}");
+                None
+            }
+        }
+    });
 
     // Drain events with Ctrl+C support
     let completed = tokio::select! {
         biased;
-        result = drain_event_stream(&mut rx, args.verbose) => result,
+        result = drain_event_stream(&mut rx, verbose) => result,
         _ = tokio::signal::ctrl_c() => {
             handle.abort();
             while rx.try_recv().is_ok() {}
@@ -104,20 +124,66 @@ pub async fn execute(ctx: &CliContext, args: &QuestionArgs) -> Result<()> {
         }
     };
 
-    let _ = handle.await;
+    let history = handle.await.ok().flatten();
 
-    // Stop auto-started server
-    if let Some(ref server_handle) = maybe_handle
+    // ── Continuation prompt ──────────────────────────────────────────────
+    // Offer to continue chatting if the initial question succeeded and we
+    // are in an interactive terminal.  Skip when:
+    //   - quiet mode (-Q) — script-friendly output
+    //   - stdin is not a TTY (piped input) — would read garbage or hang
+    //   - the agent didn't produce a usable history
+    let interactive = !quiet && io::stdin().is_terminal();
+
+    if completed && interactive {
+        if let Some(history) = history
+            && ask_continue()?
+        {
+            run_repl_with_history(agent, history, config, verbose).await?;
+        }
+    } else if !completed {
+        // Defer error until after potential server cleanup
+        stop_server(ctx, &maybe_handle).await;
+        return Err(anyhow!("agent did not produce a final answer"));
+    }
+
+    stop_server(ctx, &maybe_handle).await;
+    Ok(())
+}
+
+/// Prompt the user to continue into an interactive chat session.
+///
+/// Returns `true` for 'y', 'Y', or empty input (Enter); `false` for
+/// anything else.  EOF (Ctrl+D) is treated as a clean decline.
+fn ask_continue() -> Result<bool> {
+    // Flush stdout to ensure the agent's final output is fully rendered
+    // before we print the prompt — prevents interleaving.
+    io::stdout().flush().ok();
+    eprintln!();
+    eprint!("[Continue chatting? (y/n)] ");
+    io::stderr().flush().ok();
+
+    let mut input = String::new();
+    let bytes = io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| anyhow!("failed to read input: {e}"))?;
+
+    // EOF (Ctrl+D) → treat as 'n'
+    if bytes == 0 {
+        eprintln!();
+        return Ok(false);
+    }
+
+    let answer = input.trim();
+    Ok(answer.is_empty() || answer.eq_ignore_ascii_case("y"))
+}
+
+/// Stop the auto-started llama-server, if any.
+async fn stop_server(ctx: &CliContext, maybe_handle: &Option<gglib_core::ProcessHandle>) {
+    if let Some(server_handle) = maybe_handle
         && let Err(e) = ctx.runner.stop(server_handle).await
     {
         tracing::warn!("failed to stop llama-server: {e}");
     }
-
-    if !completed {
-        return Err(anyhow!("agent did not produce a final answer"));
-    }
-
-    Ok(())
 }
 
 /// Build the user message, incorporating piped stdin if available.

@@ -77,6 +77,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | [`dispatch.rs`](src/dispatch.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-dispatch-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-dispatch-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-dispatch-coverage.json) |
 | [`error.rs`](src/error.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-error-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-error-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-error-coverage.json) |
 | [`llama_commands.rs`](src/llama_commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-llama_commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-llama_commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-llama_commands-coverage.json) |
+| [`mcp_commands.rs`](src/mcp_commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-mcp_commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-mcp_commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-mcp_commands-coverage.json) |
 | [`model_commands.rs`](src/model_commands.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-model_commands-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-model_commands-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-model_commands-coverage.json) |
 | [`parser.rs`](src/parser.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-parser-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-parser-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-parser-coverage.json) |
 | [`shared_args.rs`](src/shared_args.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-shared_args-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-shared_args-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-shared_args-coverage.json) |
@@ -109,6 +110,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `serve <id>` | Start llama-server for a model |
 | `chat <id>` | Start interactive llama-cli chat |
 | `question <text>` | Ask a question (with optional piped context) |
+| `question --agent <text>` | Agentic question with filesystem tools |
 | `proxy` | Start the OpenAI-compatible proxy |
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |
@@ -142,6 +144,12 @@ gglib q --verbose --file CODE.rs "Explain this"
 
 # Cleaner output for scripting (no prompt echo, no timings)
 gglib q -Q "What is 2+2?"
+
+# Agentic mode: multi-step exploration with filesystem tools
+gglib q --agent "How is error handling structured in this project?"
+
+# Agentic mode with piped context
+git diff | gglib q --agent "Review these changes for potential issues"
 ```
 
 **Set a default model** to avoid using `--model` every time:

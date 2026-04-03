@@ -92,11 +92,33 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             verbose,
             quiet,
             sampling,
+            agent,
+            port,
+            max_iterations,
+            tools,
+            tool_timeout_ms,
+            max_parallel,
         } => {
-            handlers::inference::question::execute(
-                ctx, question, model, file, context, verbose, quiet, sampling,
-            )
-            .await?;
+            if agent {
+                handlers::inference::agent_question::execute(
+                    ctx,
+                    question,
+                    model,
+                    port,
+                    max_iterations,
+                    tools,
+                    tool_timeout_ms,
+                    max_parallel,
+                    verbose,
+                    quiet,
+                )
+                .await?;
+            } else {
+                handlers::inference::question::execute(
+                    ctx, question, model, file, context, verbose, quiet, sampling,
+                )
+                .await?;
+            }
         }
 
         // ── GUI / web interfaces ────────────────────────────────────────────
