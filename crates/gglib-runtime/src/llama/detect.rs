@@ -499,7 +499,7 @@ pub fn validate_cuda_gcc_compatibility() -> Result<()> {
      sudo apt install gcc-12 g++-12\n\
      export CC=gcc-12\n\
      export CXX=g++-12\n\
-     gglib llama install --cuda\n\
+     gglib config llama install --cuda\n\
 \n\
   2. Upgrade to CUDA 12.x (supports GCC 13.x):\n\
 \n\
@@ -508,7 +508,7 @@ pub fn validate_cuda_gcc_compatibility() -> Result<()> {
   3. Use Clang (if compatible with your CUDA version):\n\
 \n\
      sudo apt install clang\n\
-     gglib llama install --cuda\n",
+     gglib config config llama install --cuda\n",
                     );
                 }
                 12 => {
@@ -518,7 +518,7 @@ pub fn validate_cuda_gcc_compatibility() -> Result<()> {
      sudo apt install gcc-13 g++-13\n\
      export CC=gcc-13\n\
      export CXX=g++-13\n\
-     gglib llama install --cuda\n",
+     gglib config llama install --cuda\n",
                     );
                 }
                 11 => {
@@ -528,7 +528,7 @@ pub fn validate_cuda_gcc_compatibility() -> Result<()> {
      sudo apt install gcc-11 g++-11\n\
      export CC=gcc-11\n\
      export CXX=g++-11\n\
-     gglib llama install --cuda\n\
+     gglib config llama install --cuda\n\
 \n\
   2. Upgrade to CUDA 12.x or newer (recommended)\n",
                     );

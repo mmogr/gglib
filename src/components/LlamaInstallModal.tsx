@@ -180,7 +180,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
             <p className="mt-1 mb-0 text-text-secondary text-[0.95rem]">
               {canDownload
                 ? 'We will download a prebuilt binary for your platform (~15 MB).'
-                : 'Please build llama.cpp via the CLI: gglib llama install'}
+                : 'Please build llama.cpp via the CLI: gglib config llama install'}
             </p>
           )}
         </div>

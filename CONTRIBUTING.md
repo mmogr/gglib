@@ -78,7 +78,7 @@ Concrete examples of established patterns:
 |---|---|---|---|---|
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `/api/agent/stream` | `agent-event` Tauri event |
 | llama install | `LlamaProgressEvent` | progress bar | SSE at `/api/llama/install` | `llama-install-progress` |
-| llama build | `BuildEvent` | spinner + progress bar | SSE at `/api/system/build-llama-from-source` | `llama-build-progress` |
+| llama build | `BuildEvent` | spinner + progress bar | SSE at `/api/config/system/build-llama-from-source` | `llama-build-progress` |
 
 When adding a new long-running operation:
 

@@ -10,7 +10,7 @@ mod linux;
 mod macos;
 mod windows;
 
-use crate::handlers::check_deps::platform::{Os, detect_linux_distro, detect_os};
+use crate::handlers::config::check_deps::platform::{Os, detect_linux_distro, detect_os};
 use gglib_core::utils::system::Dependency;
 
 /// Print installation instructions for missing dependencies.

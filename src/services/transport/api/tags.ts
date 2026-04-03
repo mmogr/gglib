@@ -10,7 +10,7 @@ import type { ModelId } from '../types/ids';
  * List all available tags.
  */
 export async function listTags(): Promise<string[]> {
-  return get<string[]>('/api/tags');
+  return get<string[]>('/api/models/tags');
 }
 
 /**

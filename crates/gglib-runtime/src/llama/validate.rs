@@ -19,7 +19,7 @@ pub fn validate_llama_cli_binary(path: &Path) -> Result<()> {
 fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
     if !path.exists() {
         bail!(
-            "{} not found at: {}\n\nRun 'gglib llama install' to install it.",
+            "{} not found at: {}\n\nRun 'gglib config llama install' to install it.",
             binary_name,
             path.display()
         );
@@ -46,7 +46,7 @@ fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
 
     if !output.status.success() {
         bail!(
-            "{} binary appears corrupted: {}\n\nRun 'gglib llama rebuild' to fix.",
+            "{} binary appears corrupted: {}\n\nRun 'gglib config llama rebuild' to fix.",
             binary_name,
             path.display()
         );
@@ -63,7 +63,7 @@ pub async fn handle_status() -> Result<()> {
     if !binary_path.exists() {
         println!("Status: Not installed");
         println!();
-        println!("Run 'gglib llama install' to install llama.cpp");
+        println!("Run 'gglib config llama install' to install llama.cpp");
         return Ok(());
     }
 

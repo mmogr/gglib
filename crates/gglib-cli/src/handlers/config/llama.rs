@@ -8,6 +8,8 @@ use anyhow::Result;
 
 use crate::llama_commands::LlamaCommand;
 
+use super::llama_install;
+
 /// Dispatch a `llama` sub-command to the appropriate `gglib_runtime` handler.
 pub async fn dispatch(command: LlamaCommand) -> Result<()> {
     use gglib_runtime::llama::{
@@ -22,7 +24,7 @@ pub async fn dispatch(command: LlamaCommand) -> Result<()> {
             force,
             build,
         } => {
-            super::llama_install::handle_install(cuda, metal, vulkan, force, build).await?;
+            llama_install::handle_install(cuda, metal, vulkan, force, build).await?;
         }
         LlamaCommand::CheckUpdates => {
             handle_check_updates().await?;
@@ -38,7 +40,7 @@ pub async fn dispatch(command: LlamaCommand) -> Result<()> {
             metal,
             vulkan,
         } => {
-            super::llama_install::handle_install(cuda, metal, vulkan, true, true).await?;
+            llama_install::handle_install(cuda, metal, vulkan, true, true).await?;
         }
         LlamaCommand::Uninstall { force } => {
             handle_uninstall(force).await?;

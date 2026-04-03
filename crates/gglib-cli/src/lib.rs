@@ -32,8 +32,10 @@ pub mod error;
 pub mod handlers;
 pub mod llama_commands;
 pub mod mcp_commands;
+pub mod model_commands;
 pub mod parser;
 pub mod presentation;
+pub mod shared_args;
 pub mod utils;
 
 // Re-export primary types for convenient access

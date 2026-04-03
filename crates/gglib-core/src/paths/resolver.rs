@@ -2,7 +2,7 @@
 //!
 //! This module provides a single struct that captures all resolved paths
 //! in one call, making it easy to compare path resolution across adapters
-//! and expose via `gglib paths` CLI command.
+//! and expose via `gglib config paths` CLI command.
 
 use std::path::PathBuf;
 
@@ -15,7 +15,7 @@ use super::{
 ///
 /// This is the "golden truth" for path resolution - use it for:
 /// - Integration tests comparing adapter parity
-/// - CLI `gglib paths` command output
+/// - CLI `gglib config paths` command output
 /// - Debugging path resolution issues
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedPaths {

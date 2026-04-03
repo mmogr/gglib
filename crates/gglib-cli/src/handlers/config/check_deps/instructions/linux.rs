@@ -1,7 +1,7 @@
 //! Linux installation instructions.
 
 use super::common::{BOLD, RESET, print_command, print_header, print_subsection};
-use crate::handlers::check_deps::platform::LinuxDistro;
+use crate::handlers::config::check_deps::platform::LinuxDistro;
 use gglib_core::utils::system::Dependency;
 
 /// Print Linux-specific installation instructions.

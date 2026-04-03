@@ -8,51 +8,23 @@ use std::io::{self, IsTerminal, Read};
 use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
-use gglib_core::domain::InferenceConfig;
+use crate::shared_args::{ContextArgs, SamplingArgs};
 use gglib_core::paths::llama_cli_path;
 use gglib_runtime::llama::{ContextResolution, LlamaCommandBuilder, resolve_context_size};
 
+use super::shared::resolve_inference_config;
+
 /// Execute the question command.
-///
-/// This command allows asking a question with or without context from stdin or file.
-/// If stdin is piped or --file is provided, it will be used as context.
-/// The `{}` placeholder in the question will be replaced with the input,
-/// or if no placeholder exists, the input will be prepended to the question.
-///
-/// # Arguments
-///
-/// * `ctx` - The CLI context providing access to AppCore
-/// * `question` - The question to ask
-/// * `model` - Optional model identifier (ID or name)
-/// * `file` - Optional file path to read context from
-/// * `ctx_size` - Optional context size override
-/// * `mlock` - Whether to enable memory lock
-/// * `verbose` - Whether to print the constructed prompt
-/// * `quiet` - Whether to suppress llama-cli banner
-/// * `temperature` - Optional temperature override
-/// * `top_p` - Optional top-p override
-/// * `top_k` - Optional top-k override
-/// * `max_tokens` - Optional max-tokens override
-/// * `repeat_penalty` - Optional repeat-penalty override
-///
-/// # Returns
-///
-/// Returns `Result<()>` indicating success or failure.
 #[allow(clippy::too_many_arguments)]
 pub async fn execute(
     ctx: &CliContext,
     question: String,
-    model: Option<String>,
+    model_arg: Option<String>,
     file: Option<String>,
-    ctx_size: Option<String>,
-    mlock: bool,
+    context: ContextArgs,
     verbose: bool,
     quiet: bool,
-    temperature: Option<f32>,
-    top_p: Option<f32>,
-    top_k: Option<i32>,
-    max_tokens: Option<u32>,
-    repeat_penalty: Option<f32>,
+    sampling: SamplingArgs,
 ) -> Result<()> {
     // Get context from file or piped stdin
     let context_input = if let Some(file_path) = &file {
@@ -78,7 +50,7 @@ pub async fn execute(
     };
 
     // Resolve the model: --model flag -> settings default -> error
-    let model = resolve_model(ctx, model.as_deref()).await?;
+    let model = resolve_model(ctx, model_arg.as_deref()).await?;
 
     // Build the prompt based on whether we have context input
     let prompt = build_prompt(&question, context_input.as_deref())?;
@@ -92,32 +64,11 @@ pub async fn execute(
 
     // Calculate intelligent context size
     let context_resolution =
-        calculate_context_size(&prompt, ctx_size.as_deref(), model.context_length)?;
+        calculate_context_size(&prompt, context.ctx_size.as_deref(), model.context_length)?;
 
-    // Build request-level inference config from CLI args
-    let mut inference_config = InferenceConfig {
-        temperature,
-        top_p,
-        top_k,
-        max_tokens,
-        repeat_penalty,
-    };
-
-    // Apply 3-level hierarchy: request -> model -> global -> hardcoded defaults
-
-    // Apply model defaults
-    if let Some(ref model_defaults) = model.inference_defaults {
-        inference_config.merge_with(model_defaults);
-    }
-
-    // Apply global defaults
-    let settings = ctx.app.settings().get().await?;
-    if let Some(ref global_defaults) = settings.inference_defaults {
-        inference_config.merge_with(global_defaults);
-    }
-
-    // Apply hardcoded defaults
-    inference_config.merge_with(&InferenceConfig::with_hardcoded_defaults());
+    // Resolve inference parameters using 3-level hierarchy
+    let inference_config =
+        resolve_inference_config(ctx, sampling.into_inference_config(), &model).await?;
 
     // Get llama-cli path
     let llama_cli_path = llama_cli_path().context("Failed to resolve llama-cli path")?;
@@ -125,7 +76,7 @@ pub async fn execute(
     // Build and execute the command
     let mut cmd = LlamaCommandBuilder::new(&llama_cli_path, &model.file_path)
         .context_resolution(context_resolution)
-        .mlock(mlock)
+        .mlock(context.mlock)
         .inference_config(inference_config)
         .build();
 

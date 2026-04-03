@@ -10,12 +10,12 @@ import type { AppSettings, UpdateSettingsRequest } from '../types/settings';
  * Get current application settings.
  */
 export async function getSettings(): Promise<AppSettings> {
-  return get<AppSettings>('/api/settings');
+  return get<AppSettings>('/api/config/settings');
 }
 
 /**
  * Update application settings (partial update).
  */
 export async function updateSettings(settings: UpdateSettingsRequest): Promise<AppSettings> {
-  return put<AppSettings>('/api/settings', settings);
+  return put<AppSettings>('/api/config/settings', settings);
 }

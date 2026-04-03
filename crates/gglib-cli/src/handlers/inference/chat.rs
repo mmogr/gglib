@@ -6,30 +6,27 @@ use anyhow::Result;
 use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
-use gglib_core::domain::InferenceConfig;
+use crate::shared_args::{ContextArgs, SamplingArgs};
 use gglib_core::paths::llama_cli_path;
-use gglib_runtime::llama::{
-    ContextResolution, ContextResolutionSource, LlamaCommandBuilder, ensure_llama_initialized,
-    resolve_context_size,
+use gglib_runtime::llama::{LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size};
+
+use super::shared::{
+    log_command_execution, log_context_info, log_inference_info, log_mlock_info,
+    resolve_inference_config,
 };
 
 /// Arguments for the chat command.
 #[derive(Debug, Clone)]
 pub struct ChatArgs {
     pub identifier: String,
-    pub ctx_size: Option<String>,
-    pub mlock: bool,
+    pub context: ContextArgs,
     pub chat_template: Option<String>,
     pub chat_template_file: Option<String>,
     pub jinja: bool,
     pub system_prompt: Option<String>,
     pub multiline_input: bool,
     pub simple_io: bool,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub top_k: Option<i32>,
-    pub max_tokens: Option<u32>,
-    pub repeat_penalty: Option<f32>,
+    pub sampling: SamplingArgs,
     // Agentic mode fields
     pub agent: bool,
     pub port: Option<u16>,
@@ -54,7 +51,7 @@ pub struct ChatArgs {
 pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
     // Agentic mode: delegate entirely to the agent_chat handler.
     if args.agent {
-        return super::agent_chat::run(ctx, &args).await;
+        return crate::handlers::agent_chat::run(ctx, &args).await;
     }
 
     // Ensure llama.cpp is installed
@@ -65,19 +62,14 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
 
     let ChatArgs {
         identifier,
-        ctx_size,
-        mlock,
+        context,
         chat_template,
         chat_template_file,
         jinja,
         system_prompt,
         multiline_input,
         simple_io,
-        temperature,
-        top_p,
-        top_k,
-        max_tokens,
-        repeat_penalty,
+        sampling,
         // agent/port/max_iterations/tools already handled by the early-return above
         ..
     } = args;
@@ -90,40 +82,19 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
     println!("File: {}", model.file_path.display());
 
     // Handle context size
-    let context_resolution = resolve_context_size(ctx_size, model.context_length)?;
+    let context_resolution = resolve_context_size(context.ctx_size, model.context_length)?;
     log_context_info(&context_resolution);
-    log_mlock_info(mlock);
+    log_mlock_info(context.mlock);
 
-    // Resolve inference parameters using hierarchy: CLI args → Model → Global → Hardcoded
-    let mut inference_config = InferenceConfig {
-        temperature,
-        top_p,
-        top_k,
-        max_tokens,
-        repeat_penalty,
-    };
-
-    // Apply model defaults
-    if let Some(ref model_defaults) = model.inference_defaults {
-        inference_config.merge_with(model_defaults);
-    }
-
-    // Apply global defaults
-    let settings = ctx.app.settings().get().await?;
-    if let Some(ref global_defaults) = settings.inference_defaults {
-        inference_config.merge_with(global_defaults);
-    }
-
-    // Apply hardcoded defaults
-    inference_config.merge_with(&InferenceConfig::with_hardcoded_defaults());
-
-    // Log resolved inference parameters
+    // Resolve inference parameters using 3-level hierarchy
+    let inference_config =
+        resolve_inference_config(ctx, sampling.into_inference_config(), &model).await?;
     log_inference_info(&inference_config);
 
     // Build command using shared builder
     let mut cmd = LlamaCommandBuilder::new(&llama_cli_path, &model.file_path)
         .context_resolution(context_resolution)
-        .mlock(mlock)
+        .mlock(context.mlock)
         .inference_config(inference_config)
         .build();
 
@@ -170,53 +141,6 @@ pub async fn execute(ctx: &CliContext, args: ChatArgs) -> Result<()> {
             status.code()
         ))
     }
-}
-
-fn log_context_info(resolution: &ContextResolution) {
-    match (&resolution.value, &resolution.source) {
-        (Some(size), ContextResolutionSource::ExplicitFlag) => {
-            println!("Context size: {} (explicit)", size);
-        }
-        (Some(size), ContextResolutionSource::ModelMetadata) => {
-            println!("Context size: {} (from model metadata)", size);
-        }
-        (None, ContextResolutionSource::NotSpecified) => {
-            println!("Context size: default (not specified)");
-        }
-        (None, ContextResolutionSource::MaxRequestedMissing) => {
-            println!("Context size: max requested but not in metadata");
-        }
-        _ => {}
-    }
-}
-
-fn log_mlock_info(mlock: bool) {
-    if mlock {
-        println!("Memory lock: enabled");
-    }
-}
-
-fn log_inference_info(config: &InferenceConfig) {
-    println!("Inference parameters:");
-    if let Some(temp) = config.temperature {
-        println!("  Temperature: {}", temp);
-    }
-    if let Some(top_p) = config.top_p {
-        println!("  Top-p: {}", top_p);
-    }
-    if let Some(top_k) = config.top_k {
-        println!("  Top-k: {}", top_k);
-    }
-    if let Some(max_tokens) = config.max_tokens {
-        println!("  Max tokens: {}", max_tokens);
-    }
-    if let Some(repeat_penalty) = config.repeat_penalty {
-        println!("  Repeat penalty: {}", repeat_penalty);
-    }
-}
-
-fn log_command_execution(cmd: &std::process::Command) {
-    tracing::debug!("Executing: {:?}", cmd);
 }
 
 #[cfg(test)]

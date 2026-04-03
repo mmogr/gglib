@@ -14,15 +14,15 @@ import {
 describe('services/api/routes', () => {
   describe('HuggingFace routes', () => {
     it('HF_SEARCH_PATH is canonical', () => {
-      expect(HF_SEARCH_PATH).toBe('/api/hf/search');
+      expect(HF_SEARCH_PATH).toBe('/api/models/hf/search');
     });
 
     it('HF_QUANTIZATIONS_PATH is canonical', () => {
-      expect(HF_QUANTIZATIONS_PATH).toBe('/api/hf/quantizations');
+      expect(HF_QUANTIZATIONS_PATH).toBe('/api/models/hf/quantizations');
     });
 
     it('HF_TOOL_SUPPORT_PATH is canonical', () => {
-      expect(HF_TOOL_SUPPORT_PATH).toBe('/api/hf/tool-support');
+      expect(HF_TOOL_SUPPORT_PATH).toBe('/api/models/hf/tool-support');
     });
   });
 });

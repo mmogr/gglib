@@ -16,10 +16,10 @@ GGLib keeps a catalog of your GGUFs, handles downloading from HuggingFace, and s
 
 ```bash
 # Download a model from HuggingFace
-gglib download bartowski/Qwen2.5-7B-Instruct-GGUF
+gglib model download bartowski/Qwen2.5-7B-Instruct-GGUF
 
 # List what you have
-gglib list
+gglib model list
 
 # Start chatting (launches llama-server automatically)
 gglib chat qwen2.5
@@ -405,7 +405,7 @@ cargo run --package gglib-cli -- web --port 9887 --static-dir ./web_ui  # single
 <details>
 <summary><strong>Accelerated downloads (hf_xet)</strong></summary>
 
-gglib bundles a managed Python helper for [hf_xet](https://github.com/huggingface/hf-xet) fast downloads. On first run (or after `make setup` / `gglib check-deps`), it provisions a Miniconda environment under `<data_root>/.conda/gglib-hf-xet` and installs `huggingface_hub>=1.1.5` + `hf_xet>=0.6`. There is no legacy Rust HTTP fallback — if the helper is missing, `gglib download` will fail until the environment is repaired.
+gglib bundles a managed Python helper for [hf_xet](https://github.com/huggingface/hf-xet) fast downloads. On first run (or after `make setup` / `gglib config check-deps`), it provisions a Miniconda environment under `<data_root>/.conda/gglib-hf-xet` and installs `huggingface_hub>=1.1.5` + `hf_xet>=0.6`. There is no legacy Rust HTTP fallback — if the helper is missing, `gglib model download` will fail until the environment is repaired.
 
 </details>
 

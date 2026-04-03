@@ -80,7 +80,7 @@ check-rust:
 check-deps: check-deps-bootstrap
 	@echo ""
 	@echo "Running detailed dependency verification..."
-	@$(CARGO) run -p gglib-cli --quiet -- check-deps
+	@$(CARGO) run -p gglib-cli --quiet -- config check-deps
 
 # Default target
 help:
@@ -262,9 +262,9 @@ clean-all:
 # llama.cpp management targets
 llama-install:
 	@echo "Installing llama.cpp (manual)..."
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib llama install; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib llama install; \
-	else $(CARGO) run -p gglib-cli -- llama install; fi
+	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama install; \
+	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama install; \
+	else $(CARGO) run -p gglib-cli -- config llama install; fi
 
 llama-install-auto:
 	@echo "Installing llama.cpp with auto-detected GPU support..."
@@ -272,14 +272,14 @@ llama-install-auto:
 
 llama-update:
 	@echo "Updating llama.cpp..."
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib llama update; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib llama update; \
-	else $(CARGO) run -p gglib-cli -- llama update; fi
+	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama update; \
+	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama update; \
+	else $(CARGO) run -p gglib-cli -- config llama update; fi
 
 llama-status:
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib llama status; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib llama status; \
-	else $(CARGO) run -p gglib-cli -- llama status; fi
+	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama status; \
+	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama status; \
+	else $(CARGO) run -p gglib-cli -- config llama status; fi
 
 llama-rebuild: clean-llama llama-install-auto
 	@echo "✓ llama.cpp rebuilt"

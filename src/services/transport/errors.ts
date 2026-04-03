@@ -80,7 +80,7 @@ export class TransportError extends Error {
     return {
       expectedPath: (details.expectedPath || details.expected_path || '') as string,
       legacyPath: (details.legacyPath || details.legacy_path) as string | undefined,
-      suggestedCommand: (details.suggestedCommand || details.suggested_command || 'gglib llama install') as string,
+      suggestedCommand: (details.suggestedCommand || details.suggested_command || 'gglib config llama install') as string,
       reason: (details.reason || 'not found') as string,
     };
   }

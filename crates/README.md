@@ -239,8 +239,8 @@ Voice mode pipeline:
 
 #### gglib-cli
 Command-line interface:
-- `gglib add` - Add models
-- `gglib list` - List models
+- `gglib model add` - Add models
+- `gglib model list` - List models
 - `gglib serve` - Start servers
 - `gglib chat` - Interactive chat
 - `gglib config` - Configuration management

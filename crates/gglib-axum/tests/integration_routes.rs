@@ -120,7 +120,7 @@ async fn downloads_endpoint_returns_queue_snapshot() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/api/downloads")
+                .uri("/api/models/downloads")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -341,7 +341,7 @@ async fn settings_endpoint_accepts_get() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/api/settings")
+                .uri("/api/config/settings")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -368,7 +368,7 @@ async fn settings_endpoint_accepts_put() {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri("/api/settings")
+                .uri("/api/config/settings")
                 .header("content-type", "application/json")
                 .body(Body::from(request_body))
                 .unwrap(),
@@ -400,7 +400,7 @@ async fn settings_endpoint_accepts_patch() {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri("/api/settings")
+                .uri("/api/config/settings")
                 .header("content-type", "application/json")
                 .body(Body::from(request_body))
                 .unwrap(),
@@ -631,7 +631,7 @@ async fn downloads_queue_accepts_get() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/api/downloads/queue")
+                .uri("/api/models/downloads/queue")
                 .body(Body::empty())
                 .unwrap(),
         )

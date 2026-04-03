@@ -106,19 +106,19 @@ export async function getModelFilterOptions(): Promise<ModelFilterOptions> {
  * Get system memory information.
  */
 export async function getSystemMemory(): Promise<SystemMemoryInfo | null> {
-  return get<SystemMemoryInfo>('/api/system/memory');
+  return get<SystemMemoryInfo>('/api/config/system/memory');
 }
 
 /**
  * Get models directory information.
  */
 export async function getModelsDirectory(): Promise<ModelsDirectoryInfo> {
-  return get<ModelsDirectoryInfo>('/api/system/models-directory');
+  return get<ModelsDirectoryInfo>('/api/config/system/models-directory');
 }
 
 /**
  * Set models directory path.
  */
 export async function setModelsDirectory(path: string): Promise<void> {
-  await put<void>('/api/system/models-directory', { path });
+  await put<void>('/api/config/system/models-directory', { path });
 }

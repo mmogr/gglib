@@ -23,13 +23,13 @@ pub async fn handle_check_updates() -> Result<()> {
 
     if !binary_path.exists() {
         println!("llama.cpp is not installed.");
-        println!("Run 'gglib llama install' to install it.");
+        println!("Run 'gglib config llama install' to install it.");
         return Ok(());
     }
 
     if !llama_dir.exists() {
         println!("Warning: llama.cpp repository not found.");
-        println!("Run 'gglib llama rebuild' to reinstall.");
+        println!("Run 'gglib config llama rebuild' to reinstall.");
         return Ok(());
     }
 
@@ -106,7 +106,7 @@ pub async fn handle_check_updates() -> Result<()> {
         println!("  {}", line);
     }
     println!();
-    println!("Run 'gglib llama update' to upgrade");
+    println!("Run 'gglib config llama update' to upgrade");
 
     Ok(())
 }
@@ -119,13 +119,13 @@ pub async fn handle_update() -> Result<()> {
 
     if !binary_path.exists() {
         println!("llama.cpp is not installed.");
-        println!("Run 'gglib llama install' to install it.");
+        println!("Run 'gglib config llama install' to install it.");
         return Ok(());
     }
 
     if !llama_dir.exists() {
         println!("Error: llama.cpp repository not found.");
-        println!("Run 'gglib llama install' to reinstall.");
+        println!("Run 'gglib config llama install' to reinstall.");
         return Ok(());
     }
 

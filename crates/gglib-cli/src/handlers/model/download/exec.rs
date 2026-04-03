@@ -82,7 +82,7 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
                 e
             );
             println!(
-                "  You can manually add the model with: gglib add {}",
+                "  You can manually add the model with: gglib model add {}",
                 result.primary_path.display()
             );
         }

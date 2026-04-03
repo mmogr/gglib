@@ -93,7 +93,7 @@ pub fn handle_status() -> Result<(), String> {
     let node_modules = PathBuf::from("node_modules");
     if !node_modules.exists() {
         println!("✗ node_modules not found");
-        println!("\nRun 'gglib assistant-ui install' to install dependencies");
+        println!("\nRun 'gglib config assistant-ui install' to install dependencies");
         return Err("Dependencies not installed".to_string());
     }
 
@@ -129,7 +129,7 @@ pub fn handle_status() -> Result<(), String> {
         Ok(())
     } else {
         println!("\n✗ Some dependencies are missing");
-        println!("Run 'gglib assistant-ui install' to install missing dependencies");
+        println!("Run 'gglib config assistant-ui install' to install missing dependencies");
         Err("Missing dependencies".to_string())
     }
 }

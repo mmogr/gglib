@@ -61,7 +61,7 @@ async fn ensure_for_source_build() -> Result<()> {
 
     if input.trim().eq_ignore_ascii_case("n") {
         anyhow::bail!(
-            "llama.cpp is required to run this command. Run 'gglib llama install' manually."
+            "llama.cpp is required to run this command. Run 'gglib config llama install' manually."
         );
     }
 
@@ -94,7 +94,7 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
 
             if input.trim().eq_ignore_ascii_case("n") {
                 anyhow::bail!(
-                    "llama.cpp is required to run this command. Run 'gglib llama install' manually."
+                    "llama.cpp is required to run this command. Run 'gglib config llama install' manually."
                 );
             }
 
@@ -131,7 +131,7 @@ async fn ensure_for_prebuilt_binary() -> Result<()> {
 
             if input.trim().eq_ignore_ascii_case("n") {
                 anyhow::bail!(
-                    "llama.cpp is required to run this command. Run 'gglib llama install' manually."
+                    "llama.cpp is required to run this command. Run 'gglib config llama install' manually."
                 );
             }
 

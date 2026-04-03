@@ -28,7 +28,7 @@ interface QueueSnapshotResponse {
  * Transforms the backend's flat item list into categorized current/pending/failed.
  */
 export async function getDownloadQueue(): Promise<DownloadQueueStatus> {
-  const snapshot = await get<QueueSnapshotResponse>('/api/downloads/queue');
+  const snapshot = await get<QueueSnapshotResponse>('/api/models/downloads/queue');
   
   // Split items by status (same logic as SSE event handler)
   const items = snapshot.items || [];
@@ -48,7 +48,7 @@ export async function getDownloadQueue(): Promise<DownloadQueueStatus> {
  * Queue a new download from HuggingFace.
  */
 export async function queueDownload(params: QueueDownloadParams): Promise<QueueDownloadResponse> {
-  return post<QueueDownloadResponse>('/api/downloads/queue', {
+  return post<QueueDownloadResponse>('/api/models/downloads/queue', {
     model_id: params.modelId,
     quantization: params.quantization,
     target_path: params.targetPath,
@@ -59,35 +59,35 @@ export async function queueDownload(params: QueueDownloadParams): Promise<QueueD
  * Cancel an active or queued download.
  */
 export async function cancelDownload(id: DownloadId): Promise<void> {
-  await post<void>(`/api/downloads/${encodeURIComponent(id)}/cancel`);
+  await post<void>(`/api/models/downloads/${encodeURIComponent(id)}/cancel`);
 }
 
 /**
  * Remove a download from the queue (for failed/completed items).
  */
 export async function removeFromQueue(id: DownloadId): Promise<void> {
-  await del<void>(`/api/downloads/${encodeURIComponent(id)}`);
+  await del<void>(`/api/models/downloads/${encodeURIComponent(id)}`);
 }
 
 /**
  * Clear all failed downloads from the queue.
  */
 export async function clearFailedDownloads(): Promise<void> {
-  await post<void>('/api/downloads/failed/clear');
+  await post<void>('/api/models/downloads/failed/clear');
 }
 
 /**
  * Cancel all shards in a download group.
  */
 export async function cancelShardGroup(groupId: string): Promise<void> {
-  await post<void>(`/api/downloads/shard-group/${encodeURIComponent(groupId)}/cancel`);
+  await post<void>(`/api/models/downloads/shard-group/${encodeURIComponent(groupId)}/cancel`);
 }
 
 /**
  * Reorder downloads in the queue.
  */
 export async function reorderQueue(ids: DownloadId[]): Promise<void> {
-  await post<void>('/api/downloads/reorder-full', { ids });
+  await post<void>('/api/models/downloads/reorder-full', { ids });
 }
 
 /**
@@ -97,7 +97,7 @@ export async function reorderQueue(ids: DownloadId[]): Promise<void> {
  * @returns Actual position after reorder
  */
 export async function reorderQueueItem(id: DownloadId, position: number): Promise<number> {
-  const response = await post<number>('/api/downloads/reorder', {
+  const response = await post<number>('/api/models/downloads/reorder', {
     model_id: id,
     position,
   });

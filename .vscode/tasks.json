@@ -437,12 +437,13 @@
 			}
 		},
 		{
-			"label": "🎬 Run gglib list",
+			"label": "🎬 Run gglib model list",
 			"type": "shell",
 			"command": "cargo",
 			"args": [
 				"run",
 				"--",
+				"model",
 				"list"
 			],
 			"group": "none",
