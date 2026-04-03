@@ -39,6 +39,7 @@ use gglib_core::ports::AgentLoopPort;
 
 use crate::handlers::inference::chat::ChatArgs;
 
+use super::persistence::Conversation;
 use super::renderer::drain_event_stream;
 
 // =============================================================================
@@ -61,7 +62,11 @@ const REPL_HELP: &str = "\
 /// Takes the agent loop as `Arc<dyn AgentLoopPort>` so the REPL can cheaply
 /// clone the reference for each spawned per-turn task without requiring
 /// [`AgentLoop`] to implement [`Clone`].
-pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Result<()> {
+pub async fn run_repl(
+    agent_loop: Arc<dyn AgentLoopPort>,
+    args: &ChatArgs,
+    persistence: Option<Conversation<'_>>,
+) -> Result<()> {
     let config = AgentConfig::from_user_params(
         Some(args.max_iterations),
         args.max_parallel,
@@ -77,7 +82,7 @@ pub async fn run_repl(agent_loop: Arc<dyn AgentLoopPort>, args: &ChatArgs) -> Re
         });
     }
 
-    run_repl_with_history(agent_loop, messages, config, args.verbose).await
+    run_repl_with_history(agent_loop, messages, config, args.verbose, persistence).await
 }
 
 /// Run the interactive agent REPL with a pre-populated conversation history.
@@ -92,6 +97,7 @@ pub async fn run_repl_with_history(
     mut messages: Vec<AgentMessage>,
     config: AgentConfig,
     verbose: bool,
+    mut persistence: Option<Conversation<'_>>,
 ) -> Result<()> {
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.
@@ -150,6 +156,11 @@ pub async fn run_repl_with_history(
         // the original snapshot (failure / Ctrl+C) — one clone total instead
         // of the previous two.
         messages = run_single_turn(&agent_loop, messages, config.clone(), verbose).await;
+
+        // Persist new messages (best-effort).
+        if let Some(ref mut conv) = persistence {
+            conv.save_new(&messages).await;
+        }
     }
 
     Ok(())

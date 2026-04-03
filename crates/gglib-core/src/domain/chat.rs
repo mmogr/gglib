@@ -36,6 +36,7 @@ pub enum MessageRole {
     System,
     User,
     Assistant,
+    Tool,
 }
 
 impl MessageRole {
@@ -46,6 +47,7 @@ impl MessageRole {
             "system" => Some(Self::System),
             "user" => Some(Self::User),
             "assistant" => Some(Self::Assistant),
+            "tool" => Some(Self::Tool),
             _ => None,
         }
     }
@@ -57,6 +59,7 @@ impl MessageRole {
             Self::System => "system",
             Self::User => "user",
             Self::Assistant => "assistant",
+            Self::Tool => "tool",
         }
     }
 }

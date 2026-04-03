@@ -2022,6 +2022,7 @@ dependencies = [
  "indicatif 0.18.4",
  "reqwest 0.13.2",
  "rustyline",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

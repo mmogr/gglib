@@ -7,6 +7,7 @@
 //! - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input
 
 pub mod config;
+pub mod persistence;
 pub mod renderer;
 pub mod repl;
 
@@ -15,6 +16,8 @@ use anyhow::Result;
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
 
+use self::persistence::Conversation;
+
 /// Entry point: start the interactive agentic REPL.
 ///
 /// Called from [`crate::handlers::chat::execute`] when `args.agent` is `true`.
@@ -22,7 +25,17 @@ use crate::handlers::inference::chat::ChatArgs;
 pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     let (agent, maybe_handle) = config::compose(ctx, &args.into(), None).await?;
 
-    let result = repl::run_repl(agent, args).await;
+    // Create a conversation for persistence (best-effort).
+    let persistence =
+        match Conversation::create(ctx.app.chat_history(), args.system_prompt.clone()).await {
+            Ok(conv) => Some(conv),
+            Err(e) => {
+                tracing::warn!("failed to create agent conversation: {e}");
+                None
+            }
+        };
+
+    let result = repl::run_repl(agent, args, persistence).await;
 
     if let Some(ref handle) = maybe_handle
         && let Err(e) = ctx.runner.stop(handle).await

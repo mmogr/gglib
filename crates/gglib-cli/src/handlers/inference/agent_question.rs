@@ -17,6 +17,7 @@ use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
+use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::renderer::drain_event_stream;
 use crate::handlers::agent_chat::repl::run_repl_with_history;
 
@@ -126,6 +127,22 @@ pub async fn execute(
 
     let history = handle.await.ok().flatten();
 
+    // ── Persist conversation ─────────────────────────────────────────────
+    // Save the full agent exchange to the DB so it appears in the GUI
+    // conversation list and can later be resumed.  Best-effort: a
+    // persistence failure must never break the interactive session.
+    let mut persistence = None;
+    if completed && let Some(ref history) = history {
+        let system_prompt = format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display());
+        match Conversation::create(ctx.app.chat_history(), Some(system_prompt)).await {
+            Ok(mut conv) => {
+                conv.save_new(history).await;
+                persistence = Some(conv);
+            }
+            Err(e) => tracing::warn!("failed to create agent conversation: {e}"),
+        }
+    }
+
     // ── Continuation prompt ──────────────────────────────────────────────
     // Offer to continue chatting if the initial question succeeded and we
     // are in an interactive terminal.  Skip when:
@@ -138,7 +155,7 @@ pub async fn execute(
         if let Some(history) = history
             && ask_continue()?
         {
-            run_repl_with_history(agent, history, config, verbose).await?;
+            run_repl_with_history(agent, history, config, verbose, persistence).await?;
         }
     } else if !completed {
         // Defer error until after potential server cleanup

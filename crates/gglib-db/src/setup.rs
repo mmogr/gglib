@@ -164,6 +164,25 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Guard: drop chat tables if the schema is out of date (missing 'tool' role).
+    // No backwards-compat needed — tables are recreated below.
+    let needs_recreate: bool = sqlx::query_scalar::<_, String>(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='chat_messages'",
+    )
+    .fetch_optional(pool)
+    .await?
+    .is_some_and(|sql| !sql.contains("'tool'"));
+
+    if needs_recreate {
+        // Drop messages first (FK child), then conversations.
+        sqlx::query("DROP TABLE IF EXISTS chat_messages")
+            .execute(pool)
+            .await?;
+        sqlx::query("DROP TABLE IF EXISTS chat_conversations")
+            .execute(pool)
+            .await?;
+    }
+
     // Create chat conversations table
     sqlx::query(
         r#"
@@ -187,7 +206,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         CREATE TABLE IF NOT EXISTS chat_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             conversation_id INTEGER NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant')),
+            role TEXT NOT NULL CHECK(role IN ('system', 'user', 'assistant', 'tool')),
             content TEXT NOT NULL,
             metadata TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),

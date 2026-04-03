@@ -39,7 +39,7 @@ export interface ChatMessageMetadata {
 export interface ChatMessage {
   id: MessageId;
   conversation_id: ConversationId;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   created_at: string;
   metadata?: ChatMessageMetadata | null;

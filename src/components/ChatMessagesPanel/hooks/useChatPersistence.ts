@@ -3,7 +3,7 @@ import type { ThreadRuntime, ThreadMessageLike } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
 import { getMessages, deleteMessage } from '../../../services/clients/chat';
 import type { ConversationSummary } from '../../../services/clients/chat';
-import { buildLoadedMessage } from '../../../hooks/useChatPersistence/buildLoadedMessage';
+import { buildLoadedMessage, foldToolMessages } from '../../../hooks/useChatPersistence/buildLoadedMessage';
 
 /**
  * Options for the useChatPersistence hook.
@@ -77,6 +77,9 @@ export function useChatPersistence({
         const messages = await getMessages(activeConversationId);
         if (cancelled) return;
 
+        // Fold CLI agent tool rows into assistant contentParts.
+        const folded = foldToolMessages(messages);
+
         const prompt = activeConversation?.system_prompt?.trim();
         const systemPromptMessage: ThreadMessageLike[] = prompt && activeConversation
           ? [{
@@ -89,7 +92,7 @@ export function useChatPersistence({
 
         const initialMessages: ThreadMessageLike[] = [
           ...systemPromptMessage,
-          ...messages.map<ThreadMessageLike>((message) =>
+          ...folded.map<ThreadMessageLike>((message) =>
             buildLoadedMessage(message, activeConversationId)
           ),
         ];
@@ -253,6 +256,7 @@ export function useMessageDelete({
       
       // Reload messages from DB and reset runtime
       const messages = await getMessages(activeConversationId);
+      const folded = foldToolMessages(messages);
       
       const prompt = activeConversation?.system_prompt?.trim();
       const systemPromptMessage: ThreadMessageLike[] = prompt && activeConversation
@@ -266,7 +270,7 @@ export function useMessageDelete({
 
       const reloadedMessages: ThreadMessageLike[] = [
         ...systemPromptMessage,
-        ...messages.map<ThreadMessageLike>((message) =>
+        ...folded.map<ThreadMessageLike>((message) =>
           buildLoadedMessage(message, activeConversationId)
         ),
       ];
