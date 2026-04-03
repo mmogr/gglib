@@ -11,7 +11,6 @@ import { useEffect, useRef, useState } from 'react';
 import { appLogger } from '../../services/platform';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { getMessages, saveMessage, updateMessage, deleteMessage } from '../../services/clients/chat';
-import type { ChatMessage } from '../../services/clients/chat';
 import { threadMessageToTranscriptMarkdown } from '../../utils/messages';
 import type { ReasoningTimingTracker } from '../useGglibRuntime/reasoningTiming';
 import { buildLoadedMessage, foldToolMessages } from './buildLoadedMessage';
@@ -210,7 +209,7 @@ export function useChatPersistence({
           try {
             const dbId = await saveMessage(
               conversationId,
-              m.role as ChatMessage['role'],
+              m.role as 'user' | 'assistant' | 'system',
               text,
               buildSaveMetadata(m),
             );

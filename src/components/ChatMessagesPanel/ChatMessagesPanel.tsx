@@ -496,7 +496,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         ...systemPromptMessage,
         ...messages.map<ThreadMessageLike>((message) => ({
           id: `db-${message.id}`,
-          role: message.role,
+          role: message.role as 'user' | 'assistant' | 'system',
           content: message.content,
           createdAt: new Date(message.created_at),
         })),
