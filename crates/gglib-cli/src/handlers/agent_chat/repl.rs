@@ -207,7 +207,7 @@ async fn run_single_turn(
 
     let completed = tokio::select! {
         biased;
-        result = drain_event_stream(&mut rx, verbose) => result,
+        result = drain_event_stream(&mut rx, verbose, false) => result,
         _ = tokio::signal::ctrl_c() => {
             handle.abort();
             while rx.try_recv().is_ok() {}

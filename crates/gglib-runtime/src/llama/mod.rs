@@ -76,7 +76,7 @@ pub use detect::{Acceleration, detect_optimal_acceleration};
 pub use download::check_llama_installed;
 #[cfg(feature = "cli")]
 pub use ensure::ensure_llama_initialized;
-pub use validate::{handle_status, validate_llama_binary, validate_llama_cli_binary};
+pub use validate::{handle_status, validate_llama_binary};
 
 // Installation (CLI only)
 #[cfg(feature = "cli")]

@@ -92,17 +92,23 @@ fn format_grep_search(content: &str) -> String {
 /// `verbose` enables per-iteration progress lines that are suppressed in
 /// normal/quiet mode.
 ///
+/// `quiet` suppresses all stderr output (tool progress, reasoning tokens,
+/// iteration counts) — only LLM text on stdout is emitted.  Ideal for
+/// scripting and piped output.
+///
 /// `had_text_delta` must be `true` when at least one [`AgentEvent::TextDelta`]
 /// was rendered before this call.  When `false`, [`AgentEvent::FinalAnswer`]
 /// will print `content` to stdout — a defensive fallback for non-streaming
 /// invocations where the model returns its answer in a single chunk.
-pub fn render_event(event: &AgentEvent, verbose: bool, had_text_delta: bool) {
+pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_delta: bool) {
     match event {
         AgentEvent::ReasoningDelta { content } => {
-            // Chain-of-thought tokens from reasoning models (DeepSeek R1, QwQ, etc.).
-            // Printed to stderr so they don't interleave with the answer on stdout.
-            eprint!("{content}");
-            let _ = io::stderr().flush();
+            if !quiet {
+                // Chain-of-thought tokens from reasoning models (DeepSeek R1, QwQ, etc.).
+                // Printed to stderr so they don't interleave with the answer on stdout.
+                eprint!("{content}");
+                let _ = io::stderr().flush();
+            }
         }
 
         AgentEvent::TextDelta { content } => {
@@ -112,7 +118,9 @@ pub fn render_event(event: &AgentEvent, verbose: bool, had_text_delta: bool) {
         }
 
         AgentEvent::ToolCallStart { tool_call } => {
-            eprintln!("\n  ⚙   {} …", tool_call.name);
+            if !quiet {
+                eprintln!("\n  ⚙   {} …", tool_call.name);
+            }
         }
 
         AgentEvent::ToolCallComplete {
@@ -121,16 +129,18 @@ pub fn render_event(event: &AgentEvent, verbose: bool, had_text_delta: bool) {
             execute_duration_ms,
             ..
         } => {
-            let icon = if result.success { "✓" } else { "✗" };
-            let summary = format_tool_result(tool_name, result);
-            eprintln!("  {icon}  {execute_duration_ms}ms  {summary}");
+            if !quiet {
+                let icon = if result.success { "✓" } else { "✗" };
+                let summary = format_tool_result(tool_name, result);
+                eprintln!("  {icon}  {execute_duration_ms}ms  {summary}");
+            }
         }
 
         AgentEvent::IterationComplete {
             iteration,
             tool_calls,
         } => {
-            if verbose {
+            if verbose && !quiet {
                 eprintln!("  [iter {iteration}, {tool_calls} tool call(s)]");
             }
         }
@@ -164,10 +174,14 @@ pub fn render_event(event: &AgentEvent, verbose: bool, had_text_delta: bool) {
 ///
 /// The caller **must** gate any history update on the return value: history
 /// from a failed or incomplete turn must not replace the previous context.
-pub async fn drain_event_stream(rx: &mut mpsc::Receiver<AgentEvent>, verbose: bool) -> bool {
+pub async fn drain_event_stream(
+    rx: &mut mpsc::Receiver<AgentEvent>,
+    verbose: bool,
+    quiet: bool,
+) -> bool {
     let mut had_text_delta = false;
     while let Some(event) = rx.recv().await {
-        render_event(&event, verbose, had_text_delta);
+        render_event(&event, verbose, quiet, had_text_delta);
         if matches!(event, AgentEvent::TextDelta { .. }) {
             had_text_delta = true;
         }
@@ -200,8 +214,8 @@ mod tests {
 
     /// Convenience: call render_event and assert it does not panic.
     fn smoke(event: AgentEvent) {
-        render_event(&event, false, false);
-        render_event(&event, true, false);
+        render_event(&event, false, false, false);
+        render_event(&event, true, false, false);
     }
 
     #[test]
@@ -229,6 +243,7 @@ mod tests {
             },
             false,
             false,
+            false,
         );
         render_event(
             &AgentEvent::IterationComplete {
@@ -236,6 +251,7 @@ mod tests {
                 tool_calls: 2,
             },
             true,
+            false,
             false,
         );
     }

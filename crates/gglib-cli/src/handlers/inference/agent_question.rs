@@ -1,4 +1,4 @@
-//! Single-turn agentic question handler for `gglib q --agent`.
+//! Single-turn agentic question handler for `gglib q`.
 //!
 //! Composes an agent loop with filesystem tools sandboxed to the current
 //! working directory, sends a single user message, drains the event stream,
@@ -20,6 +20,7 @@ use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
 use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::renderer::drain_event_stream;
 use crate::handlers::agent_chat::repl::run_repl_with_history;
+use crate::shared_args::SamplingArgs;
 
 /// System prompt for the agentic question mode.
 const SYSTEM_PROMPT: &str = "\
@@ -34,6 +35,7 @@ pub async fn execute(
     ctx: &CliContext,
     question: String,
     model_arg: Option<String>,
+    file: Option<String>,
     port: Option<u16>,
     max_iterations: usize,
     tools: Vec<String>,
@@ -41,6 +43,7 @@ pub async fn execute(
     max_parallel: Option<usize>,
     verbose: bool,
     quiet: bool,
+    sampling: SamplingArgs,
 ) -> Result<()> {
     let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
 
@@ -82,7 +85,14 @@ pub async fn execute(
         params
     };
 
-    let (agent, maybe_handle) = compose(ctx, &params, Some(cwd.clone())).await?;
+    let inference_config = sampling.into_inference_config();
+    let sampling_override = if inference_config == Default::default() {
+        None
+    } else {
+        Some(inference_config)
+    };
+
+    let (agent, maybe_handle) = compose(ctx, &params, Some(cwd.clone()), sampling_override).await?;
 
     let config = AgentConfig::from_user_params(Some(max_iterations), max_parallel, tool_timeout_ms)
         .map_err(|e| anyhow!("invalid agent config: {e}"))?;
@@ -92,8 +102,8 @@ pub async fn execute(
         content: format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display()),
     }];
 
-    // Construct user message with optional piped context
-    let user_content = build_user_message(&question, verbose)?;
+    // Construct user message with optional piped/file context
+    let user_content = build_user_message(&question, file.as_deref(), verbose)?;
     messages.push(AgentMessage::User {
         content: user_content,
     });
@@ -116,7 +126,7 @@ pub async fn execute(
     // Drain events with Ctrl+C support
     let completed = tokio::select! {
         biased;
-        result = drain_event_stream(&mut rx, verbose) => result,
+        result = drain_event_stream(&mut rx, verbose, quiet) => result,
         _ = tokio::signal::ctrl_c() => {
             handle.abort();
             while rx.try_recv().is_ok() {}
@@ -203,36 +213,43 @@ async fn stop_server(ctx: &CliContext, maybe_handle: &Option<gglib_core::Process
     }
 }
 
-/// Build the user message, incorporating piped stdin if available.
-fn build_user_message(question: &str, verbose: bool) -> Result<String> {
+/// Build the user message, incorporating piped stdin or `--file` content.
+fn build_user_message(question: &str, file: Option<&str>, verbose: bool) -> Result<String> {
     use std::io::{self, IsTerminal, Read};
 
-    let stdin = io::stdin();
-    let piped_input = if !stdin.is_terminal() {
-        let mut buffer = String::new();
-        stdin
-            .lock()
-            .read_to_string(&mut buffer)
-            .map_err(|e| anyhow!("failed to read from stdin: {e}"))?;
-        if buffer.is_empty() {
+    // --file takes precedence over piped stdin.
+    let context = if let Some(path) = file {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| anyhow!("failed to read file '{}': {e}", path))?;
+        if content.is_empty() {
             None
         } else {
-            Some(buffer)
+            Some(content)
         }
     } else {
-        None
+        let stdin = io::stdin();
+        if !stdin.is_terminal() {
+            let mut buffer = String::new();
+            stdin
+                .lock()
+                .read_to_string(&mut buffer)
+                .map_err(|e| anyhow!("failed to read from stdin: {e}"))?;
+            if buffer.is_empty() {
+                None
+            } else {
+                Some(buffer)
+            }
+        } else {
+            None
+        }
     };
 
-    let user_message = match piped_input {
+    let user_message = match context {
         Some(input) => {
             if question.contains("{}") {
                 question.replace("{}", &input)
             } else {
-                format!(
-                    "<piped_input>\n{}\n</piped_input>\n\n{}",
-                    input.trim(),
-                    question
-                )
+                format!("<context>\n{}\n</context>\n\n{}", input.trim(), question)
             }
         }
         None => question.to_string(),

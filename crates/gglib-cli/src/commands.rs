@@ -55,55 +55,40 @@ pub enum Commands {
         sampling: SamplingArgs,
     },
 
-    /// Chat with a model directly via llama-cli
+    /// Chat with a model interactively
     #[command(display_order = 11)]
     Chat {
         /// Name or ID of the model to chat with
         identifier: String,
         #[command(flatten)]
         context: ContextArgs,
-        /// Override the chat template name bundled with llama-cli
-        #[arg(long = "chat-template")]
-        chat_template: Option<String>,
-        /// Provide a custom chat template file path
-        #[arg(long = "chat-template-file")]
-        chat_template_file: Option<String>,
-        /// Force-enable Jinja template parsing for custom templates
-        #[arg(long)]
-        jinja: bool,
         /// Set a system prompt for the conversation
         #[arg(long = "system-prompt", short = 's')]
         system_prompt: Option<String>,
-        /// Allow multi-line user input without escaping newlines
-        #[arg(long = "multiline-input")]
-        multiline_input: bool,
-        /// Use simplified IO mode (better for piping/limited terminals)
-        #[arg(long = "simple-io")]
-        simple_io: bool,
         #[command(flatten)]
         sampling: SamplingArgs,
-        /// Enable agentic mode: drives the backend agentic loop instead of llama-cli
-        #[arg(long)]
-        agent: bool,
+        /// Disable tool access (plain LLM chat without filesystem or MCP tools)
+        #[arg(long = "no-tools")]
+        no_tools: bool,
         /// Reuse an already-running llama-server on this port (skips auto-start)
         #[arg(long)]
         port: Option<u16>,
-        /// Maximum agent iterations before giving up (agentic mode only)
+        /// Maximum agent iterations before giving up
         #[arg(long = "max-iterations", default_value = "25")]
         max_iterations: usize,
-        /// Tool allowlist exposed to the model; may be repeated or comma-separated.
-        /// Omit to allow all tools. (agentic mode only, e.g. "mcp_search,builtin_time")
+        /// Tool allowlist; may be repeated or comma-separated.
+        /// Omit to allow all tools. (e.g. "mcp_search,builtin_time")
         /// Note: the filter is evaluated once at session start. To change the
         /// available tools mid-session, exit and restart with a new --tools list.
         #[arg(long, value_delimiter = ',')]
         tools: Vec<String>,
-        /// Per-tool execution timeout in milliseconds (agentic mode only)
+        /// Per-tool execution timeout in milliseconds
         #[arg(long = "tool-timeout-ms")]
         tool_timeout_ms: Option<u64>,
-        /// Maximum number of tools executed in parallel per iteration (agentic mode only)
+        /// Maximum number of tools executed in parallel per iteration
         #[arg(long = "max-parallel")]
         max_parallel: Option<usize>,
-        /// Model name forwarded to llama-server (agentic mode only; uses server default when omitted)
+        /// Model name forwarded to llama-server (uses server default when omitted)
         #[arg(long)]
         model: Option<String>,
     },
@@ -112,7 +97,7 @@ pub enum Commands {
     #[command(
         display_order = 12,
         alias = "q",
-        after_help = "EXAMPLES:\n    gglib q \"What is Rust?\"\n    cat file.txt | gglib q \"Summarize this\"\n    gglib q --file README.md \"Explain this project\"\n    echo \"Paris, Tokyo\" | gglib q \"List these cities: {}\"\n    gglib q --agent \"How is error handling done in this project?\"\n    cat file.rs | gglib q --agent \"Explain this code in depth\""
+        after_help = "EXAMPLES:\n    gglib q \"What is Rust?\"\n    cat file.txt | gglib q \"Summarize this\"\n    gglib q --file README.md \"Explain this project\"\n    echo \"Paris, Tokyo\" | gglib q \"List these cities: {}\"\n    gglib q \"How is error handling done in this project?\"\n    cat file.rs | gglib q \"Explain this code in depth\""
     )]
     Question {
         /// Question to ask (use {} as placeholder for piped/file input)
@@ -128,27 +113,27 @@ pub enum Commands {
         /// Show the constructed prompt before sending
         #[arg(long)]
         verbose: bool,
-        /// Cleaner output for scripting (no prompt echo, no timings)
+        /// Cleaner output for scripting (no tool progress, no reasoning tokens)
         #[arg(long, short = 'Q')]
         quiet: bool,
         #[command(flatten)]
         sampling: SamplingArgs,
-        /// Enable agentic mode: multi-step exploration with filesystem tools
-        #[arg(long)]
-        agent: bool,
-        /// Port of a running llama-server to reuse (agentic mode only)
+        /// Disable tool access (plain LLM question without filesystem or MCP tools)
+        #[arg(long = "no-tools")]
+        no_tools: bool,
+        /// Port of a running llama-server to reuse (skips auto-start)
         #[arg(long)]
         port: Option<u16>,
-        /// Maximum agent iterations (agentic mode only)
+        /// Maximum agent iterations
         #[arg(long = "max-iterations", default_value = "25")]
         max_iterations: usize,
-        /// Tool allowlist (agentic mode only; empty = all tools)
+        /// Tool allowlist (empty = all tools)
         #[arg(long, value_delimiter = ',')]
         tools: Vec<String>,
-        /// Per-tool execution timeout in milliseconds (agentic mode only)
+        /// Per-tool execution timeout in milliseconds
         #[arg(long = "tool-timeout-ms")]
         tool_timeout_ms: Option<u64>,
-        /// Maximum number of tools executed in parallel per iteration (agentic mode only)
+        /// Maximum number of tools executed in parallel per iteration
         #[arg(long = "max-parallel")]
         max_parallel: Option<usize>,
     },

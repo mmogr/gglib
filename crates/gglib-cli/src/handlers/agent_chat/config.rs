@@ -10,9 +10,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
+use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::{ProcessHandle, ServerConfig};
-use gglib_runtime::{compose_agent_loop, compose_agent_loop_sandboxed};
+use gglib_runtime::compose_agent_loop_with_sampling;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
@@ -42,11 +43,18 @@ pub struct AgentSessionParams {
 
 impl From<&ChatArgs> for AgentSessionParams {
     fn from(args: &ChatArgs) -> Self {
+        // When --no-tools is set, use a sentinel allowlist that matches nothing
+        // so the agent loop exposes zero tools to the model.
+        let tools = if args.no_tools {
+            vec!["__none__".into()]
+        } else {
+            args.tools.clone()
+        };
         Self {
             model_identifier: args.identifier.clone(),
             ctx_size: args.context.ctx_size.clone(),
             port: args.port,
-            tools: args.tools.clone(),
+            tools,
             model_name: args.model.clone(),
         }
     }
@@ -69,6 +77,7 @@ pub async fn compose(
     ctx: &CliContext,
     params: &AgentSessionParams,
     sandbox_root: Option<PathBuf>,
+    sampling: Option<InferenceConfig>,
 ) -> Result<(Arc<dyn AgentLoopPort>, Option<ProcessHandle>)> {
     // 1. Resolve the LLM port — reuse or auto-start.
     let (port, maybe_handle) = resolve_port(ctx, params).await?;
@@ -88,23 +97,15 @@ pub async fn compose(
         Some(params.tools.iter().cloned().collect())
     };
     let base_url = format!("http://127.0.0.1:{port}");
-    let agent = match sandbox_root {
-        Some(root) => compose_agent_loop_sandboxed(
-            base_url,
-            ctx.http_client.clone(),
-            params.model_name.clone(),
-            Arc::clone(&ctx.mcp),
-            tool_filter,
-            root,
-        ),
-        None => compose_agent_loop(
-            base_url,
-            ctx.http_client.clone(),
-            params.model_name.clone(),
-            Arc::clone(&ctx.mcp),
-            tool_filter,
-        ),
-    };
+    let agent = compose_agent_loop_with_sampling(
+        base_url,
+        ctx.http_client.clone(),
+        params.model_name.clone(),
+        Arc::clone(&ctx.mcp),
+        tool_filter,
+        sandbox_root,
+        sampling,
+    );
 
     Ok((agent, maybe_handle))
 }

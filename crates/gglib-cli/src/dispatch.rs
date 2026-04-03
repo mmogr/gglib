@@ -48,14 +48,9 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         Commands::Chat {
             identifier,
             context,
-            chat_template,
-            chat_template_file,
-            jinja,
             system_prompt,
-            multiline_input,
-            simple_io,
             sampling,
-            agent,
+            no_tools,
             port,
             max_iterations,
             tools,
@@ -66,14 +61,9 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             let args = handlers::inference::chat::ChatArgs {
                 identifier,
                 context,
-                chat_template,
-                chat_template_file,
-                jinja,
                 system_prompt,
-                multiline_input,
-                simple_io,
                 sampling,
-                agent,
+                no_tools,
                 port,
                 max_iterations,
                 tools,
@@ -88,37 +78,40 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             question,
             model,
             file,
-            context,
+            context: _,
             verbose,
             quiet,
             sampling,
-            agent,
+            no_tools,
             port,
             max_iterations,
             tools,
             tool_timeout_ms,
             max_parallel,
         } => {
-            if agent {
-                handlers::inference::agent_question::execute(
-                    ctx,
-                    question,
-                    model,
-                    port,
-                    max_iterations,
-                    tools,
-                    tool_timeout_ms,
-                    max_parallel,
-                    verbose,
-                    quiet,
-                )
-                .await?;
+            // When --no-tools is set, override tools to an empty allowlist
+            // so the agent loop exposes zero tools to the model.
+            let effective_tools = if no_tools {
+                vec!["__none__".into()]
             } else {
-                handlers::inference::question::execute(
-                    ctx, question, model, file, context, verbose, quiet, sampling,
-                )
-                .await?;
-            }
+                tools
+            };
+
+            handlers::inference::agent_question::execute(
+                ctx,
+                question,
+                model,
+                file,
+                port,
+                max_iterations,
+                effective_tools,
+                tool_timeout_ms,
+                max_parallel,
+                verbose,
+                quiet,
+                sampling,
+            )
+            .await?;
         }
 
         // ── GUI / web interfaces ────────────────────────────────────────────

@@ -25,7 +25,7 @@ config          Manage configuration, tooling, and system settings\n  \
 mcp             Manage MCP (Model Context Protocol) tool servers\n\n\
 Inference:\n  \
 serve           Serve a GGUF model with llama-server\n  \
-chat            Chat with a model directly via llama-cli\n  \
+chat            Chat with a model interactively\n  \
 question        Ask a question with optional context from stdin or file\n\n\
 Interfaces:\n  \
 gui             Launch the Tauri desktop GUI\n  \

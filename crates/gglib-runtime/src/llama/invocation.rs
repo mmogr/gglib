@@ -1,14 +1,14 @@
 //! Shared llama command invocation builder.
 //!
-//! This module provides a DRY abstraction for building llama-cli and llama-server
-//! command invocations, eliminating duplication between chat, serve, and other commands.
+//! This module provides a DRY abstraction for building llama-server
+//! command invocations, eliminating duplication between serve and other commands.
 
 use super::args::{ContextResolution, ContextResolutionSource};
 use gglib_core::domain::InferenceConfig;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Builder for constructing llama-cli or llama-server commands.
+/// Builder for constructing llama-server commands.
 ///
 /// This builder handles common flags (`-m`, `-c`, `--mlock`) while allowing
 /// callers to customize with command-specific flags.

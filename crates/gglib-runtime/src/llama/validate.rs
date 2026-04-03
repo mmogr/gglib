@@ -11,11 +11,6 @@ pub fn validate_llama_binary(path: &Path) -> Result<()> {
     validate_binary(path, "llama-server")
 }
 
-/// Validate that the llama-cli binary is functional
-pub fn validate_llama_cli_binary(path: &Path) -> Result<()> {
-    validate_binary(path, "llama-cli")
-}
-
 fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
     if !path.exists() {
         bail!(

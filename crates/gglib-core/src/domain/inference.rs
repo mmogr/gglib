@@ -142,7 +142,7 @@ impl InferenceConfig {
 
     /// Convert inference config to llama CLI arguments.
     ///
-    /// Returns a vector of argument strings suitable for passing to llama-cli or llama-server.
+    /// Returns a vector of argument strings suitable for passing to llama-server.
     /// Uses the same flag names as llama.cpp: `--temp`, `--top-p`, `--top-k`, `-n`, `--repeat-penalty`.
     ///
     /// This is the single source of truth for CLI flag conversion, used by:

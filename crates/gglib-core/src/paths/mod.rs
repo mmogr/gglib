@@ -37,9 +37,7 @@ pub use platform::{data_root, is_prebuilt_binary, resource_root};
 pub use database::database_path;
 
 // Llama binaries
-pub use llama::{
-    gglib_data_dir, llama_cli_path, llama_config_path, llama_cpp_dir, llama_server_path,
-};
+pub use llama::{gglib_data_dir, llama_config_path, llama_cpp_dir, llama_server_path};
 
 // Models directory
 #[cfg(not(target_os = "windows"))]

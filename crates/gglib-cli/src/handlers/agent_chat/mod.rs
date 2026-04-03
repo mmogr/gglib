@@ -1,4 +1,4 @@
-//! Interactive agentic chat handler for `gglib chat --agent`.
+//! Interactive agentic chat handler for `gglib chat`.
 //!
 //! Entry point: [`run`].  Sub-modules keep each concern small and
 //! independently readable:
@@ -20,10 +20,15 @@ use self::persistence::Conversation;
 
 /// Entry point: start the interactive agentic REPL.
 ///
-/// Called from [`crate::handlers::chat::execute`] when `args.agent` is `true`.
 /// Manages the server lifecycle (auto-start / stop) around the REPL session.
 pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
-    let (agent, maybe_handle) = config::compose(ctx, &args.into(), None).await?;
+    let inference_config = args.sampling.clone().into_inference_config();
+    let sampling = if inference_config == Default::default() {
+        None
+    } else {
+        Some(inference_config)
+    };
+    let (agent, maybe_handle) = config::compose(ctx, &args.into(), None, sampling).await?;
 
     // Create a conversation for persistence (best-effort).
     let persistence =

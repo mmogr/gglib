@@ -32,6 +32,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 
 use gglib_core::{
+    domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
     ports::LlmCompletionPort,
 };
@@ -66,6 +67,8 @@ pub struct LlmCompletionAdapter {
     /// by model name.
     model: String,
     client: Client,
+    /// Optional sampling overrides injected into every request body.
+    sampling: Option<InferenceConfig>,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -112,7 +115,15 @@ impl LlmCompletionAdapter {
             url: completions_url(&base_url.into()),
             model: model.unwrap_or_default(),
             client,
+            sampling: None,
         }
+    }
+
+    /// Set optional sampling parameters injected into every request body.
+    #[must_use]
+    pub fn with_sampling(mut self, sampling: Option<InferenceConfig>) -> Self {
+        self.sampling = sampling;
+        self
     }
 }
 
@@ -214,6 +225,23 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         if !openai_tools.is_empty() {
             body["tools"] = json!(openai_tools);
             body["tool_choice"] = json!("auto");
+        }
+        if let Some(ref s) = self.sampling {
+            if let Some(t) = s.temperature {
+                body["temperature"] = json!(t);
+            }
+            if let Some(p) = s.top_p {
+                body["top_p"] = json!(p);
+            }
+            if let Some(k) = s.top_k {
+                body["top_k"] = json!(k);
+            }
+            if let Some(m) = s.max_tokens {
+                body["max_tokens"] = json!(m);
+            }
+            if let Some(r) = s.repeat_penalty {
+                body["repeat_penalty"] = json!(r);
+            }
         }
 
         // Gate the connect + first-byte phase with a hard timeout so a

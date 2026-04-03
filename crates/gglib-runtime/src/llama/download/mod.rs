@@ -26,7 +26,7 @@ use std::path::Path;
 
 #[cfg(feature = "prebuilt")]
 use gglib_core::paths::data_root;
-use gglib_core::paths::{llama_cli_path, llama_server_path};
+use gglib_core::paths::llama_server_path;
 
 // Helper to convert PathError to anyhow::Error
 #[cfg(feature = "prebuilt")]
@@ -44,17 +44,13 @@ pub type LlamaProgressCallback<'a> = &'a dyn Fn(u64, u64);
 pub type LlamaProgressCallbackBoxed = Box<dyn Fn(u64, u64) + Send + Sync>;
 
 /// Check if llama.cpp binaries are installed.
-/// Returns true if both llama-server and llama-cli exist.
+/// Returns true if llama-server exists.
 pub fn check_llama_installed() -> bool {
     let server_path = match llama_server_path() {
         Ok(p) => p,
         Err(_) => return false,
     };
-    let cli_path = match llama_cli_path() {
-        Ok(p) => p,
-        Err(_) => return false,
-    };
-    server_path.exists() && cli_path.exists()
+    server_path.exists()
 }
 
 /// GitHub API response for a release
@@ -370,7 +366,7 @@ async fn download_with_boxed_callback(
 /// For macOS/Linux: tar.gz archives with binaries in a versioned top-level directory
 /// (e.g. `llama-b<tag>/<file>`). For Windows: zip archives with binaries at root level.
 ///
-/// This includes the main binaries (llama-server, llama-cli) and all required
+/// This includes the main binary (llama-server) and all required
 /// shared libraries (.dylib on macOS, .dll on Windows, .so on Linux).
 #[cfg(feature = "prebuilt")]
 fn extract_binaries(archive_path: &Path, bin_dir: &Path) -> Result<()> {
@@ -399,7 +395,7 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
 
     fs::create_dir_all(bin_dir).context("Failed to create bin directory")?;
 
-    let required_binaries = ["llama-server", "llama-cli"];
+    let required_binaries = ["llama-server"];
     let mut extracted_binaries = 0;
     let mut extracted_libs = 0;
 
@@ -483,9 +479,9 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
     fs::create_dir_all(bin_dir).context("Failed to create bin directory")?;
 
     #[cfg(target_os = "windows")]
-    let required_binaries = ["llama-server.exe", "llama-cli.exe"];
+    let required_binaries = ["llama-server.exe"];
     #[cfg(not(target_os = "windows"))]
-    let required_binaries = ["llama-server", "llama-cli"];
+    let required_binaries = ["llama-server"];
 
     let mut extracted_binaries = 0;
     let mut extracted_libs = 0;
@@ -721,16 +717,14 @@ pub async fn download_prebuilt_binaries() -> Result<()> {
 
     // Verify installation
     let server_path = path_err(llama_server_path())?;
-    let cli_path = path_err(llama_cli_path())?;
 
-    if !server_path.exists() || !cli_path.exists() {
+    if !server_path.exists() {
         bail!("Installation verification failed: binaries not found after extraction");
     }
 
     println!();
     println!("✓ llama.cpp installed successfully!");
     println!("  Server: {}", server_path.display());
-    println!("  CLI: {}", cli_path.display());
     println!("  Version: {}", release.tag_name);
     println!("  Type: Pre-built ({})", description);
     println!();
@@ -814,9 +808,8 @@ pub async fn download_prebuilt_binaries_with_callback(
 
     // Verify installation
     let server_path = path_err(llama_server_path())?;
-    let cli_path = path_err(llama_cli_path())?;
 
-    if !server_path.exists() || !cli_path.exists() {
+    if !server_path.exists() {
         bail!("Installation verification failed: binaries not found after extraction");
     }
 
@@ -898,9 +891,8 @@ pub async fn download_prebuilt_binaries_with_boxed_callback(
 
     // Verify installation
     let server_path = path_err(llama_server_path())?;
-    let cli_path = path_err(llama_cli_path())?;
 
-    if !server_path.exists() || !cli_path.exists() {
+    if !server_path.exists() {
         bail!("Installation verification failed: binaries not found after extraction");
     }
 
@@ -1126,10 +1118,6 @@ mod tests {
         assert!(
             bin_dir.join("llama-server").exists(),
             "llama-server should be extracted"
-        );
-        assert!(
-            bin_dir.join("llama-cli").exists(),
-            "llama-cli should be extracted"
         );
         assert!(
             bin_dir.join("libggml-metal.0.dylib").exists(),
