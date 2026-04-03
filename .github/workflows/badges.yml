@@ -2,7 +2,7 @@ name: Update Badges
 
 on:
   workflow_run:
-    workflows: ["CI", "Coverage", "Release"]
+    workflows: ["CI", "Coverage"]
     types: [completed]
     branches: [main]
 
@@ -717,11 +717,15 @@ jobs:
           commit_message: 'Update coverage badges [skip ci] ${{ github.event.workflow_run.head_sha }}'
 
   # =============================================================================
-  # RELEASE WORKFLOW: Update version badge and SCC metrics
+  # CI WORKFLOW (post-release): Update version badge and SCC metrics
+  # Since PR #356 converted Release to a workflow_call inside CI, the "Release"
+  # workflow_run event no longer fires. Trigger on CI instead (see issue #402).
+  # Serialised after update-test-badges to avoid concurrent pushes to badges.
   # =============================================================================
   update-release-badges:
     name: Update Release Badges
-    if: ${{ github.event.workflow_run.name == 'Release' }}
+    needs: [update-test-badges]
+    if: ${{ github.event.workflow_run.name == 'CI' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main branch (for source analysis)
@@ -1067,4 +1071,4 @@ jobs:
           keep_files: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Update release badges [skip ci] ${{ github.event.workflow_run.head_sha }}'
+          commit_message: 'Update release badges (from CI) [skip ci] ${{ github.event.workflow_run.head_sha }}'
