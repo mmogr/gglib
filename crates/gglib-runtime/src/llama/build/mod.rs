@@ -19,15 +19,15 @@
 //!
 //! ## Compiler flags
 //!
-//! `CXXFLAGS` is merged (read-then-append) during both the cmake configure and build
-//! phases to carry two flags:
+//! `CXXFLAGS`/`CFLAGS` are merged (read-then-append) during both the cmake configure
+//! and build phases to carry `-O1`, which works around a GCC 15.2.1 ICE (internal
+//! compiler error) that fires during higher optimisation passes on `chat.cpp`.
 //!
-//! - `-O1` — works around a GCC 15.2.1 ICE (internal compiler error) that fires during
-//!   higher optimisation passes on `chat.cpp` and related files.
-//! - `-Wno-missing-noreturn` — suppresses the warning flood from `common/jinja/runtime.h`,
-//!   whose virtual `throw`-only methods AppleClang flags as candidates for `[[noreturn]]`.
+//! Additionally, `-DLLAMA_ALL_WARNINGS=OFF` is passed at configure time. Upstream
+//! llama.cpp enables `-Wmissing-noreturn` (among others) via `LLAMA_ALL_WARNINGS`,
+//! which floods the build log with hundreds of jinja template warnings we can't fix.
+//! Since this is upstream code, we disable the extra warning set entirely.
 //!
-//! `CFLAGS` receives only `-O1`; `-Wmissing-noreturn` is a C++-only diagnostic.
 //! Any `CXXFLAGS`/`CFLAGS` already present in the caller's environment are preserved
 //! (see [`merge_flags`]).
 
@@ -77,6 +77,11 @@ fn configure_cmake(
         phase: BuildPhase::Configure,
     });
 
+    // Merge into any CXXFLAGS/CFLAGS already set by the caller's environment.
+    // -O1: GCC 15.2.1 ICE workaround.
+    let cxxflags = merge_flags("CXXFLAGS", "-O1");
+    let cflags = merge_flags("CFLAGS", "-O1");
+
     let mut args = vec![
         "-S",
         llama_dir.to_str().unwrap(),
@@ -87,6 +92,10 @@ fn configure_cmake(
         "-DLLAMA_BUILD_SERVER=ON",
         "-DLLAMA_BUILD_EXAMPLES=OFF", // Skip examples to avoid GCC bug in some files
         "-DLLAMA_BUILD_TESTS=OFF",    // Skip tests to avoid GCC bug in some files
+        // Upstream llama.cpp enables -Wmissing-noreturn via LLAMA_ALL_WARNINGS,
+        // which floods the build with jinja template warnings we can't fix.
+        // Disable the upstream warning flags entirely — we don't maintain that code.
+        "-DLLAMA_ALL_WARNINGS=OFF",
     ];
 
     // Add acceleration-specific flags
@@ -95,13 +104,9 @@ fn configure_cmake(
 
     let mut cmd = Command::new("cmake");
 
-    // Merge into any CXXFLAGS/CFLAGS already set by the caller's environment.
-    // -O1: GCC 15.2.1 ICE workaround. -Wno-missing-noreturn: suppress upstream warning flood.
-    cmd.env(
-        "CXXFLAGS",
-        merge_flags("CXXFLAGS", "-O1 -Wno-missing-noreturn"),
-    );
-    cmd.env("CFLAGS", merge_flags("CFLAGS", "-O1"));
+    // Set env vars for compilation (GCC ICE workaround).
+    cmd.env("CXXFLAGS", &cxxflags);
+    cmd.env("CFLAGS", &cflags);
 
     // Compiler selection priority (platform-specific):
     // Linux CUDA builds: Clang (best) > GCC 12/11 (compatible) > system GCC
@@ -260,8 +265,8 @@ fn build_project(
     let num_cores = build_parallelism(acceleration);
 
     // Merge into any CXXFLAGS/CFLAGS already set by the caller's environment.
-    // -O1: GCC 15.2.1 ICE workaround. -Wno-missing-noreturn: suppress upstream warning flood.
-    let cxxflags = merge_flags("CXXFLAGS", "-O1 -Wno-missing-noreturn");
+    // -O1: GCC 15.2.1 ICE workaround.
+    let cxxflags = merge_flags("CXXFLAGS", "-O1");
     let cflags = merge_flags("CFLAGS", "-O1");
 
     let mut child = Command::new("cmake")
