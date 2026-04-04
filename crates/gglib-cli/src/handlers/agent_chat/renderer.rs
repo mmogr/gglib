@@ -22,193 +22,26 @@
 //! emitting inline `<think>` tags (when `--reasoning-format none` or no
 //! format was specified) have their reasoning content redirected to stderr
 //! and only the answer text reaches stdout.
+//!
+//! ## Module decomposition
+//!
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`super::tool_format`] | Tool-result summary formatters |
+//! | [`super::markdown`] | Markdown normalisation + termimad rendering |
+//! | [`super::thinking_dispatch`] | `RenderContext`, thinking-event dispatch, spinner coordination |
 
 use std::io::{self, IsTerminal, Write as _};
-use std::time::Duration;
 
-use gglib_core::domain::agent::{AgentEvent, ToolResult};
-use gglib_core::domain::thinking::{ThinkingAccumulator, ThinkingEvent};
-use indicatif::{ProgressBar, ProgressStyle};
+use gglib_core::domain::agent::AgentEvent;
+use gglib_core::domain::thinking::ThinkingAccumulator;
 use tokio::sync::mpsc;
 
-use crate::presentation::style;
-
-use crate::presentation::tables::truncate_string;
-
-// =============================================================================
-// Tool result formatters
-// =============================================================================
-
-/// Format a tool result with a tool-specific summary instead of a generic
-/// truncation.  Builtin filesystem tools get richer output; everything else
-/// falls back to the standard 80-char preview.
-fn format_tool_result(tool_name: &str, result: &ToolResult) -> String {
-    if !result.success {
-        return truncate_string(&result.content, 80);
-    }
-
-    match tool_name {
-        "builtin:read_file" => format_read_file(&result.content),
-        "builtin:list_directory" => format_list_directory(&result.content),
-        "builtin:grep_search" => format_grep_search(&result.content),
-        _ => truncate_string(&result.content, 80),
-    }
-}
-
-/// `read_file` → show line count and a compact preview of the first few lines.
-fn format_read_file(content: &str) -> String {
-    let line_count = content.lines().count();
-    let truncated = content.contains("[truncated");
-
-    let first_line = content.lines().next().unwrap_or("");
-    let preview = truncate_string(first_line, 50);
-
-    if truncated {
-        format!("{line_count}+ lines (truncated)  {preview}")
-    } else {
-        format!("{line_count} lines  {preview}")
-    }
-}
-
-/// `list_directory` → show entry count.
-fn format_list_directory(content: &str) -> String {
-    if content == "(empty directory)" {
-        return "(empty directory)".to_string();
-    }
-    let count = content.lines().count();
-    let dirs = content.lines().filter(|l| l.ends_with('/')).count();
-    let files = count - dirs;
-    format!("{count} entries ({files} files, {dirs} dirs)")
-}
-
-/// `grep_search` → show match count and first match preview.
-fn format_grep_search(content: &str) -> String {
-    if content.starts_with("no matches") {
-        return "no matches".to_string();
-    }
-    let match_count = content
-        .lines()
-        .filter(|l| !l.starts_with("[results"))
-        .count();
-    let truncated = content.contains("[results truncated");
-    let first = content.lines().next().unwrap_or("");
-    let preview = truncate_string(first, 50);
-
-    if truncated {
-        format!("{match_count}+ matches  {preview}")
-    } else {
-        format!("{match_count} matches  {preview}")
-    }
-}
-
-// =============================================================================
-// Rich-mode helpers
-// =============================================================================
-
-/// Run a closure, temporarily suspending the spinner (if active) so its
-/// progress line does not collide with the output.
-fn suspend_or_run(spinner: Option<&ProgressBar>, f: impl FnOnce()) {
-    if let Some(sp) = spinner {
-        sp.suspend(f);
-    } else {
-        f();
-    }
-}
-
-/// Print to stderr, temporarily suspending the spinner (if active) so the
-/// output does not collide with the progress line.
-fn suspend_eprint(spinner: Option<&ProgressBar>, text: &str) {
-    suspend_or_run(spinner, || {
-        eprint!("{text}");
-        let _ = io::stderr().flush();
-    });
-}
-
-/// Open a "Thinking" banner on stderr if not already in thinking mode.
-///
-/// Guards on `in_thinking` and `stderr_tty`, calls
-/// [`style::print_thinking_banner`], and sets `in_thinking = true`.
-fn open_thinking(spinner: Option<&ProgressBar>, stderr_tty: bool, in_thinking: &mut bool) {
-    if !*in_thinking && stderr_tty {
-        suspend_or_run(spinner, style::print_thinking_banner);
-        *in_thinking = true;
-    }
-}
-
-/// Close an open "Thinking" banner on stderr.
-///
-/// Guards on `in_thinking` and `stderr_tty`, calls
-/// [`style::print_banner_close`], and sets `in_thinking = false`.
-fn close_thinking(spinner: Option<&ProgressBar>, stderr_tty: bool, in_thinking: &mut bool) {
-    if *in_thinking && stderr_tty {
-        suspend_or_run(spinner, style::print_banner_close);
-        *in_thinking = false;
-    }
-}
-
-/// Create a new spinner on stderr for the buffering phase.
-fn make_spinner() -> ProgressBar {
-    let sp = ProgressBar::new_spinner();
-    sp.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.cyan} {msg}")
-            .expect("valid spinner template"),
-    );
-    sp.enable_steady_tick(Duration::from_millis(80));
-    sp.set_message("Receiving…");
-    sp
-}
-
-/// Normalize LLM-emitted Markdown before passing it to termimad.
-///
-/// 1. Convert `*`-based unordered list markers to `-` so that termimad's
-///    minimad parser does not confuse them with bold/italic emphasis
-///    (e.g. `* **Bold:** text` → `- **Bold:** text`).
-/// 2. Collapse runs of 3+ consecutive blank lines down to one blank line
-///    to reduce excessive vertical whitespace.
-fn normalize_markdown(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut consecutive_blank = 0u32;
-
-    for (i, line) in text.lines().enumerate() {
-        if line.is_empty() {
-            consecutive_blank += 1;
-            // Collapse 3+ consecutive blank lines → 2 (one blank line).
-            if consecutive_blank <= 1 {
-                if i > 0 {
-                    out.push('\n');
-                }
-                out.push('\n');
-            }
-            continue;
-        }
-
-        // Non-empty line: emit the newline separator if needed.
-        if i > 0 && consecutive_blank == 0 {
-            out.push('\n');
-        }
-        consecutive_blank = 0;
-
-        // Replace `*`-based list markers with `-`.
-        let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("* ") {
-            let indent = &line[..line.len() - trimmed.len()];
-            out.push_str(indent);
-            out.push_str("- ");
-            out.push_str(rest);
-        } else {
-            out.push_str(line);
-        }
-    }
-    out
-}
-
-/// Render a Markdown string to stdout through [`termimad`].
-fn render_markdown(text: &str) {
-    let normalized = normalize_markdown(text);
-    let skin = style::get_markdown_skin();
-    print!("{}", skin.term_text(&normalized));
-}
+use super::markdown::render_markdown;
+use super::thinking_dispatch::{
+    RenderContext, close_thinking, dispatch_thinking_event, suspend_or_run,
+};
+use super::tool_format::format_tool_result;
 
 // =============================================================================
 // Public API
@@ -318,10 +151,8 @@ pub async fn drain_event_stream(
     let rich = !quiet && io::stdout().is_terminal();
     let stderr_tty = io::stderr().is_terminal();
     let mut acc = ThinkingAccumulator::new();
-    let mut buf = String::new();
+    let mut ctx = RenderContext::new(rich, stderr_tty, quiet);
     let mut had_text = false;
-    let mut in_thinking = false;
-    let mut spinner: Option<ProgressBar> = None;
 
     while let Some(event) = rx.recv().await {
         match &event {
@@ -329,84 +160,42 @@ pub async fn drain_event_stream(
             AgentEvent::TextDelta { content } => {
                 had_text = true;
                 for te in acc.push(content) {
-                    match te {
-                        ThinkingEvent::ThinkingDelta(t) if !quiet => {
-                            open_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-                            suspend_eprint(spinner.as_ref(), &t);
-                        }
-                        ThinkingEvent::ThinkingEnd => {
-                            close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-                        }
-                        ThinkingEvent::ContentDelta(c) => {
-                            close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-                            if rich {
-                                buf.push_str(&c);
-                                if spinner.is_none() {
-                                    spinner = Some(make_spinner());
-                                }
-                                if let Some(sp) = &spinner {
-                                    sp.set_message(format!(
-                                        "Receiving\u{2026} ({} bytes)",
-                                        buf.len()
-                                    ));
-                                }
-                            } else {
-                                print!("{c}");
-                                let _ = io::stdout().flush();
-                            }
-                        }
-                        _ => {}
-                    }
+                    dispatch_thinking_event(te, &mut ctx);
                 }
             }
 
             // ── Structured reasoning (already classified by the model) ─
             AgentEvent::ReasoningDelta { content } => {
                 if !quiet {
-                    open_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-                    suspend_eprint(spinner.as_ref(), content);
+                    use gglib_core::domain::thinking::ThinkingEvent;
+                    dispatch_thinking_event(
+                        ThinkingEvent::ThinkingDelta(content.clone()),
+                        &mut ctx,
+                    );
                 }
             }
 
             // ── Turn complete ────────────────────────────────────────
             AgentEvent::FinalAnswer { content } => {
-                // Close any open thinking block.
-                close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
+                close_thinking(&mut ctx);
 
                 // Flush any pending thinking accumulator state.
                 for te in acc.flush() {
-                    match te {
-                        ThinkingEvent::ThinkingDelta(t) if !quiet => {
-                            open_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-                            suspend_eprint(spinner.as_ref(), &t);
-                        }
-                        ThinkingEvent::ContentDelta(c) if rich => {
-                            close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-                            buf.push_str(&c);
-                        }
-                        ThinkingEvent::ContentDelta(c) => {
-                            close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-                            print!("{c}");
-                            let _ = io::stdout().flush();
-                        }
-                        _ => {}
-                    }
+                    dispatch_thinking_event(te, &mut ctx);
                 }
-
-                // Close thinking if flush produced more thinking content.
-                close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
+                close_thinking(&mut ctx);
 
                 // Stop spinner before rendering.
-                if let Some(sp) = spinner.take() {
+                if let Some(sp) = ctx.spinner.take() {
                     sp.finish_and_clear();
                 }
 
                 // Render the final output.
                 if rich {
-                    let text = if buf.is_empty() {
+                    let text = if ctx.buf.is_empty() {
                         content.as_str()
                     } else {
-                        &buf
+                        &ctx.buf
                     };
                     if !text.is_empty() {
                         render_markdown(text);
@@ -429,9 +218,8 @@ pub async fn drain_event_stream(
 
             // ── Tool / progress / error events ───────────────────────
             _ => {
-                // Close any open thinking block so DIM doesn't leak.
-                close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-                suspend_or_run(spinner.as_ref(), || {
+                close_thinking(&mut ctx);
+                suspend_or_run(ctx.spinner.as_ref(), || {
                     render_event(&event, verbose, quiet, had_text);
                 });
             }
@@ -440,12 +228,12 @@ pub async fn drain_event_stream(
 
     // Channel closed without a FinalAnswer — the loop ended with an error
     // (max iterations, stagnation, etc.).
-    close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
-    if let Some(sp) = spinner.take() {
+    close_thinking(&mut ctx);
+    if let Some(sp) = ctx.spinner.take() {
         sp.finish_and_clear();
     }
-    if rich && !buf.is_empty() {
-        render_markdown(&buf);
+    if rich && !ctx.buf.is_empty() {
+        render_markdown(&ctx.buf);
     }
     false
 }
@@ -587,54 +375,5 @@ mod tests {
             wait_ms: 0,
             execute_duration_ms: 1,
         });
-    }
-
-    // ── normalize_markdown tests ─────────────────────────────────
-    use super::normalize_markdown;
-
-    #[test]
-    fn normalize_converts_star_bullets_to_dash() {
-        let input = "* first\n* second\n";
-        assert_eq!(normalize_markdown(input), "- first\n- second");
-    }
-
-    #[test]
-    fn normalize_preserves_indented_star_bullets() {
-        let input = "  * nested\n    * deep\n";
-        assert_eq!(normalize_markdown(input), "  - nested\n    - deep");
-    }
-
-    #[test]
-    fn normalize_preserves_dash_bullets() {
-        let input = "- already dash\n  - nested\n";
-        assert_eq!(normalize_markdown(input), "- already dash\n  - nested");
-    }
-
-    #[test]
-    fn normalize_does_not_touch_bold_stars() {
-        let input = "Some **bold** text\n";
-        assert_eq!(normalize_markdown(input), "Some **bold** text");
-    }
-
-    #[test]
-    fn normalize_collapses_excess_blank_lines() {
-        let input = "para one\n\n\n\npara two\n";
-        assert_eq!(normalize_markdown(input), "para one\n\npara two");
-    }
-
-    #[test]
-    fn normalize_preserves_single_blank_line() {
-        let input = "para one\n\npara two\n";
-        assert_eq!(normalize_markdown(input), "para one\n\npara two");
-    }
-
-    #[test]
-    fn normalize_star_bullet_with_bold() {
-        // The exact pattern that confuses termimad's parser.
-        let input = "* **April 1-2:** Airstrikes hit\n* **April 3:** Ceasefire talks\n";
-        assert_eq!(
-            normalize_markdown(input),
-            "- **April 1-2:** Airstrikes hit\n- **April 3:** Ceasefire talks"
-        );
     }
 }
