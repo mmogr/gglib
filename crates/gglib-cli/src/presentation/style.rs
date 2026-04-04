@@ -57,7 +57,7 @@ pub fn get_markdown_skin() -> MadSkin {
 /// command output.
 pub fn print_info_banner(label: &str, emoji: &str) {
     // "  ╭─ {emoji} {label} " = fixed prefix; fill the rest with ─ up to
-    // column 42, then close with ╮.
+    // column 42 (banner width), then close with ╮.
     let prefix = format!("  \u{256d}\u{2500} {emoji} {label} ");
     let fill_len = 42usize.saturating_sub(prefix.chars().count());
     let fill = "\u{2500}".repeat(fill_len);
@@ -71,6 +71,7 @@ pub fn print_info_banner(label: &str, emoji: &str) {
 ///   ╰───────────────────────────────────────╯
 /// ```
 pub fn print_banner_close() {
+    // 39 = banner width (42) minus the 3-char "  ╰" prefix.
     let fill = "\u{2500}".repeat(39);
     eprintln!("{RESET}\n{INFO}  \u{2570}{fill}\u{256f}{RESET}");
 }

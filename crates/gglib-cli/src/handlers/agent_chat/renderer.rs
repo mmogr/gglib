@@ -105,17 +105,44 @@ fn format_grep_search(content: &str) -> String {
 // Rich-mode helpers
 // =============================================================================
 
+/// Run a closure, temporarily suspending the spinner (if active) so its
+/// progress line does not collide with the output.
+fn suspend_or_run(spinner: Option<&ProgressBar>, f: impl FnOnce()) {
+    if let Some(sp) = spinner {
+        sp.suspend(f);
+    } else {
+        f();
+    }
+}
+
 /// Print to stderr, temporarily suspending the spinner (if active) so the
 /// output does not collide with the progress line.
 fn suspend_eprint(spinner: Option<&ProgressBar>, text: &str) {
-    if let Some(sp) = spinner {
-        sp.suspend(|| {
-            eprint!("{text}");
-            let _ = io::stderr().flush();
-        });
-    } else {
+    suspend_or_run(spinner, || {
         eprint!("{text}");
         let _ = io::stderr().flush();
+    });
+}
+
+/// Open a "Thinking" banner on stderr if not already in thinking mode.
+///
+/// Guards on `in_thinking` and `stderr_tty`, calls
+/// [`style::print_thinking_banner`], and sets `in_thinking = true`.
+fn open_thinking(spinner: Option<&ProgressBar>, stderr_tty: bool, in_thinking: &mut bool) {
+    if !*in_thinking && stderr_tty {
+        suspend_or_run(spinner, style::print_thinking_banner);
+        *in_thinking = true;
+    }
+}
+
+/// Close an open "Thinking" banner on stderr.
+///
+/// Guards on `in_thinking` and `stderr_tty`, calls
+/// [`style::print_banner_close`], and sets `in_thinking = false`.
+fn close_thinking(spinner: Option<&ProgressBar>, stderr_tty: bool, in_thinking: &mut bool) {
+    if *in_thinking && stderr_tty {
+        suspend_or_run(spinner, style::print_banner_close);
+        *in_thinking = false;
     }
 }
 
@@ -259,35 +286,14 @@ pub async fn drain_event_stream(
                 for te in acc.push(content) {
                     match te {
                         ThinkingEvent::ThinkingDelta(t) if !quiet => {
-                            if !in_thinking && stderr_tty {
-                                if let Some(sp) = &spinner {
-                                    sp.suspend(style::print_thinking_banner);
-                                } else {
-                                    style::print_thinking_banner();
-                                }
-                                in_thinking = true;
-                            }
+                            open_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
                             suspend_eprint(spinner.as_ref(), &t);
                         }
                         ThinkingEvent::ThinkingEnd => {
-                            if in_thinking && stderr_tty {
-                                if let Some(sp) = &spinner {
-                                    sp.suspend(style::print_banner_close);
-                                } else {
-                                    style::print_banner_close();
-                                }
-                                in_thinking = false;
-                            }
+                            close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
                         }
                         ThinkingEvent::ContentDelta(c) => {
-                            if in_thinking && stderr_tty {
-                                if let Some(sp) = &spinner {
-                                    sp.suspend(style::print_banner_close);
-                                } else {
-                                    style::print_banner_close();
-                                }
-                                in_thinking = false;
-                            }
+                            close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
                             if rich {
                                 buf.push_str(&c);
                                 if spinner.is_none() {
@@ -312,14 +318,7 @@ pub async fn drain_event_stream(
             // ── Structured reasoning (already classified by the model) ─
             AgentEvent::ReasoningDelta { content } => {
                 if !quiet {
-                    if !in_thinking && stderr_tty {
-                        if let Some(sp) = &spinner {
-                            sp.suspend(style::print_thinking_banner);
-                        } else {
-                            style::print_thinking_banner();
-                        }
-                        in_thinking = true;
-                    }
+                    open_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
                     suspend_eprint(spinner.as_ref(), content);
                 }
             }
@@ -327,49 +326,21 @@ pub async fn drain_event_stream(
             // ── Turn complete ────────────────────────────────────────
             AgentEvent::FinalAnswer { content } => {
                 // Close any open thinking block.
-                if in_thinking && stderr_tty {
-                    if let Some(sp) = &spinner {
-                        sp.suspend(style::print_banner_close);
-                    } else {
-                        style::print_banner_close();
-                    }
-                    in_thinking = false;
-                }
+                close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
 
                 // Flush any pending thinking accumulator state.
                 for te in acc.flush() {
                     match te {
                         ThinkingEvent::ThinkingDelta(t) if !quiet => {
-                            if !in_thinking && stderr_tty {
-                                if let Some(sp) = &spinner {
-                                    sp.suspend(style::print_thinking_banner);
-                                } else {
-                                    style::print_thinking_banner();
-                                }
-                                in_thinking = true;
-                            }
+                            open_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
                             suspend_eprint(spinner.as_ref(), &t);
                         }
                         ThinkingEvent::ContentDelta(c) if rich => {
-                            if in_thinking && stderr_tty {
-                                if let Some(sp) = &spinner {
-                                    sp.suspend(style::print_banner_close);
-                                } else {
-                                    style::print_banner_close();
-                                }
-                                in_thinking = false;
-                            }
+                            close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
                             buf.push_str(&c);
                         }
                         ThinkingEvent::ContentDelta(c) => {
-                            if in_thinking && stderr_tty {
-                                if let Some(sp) = &spinner {
-                                    sp.suspend(style::print_banner_close);
-                                } else {
-                                    style::print_banner_close();
-                                }
-                                in_thinking = false;
-                            }
+                            close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
                             print!("{c}");
                             let _ = io::stdout().flush();
                         }
@@ -378,13 +349,7 @@ pub async fn drain_event_stream(
                 }
 
                 // Close thinking if flush produced more thinking content.
-                if in_thinking && stderr_tty {
-                    if let Some(sp) = &spinner {
-                        sp.suspend(style::print_banner_close);
-                    } else {
-                        style::print_banner_close();
-                    }
-                }
+                close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
 
                 // Stop spinner before rendering.
                 if let Some(sp) = spinner.take() {
@@ -420,28 +385,17 @@ pub async fn drain_event_stream(
             // ── Tool / progress / error events ───────────────────────
             _ => {
                 // Close any open thinking block so DIM doesn't leak.
-                if in_thinking && stderr_tty {
-                    if let Some(sp) = &spinner {
-                        sp.suspend(style::print_banner_close);
-                    } else {
-                        style::print_banner_close();
-                    }
-                    in_thinking = false;
-                }
-                if let Some(sp) = &spinner {
-                    sp.suspend(|| render_event(&event, verbose, quiet, had_text));
-                } else {
+                close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
+                suspend_or_run(spinner.as_ref(), || {
                     render_event(&event, verbose, quiet, had_text);
-                }
+                });
             }
         }
     }
 
     // Channel closed without a FinalAnswer — the loop ended with an error
     // (max iterations, stagnation, etc.).
-    if in_thinking && stderr_tty {
-        style::print_banner_close();
-    }
+    close_thinking(spinner.as_ref(), stderr_tty, &mut in_thinking);
     if let Some(sp) = spinner.take() {
         sp.finish_and_clear();
     }
