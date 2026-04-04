@@ -309,7 +309,11 @@ pub async fn drain_event_stream(
 
                 // Render the final output.
                 if rich {
-                    let text = if buf.is_empty() { content.as_str() } else { &buf };
+                    let text = if buf.is_empty() {
+                        content.as_str()
+                    } else {
+                        &buf
+                    };
                     if !text.is_empty() {
                         render_markdown(text);
                     }

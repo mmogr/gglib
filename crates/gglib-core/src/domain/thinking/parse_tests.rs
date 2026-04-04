@@ -189,9 +189,7 @@ mod has_thinking {
     #[test]
     fn not_at_start_returns_false() {
         assert!(!has_thinking_content("prefix <think>content</think>"));
-        assert!(!has_thinking_content(
-            "Hello <reasoning>world</reasoning>"
-        ));
+        assert!(!has_thinking_content("Hello <reasoning>world</reasoning>"));
     }
 
     #[test]

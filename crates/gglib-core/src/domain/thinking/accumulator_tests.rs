@@ -51,10 +51,7 @@ mod basic {
         assert_eq!(e3, vec![ThinkingEvent::ThinkingEnd]);
 
         let e4 = acc.push("Final answer");
-        assert_eq!(
-            e4,
-            vec![ThinkingEvent::ContentDelta("Final answer".into())]
-        );
+        assert_eq!(e4, vec![ThinkingEvent::ContentDelta("Final answer".into())]);
     }
 
     #[test]
@@ -113,10 +110,7 @@ mod split_tags {
 
         let e1 = acc.push("thinking</thi");
         // "thinking" should be emitted, "</thi" buffered
-        assert_eq!(
-            e1,
-            vec![ThinkingEvent::ThinkingDelta("thinking".into())]
-        );
+        assert_eq!(e1, vec![ThinkingEvent::ThinkingDelta("thinking".into())]);
 
         let e2 = acc.push("nk>");
         assert_eq!(e2, vec![ThinkingEvent::ThinkingEnd]);

@@ -81,7 +81,8 @@ pub fn embed_thinking_content(
 ) -> String {
     match thinking {
         Some(t) if !t.is_empty() => {
-            let dur_attr = duration_seconds.map_or_else(String::new, |d| format!(" duration=\"{d:.1}\""));
+            let dur_attr =
+                duration_seconds.map_or_else(String::new, |d| format!(" duration=\"{d:.1}\""));
             format!("<think{dur_attr}>{t}</think>\n{content}")
         }
         _ => content.to_string(),

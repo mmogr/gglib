@@ -8,7 +8,9 @@ use super::core::GuiProcessCore;
 use super::health::wait_for_http_health;
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
-use gglib_core::ports::{CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig};
+use gglib_core::ports::{
+    CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
