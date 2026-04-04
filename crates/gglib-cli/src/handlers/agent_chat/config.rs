@@ -182,6 +182,7 @@ async fn resolve_port(
         .context("failed to start llama-server")?;
 
     eprintln!("  llama-server ready on port {}", handle.port);
+    style::print_banner_close();
 
     Ok((handle.port, Some(handle)))
 }

@@ -77,11 +77,13 @@ pub async fn execute(
         eprintln!("  \u{1f310} Network: http://0.0.0.0:{}", port);
         eprintln!();
         eprintln!("  Press Ctrl+C to stop");
+        style::print_banner_close();
     } else {
         style::print_info_banner("Web Server (API only)", "\u{1f680}");
         eprintln!("  \u{1f310} API:     http://localhost:{}", port);
         eprintln!();
         eprintln!("  \u{1f4a1} Tip: Use --static-dir to serve a frontend build");
+        style::print_banner_close();
     }
 
     start_server(config).await?;

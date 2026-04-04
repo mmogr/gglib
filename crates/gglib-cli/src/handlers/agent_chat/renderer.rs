@@ -32,7 +32,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::mpsc;
 
 use crate::presentation::style;
-use crate::presentation::style::RESET;
+
 use crate::presentation::tables::truncate_string;
 
 // =============================================================================
@@ -271,15 +271,21 @@ pub async fn drain_event_stream(
                         }
                         ThinkingEvent::ThinkingEnd => {
                             if in_thinking && stderr_tty {
-                                suspend_eprint(spinner.as_ref(), RESET);
-                                suspend_eprint(spinner.as_ref(), "\n");
+                                if let Some(sp) = &spinner {
+                                    sp.suspend(style::print_banner_close);
+                                } else {
+                                    style::print_banner_close();
+                                }
                                 in_thinking = false;
                             }
                         }
                         ThinkingEvent::ContentDelta(c) => {
                             if in_thinking && stderr_tty {
-                                suspend_eprint(spinner.as_ref(), RESET);
-                                suspend_eprint(spinner.as_ref(), "\n");
+                                if let Some(sp) = &spinner {
+                                    sp.suspend(style::print_banner_close);
+                                } else {
+                                    style::print_banner_close();
+                                }
                                 in_thinking = false;
                             }
                             if rich {
@@ -322,8 +328,11 @@ pub async fn drain_event_stream(
             AgentEvent::FinalAnswer { content } => {
                 // Close any open thinking block.
                 if in_thinking && stderr_tty {
-                    suspend_eprint(spinner.as_ref(), RESET);
-                    suspend_eprint(spinner.as_ref(), "\n");
+                    if let Some(sp) = &spinner {
+                        sp.suspend(style::print_banner_close);
+                    } else {
+                        style::print_banner_close();
+                    }
                     in_thinking = false;
                 }
 
@@ -343,16 +352,22 @@ pub async fn drain_event_stream(
                         }
                         ThinkingEvent::ContentDelta(c) if rich => {
                             if in_thinking && stderr_tty {
-                                suspend_eprint(spinner.as_ref(), RESET);
-                                suspend_eprint(spinner.as_ref(), "\n");
+                                if let Some(sp) = &spinner {
+                                    sp.suspend(style::print_banner_close);
+                                } else {
+                                    style::print_banner_close();
+                                }
                                 in_thinking = false;
                             }
                             buf.push_str(&c);
                         }
                         ThinkingEvent::ContentDelta(c) => {
                             if in_thinking && stderr_tty {
-                                suspend_eprint(spinner.as_ref(), RESET);
-                                suspend_eprint(spinner.as_ref(), "\n");
+                                if let Some(sp) = &spinner {
+                                    sp.suspend(style::print_banner_close);
+                                } else {
+                                    style::print_banner_close();
+                                }
                                 in_thinking = false;
                             }
                             print!("{c}");
@@ -364,8 +379,11 @@ pub async fn drain_event_stream(
 
                 // Close thinking if flush produced more thinking content.
                 if in_thinking && stderr_tty {
-                    suspend_eprint(spinner.as_ref(), RESET);
-                    suspend_eprint(spinner.as_ref(), "\n");
+                    if let Some(sp) = &spinner {
+                        sp.suspend(style::print_banner_close);
+                    } else {
+                        style::print_banner_close();
+                    }
                 }
 
                 // Stop spinner before rendering.
@@ -403,8 +421,11 @@ pub async fn drain_event_stream(
             _ => {
                 // Close any open thinking block so DIM doesn't leak.
                 if in_thinking && stderr_tty {
-                    suspend_eprint(spinner.as_ref(), RESET);
-                    suspend_eprint(spinner.as_ref(), "\n");
+                    if let Some(sp) = &spinner {
+                        sp.suspend(style::print_banner_close);
+                    } else {
+                        style::print_banner_close();
+                    }
                     in_thinking = false;
                 }
                 if let Some(sp) = &spinner {
@@ -419,7 +440,7 @@ pub async fn drain_event_stream(
     // Channel closed without a FinalAnswer — the loop ended with an error
     // (max iterations, stagnation, etc.).
     if in_thinking && stderr_tty {
-        eprintln!("{RESET}");
+        style::print_banner_close();
     }
     if let Some(sp) = spinner.take() {
         sp.finish_and_clear();

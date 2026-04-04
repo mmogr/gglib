@@ -68,6 +68,7 @@ pub async fn execute(
     }
 
     eprintln!("  Server will be available on http://localhost:{}", port);
+    style::print_banner_close();
 
     // Build llama-server command
     let mut builder = LlamaCommandBuilder::new(&llama_path, &model.file_path)
