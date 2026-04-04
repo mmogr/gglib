@@ -35,6 +35,7 @@ use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent};
+use gglib_core::domain::thinking::{ThinkingAccumulator, ThinkingEvent};
 use gglib_core::ports::AgentError;
 use gglib_runtime::compose_agent_loop;
 
@@ -127,6 +128,14 @@ pub async fn chat(
     });
 
     let sse_stream = AgentTaskGuard::new(ReceiverStream::new(rx), handle)
+        // Classify inline <think>…</think> tags in TextDelta events into
+        // ReasoningDelta / TextDelta so the frontend always receives properly
+        // typed events regardless of the model's reasoning format.
+        .scan(ThinkingAccumulator::new(), |acc, event| {
+            let events = classify_thinking(acc, event);
+            futures_util::future::ready(Some(events))
+        })
+        .flat_map(futures_util::stream::iter)
         .filter_map(|event| {
         futures_util::future::ready(match serde_json::to_string(&event) {
             Ok(json) => Some(Ok::<Event, Infallible>(Event::default().data(json))),
@@ -152,4 +161,36 @@ pub async fn chat(
             .interval(std::time::Duration::from_secs(30))
             .text("ping"),
     ))
+}
+
+/// Map [`ThinkingEvent`]s back to [`AgentEvent`] variants.
+///
+/// `ThinkingDelta` → `ReasoningDelta`, `ContentDelta` → `TextDelta`,
+/// `ThinkingEnd` is silently consumed (the transition is implicit).
+fn map_thinking_events(events: Vec<ThinkingEvent>) -> Vec<AgentEvent> {
+    events
+        .into_iter()
+        .filter_map(|te| match te {
+            ThinkingEvent::ThinkingDelta(t) => Some(AgentEvent::ReasoningDelta { content: t }),
+            ThinkingEvent::ContentDelta(c) => Some(AgentEvent::TextDelta { content: c }),
+            ThinkingEvent::ThinkingEnd => None,
+        })
+        .collect()
+}
+
+/// Classify inline `<think>` tags in [`AgentEvent::TextDelta`] events.
+///
+/// Non-`TextDelta` events pass through unchanged.  Terminal events flush the
+/// accumulator first so buffered partial-tag content is never lost.
+fn classify_thinking(acc: &mut ThinkingAccumulator, event: AgentEvent) -> Vec<AgentEvent> {
+    match event {
+        AgentEvent::TextDelta { content } => map_thinking_events(acc.push(&content)),
+        AgentEvent::FinalAnswer { .. } | AgentEvent::Error { .. } => {
+            // Flush any remaining partial-tag buffer before the terminal event.
+            let mut out = map_thinking_events(acc.flush());
+            out.push(event);
+            out
+        }
+        other => vec![other],
+    }
 }

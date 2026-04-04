@@ -10,6 +10,10 @@
  * - `<reasoning>...</reasoning>` - Alternative format
  * - `<seed:think>...</seed:think>` - Seed-OSS models
  * - `<|START_THINKING|>...<|END_THINKING|>` - Command-R7B style
+ *
+ * @deprecated Thinking/reasoning tag parsing is now handled server-side
+ * in Rust via `gglib_core::domain::thinking::ThinkingAccumulator`.
+ * The SSE stream emits pre-classified `reasoning_delta` / `text_delta` events.
  */
 
 export interface ParsedThinkingContent {
@@ -25,6 +29,7 @@ export interface ParsedThinkingContent {
  * Normalize different thinking tag formats to standard `<think>` format.
  * This allows consistent handling regardless of which model format is used.
  * 
+ * @deprecated Parsing is now handled server-side via Rust. See `gglib_core::domain::thinking`.
  * @param text - Text that may contain various thinking tag formats
  * @returns Text with normalized `<think>` tags
  */
@@ -58,6 +63,7 @@ export function normalizeThinkingTags(text: string): string {
  * - `<|START_THINKING|>...<|END_THINKING|>` - Command-R7B style
  * - `<think duration="X.X">...</think>` - With duration metadata (normalized output)
  * 
+ * @deprecated Parsing is now handled server-side via Rust. See `gglib_core::domain::thinking`.
  * @param text - The full message text that may contain thinking tags
  * @returns Parsed thinking content and main content
  */
@@ -94,6 +100,7 @@ export function parseThinkingContent(text: string): ParsedThinkingContent {
  * Embed thinking content into a message using `<think>` tags.
  * Always uses standard `<think>` format for consistency.
  * 
+ * @deprecated Parsing is now handled server-side via Rust. See `gglib_core::domain::thinking`.
  * @param thinking - The thinking content to embed
  * @param content - The main content
  * @param durationSeconds - Optional duration in seconds to include as metadata
@@ -120,6 +127,7 @@ export function embedThinkingContent(
  * This is a lightweight check for UI purposes.
  * Checks for all known thinking tag formats.
  * 
+ * @deprecated Parsing is now handled server-side via Rust. See `gglib_core::domain::thinking`.
  * @param text - Text to check
  * @returns True if the text starts with a thinking tag
  */
@@ -140,6 +148,7 @@ export function hasThinkingContent(text: string): boolean {
  * 
  * Supports all known thinking tag formats by normalizing first.
  * 
+ * @deprecated Parsing is now handled server-side via Rust. See `gglib_core::domain::thinking`.
  * @param text - Streaming text that may contain partial thinking tags
  * @returns Object with extracted thinking, remaining content, and whether thinking is complete
  */
@@ -183,6 +192,7 @@ export function parseStreamingThinkingContent(text: string): {
 /**
  * Format duration for display.
  * 
+ * @deprecated Parsing is now handled server-side via Rust. See `gglib_core::domain::thinking`.
  * @param seconds - Duration in seconds
  * @returns Formatted string like "5.2s" or "1m 23s"
  */
