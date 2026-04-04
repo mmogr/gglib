@@ -29,9 +29,10 @@ use std::time::Duration;
 use gglib_core::domain::agent::{AgentEvent, ToolResult};
 use gglib_core::domain::thinking::{ThinkingAccumulator, ThinkingEvent};
 use indicatif::{ProgressBar, ProgressStyle};
-use termimad::MadSkin;
 use tokio::sync::mpsc;
 
+use crate::presentation::style;
+use crate::presentation::style::{DIM, RESET};
 use crate::presentation::tables::truncate_string;
 
 // =============================================================================
@@ -133,8 +134,8 @@ fn make_spinner() -> ProgressBar {
 
 /// Render a Markdown string to stdout through [`termimad`].
 fn render_markdown(text: &str) {
-    let skin = MadSkin::default();
-    skin.print_text(text);
+    let skin = style::get_markdown_skin();
+    print!("{}", skin.term_text(text));
 }
 
 // =============================================================================
@@ -243,9 +244,11 @@ pub async fn drain_event_stream(
     quiet: bool,
 ) -> bool {
     let rich = !quiet && io::stdout().is_terminal();
+    let stderr_tty = io::stderr().is_terminal();
     let mut acc = ThinkingAccumulator::new();
     let mut buf = String::new();
     let mut had_text = false;
+    let mut in_thinking = false;
     let mut spinner: Option<ProgressBar> = None;
 
     while let Some(event) = rx.recv().await {
@@ -256,20 +259,44 @@ pub async fn drain_event_stream(
                 for te in acc.push(content) {
                     match te {
                         ThinkingEvent::ThinkingDelta(t) if !quiet => {
+                            if !in_thinking && stderr_tty {
+                                suspend_eprint(
+                                    spinner.as_ref(),
+                                    "\n  \u{256d}\u{2500} \u{1f4ad} Thinking \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}\n",
+                                );
+                                suspend_eprint(spinner.as_ref(), DIM);
+                                in_thinking = true;
+                            }
                             suspend_eprint(spinner.as_ref(), &t);
                         }
-                        ThinkingEvent::ContentDelta(c) if rich => {
-                            buf.push_str(&c);
-                            if spinner.is_none() {
-                                spinner = Some(make_spinner());
-                            }
-                            if let Some(sp) = &spinner {
-                                sp.set_message(format!("Receiving… ({} bytes)", buf.len()));
+                        ThinkingEvent::ThinkingEnd => {
+                            if in_thinking && stderr_tty {
+                                suspend_eprint(spinner.as_ref(), RESET);
+                                suspend_eprint(spinner.as_ref(), "\n");
+                                in_thinking = false;
                             }
                         }
                         ThinkingEvent::ContentDelta(c) => {
-                            print!("{c}");
-                            let _ = io::stdout().flush();
+                            if in_thinking && stderr_tty {
+                                suspend_eprint(spinner.as_ref(), RESET);
+                                suspend_eprint(spinner.as_ref(), "\n");
+                                in_thinking = false;
+                            }
+                            if rich {
+                                buf.push_str(&c);
+                                if spinner.is_none() {
+                                    spinner = Some(make_spinner());
+                                }
+                                if let Some(sp) = &spinner {
+                                    sp.set_message(format!(
+                                        "Receiving\u{2026} ({} bytes)",
+                                        buf.len()
+                                    ));
+                                }
+                            } else {
+                                print!("{c}");
+                                let _ = io::stdout().flush();
+                            }
                         }
                         _ => {}
                     }
@@ -279,27 +306,66 @@ pub async fn drain_event_stream(
             // ── Structured reasoning (already classified by the model) ─
             AgentEvent::ReasoningDelta { content } => {
                 if !quiet {
+                    if !in_thinking && stderr_tty {
+                        suspend_eprint(
+                            spinner.as_ref(),
+                            "\n  \u{256d}\u{2500} \u{1f4ad} Thinking \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}\n",
+                        );
+                        suspend_eprint(spinner.as_ref(), DIM);
+                        in_thinking = true;
+                    }
                     suspend_eprint(spinner.as_ref(), content);
                 }
             }
 
             // ── Turn complete ────────────────────────────────────────
             AgentEvent::FinalAnswer { content } => {
+                // Close any open thinking block.
+                if in_thinking && stderr_tty {
+                    suspend_eprint(spinner.as_ref(), RESET);
+                    suspend_eprint(spinner.as_ref(), "\n");
+                    in_thinking = false;
+                }
+
                 // Flush any pending thinking accumulator state.
                 for te in acc.flush() {
                     match te {
                         ThinkingEvent::ThinkingDelta(t) if !quiet => {
+                            if !in_thinking && stderr_tty {
+                                suspend_eprint(
+                                    spinner.as_ref(),
+                                    "\n  \u{256d}\u{2500} \u{1f4ad} Thinking \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}\n",
+                                );
+                                suspend_eprint(spinner.as_ref(), DIM);
+                                in_thinking = true;
+                            }
                             suspend_eprint(spinner.as_ref(), &t);
                         }
                         ThinkingEvent::ContentDelta(c) if rich => {
+                            if in_thinking && stderr_tty {
+                                suspend_eprint(spinner.as_ref(), RESET);
+                                suspend_eprint(spinner.as_ref(), "\n");
+                                in_thinking = false;
+                            }
                             buf.push_str(&c);
                         }
                         ThinkingEvent::ContentDelta(c) => {
+                            if in_thinking && stderr_tty {
+                                suspend_eprint(spinner.as_ref(), RESET);
+                                suspend_eprint(spinner.as_ref(), "\n");
+                                in_thinking = false;
+                            }
                             print!("{c}");
                             let _ = io::stdout().flush();
                         }
                         _ => {}
                     }
+                }
+
+                // Close thinking if flush produced more thinking content.
+                if in_thinking && stderr_tty {
+                    suspend_eprint(spinner.as_ref(), RESET);
+                    suspend_eprint(spinner.as_ref(), "\n");
                 }
 
                 // Stop spinner before rendering.
