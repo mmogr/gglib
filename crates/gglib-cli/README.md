@@ -164,8 +164,15 @@ The CLI auto-detects its output target and selects a rendering mode:
 
 In **Rich** mode a spinner runs on stderr while the response is being received,
 so the terminal never appears frozen. Once the full response arrives it is
-rendered in one pass with proper Markdown formatting (headings, code blocks,
-lists, bold/italic).
+rendered in one pass with a custom Markdown skin tuned for dark terminals:
+
+- **Headings** — bold cyan
+- **Inline code** — yellow
+- **Code blocks** — green, indented 2 columns
+- **Body text** — default-dark palette (high contrast grays)
+
+The skin is built by `presentation::style::get_markdown_skin()` and uses
+`term_text()` for terminal-width-aware line wrapping.
 
 In **Raw** mode each token is printed to stdout as it arrives — identical to the
 pre-Rich behaviour. This keeps piped output clean and machine-parseable:
@@ -177,6 +184,25 @@ gglib q "Summarize this" > answer.txt
 # Quiet mode: suppresses tool progress, reasoning, iteration counts
 gglib q -Q "What is 2+2?" | pbcopy
 ```
+
+### Thinking Block
+
+When a reasoning model emits chain-of-thought tokens (via `ReasoningDelta`
+events or inline `<think>` tags), the CLI wraps them in a visually distinct
+block on stderr:
+
+```
+  ╭─ 💭 Thinking ───────────────────────────╮
+  (dim) The user is asking about … (dim)
+```
+
+The thinking block uses a **top border only** — no side or bottom borders.
+This is deliberate: SSE chunks arrive at arbitrary byte boundaries, so
+line-prefixing would cause visual corruption. Instead the body is rendered
+in `DIM` mode (`\x1b[2m`) and reset (`\x1b[0m`) when the thinking phase
+ends.
+
+Thinking visuals are suppressed when `--quiet` is set or stderr is not a TTY.
 
 ### Inline Thinking Fallback
 
