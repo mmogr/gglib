@@ -401,6 +401,12 @@ pub async fn drain_event_stream(
 
             // ── Tool / progress / error events ───────────────────────
             _ => {
+                // Close any open thinking block so DIM doesn't leak.
+                if in_thinking && stderr_tty {
+                    suspend_eprint(spinner.as_ref(), RESET);
+                    suspend_eprint(spinner.as_ref(), "\n");
+                    in_thinking = false;
+                }
                 if let Some(sp) = &spinner {
                     sp.suspend(|| render_event(&event, verbose, quiet, had_text));
                 } else {
@@ -412,6 +418,9 @@ pub async fn drain_event_stream(
 
     // Channel closed without a FinalAnswer — the loop ended with an error
     // (max iterations, stagnation, etc.).
+    if in_thinking && stderr_tty {
+        eprint!("{RESET}\n");
+    }
     if let Some(sp) = spinner.take() {
         sp.finish_and_clear();
     }
