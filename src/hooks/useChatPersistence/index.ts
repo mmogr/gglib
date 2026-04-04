@@ -192,12 +192,7 @@ export function useChatPersistence({
 
       // Case 1: New message — save to DB
       if (!existingDbId) {
-        const text = threadMessageToTranscriptMarkdown(
-          m as any,
-          m.role === 'assistant' && timingTracker
-            ? { getDurationForSegment: (msgId, idx) => timingTracker.getDurationSec(msgId, idx) }
-            : undefined,
-        );
+        const text = threadMessageToTranscriptMarkdown(m as any);
         if (!text.trim()) continue;
         if (persistedByMessageId.current.has(m.id)) continue;
 
@@ -205,13 +200,17 @@ export function useChatPersistence({
         processingRef.current.add(messageId);
         isPersistingRef.current = true;
 
+        const durationSec = m.role === 'assistant' && timingTracker
+          ? timingTracker.getDurationSec(m.id!, 0) ?? null
+          : null;
+
         (async () => {
           try {
             const dbId = await saveMessage(
               conversationId,
               m.role as 'user' | 'assistant' | 'system',
               text,
-              buildSaveMetadata(m),
+              buildSaveMetadata(m, durationSec),
             );
             persistedByMessageId.current.set(messageId, dbId);
             lastDigestByMessageId.current.set(messageId, currentDigest);
@@ -240,14 +239,12 @@ export function useChatPersistence({
           processingRef.current.add(messageId);
           isPersistingRef.current = true;
           try {
-            const text = threadMessageToTranscriptMarkdown(
-              m as any,
-              m.role === 'assistant' && timingTracker
-                ? { getDurationForSegment: (msgId, idx) => timingTracker.getDurationSec(msgId, idx) }
-                : undefined,
-            );
+            const text = threadMessageToTranscriptMarkdown(m as any);
+            const dur = m.role === 'assistant' && timingTracker
+              ? timingTracker.getDurationSec(m.id!, 0) ?? null
+              : null;
             if (text.trim() && existingDbId) {
-              await updateMessage(existingDbId, text, buildSaveMetadata(m));
+              await updateMessage(existingDbId, text, buildSaveMetadata(m, dur));
               await syncConversations({ silent: true });
 
               const isFinalized = (m.metadata as any)?.custom?.timingFinalized;
