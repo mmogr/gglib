@@ -14,6 +14,7 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_runtime::compose_agent_loop_with_sampling;
+use gglib_runtime::llama::args::{resolve_jinja_flag, resolve_reasoning_format};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
@@ -152,6 +153,19 @@ async fn resolve_port(
     );
     if let Some(ctx_size) = context_size {
         server_config = server_config.with_context_size(ctx_size);
+    }
+
+    // Auto-detect jinja and reasoning format from model tags
+    let jinja = resolve_jinja_flag(None, &model.tags);
+    if jinja.enabled {
+        tracing::debug!(source = ?jinja.source, "auto-enabling --jinja");
+        server_config = server_config.with_jinja();
+    }
+
+    let reasoning = resolve_reasoning_format(None, &model.tags);
+    if let Some(format) = reasoning.format {
+        tracing::debug!(source = ?reasoning.source, format = %format, "auto-enabling --reasoning-format");
+        server_config = server_config.with_reasoning_format(format);
     }
 
     println!(

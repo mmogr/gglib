@@ -6,9 +6,9 @@
 
 use super::core::GuiProcessCore;
 use super::health::wait_for_http_health;
-use super::types::{ServerInfo, SpawnConfig};
+use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
-use gglib_core::ports::{CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget};
+use gglib_core::ports::{CatalogError, ModelCatalogPort, ModelRuntimeError, RunningTarget, ServerConfig};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -113,7 +113,7 @@ impl ProcessManager {
     }
 
     /// Start a llama-server instance for a model (Concurrent strategy only)
-    pub async fn start_server(&self, config: SpawnConfig) -> Result<u16> {
+    pub async fn start_server(&self, config: ServerConfig) -> Result<u16> {
         let max_concurrent = match &self.strategy {
             ProcessStrategy::Concurrent { max_concurrent } => *max_concurrent,
             ProcessStrategy::SingleSwap { .. } => {
@@ -123,11 +123,12 @@ impl ProcessManager {
             }
         };
 
+        let model_id = config.model_id as u32;
         let mut core = self.core.write().await;
 
         // Check if already running
-        if core.is_running(config.model_id) {
-            return Err(anyhow!("Model {} is already being served", config.model_id));
+        if core.is_running(model_id) {
+            return Err(anyhow!("Model {} is already being served", model_id));
         }
 
         // Check concurrent limit
@@ -266,10 +267,11 @@ impl ProcessManager {
             "Starting model"
         );
 
-        let config = SpawnConfig::new(
-            launch_spec.id,
+        let config = ServerConfig::new(
+            launch_spec.id as i64,
             launch_spec.name.clone(),
             model_path.to_path_buf(),
+            0, // base_port unused — GuiProcessCore resolves port internally
         )
         .with_context_size(effective_ctx)
         .with_jinja(); // Enable jinja by default for proxy

@@ -193,8 +193,6 @@ pub struct StartServerRequest {
     pub context_length: Option<u64>,
     pub port: Option<u16>,
     #[serde(default)]
-    pub mlock: bool,
-    #[serde(default)]
     pub jinja: Option<bool>,
     #[serde(default)]
     pub reasoning_format: Option<String>,

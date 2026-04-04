@@ -169,27 +169,18 @@ impl<'a> ServerOps<'a> {
             config = config.with_port(port);
         }
 
-        let mut extra_args = Vec::new();
-
         if let Some(true) = request.jinja {
-            extra_args.push("--jinja".to_string());
+            config = config.with_jinja();
         }
 
         if let Some(ref format) = request.reasoning_format
             && format != "none"
         {
-            extra_args.push("--reasoning-format".to_string());
-            extra_args.push(format.clone());
+            config = config.with_reasoning_format(format.clone());
         }
 
-        // Add inference parameters as CLI arguments
-        // Use shared conversion method for DRY compliance
         if let Some(ref params) = request.inference_params {
-            extra_args.extend(params.to_cli_args());
-        }
-
-        if !extra_args.is_empty() {
-            config.extra_args = extra_args;
+            config = config.with_inference_config(params.clone());
         }
 
         config
