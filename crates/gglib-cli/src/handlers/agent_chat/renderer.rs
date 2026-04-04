@@ -261,7 +261,7 @@ pub async fn drain_event_stream(
                         ThinkingEvent::ThinkingDelta(t) if !quiet => {
                             if !in_thinking && stderr_tty {
                                 if let Some(sp) = &spinner {
-                                    sp.suspend(|| style::print_thinking_banner());
+                                    sp.suspend(style::print_thinking_banner);
                                 } else {
                                     style::print_thinking_banner();
                                 }
@@ -308,7 +308,7 @@ pub async fn drain_event_stream(
                 if !quiet {
                     if !in_thinking && stderr_tty {
                         if let Some(sp) = &spinner {
-                            sp.suspend(|| style::print_thinking_banner());
+                            sp.suspend(style::print_thinking_banner);
                         } else {
                             style::print_thinking_banner();
                         }
@@ -333,7 +333,7 @@ pub async fn drain_event_stream(
                         ThinkingEvent::ThinkingDelta(t) if !quiet => {
                             if !in_thinking && stderr_tty {
                                 if let Some(sp) = &spinner {
-                                    sp.suspend(|| style::print_thinking_banner());
+                                    sp.suspend(style::print_thinking_banner);
                                 } else {
                                     style::print_thinking_banner();
                                 }
@@ -419,7 +419,7 @@ pub async fn drain_event_stream(
     // Channel closed without a FinalAnswer — the loop ended with an error
     // (max iterations, stagnation, etc.).
     if in_thinking && stderr_tty {
-        eprint!("{RESET}\n");
+        eprintln!("{RESET}");
     }
     if let Some(sp) = spinner.take() {
         sp.finish_and_clear();

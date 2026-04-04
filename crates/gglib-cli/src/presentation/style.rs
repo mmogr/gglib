@@ -54,7 +54,7 @@ pub fn print_info_banner(label: &str, emoji: &str) {
     // column 42, then close with ╮.
     let prefix = format!("  \u{256d}\u{2500} {emoji} {label} ");
     let fill_len = 42usize.saturating_sub(prefix.chars().count());
-    let fill: String = std::iter::repeat('\u{2500}').take(fill_len).collect();
+    let fill = "\u{2500}".repeat(fill_len);
     eprintln!("\n{INFO}{prefix}{fill}\u{256e}{RESET}");
 }
 
