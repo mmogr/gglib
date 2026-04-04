@@ -36,6 +36,12 @@ These types form the heart of the hexagonal architecture — they have **no infr
 │  │                         GGUF Types                                           │   │
 │  │  GgufMetadata, GgufCapabilities, CapabilityFlags                             │   │
 │  └──────────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                              │
+│                                      ▼                                              │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
+│  │                    Thinking Types (thinking/)                                │   │
+│  │  ThinkingAccumulator, ParsedThinkingContent, ThinkingEvent                  │   │
+│  └──────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -56,6 +62,9 @@ These types form the heart of the hexagonal architecture — they have **no infr
 | `ToolDefinition` | Adapter-neutral tool schema (adapters convert `McpTool → ToolDefinition`) |
 | `ToolCall` | A tool invocation requested by the LLM |
 | `ToolResult` | Outcome of a tool call — `success: false` is LLM context, not an error |
+| `ThinkingAccumulator` | Streaming FSM that classifies inline `<think>` tags across chunk boundaries |
+| `ParsedThinkingContent` | Result of parsing a complete message for thinking/reasoning content |
+| `ThinkingEvent` | Event enum emitted by `ThinkingAccumulator` (`ThinkingDelta`/`ThinkingEnd`/`ContentDelta`) |
 
 ## Design Principles
 
