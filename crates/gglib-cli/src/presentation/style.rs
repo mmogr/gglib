@@ -1,9 +1,12 @@
-//! ANSI terminal colour and style constants.
+//! ANSI terminal colour and style constants and presentation factories.
 //!
 //! Centralised source of truth for all escape sequences used by CLI output.
 //! Import with `use crate::presentation::style::*;` in handler modules.
 
+use std::time::Duration;
+
 use crossterm::style::{Attribute, Color};
+use indicatif::{ProgressBar, ProgressStyle};
 use termimad::{ListItemsIndentationMode, MadSkin, StyledChar};
 
 /// Green — success states, installed dependencies, GPU detected.
@@ -90,4 +93,24 @@ pub fn print_banner_close() {
 /// Equivalent to [`print_info_banner`] with label "Thinking" and 💭 emoji.
 pub fn print_thinking_banner() {
     print_info_banner("Thinking", "\u{1f4ad}");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spinners
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Create a new spinner on stderr for the buffering phase.
+///
+/// Used by the Rich-mode rendering path to show progress while tokens are
+/// being received.
+pub fn make_spinner() -> ProgressBar {
+    let sp = ProgressBar::new_spinner();
+    sp.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.cyan} {msg}")
+            .expect("valid spinner template"),
+    );
+    sp.enable_steady_tick(Duration::from_millis(80));
+    sp.set_message("Receiving…");
+    sp
 }
