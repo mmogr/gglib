@@ -5,6 +5,15 @@
 //! bridges the resulting `mpsc::Receiver<AgentEvent>` to an Axum [`Sse`]
 //! response.
 //!
+//! # Inline thinking classification
+//!
+//! A [`ThinkingAccumulator`] sits in the stream pipeline (`scan` + `flat_map`)
+//! between the agent loop and SSE serialisation.  When a model emits inline
+//! `<think>…</think>` tags inside [`AgentEvent::TextDelta`] events (e.g. with
+//! `--reasoning-format none`), the accumulator reclassifies them as
+//! [`AgentEvent::ReasoningDelta`] / [`AgentEvent::TextDelta`] so the frontend
+//! always receives pre-classified events regardless of model configuration.
+//!
 //! # Cancellation
 //!
 //! When the HTTP client disconnects (browser tab closed, `curl` killed, etc.),

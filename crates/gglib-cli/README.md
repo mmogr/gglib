@@ -152,6 +152,39 @@ gglib q --agent "How is error handling structured in this project?"
 git diff | gglib q --agent "Review these changes for potential issues"
 ```
 
+### Rendering Modes
+
+The CLI auto-detects its output target and selects a rendering mode:
+
+| Stdout target | `--quiet` | Mode     | Behaviour |
+|---------------|-----------|----------|-----------|
+| TTY           | no        | **Rich** | Buffers tokens → renders Markdown via [termimad](https://crates.io/crates/termimad) |
+| TTY           | yes       | **Raw**  | Streams tokens directly, suppresses stderr |
+| Pipe / file   | either    | **Raw**  | Streams tokens directly (no ANSI escapes) |
+
+In **Rich** mode a spinner runs on stderr while the response is being received,
+so the terminal never appears frozen. Once the full response arrives it is
+rendered in one pass with proper Markdown formatting (headings, code blocks,
+lists, bold/italic).
+
+In **Raw** mode each token is printed to stdout as it arrives — identical to the
+pre-Rich behaviour. This keeps piped output clean and machine-parseable:
+
+```bash
+# Pipe-safe: only the raw answer reaches the file
+gglib q "Summarize this" > answer.txt
+
+# Quiet mode: suppresses tool progress, reasoning, iteration counts
+gglib q -Q "What is 2+2?" | pbcopy
+```
+
+### Inline Thinking Fallback
+
+When a reasoning model emits inline `<think>…</think>` tags (e.g. with
+`--reasoning-format none`), the CLI's `ThinkingAccumulator` intercepts them
+and redirects the reasoning content to stderr while only the answer text
+reaches stdout. This works regardless of rendering mode.
+
 **Set a default model** to avoid using `--model` every time:
 
 ```bash
