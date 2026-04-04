@@ -191,7 +191,7 @@ When a reasoning model emits chain-of-thought tokens (via `ReasoningDelta`
 events or inline `<think>` tags), the CLI wraps them in a visually distinct
 block on stderr:
 
-```
+```text
   ╭─ 💭 Thinking ───────────────────────────╮
   (dim) The user is asking about … (dim)
 ```
