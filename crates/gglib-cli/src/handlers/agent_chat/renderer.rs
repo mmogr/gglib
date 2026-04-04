@@ -32,7 +32,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::mpsc;
 
 use crate::presentation::style;
-use crate::presentation::style::{DIM, RESET};
+use crate::presentation::style::RESET;
 use crate::presentation::tables::truncate_string;
 
 // =============================================================================
@@ -260,11 +260,11 @@ pub async fn drain_event_stream(
                     match te {
                         ThinkingEvent::ThinkingDelta(t) if !quiet => {
                             if !in_thinking && stderr_tty {
-                                suspend_eprint(
-                                    spinner.as_ref(),
-                                    "\n  \u{256d}\u{2500} \u{1f4ad} Thinking \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}\n",
-                                );
-                                suspend_eprint(spinner.as_ref(), DIM);
+                                if let Some(sp) = &spinner {
+                                    sp.suspend(|| style::print_thinking_banner());
+                                } else {
+                                    style::print_thinking_banner();
+                                }
                                 in_thinking = true;
                             }
                             suspend_eprint(spinner.as_ref(), &t);
@@ -307,11 +307,11 @@ pub async fn drain_event_stream(
             AgentEvent::ReasoningDelta { content } => {
                 if !quiet {
                     if !in_thinking && stderr_tty {
-                        suspend_eprint(
-                            spinner.as_ref(),
-                            "\n  \u{256d}\u{2500} \u{1f4ad} Thinking \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}\n",
-                        );
-                        suspend_eprint(spinner.as_ref(), DIM);
+                        if let Some(sp) = &spinner {
+                            sp.suspend(|| style::print_thinking_banner());
+                        } else {
+                            style::print_thinking_banner();
+                        }
                         in_thinking = true;
                     }
                     suspend_eprint(spinner.as_ref(), content);
@@ -332,11 +332,11 @@ pub async fn drain_event_stream(
                     match te {
                         ThinkingEvent::ThinkingDelta(t) if !quiet => {
                             if !in_thinking && stderr_tty {
-                                suspend_eprint(
-                                    spinner.as_ref(),
-                                    "\n  \u{256d}\u{2500} \u{1f4ad} Thinking \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}\n",
-                                );
-                                suspend_eprint(spinner.as_ref(), DIM);
+                                if let Some(sp) = &spinner {
+                                    sp.suspend(|| style::print_thinking_banner());
+                                } else {
+                                    style::print_thinking_banner();
+                                }
                                 in_thinking = true;
                             }
                             suspend_eprint(spinner.as_ref(), &t);

@@ -36,3 +36,33 @@ pub fn get_markdown_skin() -> MadSkin {
     skin.code_block.left_margin = 2;
     skin
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Banners
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Print a styled info banner to stderr.
+///
+/// ```text
+///   ╭─ ℹ️  Info ─────────────────────────╮
+/// ```
+///
+/// The border is rendered in [`INFO`] blue. All output goes to **stderr**
+/// so that stdout remains clean for piped command output.
+pub fn print_info_banner(label: &str, emoji: &str) {
+    // "  ╭─ {emoji} {label} " = fixed prefix; fill the rest with ─ up to
+    // column 42, then close with ╮.
+    let prefix = format!("  \u{256d}\u{2500} {emoji} {label} ");
+    let fill_len = 42usize.saturating_sub(prefix.chars().count());
+    let fill: String = std::iter::repeat('\u{2500}').take(fill_len).collect();
+    eprintln!("\n{INFO}{prefix}{fill}\u{256e}{RESET}");
+}
+
+/// Print the thinking-block banner and enter DIM mode on stderr.
+///
+/// Equivalent to `print_info_banner("Thinking", "💭")` followed by writing
+/// the DIM escape to stderr so subsequent thinking tokens appear dimmed.
+pub fn print_thinking_banner() {
+    print_info_banner("Thinking", "\u{1f4ad}");
+    eprint!("{DIM}");
+}
