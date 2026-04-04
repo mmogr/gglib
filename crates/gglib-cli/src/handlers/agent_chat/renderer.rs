@@ -1,18 +1,35 @@
 //! Maps [`AgentEvent`] variants to human-readable terminal output.
 //!
-//! All output follows a simple rule:
-//! - LLM text tokens (`TextDelta`) → `print!` to stdout (no newline, streaming)
-//! - Tool / progress lines        → `eprintln!` to stderr (avoids interleaving
-//!   with streamed tokens on stdout when stdout is piped)
-//! - Errors                       → `eprintln!` to stderr
+//! ## Rendering modes
 //!
-//! `FinalAnswer` emits only a trailing newline; the content was already
-//! streamed live as `TextDelta` events.  The REPL layer captures
-//! `FinalAnswer.content` for message history — it does not re-display it.
+//! | Output target | `--quiet` | Mode   | Behaviour                                  |
+//! |---------------|-----------|--------|--------------------------------------------|
+//! | TTY           | no        | **Rich** | Buffer tokens → render Markdown via *termimad* |
+//! | TTY           | yes       | **Raw**  | Stream tokens directly, suppress stderr    |
+//! | Pipe / file   | either    | **Raw**  | Stream tokens directly (no ANSI escapes)   |
+//!
+//! In **Rich** mode an [`indicatif`] spinner runs on stderr while tokens are
+//! buffered, giving the user visual feedback that the response is arriving.
+//! When [`AgentEvent::FinalAnswer`] arrives the spinner is cleared and the
+//! buffered Markdown is rendered in one pass through [`termimad`].
+//!
+//! In **Raw** mode tokens stream to stdout as they arrive — identical to the
+//! pre-`termimad` behaviour.  This keeps piped output clean and predictable.
+//!
+//! ## Inline thinking fallback
+//!
+//! A [`ThinkingAccumulator`] intercepts `TextDelta` events so that models
+//! emitting inline `<think>` tags (when `--reasoning-format none` or no
+//! format was specified) have their reasoning content redirected to stderr
+//! and only the answer text reaches stdout.
 
-use std::io::{self, Write as _};
+use std::io::{self, IsTerminal, Write as _};
+use std::time::Duration;
 
 use gglib_core::domain::agent::{AgentEvent, ToolResult};
+use gglib_core::domain::thinking::{ThinkingAccumulator, ThinkingEvent};
+use indicatif::{ProgressBar, ProgressStyle};
+use termimad::MadSkin;
 use tokio::sync::mpsc;
 
 use crate::presentation::tables::truncate_string;
@@ -81,6 +98,43 @@ fn format_grep_search(content: &str) -> String {
     } else {
         format!("{match_count} matches  {preview}")
     }
+}
+
+// =============================================================================
+// Rich-mode helpers
+// =============================================================================
+
+/// Print to stderr, temporarily suspending the spinner (if active) so the
+/// output does not collide with the progress line.
+fn suspend_eprint(spinner: Option<&ProgressBar>, text: &str) {
+    if let Some(sp) = spinner {
+        sp.suspend(|| {
+            eprint!("{text}");
+            let _ = io::stderr().flush();
+        });
+    } else {
+        eprint!("{text}");
+        let _ = io::stderr().flush();
+    }
+}
+
+/// Create a new spinner on stderr for the buffering phase.
+fn make_spinner() -> ProgressBar {
+    let sp = ProgressBar::new_spinner();
+    sp.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.cyan} {msg}")
+            .expect("valid spinner template"),
+    );
+    sp.enable_steady_tick(Duration::from_millis(80));
+    sp.set_message("Receiving…");
+    sp
+}
+
+/// Render a Markdown string to stdout through [`termimad`].
+fn render_markdown(text: &str) {
+    let skin = MadSkin::default();
+    skin.print_text(text);
 }
 
 // =============================================================================
@@ -172,6 +226,15 @@ pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_del
 /// caller via `tokio::select!`; this function has no side effects beyond
 /// rendering.
 ///
+/// When stdout is a TTY and `quiet` is `false`, tokens are buffered and
+/// rendered through [`termimad`] on completion (Rich mode).  An
+/// [`indicatif`] spinner runs on stderr while buffering.  In all other
+/// cases tokens stream to stdout as they arrive (Raw mode).
+///
+/// A [`ThinkingAccumulator`] intercepts `TextDelta` events so that inline
+/// `<think>` tags are reclassified: reasoning goes to stderr, content to
+/// stdout.
+///
 /// The caller **must** gate any history update on the return value: history
 /// from a failed or incomplete turn must not replace the previous context.
 pub async fn drain_event_stream(
@@ -179,26 +242,112 @@ pub async fn drain_event_stream(
     verbose: bool,
     quiet: bool,
 ) -> bool {
-    let mut had_text_delta = false;
-    while let Some(event) = rx.recv().await {
-        render_event(&event, verbose, quiet, had_text_delta);
-        if matches!(event, AgentEvent::TextDelta { .. }) {
-            had_text_delta = true;
-        }
+    let rich = !quiet && io::stdout().is_terminal();
+    let mut acc = ThinkingAccumulator::new();
+    let mut buf = String::new();
+    let mut had_text = false;
+    let mut spinner: Option<ProgressBar> = None;
 
-        if let AgentEvent::FinalAnswer { .. } = event {
-            // `FinalAnswer` is always the last event emitted before the loop
-            // drops its `Sender`.  Any events after this would be a protocol
-            // violation and are intentionally dropped.
-            debug_assert!(
-                rx.try_recv().is_err(),
-                "events after FinalAnswer violate agent protocol"
-            );
-            return true;
+    while let Some(event) = rx.recv().await {
+        match &event {
+            // ── Content tokens ───────────────────────────────────────
+            AgentEvent::TextDelta { content } => {
+                had_text = true;
+                for te in acc.push(content) {
+                    match te {
+                        ThinkingEvent::ThinkingDelta(t) if !quiet => {
+                            suspend_eprint(spinner.as_ref(), &t);
+                        }
+                        ThinkingEvent::ContentDelta(c) if rich => {
+                            buf.push_str(&c);
+                            if spinner.is_none() {
+                                spinner = Some(make_spinner());
+                            }
+                            if let Some(sp) = &spinner {
+                                sp.set_message(format!("Receiving… ({} bytes)", buf.len()));
+                            }
+                        }
+                        ThinkingEvent::ContentDelta(c) => {
+                            print!("{c}");
+                            let _ = io::stdout().flush();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            // ── Structured reasoning (already classified by the model) ─
+            AgentEvent::ReasoningDelta { content } => {
+                if !quiet {
+                    suspend_eprint(spinner.as_ref(), content);
+                }
+            }
+
+            // ── Turn complete ────────────────────────────────────────
+            AgentEvent::FinalAnswer { content } => {
+                // Flush any pending thinking accumulator state.
+                for te in acc.flush() {
+                    match te {
+                        ThinkingEvent::ThinkingDelta(t) if !quiet => {
+                            suspend_eprint(spinner.as_ref(), &t);
+                        }
+                        ThinkingEvent::ContentDelta(c) if rich => {
+                            buf.push_str(&c);
+                        }
+                        ThinkingEvent::ContentDelta(c) => {
+                            print!("{c}");
+                            let _ = io::stdout().flush();
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Stop spinner before rendering.
+                if let Some(sp) = spinner.take() {
+                    sp.finish_and_clear();
+                }
+
+                // Render the final output.
+                if rich {
+                    let text = if buf.is_empty() { content.as_str() } else { &buf };
+                    if !text.is_empty() {
+                        render_markdown(text);
+                    }
+                } else {
+                    // Raw mode: defensive fallback for non-streaming responses.
+                    if !had_text && !content.is_empty() {
+                        print!("{content}");
+                        let _ = io::stdout().flush();
+                    }
+                    println!();
+                }
+
+                debug_assert!(
+                    rx.try_recv().is_err(),
+                    "events after FinalAnswer violate agent protocol"
+                );
+                return true;
+            }
+
+            // ── Tool / progress / error events ───────────────────────
+            _ => {
+                if let Some(sp) = &spinner {
+                    sp.suspend(|| render_event(&event, verbose, quiet, had_text));
+                } else {
+                    render_event(&event, verbose, quiet, had_text);
+                }
+            }
         }
     }
+
     // Channel closed without a FinalAnswer — the loop ended with an error
-    // (max iterations, stagnation, etc.).  The caller must not update history.
+    // (max iterations, stagnation, etc.).
+    if let Some(sp) = spinner.take() {
+        sp.finish_and_clear();
+    }
+    if rich && !buf.is_empty() {
+        render_markdown(&buf);
+    }
     false
 }
 
