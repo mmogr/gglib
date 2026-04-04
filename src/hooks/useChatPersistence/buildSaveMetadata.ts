@@ -1,5 +1,5 @@
 import type { ThreadMessage, ThreadMessageLike } from '@assistant-ui/react';
-import { extractNonTextContentParts } from '../../utils/messages';
+import { extractNonTextContentParts, extractReasoningText } from '../../utils/messages';
 import type { ChatMessageMetadata } from '../../services/clients/chat';
 
 /**
@@ -19,23 +19,7 @@ export function buildSaveMetadata(
 ): ChatMessageMetadata | null {
   const msg = m as unknown as ThreadMessage;
   const parts = extractNonTextContentParts(msg);
-
-  // Extract reasoning text from content parts
-  const reasoningChunks: string[] = [];
-  for (const part of msg.content) {
-    if (
-      typeof part === 'object' &&
-      part !== null &&
-      'type' in part &&
-      part.type === 'reasoning' &&
-      'text' in part &&
-      typeof part.text === 'string'
-    ) {
-      const trimmed = part.text.trim();
-      if (trimmed) reasoningChunks.push(trimmed);
-    }
-  }
-  const thinking = reasoningChunks.length > 0 ? reasoningChunks.join('\n') : null;
+  const thinking = extractReasoningText(msg.content);
 
   const hasContent = parts.length > 0 || thinking !== null;
   if (!hasContent) return null;

@@ -1,7 +1,8 @@
 /**
  * Content parts serialization for message persistence.
  *
- * Text and reasoning parts are stored in the `content` column via markdown.
+ * Text is stored in the `content` column as plain markdown.
+ * Reasoning is stored in `metadata.thinking`.
  * Non-text parts (tool-call, audio, file, image) are serialized here and
  * stored in `metadata.contentParts` so they survive the DB round-trip.
  *
@@ -59,9 +60,9 @@ export type SerializableContentPart =
 /**
  * Extract serializable non-text content parts from a ThreadMessage.
  *
- * Text and reasoning parts are already captured by `threadMessageToTranscriptMarkdown`
- * and stored in the `content` column. This function captures everything else:
- * tool-call, audio, file, and image parts.
+ * Text is stored in the `content` column; reasoning is stored in
+ * `metadata.thinking` (see {@link extractReasoningText}). This function
+ * captures everything else: tool-call, audio, file, and image parts.
  *
  * @param message - The ThreadMessage from the runtime
  * @returns Array of serializable content parts (empty if none found)
@@ -138,6 +139,31 @@ export function extractNonTextContentParts(message: ThreadMessage): Serializable
   }
 
   return parts;
+}
+
+/**
+ * Extract concatenated reasoning text from a message's content parts.
+ *
+ * Iterates the parts array once, collecting trimmed text from every
+ * `{ type: 'reasoning', text: string }` entry and joining them with
+ * newlines.  Returns `null` when no reasoning is present.
+ */
+export function extractReasoningText(contentParts: ReadonlyArray<unknown>): string | null {
+  const chunks: string[] = [];
+  for (const part of contentParts) {
+    if (
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      (part as Record<string, unknown>).type === 'reasoning' &&
+      'text' in part &&
+      typeof (part as Record<string, unknown>).text === 'string'
+    ) {
+      const trimmed = ((part as Record<string, unknown>).text as string).trim();
+      if (trimmed) chunks.push(trimmed);
+    }
+  }
+  return chunks.length > 0 ? chunks.join('\n') : null;
 }
 
 /**

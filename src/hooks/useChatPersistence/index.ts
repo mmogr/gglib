@@ -25,6 +25,15 @@ function digestMessage(m: ThreadMessageLike): string {
   return JSON.stringify({ role: m.role, content: m.content, timingFinalized });
 }
 
+/** Extract thinking duration (seconds) for an assistant message, or null. */
+function getDurationForMessage(
+  m: ThreadMessageLike,
+  tracker: ReasoningTimingTracker | undefined,
+): number | null {
+  if (m.role !== 'assistant' || !tracker) return null;
+  return tracker.getDurationSec(m.id!, 0) ?? null;
+}
+
 export interface UseChatPersistenceOptions {
   activeConversationId: number | null;
   systemPrompt?: string | null;
@@ -200,17 +209,13 @@ export function useChatPersistence({
         processingRef.current.add(messageId);
         isPersistingRef.current = true;
 
-        const durationSec = m.role === 'assistant' && timingTracker
-          ? timingTracker.getDurationSec(m.id!, 0) ?? null
-          : null;
-
         (async () => {
           try {
             const dbId = await saveMessage(
               conversationId,
               m.role as 'user' | 'assistant' | 'system',
               text,
-              buildSaveMetadata(m, durationSec),
+              buildSaveMetadata(m, getDurationForMessage(m, timingTracker)),
             );
             persistedByMessageId.current.set(messageId, dbId);
             lastDigestByMessageId.current.set(messageId, currentDigest);
@@ -240,11 +245,8 @@ export function useChatPersistence({
           isPersistingRef.current = true;
           try {
             const text = threadMessageToTranscriptMarkdown(m as any);
-            const dur = m.role === 'assistant' && timingTracker
-              ? timingTracker.getDurationSec(m.id!, 0) ?? null
-              : null;
             if (text.trim() && existingDbId) {
-              await updateMessage(existingDbId, text, buildSaveMetadata(m, dur));
+              await updateMessage(existingDbId, text, buildSaveMetadata(m, getDurationForMessage(m, timingTracker)));
               await syncConversations({ silent: true });
 
               const isFinalized = (m.metadata as any)?.custom?.timingFinalized;

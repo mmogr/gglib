@@ -20,6 +20,7 @@ import type { GglibMessageCustom } from '../../../types/messages';
 import type { ResearchState } from '../../../hooks/useDeepResearch/types';
 import { useVoiceContextOptional } from '../context/VoiceContext';
 import { stripThinkingBlocks } from '../../../utils/stripThinkingBlocks';
+import { extractReasoningText } from '../../../utils/messages';
 
 import { cn } from '../../../utils/cn';
 
@@ -124,29 +125,28 @@ export const AssistantMessageBubble: React.FC = () => {
   const researchState = getResearchState(message);
   const isResearch = isDeepResearchMessage(message);
 
-  // Extract reasoning and text parts directly from message content
-  const reasoningChunks: string[] = [];
-  const textChunks: string[] = [];
+  // Extract reasoning and text parts from message content
   const content = (message as any)?.content;
-  if (Array.isArray(content)) {
-    for (const part of content) {
-      if (typeof part === 'string') {
-        const trimmed = part.trim();
-        if (trimmed) textChunks.push(trimmed);
-      } else if (typeof part === 'object' && part !== null && 'type' in part) {
-        if (part.type === 'reasoning' && typeof part.text === 'string') {
-          const trimmed = part.text.trim();
-          if (trimmed) reasoningChunks.push(trimmed);
-        } else if (part.type === 'text' && typeof part.text === 'string') {
-          const trimmed = part.text.trim();
-          if (trimmed) textChunks.push(trimmed);
-        }
-      }
+  const contentArray = Array.isArray(content) ? content : [];
+  const thinkingText = extractReasoningText(contentArray);
+
+  const textChunks: string[] = [];
+  for (const part of contentArray) {
+    if (typeof part === 'string') {
+      const trimmed = part.trim();
+      if (trimmed) textChunks.push(trimmed);
+    } else if (
+      typeof part === 'object' && part !== null &&
+      'type' in part && part.type === 'text' &&
+      'text' in part && typeof part.text === 'string'
+    ) {
+      const trimmed = part.text.trim();
+      if (trimmed) textChunks.push(trimmed);
     }
-  } else if (typeof content === 'string' && content.trim()) {
+  }
+  if (!contentArray.length && typeof content === 'string' && content.trim()) {
     textChunks.push(content.trim());
   }
-  const thinkingText = reasoningChunks.length > 0 ? reasoningChunks.join('\n') : null;
   const contentText = textChunks.join('\n\n');
 
   // Get thinking duration from loaded metadata or timing tracker

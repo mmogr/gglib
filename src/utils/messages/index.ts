@@ -9,6 +9,7 @@
 export { threadMessageToTranscriptMarkdown } from './threadMessageToTranscriptMarkdown';
 export {
   extractNonTextContentParts,
+  extractReasoningText,
   hasNonTextContent,
   reconstructContent,
   type SerializableContentPart,
