@@ -18,6 +18,7 @@ use gglib_runtime::llama::args::{resolve_jinja_flag, resolve_reasoning_format};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
+use crate::presentation::style;
 
 // =============================================================================
 // Types
@@ -168,8 +169,9 @@ async fn resolve_port(
         server_config = server_config.with_reasoning_format(format);
     }
 
-    println!(
-        "Starting llama-server for '{}' (this may take a moment) …",
+    style::print_info_banner("Info", "\u{2139}\u{fe0f}");
+    eprintln!(
+        "  Starting llama-server for '{}' (this may take a moment) \u{2026}",
         model.name
     );
 
@@ -179,7 +181,7 @@ async fn resolve_port(
         .await
         .context("failed to start llama-server")?;
 
-    println!("llama-server ready on port {}", handle.port);
+    eprintln!("  llama-server ready on port {}", handle.port);
 
     Ok((handle.port, Some(handle)))
 }

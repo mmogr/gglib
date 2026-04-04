@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
+use crate::presentation::style;
+
 /// Execute the `web` command.
 ///
 /// Builds the Axum `ServerConfig`, resolves the static-files directory
@@ -69,23 +71,17 @@ pub async fn execute(
     }
 
     if let Some(ref dir) = config.static_dir {
-        println!();
-        println!("  🚀 gglib web server starting...");
-        println!();
-        println!("  📂 Serving UI from: {}", dir.display());
-        println!("  🌐 Local:   http://localhost:{}", port);
-        println!("  🌐 Network: http://0.0.0.0:{}", port);
-        println!();
-        println!("  Press Ctrl+C to stop");
-        println!();
+        style::print_info_banner("Web Server", "\u{1f680}");
+        eprintln!("  \u{1f4c2} Serving UI from: {}", dir.display());
+        eprintln!("  \u{1f310} Local:   http://localhost:{}", port);
+        eprintln!("  \u{1f310} Network: http://0.0.0.0:{}", port);
+        eprintln!();
+        eprintln!("  Press Ctrl+C to stop");
     } else {
-        println!();
-        println!("  🚀 gglib web server starting (API only)...");
-        println!();
-        println!("  🌐 API:     http://localhost:{}", port);
-        println!();
-        println!("  💡 Tip: Use --static-dir to serve a frontend build");
-        println!();
+        style::print_info_banner("Web Server (API only)", "\u{1f680}");
+        eprintln!("  \u{1f310} API:     http://localhost:{}", port);
+        eprintln!();
+        eprintln!("  \u{1f4a1} Tip: Use --static-dir to serve a frontend build");
     }
 
     start_server(config).await?;
