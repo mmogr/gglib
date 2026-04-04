@@ -4,7 +4,7 @@
 //! Import with `use crate::presentation::style::*;` in handler modules.
 
 use crossterm::style::{Attribute, Color};
-use termimad::MadSkin;
+use termimad::{ListItemsIndentationMode, MadSkin, StyledChar};
 
 /// Green — success states, installed dependencies, GPU detected.
 pub const SUCCESS: &str = "\x1b[32m";
@@ -34,6 +34,15 @@ pub fn get_markdown_skin() -> MadSkin {
     skin.inline_code.set_fg(Color::Yellow);
     skin.code_block.set_fg(Color::Green);
     skin.code_block.left_margin = 2;
+
+    // Explicit bold/italic so rendering is consistent across terminals.
+    skin.bold.set_fg(Color::White);
+    skin.bold.add_attr(Attribute::Bold);
+    skin.italic.add_attr(Attribute::Italic);
+
+    // Consistent bullet character and prettier multi-line wrapping.
+    skin.bullet = StyledChar::from_fg_char(Color::Cyan, '•');
+    skin.list_items_indentation_mode = ListItemsIndentationMode::Block;
     skin
 }
 
