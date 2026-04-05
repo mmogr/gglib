@@ -153,8 +153,19 @@ async fn resume_conversation<'a>(
     }
 
     // Convert persisted messages to agent messages
-    let prior_messages: Vec<AgentMessage> =
+    let mut prior_messages: Vec<AgentMessage> =
         db_messages.iter().map(|m| m.to_agent_message()).collect();
+
+    // The system prompt is stored on the conversation record (not as a
+    // message row), so prepend it if present.
+    if let Some(ref prompt) = merged.system_prompt {
+        prior_messages.insert(
+            0,
+            AgentMessage::System {
+                content: prompt.clone(),
+            },
+        );
+    }
 
     let persistence = Conversation::resume(history, conv_id, msg_count).await;
 

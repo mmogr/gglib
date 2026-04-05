@@ -38,13 +38,18 @@ export function foldToolMessages(messages: ChatMessage[]): ChatMessage[] {
   }
 
   // Nothing to fold — fast path.
-  if (toolResultByCallId.size === 0) return messages;
+  // Always strip system and tool rows: system prompt is sourced from the
+  // conversation record, and tool content is embedded in assistant messages.
+  if (toolResultByCallId.size === 0) {
+    return messages.filter((m) => m.role !== 'tool' && m.role !== 'system');
+  }
 
   const result: ChatMessage[] = [];
 
   for (const msg of messages) {
-    // Strip tool rows — their content is now embedded in the assistant.
-    if (msg.role === 'tool') continue;
+    // Strip tool and system rows — tool content is embedded in assistants,
+    // and system prompt is sourced from the conversation record.
+    if (msg.role === 'tool' || msg.role === 'system') continue;
 
     // Enrich assistant messages that have tool_calls metadata.
     if (

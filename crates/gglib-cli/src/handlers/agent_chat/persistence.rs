@@ -59,10 +59,18 @@ impl<'a> Conversation<'a> {
 
     /// Persist any messages added since the last call.
     ///
+    /// System messages are **not** persisted — the system prompt lives on the
+    /// `chat_conversations` row (`system_prompt` column) and is the canonical
+    /// source for both CLI and GUI resume.  Persisting it as a message row
+    /// would cause duplicates when the GUI hydrates from both sources.
+    ///
     /// Errors are logged as warnings and swallowed — persistence must never
     /// break the interactive session.
     pub async fn save_new(&mut self, messages: &[AgentMessage]) {
         for msg in messages.iter().skip(self.saved) {
+            if matches!(msg, AgentMessage::System { .. }) {
+                continue;
+            }
             let new_msg = to_new_message(msg, self.id);
             if let Err(e) = self.service.save_message(new_msg).await {
                 tracing::warn!("failed to persist agent message: {e}");
