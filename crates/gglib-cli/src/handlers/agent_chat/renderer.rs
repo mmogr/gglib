@@ -65,22 +65,30 @@ pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_del
             let _ = io::stdout().flush();
         }
 
-        AgentEvent::ToolCallStart { tool_call } => {
+        AgentEvent::ToolCallStart {
+            display_name,
+            args_summary,
+            ..
+        } => {
             if !quiet {
-                eprintln!("\n  ⚙   {} …", tool_call.name);
+                match args_summary {
+                    Some(summary) => eprintln!("\n  ⚙   {display_name}  {summary} …"),
+                    None => eprintln!("\n  ⚙   {display_name} …"),
+                }
             }
         }
 
         AgentEvent::ToolCallComplete {
             tool_name,
+            display_name,
+            duration_display,
             result,
-            execute_duration_ms,
             ..
         } => {
             if !quiet {
                 let icon = if result.success { "✓" } else { "✗" };
                 let summary = format_tool_result(tool_name, result);
-                eprintln!("  {icon}  {execute_duration_ms}ms  {summary}");
+                eprintln!("  {icon}  {duration_display}  {display_name}  {summary}");
             }
         }
 
@@ -176,6 +184,8 @@ mod tests {
             },
             wait_ms: 0,
             execute_duration_ms: 5,
+            display_name: "Some Tool".into(),
+            duration_display: "5ms".into(),
         });
     }
 
@@ -191,6 +201,8 @@ mod tests {
             },
             wait_ms: 0,
             execute_duration_ms: 10,
+            display_name: "Read File".into(),
+            duration_display: "10ms".into(),
         });
     }
 
@@ -205,6 +217,8 @@ mod tests {
             },
             wait_ms: 0,
             execute_duration_ms: 3,
+            display_name: "List Directory".into(),
+            duration_display: "3ms".into(),
         });
     }
 
@@ -219,6 +233,8 @@ mod tests {
             },
             wait_ms: 0,
             execute_duration_ms: 20,
+            display_name: "Grep Search".into(),
+            duration_display: "20ms".into(),
         });
     }
 
@@ -233,6 +249,8 @@ mod tests {
             },
             wait_ms: 0,
             execute_duration_ms: 15,
+            display_name: "Grep Search".into(),
+            duration_display: "15ms".into(),
         });
     }
 
@@ -247,6 +265,8 @@ mod tests {
             },
             wait_ms: 0,
             execute_duration_ms: 1,
+            display_name: "Read File".into(),
+            duration_display: "1ms".into(),
         });
     }
 }

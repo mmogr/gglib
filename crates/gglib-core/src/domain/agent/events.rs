@@ -42,6 +42,10 @@ pub enum AgentEvent {
     ToolCallStart {
         /// The tool call that is about to be dispatched.
         tool_call: ToolCall,
+        /// Human-readable tool name (prefix stripped, title-cased).
+        display_name: String,
+        /// One-line argument summary (e.g. file path, search pattern).
+        args_summary: Option<String>,
     },
 
     /// A tool execution has completed (success or failure).
@@ -55,6 +59,10 @@ pub enum AgentEvent {
         /// Wall-clock time taken to execute the tool after acquiring the permit,
         /// in milliseconds.
         execute_duration_ms: u64,
+        /// Human-readable tool name (prefix stripped, title-cased).
+        display_name: String,
+        /// Human-readable duration (e.g. "125ms", "1.5s").
+        duration_display: String,
     },
 
     /// One full LLM→tool-execution cycle has completed.
@@ -184,6 +192,8 @@ mod tests {
                 name: "search".into(),
                 arguments: serde_json::json!({"q": "rust"}),
             },
+            display_name: "Search".into(),
+            args_summary: None,
         };
         let json = serde_json::to_value(&evt).unwrap();
         assert_eq!(json["type"], "tool_call_start");

@@ -23,6 +23,10 @@ mod tests;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use gglib_core::domain::agent::tool_display::{
+    format_tool_args_summary, format_tool_display_name, strip_tool_prefix,
+};
+use gglib_core::format_duration_human;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{AgentConfig, AgentEvent, ToolCall, ToolResult};
 use tokio::sync::{Semaphore, mpsc};
@@ -76,9 +80,15 @@ async fn execute_single_tool(
 
     // Notify that execution is starting (after permit acquired —
     // we only claim "started" once we have a slot, not when queued).
+    let bare_name = strip_tool_prefix(&tc.name);
+    let display_name = format_tool_display_name(bare_name);
+    let args_summary = format_tool_args_summary(bare_name, &tc.arguments);
+
     let _ = tx
         .send(AgentEvent::ToolCallStart {
             tool_call: tc.clone(),
+            display_name: display_name.clone(),
+            args_summary,
         })
         .await;
 
@@ -96,12 +106,15 @@ async fn execute_single_tool(
     };
 
     // Notify that execution is complete.
+    let duration_display = format_duration_human(duration_ms);
     let _ = tx
         .send(AgentEvent::ToolCallComplete {
             tool_name: tc.name.clone(),
             result: tool_result.clone(),
             wait_ms,
             execute_duration_ms: duration_ms,
+            display_name,
+            duration_display,
         })
         .await;
 
