@@ -25,6 +25,15 @@ function digestMessage(m: ThreadMessageLike): string {
   return JSON.stringify({ role: m.role, content: m.content, timingFinalized });
 }
 
+/** Extract thinking duration (seconds) for an assistant message, or null. */
+function getDurationForMessage(
+  m: ThreadMessageLike,
+  tracker: ReasoningTimingTracker | undefined,
+): number | null {
+  if (m.role !== 'assistant' || !tracker) return null;
+  return tracker.getDurationSec(m.id!, 0) ?? null;
+}
+
 export interface UseChatPersistenceOptions {
   activeConversationId: number | null;
   systemPrompt?: string | null;
@@ -192,12 +201,7 @@ export function useChatPersistence({
 
       // Case 1: New message — save to DB
       if (!existingDbId) {
-        const text = threadMessageToTranscriptMarkdown(
-          m as any,
-          m.role === 'assistant' && timingTracker
-            ? { getDurationForSegment: (msgId, idx) => timingTracker.getDurationSec(msgId, idx) }
-            : undefined,
-        );
+        const text = threadMessageToTranscriptMarkdown(m as any);
         if (!text.trim()) continue;
         if (persistedByMessageId.current.has(m.id)) continue;
 
@@ -211,7 +215,7 @@ export function useChatPersistence({
               conversationId,
               m.role as 'user' | 'assistant' | 'system',
               text,
-              buildSaveMetadata(m),
+              buildSaveMetadata(m, getDurationForMessage(m, timingTracker)),
             );
             persistedByMessageId.current.set(messageId, dbId);
             lastDigestByMessageId.current.set(messageId, currentDigest);
@@ -240,14 +244,9 @@ export function useChatPersistence({
           processingRef.current.add(messageId);
           isPersistingRef.current = true;
           try {
-            const text = threadMessageToTranscriptMarkdown(
-              m as any,
-              m.role === 'assistant' && timingTracker
-                ? { getDurationForSegment: (msgId, idx) => timingTracker.getDurationSec(msgId, idx) }
-                : undefined,
-            );
+            const text = threadMessageToTranscriptMarkdown(m as any);
             if (text.trim() && existingDbId) {
-              await updateMessage(existingDbId, text, buildSaveMetadata(m));
+              await updateMessage(existingDbId, text, buildSaveMetadata(m, getDurationForMessage(m, timingTracker)));
               await syncConversations({ silent: true });
 
               const isFinalized = (m.metadata as any)?.custom?.timingFinalized;

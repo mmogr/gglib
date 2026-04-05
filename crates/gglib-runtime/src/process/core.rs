@@ -8,12 +8,14 @@
 
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
-use super::types::{RunningProcess, ServerInfo, SpawnConfig};
+use super::types::{RunningProcess, ServerInfo};
+use crate::command::{build_and_spawn, spawn_log_readers};
 use crate::pidfile::{delete_pidfile, write_pidfile};
 use anyhow::{Result, anyhow};
-use gglib_core::utils::process::async_cmd;
+use gglib_core::ports::ServerConfig;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
 
@@ -46,9 +48,11 @@ impl GuiProcessCore {
     /// Spawn a new llama-server process
     ///
     /// Returns the port number for the spawned process.
-    pub async fn spawn(&mut self, config: SpawnConfig) -> Result<u16> {
-        if self.processes.contains_key(&config.model_id) {
-            return Err(anyhow!("Model {} is already running", config.model_id));
+    pub async fn spawn(&mut self, config: ServerConfig) -> Result<u16> {
+        let model_id = config.model_id as u32;
+
+        if self.processes.contains_key(&model_id) {
+            return Err(anyhow!("Model {} is already running", model_id));
         }
 
         if !config.model_path.exists() {
@@ -59,19 +63,14 @@ impl GuiProcessCore {
         }
 
         let port = self.resolve_port(config.port)?;
-        let mut child = self.build_and_spawn_command(
-            &config.model_path,
-            port,
-            config.context_size,
-            config.jinja,
-            config.reasoning_format,
-        )?;
+        let llama_path = Path::new(&self.llama_server_path);
+        let mut child = build_and_spawn(Some(llama_path), &config, port)?;
         let pid = child
             .id()
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;
 
-        // Write PID file (u32 model_id cast to i64 for pidfile compatibility)
-        if let Err(e) = write_pidfile(config.model_id as i64, pid, port) {
+        // Write PID file
+        if let Err(e) = write_pidfile(config.model_id, pid, port) {
             debug!("Failed to write PID file: {}", e);
         }
 
@@ -83,7 +82,7 @@ impl GuiProcessCore {
             .as_secs();
 
         let info = ServerInfo::new(
-            config.model_id,
+            model_id,
             config.model_name,
             pid,
             port,
@@ -91,67 +90,14 @@ impl GuiProcessCore {
             config.context_size,
         );
         let running = RunningProcess::new(info, child);
-        self.processes.insert(config.model_id, running);
+        self.processes.insert(model_id, running);
 
         Ok(port)
     }
 
-    fn build_and_spawn_command(
-        &self,
-        model_path: &Path,
-        port: u16,
-        context_size: Option<u64>,
-        jinja: bool,
-        reasoning_format: Option<String>,
-    ) -> Result<tokio::process::Child> {
-        let mut cmd = async_cmd(&self.llama_server_path);
-        cmd.arg("-m")
-            .arg(model_path)
-            .arg("--host")
-            .arg("127.0.0.1")
-            .arg("--port")
-            .arg(port.to_string())
-            .arg("--metrics");
-
-        if let Some(ctx) = context_size {
-            cmd.arg("-c").arg(ctx.to_string());
-        }
-
-        if jinja {
-            cmd.arg("--jinja");
-        }
-
-        if let Some(format) = reasoning_format {
-            cmd.arg("--reasoning-format").arg(format);
-        }
-
-        cmd.stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
-
-        cmd.spawn()
-            .map_err(|e| anyhow!("Failed to spawn llama-server: {}", e))
-    }
-
     fn spawn_log_readers(&self, child: &mut tokio::process::Child, port: u16) {
-        if let Some(stdout) = child.stdout.take() {
-            use crate::process::{LogManagerSink, spawn_stream_reader};
-            spawn_stream_reader(
-                stdout,
-                port,
-                "stdout",
-                Some(std::sync::Arc::new(LogManagerSink)),
-            );
-        }
-
-        if let Some(stderr) = child.stderr.take() {
-            use crate::process::{LogManagerSink, spawn_stream_reader};
-            spawn_stream_reader(
-                stderr,
-                port,
-                "stderr",
-                Some(std::sync::Arc::new(LogManagerSink)),
-            );
-        }
+        use crate::process::LogManagerSink;
+        spawn_log_readers(child, port, Some(Arc::new(LogManagerSink)));
     }
 
     fn resolve_port(&self, requested: Option<u16>) -> Result<u16> {

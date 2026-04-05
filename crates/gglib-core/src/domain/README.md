@@ -36,6 +36,12 @@ These types form the heart of the hexagonal architecture — they have **no infr
 │  │                         GGUF Types                                           │   │
 │  │  GgufMetadata, GgufCapabilities, CapabilityFlags                             │   │
 │  └──────────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                              │
+│                                      ▼                                              │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
+│  │                    Thinking Types (thinking/)                                │   │
+│  │  ThinkingAccumulator, ParsedThinkingContent, ThinkingEvent                  │   │
+│  └──────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -56,6 +62,9 @@ These types form the heart of the hexagonal architecture — they have **no infr
 | `ToolDefinition` | Adapter-neutral tool schema (adapters convert `McpTool → ToolDefinition`) |
 | `ToolCall` | A tool invocation requested by the LLM |
 | `ToolResult` | Outcome of a tool call — `success: false` is LLM context, not an error |
+| `ThinkingAccumulator` | Streaming FSM that classifies inline `<think>` tags across chunk boundaries |
+| `ParsedThinkingContent` | Result of parsing a complete message for thinking/reasoning content |
+| `ThinkingEvent` | Event enum emitted by `ThinkingAccumulator` (`ThinkingDelta`/`ThinkingEnd`/`ContentDelta`) |
 
 ## Design Principles
 
@@ -79,6 +88,7 @@ These types form the heart of the hexagonal architecture — they have **no infr
 | [`model.rs`](model.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-model-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-model-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-model-coverage.json) |
 | [`agent/`](agent/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-agent-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-agent-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-agent-coverage.json) |
 | [`mcp/`](mcp/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-mcp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-mcp-coverage.json) |
+| [`thinking/`](thinking/) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-thinking-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-thinking-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-thinking-coverage.json) |
 <!-- module-table:end -->
 
 </details>

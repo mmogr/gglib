@@ -35,49 +35,49 @@ pub async fn resolve_inference_config(
     Ok(config)
 }
 
-/// Log context-size resolution to stdout.
+/// Log context-size resolution to stderr.
 pub fn log_context_info(resolution: &ContextResolution) {
     match (&resolution.value, &resolution.source) {
         (Some(size), ContextResolutionSource::ExplicitFlag) => {
-            println!("Context size: {} (explicit)", size);
+            eprintln!("  Context size: {} (explicit)", size);
         }
         (Some(size), ContextResolutionSource::ModelMetadata) => {
-            println!("Context size: {} (from model metadata)", size);
+            eprintln!("  Context size: {} (from model metadata)", size);
         }
         (None, ContextResolutionSource::NotSpecified) => {
-            println!("Context size: default (not specified)");
+            eprintln!("  Context size: default (not specified)");
         }
         (None, ContextResolutionSource::MaxRequestedMissing) => {
-            println!("Context size: max requested but not in metadata");
+            eprintln!("  Context size: max requested but not in metadata");
         }
         _ => {}
     }
 }
 
-/// Log mlock status to stdout.
+/// Log mlock status to stderr.
 pub fn log_mlock_info(mlock: bool) {
     if mlock {
-        println!("Memory lock: enabled");
+        eprintln!("  Memory lock: enabled");
     }
 }
 
-/// Log resolved inference parameters to stdout.
+/// Log resolved inference parameters to stderr.
 pub fn log_inference_info(config: &InferenceConfig) {
-    println!("Inference parameters:");
+    eprintln!("  Inference parameters:");
     if let Some(temp) = config.temperature {
-        println!("  Temperature: {}", temp);
+        eprintln!("    Temperature: {}", temp);
     }
     if let Some(top_p) = config.top_p {
-        println!("  Top-p: {}", top_p);
+        eprintln!("    Top-p: {}", top_p);
     }
     if let Some(top_k) = config.top_k {
-        println!("  Top-k: {}", top_k);
+        eprintln!("    Top-k: {}", top_k);
     }
     if let Some(max_tokens) = config.max_tokens {
-        println!("  Max tokens: {}", max_tokens);
+        eprintln!("    Max tokens: {}", max_tokens);
     }
     if let Some(repeat_penalty) = config.repeat_penalty {
-        println!("  Repeat penalty: {}", repeat_penalty);
+        eprintln!("    Repeat penalty: {}", repeat_penalty);
     }
 }
 

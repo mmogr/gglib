@@ -96,8 +96,12 @@ export function foldToolMessages(messages: ChatMessage[]): ChatMessage[] {
  * Convert a raw DB message into a ThreadMessageLike ready for the runtime.
  *
  * Restores structured content parts (tool-call, audio, file, image) stored in
- * `metadata.contentParts` so they survive the DB round-trip. When no parts are
- * stored the plain-text `content` column is used as-is (backward compat).
+ * `metadata.contentParts` so they survive the DB round-trip. Reasoning text
+ * stored in `metadata.thinking` is injected as a `{type:'reasoning'}` part.
+ *
+ * Backwards compatibility: if the content column contains legacy `<think>` tags
+ * (from before reasoning was stored in metadata), they are parsed and converted
+ * to structured reasoning parts.
  */
 export function buildLoadedMessage(
   msg: ChatMessage,
@@ -105,8 +109,10 @@ export function buildLoadedMessage(
 ): ThreadMessageLike {
   const storedParts = msg.metadata?.contentParts as SerializableContentPart[] | undefined;
   const isDeepResearch = msg.metadata?.isDeepResearch === true;
+  const thinkingText = msg.metadata?.thinking as string | undefined;
+  const thinkingDuration = msg.metadata?.thinkingDurationSeconds as number | null | undefined;
 
-  const custom = isDeepResearch
+  const custom: Record<string, unknown> = isDeepResearch
     ? {
         dbId: msg.id,
         conversationId,
@@ -115,11 +121,68 @@ export function buildLoadedMessage(
       }
     : { dbId: msg.id, conversationId };
 
+  if (thinkingDuration != null) {
+    custom.thinkingDurationSeconds = thinkingDuration;
+  }
+
+  let content = reconstructContent(msg.content, storedParts ?? null);
+
+  // Inject reasoning from metadata.thinking (new path)
+  if (thinkingText) {
+    const parts: Array<Record<string, unknown>> =
+      typeof content === 'string'
+        ? content.trim() ? [{ type: 'text' as const, text: content }] : []
+        : [...(content as unknown as Array<Record<string, unknown>>)];
+    parts.unshift({ type: 'reasoning', text: thinkingText });
+    content = parts as unknown as ThreadMessageLike['content'];
+  } else if (msg.role === 'assistant' && typeof content === 'string') {
+    // Backwards compat: parse legacy <think> tags embedded in content
+    const legacyParsed = parseLegacyThinkingTags(content);
+    if (legacyParsed) {
+      const parts: Array<Record<string, unknown>> = [];
+      parts.push({ type: 'reasoning', text: legacyParsed.thinking });
+      if (legacyParsed.durationSeconds != null) {
+        custom.thinkingDurationSeconds = legacyParsed.durationSeconds;
+      }
+      if (legacyParsed.content.trim()) {
+        parts.push({ type: 'text', text: legacyParsed.content });
+      }
+      content = parts as unknown as ThreadMessageLike['content'];
+    }
+  }
+
   return {
     id: `db-${msg.id}`,
     role: msg.role as 'user' | 'assistant',
-    content: reconstructContent(msg.content, storedParts ?? null),
+    content,
     createdAt: new Date(msg.created_at),
     metadata: { custom },
+  };
+}
+
+// ============================================================================
+// Legacy <think> tag parser (backwards compatibility for old messages)
+// ============================================================================
+
+/**
+ * Parse legacy `<think>` tags from content text.
+ * Returns null if no tags are found.
+ */
+function parseLegacyThinkingTags(
+  text: string,
+): { thinking: string; content: string; durationSeconds: number | null } | null {
+  const match = text.match(
+    /^<think(?:\s+duration="([\d.]+)")?\s*>([\s\S]*?)<\/think>\s*/,
+  );
+  if (!match) return null;
+
+  const durationStr = match[1];
+  const thinking = match[2]?.trim();
+  if (!thinking) return null;
+
+  return {
+    thinking,
+    content: text.slice(match[0].length),
+    durationSeconds: durationStr ? parseFloat(durationStr) : null,
   };
 }

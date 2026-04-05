@@ -8,10 +8,8 @@ import {
 import { Bot, Copy, Loader2, Mic, Pencil, Trash2, User as UserIcon, Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
-import { parseThinkingContent } from '../../../utils/thinkingParser';
 import ThinkingBlock from '../ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
-import { threadMessageToTranscriptMarkdown } from '../../../utils/messages';
 import { MessageActionsContext } from './MessageActionsContext';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
@@ -22,6 +20,7 @@ import type { GglibMessageCustom } from '../../../types/messages';
 import type { ResearchState } from '../../../hooks/useDeepResearch/types';
 import { useVoiceContextOptional } from '../context/VoiceContext';
 import { stripThinkingBlocks } from '../../../utils/stripThinkingBlocks';
+import { extractReasoningText } from '../../../utils/messages';
 
 import { cn } from '../../../utils/cn';
 
@@ -126,15 +125,39 @@ export const AssistantMessageBubble: React.FC = () => {
   const researchState = getResearchState(message);
   const isResearch = isDeepResearchMessage(message);
 
-  // Extract and parse thinking content from message (for non-research messages)
-  const rawText = threadMessageToTranscriptMarkdown(message);
-  const parsed = parseThinkingContent(rawText);
+  // Extract reasoning and text parts from message content
+  const content = (message as any)?.content;
+  const contentArray = Array.isArray(content) ? content : [];
+  const thinkingText = extractReasoningText(contentArray);
+
+  const textChunks: string[] = [];
+  for (const part of contentArray) {
+    if (typeof part === 'string') {
+      const trimmed = part.trim();
+      if (trimmed) textChunks.push(trimmed);
+    } else if (
+      typeof part === 'object' && part !== null &&
+      'type' in part && part.type === 'text' &&
+      'text' in part && typeof part.text === 'string'
+    ) {
+      const trimmed = part.text.trim();
+      if (trimmed) textChunks.push(trimmed);
+    }
+  }
+  if (!contentArray.length && typeof content === 'string' && content.trim()) {
+    textChunks.push(content.trim());
+  }
+  const contentText = textChunks.join('\n\n');
+
+  // Get thinking duration from loaded metadata or timing tracker
+  const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
+  const loadedDuration = custom?.thinkingDurationSeconds ?? null;
   
   // Determine if this message is currently streaming
   const isStreaming = timing?.currentStreamingAssistantMessageId === message.id;
   
   // Determine if we're currently in the thinking phase (streaming with only thinking, no main content yet)
-  const isCurrentlyThinking = isStreaming && !!parsed.thinking && !parsed.content.trim();
+  const isCurrentlyThinking = isStreaming && !!thinkingText && !contentText;
 
   // For deep research messages, render ResearchArtifact
   if (isResearch && researchState) {
@@ -190,19 +213,19 @@ export const AssistantMessageBubble: React.FC = () => {
         </div>
       </div>
       <div className="leading-[1.6]">
-        {parsed.thinking && (
+        {thinkingText && (
           <ThinkingBlock
             messageId={message.id}
             segmentIndex={0}
-            thinking={parsed.thinking}
-            durationSeconds={parsed.durationSeconds}
+            thinking={thinkingText}
+            durationSeconds={loadedDuration}
             isStreaming={isCurrentlyThinking}
           />
         )}
-        {parsed.content && (
-          <MarkdownMessageContent text={parsed.content} />
+        {contentText && (
+          <MarkdownMessageContent text={contentText} />
         )}
-        {!parsed.thinking && !parsed.content && isStreaming && (
+        {!thinkingText && !contentText && isStreaming && (
           <span className="text-text-muted animate-blink">…</span>
         )}
       </div>

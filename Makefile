@@ -110,6 +110,9 @@ install:
 	@echo "Installing gglib..."
 	@mkdir -p "$$HOME/.cargo/bin"
 	@cp target/release/gglib "$$HOME/.cargo/bin/gglib"
+ifeq ($(UNAME_S),Darwin)
+	@codesign --force --sign - "$$HOME/.cargo/bin/gglib"
+endif
 	@echo "✓ Installed gglib to ~/.cargo/bin/gglib"
 
 uninstall:

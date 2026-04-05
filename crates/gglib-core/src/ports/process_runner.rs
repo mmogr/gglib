@@ -8,11 +8,14 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use super::ProcessError;
+use crate::domain::InferenceConfig;
 
 /// Configuration for starting a model server.
 ///
 /// This is an intent-based configuration — it expresses what the caller
-/// wants, not how the server should be started.
+/// wants, not how the server should be started. All typed fields are
+/// handled by `build_and_spawn()`; `extra_args` is an escape hatch for
+/// flags not yet promoted to first-class fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     /// Database ID of the model to serve.
@@ -29,7 +32,13 @@ pub struct ServerConfig {
     pub context_size: Option<u64>,
     /// Number of GPU layers to offload (if None, use default).
     pub gpu_layers: Option<i32>,
-    /// Additional server-specific options.
+    /// Enable Jinja templating for chat formats.
+    pub jinja: bool,
+    /// Reasoning format override (e.g., `"deepseek"`, `"none"`).
+    pub reasoning_format: Option<String>,
+    /// Inference sampling parameters (temperature, `top_p`, etc.).
+    pub inference_config: Option<InferenceConfig>,
+    /// Additional server-specific options (escape hatch).
     pub extra_args: Vec<String>,
 }
 
@@ -50,6 +59,9 @@ impl ServerConfig {
             base_port,
             context_size: None,
             gpu_layers: None,
+            jinja: false,
+            reasoning_format: None,
+            inference_config: None,
             extra_args: Vec::new(),
         }
     }
@@ -72,6 +84,27 @@ impl ServerConfig {
     #[must_use]
     pub const fn with_gpu_layers(mut self, layers: i32) -> Self {
         self.gpu_layers = Some(layers);
+        self
+    }
+
+    /// Enable Jinja templating.
+    #[must_use]
+    pub const fn with_jinja(mut self) -> Self {
+        self.jinja = true;
+        self
+    }
+
+    /// Set the reasoning format (e.g., `"deepseek"`, `"none"`).
+    #[must_use]
+    pub fn with_reasoning_format(mut self, format: String) -> Self {
+        self.reasoning_format = Some(format);
+        self
+    }
+
+    /// Set inference sampling parameters.
+    #[must_use]
+    pub const fn with_inference_config(mut self, config: InferenceConfig) -> Self {
+        self.inference_config = Some(config);
         self
     }
 

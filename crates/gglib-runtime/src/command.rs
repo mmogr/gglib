@@ -126,6 +126,23 @@ pub fn build_and_spawn(
         cmd.arg("-ngl").arg(layers.to_string());
     }
 
+    // Add jinja if enabled
+    if config.jinja {
+        cmd.arg("--jinja");
+    }
+
+    // Add reasoning format if specified
+    if let Some(ref format) = config.reasoning_format {
+        cmd.arg("--reasoning-format").arg(format);
+    }
+
+    // Add inference parameters if specified
+    if let Some(ref inference) = config.inference_config {
+        for arg in inference.to_cli_args() {
+            cmd.arg(arg);
+        }
+    }
+
     // Add extra arguments
     for arg in &config.extra_args {
         cmd.arg(arg);
@@ -235,6 +252,9 @@ mod tests {
             port: Some(8080),
             context_size: None,
             gpu_layers: None,
+            jinja: false,
+            reasoning_format: None,
+            inference_config: None,
             extra_args: vec![],
         };
 

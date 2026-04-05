@@ -6,11 +6,10 @@
  * @module messages
  */
 
-export { wrapThink, isWrappedThink } from './wrapThink';
-export { coalesceAdjacentReasoning, type Chunk } from './coalesceReasoning';
 export { threadMessageToTranscriptMarkdown } from './threadMessageToTranscriptMarkdown';
 export {
   extractNonTextContentParts,
+  extractReasoningText,
   hasNonTextContent,
   reconstructContent,
   type SerializableContentPart,

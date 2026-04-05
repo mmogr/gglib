@@ -73,6 +73,8 @@ export type GglibMessageCustom = {
   isVoice?: boolean;
   /** Set once the final iteration is complete; triggers persisted transcript regeneration. */
   timingFinalized?: boolean;
+  /** Thinking duration in seconds (restored from metadata on load). */
+  thinkingDurationSeconds?: number | null;
 };
 
 /**

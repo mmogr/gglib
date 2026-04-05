@@ -5,11 +5,17 @@
 //! - [`config`]   — resolves LLM port + MCP tools, composes an [`gglib_core::ports::AgentLoopPort`]
 //! - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output
 //! - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input
+//! - [`tool_format`] — tool-result summary formatters
+//! - [`markdown`] — Markdown normalisation + termimad rendering
+//! - [`thinking_dispatch`] — `RenderContext`, thinking-event dispatch, spinner coordination
 
 pub mod config;
+mod markdown;
 pub mod persistence;
 pub mod renderer;
 pub mod repl;
+mod thinking_dispatch;
+mod tool_format;
 
 use anyhow::Result;
 

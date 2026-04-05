@@ -6,6 +6,7 @@ use anyhow::Result;
 use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
+use crate::presentation::style;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 use gglib_runtime::llama::{
     LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size, resolve_llama_server,
@@ -47,8 +48,9 @@ pub async fn execute(
         .ok_or_else(|| anyhow::anyhow!("Model with ID {} not found", id))?;
 
     // Log model info
-    println!("Using model: {} (ID: {})", model.name, model.id);
-    println!("File: {}", model.file_path.display());
+    style::print_info_banner("Info", "\u{2139}\u{fe0f}");
+    eprintln!("  Using model: {} (ID: {})", model.name, model.id);
+    eprintln!("  File: {}", model.file_path.display());
 
     // Handle context size
     let context_resolution = resolve_context_size(context.ctx_size, model.context_length)?;
@@ -62,10 +64,11 @@ pub async fn execute(
 
     // Handle Jinja flag
     if jinja_flag {
-        println!("Jinja templates: enabled");
+        eprintln!("  Jinja templates: enabled");
     }
 
-    println!("Server will be available on http://localhost:{}", port);
+    eprintln!("  Server will be available on http://localhost:{}", port);
+    style::print_banner_close();
 
     // Build llama-server command
     let mut builder = LlamaCommandBuilder::new(&llama_path, &model.file_path)
@@ -86,13 +89,13 @@ pub async fn execute(
         .stderr(Stdio::inherit());
 
     log_command_execution(&cmd);
-    println!("Starting server... (Press Ctrl+C to stop)");
+    eprintln!("  Starting server... (Press Ctrl+C to stop)");
 
     // Execute llama-server
     let status = cmd.status()?;
 
     if status.success() {
-        println!("llama-server exited successfully");
+        eprintln!("  llama-server exited successfully");
         Ok(())
     } else {
         Err(anyhow::anyhow!(
