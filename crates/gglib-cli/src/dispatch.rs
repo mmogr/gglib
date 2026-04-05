@@ -60,6 +60,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             tool_timeout_ms,
             max_parallel,
             model,
+            continue_id,
         } => {
             let args = handlers::inference::chat::ChatArgs {
                 identifier,
@@ -74,6 +75,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 max_parallel,
                 verbose, // global flag forwarded here
                 model,
+                continue_id,
             };
             handlers::inference::chat::execute(ctx, args).await?;
         }

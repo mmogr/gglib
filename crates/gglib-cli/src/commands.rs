@@ -99,6 +99,9 @@ pub enum Commands {
         /// Model name forwarded to llama-server (uses server default when omitted)
         #[arg(long)]
         model: Option<String>,
+        /// Resume a previous conversation by ID (use `gglib history` to find IDs)
+        #[arg(long = "continue", alias = "c")]
+        continue_id: Option<i64>,
     },
 
     /// Ask a question with optional context from stdin or file

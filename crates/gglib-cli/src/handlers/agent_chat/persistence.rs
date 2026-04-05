@@ -42,6 +42,21 @@ impl<'a> Conversation<'a> {
         })
     }
 
+    /// Resume an existing conversation for continued persistence.
+    ///
+    /// Loads the existing message count so [`save_new`] only persists the delta.
+    pub async fn resume(
+        service: &'a ChatHistoryService,
+        id: i64,
+        existing_message_count: usize,
+    ) -> Conversation<'a> {
+        Conversation {
+            service,
+            id,
+            saved: existing_message_count,
+        }
+    }
+
     /// Persist any messages added since the last call.
     ///
     /// Errors are logged as warnings and swallowed — persistence must never
