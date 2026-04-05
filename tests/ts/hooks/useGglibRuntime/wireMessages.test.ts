@@ -124,6 +124,15 @@ describe('convertToWireMessages — assistant text', () => {
     ]);
     expect(wire[0]).toMatchObject({ role: 'assistant', content: 'Part A Part B' });
   });
+
+  it('preserves plain string content (DB-loaded messages)', () => {
+    // DB-loaded messages may arrive with content as a plain string instead
+    // of an array of parts.  convertToWireMessages must not lose the text.
+    const wire = convertToWireMessages([assistantMsg('Hello from DB')]);
+    expect(wire).toEqual<AgentWireMessage[]>([
+      { role: 'assistant', content: 'Hello from DB' },
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------
