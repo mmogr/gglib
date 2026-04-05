@@ -28,12 +28,18 @@ impl SqliteChatHistoryRepository {
 #[async_trait]
 impl ChatHistoryRepository for SqliteChatHistoryRepository {
     async fn create_conversation(&self, conv: NewConversation) -> Result<i64, ChatHistoryError> {
+        let settings_str = conv
+            .settings
+            .as_ref()
+            .and_then(|s| serde_json::to_string(s).ok());
+
         let result = sqlx::query(
-            "INSERT INTO chat_conversations (title, model_id, system_prompt) VALUES (?, ?, ?)",
+            "INSERT INTO chat_conversations (title, model_id, system_prompt, settings) VALUES (?, ?, ?, ?)",
         )
         .bind(&conv.title)
         .bind(conv.model_id)
         .bind(conv.system_prompt)
+        .bind(&settings_str)
         .execute(&self.pool)
         .await
         .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
@@ -43,7 +49,7 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
 
     async fn list_conversations(&self) -> Result<Vec<Conversation>, ChatHistoryError> {
         let rows = sqlx::query(
-            "SELECT id, title, model_id, system_prompt, created_at, updated_at 
+            "SELECT id, title, model_id, system_prompt, settings, created_at, updated_at 
              FROM chat_conversations 
              ORDER BY updated_at DESC",
         )
@@ -53,13 +59,18 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
 
         let conversations = rows
             .iter()
-            .map(|row| Conversation {
-                id: row.get("id"),
-                title: row.get("title"),
-                model_id: row.get("model_id"),
-                system_prompt: row.get("system_prompt"),
-                created_at: row.get("created_at"),
-                updated_at: row.get("updated_at"),
+            .map(|row| {
+                let settings_str: Option<String> = row.get("settings");
+                let settings = settings_str.and_then(|s| serde_json::from_str(&s).ok());
+                Conversation {
+                    id: row.get("id"),
+                    title: row.get("title"),
+                    model_id: row.get("model_id"),
+                    system_prompt: row.get("system_prompt"),
+                    settings,
+                    created_at: row.get("created_at"),
+                    updated_at: row.get("updated_at"),
+                }
             })
             .collect();
 
@@ -68,7 +79,7 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
 
     async fn get_conversation(&self, id: i64) -> Result<Option<Conversation>, ChatHistoryError> {
         let row = sqlx::query(
-            "SELECT id, title, model_id, system_prompt, created_at, updated_at 
+            "SELECT id, title, model_id, system_prompt, settings, created_at, updated_at 
              FROM chat_conversations 
              WHERE id = ?",
         )
@@ -77,13 +88,18 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         .await
         .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
 
-        Ok(row.map(|r| Conversation {
-            id: r.get("id"),
-            title: r.get("title"),
-            model_id: r.get("model_id"),
-            system_prompt: r.get("system_prompt"),
-            created_at: r.get("created_at"),
-            updated_at: r.get("updated_at"),
+        Ok(row.map(|r| {
+            let settings_str: Option<String> = r.get("settings");
+            let settings = settings_str.and_then(|s| serde_json::from_str(&s).ok());
+            Conversation {
+                id: r.get("id"),
+                title: r.get("title"),
+                model_id: r.get("model_id"),
+                system_prompt: r.get("system_prompt"),
+                settings,
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
+            }
         }))
     }
 
@@ -92,11 +108,11 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         id: i64,
         update: ConversationUpdate,
     ) -> Result<(), ChatHistoryError> {
-        if update.title.is_none() && update.system_prompt.is_none() {
+        if update.title.is_none() && update.system_prompt.is_none() && update.settings.is_none() {
             return Ok(());
         }
 
-        let row = sqlx::query("SELECT title, system_prompt FROM chat_conversations WHERE id = ?")
+        let row = sqlx::query("SELECT title, system_prompt, settings FROM chat_conversations WHERE id = ?")
             .bind(id)
             .fetch_optional(&self.pool)
             .await
@@ -105,15 +121,22 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
 
         let current_title: String = row.get("title");
         let current_prompt: Option<String> = row.get("system_prompt");
+        let current_settings: Option<String> = row.get("settings");
 
         let next_title = update.title.unwrap_or(current_title);
         let next_prompt = update.system_prompt.unwrap_or(current_prompt);
+        let next_settings = match update.settings {
+            Some(Some(s)) => serde_json::to_string(&s).ok(),
+            Some(None) => None,
+            None => current_settings,
+        };
 
         sqlx::query(
-            "UPDATE chat_conversations SET title = ?, system_prompt = ?, updated_at = datetime('now') WHERE id = ?",
+            "UPDATE chat_conversations SET title = ?, system_prompt = ?, settings = ?, updated_at = datetime('now') WHERE id = ?",
         )
         .bind(next_title)
         .bind(next_prompt)
+        .bind(next_settings)
         .bind(id)
         .execute(&self.pool)
         .await

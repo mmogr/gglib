@@ -35,8 +35,17 @@ impl ChatHistoryService {
                 title,
                 model_id,
                 system_prompt,
+                settings: None,
             })
             .await
+    }
+
+    /// Create a new conversation with session settings for resume.
+    pub async fn create_conversation_with_settings(
+        &self,
+        conv: NewConversation,
+    ) -> Result<i64, ChatHistoryError> {
+        self.repo.create_conversation(conv).await
     }
 
     /// List all conversations, ordered by most recently updated.
@@ -65,6 +74,7 @@ impl ChatHistoryService {
                 ConversationUpdate {
                     title: new_title,
                     system_prompt,
+                    settings: None,
                 },
             )
             .await

@@ -21,6 +21,7 @@ async fn test_create_and_list_conversation() {
             title: "Test Chat".to_string(),
             model_id: None,
             system_prompt: Some("You are a helpful assistant.".to_string()),
+            settings: None,
         })
         .await
         .expect("Failed to create conversation");
@@ -61,6 +62,7 @@ async fn test_save_and_list_messages() {
             title: "Message Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .expect("Failed to create conversation");
@@ -126,6 +128,7 @@ async fn test_update_conversation() {
             title: "Original Title".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .expect("Failed to create conversation");
@@ -136,6 +139,7 @@ async fn test_update_conversation() {
         gglib_core::domain::chat::ConversationUpdate {
             title: Some("Updated Title".to_string()),
             system_prompt: None,
+            settings: None,
         },
     )
     .await
@@ -165,6 +169,7 @@ async fn test_delete_conversation_cascades() {
             title: "To Delete".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .expect("Failed to create conversation");
