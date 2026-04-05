@@ -439,6 +439,9 @@ pub struct McpToolInfo {
     pub name: String,
     pub description: Option<String>,
     pub input_schema: Option<serde_json::Value>,
+    /// Human-readable display title from MCP `annotations.title`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// Request to call an MCP tool.
