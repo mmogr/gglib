@@ -18,7 +18,7 @@ use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use crate::bootstrap::CliContext;
 use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
 use crate::handlers::agent_chat::persistence::Conversation;
-use crate::handlers::agent_chat::renderer::drain_event_stream;
+use crate::handlers::agent_chat::drain::drain_event_stream;
 use crate::handlers::agent_chat::repl::run_repl_with_history;
 use crate::shared_args::SamplingArgs;
 

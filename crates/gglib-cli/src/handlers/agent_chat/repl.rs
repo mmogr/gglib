@@ -40,7 +40,7 @@ use gglib_core::ports::AgentLoopPort;
 use crate::handlers::inference::chat::ChatArgs;
 
 use super::persistence::Conversation;
-use super::renderer::drain_event_stream;
+use super::drain::drain_event_stream;
 
 // =============================================================================
 // Help text
