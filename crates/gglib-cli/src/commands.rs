@@ -66,7 +66,8 @@ pub enum Commands {
     /// Chat with a model interactively
     #[command(display_order = 11)]
     Chat {
-        /// Name or ID of the model to chat with
+        /// Name or ID of the model to chat with (optional when resuming with --continue)
+        #[arg(default_value = "")]
         identifier: String,
         #[command(flatten)]
         context: ContextArgs,
