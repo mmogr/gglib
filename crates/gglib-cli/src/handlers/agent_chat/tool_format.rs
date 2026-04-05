@@ -13,13 +13,14 @@ use crate::presentation::tables::truncate_string;
 /// falls back to the standard 80-char preview.
 pub(super) fn format_tool_result(tool_name: &str, result: &ToolResult) -> String {
     if !result.success {
-        return truncate_string(&result.content, 80);
+        return truncate_string(&result.content, 120);
     }
 
     match tool_name {
         "builtin:read_file" => format_read_file(&result.content),
         "builtin:list_directory" => format_list_directory(&result.content),
         "builtin:grep_search" => format_grep_search(&result.content),
+        "builtin:get_current_time" => format_get_current_time(&result.content),
         _ => truncate_string(&result.content, 80),
     }
 }
@@ -68,4 +69,23 @@ fn format_grep_search(content: &str) -> String {
     } else {
         format!("{match_count} matches  {preview}")
     }
+}
+
+/// `get_current_time` → extract the readable time value from result JSON.
+fn format_get_current_time(content: &str) -> String {
+    // The tool returns JSON like {"timezone":"UTC","datetime":"2025-01-15T10:30:00Z","unix_timestamp":...}
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
+        if let Some(dt) = v.get("datetime").and_then(|d| d.as_str()) {
+            let tz = v
+                .get("timezone")
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+            if tz.is_empty() {
+                return dt.to_string();
+            }
+            return format!("{dt} ({tz})");
+        }
+    }
+    // Fallback: content is already human-readable or unexpected format.
+    truncate_string(content, 80)
 }

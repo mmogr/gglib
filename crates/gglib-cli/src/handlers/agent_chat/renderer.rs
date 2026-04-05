@@ -29,6 +29,8 @@ use std::io::{self, Write as _};
 
 use gglib_core::domain::agent::AgentEvent;
 
+use crate::presentation::style::{BOLD, DANGER, DIM, RESET, SUCCESS};
+
 use super::tool_format::format_tool_result;
 
 // =============================================================================
@@ -72,8 +74,12 @@ pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_del
         } => {
             if !quiet {
                 match args_summary {
-                    Some(summary) => eprintln!("\n  ⚙   {display_name}  {summary} …"),
-                    None => eprintln!("\n  ⚙   {display_name} …"),
+                    Some(summary) => eprintln!(
+                        "\n  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET}  {DIM}{summary}{RESET} …"
+                    ),
+                    None => eprintln!(
+                        "\n  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET} …"
+                    ),
                 }
             }
         }
@@ -86,9 +92,15 @@ pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_del
             ..
         } => {
             if !quiet {
-                let icon = if result.success { "✓" } else { "✗" };
+                let (icon, icon_color) = if result.success {
+                    ("✓", SUCCESS)
+                } else {
+                    ("✗", DANGER)
+                };
                 let summary = format_tool_result(tool_name, result);
-                eprintln!("  {icon}  {duration_display}  {display_name}  {summary}");
+                eprintln!(
+                    "  {icon_color}{icon}{RESET}  {BOLD}{display_name}{RESET}  {DIM}{duration_display}{RESET}  {summary}"
+                );
             }
         }
 
