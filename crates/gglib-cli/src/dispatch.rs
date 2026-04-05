@@ -36,9 +36,6 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         }
 
         // ── Inference (top-level for ergonomic access) ──────────────────────
-        Commands::History { limit } => {
-            handlers::history::execute(ctx, limit).await?;
-        }
         Commands::Serve {
             id,
             context,
@@ -61,23 +58,33 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             max_parallel,
             model,
             continue_id,
+            command,
         } => {
-            let args = handlers::inference::chat::ChatArgs {
-                identifier,
-                context,
-                system_prompt,
-                sampling,
-                no_tools,
-                port,
-                max_iterations,
-                tools,
-                tool_timeout_ms,
-                max_parallel,
-                verbose, // global flag forwarded here
-                model,
-                continue_id,
-            };
-            handlers::inference::chat::execute(ctx, args).await?;
+            // Subcommand takes priority (e.g. `gglib chat history`)
+            if let Some(sub) = command {
+                match sub {
+                    crate::commands::ChatCommand::History { limit } => {
+                        handlers::history::execute(ctx, limit).await?;
+                    }
+                }
+            } else {
+                let args = handlers::inference::chat::ChatArgs {
+                    identifier,
+                    context,
+                    system_prompt,
+                    sampling,
+                    no_tools,
+                    port,
+                    max_iterations,
+                    tools,
+                    tool_timeout_ms,
+                    max_parallel,
+                    verbose, // global flag forwarded here
+                    model,
+                    continue_id,
+                };
+                handlers::inference::chat::execute(ctx, args).await?;
+            }
         }
         Commands::Question {
             question,

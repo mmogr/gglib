@@ -112,7 +112,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `chat <id> --continue <N>` | Resume a previous conversation by ID |
 | `question <text>` | Ask a question (with optional piped context) |
 | `question --agent <text>` | Agentic question with filesystem tools |
-| `history` | List past conversations with message counts |
+| `chat history` | List past conversations with message counts |
 | `proxy` | Start the OpenAI-compatible proxy |
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |

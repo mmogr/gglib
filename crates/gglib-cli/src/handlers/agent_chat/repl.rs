@@ -129,7 +129,7 @@ pub async fn run_repl_with_history(
     println!("Agentic chat ready. Type /help for help, /quit to exit.");
     if let Some(ref conv) = persistence {
         println!(
-            "{}Session #{} — resume later with: gglib chat <model> --continue {}{}",
+            "{}Session #{} — resume later with: gglib chat --continue {}{}",
             crate::presentation::style::DIM,
             conv.id,
             conv.id,
@@ -194,7 +194,7 @@ pub async fn run_repl_with_history(
 
     if let Some(ref conv) = persistence {
         println!(
-            "{}Session #{} saved. Resume with: gglib chat <model> --continue {}{}",
+            "{}Session #{} saved. Resume with: gglib chat --continue {}{}",
             crate::presentation::style::DIM,
             conv.id,
             conv.id,
