@@ -7,7 +7,7 @@ use anyhow::Result;
 use chrono::Local;
 
 use gglib_core::domain::agent::AgentMessage;
-use gglib_core::domain::chat::{MessageRole, NewMessage};
+use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use gglib_core::services::ChatHistoryService;
 
 /// Tracks a persisted conversation and the number of messages already saved,
@@ -23,10 +23,17 @@ impl<'a> Conversation<'a> {
     pub async fn create(
         service: &'a ChatHistoryService,
         system_prompt: Option<String>,
+        model_id: Option<i64>,
+        settings: Option<ConversationSettings>,
     ) -> Result<Conversation<'a>> {
         let title = format!("Agent session {}", Local::now().format("%Y-%m-%d %H:%M"));
         let id = service
-            .create_conversation(title, None, system_prompt)
+            .create_conversation_with_settings(NewConversation {
+                title,
+                model_id,
+                system_prompt,
+                settings,
+            })
             .await?;
         Ok(Conversation {
             service,

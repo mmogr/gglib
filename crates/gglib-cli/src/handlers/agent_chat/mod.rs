@@ -23,6 +23,7 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
+use crate::shared_args::ConversationSettingsBuilder;
 
 use self::persistence::Conversation;
 
@@ -38,15 +39,28 @@ pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     };
     let (agent, maybe_handle) = config::compose(ctx, &args.into(), None, sampling).await?;
 
+    // Build ConversationSettings from CLI args for resume support.
+    let settings = ConversationSettingsBuilder::new(&args.sampling, &args.context)
+        .model_name(&args.identifier)
+        .tools(args.tools.clone(), args.no_tools)
+        .agent_params(args.max_iterations, args.tool_timeout_ms, args.max_parallel)
+        .build();
+
     // Create a conversation for persistence (best-effort).
-    let persistence =
-        match Conversation::create(ctx.app.chat_history(), args.system_prompt.clone()).await {
-            Ok(conv) => Some(conv),
-            Err(e) => {
-                tracing::warn!("failed to create agent conversation: {e}");
-                None
-            }
-        };
+    let persistence = match Conversation::create(
+        ctx.app.chat_history(),
+        args.system_prompt.clone(),
+        None,
+        Some(settings),
+    )
+    .await
+    {
+        Ok(conv) => Some(conv),
+        Err(e) => {
+            tracing::warn!("failed to create agent conversation: {e}");
+            None
+        }
+    };
 
     let result = repl::run_repl(agent, args, persistence).await;
 

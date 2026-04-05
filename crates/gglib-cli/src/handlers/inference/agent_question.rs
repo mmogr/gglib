@@ -144,7 +144,22 @@ pub async fn execute(
     let mut persistence = None;
     if completed && let Some(ref history) = history {
         let system_prompt = format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display());
-        match Conversation::create(ctx.app.chat_history(), Some(system_prompt)).await {
+        let settings = crate::shared_args::ConversationSettingsBuilder::new(
+            &SamplingArgs::default(),
+            &crate::shared_args::ContextArgs::default(),
+        )
+        .model_name(params.model_identifier.clone())
+        .tools(tools.clone(), false)
+        .agent_params(max_iterations, tool_timeout_ms, max_parallel)
+        .build();
+        match Conversation::create(
+            ctx.app.chat_history(),
+            Some(system_prompt),
+            None,
+            Some(settings),
+        )
+        .await
+        {
             Ok(mut conv) => {
                 conv.save_new(history).await;
                 persistence = Some(conv);
