@@ -26,7 +26,10 @@ pub fn format_duration_human(ms: u64) -> String {
     if ms < 1_000 {
         format!("{ms}ms")
     } else if ms < 60_000 {
-        format!("{:.1}s", ms as f64 / 1_000.0)
+#[allow(clippy::cast_precision_loss)] // ms values are ≤60k here; no precision issue
+        {
+            format!("{:.1}s", ms as f64 / 1_000.0)
+        }
     } else {
         let mins = ms / 60_000;
         let secs = (ms % 60_000) / 1_000;

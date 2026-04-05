@@ -3,7 +3,7 @@
 //! These pure functions convert raw tool names and arguments into
 //! human-readable display strings.  The agentic loop populates
 //! [`AgentEvent`] payloads with pre-formatted fields computed here,
-//! so CLI, WebUI (Axum SSE), and GUI (Tauri) all render identical labels
+//! so CLI, `WebUI` (Axum SSE), and GUI (Tauri) all render identical labels
 //! without duplicating formatting logic.
 //!
 //! [`AgentEvent`]: super::events::AgentEvent
@@ -22,10 +22,7 @@
 /// assert_eq!(strip_tool_prefix("plain_name"), "plain_name");
 /// ```
 pub fn strip_tool_prefix(name: &str) -> &str {
-    match name.find(':') {
-        Some(pos) => &name[pos + 1..],
-        None => name,
-    }
+    name.find(':').map_or(name, |pos| &name[pos + 1..])
 }
 
 /// Convert a raw tool name into a human-readable "Title Case" label.
@@ -100,7 +97,7 @@ pub fn format_tool_args_summary(bare_name: &str, arguments: &serde_json::Value) 
         "get_current_time" => obj
             .get("timezone")
             .and_then(|v| v.as_str())
-            .map(|tz| tz.to_string()),
+            .map(std::string::ToString::to_string),
 
         // Generic fallback: show the first string-valued argument.
         _ => obj
@@ -117,13 +114,10 @@ pub fn format_tool_args_summary(bare_name: &str, arguments: &serde_json::Value) 
 /// Title-case a single word (first char uppercase, rest lowercase).
 fn title_case_word(word: &str) -> String {
     let mut chars = word.chars();
-    match chars.next() {
-        Some(c) => {
-            let upper: String = c.to_uppercase().collect();
-            upper + &chars.as_str().to_owned()
-        }
-        None => String::new(),
-    }
+    chars.next().map_or_else(String::new, |c| {
+        let upper: String = c.to_uppercase().collect();
+        upper + chars.as_str()
+    })
 }
 
 /// Truncate a string to `max_len` characters, appending `…` if truncated.
