@@ -10,6 +10,26 @@ import type { ConversationId, MessageId, ModelId } from './ids';
 // ============================================================================
 
 /**
+ * Persisted session parameters for a conversation.
+ * Mirrors the Rust `ConversationSettings` domain type.
+ */
+export interface ConversationSettings {
+  model_name?: string | null;
+  temperature?: number | null;
+  top_p?: number | null;
+  top_k?: number | null;
+  max_tokens?: number | null;
+  repeat_penalty?: number | null;
+  ctx_size?: number | null;
+  mlock?: boolean | null;
+  tools?: string[] | null;
+  tool_timeout_ms?: number | null;
+  max_parallel?: number | null;
+  max_iterations?: number | null;
+  no_tools?: boolean | null;
+}
+
+/**
  * Summary of a conversation for listing.
  */
 export interface ConversationSummary {
@@ -17,6 +37,7 @@ export interface ConversationSummary {
   title: string;
   model_id: ModelId | null;
   system_prompt: string | null;
+  settings: ConversationSettings | null;
   created_at: string;
   updated_at: string;
 }
