@@ -77,9 +77,7 @@ pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_del
                     Some(summary) => eprintln!(
                         "\n  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET}  {DIM}{summary}{RESET} …"
                     ),
-                    None => eprintln!(
-                        "\n  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET} …"
-                    ),
+                    None => eprintln!("\n  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET} …"),
                 }
             }
         }

@@ -73,10 +73,7 @@ pub fn format_tool_display_name(raw: &str) -> String {
 ///     Some("\"TODO\" in /src".to_string()),
 /// );
 /// ```
-pub fn format_tool_args_summary(
-    bare_name: &str,
-    arguments: &serde_json::Value,
-) -> Option<String> {
+pub fn format_tool_args_summary(bare_name: &str, arguments: &serde_json::Value) -> Option<String> {
     let obj = arguments.as_object()?;
 
     match bare_name {
@@ -92,11 +89,12 @@ pub fn format_tool_args_summary(
 
         "grep_search" => {
             let pattern = obj.get("pattern").and_then(|v| v.as_str())?;
-            let path = obj
-                .get("path")
-                .and_then(|v| v.as_str())
-                .unwrap_or(".");
-            Some(format!("\"{}\" in {}", truncate(pattern, 30), truncate(path, 30)))
+            let path = obj.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+            Some(format!(
+                "\"{}\" in {}",
+                truncate(pattern, 30),
+                truncate(path, 30)
+            ))
         }
 
         "get_current_time" => obj

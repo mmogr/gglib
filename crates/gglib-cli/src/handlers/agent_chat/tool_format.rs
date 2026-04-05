@@ -76,10 +76,7 @@ fn format_get_current_time(content: &str) -> String {
     // The tool returns JSON like {"timezone":"UTC","datetime":"2025-01-15T10:30:00Z","unix_timestamp":...}
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
         if let Some(dt) = v.get("datetime").and_then(|d| d.as_str()) {
-            let tz = v
-                .get("timezone")
-                .and_then(|t| t.as_str())
-                .unwrap_or("");
+            let tz = v.get("timezone").and_then(|t| t.as_str()).unwrap_or("");
             if tz.is_empty() {
                 return dt.to_string();
             }
