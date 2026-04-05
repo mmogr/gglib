@@ -28,7 +28,7 @@ use gglib_core::domain::agent::tool_display::{
 };
 use gglib_core::format_duration_human;
 use gglib_core::ports::ToolExecutorPort;
-use gglib_core::{AgentConfig, AgentEvent, ToolCall, ToolResult};
+use gglib_core::{AgentConfig, AgentEvent, ToolCall, ToolDefinition, ToolResult};
 use tokio::sync::{Semaphore, mpsc};
 use tokio::task::JoinSet;
 use tracing::warn;
@@ -52,6 +52,7 @@ async fn execute_single_tool(
     sem: Arc<Semaphore>,
     tx: mpsc::Sender<AgentEvent>,
     timeout_ms: u64,
+    title: Option<String>,
 ) -> ToolResult {
     // Shared failure constructor — avoids repeating the struct literal with the
     // same `tool_call_id` and `success: false` across every error branch.
@@ -81,7 +82,7 @@ async fn execute_single_tool(
     // Notify that execution is starting (after permit acquired —
     // we only claim "started" once we have a slot, not when queued).
     let bare_name = strip_tool_prefix(&tc.name);
-    let display_name = format_tool_display_name(bare_name);
+    let display_name = title.unwrap_or_else(|| format_tool_display_name(bare_name));
     let args_summary = format_tool_args_summary(bare_name, &tc.arguments);
 
     let _ = tx
@@ -134,6 +135,7 @@ pub async fn execute_tools_parallel(
     executor: &Arc<dyn ToolExecutorPort>,
     config: &AgentConfig,
     tx: &mpsc::Sender<AgentEvent>,
+    tools: &[ToolDefinition],
 ) -> Vec<ToolResult> {
     let semaphore = Arc::new(Semaphore::new(config.max_parallel_tools));
     let timeout_ms = config.tool_timeout_ms;
@@ -149,8 +151,12 @@ pub async fn execute_tools_parallel(
         let permit = Arc::clone(&semaphore);
         let executor = Arc::clone(executor);
         let tx = tx.clone();
+        let title = tools
+            .iter()
+            .find(|d| d.name == tc.name)
+            .and_then(|d| d.title.clone());
         set.spawn(async move {
-            let result = execute_single_tool(tc, executor, permit, tx, timeout_ms).await;
+            let result = execute_single_tool(tc, executor, permit, tx, timeout_ms, title).await;
             (i, result)
         });
     }

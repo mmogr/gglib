@@ -199,9 +199,11 @@ impl AgentLoop {
         config: &AgentConfig,
         iteration: usize,
         tx: &mpsc::Sender<AgentEvent>,
+        tools: &[ToolDefinition],
     ) {
         let results =
-            execute_tools_parallel(&response.tool_calls, &self.tool_executor, config, tx).await;
+            execute_tools_parallel(&response.tool_calls, &self.tool_executor, config, tx, tools)
+                .await;
 
         let tool_call_count = results.len();
         let tool_failures = results.iter().filter(|r| !r.success).count();
@@ -300,7 +302,7 @@ impl AgentLoopPort for AgentLoop {
                     .await;
             }
 
-            self.execute_tool_iteration(&mut messages, response, &config, iteration, &tx)
+            self.execute_tool_iteration(&mut messages, response, &config, iteration, &tx, &tools)
                 .await;
         }
 
