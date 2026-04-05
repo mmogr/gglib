@@ -82,6 +82,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
                     name: format!("{server_id}:{}", t.name),
                     description: t.description,
                     input_schema: t.input_schema,
+                    title: t.title,
                 })
             })
             .collect()

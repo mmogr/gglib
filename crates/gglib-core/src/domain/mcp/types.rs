@@ -341,6 +341,10 @@ pub struct McpTool {
     /// JSON Schema for input parameters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<serde_json::Value>,
+
+    /// Human-readable display title from MCP `annotations.title` (spec 2025-03-26).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 impl McpTool {
@@ -350,6 +354,7 @@ impl McpTool {
             name: name.into(),
             description: None,
             input_schema: None,
+            title: None,
         }
     }
 

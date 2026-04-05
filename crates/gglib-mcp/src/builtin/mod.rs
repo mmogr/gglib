@@ -179,6 +179,7 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
                 name: format!("{BUILTIN_PREFIX}{}", t.name),
                 description: t.description,
                 input_schema: t.input_schema,
+                title: None,
             })
             .collect()
     }

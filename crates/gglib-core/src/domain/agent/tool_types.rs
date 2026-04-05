@@ -28,6 +28,13 @@ pub struct ToolDefinition {
     /// JSON Schema object describing the tool's input parameters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<serde_json::Value>,
+
+    /// Human-readable display title from MCP `annotations.title`.
+    ///
+    /// When present, surfaces prefer this over the heuristic
+    /// `format_tool_display_name()`.  Not serialized to the LLM.
+    #[serde(skip)]
+    pub title: Option<String>,
 }
 
 impl ToolDefinition {
@@ -38,6 +45,7 @@ impl ToolDefinition {
             name: name.into(),
             description: None,
             input_schema: None,
+            title: None,
         }
     }
 
