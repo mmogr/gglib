@@ -37,6 +37,14 @@ pub enum Commands {
         command: McpCommand,
     },
 
+    /// List past conversations (use `--continue <ID>` with chat to resume)
+    #[command(display_order = 4)]
+    History {
+        /// Maximum number of conversations to show
+        #[arg(short = 'n', long, default_value = "20")]
+        limit: usize,
+    },
+
     // ── Inference ────────────────────────────────────────────────────────
     /// Serve a GGUF model with llama-server
     #[command(display_order = 10)]

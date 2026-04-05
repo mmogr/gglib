@@ -36,6 +36,9 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         }
 
         // ── Inference (top-level for ergonomic access) ──────────────────────
+        Commands::History { limit } => {
+            handlers::history::execute(ctx, limit).await?;
+        }
         Commands::Serve {
             id,
             context,
