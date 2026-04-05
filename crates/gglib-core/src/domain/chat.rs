@@ -8,6 +8,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::agent::messages::AgentMessage;
+use super::agent::messages::AssistantContent;
+use super::agent::tool_types::ToolCall;
+
 /// A chat conversation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Conversation {
@@ -33,6 +37,55 @@ pub struct Message {
     /// Optional JSON metadata for deep research state, tool usage, etc.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+}
+
+impl Message {
+    /// Convert a persisted message back into an [`AgentMessage`] for resume.
+    ///
+    /// Tool call metadata is faithfully restored from the JSON `"tool_calls"` key
+    /// (assistant messages) or `"tool_call_id"` key (tool messages).
+    #[must_use]
+    pub fn to_agent_message(&self) -> AgentMessage {
+        match self.role {
+            MessageRole::System => AgentMessage::System {
+                content: self.content.clone(),
+            },
+            MessageRole::User => AgentMessage::User {
+                content: self.content.clone(),
+            },
+            MessageRole::Assistant => {
+                let tool_calls: Vec<ToolCall> = self
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| m.get("tool_calls"))
+                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    .unwrap_or_default();
+                AgentMessage::Assistant {
+                    content: AssistantContent {
+                        text: if self.content.is_empty() {
+                            None
+                        } else {
+                            Some(self.content.clone())
+                        },
+                        tool_calls,
+                    },
+                }
+            }
+            MessageRole::Tool => {
+                let tool_call_id = self
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| m.get("tool_call_id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                AgentMessage::Tool {
+                    tool_call_id,
+                    content: self.content.clone(),
+                }
+            }
+        }
+    }
 }
 
 /// The role of a message sender.
