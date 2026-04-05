@@ -19,7 +19,7 @@ pub mod repl;
 mod thinking_dispatch;
 mod tool_format;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::ConversationSettings;
