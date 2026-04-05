@@ -203,7 +203,11 @@ async fn resolve_port(
         eprintln!("  llama-server ready on port {}", handle.port);
 
         // Context size
-        print_context_line(params.ctx_size.as_deref(), context_size, model.context_length);
+        print_context_line(
+            params.ctx_size.as_deref(),
+            context_size,
+            model.context_length,
+        );
 
         // Sampling overrides
         if let Some(ref s) = banner.sampling {
