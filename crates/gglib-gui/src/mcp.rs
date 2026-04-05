@@ -30,6 +30,7 @@ impl<'a> McpOps<'a> {
             name: tool.name.clone(),
             description: tool.description.clone(),
             input_schema: tool.input_schema.clone(),
+            title: tool.title.clone(),
         }
     }
 

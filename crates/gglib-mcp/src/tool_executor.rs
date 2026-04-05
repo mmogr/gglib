@@ -82,6 +82,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
                     name: format!("{server_id}:{}", t.name),
                     description: t.description,
                     input_schema: t.input_schema,
+                    title: t.title,
                 })
             })
             .collect()
@@ -145,10 +146,10 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
 
         // ---- Convert McpToolResult → ToolResult ------------------------------
         let (content, success) = if result.success {
-            let text = result.data.as_ref().map_or_else(
-                || "null".to_owned(),
-                |v| v.as_str().map_or_else(|| v.to_string(), str::to_owned),
-            );
+            let text = result
+                .data
+                .as_ref()
+                .map_or_else(|| "null".to_owned(), extract_mcp_content_text);
             (text, true)
         } else {
             let text = result
@@ -166,11 +167,46 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/// Extract human-readable text from an MCP `content` array.
+///
+/// MCP `tools/call` responses return a `content` field that is a JSON array
+/// of items like `[{"type":"text","text":"..."}]`.  This function concatenates
+/// the `text` fields from all text-typed items, joining multiple items with
+/// `\n`.  Non-text items (e.g. images) are skipped.
+///
+/// Falls back to `v.to_string()` when `v` is neither an array nor a string.
+fn extract_mcp_content_text(v: &serde_json::Value) -> String {
+    // Fast path: already a plain string (some servers return un-wrapped text).
+    if let Some(s) = v.as_str() {
+        return s.to_owned();
+    }
+
+    // Standard MCP path: array of content items.
+    if let Some(arr) = v.as_array() {
+        let texts: Vec<&str> = arr
+            .iter()
+            .filter_map(|item| item.get("text").and_then(|t| t.as_str()))
+            .collect();
+        if !texts.is_empty() {
+            return texts.join("\n");
+        }
+        // Array with no text items — fall through to to_string().
+    }
+
+    // Safety net for unexpected shapes.
+    v.to_string()
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     #[test]
     fn qualified_name_splits_on_colon_separator() {
         // execute() uses split_once(':') to parse the qualified form
@@ -207,5 +243,49 @@ mod tests {
             name.split_once(':').is_none(),
             "unqualified name must not contain a colon — execute() will reject it"
         );
+    }
+
+    // ---- extract_mcp_content_text -------------------------------------------
+
+    #[test]
+    fn extract_single_text_item() {
+        let v = serde_json::json!([{"type": "text", "text": "hello world"}]);
+        assert_eq!(extract_mcp_content_text(&v), "hello world");
+    }
+
+    #[test]
+    fn extract_multiple_text_items() {
+        let v = serde_json::json!([
+            {"type": "text", "text": "line 1"},
+            {"type": "text", "text": "line 2"},
+        ]);
+        assert_eq!(extract_mcp_content_text(&v), "line 1\nline 2");
+    }
+
+    #[test]
+    fn extract_skips_non_text_items() {
+        let v = serde_json::json!([
+            {"type": "image", "data": "base64..."},
+            {"type": "text", "text": "caption"},
+        ]);
+        assert_eq!(extract_mcp_content_text(&v), "caption");
+    }
+
+    #[test]
+    fn extract_plain_string_value() {
+        let v = serde_json::json!("already a string");
+        assert_eq!(extract_mcp_content_text(&v), "already a string");
+    }
+
+    #[test]
+    fn extract_empty_array_falls_back() {
+        let v = serde_json::json!([]);
+        assert_eq!(extract_mcp_content_text(&v), "[]");
+    }
+
+    #[test]
+    fn extract_object_falls_back_to_json() {
+        let v = serde_json::json!({"unexpected": "shape"});
+        assert_eq!(extract_mcp_content_text(&v), r#"{"unexpected":"shape"}"#);
     }
 }

@@ -30,6 +30,7 @@ pub mod config;
 pub mod events;
 pub mod messages;
 mod messages_serde;
+pub mod tool_display;
 pub mod tool_types;
 
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.

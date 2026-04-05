@@ -142,6 +142,7 @@ describe('dispatchAgentEvent — tool_call_start', () => {
       {
         type: 'tool_call_start',
         tool_call: { id: 'tc-1', name: 'search', arguments: { q: 'test' } },
+        display_name: 'Search',
       },
       state,
       deps,
@@ -155,6 +156,7 @@ describe('dispatchAgentEvent — tool_call_start', () => {
       toolCallId: 'tc-1',
       toolName: 'search',
       args: { q: 'test' },
+      displayName: 'Search',
     });
   });
 });
@@ -179,9 +181,12 @@ describe('dispatchAgentEvent — tool_call_complete', () => {
     const done = dispatchAgentEvent(
       {
         type: 'tool_call_complete',
+        tool_name: 'search',
         result: { tool_call_id: 'tc-1', content: 'found it', success: true },
         wait_ms: 5,
         execute_duration_ms: 50,
+        display_name: 'Search',
+        duration_display: '50ms',
       },
       state,
       deps,

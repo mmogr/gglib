@@ -294,7 +294,7 @@ export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps
         return false;
       }
       if (timingTracker) timingTracker.onBoundary(state.currentId);
-      addToolCallPart(setMessages, state.currentId, event.tool_call.id, event.tool_call.name, event.tool_call.arguments);
+      addToolCallPart(setMessages, state.currentId, event.tool_call.id, event.tool_call.name, event.tool_call.arguments, event.display_name);
       appLogger.debug('hook.runtime', 'streamAgentChat: tool call started', { tool: event.tool_call.name });
       return false;
     }

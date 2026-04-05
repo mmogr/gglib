@@ -20,6 +20,8 @@ type ToolCallPart = Extract<ThreadMessage['content'][number], { type: 'tool-call
 type AugmentedToolCallPart = ToolCallPart & {
   /** Elapsed wall-clock time in milliseconds (present once the tool has settled). */
   durationMs?: number;
+  /** Pre-computed display name from the backend (e.g. "Read File"). */
+  displayName?: string;
 };
 
 interface ToolDetailsModalProps {
@@ -66,11 +68,12 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
     });
   };
 
-  const formatToolName = (name: string): string => {
-    // Resolve sanitized registry key to the original raw MCP tool name so that
-    // tools with dots, spaces, or other special characters display correctly.
-    // Falls back to the name itself for built-in tools with no mapping.
-    const raw = getToolRegistry().getOriginalName(name) ?? name;
+  const formatToolName = (call: ToolCallPart): string => {
+    // Prefer the backend-provided display name stamped on the part.
+    const augmented = call as AugmentedToolCallPart;
+    if (augmented.displayName) return augmented.displayName;
+    // Fallback: resolve via registry + local formatter.
+    const raw = getToolRegistry().getOriginalName(call.toolName) ?? call.toolName;
     return formatToolDisplayName(raw);
   };
 
@@ -123,7 +126,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                 )}>
                   <Icon icon={StatusIcon} size={16} className={StatusIcon === Loader2 ? 'animate-spin' : ''} />
                 </span>
-                <span className="font-semibold text-text">{formatToolName(call.toolName)}</span>
+                <span className="font-semibold text-text">{formatToolName(call)}</span>
                 <span className="text-[0.85rem] text-text-secondary font-mono">({call.toolName})</span>
                 {durationMs !== undefined && (
                   <span className="ml-auto text-[0.8rem] text-text-muted font-mono">

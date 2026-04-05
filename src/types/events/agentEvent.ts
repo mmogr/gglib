@@ -45,16 +45,26 @@ export interface AgentTextDeltaEvent {
 export interface AgentToolCallStartEvent {
   type: 'tool_call_start';
   tool_call: AgentToolCall;
+  /** Human-readable title-cased tool name (e.g. "Read File"). */
+  display_name: string;
+  /** Optional one-line argument summary (e.g. a file path). */
+  args_summary?: string;
 }
 
 /** A tool execution has completed (success or failure). */
 export interface AgentToolCallCompleteEvent {
   type: 'tool_call_complete';
+  /** Raw tool name including any prefix (e.g. "builtin:read_file"). */
+  tool_name: string;
   result: AgentToolResult;
   /** Time spent waiting for a concurrency slot, in milliseconds. */
   wait_ms: number;
   /** Wall-clock execution time (after acquiring the slot), in milliseconds. */
   execute_duration_ms: number;
+  /** Human-readable title-cased tool name (e.g. "Read File"). */
+  display_name: string;
+  /** Pre-formatted duration string (e.g. "125ms", "1.8s"). */
+  duration_display: string;
 }
 
 /** One full LLM → tool-execution cycle has completed. */

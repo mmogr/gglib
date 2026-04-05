@@ -205,9 +205,12 @@ describe('applyToolResult', () => {
     };
     const event: AgentToolCallCompleteEvent = {
       type: 'tool_call_complete',
+      tool_name: 'search',
       result: { tool_call_id: 'tc-1', content: 'found it', success: true },
       wait_ms: 10,
       execute_duration_ms: 50,
+      display_name: 'Search',
+      duration_display: '50ms',
     };
     const msgs = applyUpdate([initial], (set) =>
       applyToolResult(set, MSG_ID, event),
@@ -229,9 +232,12 @@ describe('applyToolResult', () => {
     };
     const event: AgentToolCallCompleteEvent = {
       type: 'tool_call_complete',
+      tool_name: 'fn',
       result: { tool_call_id: 'tc-2', content: 'timeout', success: false },
       wait_ms: 0,
       execute_duration_ms: 30000,
+      display_name: 'Fn',
+      duration_display: '30.0s',
     };
     const msgs = applyUpdate([initial], (set) =>
       applyToolResult(set, MSG_ID, event),
@@ -252,9 +258,12 @@ describe('applyToolResult', () => {
     };
     const event: AgentToolCallCompleteEvent = {
       type: 'tool_call_complete',
+      tool_name: 'fn',
       result: { tool_call_id: 'tc-B', content: 'ok', success: true },
       wait_ms: 0,
       execute_duration_ms: 5,
+      display_name: 'Fn',
+      duration_display: '5ms',
     };
     const msgs = applyUpdate([initial], (set) =>
       applyToolResult(set, MSG_ID, event),

@@ -63,7 +63,8 @@ async fn all_tools_return_results_in_order() {
     let executor: Arc<dyn ToolExecutorPort> = Arc::new(OkExecutor);
     let calls: Vec<ToolCall> = (0..3).map(|i| call(&format!("c{i}"), "t")).collect();
 
-    let results = execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx).await;
+    let results =
+        execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx, &[]).await;
 
     assert_eq!(results.len(), 3);
     for (i, r) in results.iter().enumerate() {
@@ -86,7 +87,7 @@ async fn timeout_produces_failure_result() {
     let mut config = AgentConfig::default();
     config.tool_timeout_ms = 10;
 
-    let results = execute_tools_parallel(&calls, &executor, &config, &tx).await;
+    let results = execute_tools_parallel(&calls, &executor, &config, &tx, &[]).await;
 
     assert_eq!(results.len(), 1);
     assert!(!results[0].success);
@@ -140,7 +141,7 @@ async fn concurrency_limited_by_semaphore() {
     let mut config = AgentConfig::default();
     config.max_parallel_tools = 3;
 
-    execute_tools_parallel(&calls, &tracker, &config, &tx).await;
+    execute_tools_parallel(&calls, &tracker, &config, &tx, &[]).await;
 
     let observed_peak = peak.load(Ordering::SeqCst);
     assert!(
@@ -169,7 +170,8 @@ async fn executor_error_produces_failure_result() {
     let executor: Arc<dyn ToolExecutorPort> = Arc::new(ErrorExecutor);
     let calls = vec![call("err1", "broken_tool")];
 
-    let results = execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx).await;
+    let results =
+        execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx, &[]).await;
 
     assert_eq!(results.len(), 1);
     assert!(!results[0].success, "result should indicate failure");

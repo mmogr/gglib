@@ -172,6 +172,7 @@ async fn handle_tools_list(mcp: &gglib_mcp::McpService, id: Value) -> Response {
                 name: format!("{server_name}__{}", tool.name),
                 description: tool.description,
                 input_schema: tool.input_schema,
+                title: tool.title,
             }
         })
         .collect();

@@ -181,6 +181,9 @@ pub struct McpToolSpec {
     /// JSON Schema describing the tool's input parameters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<Value>,
+    /// Human-readable display title from MCP `annotations.title`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// Result of the `tools/list` method.

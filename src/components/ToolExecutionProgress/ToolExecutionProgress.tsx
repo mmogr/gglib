@@ -33,6 +33,8 @@ type AugmentedToolCallPart = ToolCallPart & {
   durationMs?: number;
   /** True when the tool result represents an error condition. */
   isError?: boolean;
+  /** Pre-computed display name from the backend (e.g. "Read File"). */
+  displayName?: string;
 };
 
 type ToolRowState = 'running' | 'complete' | 'error';
@@ -40,6 +42,7 @@ type ToolRowState = 'running' | 'complete' | 'error';
 interface ToolRowData {
   toolCallId: string;
   toolName: string;
+  displayLabel: string;
   state: ToolRowState;
   durationMs?: number;
   /** First 80 chars of the error message, for inline display. */
@@ -76,9 +79,10 @@ function formatDuration(ms: number): string {
 function classifyPart(part: ToolCallPart): ToolRowData {
   const augmented = part as AugmentedToolCallPart;
   const durationMs = augmented.durationMs;
+  const displayLabel = augmented.displayName ?? formatToolName(part.toolName);
 
   if (!('result' in part)) {
-    return { toolCallId: part.toolCallId, toolName: part.toolName, state: 'running' };
+    return { toolCallId: part.toolCallId, toolName: part.toolName, displayLabel, state: 'running' };
   }
 
   if (augmented.isError === true) {
@@ -90,13 +94,14 @@ function classifyPart(part: ToolCallPart): ToolRowData {
     return {
       toolCallId: part.toolCallId,
       toolName: part.toolName,
+      displayLabel,
       state: 'error',
       durationMs,
       errorSummary,
     };
   }
 
-  return { toolCallId: part.toolCallId, toolName: part.toolName, state: 'complete', durationMs };
+  return { toolCallId: part.toolCallId, toolName: part.toolName, displayLabel, state: 'complete', durationMs };
 }
 
 // =============================================================================
@@ -125,7 +130,7 @@ const ToolRow: React.FC<{ row: ToolRowData }> = ({ row }) => (
       <Icon icon={XCircle} size={13} className="flex-shrink-0" />
     )}
 
-    <span className="font-medium truncate">{formatToolName(row.toolName)}</span>
+    <span className="font-medium truncate">{row.displayLabel}</span>
 
     {row.state === 'error' && row.errorSummary && (
       <span className="ml-1 text-text-muted truncate max-w-[160px]">
@@ -185,10 +190,10 @@ const ToolExecutionProgress: React.FC = () => {
 
       if (row.state === 'complete') {
         const dur = row.durationMs !== undefined ? ` in ${formatDuration(row.durationMs)}` : '';
-        out.push(`Tool ${formatToolName(row.toolName)} complete${dur}.`);
+        out.push(`Tool ${row.displayLabel} complete${dur}.`);
       } else {
         const err = row.errorSummary ? `: ${row.errorSummary}` : '';
-        out.push(`Tool ${formatToolName(row.toolName)} failed${err}.`);
+        out.push(`Tool ${row.displayLabel} failed${err}.`);
       }
     }
     return out;

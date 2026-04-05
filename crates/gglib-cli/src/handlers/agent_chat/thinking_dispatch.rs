@@ -110,9 +110,17 @@ fn suspend_eprint(spinner: Option<&ProgressBar>, text: &str) {
 }
 
 /// Open a "Thinking" banner on stderr if not already in thinking mode.
+///
+/// The spinner is stopped before printing the banner so that its 80 ms
+/// steady-tick does not interleave with per-token `eprint!` calls,
+/// which would produce garbled output like `word⠴ Receiving…`.
+/// The spinner is recreated automatically on the next `ContentDelta`.
 fn open_thinking(ctx: &mut RenderContext) {
     if !ctx.in_thinking && ctx.stderr_tty {
-        suspend_or_run(ctx.spinner.as_ref(), style::print_thinking_banner);
+        if let Some(sp) = ctx.spinner.take() {
+            sp.finish_and_clear();
+        }
+        style::print_thinking_banner();
         ctx.in_thinking = true;
     }
 }

@@ -151,6 +151,7 @@ export function addToolCallPart(
   toolCallId: string,
   toolName: string,
   toolArgs: unknown,
+  displayName?: string,
 ): void {
   setMessages(prev =>
     prev.map(m => {
@@ -167,6 +168,7 @@ export function addToolCallPart(
             toolCallId,
             toolName,
             args: typeof toolArgs === 'object' ? toolArgs : {},
+            ...(displayName ? { displayName } : {}),
           },
         ] as GglibContent,
       };

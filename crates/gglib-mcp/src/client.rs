@@ -116,6 +116,10 @@ struct McpToolSchema {
     description: Option<String>,
     #[serde(default, rename = "inputSchema")]
     input_schema: Option<Value>,
+    /// Raw MCP annotations object (spec 2025-03-26).
+    /// We extract `title` from this during conversion to `McpTool`.
+    #[serde(default)]
+    annotations: Option<Value>,
 }
 
 /// Client for communicating with an MCP server via stdio.
@@ -255,10 +259,19 @@ impl McpClient {
 
         Ok(mcp_tools
             .into_iter()
-            .map(|t| McpTool {
-                name: t.name,
-                description: t.description,
-                input_schema: t.input_schema,
+            .map(|t| {
+                let title = t
+                    .annotations
+                    .as_ref()
+                    .and_then(|a| a.get("title"))
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned);
+                McpTool {
+                    name: t.name,
+                    description: t.description,
+                    input_schema: t.input_schema,
+                    title,
+                }
             })
             .collect())
     }
