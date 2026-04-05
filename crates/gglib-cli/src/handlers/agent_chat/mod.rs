@@ -49,8 +49,7 @@ pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
         new_conversation(ctx, args).await
     };
 
-    let result =
-        repl::run_repl_with_prior(agent, args, persistence, prior_messages).await;
+    let result = repl::run_repl_with_prior(agent, args, persistence, prior_messages).await;
 
     if let Some(ref handle) = maybe_handle
         && let Err(e) = ctx.runner.stop(handle).await
@@ -123,18 +122,10 @@ async fn resume_conversation<'a>(
 }
 
 /// Print the last user/assistant exchange as a memory jogger when resuming.
-fn print_memory_jogger(
-    db_messages: &[gglib_core::domain::chat::Message],
-    title: &str,
-) {
+fn print_memory_jogger(db_messages: &[gglib_core::domain::chat::Message], title: &str) {
     use gglib_core::domain::chat::MessageRole;
 
-    println!(
-        "\n{}Resuming: {}{}\n",
-        style::INFO,
-        title,
-        style::RESET,
-    );
+    println!("\n{}Resuming: {}{}\n", style::INFO, title, style::RESET,);
 
     // Find last user message and last assistant message
     let last_user = db_messages
@@ -160,10 +151,7 @@ fn print_memory_jogger(
         } else {
             asst_msg.content.clone()
         };
-        println!(
-            "{}  Assistant: {}{}",
-            style::DIM, content, style::RESET
-        );
+        println!("{}  Assistant: {}{}", style::DIM, content, style::RESET);
     }
     println!();
 }

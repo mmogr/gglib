@@ -112,12 +112,14 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
             return Ok(());
         }
 
-        let row = sqlx::query("SELECT title, system_prompt, settings FROM chat_conversations WHERE id = ?")
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| ChatHistoryError::Database(e.to_string()))?
-            .ok_or(ChatHistoryError::ConversationNotFound(id))?;
+        let row = sqlx::query(
+            "SELECT title, system_prompt, settings FROM chat_conversations WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ChatHistoryError::Database(e.to_string()))?
+        .ok_or(ChatHistoryError::ConversationNotFound(id))?;
 
         let current_title: String = row.get("title");
         let current_prompt: Option<String> = row.get("system_prompt");

@@ -117,7 +117,10 @@ mod tests {
 
     #[test]
     fn relative_time_just_now() {
-        let now = Utc::now().naive_utc().format("%Y-%m-%d %H:%M:%S").to_string();
+        let now = Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
         assert_eq!(format_relative_time(&now), "just now");
     }
 

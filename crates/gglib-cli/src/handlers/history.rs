@@ -52,9 +52,7 @@ pub async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
         );
     }
 
-    println!(
-        "\nResume with: gglib chat <model> --continue <ID>"
-    );
+    println!("\nResume with: gglib chat <model> --continue <ID>");
 
     Ok(())
 }
