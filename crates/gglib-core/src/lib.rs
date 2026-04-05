@@ -47,7 +47,7 @@ pub use settings::{
 };
 
 // Re-export timing utility
-pub use utils::timing::elapsed_ms;
+pub use utils::timing::{elapsed_ms, format_duration_human};
 
 // Re-export path utilities
 #[cfg(not(target_os = "windows"))]
