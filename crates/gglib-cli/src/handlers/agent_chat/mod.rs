@@ -60,8 +60,18 @@ pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     } else {
         Some(inference_config)
     };
+    let prior_chars: usize = prior_messages.iter().map(|m| m.char_count()).sum();
+    let banner = config::BannerInfo {
+        quiet: false,
+        sampling: sampling.clone(),
+        prior_history_chars: if prior_chars > 0 {
+            Some(prior_chars)
+        } else {
+            None
+        },
+    };
     let params = config::AgentSessionParams::from(&args);
-    let (agent, maybe_handle) = config::compose(ctx, &params, None, sampling).await?;
+    let (agent, maybe_handle) = config::compose(ctx, &params, None, sampling, &banner).await?;
 
     let result = repl::run_repl_with_prior(agent, &args, persistence, prior_messages).await;
 

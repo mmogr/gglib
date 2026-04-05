@@ -92,7 +92,18 @@ pub async fn execute(
         Some(inference_config)
     };
 
-    let (agent, maybe_handle) = compose(ctx, &params, Some(cwd.clone()), sampling_override).await?;
+    let (agent, maybe_handle) = compose(
+        ctx,
+        &params,
+        Some(cwd.clone()),
+        sampling_override.clone(),
+        &crate::handlers::agent_chat::config::BannerInfo {
+            quiet,
+            sampling: sampling_override,
+            prior_history_chars: None,
+        },
+    )
+    .await?;
 
     let config = AgentConfig::from_user_params(Some(max_iterations), max_parallel, tool_timeout_ms)
         .map_err(|e| anyhow!("invalid agent config: {e}"))?;
