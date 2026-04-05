@@ -63,7 +63,8 @@ async fn all_tools_return_results_in_order() {
     let executor: Arc<dyn ToolExecutorPort> = Arc::new(OkExecutor);
     let calls: Vec<ToolCall> = (0..3).map(|i| call(&format!("c{i}"), "t")).collect();
 
-    let results = execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx, &[]).await;
+    let results =
+        execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx, &[]).await;
 
     assert_eq!(results.len(), 3);
     for (i, r) in results.iter().enumerate() {
@@ -169,7 +170,8 @@ async fn executor_error_produces_failure_result() {
     let executor: Arc<dyn ToolExecutorPort> = Arc::new(ErrorExecutor);
     let calls = vec![call("err1", "broken_tool")];
 
-    let results = execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx, &[]).await;
+    let results =
+        execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx, &[]).await;
 
     assert_eq!(results.len(), 1);
     assert!(!results[0].success, "result should indicate failure");

@@ -286,9 +286,6 @@ mod tests {
     #[test]
     fn extract_object_falls_back_to_json() {
         let v = serde_json::json!({"unexpected": "shape"});
-        assert_eq!(
-            extract_mcp_content_text(&v),
-            r#"{"unexpected":"shape"}"#
-        );
+        assert_eq!(extract_mcp_content_text(&v), r#"{"unexpected":"shape"}"#);
     }
 }
