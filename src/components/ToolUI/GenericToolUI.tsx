@@ -17,6 +17,7 @@ import {
 import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
 import { ToolResultDisplay } from './ToolResultDisplay';
+import { formatToolDisplayName } from '../../services/tools/nameUtils';
 
 /**
  * Status indicator component
@@ -118,11 +119,9 @@ export const GenericToolUI = makeAssistantToolUI<
       displayStatus = status.reason === 'error' ? 'error' : 'incomplete';
     }
 
-    // Format tool name for display (e.g., get_current_time -> Get Current Time)
-    const displayName = toolName
-      .split('_')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    // Format tool name for display (e.g., get_current_time -> Get Current Time).
+    // Uses the shared nameUtils formatter to match the backend's display_name.
+    const displayName = formatToolDisplayName(toolName);
 
     return (
       <div className="bg-background-secondary border border-border rounded-lg my-2 overflow-hidden text-[13px]">
