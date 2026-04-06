@@ -5,13 +5,20 @@
 
 import { get, post } from './client';
 import { getApiBaseUrl, getAuthHeaders } from './client';
-import type { SetupStatus, LlamaInstallProgress } from '../../../types/setup';
+import type { SetupStatus, LlamaInstallProgress, VulkanStatus } from '../../../types/setup';
 
 /**
  * Get the current system setup status.
  */
 export async function getSetupStatus(): Promise<SetupStatus> {
   return get<SetupStatus>('/api/config/system/setup-status');
+}
+
+/**
+ * Get Vulkan build-readiness status.
+ */
+export async function getVulkanStatus(): Promise<VulkanStatus> {
+  return get<VulkanStatus>('/api/config/system/vulkan-status');
 }
 
 /**

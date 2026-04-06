@@ -1,6 +1,7 @@
 //! System information DTOs.
 
 use gglib_core::utils::system::SystemMemoryInfo;
+use gglib_runtime::llama::{MissingPackage, VulkanStatus};
 use serde::{Deserialize, Serialize};
 
 /// System memory information DTO for HTTP API.
@@ -88,5 +89,131 @@ mod tests {
 
         // GPU memory should be omitted when None
         assert!(!json.contains("gpuMemoryBytes"));
+    }
+}
+
+/// Vulkan build-readiness status DTO for HTTP API.
+///
+/// Mirrors [`VulkanStatus`] from `gglib-runtime` with stable camelCase
+/// JSON field names for frontend consumption.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VulkanStatusDto {
+    /// Vulkan runtime loader is present and working.
+    pub has_loader: bool,
+    /// Vulkan development headers are installed.
+    pub has_headers: bool,
+    /// The `glslc` SPIR-V shader compiler is available.
+    pub has_glslc: bool,
+    /// Whether all components needed for a Vulkan build are present.
+    pub ready_for_build: bool,
+    /// Components that are missing (empty if fully ready).
+    pub missing: Vec<MissingPackageDto>,
+}
+
+impl From<VulkanStatus> for VulkanStatusDto {
+    fn from(status: VulkanStatus) -> Self {
+        let ready_for_build = status.ready_for_build();
+        Self {
+            has_loader: status.has_loader,
+            has_headers: status.has_headers,
+            has_glslc: status.has_glslc,
+            ready_for_build,
+            missing: status.missing.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// A missing Vulkan build component with install hints.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissingPackageDto {
+    /// Machine-readable identifier for the missing component.
+    pub id: String,
+    /// Human-readable label.
+    pub label: String,
+    /// Distro-specific install commands.
+    pub install_hints: Vec<InstallHintDto>,
+}
+
+impl From<MissingPackage> for MissingPackageDto {
+    fn from(pkg: MissingPackage) -> Self {
+        let id = match &pkg {
+            MissingPackage::VulkanLoader => "vulkanLoader",
+            MissingPackage::VulkanHeaders => "vulkanHeaders",
+            MissingPackage::Glslc => "glslc",
+        };
+        Self {
+            id: id.to_string(),
+            label: pkg.label().to_string(),
+            install_hints: pkg
+                .install_hints()
+                .into_iter()
+                .map(|(distro, cmd)| InstallHintDto {
+                    distro: distro.to_string(),
+                    command: cmd.to_string(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Distro-specific install command.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallHintDto {
+    /// Distribution label (e.g. "Ubuntu/Debian", "Arch").
+    pub distro: String,
+    /// Shell command to install the missing component.
+    pub command: String,
+}
+
+#[cfg(test)]
+mod vulkan_dto_tests {
+    use super::*;
+
+    #[test]
+    fn test_vulkan_status_dto_from_ready() {
+        let status = VulkanStatus {
+            has_loader: true,
+            has_headers: true,
+            has_glslc: true,
+            missing: vec![],
+        };
+        let dto: VulkanStatusDto = status.into();
+        assert!(dto.ready_for_build);
+        assert!(dto.missing.is_empty());
+    }
+
+    #[test]
+    fn test_vulkan_status_dto_from_missing_headers() {
+        let status = VulkanStatus {
+            has_loader: true,
+            has_headers: false,
+            has_glslc: true,
+            missing: vec![MissingPackage::VulkanHeaders],
+        };
+        let dto: VulkanStatusDto = status.into();
+        assert!(!dto.ready_for_build);
+        assert_eq!(dto.missing.len(), 1);
+        assert_eq!(dto.missing[0].id, "vulkanHeaders");
+        assert!(!dto.missing[0].install_hints.is_empty());
+    }
+
+    #[test]
+    fn test_vulkan_status_dto_camel_case() {
+        let status = VulkanStatus {
+            has_loader: true,
+            has_headers: false,
+            has_glslc: false,
+            missing: vec![MissingPackage::VulkanHeaders, MissingPackage::Glslc],
+        };
+        let dto: VulkanStatusDto = status.into();
+        let json = serde_json::to_value(&dto).unwrap();
+        assert!(json.get("hasLoader").is_some());
+        assert!(json.get("hasHeaders").is_some());
+        assert!(json.get("hasGlslc").is_some());
+        assert!(json.get("readyForBuild").is_some());
+        assert!(json.get("missing").is_some());
     }
 }
