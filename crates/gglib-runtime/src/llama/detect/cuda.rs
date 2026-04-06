@@ -47,14 +47,14 @@ pub fn get_cuda_version_tuple() -> Option<(u32, u32)> {
     let stdout = command_stdout("nvcc", &["--version"])?;
     // Parse "Cuda compilation tools, release X.Y, ..." format
     for line in stdout.lines() {
-        if line.contains("release") {
-            if let Some(pos) = line.find("release ") {
-                let version_part = &line[pos + 8..];
-                if let Some(comma_pos) = version_part.find(',') {
-                    return parse_version_tuple(&version_part[..comma_pos]);
-                }
-                return parse_version_tuple(version_part.split_whitespace().next()?);
+        if line.contains("release")
+            && let Some(pos) = line.find("release ")
+        {
+            let version_part = &line[pos + 8..];
+            if let Some(comma_pos) = version_part.find(',') {
+                return parse_version_tuple(&version_part[..comma_pos]);
             }
+            return parse_version_tuple(version_part.split_whitespace().next()?);
         }
     }
     None

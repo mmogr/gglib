@@ -67,6 +67,7 @@ impl Dependency {
 }
 
 /// GPU hardware detection result.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuInfo {
     /// NVIDIA GPU hardware detected (via nvidia-smi, lspci, etc.).

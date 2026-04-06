@@ -29,9 +29,9 @@ pub(crate) mod tools;
 mod vulkan;
 
 // Re-export submodule public API
-pub use cuda::{get_cuda_path, validate_cuda_gcc_compatibility};
 #[cfg(target_os = "linux")]
 pub use cuda::select_cuda_compiler_for_build;
+pub use cuda::{get_cuda_path, validate_cuda_gcc_compatibility};
 pub use tools::{get_num_cores, has_cmake, has_cpp_compiler, has_git};
 pub use vulkan::{MissingPackage, VulkanStatus, vulkan_status};
 

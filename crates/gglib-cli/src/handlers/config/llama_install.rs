@@ -98,15 +98,27 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
             println!();
             println!(
                 "  Vulkan runtime (loader): {}",
-                if vk.has_loader { "✓ found" } else { "✗ missing" }
+                if vk.has_loader {
+                    "✓ found"
+                } else {
+                    "✗ missing"
+                }
             );
             println!(
                 "  Vulkan dev headers:      {}",
-                if vk.has_headers { "✓ found" } else { "✗ missing" }
+                if vk.has_headers {
+                    "✓ found"
+                } else {
+                    "✗ missing"
+                }
             );
             println!(
                 "  SPIR-V compiler (glslc): {}",
-                if vk.has_glslc { "✓ found" } else { "✗ missing" }
+                if vk.has_glslc {
+                    "✓ found"
+                } else {
+                    "✗ missing"
+                }
             );
             println!();
             println!("Install the missing components to build with Vulkan:");

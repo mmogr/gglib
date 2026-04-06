@@ -8,8 +8,8 @@ use anyhow::Result;
 
 use crate::llama_commands::LlamaCommand;
 
-use super::llama_install;
 use super::llama_detect;
+use super::llama_install;
 
 /// Dispatch a `llama` sub-command to the appropriate `gglib_runtime` handler.
 pub async fn dispatch(command: LlamaCommand) -> Result<()> {

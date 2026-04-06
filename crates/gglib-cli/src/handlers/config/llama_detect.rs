@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 
-use gglib_runtime::llama::{detect_optimal_acceleration, vulkan_status, Acceleration};
+use gglib_runtime::llama::{Acceleration, detect_optimal_acceleration, vulkan_status};
 
 /// Execute the `detect` subcommand.
 ///
@@ -44,10 +44,7 @@ pub fn execute(json: bool) -> Result<()> {
 }
 
 /// JSON output for machine consumption by shell scripts.
-fn print_json(
-    accel: &Result<Acceleration>,
-    vk: &gglib_runtime::llama::VulkanStatus,
-) {
+fn print_json(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanStatus) {
     let (acceleration, ready) = match accel {
         Ok(a) => {
             let ready = match a {
@@ -77,10 +74,7 @@ fn print_json(
 }
 
 /// Human-readable summary for interactive CLI use.
-fn print_human(
-    accel: &Result<Acceleration>,
-    vk: &gglib_runtime::llama::VulkanStatus,
-) {
+fn print_human(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanStatus) {
     println!("GPU Acceleration Detection");
     println!("==========================");
     println!();
@@ -94,18 +88,9 @@ fn print_human(
                 println!("Vulkan Build Readiness");
                 println!("----------------------");
                 let check = |ok: bool| if ok { "✓" } else { "✗" };
-                println!(
-                    "  Vulkan runtime (loader): {}",
-                    check(vk.has_loader)
-                );
-                println!(
-                    "  Vulkan dev headers:      {}",
-                    check(vk.has_headers)
-                );
-                println!(
-                    "  SPIR-V compiler (glslc): {}",
-                    check(vk.has_glslc)
-                );
+                println!("  Vulkan runtime (loader): {}", check(vk.has_loader));
+                println!("  Vulkan dev headers:      {}", check(vk.has_headers));
+                println!("  SPIR-V compiler (glslc): {}", check(vk.has_glslc));
                 println!();
 
                 if vk.ready_for_build() {
