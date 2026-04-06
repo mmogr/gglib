@@ -187,23 +187,34 @@ fn check_vulkan_loader() -> bool {
 
 /// Check whether Vulkan development headers are installed.
 ///
-/// Uses `pkg-config` first (most reliable across distros), then falls
-/// back to checking common header paths.
+/// Checks for the actual `vulkan/vulkan.h` header file that CMake's
+/// `FindVulkan.cmake` needs to set `Vulkan_INCLUDE_DIR`. We cannot
+/// rely on `pkg-config --exists vulkan` alone because on some distros
+/// (e.g. Arch) the `.pc` file ships with the runtime loader package,
+/// not the headers package.
 fn check_vulkan_headers() -> bool {
-    // pkg-config is the canonical way to check for development libraries
-    if command_succeeds("pkg-config", &["--exists", "vulkan"]) {
-        return true;
-    }
+    use std::path::Path;
 
-    // Fall back to common header paths
+    // Direct header-file check — mirrors what CMake's FindVulkan does.
     #[cfg(target_os = "linux")]
     {
-        use std::path::Path;
         if Path::new("/usr/include/vulkan/vulkan.h").exists()
             || Path::new("/usr/local/include/vulkan/vulkan.h").exists()
         {
             return true;
         }
+    }
+
+    // On other platforms, fall back to pkg-config with a cflags probe
+    // that verifies the include directory actually contains the header.
+    if command_succeeds("pkg-config", &["--exists", "vulkan"])
+        && let Some(includedir) =
+            super::tools::command_stdout("pkg-config", &["--variable=includedir", "vulkan"])
+        && Path::new(includedir.trim())
+            .join("vulkan/vulkan.h")
+            .exists()
+    {
+        return true;
     }
 
     false
