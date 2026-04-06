@@ -206,7 +206,7 @@ OpenAI-compatible HTTP proxy:
 - Streaming support
 
 #### gglib-gguf
-Parses GGUF files to extract:
+PParses GGUF files to extract:
 - Model architecture
 - Quantization method
 - Context size
