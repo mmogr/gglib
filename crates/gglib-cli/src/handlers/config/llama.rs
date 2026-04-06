@@ -9,6 +9,7 @@ use anyhow::Result;
 use crate::llama_commands::LlamaCommand;
 
 use super::llama_install;
+use super::llama_detect;
 
 /// Dispatch a `llama` sub-command to the appropriate `gglib_runtime` handler.
 pub async fn dispatch(command: LlamaCommand) -> Result<()> {
@@ -44,6 +45,9 @@ pub async fn dispatch(command: LlamaCommand) -> Result<()> {
         }
         LlamaCommand::Uninstall { force } => {
             handle_uninstall(force).await?;
+        }
+        LlamaCommand::Detect { json } => {
+            llama_detect::execute(json)?;
         }
     }
     Ok(())

@@ -801,14 +801,47 @@ main() {
     elif (command_exists vulkaninfo && vulkaninfo --summary >/dev/null 2>&1) || \
          [ -f "/usr/lib/x86_64-linux-gnu/libvulkan.so.1" ] || \
          [ -f "/usr/lib/libvulkan.so.1" ]; then
-        printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan" "✓" "available" "Vulkan GPU acceleration (AMD/Intel)"
+        printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan runtime" "✓" "available" "Vulkan GPU acceleration (AMD/Intel)"
         PRESENT_REQUIRED+=("Vulkan")
-        if command_exists glslc; then
-            printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "glslc" "✓" "installed" "SPIR-V shader compiler (required for Vulkan build)"
-            PRESENT_REQUIRED+=("glslc")
+
+        # Delegate detailed Vulkan readiness to the gglib binary when available.
+        local gglib_bin=""
+        if [ -f "./target/release/gglib" ]; then gglib_bin="./target/release/gglib"
+        elif [ -f "./target/debug/gglib" ]; then gglib_bin="./target/debug/gglib"
+        elif command_exists gglib; then gglib_bin="gglib"
+        fi
+
+        if [ -n "$gglib_bin" ]; then
+            local vk_json
+            vk_json=$("$gglib_bin" config llama detect --json 2>/dev/null) || true
+            if [ -n "$vk_json" ]; then
+                local has_headers has_glslc
+                has_headers=$(echo "$vk_json" | grep -o '"hasHeaders":true' | head -1)
+                has_glslc=$(echo "$vk_json" | grep -o '"hasGlslc":true' | head -1)
+                if [ -n "$has_headers" ]; then
+                    printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan headers" "✓" "installed" "vulkan/vulkan.h development headers"
+                    PRESENT_REQUIRED+=("Vulkan headers")
+                else
+                    printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "Vulkan headers" "✗" "MISSING" "Install: libvulkan-dev (Debian/Ubuntu) or vulkan-devel (Fedora)"
+                    MISSING_REQUIRED+=("Vulkan headers")
+                fi
+                if [ -n "$has_glslc" ]; then
+                    printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "glslc" "✓" "installed" "SPIR-V shader compiler"
+                    PRESENT_REQUIRED+=("glslc")
+                else
+                    printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "Install: glslc or shaderc (via package manager)"
+                    MISSING_REQUIRED+=("glslc")
+                fi
+            fi
         else
-            printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "SPIR-V shader compiler (required for Vulkan build)"
-            MISSING_REQUIRED+=("glslc")
+            # Fallback: no gglib binary yet — basic glslc check only
+            if command_exists glslc; then
+                printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "glslc" "✓" "installed" "SPIR-V shader compiler (required for Vulkan build)"
+                PRESENT_REQUIRED+=("glslc")
+            else
+                printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "SPIR-V shader compiler (required for Vulkan build)"
+                MISSING_REQUIRED+=("glslc")
+            fi
         fi
     elif [ "$os" = "linux" ] || [ "$os" = "windows" ]; then
         printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "GPU" "✗" "MISSING" "No GPU detected - CUDA (NVIDIA), Vulkan (AMD/Intel), or Metal (macOS) required"
