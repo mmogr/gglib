@@ -16,6 +16,7 @@
 pub mod agent_chat;
 pub mod config;
 pub mod gui;
+pub mod history;
 pub mod inference;
 pub mod mcp_cli;
 pub mod model;

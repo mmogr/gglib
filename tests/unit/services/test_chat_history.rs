@@ -19,6 +19,7 @@ async fn test_create_conversation() {
             title: "Test Chat".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -38,6 +39,7 @@ async fn test_create_conversation_with_system_prompt() {
             title: "Chat with Prompt".to_string(),
             model_id: None,
             system_prompt: Some(system_prompt.clone()),
+            settings: None,
         })
         .await
         .unwrap();
@@ -57,6 +59,7 @@ async fn test_list_conversations() {
         title: "First".to_string(),
         model_id: None,
         system_prompt: None,
+        settings: None,
     })
     .await
     .unwrap();
@@ -65,6 +68,7 @@ async fn test_list_conversations() {
         title: "Second".to_string(),
         model_id: None,
         system_prompt: None,
+        settings: None,
     })
     .await
     .unwrap();
@@ -73,6 +77,7 @@ async fn test_list_conversations() {
         title: "Third".to_string(),
         model_id: None,
         system_prompt: None,
+        settings: None,
     })
     .await
     .unwrap();
@@ -107,6 +112,7 @@ async fn test_get_conversation_by_id() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: Some("Prompt".to_string()),
+            settings: None,
         })
         .await
         .unwrap();
@@ -142,6 +148,7 @@ async fn test_save_user_message() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -175,6 +182,7 @@ async fn test_save_assistant_message() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -206,6 +214,7 @@ async fn test_save_system_message() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -234,6 +243,7 @@ async fn test_get_messages_ordering() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -285,6 +295,7 @@ async fn test_get_messages_empty() {
             title: "Empty".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -304,6 +315,7 @@ async fn test_update_conversation_title() {
             title: "Original".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -313,6 +325,7 @@ async fn test_update_conversation_title() {
         ConversationUpdate {
             title: Some("Updated".to_string()),
             system_prompt: None,
+            settings: None,
         },
     )
     .await
@@ -333,6 +346,7 @@ async fn test_update_conversation_system_prompt() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -342,6 +356,7 @@ async fn test_update_conversation_system_prompt() {
         ConversationUpdate {
             title: None,
             system_prompt: Some(Some("New prompt".to_string())),
+            settings: None,
         },
     )
     .await
@@ -362,6 +377,7 @@ async fn test_clear_system_prompt() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: Some("Initial prompt".to_string()),
+            settings: None,
         })
         .await
         .unwrap();
@@ -371,6 +387,7 @@ async fn test_clear_system_prompt() {
         ConversationUpdate {
             title: None,
             system_prompt: Some(None), // Clear the prompt
+            settings: None,
         },
     )
     .await
@@ -391,6 +408,7 @@ async fn test_delete_conversation() {
             title: "To Delete".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -412,6 +430,7 @@ async fn test_delete_conversation_cascades_messages() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -444,6 +463,7 @@ async fn test_conversation_count() {
         title: "First".to_string(),
         model_id: None,
         system_prompt: None,
+        settings: None,
     })
     .await
     .unwrap();
@@ -454,6 +474,7 @@ async fn test_conversation_count() {
         title: "Second".to_string(),
         model_id: None,
         system_prompt: None,
+        settings: None,
     })
     .await
     .unwrap();
@@ -472,6 +493,7 @@ async fn test_message_count() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -512,6 +534,7 @@ async fn test_update_message_content() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -545,6 +568,7 @@ async fn test_delete_message_and_subsequent() {
             title: "Test".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -597,6 +621,7 @@ async fn test_multiple_conversations_isolation() {
             title: "Conv 1".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();
@@ -606,6 +631,7 @@ async fn test_multiple_conversations_isolation() {
             title: "Conv 2".to_string(),
             model_id: None,
             system_prompt: None,
+            settings: None,
         })
         .await
         .unwrap();

@@ -25,6 +25,8 @@ pub struct ChatArgs {
     pub verbose: bool,
     /// Optional model-name override for llama-server routing.
     pub model: Option<String>,
+    /// Resume a previous conversation by ID.
+    pub continue_id: Option<i64>,
 }
 
 /// Execute the chat command — always routes to the agentic REPL.

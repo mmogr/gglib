@@ -67,6 +67,21 @@ pub async fn run_repl(
     args: &ChatArgs,
     persistence: Option<Conversation<'_>>,
 ) -> Result<()> {
+    run_repl_with_prior(agent_loop, args, persistence, Vec::new()).await
+}
+
+/// Run the interactive agent REPL with optional prior messages from a resumed
+/// conversation.
+///
+/// When `prior_messages` is non-empty, the REPL begins with those messages
+/// already in the history (no system prompt is prepended — it is already
+/// in the prior messages). When empty, behaves identically to [`run_repl`].
+pub async fn run_repl_with_prior(
+    agent_loop: Arc<dyn AgentLoopPort>,
+    args: &ChatArgs,
+    persistence: Option<Conversation<'_>>,
+    prior_messages: Vec<AgentMessage>,
+) -> Result<()> {
     let config = AgentConfig::from_user_params(
         Some(args.max_iterations),
         args.max_parallel,
@@ -74,13 +89,18 @@ pub async fn run_repl(
     )
     .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
 
-    // Conversation history shared across turns.
-    let mut messages: Vec<AgentMessage> = Vec::new();
-    if let Some(ref system) = args.system_prompt {
-        messages.push(AgentMessage::System {
-            content: system.clone(),
-        });
-    }
+    let messages = if prior_messages.is_empty() {
+        // Fresh session: optionally prepend system prompt.
+        let mut msgs = Vec::new();
+        if let Some(ref system) = args.system_prompt {
+            msgs.push(AgentMessage::System {
+                content: system.clone(),
+            });
+        }
+        msgs
+    } else {
+        prior_messages
+    };
 
     run_repl_with_history(agent_loop, messages, config, args.verbose, persistence).await
 }
@@ -107,6 +127,15 @@ pub async fn run_repl_with_history(
         })?));
 
     println!("Agentic chat ready. Type /help for help, /quit to exit.");
+    if let Some(ref conv) = persistence {
+        println!(
+            "{}Session #{} — resume later with: gglib chat --continue {}{}",
+            crate::presentation::style::DIM,
+            conv.id,
+            conv.id,
+            crate::presentation::style::RESET,
+        );
+    }
 
     // ── REPL outer loop ──────────────────────────────────────────────────────
     loop {
@@ -161,6 +190,16 @@ pub async fn run_repl_with_history(
         if let Some(ref mut conv) = persistence {
             conv.save_new(&messages).await;
         }
+    }
+
+    if let Some(ref conv) = persistence {
+        println!(
+            "{}Session #{} saved. Resume with: gglib chat --continue {}{}",
+            crate::presentation::style::DIM,
+            conv.id,
+            conv.id,
+            crate::presentation::style::RESET,
+        );
     }
 
     Ok(())

@@ -16,4 +16,4 @@ pub mod tables;
 
 // Re-export commonly used items
 pub use model_display::{DisplayStyle, ModelSummaryOpts, display_model_summary};
-pub use tables::{format_optional, print_separator, truncate_string};
+pub use tables::{format_optional, format_relative_time, print_separator, truncate_string};

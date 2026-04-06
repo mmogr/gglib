@@ -43,6 +43,20 @@ pub struct AgentSessionParams {
     pub model_name: Option<String>,
 }
 
+/// Display metadata for the server-startup info banner.
+///
+/// Callers populate this with whatever session context they have so that
+/// `resolve_port` can render a richer startup message.
+#[derive(Debug, Clone, Default)]
+pub struct BannerInfo {
+    /// Suppress the banner entirely (e.g. `gglib q -Q`).
+    pub quiet: bool,
+    /// Sampling overrides to display (only non-default values are shown).
+    pub sampling: Option<InferenceConfig>,
+    /// Character count of prior conversation history being loaded (resume only).
+    pub prior_history_chars: Option<usize>,
+}
+
 impl From<&ChatArgs> for AgentSessionParams {
     fn from(args: &ChatArgs) -> Self {
         // When --no-tools is set, use a sentinel allowlist that matches nothing
@@ -80,9 +94,10 @@ pub async fn compose(
     params: &AgentSessionParams,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
+    banner: &BannerInfo,
 ) -> Result<(Arc<dyn AgentLoopPort>, Option<ProcessHandle>)> {
     // 1. Resolve the LLM port — reuse or auto-start.
-    let (port, maybe_handle) = resolve_port(ctx, params).await?;
+    let (port, maybe_handle) = resolve_port(ctx, params, banner).await?;
 
     // 2. Initialise MCP servers (CLI bootstrap intentionally skips this).
     //    A failure is logged as a warning rather than aborting the session:
@@ -125,6 +140,7 @@ pub async fn compose(
 async fn resolve_port(
     ctx: &CliContext,
     params: &AgentSessionParams,
+    banner: &BannerInfo,
 ) -> Result<(u16, Option<ProcessHandle>)> {
     if let Some(port) = params.port {
         tracing::debug!("reusing user-supplied llama-server on port {port}");
@@ -169,11 +185,13 @@ async fn resolve_port(
         server_config = server_config.with_reasoning_format(format);
     }
 
-    style::print_info_banner("Info", "\u{2139}\u{fe0f}");
-    eprintln!(
-        "  Starting llama-server for '{}' (this may take a moment) \u{2026}",
-        model.name
-    );
+    if !banner.quiet {
+        style::print_info_banner("Info", "\u{2139}\u{fe0f}");
+        eprintln!(
+            "  Starting llama-server for '{}' (this may take a moment) \u{2026}",
+            model.name
+        );
+    }
 
     let handle = ctx
         .runner
@@ -181,8 +199,73 @@ async fn resolve_port(
         .await
         .context("failed to start llama-server")?;
 
-    eprintln!("  llama-server ready on port {}", handle.port);
-    style::print_banner_close();
+    if !banner.quiet {
+        eprintln!("  llama-server ready on port {}", handle.port);
+
+        // Context size
+        print_context_line(
+            params.ctx_size.as_deref(),
+            context_size,
+            model.context_length,
+        );
+
+        // Sampling overrides
+        if let Some(ref s) = banner.sampling {
+            print_sampling_lines(s);
+        }
+
+        // Conversation history usage (resume only)
+        if let Some(chars) = banner.prior_history_chars {
+            let budget = 180_000usize; // AgentConfig default
+            let pct = (chars * 100).checked_div(budget).unwrap_or(0);
+            eprintln!("  History: ~{chars} chars loaded (~{pct}% of context budget)");
+        }
+
+        style::print_banner_close();
+    }
 
     Ok((handle.port, Some(handle)))
+}
+
+/// Print the resolved context-size line in the info banner.
+fn print_context_line(
+    raw_flag: Option<&str>,
+    parsed_numeric: Option<u64>,
+    model_context_length: Option<u64>,
+) {
+    match (raw_flag, parsed_numeric) {
+        // User passed a numeric value like "8192"
+        (_, Some(n)) => {
+            eprintln!("  Context: {n}");
+        }
+        // User passed "max" — resolve from model metadata
+        (Some(flag), None) if flag.eq_ignore_ascii_case("max") => {
+            if let Some(model_ctx) = model_context_length {
+                eprintln!("  Context: {model_ctx} (model max)");
+            } else {
+                eprintln!("  Context: max (model default)");
+            }
+        }
+        // Not specified — server default
+        _ => {}
+    }
+}
+
+/// Print non-default sampling parameter lines in the info banner.
+fn print_sampling_lines(s: &InferenceConfig) {
+    if let Some(v) = s.temperature {
+        eprintln!("  Temperature: {v}");
+    }
+    if let Some(v) = s.top_p {
+        eprintln!("  Top-p: {v}");
+    }
+    if let Some(v) = s.top_k {
+        eprintln!("  Top-k: {v}");
+    }
+    if let Some(v) = s.max_tokens {
+        eprintln!("  Max tokens: {v}");
+    }
+    if let Some(v) = s.repeat_penalty {
+        eprintln!("  Repeat penalty: {v}");
+    }
 }

@@ -12,6 +12,17 @@ use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 
+/// Subcommands available under `gglib chat`.
+#[derive(Subcommand)]
+pub enum ChatCommand {
+    /// List past conversations (use `--continue <ID>` to resume one)
+    History {
+        /// Maximum number of conversations to show
+        #[arg(short = 'n', long, default_value = "20")]
+        limit: usize,
+    },
+}
+
 /// Top-level commands for the GGUF library management tool.
 #[derive(Subcommand)]
 pub enum Commands {
@@ -55,10 +66,11 @@ pub enum Commands {
         sampling: SamplingArgs,
     },
 
-    /// Chat with a model interactively
-    #[command(display_order = 11)]
+    /// Chat with a model interactively, or manage chat history
+    #[command(display_order = 11, subcommand_negates_reqs = true)]
     Chat {
-        /// Name or ID of the model to chat with
+        /// Name or ID of the model to chat with (optional when resuming with --continue)
+        #[arg(default_value = "")]
         identifier: String,
         #[command(flatten)]
         context: ContextArgs,
@@ -91,6 +103,12 @@ pub enum Commands {
         /// Model name forwarded to llama-server (uses server default when omitted)
         #[arg(long)]
         model: Option<String>,
+        /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
+        #[arg(long = "continue", alias = "c")]
+        continue_id: Option<i64>,
+        /// Subcommand (e.g. `history`)
+        #[command(subcommand)]
+        command: Option<ChatCommand>,
     },
 
     /// Ask a question with optional context from stdin or file

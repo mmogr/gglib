@@ -230,6 +230,12 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         .await;
     // Ignore error if column already exists
 
+    // Migration: Add settings column for session parameter persistence.
+    let _ = sqlx::query(r#"ALTER TABLE chat_conversations ADD COLUMN settings TEXT"#)
+        .execute(pool)
+        .await;
+    // Ignore error if column already exists
+
     // Create MCP servers table
     sqlx::query(
         r#"

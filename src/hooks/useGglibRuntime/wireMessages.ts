@@ -64,10 +64,15 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentWireMessag
 
     } else if (msg.role === 'assistant') {
       const parts = extractParts(msg.content);
-      const text = parts
-        .filter((p): p is TextPart => p.type === 'text')
-        .map(p => p.text)
-        .join('');
+      // Content may be a plain string (DB-loaded messages without structured
+      // contentParts) or an array of parts (GUI-created messages).  Handle
+      // both so we never lose the assistant's text.
+      const text = !Array.isArray(msg.content)
+        ? (msg.content as string) ?? ''
+        : parts
+            .filter((p): p is TextPart => p.type === 'text')
+            .map(p => p.text)
+            .join('');
       // Only include tool-call parts that have both required string fields AND
       // a result. An assistant message with tool_calls but no corresponding
       // tool-result entries is structurally invalid in the OpenAI wire format.
