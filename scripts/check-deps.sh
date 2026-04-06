@@ -861,8 +861,8 @@ main() {
             vk_json=$("$gglib_bin" config llama detect --json 2>/dev/null) || true
             if [ -n "$vk_json" ]; then
                 local has_headers has_glslc
-                has_headers=$(echo "$vk_json" | grep -o '"hasHeaders":true' | head -1)
-                has_glslc=$(echo "$vk_json" | grep -o '"hasGlslc":true' | head -1)
+                has_headers=$(echo "$vk_json" | grep -oE '"hasHeaders"\s*:\s*true' | head -1)
+                has_glslc=$(echo "$vk_json" | grep -oE '"hasGlslc"\s*:\s*true' | head -1)
                 if [ -n "$has_headers" ]; then
                     printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan headers" "✓" "installed" "vulkan/vulkan.h development headers"
                     PRESENT_REQUIRED+=("Vulkan headers")

@@ -27,7 +27,7 @@ detect_gpu_flags() {
         json=$("$bin" config llama detect --json 2>/dev/null) || true
         if [ -n "$json" ]; then
             local accel
-            accel=$(echo "$json" | grep -o '"acceleration":"[^"]*"' | head -1 | cut -d'"' -f4)
+            accel=$(echo "$json" | grep -oE '"acceleration"\s*:\s*"[^"]*"' | head -1 | cut -d'"' -f4)
             case "$accel" in
                 Metal)
                     echo "🍎 macOS detected: Installing with Metal support" >&2
