@@ -20,7 +20,7 @@ use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
 use crate::handlers::agent_chat::drain::drain_event_stream;
 use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::repl::run_repl_with_history;
-use crate::shared_args::SamplingArgs;
+use crate::shared_args::{ContextArgs, SamplingArgs};
 
 /// System prompt for the agentic question mode.
 const SYSTEM_PROMPT: &str = "\
@@ -44,12 +44,13 @@ pub async fn execute(
     verbose: bool,
     quiet: bool,
     sampling: SamplingArgs,
+    context: ContextArgs,
 ) -> Result<()> {
     let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
 
     let params = AgentSessionParams {
         model_identifier: model_arg.clone().unwrap_or_default(),
-        ctx_size: None,
+        ctx_size: context.ctx_size,
         port,
         tools: tools.clone(),
         model_name: model_arg.clone(),

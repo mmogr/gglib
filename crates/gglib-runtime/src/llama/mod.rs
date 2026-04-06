@@ -93,9 +93,9 @@ pub use invocation::{LlamaCommandBuilder, log_context_info, log_model_info};
 
 // Args resolution
 pub use args::{
-    ContextResolution, ContextResolutionSource, JinjaResolution, JinjaResolutionSource,
-    ReasoningDetection, ReasoningFormatResolution, ReasoningFormatSource, resolve_context_size,
-    resolve_jinja_flag, resolve_reasoning_format,
+    ContextInput, ContextResolution, ContextResolutionSource, JinjaResolution,
+    JinjaResolutionSource, ReasoningDetection, ReasoningFormatResolution, ReasoningFormatSource,
+    resolve_context_size, resolve_jinja_flag, resolve_reasoning_format,
 };
 
 // Prebuilt download (for adapters that need fine-grained control - Tauri + CLI)

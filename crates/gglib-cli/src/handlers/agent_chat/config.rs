@@ -15,9 +15,11 @@ use gglib_core::ports::AgentLoopPort;
 use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_runtime::compose_agent_loop_with_sampling;
 use gglib_runtime::llama::args::{resolve_jinja_flag, resolve_reasoning_format};
+use gglib_runtime::llama::{ContextInput, resolve_context_size};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
+use crate::handlers::inference::shared::log_context_info;
 use crate::presentation::style;
 
 // =============================================================================
@@ -155,12 +157,13 @@ async fn resolve_port(
         .await
         .context("failed to look up model")?;
 
-    // Parse an explicit numeric ctx_size; ignore "max" (pass None, let the
-    // runner use the model's native context length).
-    let context_size = params
-        .ctx_size
-        .as_deref()
-        .and_then(|s| s.parse::<u64>().ok());
+    // Resolve context size via the shared 3-level fallback chain.
+    let settings = ctx.app.settings().get().await?;
+    let context_resolution = resolve_context_size(ContextInput {
+        flag: params.ctx_size.clone(),
+        model_context_length: model.context_length,
+        settings_default: settings.default_context_size,
+    })?;
 
     let mut server_config = ServerConfig::new(
         model.id,
@@ -168,8 +171,8 @@ async fn resolve_port(
         model.file_path.clone(),
         ctx.base_port,
     );
-    if let Some(ctx_size) = context_size {
-        server_config = server_config.with_context_size(ctx_size);
+    if let Some(ctx_size) = context_resolution.value {
+        server_config = server_config.with_context_size(u64::from(ctx_size));
     }
 
     // Auto-detect jinja and reasoning format from model tags
@@ -203,11 +206,7 @@ async fn resolve_port(
         eprintln!("  llama-server ready on port {}", handle.port);
 
         // Context size
-        print_context_line(
-            params.ctx_size.as_deref(),
-            context_size,
-            model.context_length,
-        );
+        log_context_info(&context_resolution);
 
         // Sampling overrides
         if let Some(ref s) = banner.sampling {
@@ -225,30 +224,6 @@ async fn resolve_port(
     }
 
     Ok((handle.port, Some(handle)))
-}
-
-/// Print the resolved context-size line in the info banner.
-fn print_context_line(
-    raw_flag: Option<&str>,
-    parsed_numeric: Option<u64>,
-    model_context_length: Option<u64>,
-) {
-    match (raw_flag, parsed_numeric) {
-        // User passed a numeric value like "8192"
-        (_, Some(n)) => {
-            eprintln!("  Context: {n}");
-        }
-        // User passed "max" — resolve from model metadata
-        (Some(flag), None) if flag.eq_ignore_ascii_case("max") => {
-            if let Some(model_ctx) = model_context_length {
-                eprintln!("  Context: {model_ctx} (model max)");
-            } else {
-                eprintln!("  Context: max (model default)");
-            }
-        }
-        // Not specified — server default
-        _ => {}
-    }
 }
 
 /// Print non-default sampling parameter lines in the info banner.

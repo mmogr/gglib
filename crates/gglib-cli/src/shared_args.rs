@@ -32,7 +32,8 @@ pub struct SamplingArgs {
 /// Context-size and memory-lock flags common to all inference commands.
 #[derive(Args, Debug, Clone, Default)]
 pub struct ContextArgs {
-    /// Context size (use 'max' to auto-detect from model metadata)
+    /// Context size override (number or 'max' for model metadata).
+    /// Falls back to the global default from 'gglib config settings'.
     #[arg(short, long)]
     pub ctx_size: Option<String>,
     /// Enable memory lock

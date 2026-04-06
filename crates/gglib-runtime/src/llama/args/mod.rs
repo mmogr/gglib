@@ -8,7 +8,7 @@ pub mod jinja;
 pub mod reasoning;
 
 // Re-export public API
-pub use context::{ContextResolution, ContextResolutionSource, resolve_context_size};
+pub use context::{ContextInput, ContextResolution, ContextResolutionSource, resolve_context_size};
 pub use jinja::{JinjaResolution, JinjaResolutionSource, resolve_jinja_flag};
 pub use reasoning::{
     ReasoningDetection, ReasoningFormatResolution, ReasoningFormatSource, resolve_reasoning_format,

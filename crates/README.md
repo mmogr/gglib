@@ -185,6 +185,7 @@ Implements port traits for data persistence:
 Manages llama.cpp lifecycle:
 - Installation and updates
 - Configuration and argument building
+- Context size resolution (explicit flag → settings default → server default)
 - Process spawning and monitoring
 - Health checking
 - Port allocation
@@ -205,7 +206,7 @@ OpenAI-compatible HTTP proxy:
 - Streaming support
 
 #### gglib-gguf
-Parses GGUF files to extract:
+PParses GGUF files to extract:
 - Model architecture
 - Quantization method
 - Context size
