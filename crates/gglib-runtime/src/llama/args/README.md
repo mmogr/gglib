@@ -16,7 +16,8 @@ Reusable utilities for resolving CLI flags and configuration options so that mul
 
 ## Key Functions
 
-- `resolve_context_size()` — Determine optimal context size
+- `resolve_context_size(ContextInput)` — Determine context size via the 3-level
+  fallback: explicit flag → global settings default → llama-server default
 - `resolve_jinja_flag()` — Whether to enable Jinja templates
 - `resolve_reasoning_format()` — Detect and configure reasoning models
 

@@ -96,7 +96,7 @@ gglib model update 1 --name "Llama 2 7B" --metadata "use-case=chat"
 Serve a model with llama-server.
 
 **Options:**
-- `--ctx-size <SIZE>`, `-c`: Context size (number or "max" for model's maximum)
+- `--ctx-size <SIZE>`, `-c`: Context size override (number or "max" for model metadata). Falls back to the global default from `gglib config settings`.
 - `--mlock`: Enable memory lock
 - `--jinja`: Force-enable Jinja template parsing for llama-server chat templates
 - `--port <PORT>`, `-p`: Port to serve on (default: 8080)
@@ -110,7 +110,7 @@ gglib serve 1 --ctx-size max --mlock
 Start an interactive chat session with `llama-cli` using any stored model.
 
 **Options:**
-- `--ctx-size <SIZE>`: Context size (number or `max` for the model's metadata)
+- `--ctx-size <SIZE>`: Context size override (number or `max` for model metadata). Falls back to the global default from `gglib config settings`.
 - `--mlock`: Enable memory locking
 - `--chat-template <NAME>`: Override the template name baked into llama-cli
 - `--chat-template-file <PATH>`: Provide a custom Jinja template path
