@@ -133,8 +133,8 @@ mod tests {
     fn explicit_numeric_wins_over_settings() {
         let res = resolve_context_size(ContextInput {
             flag: Some("8192".into()),
+            model_context_length: None,
             settings_default: Some(4096),
-            ..Default::default()
         })
         .unwrap();
         assert_eq!(res.value, Some(8192));
@@ -147,7 +147,6 @@ mod tests {
             flag: Some("max".into()),
             model_context_length: Some(131072),
             settings_default: Some(4096),
-            ..Default::default()
         })
         .unwrap();
         assert_eq!(res.value, Some(131072));
@@ -158,8 +157,8 @@ mod tests {
     fn no_flag_falls_back_to_settings() {
         let res = resolve_context_size(ContextInput {
             flag: None,
+            model_context_length: None,
             settings_default: Some(16384),
-            ..Default::default()
         })
         .unwrap();
         assert_eq!(res.value, Some(16384));
