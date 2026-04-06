@@ -154,6 +154,11 @@ pub fn log_context_info(resolution: &ContextResolution) {
                 println!("Using maximum context size from model: {}", size);
             }
         }
+        ContextResolutionSource::SettingsDefault => {
+            if let Some(size) = resolution.value {
+                println!("Using context size from settings: {}", size);
+            }
+        }
         ContextResolutionSource::MaxRequestedMissing => {
             println!("Warning: 'max' specified but no context length found in model metadata");
         }

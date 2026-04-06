@@ -9,7 +9,8 @@ use crate::bootstrap::CliContext;
 use crate::presentation::style;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 use gglib_runtime::llama::{
-    LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size, resolve_llama_server,
+    ContextInput, LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size,
+    resolve_llama_server,
 };
 
 use super::shared::{
@@ -53,7 +54,12 @@ pub async fn execute(
     eprintln!("  File: {}", model.file_path.display());
 
     // Handle context size
-    let context_resolution = resolve_context_size(context.ctx_size, model.context_length)?;
+    let settings = ctx.app.settings().get().await?;
+    let context_resolution = resolve_context_size(ContextInput {
+        flag: context.ctx_size,
+        model_context_length: model.context_length,
+        settings_default: settings.default_context_size,
+    })?;
     log_context_info(&context_resolution);
     log_mlock_info(context.mlock);
 

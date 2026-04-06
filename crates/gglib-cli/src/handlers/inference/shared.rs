@@ -44,6 +44,9 @@ pub fn log_context_info(resolution: &ContextResolution) {
         (Some(size), ContextResolutionSource::ModelMetadata) => {
             eprintln!("  Context size: {} (from model metadata)", size);
         }
+        (Some(size), ContextResolutionSource::SettingsDefault) => {
+            eprintln!("  Context size: {} (from settings)", size);
+        }
         (None, ContextResolutionSource::NotSpecified) => {
             eprintln!("  Context size: default (not specified)");
         }
