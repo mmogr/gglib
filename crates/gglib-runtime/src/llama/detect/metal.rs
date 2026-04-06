@@ -7,6 +7,7 @@
 //! This module is a no-op on non-macOS targets — [`has_metal_support`]
 //! unconditionally returns `false` there.
 
+#[cfg(target_os = "macos")]
 use gglib_core::utils::process::cmd;
 
 /// Check if the system has Metal support.
