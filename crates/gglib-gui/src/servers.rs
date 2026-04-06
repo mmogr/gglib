@@ -152,8 +152,16 @@ impl<'a> ServerOps<'a> {
         }
     }
 
-    /// Build a ServerConfig from a model and GUI request.
-    fn build_config(model: &Model, request: &StartServerRequest, base_port: u16) -> ServerConfig {
+    /// Build a [`ServerConfig`] from a model and GUI request.
+    ///
+    /// Context size precedence: explicit request field → global settings
+    /// default → llama-server built-in default.
+    fn build_config(
+        model: &Model,
+        request: &StartServerRequest,
+        base_port: u16,
+        default_context_size: Option<u64>,
+    ) -> ServerConfig {
         let mut config = ServerConfig::new(
             model.id,
             model.name.clone(),
@@ -161,7 +169,7 @@ impl<'a> ServerOps<'a> {
             base_port,
         );
 
-        if let Some(ctx) = request.context_length.or(model.context_length) {
+        if let Some(ctx) = request.context_length.or(default_context_size) {
             config = config.with_context_size(ctx);
         }
 
@@ -225,7 +233,7 @@ impl<'a> ServerOps<'a> {
             "Resolved llama-server base port for model serving"
         );
 
-        let config = Self::build_config(&model, &request, base_port);
+        let config = Self::build_config(&model, &request, base_port, settings.default_context_size);
         let handle = self.deps.runner.start(config).await.map_err(|e| {
             // Emit error event before mapping the error
             let error_summary = ServerSummary {
