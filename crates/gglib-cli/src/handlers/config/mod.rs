@@ -7,6 +7,7 @@
 pub mod assistant_ui;
 pub mod check_deps;
 pub mod llama;
+pub mod llama_detect;
 pub mod llama_install;
 pub mod paths;
 pub mod settings;

@@ -247,6 +247,10 @@ fn config_routes() -> Router<AppState> {
         )
         .route("/system/setup-status", get(handlers::config::setup::status))
         .route(
+            "/system/vulkan-status",
+            get(handlers::config::setup::vulkan_status_handler),
+        )
+        .route(
             "/system/install-llama",
             post(handlers::config::setup::install_llama),
         )

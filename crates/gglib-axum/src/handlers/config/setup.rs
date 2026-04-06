@@ -9,17 +9,23 @@ use futures_util::StreamExt;
 use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
 
+use crate::dto::system::VulkanStatusDto;
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_gui::setup::SetupStatus;
 use gglib_runtime::llama::{
-    Acceleration, BuildEvent, detect_optimal_acceleration, run_llama_source_build,
+    Acceleration, BuildEvent, detect_optimal_acceleration, run_llama_source_build, vulkan_status,
 };
 
 /// Get the full system setup status for the first-run wizard.
 pub async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, HttpError> {
     Ok(Json(state.gui.get_setup_status().await?))
+}
+
+/// Get Vulkan build-readiness status.
+pub async fn vulkan_status_handler() -> Json<VulkanStatusDto> {
+    Json(vulkan_status().into())
 }
 
 /// Install llama.cpp pre-built binaries with SSE progress streaming.

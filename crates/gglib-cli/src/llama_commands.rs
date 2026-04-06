@@ -54,4 +54,11 @@ pub enum LlamaCommand {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// Detect GPU acceleration and check build readiness
+    Detect {
+        /// Output raw JSON instead of human-readable summary
+        #[arg(long)]
+        json: bool,
+    },
 }

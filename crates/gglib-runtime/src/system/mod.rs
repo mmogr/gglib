@@ -247,9 +247,41 @@ impl SystemProbePort for DefaultSystemProbe {
 
         if gpu_info.has_vulkan {
             deps.push(
-                Dependency::optional("Vulkan", "GPU acceleration via Vulkan (AMD, Intel, NVIDIA)")
-                    .with_status(DependencyStatus::Present {
+                Dependency::optional(
+                    "Vulkan runtime",
+                    "GPU acceleration via Vulkan (AMD, Intel, NVIDIA)",
+                )
+                .with_status(DependencyStatus::Present {
+                    version: "available".to_string(),
+                }),
+            );
+
+            // When the runtime is present, also show build-header status
+            // so users understand why a build might still fail.
+            deps.push(
+                Dependency::optional(
+                    "Vulkan headers",
+                    "Development headers required to build with -DGGML_VULKAN=ON",
+                )
+                .with_hint("apt install libvulkan-dev")
+                .with_status(if gpu_info.vulkan_headers {
+                    DependencyStatus::Present {
                         version: "available".to_string(),
+                    }
+                } else {
+                    DependencyStatus::Missing
+                }),
+            );
+
+            deps.push(
+                Dependency::optional("glslc", "SPIR-V shader compiler required for Vulkan builds")
+                    .with_hint("apt install glslc")
+                    .with_status(if gpu_info.vulkan_glslc {
+                        DependencyStatus::Present {
+                            version: "available".to_string(),
+                        }
+                    } else {
+                        DependencyStatus::Missing
                     }),
             );
         } else if !gpu_info.has_metal {

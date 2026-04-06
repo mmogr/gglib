@@ -42,6 +42,8 @@ pub struct GpuInfoDto {
     pub has_nvidia: bool,
     pub has_vulkan: bool,
     pub cuda_version: Option<String>,
+    pub vulkan_headers_installed: bool,
+    pub vulkan_glslc_installed: bool,
 }
 
 /// Models directory status.
@@ -102,6 +104,8 @@ impl<'a> SetupOps<'a> {
             has_nvidia: gpu_info_raw.has_nvidia_gpu,
             has_vulkan: gpu_info_raw.has_vulkan,
             cuda_version: gpu_info_raw.cuda_version,
+            vulkan_headers_installed: gpu_info_raw.vulkan_headers,
+            vulkan_glslc_installed: gpu_info_raw.vulkan_glslc,
         };
 
         // Models directory

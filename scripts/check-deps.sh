@@ -350,6 +350,7 @@ print_install_instructions() {
     local need_build_tools=false
     local need_gtk=false
     local need_cuda=false
+    local need_vulkan_headers=false
     local need_glslc=false
     local cuda_not_in_path=false
     
@@ -376,6 +377,7 @@ print_install_instructions() {
             git|make|gcc|g++|pkg-config|libssl-dev|cmake|libclang-dev|libsqlite3-dev) need_build_tools=true ;;
             patchelf|webkit2gtk-4.1|librsvg|libappindicator-gtk3) need_gtk=true ;;
             CUDA|GPU) need_cuda=true ;;
+            "Vulkan headers") need_vulkan_headers=true ;;
             glslc) need_glslc=true ;;
         esac
     done
@@ -579,7 +581,39 @@ print_install_instructions() {
         ((step++))
     fi
     
-    # 6. glslc (Vulkan shader compiler)
+    # 6. Vulkan development headers
+    if [ "$need_vulkan_headers" = true ]; then
+        echo -e "${BOLD}${step}. Install Vulkan development headers:${RESET}"
+        case "$os" in
+            linux)
+                case "$distro" in
+                    debian)
+                        echo -e "   ${YELLOW}# Ubuntu/Debian:${RESET}"
+                        echo "   sudo apt install -y libvulkan-dev"
+                        ;;
+                    fedora)
+                        echo -e "   ${YELLOW}# Fedora:${RESET}"
+                        echo "   sudo dnf install -y vulkan-devel"
+                        ;;
+                    arch)
+                        echo -e "   ${YELLOW}# Arch Linux:${RESET}"
+                        echo "   sudo pacman -S vulkan-headers"
+                        ;;
+                    *)
+                        echo -e "   ${YELLOW}Install the 'vulkan-headers' or 'libvulkan-dev' package from your package manager${RESET}"
+                        ;;
+                esac
+                ;;
+            windows)
+                echo -e "   ${YELLOW}Install the Vulkan SDK from: https://vulkan.lunarg.com/sdk/home${RESET}"
+                echo -e "   ${YELLOW}(includes headers, loader, and glslc)${RESET}"
+                ;;
+        esac
+        echo ""
+        ((step++))
+    fi
+
+    # 7. glslc (Vulkan shader compiler)
     if [ "$need_glslc" = true ]; then
         echo -e "${BOLD}${step}. Install glslc (SPIR-V shader compiler for Vulkan):${RESET}"
         case "$os" in
@@ -644,6 +678,9 @@ print_install_instructions() {
             echo -e "  ${YELLOW}1. Install Rust: https://win.rustup.rs/x86_64${RESET}"
             echo -e "  ${YELLOW}2. Install Node.js: https://nodejs.org${RESET}"
             echo -e "  ${YELLOW}3. Install VS Build Tools: https://visualstudio.microsoft.com/downloads/${RESET}"
+            if [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ]; then
+                echo -e "  ${YELLOW}4. Install Vulkan SDK: https://vulkan.lunarg.com/sdk/home${RESET}"
+            fi
             ;;
         linux)
             case "$distro" in
@@ -651,11 +688,13 @@ print_install_instructions() {
                     if [ "$need_rust" = true ]; then
                         echo -e "  ${YELLOW}curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh${RESET}"
                     fi
-                    if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ]; then
+                    if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ] || [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ]; then
                         local cmd="sudo apt update && sudo apt install -y"
                         [ "$need_node" = true ] && cmd="$cmd nodejs npm"
                         [ "$need_build_tools" = true ] && cmd="$cmd build-essential git pkg-config libssl-dev libcurl4-openssl-dev patchelf cmake libasound2-dev libclang-dev libsqlite3-dev"
                         [ "$need_gtk" = true ] && cmd="$cmd libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev"
+                        [ "$need_vulkan_headers" = true ] && cmd="$cmd libvulkan-dev"
+                        [ "$need_glslc" = true ] && cmd="$cmd glslc"
                         echo -e "  ${YELLOW}${cmd}${RESET}"
                     fi
                     ;;
@@ -666,16 +705,20 @@ print_install_instructions() {
                     [ "$need_build_tools" = true ] && echo -e "  ${YELLOW}sudo dnf groupinstall -y 'Development Tools' && sudo dnf install -y git pkg-config openssl-devel patchelf cmake${RESET}"
                     [ "$need_node" = true ] && echo -e "  ${YELLOW}sudo dnf install -y nodejs npm${RESET}"
                     [ "$need_gtk" = true ] && echo -e "  ${YELLOW}sudo dnf install -y webkit2gtk4.1-devel librsvg2-devel gtk3-devel libappindicator-gtk3-devel${RESET}"
+                    [ "$need_vulkan_headers" = true ] && echo -e "  ${YELLOW}sudo dnf install -y vulkan-devel${RESET}"
+                    [ "$need_glslc" = true ] && echo -e "  ${YELLOW}sudo dnf install -y glslc${RESET}"
                     ;;
                 arch)
                     if [ "$need_rust" = true ]; then
                         echo -e "  ${YELLOW}curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh${RESET}"
                     fi
-                    if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ]; then
+                    if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ] || [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ]; then
                         local cmd="sudo pacman -S"
                         [ "$need_node" = true ] && cmd="$cmd nodejs npm"
                         [ "$need_build_tools" = true ] && cmd="$cmd base-devel git pkg-config openssl patchelf cmake"
                         [ "$need_gtk" = true ] && cmd="$cmd webkit2gtk-4.1 librsvg gtk3 libappindicator-gtk3"
+                        [ "$need_vulkan_headers" = true ] && cmd="$cmd vulkan-headers"
+                        [ "$need_glslc" = true ] && cmd="$cmd shaderc"
                         echo -e "  ${YELLOW}${cmd}${RESET}"
                     fi
                     ;;
@@ -800,15 +843,50 @@ main() {
         MISSING_REQUIRED+=("CUDA")
     elif (command_exists vulkaninfo && vulkaninfo --summary >/dev/null 2>&1) || \
          [ -f "/usr/lib/x86_64-linux-gnu/libvulkan.so.1" ] || \
-         [ -f "/usr/lib/libvulkan.so.1" ]; then
-        printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan" "✓" "available" "Vulkan GPU acceleration (AMD/Intel)"
+         [ -f "/usr/lib/libvulkan.so.1" ] || \
+         [ -f "/c/Windows/System32/vulkan-1.dll" ] || \
+         [ -f "/mnt/c/Windows/System32/vulkan-1.dll" ]; then
+        printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan runtime" "✓" "available" "Vulkan GPU acceleration (AMD/Intel)"
         PRESENT_REQUIRED+=("Vulkan")
-        if command_exists glslc; then
-            printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "glslc" "✓" "installed" "SPIR-V shader compiler (required for Vulkan build)"
-            PRESENT_REQUIRED+=("glslc")
+
+        # Delegate detailed Vulkan readiness to the gglib binary when available.
+        local gglib_bin=""
+        if [ -f "./target/release/gglib" ]; then gglib_bin="./target/release/gglib"
+        elif [ -f "./target/debug/gglib" ]; then gglib_bin="./target/debug/gglib"
+        elif command_exists gglib; then gglib_bin="gglib"
+        fi
+
+        if [ -n "$gglib_bin" ]; then
+            local vk_json
+            vk_json=$("$gglib_bin" config llama detect --json 2>/dev/null) || true
+            if [ -n "$vk_json" ]; then
+                local has_headers has_glslc
+                has_headers=$(echo "$vk_json" | grep -oE '"hasHeaders"\s*:\s*true' | head -1)
+                has_glslc=$(echo "$vk_json" | grep -oE '"hasGlslc"\s*:\s*true' | head -1)
+                if [ -n "$has_headers" ]; then
+                    printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan headers" "✓" "installed" "vulkan/vulkan.h development headers"
+                    PRESENT_REQUIRED+=("Vulkan headers")
+                else
+                    printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "Vulkan headers" "✗" "MISSING" "vulkan/vulkan.h required to build with -DGGML_VULKAN=ON"
+                    MISSING_REQUIRED+=("Vulkan headers")
+                fi
+                if [ -n "$has_glslc" ]; then
+                    printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "glslc" "✓" "installed" "SPIR-V shader compiler"
+                    PRESENT_REQUIRED+=("glslc")
+                else
+                    printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "Install: glslc or shaderc (via package manager)"
+                    MISSING_REQUIRED+=("glslc")
+                fi
+            fi
         else
-            printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "SPIR-V shader compiler (required for Vulkan build)"
-            MISSING_REQUIRED+=("glslc")
+            # Fallback: no gglib binary yet — basic glslc check only
+            if command_exists glslc; then
+                printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "glslc" "✓" "installed" "SPIR-V shader compiler (required for Vulkan build)"
+                PRESENT_REQUIRED+=("glslc")
+            else
+                printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "SPIR-V shader compiler (required for Vulkan build)"
+                MISSING_REQUIRED+=("glslc")
+            fi
         fi
     elif [ "$os" = "linux" ] || [ "$os" = "windows" ]; then
         printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "GPU" "✗" "MISSING" "No GPU detected - CUDA (NVIDIA), Vulkan (AMD/Intel), or Metal (macOS) required"

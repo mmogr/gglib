@@ -14,7 +14,7 @@ use gglib_core::paths::{gglib_data_dir, is_prebuilt_binary, llama_cpp_dir, llama
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, BuildPhase, PrebuiltAvailability, check_dependencies,
     check_disk_space, check_prebuilt_availability, detect_optimal_acceleration,
-    download_prebuilt_binaries, run_llama_source_build,
+    download_prebuilt_binaries, run_llama_source_build, vulkan_status,
 };
 
 fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
@@ -88,6 +88,57 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     // Step 2: Determine acceleration.
     let acceleration = determine_acceleration(cuda, metal, vulkan)?;
     println!("Selected acceleration: {}", acceleration.display_name());
+
+    // Step 2b: Vulkan build-readiness pre-flight.
+    if acceleration == Acceleration::Vulkan {
+        let vk = vulkan_status();
+        if !vk.ready_for_build() {
+            println!();
+            println!("\x1b[1;31m❌ Vulkan build requirements not met\x1b[0m");
+            println!();
+            println!(
+                "  Vulkan runtime (loader): {}",
+                if vk.has_loader {
+                    "✓ found"
+                } else {
+                    "✗ missing"
+                }
+            );
+            println!(
+                "  Vulkan dev headers:      {}",
+                if vk.has_headers {
+                    "✓ found"
+                } else {
+                    "✗ missing"
+                }
+            );
+            println!(
+                "  SPIR-V compiler (glslc): {}",
+                if vk.has_glslc {
+                    "✓ found"
+                } else {
+                    "✗ missing"
+                }
+            );
+            println!();
+            println!("Install the missing components to build with Vulkan:");
+            println!();
+            for pkg in &vk.missing {
+                for (distro, cmd) in pkg.install_hints() {
+                    println!("  {distro:16} {cmd}");
+                }
+            }
+            println!();
+            bail!(
+                "Missing Vulkan build dependencies: {}",
+                vk.missing
+                    .iter()
+                    .map(|p| p.label())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+    }
     println!();
 
     // Step 3: Interactive pre-flight prompt.
