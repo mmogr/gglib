@@ -13,6 +13,7 @@
 //! DRY. The helpers here provide a small, typed API on top of
 //! [`gglib_core::utils::process::cmd`].
 
+#[cfg(any(feature = "cli", test))]
 use anyhow::Result;
 use gglib_core::utils::process::cmd;
 
@@ -61,6 +62,7 @@ pub fn command_exists(program: &str) -> bool {
 ///
 /// Extracts only the leading numeric portion of each component, so
 /// `"12.0-rc1"` successfully parses as `(12, 0)`.
+#[cfg(any(target_os = "linux", test))]
 pub fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
     let parts: Vec<&str> = version_str.split('.').collect();
     if parts.len() >= 2 {
@@ -81,6 +83,7 @@ pub fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
 // ============================================================================
 
 /// Check if git is installed, returning its version string on success.
+#[cfg(any(feature = "cli", test))]
 pub fn has_git() -> Result<Option<String>> {
     match command_stdout("git", &["--version"]) {
         Some(v) => {
@@ -92,6 +95,7 @@ pub fn has_git() -> Result<Option<String>> {
 }
 
 /// Check if cmake is installed, returning its version string on success.
+#[cfg(any(feature = "cli", test))]
 pub fn has_cmake() -> Result<Option<String>> {
     match command_stdout("cmake", &["--version"]) {
         Some(v) => {
@@ -113,6 +117,7 @@ pub fn has_cmake() -> Result<Option<String>> {
 /// - **Windows**: `cl`, `g++`, `clang++`
 /// - **macOS**: `clang++`, `g++`
 /// - **Linux**: `g++`, `clang++`
+#[cfg(any(feature = "cli", test))]
 pub fn has_cpp_compiler() -> Result<Option<String>> {
     let compilers = if cfg!(target_os = "windows") {
         vec!["cl", "g++", "clang++"]
@@ -133,6 +138,7 @@ pub fn has_cpp_compiler() -> Result<Option<String>> {
 }
 
 /// Get the number of CPU cores available for parallel compilation.
+#[cfg(any(feature = "cli", test))]
 pub fn get_num_cores() -> usize {
     num_cpus::get()
 }

@@ -22,11 +22,14 @@
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
+#[cfg(feature = "cli")]
 use anyhow::Result;
 #[cfg(target_os = "linux")]
 use tracing::warn;
 
-use super::tools::{command_exists, command_stdout, parse_version_tuple};
+use super::tools::command_exists;
+#[cfg(target_os = "linux")]
+use super::tools::{command_stdout, parse_version_tuple};
 
 // ============================================================================
 // CUDA toolkit detection
@@ -81,6 +84,7 @@ fn get_gcc_version_tuple() -> Option<(u32, u32)> {
 /// 3. `/usr/local/cuda-*` (versioned installs, newest first)
 /// 4. `/usr/local/cuda` (generic symlink)
 /// 5. Windows standard locations
+#[cfg(feature = "cli")]
 pub fn get_cuda_path() -> Option<String> {
     if let Ok(cuda_path) = std::env::var("CUDA_PATH")
         && std::path::Path::new(&cuda_path).exists()
@@ -206,6 +210,7 @@ fn get_specific_gcc_version(gcc_cmd: &str) -> Result<String> {
 /// Returns `Ok(())` if the combination is supported, or an `Err` with
 /// a detailed message including remediation steps. Validation is only
 /// performed on Linux; other platforms return `Ok(())` unconditionally.
+#[cfg(feature = "cli")]
 pub fn validate_cuda_gcc_compatibility() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
