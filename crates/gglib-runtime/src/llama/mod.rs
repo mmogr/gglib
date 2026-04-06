@@ -72,7 +72,7 @@ pub use progress::CliProgress;
 pub use prompt::CliPrompt;
 
 // Core functionality
-pub use detect::{Acceleration, detect_optimal_acceleration};
+pub use detect::{Acceleration, MissingPackage, VulkanStatus, detect_optimal_acceleration, vulkan_status};
 pub use download::check_llama_installed;
 #[cfg(feature = "cli")]
 pub use ensure::ensure_llama_initialized;

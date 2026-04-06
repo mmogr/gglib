@@ -956,6 +956,8 @@ mod tests {
             cuda_version: Some("12.4".to_string()),
             has_metal: false,
             has_vulkan: false,
+            vulkan_headers: false,
+            vulkan_glslc: false,
         };
         let result = windows_availability_for_gpu(&gpu);
         match result {
@@ -987,6 +989,8 @@ mod tests {
             cuda_version: None,
             has_metal: false,
             has_vulkan: true,
+            vulkan_headers: false,
+            vulkan_glslc: false,
         };
         let result = windows_availability_for_gpu(&gpu);
         match result {
@@ -1019,6 +1023,8 @@ mod tests {
             cuda_version: None,
             has_metal: false,
             has_vulkan: true,
+            vulkan_headers: false,
+            vulkan_glslc: false,
         };
         let result = windows_availability_for_gpu(&gpu);
         match result {
@@ -1043,6 +1049,8 @@ mod tests {
             cuda_version: None,
             has_metal: false,
             has_vulkan: false,
+            vulkan_headers: false,
+            vulkan_glslc: false,
         };
         let result = windows_availability_for_gpu(&gpu);
         assert!(

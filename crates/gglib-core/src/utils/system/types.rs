@@ -77,6 +77,10 @@ pub struct GpuInfo {
     pub has_metal: bool,
     /// Vulkan runtime available (AMD, Intel, NVIDIA via Mesa/drivers).
     pub has_vulkan: bool,
+    /// Vulkan development headers installed (`vulkan/vulkan.h`).
+    pub vulkan_headers: bool,
+    /// SPIR-V shader compiler (`glslc`) available.
+    pub vulkan_glslc: bool,
 }
 
 /// System memory information for model fit calculations.
