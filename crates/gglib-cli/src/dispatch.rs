@@ -90,7 +90,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             question,
             model,
             file,
-            context: _,
+            context,
             verbose,
             quiet,
             sampling,
@@ -122,6 +122,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 verbose,
                 quiet,
                 sampling,
+                context,
             )
             .await?;
         }
