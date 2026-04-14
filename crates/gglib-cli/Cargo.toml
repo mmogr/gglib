@@ -24,6 +24,7 @@ reqwest = { workspace = true }
 
 # CLI-specific dependencies
 clap = { version = "4.0", features = ["derive", "env"] }
+clap_complete = "4"
 indicatif = { workspace = true }
 termimad = { workspace = true }
 crossterm = { workspace = true }
