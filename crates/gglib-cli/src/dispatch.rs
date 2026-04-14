@@ -161,6 +161,11 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         Commands::Mcp { command } => {
             handlers::mcp_cli::dispatch(ctx, command).await?;
         }
+
+        // ── Shell completions ───────────────────────────────────────────────
+        Commands::Completions { shell } => {
+            handlers::completions::execute(shell);
+        }
     }
 
     Ok(())
