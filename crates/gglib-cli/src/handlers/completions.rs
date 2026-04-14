@@ -10,16 +10,27 @@
 //! gglib completions zsh  > ~/.zsh/_gglib
 //! ```
 
-use std::io;
+use std::io::{self, Write};
 
+use anyhow::Result;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 
 use crate::parser::Cli;
 
 /// Write a completion script for `shell` to stdout.
-pub fn execute(shell: Shell) {
+///
+/// The script is buffered in memory before writing so that a broken pipe
+/// (e.g. the caller piping to `head`) is handled gracefully rather than
+/// causing a panic from within `clap_complete`.
+pub fn execute(shell: Shell) -> Result<()> {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
-    generate(shell, &mut cmd, bin_name, &mut io::stdout());
+    let mut buf: Vec<u8> = Vec::new();
+    generate(shell, &mut cmd, bin_name, &mut buf);
+    match io::stdout().write_all(&buf) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }

@@ -164,7 +164,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
 
         // ── Shell completions ───────────────────────────────────────────────
         Commands::Completions { shell } => {
-            handlers::completions::execute(shell);
+            handlers::completions::execute(shell)?;
         }
     }
 
