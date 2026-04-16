@@ -216,6 +216,35 @@ export function contentiousnessLabel(c: number): string {
   return "Devil's Advocate";
 }
 
+// ─── Serializable subset for DB persistence ────────────────────────────────
+
+/**
+ * Subset of CouncilSession stored in the DB metadata column.
+ *
+ * Strips transient streaming fields (activeAgent*, phase) to keep the
+ * payload lean. Everything needed to render a historical council thread
+ * is included.
+ */
+export interface SerializableCouncilSession {
+  topic: string;
+  totalRounds: number;
+  contributions: AgentContribution[];
+  synthesisText: string;
+  /** Non-null only for sessions that ended in error. */
+  error?: string | null;
+}
+
+/** Extract the persistable subset from a live session. */
+export function toSerializableSession(s: CouncilSession): SerializableCouncilSession {
+  return {
+    topic: s.topic,
+    totalRounds: s.totalRounds,
+    contributions: s.contributions,
+    synthesisText: s.synthesisText,
+    ...(s.error ? { error: s.error } : {}),
+  };
+}
+
 // ─── Factory ────────────────────────────────────────────────────────────────
 
 /** Create a fresh idle session. */

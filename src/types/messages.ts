@@ -6,6 +6,7 @@
  */
 
 import type { ThreadMessageLike } from '@assistant-ui/react';
+import type { SerializableCouncilSession } from './council';
 
 /**
  * Gglib message type - directly uses ThreadMessageLike
@@ -72,6 +73,8 @@ export type GglibMessageCustom = {
   thinkingDurationSeconds?: number | null;
   /** Whether this message should trigger council mode instead of normal chat. */
   isCouncilMode?: boolean;
+  /** Persisted council session data (set on the assistant message that holds the synthesis). */
+  councilSession?: SerializableCouncilSession;
 };
 
 /**

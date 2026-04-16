@@ -15,11 +15,13 @@ import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
 import type { GglibMessageCustom } from '../../../types/messages';
+import type { SerializableCouncilSession } from '../../../types/council';
 import { useVoiceContextOptional } from '../context/VoiceContext';
 import { stripThinkingBlocks } from '../../../utils/stripThinkingBlocks';
 import { extractReasoningText } from '../../../utils/messages';
 
 import { cn } from '../../../utils/cn';
+import { HistoricalCouncilThread } from '../../Council/Messages/HistoricalCouncilThread';
 
 /** Shared styling for small action buttons in message bubble footers. */
 const ACTION_BTN =
@@ -100,6 +102,24 @@ export const AssistantMessageBubble: React.FC = () => {
     minute: '2-digit',
   }).format(message.createdAt ?? new Date());
 
+  // Detect persisted council session — render historical thread instead of standard bubble
+  const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
+  const councilSession = custom?.councilSession as SerializableCouncilSession | undefined;
+  if (councilSession) {
+    return (
+      <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
+        <div className="flex items-center gap-sm mb-sm">
+          <div className="font-medium text-sm">Council of Agents</div>
+          <div className="text-xs text-text-muted">{timestamp}</div>
+        </div>
+        <HistoricalCouncilThread session={councilSession} />
+        <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <ActionBarPrimitive.Copy />
+        </ActionBarPrimitive.Root>
+      </MessagePrimitive.Root>
+    );
+  }
+
   // Extract reasoning and text parts from message content
   const content = (message as any)?.content;
   const contentArray = Array.isArray(content) ? content : [];
@@ -125,7 +145,6 @@ export const AssistantMessageBubble: React.FC = () => {
   const contentText = textChunks.join('\n\n');
 
   // Get thinking duration from loaded metadata or timing tracker
-  const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
   const loadedDuration = custom?.thinkingDurationSeconds ?? null;
   
   // Determine if this message is currently streaming

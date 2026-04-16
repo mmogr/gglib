@@ -1,6 +1,7 @@
 import type { ThreadMessage, ThreadMessageLike } from '@assistant-ui/react';
 import { extractNonTextContentParts, extractReasoningText } from '../../utils/messages';
 import type { ChatMessageMetadata } from '../../services/clients/chat';
+import type { GglibMessageCustom } from '../../types/messages';
 
 /**
  * Build the metadata payload for a DB save or update call.
@@ -22,7 +23,11 @@ export function buildSaveMetadata(
   const thinking = extractReasoningText(msg.content);
 
   const hasContent = parts.length > 0 || thinking !== null;
-  if (!hasContent) return null;
+
+  // Extract council session payload if present on the message
+  const councilSession = (m.metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.councilSession;
+
+  if (!hasContent && !councilSession) return null;
 
   const meta: ChatMessageMetadata = {};
   if (parts.length > 0) meta.contentParts = parts;
@@ -32,5 +37,11 @@ export function buildSaveMetadata(
       meta.thinkingDurationSeconds = thinkingDurationSeconds;
     }
   }
+
+  // Persist council session payload
+  if (councilSession) {
+    meta.councilSession = councilSession;
+  }
+
   return meta;
 }

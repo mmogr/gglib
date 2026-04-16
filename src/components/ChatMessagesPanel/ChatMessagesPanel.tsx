@@ -41,6 +41,8 @@ import { CouncilThread } from '../Council/Messages/CouncilThread';
 import { CouncilToggle } from '../Council/Composer/CouncilToggle';
 import { useCouncil } from '../../hooks/useCouncil';
 import type { GglibMessageCustom } from '../../types/messages';
+import type { SerializableCouncilSession } from '../../types/council';
+import { toSerializableSession } from '../../types/council';
 
 
 interface ChatMessagesPanelProps {
@@ -74,6 +76,8 @@ interface ChatMessagesPanelProps {
   councilSubmitRef?: React.MutableRefObject<((text: string) => void) | null>;
   /** Set one-shot metadata on the next user message. */
   setNextMessageMeta?: (meta: Partial<GglibMessageCustom>) => void;
+  /** Called when a council session completes (for persistence). */
+  onCouncilComplete?: (topic: string, synthesisText: string, session: SerializableCouncilSession) => void;
 }
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
@@ -99,6 +103,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   toolFormat,
   councilSubmitRef,
   setNextMessageMeta,
+  onCouncilComplete,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
@@ -130,6 +135,21 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
       setNextMessageMeta(isCouncilMode ? { isCouncilMode: true } : {});
     }
   }, [isCouncilMode, setNextMessageMeta]);
+
+  // When council completes, persist the session as a message pair and reset
+  const councilCompleteHandled = useRef(false);
+  useEffect(() => {
+    if (council.session.phase === 'complete' && !councilCompleteHandled.current) {
+      councilCompleteHandled.current = true;
+      const serialized = toSerializableSession(council.session);
+      onCouncilComplete?.(council.session.topic, council.session.synthesisText, serialized);
+      // Defer reset so the completion callback runs first
+      queueMicrotask(() => council.reset());
+    }
+    if (council.session.phase !== 'complete') {
+      councilCompleteHandled.current = false;
+    }
+  }, [council.session.phase, council.session, council, onCouncilComplete]);
 
   // Shared ticker for live timer updates (only runs while streaming)
   // Note: Updating tick triggers provider re-render, but messageComponents is stable
