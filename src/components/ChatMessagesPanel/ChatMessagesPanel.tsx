@@ -37,6 +37,8 @@ import { cn } from '../../utils/cn';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
 import { ToolSupportIndicator } from '../ToolSupportIndicator';
 import { getToolRegistry } from '../../services/tools';
+import { CouncilProvider } from '../../contexts/CouncilContext';
+import { CouncilThread } from '../Council/Messages/CouncilThread';
 
 
 interface ChatMessagesPanelProps {
@@ -506,6 +508,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             <MessageActionsContext.Provider value={messageActionsValue}>
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
               <VoiceProvider value={voiceContextValue}>
+              <CouncilProvider>
                 <ThreadPrimitive.Root
                   key={activeConversationId ?? 'thread-root'}
                   className="flex flex-col h-full min-h-0"
@@ -513,6 +516,10 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto p-md flex flex-col gap-md scroll-smooth" autoScroll>
                     <ThreadPrimitive.Messages
                       components={messageComponents}
+                    />
+                    <CouncilThread
+                      onRun={() => {/* wired in council mode integration */}}
+                      onCancel={() => {/* wired in council mode integration */}}
                     />
                   <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                     Jump to latest
@@ -557,6 +564,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   </ComposerPrimitive.Root>
                 </div>
               </ThreadPrimitive.Root>
+              </CouncilProvider>
               </VoiceProvider>
               </ThinkingTimingProvider>
             </MessageActionsContext.Provider>
