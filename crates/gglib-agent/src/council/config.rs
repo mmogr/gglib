@@ -1,0 +1,152 @@
+//! Configuration types for the Council of Agents feature.
+//!
+//! A council is a group of agents with distinct personas who debate a topic
+//! across multiple rounds, then produce a synthesised answer.  These types
+//! describe the static configuration of a council run — who the agents are,
+//! how many rounds to run, and what the synthesis should prioritise.
+
+use serde::{Deserialize, Serialize};
+
+// ─── per-agent config ────────────────────────────────────────────────────────
+
+/// Describes a single agent participating in a council debate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CouncilAgent {
+    /// Unique opaque identifier (e.g. a short slug or UUID).
+    pub id: String,
+
+    /// Human-readable role title (e.g. "Devil's Advocate", "Pragmatist").
+    pub name: String,
+
+    /// CSS-compatible colour string for the agent's avatar and lane tint
+    /// (e.g. `"#ef4444"` or `"rgb(239,68,68)"`).
+    pub color: String,
+
+    /// 2-3 sentence persona definition.  Re-injected at the top of every
+    /// turn to anchor the model's identity.
+    pub persona: String,
+
+    /// What unique angle this agent brings, expressed as a single sentence.
+    pub perspective: String,
+
+    /// Behavioural contentiousness on a `[0.0, 1.0]` scale.
+    ///
+    /// - `0.0` – fully collaborative (seek common ground)
+    /// - `1.0` – maximally adversarial (devil's advocate)
+    ///
+    /// The raw float is stored for UI slider binding.  Prompt assembly
+    /// maps it to a discrete instruction string via
+    /// [`crate::council::prompts::contentiousness_to_instruction`].
+    pub contentiousness: f32,
+
+    /// Optional allowlist of tool names this agent may use.
+    ///
+    /// - `None` → agent may use **all** tools available to the session.
+    /// - `Some(vec![])` → agent may use **no** tools.
+    /// - `Some(vec!["web_search"])` → agent may only use `web_search`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_filter: Option<Vec<String>>,
+}
+
+// ─── council-level config ────────────────────────────────────────────────────
+
+/// Full configuration for a council deliberation run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CouncilConfig {
+    /// The agents that will participate in the debate.
+    pub agents: Vec<CouncilAgent>,
+
+    /// The user's question or topic that the council will deliberate on.
+    pub topic: String,
+
+    /// Number of debate rounds before synthesis.
+    pub rounds: u32,
+
+    /// Optional guidance injected into the synthesis prompt to steer the
+    /// final answer's focus (e.g. "prioritise actionable recommendations").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesis_guidance: Option<String>,
+}
+
+// ─── suggested council (returned by /api/council/suggest) ────────────────────
+
+/// The LLM's suggested council composition, returned from the designer
+/// endpoint.  Every field is user-editable before the run begins.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SuggestedCouncil {
+    /// Suggested agents.
+    pub agents: Vec<CouncilAgent>,
+
+    /// Suggested number of debate rounds.
+    pub rounds: u32,
+
+    /// Suggested synthesis guidance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesis_guidance: Option<String>,
+}
+
+// ─── validation ──────────────────────────────────────────────────────────────
+
+/// Clamp `contentiousness` into `[0.0, 1.0]`.
+#[must_use]
+pub const fn clamp_contentiousness(value: f32) -> f32 {
+    if value < 0.0 {
+        0.0
+    } else if value > 1.0 {
+        1.0
+    } else {
+        value
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clamp_within_range() {
+        assert!((clamp_contentiousness(0.5) - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn clamp_below_zero() {
+        assert!((clamp_contentiousness(-0.3) - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn clamp_above_one() {
+        assert!((clamp_contentiousness(1.7) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn round_trip_council_agent_json() {
+        let agent = CouncilAgent {
+            id: "skeptic-1".into(),
+            name: "Skeptic".into(),
+            color: "#ef4444".into(),
+            persona: "A rigorous critic who demands evidence.".into(),
+            perspective: "Challenges assumptions.".into(),
+            contentiousness: 0.8,
+            tool_filter: Some(vec!["web_search".into()]),
+        };
+        let json = serde_json::to_string(&agent).unwrap();
+        let back: CouncilAgent = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, "skeptic-1");
+        assert!((back.contentiousness - 0.8).abs() < f32::EPSILON);
+        assert_eq!(back.tool_filter.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn council_agent_without_tool_filter() {
+        let json = r##"{
+            "id": "a",
+            "name": "A",
+            "color": "#000",
+            "persona": "p",
+            "perspective": "v",
+            "contentiousness": 0.5
+        }"##;
+        let agent: CouncilAgent = serde_json::from_str(json).unwrap();
+        assert!(agent.tool_filter.is_none());
+    }
+}

@@ -2048,6 +2048,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "gglib-core",
+ "serde",
  "serde_json",
  "tokio",
  "tracing",
