@@ -30,10 +30,5 @@ export type { LlamaStatus, LlamaInstallProgress } from './llamaInstall';
 export { getServerLogs, listenToServerLogs } from './serverLogs';
 export type { ServerLogEntry } from './serverLogs';
 
-// Research logs (deep research session logging)
-export {
-  researchLogger,
-  truncateString,
-  truncatePayload,
-} from './researchLogger';
-export type { ResearchLogEntry } from './researchLogger';
+// Payload truncation utilities
+export { truncateString, truncatePayload } from './logging/truncate';

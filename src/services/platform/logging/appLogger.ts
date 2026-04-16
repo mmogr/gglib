@@ -12,7 +12,7 @@ import type { ILogger, LogEntry, LogLevel } from './types';
 import { isLevelEnabled, parseLogLevel } from './types';
 import type { ILogTransport } from './transports';
 import { ConsoleTransport, TauriTracingTransport } from './transports';
-import { truncatePayload } from '../researchLogger';
+import { truncatePayload } from './truncate';
 import { isDesktop } from '../detect';
 
 // =============================================================================
@@ -43,17 +43,6 @@ export type AppLogCategory =
   | 'service.chat'
   | 'service.settings'
   | 'service.platform'
-  
-  // Research system
-  | 'research.session'
-  | 'research.loop'
-  | 'research.hook'
-  | 'research.tool'
-  | 'research.fact'
-  | 'research.facts'
-  | 'research.llm'
-  | 'research.planning'
-  | 'research.context'
   
   // Data flow
   | 'decoder'
@@ -107,8 +96,7 @@ export type AppLogCategory =
 /**
  * Application logger with configurable transports.
  * 
- * Unlike researchLogger (session-based), this is a global singleton for
- * general application logging throughout the codebase.
+ * Global singleton for application logging throughout the codebase.
  * 
  * Key features:
  * - Frontend-side level filtering (checks VITE_LOG_LEVEL before transport iteration)

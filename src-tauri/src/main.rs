@@ -220,11 +220,6 @@ fn main() {
             commands::llama::check_llama_status,
             commands::llama::install_llama,
             commands::llama::build_llama_from_source,
-            // Research logs: file persistence for debugging
-            commands::research_logs::init_research_logs,
-            commands::research_logs::append_research_log,
-            commands::research_logs::get_research_log_path,
-            commands::research_logs::list_research_logs,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
         ])

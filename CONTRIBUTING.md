@@ -87,7 +87,7 @@ When adding a new long-running operation:
 - Wire the CLI adapter in its own function. Wire the Axum handler. Wire the Tauri command.
 - All three ship in the same PR.
 
-**Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`, `research_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
+**Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
 
 **Frontend transport is unified.** The frontend client modules must not branch on `isTauriApp`. If you find yourself writing `if (isTauriApp()) { invoke(...) } else { fetch(...) }` in a service module, that is an architectural violation. The transport abstraction layer handles that distinction.
 

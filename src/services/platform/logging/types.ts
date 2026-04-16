@@ -2,7 +2,7 @@
  * Shared logging types and interfaces.
  * 
  * This module defines the core abstractions for the unified logging system.
- * Both AppLogger and researchLogger implement these interfaces.
+ * Both AppLogger and other logger implementations use these interfaces.
  */
 
 // =============================================================================
@@ -91,7 +91,7 @@ export interface LogEntry {
 /**
  * Core logger interface - transport-agnostic.
  * 
- * All logger implementations (AppLogger, researchLogger wrapper) should
+ * All logger implementations should
  * implement this interface for consistency.
  */
 export interface ILogger {

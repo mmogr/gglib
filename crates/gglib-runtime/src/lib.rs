@@ -39,7 +39,8 @@ pub use ports_impl::{CatalogPortImpl, LlmCompletionAdapter, RuntimePortImpl};
 
 // Re-export composition root factory
 pub use compose::{
-    compose_agent_loop, compose_agent_loop_sandboxed, compose_agent_loop_with_sampling,
+    CouncilPorts, compose_agent_loop, compose_agent_loop_sandboxed,
+    compose_agent_loop_with_sampling, compose_council_ports,
 };
 
 // Re-export system probe implementation

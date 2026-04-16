@@ -6,12 +6,11 @@ import {
   ComposerPrimitive,
   useThreadRuntime,
   useThread,
-  useComposerRuntime,
 } from '@assistant-ui/react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { AlertTriangle, Download, Mic, MicOff, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { getMessages, deleteMessage, saveMessage, updateMessage } from '../../services/clients/chat';
+import { getMessages, deleteMessage } from '../../services/clients/chat';
 import type { ConversationSummary } from '../../services/clients/chat';
 import type { ToastType } from '../Toast';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -31,13 +30,9 @@ import type { MessageActionsContextValue } from './components';
 import { useChatPersistence, useTitleGeneration } from './hooks';
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
-import { DeepResearchProvider } from './context/DeepResearchContext';
 import { VoiceProvider, useVoiceContextValue } from './context/VoiceContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
 import type { UseVoiceModeReturn } from '../../hooks/useVoiceMode';
-import { DeepResearchToggle } from '../DeepResearch';
-import { useDeepResearch } from '../../hooks/useDeepResearch';
-import type { ResearchState } from '../../hooks/useDeepResearch/types';
 import { cn } from '../../utils/cn';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
 import { ToolSupportIndicator } from '../ToolSupportIndicator';
@@ -96,7 +91,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   toolFormat,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
-  const composerRuntime = useComposerRuntime({ optional: true });
   const threadState = useThread({ optional: true });
   const isThreadRunning = threadState?.isRunning ?? false;
 
@@ -148,228 +142,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // ─────────────────────────────────────────────────────────────────────────────
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [systemPromptDraft, setSystemPromptDraft] = useState(DEFAULT_SYSTEM_PROMPT);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Deep Research mode state and hook
-  // ─────────────────────────────────────────────────────────────────────────────
-  const [isDeepResearchEnabled, setIsDeepResearchEnabled] = useState(false);
-  
-  // Track the assistant message ID that contains the research state
-  const researchMessageIdRef = useRef<string | null>(null);
-
-  // Deep research hook - handles the research loop and persistence
-  const deepResearch = useDeepResearch({
-    serverPort,
-    conversationId: activeConversationId ?? undefined,
-    systemPrompt: activeConversation?.system_prompt ?? DEFAULT_SYSTEM_PROMPT,
-    onStateChange: (newState: ResearchState) => {
-      // Update the assistant message with new research state
-      if (researchMessageIdRef.current && threadRuntime) {
-        const state = threadRuntime.getState();
-        const updatedMessages = state.messages.map((msg) => {
-          if (msg.id === researchMessageIdRef.current) {
-            // Update the message's metadata with the new research state
-            return {
-              ...msg,
-              metadata: {
-                ...msg.metadata,
-                custom: {
-                  ...(msg.metadata?.custom || {}),
-                  researchState: newState,
-                  isDeepResearch: true,
-                },
-              },
-            } as ThreadMessageLike;
-          }
-          return msg;
-        });
-        // Force re-render by resetting messages
-        threadRuntime.reset(updatedMessages);
-      }
-    },
-    onPersist: async (stateToSave: ResearchState) => {
-      // Persist the research state to database
-      // This will be saved as JSON in the message metadata
-      if (!activeConversationId) return;
-      
-      try {
-        // Get the dbId from the message's custom metadata
-        const customMeta = researchMessageIdRef.current
-          ? (threadRuntime?.getState().messages.find(m => m.id === researchMessageIdRef.current)?.metadata?.custom as { dbId?: number })
-          : null;
-        
-        if (customMeta?.dbId) {
-          // Update existing message with new content and metadata
-          const content = stateToSave.finalReport || `[Deep Research: ${stateToSave.phase}]`;
-          await updateMessage(
-            customMeta.dbId,
-            content,
-            { isDeepResearch: true, researchState: stateToSave }
-          );
-        }
-      } catch (error) {
-        appLogger.error('component.chat', 'Failed to persist research state', { error });
-      }
-    },
-    onError: (error: Error) => {
-      setChatError(`Research error: ${error.message}`);
-      showToast('Research failed', 'error');
-    },
-  });
-
-  // Toggle deep research mode
-  const toggleDeepResearch = useCallback(() => {
-    appLogger.debug('component.chat', 'Deep research toggle clicked', { enabled: isDeepResearchEnabled });
-    setIsDeepResearchEnabled((prev) => !prev);
-  }, [isDeepResearchEnabled]);
-
-  // Stop deep research
-  const stopDeepResearch = useCallback(() => {
-    deepResearch.stopResearch();
-    showToast('Deep research stopped', 'info');
-  }, [deepResearch, showToast]);
-
-  // Handle deep research submission
-  const handleDeepResearchSubmit = useCallback(async (query: string) => {
-    appLogger.debug('component.chat', 'Starting deep research submission', { query: query.slice(0, 50), conversationId: activeConversationId });
-    
-    if (!activeConversationId || !threadRuntime) {
-      appLogger.debug('component.chat', 'Missing conversation or runtime for deep research');
-      showToast('No active conversation', 'error');
-      return;
-    }
-
-    // 1. Create user message
-    const userMessageId = `user-${crypto.randomUUID()}`;
-    const userMessage: ThreadMessageLike = {
-      id: userMessageId,
-      role: 'user',
-      content: [{ type: 'text', text: query }],
-      createdAt: new Date(),
-      metadata: {
-        custom: {
-          conversationId: activeConversationId,
-        },
-      },
-    };
-
-    // 2. Create placeholder assistant message for research artifact
-    const assistantMessageId = `research-${crypto.randomUUID()}`;
-    const initialResearchState: ResearchState = {
-      originalQuery: query,
-      messageId: assistantMessageId,
-      conversationId: activeConversationId,
-      startedAt: Date.now(),
-      currentHypothesis: null,
-      researchPlan: [],
-      gatheredFacts: [],
-      currentStep: 0,
-      maxSteps: 30,
-      phase: 'planning',
-      knowledgeGaps: [],
-      contradictions: [],
-      lastReasoning: null,
-      pendingObservations: [],
-      finalReport: null,
-      citations: [],
-      // Verbose tracking fields
-      activityLog: [],
-      activeToolCalls: [],
-      isLLMGenerating: false,
-      // Multi-round research fields
-      searchHistory: [],
-      currentRound: 1,
-      maxRounds: 3,
-      roundSummaries: [],
-      // Multi-perspective research fields
-      complexity: 'simple',
-      perspectives: [],
-      currentPerspective: undefined,
-      // Productive step tracking
-      consecutiveUnproductiveSteps: 0,
-      consecutiveTextOnlySteps: 0,
-      stepsOnCurrentFocus: 0,
-      currentFocusQuestionId: null,
-      loopIterations: 0,
-    };
-
-    const assistantMessage: ThreadMessageLike = {
-      id: assistantMessageId,
-      role: 'assistant',
-      content: [{ type: 'text', text: '' }],
-      createdAt: new Date(),
-      metadata: {
-        custom: {
-          conversationId: activeConversationId,
-          isDeepResearch: true,
-          researchState: initialResearchState,
-        },
-      },
-    };
-
-    // 3. Add messages to thread
-    const currentMessages = threadRuntime.getState().messages;
-    threadRuntime.reset([...currentMessages, userMessage, assistantMessage]);
-    researchMessageIdRef.current = assistantMessageId;
-
-    // 4. Persist user message to database
-    try {
-      await saveMessage(
-        activeConversationId,
-        'user',
-        query
-      );
-    } catch (error) {
-      appLogger.error('component.chat', 'Failed to save user message', { error, conversationId: activeConversationId });
-    }
-
-    // 5. Persist assistant message to database with research metadata
-    let assistantDbId: number | undefined;
-    try {
-      assistantDbId = await saveMessage(
-        activeConversationId,
-        'assistant',
-        '[Deep Research in progress...]',
-        { isDeepResearch: true, researchState: initialResearchState }
-      );
-      
-      // Update the runtime message with the dbId for future updates
-      const messagesWithDbId = threadRuntime.getState().messages.map((msg) => {
-        if (msg.id === assistantMessageId) {
-          return {
-            ...msg,
-            metadata: {
-              ...msg.metadata,
-              custom: {
-                ...(msg.metadata?.custom || {}),
-                dbId: assistantDbId,
-              },
-            },
-          } as ThreadMessageLike;
-        }
-        return msg;
-      });
-      threadRuntime.reset(messagesWithDbId);
-    } catch (error) {
-      appLogger.error('component.chat', 'Failed to save assistant message', { error, conversationId: activeConversationId });
-    }
-
-    // 6. Start the research loop
-    try {
-      await deepResearch.startResearch(query, assistantMessageId);
-    } catch (error) {
-      appLogger.error('component.chat', 'Research failed', { error, query: query.slice(0, 50) });
-      setChatError(error instanceof Error ? error.message : 'Research failed');
-    }
-  }, [activeConversationId, threadRuntime, deepResearch, showToast, setChatError]);
-
-  // Reset deep research state when conversation changes
-  useEffect(() => {
-    setIsDeepResearchEnabled(false);
-    deepResearch.resetState();
-    researchMessageIdRef.current = null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConversationId]); // Only reset when conversation changes, not on every deepResearch change
 
   const [savingSystemPrompt, setSavingSystemPrompt] = useState(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -732,16 +504,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             <div className="flex items-center justify-center h-full text-text-muted">Loading messages…</div>
           ) : (
             <MessageActionsContext.Provider value={messageActionsValue}>
-              <DeepResearchProvider
-                isRunning={deepResearch.isRunning}
-                skipQuestion={deepResearch.skipQuestion}
-                skipAllPending={deepResearch.skipAllPending}
-                addQuestion={deepResearch.addQuestion}
-                generateMoreQuestions={deepResearch.generateMoreQuestions}
-                expandQuestion={deepResearch.expandQuestion}
-                goDeeper={deepResearch.goDeeper}
-                forceAnswer={deepResearch.forceAnswer}
-              >
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
               <VoiceProvider value={voiceContextValue}>
                 <ThreadPrimitive.Root
@@ -758,42 +520,21 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                 </ThreadPrimitive.Viewport>
 
                 <div className="border-t border-border p-md shrink-0">
-                  {isThreadRunning && !deepResearch.isRunning && (
+                  {isThreadRunning && (
                     <div className="text-sm text-primary mb-sm animate-research-pulse">Assistant is thinking…</div>
-                  )}
-                  {deepResearch.isRunning && (
-                    <div className="text-sm text-primary mb-sm animate-research-pulse">Researching… This may take a few minutes.</div>
                   )}
                   <ComposerPrimitive.Root className="flex gap-sm items-end">
                     <ComposerPrimitive.Input
                       className="flex-1 py-sm px-md border border-border rounded-base bg-surface text-text text-sm font-[inherit] resize-none min-h-[40px] max-h-[150px] focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                       placeholder={
                         isServerConnected
-                          ? isDeepResearchEnabled
-                            ? 'Ask a research question (Deep Research mode)'
-                            : 'Type your message. Shift + Enter for newline'
+                          ? 'Type your message. Shift + Enter for newline'
                           : 'Server not connected'
                       }
-                      disabled={!isServerConnected || deepResearch.isRunning}
+                      disabled={!isServerConnected}
                     />
                     <div className="flex gap-sm shrink-0">
-                      <DeepResearchToggle
-                        isEnabled={isDeepResearchEnabled}
-                        onToggle={toggleDeepResearch}
-                        isRunning={deepResearch.isRunning}
-                        onStop={stopDeepResearch}
-                        onWrapUp={deepResearch.requestWrapUp}
-                        researchPhase={deepResearch.state?.phase}
-                        disabled={!isServerConnected || isThreadRunning}
-                        disabledReason={
-                          !isServerConnected
-                            ? 'Server not connected'
-                            : isThreadRunning
-                            ? 'Wait for current response'
-                            : undefined
-                        }
-                      />
-                      {isThreadRunning && !deepResearch.isRunning && (
+                      {isThreadRunning && (
                         <Button
                           variant="danger"
                           size="sm"
@@ -803,40 +544,21 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                           Stop
                         </Button>
                       )}
-                      {isDeepResearchEnabled ? (
+                      <ComposerPrimitive.Send asChild>
                         <Button
                           variant="primary"
                           size="sm"
-                          disabled={!isServerConnected || deepResearch.isRunning}
-                          onClick={() => {
-                            const composer = composerRuntime;
-                            if (!composer) return;
-                            const text = composer.getState().text.trim();
-                            if (!text) return;
-                            composer.setText('');
-                            handleDeepResearchSubmit(text);
-                          }}
+                          disabled={!isServerConnected}
                         >
-                          Research ↵
+                          Send ↵
                         </Button>
-                      ) : (
-                        <ComposerPrimitive.Send asChild>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            disabled={!isServerConnected}
-                          >
-                            Send ↵
-                          </Button>
-                        </ComposerPrimitive.Send>
-                      )}
+                      </ComposerPrimitive.Send>
                     </div>
                   </ComposerPrimitive.Root>
                 </div>
               </ThreadPrimitive.Root>
               </VoiceProvider>
               </ThinkingTimingProvider>
-              </DeepResearchProvider>
             </MessageActionsContext.Provider>
           )}
         </div>
