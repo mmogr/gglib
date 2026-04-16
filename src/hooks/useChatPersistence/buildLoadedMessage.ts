@@ -113,18 +113,10 @@ export function buildLoadedMessage(
   conversationId: number,
 ): ThreadMessageLike {
   const storedParts = msg.metadata?.contentParts as SerializableContentPart[] | undefined;
-  const isDeepResearch = msg.metadata?.isDeepResearch === true;
   const thinkingText = msg.metadata?.thinking as string | undefined;
   const thinkingDuration = msg.metadata?.thinkingDurationSeconds as number | null | undefined;
 
-  const custom: Record<string, unknown> = isDeepResearch
-    ? {
-        dbId: msg.id,
-        conversationId,
-        isDeepResearch: true,
-        researchState: msg.metadata?.researchState,
-      }
-    : { dbId: msg.id, conversationId };
+  const custom: Record<string, unknown> = { dbId: msg.id, conversationId };
 
   if (thinkingDuration != null) {
     custom.thinkingDurationSeconds = thinkingDuration;

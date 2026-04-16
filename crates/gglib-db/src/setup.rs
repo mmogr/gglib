@@ -224,7 +224,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Migration: Add metadata column for deep research state, tool usage, etc.
+    // Migration: Add metadata column for tool usage, etc.
     let _ = sqlx::query(r#"ALTER TABLE chat_messages ADD COLUMN metadata TEXT"#)
         .execute(pool)
         .await;

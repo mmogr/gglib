@@ -6,7 +6,7 @@
  */
 
 import type { LogEntry } from './types';
-import { truncatePayload } from '../researchLogger';
+import { truncatePayload } from './truncate';
 
 // =============================================================================
 // Transport Interface

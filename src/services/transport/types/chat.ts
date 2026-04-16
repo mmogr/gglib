@@ -42,16 +42,12 @@ export interface ConversationSummary {
   updated_at: string;
 }
 
-import type { ResearchState } from '../../../hooks/useDeepResearch/types';
 import type { SerializableContentPart } from '../../../utils/messages/contentParts';
 
 /**
  * Metadata attached to a chat message.
- * Used for deep research state, thinking, content parts, custom flags, etc.
  */
 export interface ChatMessageMetadata {
-  isDeepResearch?: boolean;
-  researchState?: ResearchState | null;
   thinking?: string;
   thinkingDurationSeconds?: number | null;
   contentParts?: SerializableContentPart[];

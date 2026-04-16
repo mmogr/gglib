@@ -76,7 +76,7 @@ Enforces Tauri `invoke()` allowlist in frontend code:
 ### `check-tauri-commands.sh`
 
 Enforces "HTTP-first, OS-glue-only" Tauri command policy:
-1. `#[tauri::command]` only in `{util,llama,app_logs,research_logs}.rs`
+1. `#[tauri::command]` only in `{util,llama,app_logs}.rs`
 2. No extra `.rs` files in `src-tauri/src/commands/`
 3. No deprecated `get_gui_api_port` anywhere
 

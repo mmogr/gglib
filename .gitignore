@@ -74,5 +74,4 @@ tarpaulin-report.html
 boundary-status.json
 .vscode/settings.json
 
-research_logs/
 logs/

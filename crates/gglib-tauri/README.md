@@ -102,13 +102,7 @@ The desktop app uses an **HTTP-first architecture** — model operations, chat, 
 | `set_proxy_state` | util | Update proxy menu toggle |
 | `check_llama_status` | llama | Check llama.cpp installation |
 | `install_llama` | llama | Install/build llama.cpp |
-| `log_from_frontend` | app_logs | Forward frontend logs to Rust logger |
-| `init_research_logs` | research_logs | Initialize research log directory |
-| `append_research_log` | research_logs | Append line to research session log |
-| `get_research_log_path` | research_logs | Get filesystem path for a session |
-| `list_research_logs` | research_logs | List available research sessions |
-
-See [src-tauri/README.md](../../src-tauri/README.md) for the full architecture explanation.
+| `log_from_frontend` | app_logs | Forward frontend logs to Rust logger |\n\nSee [src-tauri/README.md](../../src-tauri/README.md) for the full architecture explanation.
 
 ## Events
 

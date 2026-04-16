@@ -14,10 +14,7 @@ import { MessageActionsContext } from './MessageActionsContext';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
-import { useDeepResearchContext } from '../context/DeepResearchContext';
-import { ResearchArtifact } from '../../DeepResearch';
 import type { GglibMessageCustom } from '../../../types/messages';
-import type { ResearchState } from '../../../hooks/useDeepResearch/types';
 import { useVoiceContextOptional } from '../context/VoiceContext';
 import { stripThinkingBlocks } from '../../../utils/stripThinkingBlocks';
 import { extractReasoningText } from '../../../utils/messages';
@@ -27,23 +24,6 @@ import { cn } from '../../../utils/cn';
 /** Shared styling for small action buttons in message bubble footers. */
 const ACTION_BTN =
   'bg-transparent border-none cursor-pointer py-xs px-sm rounded-base text-sm opacity-70 transition-all duration-150 hover:opacity-100 hover:bg-surface-elevated';
-
-/**
- * Extract research state from message metadata (if present).
- */
-function getResearchState(message: ReturnType<typeof useMessage>): ResearchState | null {
-  // Access custom metadata via the message's metadata.custom field
-  const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
-  return custom?.researchState ?? null;
-}
-
-/**
- * Check if a message is a deep research artifact.
- */
-function isDeepResearchMessage(message: ReturnType<typeof useMessage>): boolean {
-  const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
-  return custom?.isDeepResearch === true || custom?.researchState != null;
-}
 
 /**
  * Check if a message originated from voice input/output.
@@ -109,21 +89,16 @@ const SpeakButton: React.FC<{ message: ReturnType<typeof useMessage> }> = ({ mes
 
 /**
  * Message bubble for assistant responses.
- * Handles thinking blocks, markdown rendering, and deep research artifacts.
+ * Handles thinking blocks and markdown rendering.
  */
 export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
   const timing = useThinkingTiming();
-  const deepResearchCtx = useDeepResearchContext();
   const isVoice = isVoiceMessage(message);
   const timestamp = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
   }).format(message.createdAt ?? new Date());
-
-  // Check if this is a deep research message
-  const researchState = getResearchState(message);
-  const isResearch = isDeepResearchMessage(message);
 
   // Extract reasoning and text parts from message content
   const content = (message as any)?.content;
@@ -159,45 +134,6 @@ export const AssistantMessageBubble: React.FC = () => {
   // Determine if we're currently in the thinking phase (streaming with only thinking, no main content yet)
   const isCurrentlyThinking = isStreaming && !!thinkingText && !contentText;
 
-  // For deep research messages, render ResearchArtifact
-  if (isResearch && researchState) {
-    // Research is "running" if it's not complete and not in error state
-    // Note: We don't rely on isStreaming here because deep research manages its own state
-    const isResearchRunning = researchState.phase !== 'complete' && researchState.phase !== 'error';
-    
-    return (
-      <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
-        <div className="flex items-center gap-sm">
-          <div className="text-lg" aria-hidden>
-            <Icon icon={Bot} size={18} />
-          </div>
-          <div>
-            <div className="font-medium text-sm">Assistant</div>
-            <div className="text-xs text-text-muted">{timestamp}</div>
-          </div>
-        </div>
-        <div className="leading-[1.6]">
-          <ResearchArtifact
-            state={researchState}
-            isRunning={isResearchRunning}
-            onSkipQuestion={deepResearchCtx?.skipQuestion}
-            onSkipAllPending={deepResearchCtx?.skipAllPending}
-            onAddQuestion={deepResearchCtx?.addQuestion}
-            onGenerateMoreQuestions={deepResearchCtx?.generateMoreQuestions}
-            onExpandQuestion={deepResearchCtx?.expandQuestion}
-            onGoDeeper={deepResearchCtx?.goDeeper}
-            onForceAnswer={deepResearchCtx?.forceAnswer}
-            defaultExpanded={true}
-          />
-        </div>
-        <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-          <ActionBarPrimitive.Copy />
-        </ActionBarPrimitive.Root>
-      </MessagePrimitive.Root>
-    );
-  }
-
-  // Standard assistant message rendering
   return (
     <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
       <div className="flex items-center gap-sm">

@@ -3,9 +3,9 @@
 # CI gate: Enforce "HTTP-first, OS-glue-only" Tauri command policy
 #
 # This script fails if it finds:
-# 1. #[tauri::command] outside of {util,llama,app_logs,research_logs}.rs
-# 2. Extra .rs files in src-tauri/src/commands/ (only {mod,util,llama,app_logs,research_logs}.rs allowed)
-# 3. invoke_handler! referencing commands outside of {util,llama,app_logs,research_logs}
+# 1. #[tauri::command] outside of {util,llama,app_logs}.rs
+# 2. Extra .rs files in src-tauri/src/commands/ (only {mod,util,llama,app_logs}.rs allowed)
+# 3. invoke_handler! referencing commands outside of {util,llama,app_logs}
 # 4. Deprecated get_gui_api_port anywhere in the codebase
 #
 # Run this in CI to prevent architectural regression.
@@ -15,7 +15,6 @@
 #   util.rs          — discovery, shell, menu (OS hooks)
 #   llama.rs         — llama-server binary management (OS process)
 #   app_logs.rs      — frontend log ingestion (OS file I/O)
-#   research_logs.rs — session research log persistence (OS file I/O)
 
 set -euo pipefail
 
@@ -59,12 +58,9 @@ while IFS= read -r line; do
         src-tauri/src/commands/app_logs.rs)
             echo -e "  ${GREEN}✓${NC} $file (OS integration: frontend log ingestion)"
             ;;
-        src-tauri/src/commands/research_logs.rs)
-            echo -e "  ${GREEN}✓${NC} $file (OS integration: research log persistence)"
-            ;;
         *)
             echo -e "  ${RED}✗${NC} UNAUTHORIZED COMMAND: $line"
-            echo -e "      Commands must be in util.rs, llama.rs, app_logs.rs, or research_logs.rs only"
+            echo -e "      Commands must be in util.rs, llama.rs, or app_logs.rs only"
             ERRORS=$((ERRORS + 1))
             ;;
     esac
@@ -89,7 +85,7 @@ if [ -d "$COMMANDS_DIR" ]; then
         basename=$(basename "$file")
         
         case "$basename" in
-            mod.rs|util.rs|llama.rs|app_logs.rs|research_logs.rs)
+            mod.rs|util.rs|llama.rs|app_logs.rs)
                 echo -e "  ${GREEN}✓${NC} $basename (allowed)"
                 ;;
             *)
@@ -127,7 +123,7 @@ if [ -f "$MAIN_RS" ]; then
             # Check if line contains a command reference
             if echo "$line" | grep -q "commands::"; then
                 # Validate it's one of the allowed patterns
-                if echo "$line" | grep -qE "commands::(util|llama|app_logs|research_logs)::"; then
+                if echo "$line" | grep -qE "commands::(util|llama|app_logs)::"; then
                     echo -e "  ${GREEN}✓${NC} $(echo "$line" | sed 's/^[[:space:]]*//')"
                 else
                     echo -e "  ${RED}✗${NC} INVALID COMMAND REGISTRATION: $(echo "$line" | sed 's/^[[:space:]]*//')"
