@@ -86,6 +86,34 @@ pub fn compose_agent_loop_with_sampling(
     )
 }
 
+/// Return type for [`compose_council_ports`].
+pub struct CouncilPorts {
+    /// LLM completion port shared across all agent turns in the council.
+    pub llm: Arc<dyn LlmCompletionPort>,
+    /// Tool executor shared across all agent turns in the council.
+    pub tool_executor: Arc<dyn ToolExecutorPort>,
+}
+
+/// Compose the raw infrastructure ports needed by the council orchestrator.
+///
+/// Unlike [`compose_agent_loop`] — which returns a fully-assembled
+/// [`AgentLoopPort`] — this returns the underlying [`LlmCompletionPort`] and
+/// [`ToolExecutorPort`] separately, because
+/// [`gglib_agent::council::run_council`] creates per-agent `AgentLoop`
+/// instances internally (each with its own tool filter).
+pub fn compose_council_ports(
+    base_url: String,
+    http_client: Client,
+    model: Option<String>,
+    mcp: Arc<McpService>,
+) -> CouncilPorts {
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
+        LlmCompletionAdapter::with_client(base_url, http_client, model),
+    );
+    let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(CombinedToolExecutor::new(mcp));
+    CouncilPorts { llm, tool_executor }
+}
+
 fn compose_agent_loop_inner(
     base_url: String,
     http_client: Client,

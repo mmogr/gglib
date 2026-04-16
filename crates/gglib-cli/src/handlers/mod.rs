@@ -16,6 +16,7 @@
 pub mod agent_chat;
 pub mod completions;
 pub mod config;
+pub mod council;
 pub mod gui;
 pub mod history;
 pub mod inference;

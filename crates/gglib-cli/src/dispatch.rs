@@ -86,6 +86,29 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                 handlers::inference::chat::execute(ctx, args).await?;
             }
         }
+        Commands::Council {
+            topic,
+            suggest,
+            config,
+            agent_count,
+            model,
+            port,
+        } => {
+            if suggest {
+                handlers::council::execute_suggest(ctx, &topic, port, agent_count, model)
+                    .await?;
+            } else {
+                let config_path = config.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--config <path> is required when running a council.\n\
+                         Use --suggest to generate a config first."
+                    )
+                })?;
+                handlers::council::execute_run(ctx, &config_path, &topic, port, model)
+                    .await?;
+            }
+        }
+
         Commands::Question {
             question,
             model,

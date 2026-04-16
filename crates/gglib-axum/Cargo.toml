@@ -11,6 +11,7 @@ name = "gglib_axum"
 path = "src/lib.rs"
 
 [dependencies]
+gglib-agent = { path = "../gglib-agent" }
 gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
 gglib-download = { path = "../gglib-download" }

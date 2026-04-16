@@ -10,6 +10,7 @@ pub mod agent;
 pub mod builtin;
 pub mod chat;
 pub mod config;
+pub mod council;
 pub mod events;
 pub mod mcp;
 pub mod model;

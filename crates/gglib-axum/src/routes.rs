@@ -137,6 +137,9 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/agent/chat",
             post(handlers::agent::chat).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
         )
+        // Council (multi-agent deliberation)
+        .route("/council/suggest", post(handlers::council::suggest))
+        .route("/council/run", post(handlers::council::run))
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }

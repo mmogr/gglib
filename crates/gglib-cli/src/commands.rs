@@ -8,6 +8,8 @@
 use clap::Subcommand;
 use clap_complete::Shell;
 
+use std::path::PathBuf;
+
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
@@ -110,6 +112,31 @@ pub enum Commands {
         /// Subcommand (e.g. `history`)
         #[command(subcommand)]
         command: Option<ChatCommand>,
+    },
+
+    /// Run a council of agents that deliberate on a topic
+    ///
+    /// Use --suggest to have the LLM design a council for your topic,
+    /// or --config to run a deliberation with a pre-built council config.
+    #[command(display_order = 13)]
+    Council {
+        /// Topic for the council to deliberate on
+        topic: String,
+        /// Generate a council config instead of running one
+        #[arg(long)]
+        suggest: bool,
+        /// Path to a council config JSON file (required unless --suggest)
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// Number of agents to suggest (only with --suggest)
+        #[arg(long, default_value = "4")]
+        agent_count: u32,
+        /// Model name forwarded to llama-server
+        #[arg(long)]
+        model: Option<String>,
+        /// Port of a running llama-server to reuse
+        #[arg(long, default_value = "8080")]
+        port: u16,
     },
 
     /// Ask a question with optional context from stdin or file
