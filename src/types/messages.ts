@@ -70,6 +70,8 @@ export type GglibMessageCustom = {
   timingFinalized?: boolean;
   /** Thinking duration in seconds (restored from metadata on load). */
   thinkingDurationSeconds?: number | null;
+  /** Whether this message should trigger council mode instead of normal chat. */
+  isCouncilMode?: boolean;
 };
 
 /**
