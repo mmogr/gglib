@@ -14,6 +14,7 @@
 //! - [`web`]       — Axum web-server GUI launcher
 
 pub mod agent_chat;
+pub mod completions;
 pub mod config;
 pub mod gui;
 pub mod history;

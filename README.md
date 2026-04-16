@@ -281,6 +281,16 @@ All interfaces share the same database and model directory. Pick whichever fits 
 | **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `0.0.0.0:9887` |
 | **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — works with OpenWebUI, any OpenAI SDK |
 
+**Shell completions** — enable tab completion for your shell:
+
+| Shell | Setup |
+|-------|-------|
+| fish | `gglib completions fish > ~/.config/fish/completions/gglib.fish` |
+| bash | `gglib completions bash > ~/.bash_completion` |
+| zsh | `gglib completions zsh > ~/.zsh/_gglib` |
+| elvish | `gglib completions elvish > ~/.config/elvish/lib/gglib.elv` |
+| powershell | `gglib completions powershell >> $PROFILE` |
+
 <details>
 <summary><strong>Security notes</strong></summary>
 

@@ -120,6 +120,21 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `config default <id>` | Set/show/clear the default model |
 | `verify <id>` | Verify model integrity via SHA256 hash comparison |
 | `repair <id>` | Re-download corrupt shards for a model |
+| `completions <shell>` | Print a shell completion script to stdout |
+
+### Shell Completions
+
+Enable tab completion for your shell by piping the generated script into place:
+
+| Shell | One-time setup |
+|-------|----------------|
+| fish | `gglib completions fish > ~/.config/fish/completions/gglib.fish` |
+| bash | `gglib completions bash > ~/.bash_completion` |
+| zsh | `gglib completions zsh > ~/.zsh/_gglib` |
+| elvish | `gglib completions elvish > ~/.config/elvish/lib/gglib.elv` |
+| powershell | `gglib completions powershell >> $PROFILE` |
+
+Supported shells: `bash`, `zsh`, `fish`, `elvish`, `powershell`.
 
 ### Question Command
 

@@ -6,6 +6,7 @@
 //! ergonomic direct access.
 
 use clap::Subcommand;
+use clap_complete::Shell;
 
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
@@ -184,6 +185,20 @@ pub enum Commands {
         /// Path to the directory containing built frontend assets (e.g., ./web_ui/dist)
         #[arg(long)]
         static_dir: Option<std::path::PathBuf>,
+    },
+
+    /// Generate shell completion scripts (bash, zsh, fish, elvish, powershell)
+    ///
+    /// Prints a completion script to stdout. Pipe it into your shell's config:
+    ///
+    ///   gglib completions fish > ~/.config/fish/completions/gglib.fish
+    ///   gglib completions bash > ~/.bash_completion
+    ///   gglib completions zsh  > ~/.zsh/_gglib
+    #[command(display_order = 30)]
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
     },
 
     /// Start OpenAI-compatible proxy with MCP tool gateway
