@@ -141,7 +141,15 @@ pub async fn run(
     }
 
     // ── synthesis ────────────────────────────────────────────────────────
-    run_synthesis(&config, agent_config, &llm, &tool_executor, &state, &council_tx).await;
+    run_synthesis(
+        &config,
+        agent_config,
+        &llm,
+        &tool_executor,
+        &state,
+        &council_tx,
+    )
+    .await;
 }
 
 /// Synthesis pass: build the transcript, run a single-iteration agent loop,
