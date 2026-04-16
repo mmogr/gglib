@@ -53,4 +53,4 @@ pub struct CouncilRunRequest {
 
 // ── Re-exports for handler convenience ───────────────────────────────────────
 
-pub(crate) use gglib_agent::council::{CouncilEvent, COUNCIL_EVENT_CHANNEL_CAPACITY};
+pub(crate) use gglib_agent::council::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};

@@ -12,13 +12,13 @@ use std::sync::Arc;
 use anyhow::{Result, anyhow};
 use tokio::sync::mpsc;
 
+use gglib_agent::AgentLoop;
 use gglib_agent::council::config::{CouncilConfig, SuggestedCouncil};
 use gglib_agent::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_agent::council::prompts::COUNCIL_DESIGNER_PROMPT;
 use gglib_agent::council::run_council;
-use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_runtime::compose_council_ports;
 
 use crate::bootstrap::CliContext;
@@ -126,8 +126,8 @@ pub async fn execute_run(
 ) -> Result<()> {
     let raw = std::fs::read_to_string(config_path)
         .map_err(|e| anyhow!("cannot read config file '{}': {e}", config_path.display()))?;
-    let mut council: CouncilConfig = serde_json::from_str(&raw)
-        .map_err(|e| anyhow!("invalid council config: {e}"))?;
+    let mut council: CouncilConfig =
+        serde_json::from_str(&raw).map_err(|e| anyhow!("invalid council config: {e}"))?;
 
     // Override topic if the config has a placeholder
     if council.topic.is_empty() {
@@ -150,7 +150,14 @@ pub async fn execute_run(
         mpsc::channel::<CouncilEvent>(COUNCIL_EVENT_CHANNEL_CAPACITY);
 
     tokio::spawn(async move {
-        run_council(council, agent_config, ports.llm, ports.tool_executor, council_tx).await;
+        run_council(
+            council,
+            agent_config,
+            ports.llm,
+            ports.tool_executor,
+            council_tx,
+        )
+        .await;
     });
 
     render_council_stream(&mut council_rx).await;
@@ -174,9 +181,7 @@ async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 let color = temperature_fg(contentiousness);
                 current_agent_color = color;
                 in_synthesis = false;
-                eprintln!(
-                    "\n{color}{BOLD}── {agent_name}{RESET}  {DIM}(round {round}){RESET}"
-                );
+                eprintln!("\n{color}{BOLD}── {agent_name}{RESET}  {DIM}(round {round}){RESET}");
             }
 
             CouncilEvent::AgentTextDelta { delta, .. } => {
@@ -193,16 +198,16 @@ async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 display_name,
                 args_summary,
                 ..
-            } => {
-                match args_summary {
-                    Some(summary) => {
-                        eprintln!("  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET}  {DIM}{summary}{RESET} …");
-                    }
-                    None => {
-                        eprintln!("  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET} …");
-                    }
+            } => match args_summary {
+                Some(summary) => {
+                    eprintln!(
+                        "  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET}  {DIM}{summary}{RESET} …"
+                    );
                 }
-            }
+                None => {
+                    eprintln!("  {DIM}⚙{RESET}  {BOLD}{display_name}{RESET} …");
+                }
+            },
 
             CouncilEvent::AgentToolCallComplete {
                 display_name,
@@ -221,29 +226,20 @@ async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 );
             }
 
-            CouncilEvent::AgentTurnComplete {
-                core_claim,
-                ..
-            } => {
+            CouncilEvent::AgentTurnComplete { core_claim, .. } => {
                 println!();
                 if let Some(claim) = core_claim {
-                    eprintln!(
-                        "  {current_agent_color}{DIM}CORE CLAIM: {claim}{RESET}"
-                    );
+                    eprintln!("  {current_agent_color}{DIM}CORE CLAIM: {claim}{RESET}");
                 }
             }
 
             CouncilEvent::RoundSeparator { round } => {
-                eprintln!(
-                    "\n{DIM}═══════════════════ Round {round} ═══════════════════{RESET}"
-                );
+                eprintln!("\n{DIM}═══════════════════ Round {round} ═══════════════════{RESET}");
             }
 
             CouncilEvent::SynthesisStart => {
                 in_synthesis = true;
-                eprintln!(
-                    "\n\x1b[36m{BOLD}── Council Synthesis ──{RESET}"
-                );
+                eprintln!("\n\x1b[36m{BOLD}── Council Synthesis ──{RESET}");
             }
 
             CouncilEvent::SynthesisTextDelta { delta } => {

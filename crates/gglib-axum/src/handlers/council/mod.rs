@@ -18,13 +18,13 @@ use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
 use crate::state::AppState;
 
-use dto::{CouncilEvent, COUNCIL_EVENT_CHANNEL_CAPACITY};
+use dto::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 
-use gglib_agent::council::{SuggestedCouncil, run_council};
-use gglib_agent::council::prompts::COUNCIL_DESIGNER_PROMPT;
 use gglib_agent::AgentLoop;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_agent::council::prompts::COUNCIL_DESIGNER_PROMPT;
+use gglib_agent::council::{SuggestedCouncil, run_council};
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_runtime::compose_council_ports;
 
 // ─── POST /api/council/suggest ───────────────────────────────────────────────
@@ -107,9 +107,7 @@ pub async fn run(
         .clone()
         .try_acquire_owned()
         .map_err(|_| {
-            HttpError::TooManyRequests(
-                "all agent loop slots are in use; try again later".into(),
-            )
+            HttpError::TooManyRequests("all agent loop slots are in use; try again later".into())
         })?;
 
     validate_port(&state, req.port).await?;
@@ -124,8 +122,7 @@ pub async fn run(
     let agent_config: AgentConfig = req.config.map_or_else(AgentConfig::default, Into::into);
     let council_config = req.council;
 
-    let (council_tx, council_rx) =
-        mpsc::channel::<CouncilEvent>(COUNCIL_EVENT_CHANNEL_CAPACITY);
+    let (council_tx, council_rx) = mpsc::channel::<CouncilEvent>(COUNCIL_EVENT_CHANNEL_CAPACITY);
 
     tokio::spawn(async move {
         let _permit = permit;

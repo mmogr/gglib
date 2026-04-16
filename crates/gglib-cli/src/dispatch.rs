@@ -95,8 +95,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             port,
         } => {
             if suggest {
-                handlers::council::execute_suggest(ctx, &topic, port, agent_count, model)
-                    .await?;
+                handlers::council::execute_suggest(ctx, &topic, port, agent_count, model).await?;
             } else {
                 let config_path = config.ok_or_else(|| {
                     anyhow::anyhow!(
@@ -104,8 +103,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                          Use --suggest to generate a config first."
                     )
                 })?;
-                handlers::council::execute_run(ctx, &config_path, &topic, port, model)
-                    .await?;
+                handlers::council::execute_run(ctx, &config_path, &topic, port, model).await?;
             }
         }
 

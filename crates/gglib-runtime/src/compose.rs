@@ -107,9 +107,11 @@ pub fn compose_council_ports(
     model: Option<String>,
     mcp: Arc<McpService>,
 ) -> CouncilPorts {
-    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
-        LlmCompletionAdapter::with_client(base_url, http_client, model),
-    );
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
+        base_url,
+        http_client,
+        model,
+    ));
     let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(CombinedToolExecutor::new(mcp));
     CouncilPorts { llm, tool_executor }
 }
