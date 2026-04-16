@@ -19,6 +19,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useVoiceModeContext } from '../contexts/VoiceModeContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
+import { CouncilProvider } from '../contexts/CouncilContext';
 import { useServerState } from '../services/serverEvents';
 import { getServerToolSupport } from '../services/clients/servers';
 import {
@@ -103,6 +104,9 @@ export default function ChatPage({
     return () => { cancelled = true; };
   }, [modelId]);
 
+  // Council mode: ref filled by ChatMessagesPanel with the suggest() callback
+  const councilSubmitRef = useRef<((text: string) => void) | null>(null);
+
   // Runtime - now with external message state
   const { runtime, messages, setMessages, isRunning, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
@@ -110,6 +114,7 @@ export default function ChatPage({
     onError: (error) => setChatError(error.message),
     maxToolIterations,
     supportsToolCalls,
+    onCouncilSubmit: (text) => councilSubmitRef.current?.(text),
   });
 
   // Server state from registry - derives isServerRunning reactively
@@ -393,6 +398,7 @@ export default function ChatPage({
         {/* Tool UI Components - render tool calls in chat messages */}
         <GenericToolUI />
         
+        <CouncilProvider>
         <TwoPanelLayout
           ref={activeTab === 'chat' ? layoutRef : undefined}
           isHidden={activeTab !== 'chat'}
@@ -440,9 +446,12 @@ export default function ChatPage({
               voice={voice ?? undefined}
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
+              councilSubmitRef={councilSubmitRef}
+              setNextMessageMeta={setNextMessageMeta}
             />
           }
         />
+        </CouncilProvider>
 
         {/* Voice overlay (floating controls when voice mode is active) */}
         <VoiceOverlay voice={voice} onTranscript={handleVoiceTranscript} />

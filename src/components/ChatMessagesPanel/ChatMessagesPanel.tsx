@@ -37,8 +37,10 @@ import { cn } from '../../utils/cn';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
 import { ToolSupportIndicator } from '../ToolSupportIndicator';
 import { getToolRegistry } from '../../services/tools';
-import { CouncilProvider } from '../../contexts/CouncilContext';
 import { CouncilThread } from '../Council/Messages/CouncilThread';
+import { CouncilToggle } from '../Council/Composer/CouncilToggle';
+import { useCouncil } from '../../hooks/useCouncil';
+import type { GglibMessageCustom } from '../../types/messages';
 
 
 interface ChatMessagesPanelProps {
@@ -68,6 +70,10 @@ interface ChatMessagesPanelProps {
   supportsToolCalls?: boolean | null;
   /** Detected tool-calling format, e.g. "hermes" or "llama3". */
   toolFormat?: string | null;
+  /** Ref for council submit callback (filled by this component). */
+  councilSubmitRef?: React.MutableRefObject<((text: string) => void) | null>;
+  /** Set one-shot metadata on the next user message. */
+  setNextMessageMeta?: (meta: Partial<GglibMessageCustom>) => void;
 }
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
@@ -91,10 +97,39 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   voice,
   supportsToolCalls,
   toolFormat,
+  councilSubmitRef,
+  setNextMessageMeta,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
   const isThreadRunning = threadState?.isRunning ?? false;
+
+  // Council mode toggle state
+  const [isCouncilMode, setIsCouncilMode] = useState(false);
+  const isCouncilModeRef = useRef(isCouncilMode);
+  isCouncilModeRef.current = isCouncilMode;
+
+  // Council hook — wired to context
+  const council = useCouncil({ serverPort });
+
+  // Register the council suggest callback so ChatPage can call it on submit
+  useEffect(() => {
+    if (councilSubmitRef) {
+      councilSubmitRef.current = (text: string) => {
+        council.suggest(text);
+        setIsCouncilMode(false); // Reset toggle after submit
+      };
+      return () => { councilSubmitRef.current = null; };
+    }
+  }, [councilSubmitRef, council]);
+
+  // Sync council mode flag to message metadata before each submission.
+  // Uses a ref so the onNew callback always sees the latest toggle state.
+  useEffect(() => {
+    if (setNextMessageMeta) {
+      setNextMessageMeta(isCouncilMode ? { isCouncilMode: true } : {});
+    }
+  }, [isCouncilMode, setNextMessageMeta]);
 
   // Shared ticker for live timer updates (only runs while streaming)
   // Note: Updating tick triggers provider re-render, but messageComponents is stable
@@ -508,7 +543,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
             <MessageActionsContext.Provider value={messageActionsValue}>
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
               <VoiceProvider value={voiceContextValue}>
-              <CouncilProvider>
                 <ThreadPrimitive.Root
                   key={activeConversationId ?? 'thread-root'}
                   className="flex flex-col h-full min-h-0"
@@ -518,8 +552,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       components={messageComponents}
                     />
                     <CouncilThread
-                      onRun={() => {/* wired in council mode integration */}}
-                      onCancel={() => {/* wired in council mode integration */}}
+                      onRun={(config) => council.run(config)}
+                      onCancel={() => council.reset()}
                     />
                   <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                     Jump to latest
@@ -530,15 +564,25 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   {isThreadRunning && (
                     <div className="text-sm text-primary mb-sm animate-research-pulse">Assistant is thinking…</div>
                   )}
+                  {council.session.phase === 'suggesting' && (
+                    <div className="text-sm text-primary mb-sm animate-pulse">Designing council…</div>
+                  )}
                   <ComposerPrimitive.Root className="flex gap-sm items-end">
                     <ComposerPrimitive.Input
                       className="flex-1 py-sm px-md border border-border rounded-base bg-surface text-text text-sm font-[inherit] resize-none min-h-[40px] max-h-[150px] focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                       placeholder={
                         isServerConnected
-                          ? 'Type your message. Shift + Enter for newline'
+                          ? isCouncilMode
+                            ? 'Describe the topic for the Council of Agents…'
+                            : 'Type your message. Shift + Enter for newline'
                           : 'Server not connected'
                       }
                       disabled={!isServerConnected}
+                    />
+                    <CouncilToggle
+                      active={isCouncilMode}
+                      onToggle={() => setIsCouncilMode((prev) => !prev)}
+                      disabled={!isServerConnected || council.isStreaming}
                     />
                     <div className="flex gap-sm shrink-0">
                       {isThreadRunning && (
@@ -547,6 +591,16 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                           size="sm"
                           onClick={() => threadRuntime?.cancelRun()}
                           title="Stop generation"
+                        >
+                          Stop
+                        </Button>
+                      )}
+                      {council.isStreaming && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => council.cancel()}
+                          title="Stop council"
                         >
                           Stop
                         </Button>
@@ -564,7 +618,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   </ComposerPrimitive.Root>
                 </div>
               </ThreadPrimitive.Root>
-              </CouncilProvider>
               </VoiceProvider>
               </ThinkingTimingProvider>
             </MessageActionsContext.Provider>
