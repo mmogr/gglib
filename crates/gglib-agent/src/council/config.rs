@@ -110,15 +110,10 @@ impl SuggestedCouncil {
     pub fn backfill_defaults(&mut self) {
         for (i, agent) in self.agents.iter_mut().enumerate() {
             if agent.id.is_empty() {
-                agent.id = format!(
-                    "{}-{}",
-                    agent.name.to_lowercase().replace(' ', "-"),
-                    i + 1,
-                );
+                agent.id = format!("{}-{}", agent.name.to_lowercase().replace(' ', "-"), i + 1,);
             }
             if agent.color.is_empty() {
-                agent.color =
-                    DEFAULT_AGENT_COLORS[i % DEFAULT_AGENT_COLORS.len()].to_string();
+                agent.color = DEFAULT_AGENT_COLORS[i % DEFAULT_AGENT_COLORS.len()].to_string();
             }
         }
     }
