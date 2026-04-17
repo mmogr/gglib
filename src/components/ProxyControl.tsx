@@ -1,4 +1,4 @@
-import { FC, useState, useRef, useEffect } from "react";
+import { FC, useState, useRef } from "react";
 import { ClipboardCopy, Power, Repeat2 } from "lucide-react";
 import { startProxy, stopProxy } from "../services/clients/servers";
 import { useClickOutside } from "../hooks/useClickOutside";
