@@ -85,7 +85,7 @@ export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
   // Error state
   if (session.phase === 'error' && items.length === 0) {
     return (
-      <div className="text-sm text-danger px-md py-sm">
+      <div className="w-full text-sm text-danger px-md py-sm">
         Council error: {session.error ?? 'Unknown error'}
       </div>
     );
@@ -93,7 +93,7 @@ export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
 
   // Deliberating / synthesizing / complete
   return (
-    <div className="flex flex-col gap-md">
+    <div className="flex flex-col gap-md w-full">
       {items.map((item) => {
         switch (item.kind) {
           case 'round':

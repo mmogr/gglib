@@ -2,6 +2,7 @@ import type { ThreadMessageLike } from '@assistant-ui/react';
 import { reconstructContent } from '../../utils/messages';
 import type { SerializableContentPart, SerializableToolCallPart } from '../../utils/messages';
 import type { ChatMessage } from '../../services/clients/chat';
+import type { SerializableCouncilSession } from '../../types/council';
 
 // ============================================================================
 // Tool-row folding (CLI agent conversations store tool results as separate rows)
@@ -115,11 +116,16 @@ export function buildLoadedMessage(
   const storedParts = msg.metadata?.contentParts as SerializableContentPart[] | undefined;
   const thinkingText = msg.metadata?.thinking as string | undefined;
   const thinkingDuration = msg.metadata?.thinkingDurationSeconds as number | null | undefined;
+  const councilSession = msg.metadata?.councilSession as SerializableCouncilSession | undefined;
 
   const custom: Record<string, unknown> = { dbId: msg.id, conversationId };
 
   if (thinkingDuration != null) {
     custom.thinkingDurationSeconds = thinkingDuration;
+  }
+
+  if (councilSession) {
+    custom.councilSession = councilSession;
   }
 
   let content = reconstructContent(msg.content, storedParts ?? null);

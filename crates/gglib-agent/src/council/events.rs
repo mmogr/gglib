@@ -39,10 +39,12 @@ pub enum CouncilEvent {
     /// Incremental text token from the current agent's response.
     AgentTextDelta { agent_id: String, delta: String },
 
-    /// Incremental reasoning/thinking token (for models that expose `CoT`).
+    /// Incremental reasoning / chain-of-thought token (for models that
+    /// expose `CoT`).  Rendered in a collapsible "thinking" block.
     AgentReasoningDelta { agent_id: String, delta: String },
 
-    /// The current agent has started a tool call.
+    /// The current agent has initiated a tool call.  The frontend shows a
+    /// spinner with `display_name` and an optional `args_summary`.
     AgentToolCallStart {
         agent_id: String,
         tool_call: ToolCall,
@@ -51,7 +53,8 @@ pub enum CouncilEvent {
         args_summary: Option<String>,
     },
 
-    /// A tool call by the current agent has completed.
+    /// A tool call by the current agent has completed.  Contains the
+    /// [`ToolResult`] payload and a human-readable `duration_display`.
     AgentToolCallComplete {
         agent_id: String,
         tool_name: String,
@@ -79,13 +82,14 @@ pub enum CouncilEvent {
     RoundSeparator { round: u32 },
 
     // ── synthesis ────────────────────────────────────────────────────────
-    /// The synthesis phase has begun.
+    /// The synthesis phase has begun.  The frontend renders a
+    /// "Synthesising…" placeholder.
     SynthesisStart,
 
-    /// Incremental text token from the synthesis.
+    /// Incremental text token from the synthesiser agent.
     SynthesisTextDelta { delta: String },
 
-    /// The synthesis is complete.
+    /// The synthesis is complete; `content` holds the full merged answer.
     SynthesisComplete { content: String },
 
     // ── terminal ─────────────────────────────────────────────────────────

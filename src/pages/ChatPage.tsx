@@ -20,6 +20,8 @@ import { useVoiceModeContext } from '../contexts/VoiceModeContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { CouncilProvider } from '../contexts/CouncilContext';
+import type { SerializableCouncilSession } from '../types/council';
+import { mkUserMessage, mkAssistantMessage } from '../types/messages';
 import { useServerState } from '../services/serverEvents';
 import { getServerToolSupport } from '../services/clients/servers';
 import {
@@ -104,6 +106,7 @@ export default function ChatPage({
     return () => { cancelled = true; };
   }, [modelId]);
 
+
   // Council mode: ref filled by ChatMessagesPanel with the suggest() callback
   const councilSubmitRef = useRef<((text: string) => void) | null>(null);
 
@@ -116,6 +119,27 @@ export default function ChatPage({
     supportsToolCalls,
     onCouncilSubmit: (text) => councilSubmitRef.current?.(text),
   });
+
+  // When council completes, inject the topic + synthesis into the message thread.
+  // The persistence hook auto-saves them since timingFinalized is set.
+  const handleCouncilComplete = useCallback(
+    (topic: string, synthesisText: string, councilSession: SerializableCouncilSession) => {
+      const userMsg = mkUserMessage(
+        [{ type: 'text' as const, text: topic }],
+        { isCouncilMode: true },
+      );
+      const assistantMsg = mkAssistantMessage({
+        timingFinalized: true,
+        councilSession,
+      });
+      // Set synthesis as the assistant message content
+      (assistantMsg.content as Array<{ type: string; text: string }>).push(
+        { type: 'text', text: synthesisText },
+      );
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    },
+    [setMessages],
+  );
 
   // Server state from registry - derives isServerRunning reactively
   // Note: If serverState is null (no event received yet), we assume running
@@ -448,6 +472,7 @@ export default function ChatPage({
               toolFormat={toolFormat}
               councilSubmitRef={councilSubmitRef}
               setNextMessageMeta={setNextMessageMeta}
+              onCouncilComplete={handleCouncilComplete}
             />
           }
         />
