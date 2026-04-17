@@ -24,9 +24,9 @@ use gglib_agent::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent}
 use gglib_agent::council::{run_council, suggest_council};
 use gglib_core::domain::agent::AgentConfig;
 use gglib_core::{ProcessHandle, ServerConfig};
+use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;
 use gglib_runtime::llama::args::{resolve_jinja_flag, resolve_reasoning_format};
-use gglib_runtime::CouncilPorts;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
@@ -145,15 +145,17 @@ async fn resolve_port(
 
     // Resolve the model — explicit arg or default from settings.
     let model_id = if let Some(name) = model_arg {
-        let m = ctx
-            .app
+        ctx.app
             .models()
             .find_by_identifier(name)
             .await
-            .context("failed to look up model")?;
-        m
+            .context("failed to look up model")?
     } else {
-        let settings = ctx.app.settings().get().await
+        let settings = ctx
+            .app
+            .settings()
+            .get()
+            .await
             .map_err(|e| anyhow!("failed to load settings: {e}"))?;
         let default_id = settings.default_model_id.ok_or_else(|| {
             anyhow!(
@@ -187,10 +189,7 @@ async fn resolve_port(
     }
 
     style::print_info_banner("Council", "\u{1f3db}\u{fe0f}");
-    eprintln!(
-        "  Starting llama-server for '{}' \u{2026}",
-        model_id.name
-    );
+    eprintln!("  Starting llama-server for '{}' \u{2026}", model_id.name);
     style::print_banner_close();
 
     let h = ctx
