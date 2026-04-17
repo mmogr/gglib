@@ -148,10 +148,10 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       setPathInput(info.defaultPath);
     }
     if (settings) {
-      setContextSizeInput(settings.defaultContextSize?.toString() || "4096");
-      setProxyPortInput(settings.proxyPort?.toString() || "8080");
-      setServerPortInput(settings.llamaBasePort?.toString() || "9000");
-      setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() || "10");
+      setContextSizeInput(settings.defaultContextSize?.toString() ?? "");
+      setProxyPortInput(settings.proxyPort?.toString() ?? "");
+      setServerPortInput(settings.llamaBasePort?.toString() ?? "");
+      setMaxQueueSizeInput(settings.maxDownloadQueueSize?.toString() ?? "");
       setTitlePromptInput(""); // Reset to default (empty uses DEFAULT_TITLE_GENERATION_PROMPT)
       setShowFitIndicators(true); // Default is enabled
     }

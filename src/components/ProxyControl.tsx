@@ -1,8 +1,9 @@
-import { FC, useState, useRef } from "react";
+import { FC, useState, useRef, useEffect } from "react";
 import { ClipboardCopy, Power, Repeat2 } from "lucide-react";
 import { startProxy, stopProxy } from "../services/clients/servers";
 import { useClickOutside } from "../hooks/useClickOutside";
 import { useProxyState } from "../services/proxyRegistry";
+import { useSettings } from "../hooks/useSettings";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
@@ -30,10 +31,11 @@ const ProxyControl: FC<ProxyControlProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const proxyState = useProxyState();
+  const { settings } = useSettings();
   const [config, setConfig] = useState<ProxyConfig>({
     host: "127.0.0.1",
-    port: 8080,
-    default_context: 8192,
+    port: settings?.proxyPort ?? 8080,
+    default_context: settings?.defaultContextSize ?? 4096,
   });
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);

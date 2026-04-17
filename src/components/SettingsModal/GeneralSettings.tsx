@@ -281,7 +281,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
             onChange={(event) => setMaxToolIterationsInput(event.target.value)}
             placeholder="25"
             min="1"
-            max="100"
+            max="50"
             disabled={saving}
           />
           <Row justify="between" gap="sm" className="text-text-secondary text-sm">
