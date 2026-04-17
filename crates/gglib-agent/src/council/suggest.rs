@@ -24,23 +24,24 @@ use gglib_core::ports::{LlmCompletionPort, ToolExecutorPort};
 ///
 /// Runs a single `AgentLoop` iteration with the designer prompt, extracts
 /// the JSON payload from the response, and backfills default ids/colours.
+///
+/// When `refinement_history` is `Some`, the caller-provided messages are
+/// appended after the system prompt instead of the default `User(topic)`.
+/// This enables multi-turn refinement: the caller constructs a thread like
+/// `[User(topic), Assistant(prior_suggestion), User(feedback)]`.
 pub async fn suggest_council(
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
     topic: &str,
     agent_count: u32,
+    refinement_history: Option<Vec<AgentMessage>>,
 ) -> Result<SuggestedCouncil> {
     #[allow(clippy::literal_string_with_formatting_args)]
     let system = COUNCIL_DESIGNER_PROMPT
         .replace("{agent_count}", &agent_count.to_string())
         .replace("{user_topic}", topic);
 
-    let messages = vec![
-        AgentMessage::System { content: system },
-        AgentMessage::User {
-            content: topic.to_owned(),
-        },
-    ];
+    let messages = build_suggest_messages(&system, refinement_history, topic);
 
     let mut config = AgentConfig::default();
     config.max_iterations = 1;
@@ -73,6 +74,35 @@ pub async fn suggest_council(
     Ok(council)
 }
 
+// ─── Message construction ────────────────────────────────────────────────────
+
+/// Build the message list for a suggest call.
+///
+/// Fresh suggest: `[System(prompt), User(topic)]`.
+/// Refinement:    `[System(prompt)] + history` (caller-provided thread).
+fn build_suggest_messages(
+    system: &str,
+    refinement_history: Option<Vec<AgentMessage>>,
+    topic: &str,
+) -> Vec<AgentMessage> {
+    if let Some(history) = refinement_history {
+        let mut msgs = vec![AgentMessage::System {
+            content: system.to_owned(),
+        }];
+        msgs.extend(history);
+        msgs
+    } else {
+        vec![
+            AgentMessage::System {
+                content: system.to_owned(),
+            },
+            AgentMessage::User {
+                content: topic.to_owned(),
+            },
+        ]
+    }
+}
+
 // ─── Parsing helpers ─────────────────────────────────────────────────────────
 
 /// Parse the LLM's response text as a [`SuggestedCouncil`].
@@ -96,6 +126,52 @@ fn strip_markdown_json(s: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::domain::agent::AssistantContent;
+
+    #[test]
+    fn build_messages_fresh_suggest() {
+        // When refinement_history is None, messages should be
+        // [System(prompt), User(topic)].
+        let system = COUNCIL_DESIGNER_PROMPT
+            .replace("{agent_count}", "3")
+            .replace("{user_topic}", "test topic");
+
+        let messages = build_suggest_messages(&system, None, "test topic");
+        assert_eq!(messages.len(), 2);
+        assert!(matches!(&messages[0], AgentMessage::System { .. }));
+        assert!(matches!(&messages[1], AgentMessage::User { content } if content == "test topic"));
+    }
+
+    #[test]
+    fn build_messages_with_refinement() {
+        let system = COUNCIL_DESIGNER_PROMPT
+            .replace("{agent_count}", "3")
+            .replace("{user_topic}", "test topic");
+
+        let history = vec![
+            AgentMessage::User {
+                content: "test topic".into(),
+            },
+            AgentMessage::Assistant {
+                content: AssistantContent {
+                    text: Some("{\"agents\": []}".into()),
+                    tool_calls: vec![],
+                },
+            },
+            AgentMessage::User {
+                content: "add a security expert".into(),
+            },
+        ];
+
+        let messages = build_suggest_messages(&system, Some(history), "test topic");
+        assert_eq!(messages.len(), 4); // System + 3 history
+        assert!(matches!(&messages[0], AgentMessage::System { .. }));
+        assert!(matches!(&messages[1], AgentMessage::User { content } if content == "test topic"));
+        assert!(matches!(&messages[2], AgentMessage::Assistant { .. }));
+        assert!(
+            matches!(&messages[3], AgentMessage::User { content } if content == "add a security expert")
+        );
+    }
 
     #[test]
     fn strip_plain_json() {

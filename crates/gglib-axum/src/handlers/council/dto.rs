@@ -20,6 +20,15 @@ pub struct CouncilSuggestRequest {
     /// Optional model-name override forwarded to llama-server.
     #[serde(default)]
     pub model: Option<String>,
+
+    /// A previous `SuggestedCouncil` to refine (multi-turn suggest).
+    #[serde(default)]
+    pub previous_suggestion: Option<SuggestedCouncil>,
+
+    /// The user's follow-up message requesting changes to the prior
+    /// suggestion.  Only meaningful when `previous_suggestion` is set.
+    #[serde(default)]
+    pub refinement: Option<String>,
 }
 
 fn default_agent_count() -> u32 {
