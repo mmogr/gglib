@@ -76,8 +76,7 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
 /// Map a [`CliDownloadResult`] to the [`CompletedDownload`] DTO that
 /// [`ModelRegistrarPort::register_model`] expects.
 fn build_completed_download(result: &CliDownloadResult) -> Result<CompletedDownload> {
-    let quantization = Quantization::from_str(&result.quantization)
-        .unwrap_or_default(); // falls back to Quantization::Unknown
+    let quantization = Quantization::from_str(&result.quantization).unwrap_or_default(); // falls back to Quantization::Unknown
 
     let is_sharded = result.downloaded_paths.len() > 1;
 
