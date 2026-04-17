@@ -236,18 +236,20 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
 
   const addAgent = useCallback(() => {
     const id = `new-agent-${Date.now()}`;
+    const colors = ['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316'];
+    const idx = session.suggestedAgents.length % colors.length;
     dispatch({
       type: 'ADD_AGENT',
       agent: {
         id,
         name: 'New Agent',
-        color: '',
+        color: colors[idx],
         persona: 'Define this agent\'s worldview and expertise.',
         perspective: 'Describe their unique angle.',
         contentiousness: 0.5,
       },
     });
-  }, [dispatch]);
+  }, [dispatch, session.suggestedAgents.length]);
 
   return { session, suggest, refine, run, cancel, reset, updateAgent, removeAgent, addAgent, isStreaming };
 }

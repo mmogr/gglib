@@ -8,7 +8,7 @@
  * @module components/Council/Setup/CouncilSetupPanel
  */
 
-import { type FC, useState, useCallback } from 'react';
+import { type FC, useState, useCallback, useEffect } from 'react';
 import type { CouncilAgent, CouncilConfig } from '../../../types/council';
 import { Button } from '../../ui/Button';
 import { AgentCard } from './AgentCard';
@@ -46,6 +46,11 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
 }) => {
   const [agents, setAgents] = useState<CouncilAgent[]>(initialAgents);
   const [rounds, setRounds] = useState(initialRounds);
+
+  // Sync local state when context-driven changes arrive (add/remove/update agent).
+  useEffect(() => {
+    setAgents(initialAgents);
+  }, [initialAgents]);
 
   const handleContentiousnessChange = useCallback((agentId: string, value: number) => {
     setAgents((prev) =>
