@@ -76,15 +76,43 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         port,
                     } => {
                         if suggest {
-                            handlers::council::execute_suggest(ctx, &topic, port, agent_count, model).await?;
+                            handlers::council::execute_suggest(
+                                ctx,
+                                &topic,
+                                port,
+                                agent_count,
+                                model,
+                            )
+                            .await?;
                         } else if let Some(config_path) = config {
                             if edit {
-                                handlers::council::execute_edit(ctx, &config_path, &topic, port, model).await?;
+                                handlers::council::execute_edit(
+                                    ctx,
+                                    &config_path,
+                                    &topic,
+                                    port,
+                                    model,
+                                )
+                                .await?;
                             } else {
-                                handlers::council::execute_run(ctx, &config_path, &topic, port, model).await?;
+                                handlers::council::execute_run(
+                                    ctx,
+                                    &config_path,
+                                    &topic,
+                                    port,
+                                    model,
+                                )
+                                .await?;
                             }
                         } else {
-                            handlers::council::execute_interactive(ctx, &topic, port, agent_count, model).await?;
+                            handlers::council::execute_interactive(
+                                ctx,
+                                &topic,
+                                port,
+                                agent_count,
+                                model,
+                            )
+                            .await?;
                         }
                     }
                 }
