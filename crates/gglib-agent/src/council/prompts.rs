@@ -37,7 +37,11 @@ Also suggest:
 - rounds: How many debate rounds (typically 2-4; more for complex/controversial topics)
 - synthesis_guidance: A brief note on what the final synthesis should prioritize
 
-Respond in JSON: {{ \"agents\": [...], \"rounds\": N, \"synthesis_guidance\": \"...\" }}
+Respond with ONLY the JSON object below — no explanation, no markdown fences, \
+no surrounding text:
+ the JSON object below — no explanation, no markdown fences, \
+no surrounding text:
+{{ \"agents\": [...], \"rounds\": N, \"synthesis_guidance\": \"...\" }}
 
 Topic: \"{user_topic}\"";
 

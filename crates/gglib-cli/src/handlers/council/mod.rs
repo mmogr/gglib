@@ -43,7 +43,7 @@ pub async fn execute_suggest(
     model: Option<String>,
 ) -> Result<()> {
     let (ports, handle) = init_session(ctx, port, model).await?;
-    let res = suggest_council(ports.llm, ports.tool_executor, topic, agent_count).await;
+    let res = suggest_council(ports.llm, ports.tool_executor, topic, agent_count, None).await;
     stop_server(ctx, &handle).await;
     let council = res?;
     println!("{}", serde_json::to_string_pretty(&council)?);
@@ -83,6 +83,7 @@ pub async fn execute_interactive(
         Arc::clone(&ports.tool_executor),
         topic,
         agent_count,
+        None,
     )
     .await?;
 

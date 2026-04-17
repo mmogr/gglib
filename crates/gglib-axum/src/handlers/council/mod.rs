@@ -21,7 +21,7 @@ use crate::state::AppState;
 use dto::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 
 use gglib_agent::council::{run_council, suggest_council};
-use gglib_core::domain::agent::AgentConfig;
+use gglib_core::domain::agent::{AgentConfig, AgentMessage, AssistantContent};
 use gglib_runtime::compose_council_ports;
 
 // ─── POST /api/council/suggest ───────────────────────────────────────────────
@@ -39,9 +39,38 @@ pub async fn suggest(
         state.mcp.clone(),
     );
 
-    let council = suggest_council(ports.llm, ports.tool_executor, &req.topic, req.agent_count)
-        .await
-        .map_err(|e| HttpError::Internal(e.to_string()))?;
+    // Build multi-turn refinement history when the client sends a prior
+    // suggestion and a follow-up message.
+    let refinement_history = match (req.previous_suggestion, req.refinement) {
+        (Some(prev), Some(feedback)) => {
+            let prev_json = serde_json::to_string(&prev).map_err(|e| {
+                HttpError::Internal(format!("failed to serialise prior suggestion: {e}"))
+            })?;
+            Some(vec![
+                AgentMessage::User {
+                    content: req.topic.clone(),
+                },
+                AgentMessage::Assistant {
+                    content: AssistantContent {
+                        text: Some(prev_json),
+                        tool_calls: vec![],
+                    },
+                },
+                AgentMessage::User { content: feedback },
+            ])
+        }
+        _ => None,
+    };
+
+    let council = suggest_council(
+        ports.llm,
+        ports.tool_executor,
+        &req.topic,
+        req.agent_count,
+        refinement_history,
+    )
+    .await
+    .map_err(|e| HttpError::Internal(e.to_string()))?;
 
     Ok(Json(CouncilSuggestResponse { council }))
 }

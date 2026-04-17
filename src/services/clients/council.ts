@@ -44,6 +44,10 @@ export interface SuggestCouncilParams {
   topic: string;
   agent_count?: number;
   model?: string;
+  /** Previous suggestion to refine (multi-turn suggest). */
+  previous_suggestion?: SuggestedCouncil;
+  /** User's follow-up requesting changes to the prior suggestion. */
+  refinement?: string;
 }
 
 /**

@@ -117,16 +117,31 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Council hook — wired to context
   const council = useCouncil({ serverPort });
 
-  // Register the council suggest callback so ChatPage can call it on submit
+  // Register the council suggest/refine callback so ChatPage can call it on submit.
+  // During `setup` phase, follow-up messages refine the existing suggestion.
   useEffect(() => {
     if (councilSubmitRef) {
       councilSubmitRef.current = (text: string) => {
-        council.suggest(text);
+        if (council.session.phase === 'setup') {
+          council.refine(text);
+        } else {
+          council.suggest(text);
+        }
         setIsCouncilMode(false); // Reset toggle after submit
       };
       return () => { councilSubmitRef.current = null; };
     }
   }, [councilSubmitRef, council]);
+
+  // Keep council-mode active while the session is in a non-idle phase
+  // so that follow-up messages in the composer are routed through the
+  // council intercept path (onCouncilSubmit) rather than normal chat.
+  const councilActive = council.session.phase === 'setup' || council.session.phase === 'suggesting';
+  useEffect(() => {
+    if (councilActive && !isCouncilMode) {
+      setIsCouncilMode(true);
+    }
+  }, [councilActive, isCouncilMode]);
 
   // Sync council mode flag to message metadata before each submission.
   // Uses a ref so the onNew callback always sees the latest toggle state.
