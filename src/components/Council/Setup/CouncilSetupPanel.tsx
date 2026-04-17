@@ -12,6 +12,8 @@ import { type FC, useState, useCallback } from 'react';
 import type { CouncilAgent, CouncilConfig } from '../../../types/council';
 import { Button } from '../../ui/Button';
 import { AgentCard } from './AgentCard';
+import { AddAgentButton } from './AddAgentButton';
+import type { DiffStatus } from './AgentDiffBadge';
 import { cn } from '../../../utils/cn';
 
 interface CouncilSetupPanelProps {
@@ -19,8 +21,13 @@ interface CouncilSetupPanelProps {
   agents: CouncilAgent[];
   rounds: number;
   synthesisGuidance?: string;
+  /** Per-agent diff status after a refinement. Keyed by agent id. */
+  diffStatuses?: Record<string, DiffStatus>;
   onRun: (config: CouncilConfig) => void;
   onCancel: () => void;
+  onUpdateAgent?: (agentId: string, changes: Partial<CouncilAgent>) => void;
+  onRemoveAgent?: (agentId: string) => void;
+  onAddAgent?: () => void;
   disabled?: boolean;
 }
 
@@ -29,8 +36,12 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
   agents: initialAgents,
   rounds: initialRounds,
   synthesisGuidance,
+  diffStatuses,
   onRun,
   onCancel,
+  onUpdateAgent,
+  onRemoveAgent,
+  onAddAgent,
   disabled,
 }) => {
   const [agents, setAgents] = useState<CouncilAgent[]>(initialAgents);
@@ -76,10 +87,14 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
           <AgentCard
             key={agent.id}
             agent={agent}
+            diffStatus={diffStatuses?.[agent.id]}
             onContentiousnessChange={handleContentiousnessChange}
+            onUpdate={onUpdateAgent}
+            onRemove={onRemoveAgent}
             disabled={disabled}
           />
         ))}
+        {onAddAgent && !disabled && <AddAgentButton onClick={onAddAgent} disabled={disabled} />}
       </div>
 
       {/* Rounds control + Run */}

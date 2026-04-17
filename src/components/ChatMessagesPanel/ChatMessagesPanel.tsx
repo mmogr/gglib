@@ -589,6 +589,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     <CouncilThread
                       onRun={(config) => council.run(config)}
                       onCancel={() => council.reset()}
+                      onUpdateAgent={council.updateAgent}
+                      onRemoveAgent={council.removeAgent}
+                      onAddAgent={council.addAgent}
                     />
                   <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                     Jump to latest

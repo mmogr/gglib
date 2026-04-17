@@ -35,6 +35,12 @@ export interface UseCouncilReturn {
   cancel: () => void;
   /** Reset session to idle. */
   reset: () => void;
+  /** Update a single agent's properties. */
+  updateAgent: (agentId: string, changes: Partial<CouncilAgent>) => void;
+  /** Remove an agent by id. */
+  removeAgent: (agentId: string) => void;
+  /** Add a blank agent scaffold. */
+  addAgent: () => void;
   /** Whether a deliberation is currently streaming. */
   isStreaming: boolean;
 }
@@ -220,5 +226,28 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
 
   const isStreaming = session.phase === 'deliberating' || session.phase === 'synthesizing';
 
-  return { session, suggest, refine, run, cancel, reset, isStreaming };
+  const updateAgent = useCallback((agentId: string, changes: Partial<CouncilAgent>) => {
+    dispatch({ type: 'UPDATE_AGENT', agentId, changes });
+  }, [dispatch]);
+
+  const removeAgent = useCallback((agentId: string) => {
+    dispatch({ type: 'REMOVE_AGENT', agentId });
+  }, [dispatch]);
+
+  const addAgent = useCallback(() => {
+    const id = `new-agent-${Date.now()}`;
+    dispatch({
+      type: 'ADD_AGENT',
+      agent: {
+        id,
+        name: 'New Agent',
+        color: '',
+        persona: 'Define this agent\'s worldview and expertise.',
+        perspective: 'Describe their unique angle.',
+        contentiousness: 0.5,
+      },
+    });
+  }, [dispatch]);
+
+  return { session, suggest, refine, run, cancel, reset, updateAgent, removeAgent, addAgent, isStreaming };
 }
