@@ -27,6 +27,8 @@ export interface UseCouncilReturn {
   session: ReturnType<typeof useCouncilContext>['session'];
   /** Request the LLM to design a council for a topic. */
   suggest: (topic: string, agentCount?: number) => Promise<CouncilAgent[] | null>;
+  /** Refine the current suggestion with a follow-up instruction. */
+  refine: (instruction: string) => Promise<CouncilAgent[] | null>;
   /** Start a deliberation with the given config. */
   run: (config: CouncilConfig) => Promise<void>;
   /** Abort the current deliberation stream. */
@@ -138,6 +140,39 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
     }
   }, [serverPort, model, dispatch]);
 
+  const refine = useCallback(async (instruction: string): Promise<CouncilAgent[] | null> => {
+    // Build the previous suggestion from the current session state
+    const previousSuggestion = {
+      agents: session.suggestedAgents,
+      rounds: session.suggestedRounds,
+      synthesis_guidance: session.suggestedSynthesisGuidance,
+    };
+
+    dispatch({ type: 'START_SUGGEST', topic: session.topic });
+
+    try {
+      const result = await suggestCouncil({
+        port: serverPort,
+        topic: session.topic,
+        model,
+        previous_suggestion: previousSuggestion,
+        refinement: instruction,
+      });
+      dispatch({
+        type: 'SUGGEST_COMPLETE',
+        agents: result.agents,
+        rounds: result.rounds,
+        synthesisGuidance: result.synthesis_guidance,
+      });
+      return result.agents;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to refine council';
+      dispatch({ type: 'SUGGEST_ERROR', error: message });
+      appLogger.error('hook', 'Council refine failed', { error: message });
+      return null;
+    }
+  }, [serverPort, model, session.topic, session.suggestedAgents, session.suggestedRounds, session.suggestedSynthesisGuidance, dispatch]);
+
   const run = useCallback(async (config: CouncilConfig) => {
     cancel();
 
@@ -185,5 +220,5 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
 
   const isStreaming = session.phase === 'deliberating' || session.phase === 'synthesizing';
 
-  return { session, suggest, run, cancel, reset, isStreaming };
+  return { session, suggest, refine, run, cancel, reset, isStreaming };
 }
