@@ -33,6 +33,8 @@ use crate::presentation::style;
 
 // ─── Suggest ────────────────────────────────────────────────────────────────
 
+/// Run `--suggest` mode: ask the LLM to design a council and print the
+/// resulting `SuggestedCouncil` as pretty-printed JSON.
 pub async fn execute_suggest(
     ctx: &CliContext,
     topic: &str,
@@ -50,6 +52,7 @@ pub async fn execute_suggest(
 
 // ─── Run ────────────────────────────────────────────────────────────────────
 
+/// Run a council deliberation from a saved config file.
 pub async fn execute_run(
     ctx: &CliContext,
     config_path: &PathBuf,
@@ -66,6 +69,7 @@ pub async fn execute_run(
 
 // ─── Interactive (suggest → edit → run) ─────────────────────────────────────
 
+/// Interactive mode: suggest a council, open the REPL editor, then run.
 pub async fn execute_interactive(
     ctx: &CliContext,
     topic: &str,
@@ -91,6 +95,7 @@ pub async fn execute_interactive(
 
 // ─── Edit (load → edit → run) ───────────────────────────────────────────────
 
+/// Load a saved config, open the REPL editor for tweaks, then run.
 pub async fn execute_edit(
     ctx: &CliContext,
     config_path: &PathBuf,
