@@ -7,6 +7,7 @@
 //!   tools <N>           — edit agent N's tool filter (prints list first)
 //!   rounds <N>          — set the number of deliberation rounds
 //!   remove <N>          — remove agent N
+//!   refine <msg>        — ask the LLM to revise the council
 //!   run                 — accept and run the council
 //!   save <path>         — write the config to a JSON file
 //!   quit / q            — abort without running
@@ -23,9 +24,18 @@ use crate::presentation::style::{BOLD, DIM, RESET};
 use super::editor;
 use super::render;
 
-/// Run the interactive editing REPL.  Returns `Some(config)` if the user
-/// chose `run`, or `None` if they quit.
-pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Result<Option<()>> {
+/// Outcome of a single REPL session.
+pub enum EditOutcome {
+    /// User chose `run` — proceed with deliberation.
+    Run,
+    /// User chose `quit` — abort without running.
+    Quit,
+    /// User chose `refine <msg>` — caller should re-suggest then re-enter REPL.
+    Refine(String),
+}
+
+/// Run the interactive editing REPL.
+pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Result<EditOutcome> {
     let mut rl = DefaultEditor::new()?;
 
     print_help();
@@ -37,7 +47,7 @@ pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Resu
                 rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
             ) => {
                 eprintln!("{DIM}Aborted.{RESET}");
-                return Ok(None);
+                return Ok(EditOutcome::Quit);
             }
             Err(e) => return Err(e.into()),
         };
@@ -51,11 +61,15 @@ pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Resu
         match cmd {
             "help" | "h" | "?" => print_help(),
             "show" | "s" => render::render_config(config),
-            "run" | "r" => return Ok(Some(())),
+            "run" | "r" => return Ok(EditOutcome::Run),
             "quit" | "q" => {
                 eprintln!("{DIM}Aborted.{RESET}");
-                return Ok(None);
+                return Ok(EditOutcome::Quit);
             }
+            "refine" => match arg {
+                Some(instruction) => return Ok(EditOutcome::Refine(instruction.to_owned())),
+                None => eprintln!("  usage: refine <instruction>"),
+            },
             "rounds" => match arg {
                 Some(a) => report(editor::apply_rounds(config, a)),
                 None => eprintln!("  usage: rounds <number>"),
@@ -155,6 +169,7 @@ fn print_help() {
   tools <N>        edit agent N's tool filter
   rounds <N>       set number of rounds
   remove <N>       remove agent N
+  refine <msg>     ask the LLM to revise the council
   save <path>      save config to JSON file
   run              accept and run the council
   quit             abort without running

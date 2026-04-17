@@ -20,10 +20,11 @@ use anyhow::{Context as _, Result, anyhow};
 use tokio::sync::mpsc;
 
 use gglib_agent::council::config::CouncilConfig;
+use gglib_agent::council::config::SuggestedCouncil;
 use gglib_agent::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_agent::council::{run_council, suggest_council};
 use gglib_core::domain::agent::AgentConfig;
-use gglib_core::{ProcessHandle, ServerConfig};
+use gglib_core::{AgentMessage, AssistantContent, ProcessHandle, ServerConfig};
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;
 use gglib_runtime::llama::args::{resolve_jinja_flag, resolve_reasoning_format};
@@ -234,9 +235,53 @@ async fn edit_then_run(config: &mut CouncilConfig, ports: CouncilPorts) -> Resul
         .into_iter()
         .map(|t| t.name)
         .collect();
-    match repl::edit_loop(config, &tools)? {
-        Some(()) => run_with_ports(config.clone(), ports).await,
-        None => Ok(()),
+
+    loop {
+        match repl::edit_loop(config, &tools)? {
+            repl::EditOutcome::Run => return run_with_ports(config.clone(), ports).await,
+            repl::EditOutcome::Quit => return Ok(()),
+            repl::EditOutcome::Refine(instruction) => {
+                eprintln!(
+                    "{}  Refining council …{}",
+                    style::DIM,
+                    style::RESET
+                );
+
+                let prev = SuggestedCouncil {
+                    agents: config.agents.clone(),
+                    rounds: config.rounds,
+                    synthesis_guidance: config.synthesis_guidance.clone(),
+                };
+                let prev_json = serde_json::to_string(&prev)?;
+
+                let history = vec![
+                    AgentMessage::User {
+                        content: config.topic.clone(),
+                    },
+                    AgentMessage::Assistant {
+                        content: AssistantContent {
+                            text: Some(prev_json),
+                            tool_calls: vec![],
+                        },
+                    },
+                    AgentMessage::User {
+                        content: instruction,
+                    },
+                ];
+
+                let suggested = suggest_council(
+                    Arc::clone(&ports.llm),
+                    Arc::clone(&ports.tool_executor),
+                    &config.topic,
+                    config.agents.len() as u32,
+                    Some(history),
+                )
+                .await?;
+
+                render::render_suggested(&suggested);
+                *config = suggested.into_config(config.topic.clone());
+            }
+        }
     }
 }
 
