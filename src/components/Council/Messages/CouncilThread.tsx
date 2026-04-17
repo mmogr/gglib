@@ -71,7 +71,6 @@ export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
   // Setup phase: show the setup panel
   if (session.phase === 'setup') {
     return (
-      <div className="w-full">
       <CouncilSetupPanel
         topic={session.topic}
         agents={session.suggestedAgents}
@@ -80,7 +79,6 @@ export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
         onRun={onRun}
         onCancel={onCancel}
       />
-      </div>
     );
   }
 

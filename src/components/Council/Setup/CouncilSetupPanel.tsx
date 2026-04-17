@@ -50,7 +50,7 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
     <div className={cn(
       'flex flex-col gap-md p-md rounded-base',
       'border border-border bg-surface',
-      'max-w-2xl w-full mx-auto',
+      'max-w-[42rem] w-full mx-auto',
     )}>
       {/* Header */}
       <div className="flex items-center justify-between">
