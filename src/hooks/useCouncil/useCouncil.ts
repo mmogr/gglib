@@ -256,22 +256,19 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
   const fillAgent = useCallback(async (agentId: string): Promise<void> => {
     const target = session.suggestedAgents.find((a) => a.id === agentId);
     if (!target) return;
-    const prev = {
-      agents: session.suggestedAgents,
-      rounds: session.suggestedRounds,
-      synthesis_guidance: session.suggestedSynthesisGuidance,
-    };
+    // Send only agent names as context — avoids echoing full personas back.
+    const roster = session.suggestedAgents.map((a) => a.name).join(', ');
     const result = await suggestCouncil({
       port: serverPort,
       topic: session.topic,
       model,
-      previous_suggestion: prev,
-      refinement: `The user wants to add/update an agent named '${target.name}'. `
-        + `Please generate a highly specific persona, perspective, and contentiousness `
-        + `score for this agent to complement the rest of the council. Return the full `
-        + `council JSON, but focus your creative updates strictly on the agent named '${target.name}'.`,
+      agent_count: 1,
+      refinement: `The council already has these agents: [${roster}]. `
+        + `Generate details for the agent named '${target.name}' to complement them. `
+        + `Return a JSON with ONLY this one agent in the "agents" array — do NOT `
+        + `regenerate the other agents. Include: id, name, persona (2-3 sentences), `
+        + `perspective (1 sentence), and contentiousness (0.0-1.0).`,
     });
-    // Strict plucking: find the matching agent by name, discard everything else.
     const filled = result.agents.find((a) => a.name === target.name) ?? result.agents[0];
     if (!filled) return;
     dispatch({
@@ -279,7 +276,7 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
       agentId,
       changes: { persona: filled.persona, perspective: filled.perspective, contentiousness: filled.contentiousness },
     });
-  }, [serverPort, model, session.topic, session.suggestedAgents, session.suggestedRounds, session.suggestedSynthesisGuidance, dispatch]);
+  }, [serverPort, model, session.topic, session.suggestedAgents, dispatch]);
 
   return { session, suggest, refine, run, cancel, reset, updateAgent, removeAgent, addAgent, fillAgent, isStreaming };
 }

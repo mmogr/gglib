@@ -316,27 +316,19 @@ async fn handle_ai_fill(
         style::RESET
     );
 
-    let prev = SuggestedCouncil {
-        agents: config.agents.clone(),
-        rounds: config.rounds,
-        synthesis_guidance: config.synthesis_guidance.clone(),
-    };
-    let prev_json = serde_json::to_string(&prev)?;
+    // Send only agent names as context — avoids echoing full personas back.
+    let roster: Vec<&str> = config.agents.iter().map(|a| a.name.as_str()).collect();
     let refinement = format!(
-        "The user wants to add/update an agent named '{name}'. \
-         Please generate a highly specific persona, perspective, and contentiousness \
-         score for this agent to complement the rest of the council. Return the full \
-         council JSON, but focus your creative updates strictly on the agent named '{name}'."
+        "The council already has these agents: [{}]. \
+         Generate details for the agent named '{name}' to complement them. \
+         Return a JSON with ONLY this one agent in the \"agents\" array \u{2014} do NOT \
+         regenerate the other agents. Include: id, name, persona (2-3 sentences), \
+         perspective (1 sentence), and contentiousness (0.0-1.0).",
+        roster.join(", ")
     );
     let history = vec![
         AgentMessage::User {
             content: config.topic.clone(),
-        },
-        AgentMessage::Assistant {
-            content: AssistantContent {
-                text: Some(prev_json),
-                tool_calls: vec![],
-            },
         },
         AgentMessage::User {
             content: refinement,
@@ -347,7 +339,7 @@ async fn handle_ai_fill(
         Arc::clone(&ports.llm),
         Arc::clone(&ports.tool_executor),
         &config.topic,
-        config.agents.len() as u32,
+        1,
         Some(history),
     )
     .await?;
