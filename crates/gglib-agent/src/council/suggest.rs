@@ -51,13 +51,19 @@ pub async fn suggest_council(
     let handle = tokio::spawn(async move { agent.run(messages, config, tx).await });
 
     let mut content = String::new();
+    let mut error_msg: Option<String> = None;
     while let Some(event) = rx.recv().await {
-        if let AgentEvent::FinalAnswer { content: answer } = event {
-            content = answer;
+        match event {
+            AgentEvent::FinalAnswer { content: answer } => content = answer,
+            AgentEvent::Error { message } => error_msg = Some(message),
+            _ => {}
         }
     }
     let _ = handle.await;
 
+    if let Some(msg) = error_msg {
+        return Err(anyhow!("council suggestion failed: {msg}"));
+    }
     if content.is_empty() {
         return Err(anyhow!("LLM did not return a council suggestion"));
     }

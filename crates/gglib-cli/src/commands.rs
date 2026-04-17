@@ -44,12 +44,12 @@ pub enum ChatCommand {
         /// Number of agents to suggest (only with --suggest)
         #[arg(long, default_value = "4")]
         agent_count: u32,
-        /// Model name forwarded to llama-server
-        #[arg(long)]
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
         model: Option<String>,
-        /// Port of a running llama-server to reuse
-        #[arg(long, default_value = "8080")]
-        port: u16,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
     },
 }
 
