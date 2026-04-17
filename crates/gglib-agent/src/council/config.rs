@@ -103,6 +103,16 @@ const DEFAULT_AGENT_COLORS: &[&str] = &[
 ];
 
 impl SuggestedCouncil {
+    /// Convert into a [`CouncilConfig`] by supplying the user's topic.
+    pub fn into_config(self, topic: String) -> CouncilConfig {
+        CouncilConfig {
+            agents: self.agents,
+            topic,
+            rounds: self.rounds,
+            synthesis_guidance: self.synthesis_guidance,
+        }
+    }
+
     /// Fill in any `id` or `color` fields that the LLM left empty.
     ///
     /// - `id` is derived by slugifying the agent `name` with a numeric suffix.

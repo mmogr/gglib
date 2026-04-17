@@ -20,11 +20,8 @@ use crate::state::AppState;
 
 use dto::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 
-use gglib_agent::AgentLoop;
-use gglib_agent::council::prompts::COUNCIL_DESIGNER_PROMPT;
-use gglib_agent::council::{SuggestedCouncil, run_council};
-use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_agent::council::{run_council, suggest_council};
+use gglib_core::domain::agent::AgentConfig;
 use gglib_runtime::compose_council_ports;
 
 // ─── POST /api/council/suggest ───────────────────────────────────────────────
@@ -42,59 +39,11 @@ pub async fn suggest(
         state.mcp.clone(),
     );
 
-    #[allow(clippy::literal_string_with_formatting_args)]
-    let system = COUNCIL_DESIGNER_PROMPT
-        .replace("{agent_count}", &req.agent_count.to_string())
-        .replace("{user_topic}", &req.topic);
+    let council = suggest_council(ports.llm, ports.tool_executor, &req.topic, req.agent_count)
+        .await
+        .map_err(|e| HttpError::Internal(e.to_string()))?;
 
-    let messages = vec![
-        AgentMessage::System { content: system },
-        AgentMessage::User {
-            content: req.topic.clone(),
-        },
-    ];
-
-    let mut config = AgentConfig::default();
-    config.max_iterations = 1;
-
-    let agent = AgentLoop::build(ports.llm, ports.tool_executor, None);
-    let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
-
-    let handle = tokio::spawn(async move { agent.run(messages, config, tx).await });
-
-    let mut content = String::new();
-    while let Some(event) = rx.recv().await {
-        if let AgentEvent::FinalAnswer { content: answer } = event {
-            content = answer;
-        }
-    }
-    let _ = handle.await;
-
-    if content.is_empty() {
-        return Err(HttpError::Internal(
-            "LLM did not return a council suggestion".into(),
-        ));
-    }
-
-    let mut council: SuggestedCouncil = parse_suggested_council(&content)?;
-    council.backfill_defaults();
     Ok(Json(CouncilSuggestResponse { council }))
-}
-
-/// Extract the first JSON object from the LLM response (may be wrapped in markdown fences).
-fn parse_suggested_council(raw: &str) -> Result<SuggestedCouncil, HttpError> {
-    let trimmed = strip_markdown_json(raw);
-    serde_json::from_str(trimmed)
-        .map_err(|e| HttpError::Internal(format!("failed to parse council suggestion: {e}")))
-}
-
-/// Strip optional ` ```json ... ``` ` fences that small models often emit.
-fn strip_markdown_json(s: &str) -> &str {
-    let s = s.trim();
-    let s = s.strip_prefix("```json").unwrap_or(s);
-    let s = s.strip_prefix("```").unwrap_or(s);
-    let s = s.strip_suffix("```").unwrap_or(s);
-    s.trim()
 }
 
 // ─── POST /api/council/run ───────────────────────────────────────────────────
