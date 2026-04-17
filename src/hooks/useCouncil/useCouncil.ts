@@ -258,17 +258,23 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
     if (!target) return;
     // Send only agent names as context — avoids echoing full personas back.
     const roster = session.suggestedAgents.map((a) => a.name).join(', ');
-    const result = await suggestCouncil({
-      port: serverPort,
-      topic: session.topic,
-      model,
-      agent_count: 1,
-      refinement: `The council already has these agents: [${roster}]. `
-        + `Generate details for the agent named '${target.name}' to complement them. `
-        + `Return a JSON with ONLY this one agent in the "agents" array — do NOT `
-        + `regenerate the other agents. Include: id, name, persona (2-3 sentences), `
-        + `perspective (1 sentence), and contentiousness (0.0-1.0).`,
-    });
+    let result;
+    try {
+      result = await suggestCouncil({
+        port: serverPort,
+        topic: session.topic,
+        model,
+        agent_count: 1,
+        refinement: `The council already has these agents: [${roster}]. `
+          + `Generate details for the agent named '${target.name}' to complement them. `
+          + `Return a JSON with ONLY this one agent in the "agents" array — do NOT `
+          + `regenerate the other agents. Include id, name, persona (2-3 sentences), `
+          + `perspective (1 sentence), contentiousness (0.0-1.0), rounds, and synthesis_guidance.`,
+      });
+    } catch (err) {
+      appLogger.error('hook', 'Council fill failed', { error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
     const filled = result.agents.find((a) => a.name === target.name) ?? result.agents[0];
     if (!filled) return;
     dispatch({

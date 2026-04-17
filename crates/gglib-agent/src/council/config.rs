@@ -86,6 +86,10 @@ pub struct SuggestedCouncil {
     pub agents: Vec<CouncilAgent>,
 
     /// Suggested number of debate rounds.
+    ///
+    /// Defaults to `0` when absent (fill responses only return one agent
+    /// and may omit council-level fields).
+    #[serde(default)]
     pub rounds: u32,
 
     /// Suggested synthesis guidance.

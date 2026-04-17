@@ -322,8 +322,8 @@ async fn handle_ai_fill(
         "The council already has these agents: [{}]. \
          Generate details for the agent named '{name}' to complement them. \
          Return a JSON with ONLY this one agent in the \"agents\" array \u{2014} do NOT \
-         regenerate the other agents. Include: id, name, persona (2-3 sentences), \
-         perspective (1 sentence), and contentiousness (0.0-1.0).",
+         regenerate the other agents. Include id, name, persona (2-3 sentences), \
+         perspective (1 sentence), contentiousness (0.0-1.0), rounds, and synthesis_guidance.",
         roster.join(", ")
     );
     let history = vec![
