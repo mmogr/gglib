@@ -113,6 +113,7 @@ impl<'a> SettingsOps<'a> {
             voice_auto_speak: settings.voice_auto_speak,
             voice_input_device: settings.voice_input_device,
             setup_completed: settings.setup_completed,
+            title_generation_prompt: settings.title_generation_prompt,
         })
     }
 
@@ -139,6 +140,7 @@ impl<'a> SettingsOps<'a> {
             voice_auto_speak: request.voice_auto_speak,
             voice_input_device: request.voice_input_device,
             setup_completed: request.setup_completed,
+            title_generation_prompt: request.title_generation_prompt,
         };
 
         let settings = self
@@ -173,6 +175,7 @@ impl<'a> SettingsOps<'a> {
             voice_auto_speak: settings.voice_auto_speak,
             voice_input_device: settings.voice_input_device,
             setup_completed: settings.setup_completed,
+            title_generation_prompt: settings.title_generation_prompt,
         })
     }
 

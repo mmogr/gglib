@@ -85,6 +85,15 @@ pub enum SettingsCommand {
         /// Default download path for models
         #[arg(long)]
         default_download_path: Option<String>,
+        /// Maximum agent iterations for tool-calling loop (1-50)
+        #[arg(long)]
+        max_tool_iterations: Option<u32>,
+        /// Maximum stagnation steps before stopping agent loop
+        #[arg(long)]
+        max_stagnation_steps: Option<u32>,
+        /// Show memory fit indicators in HuggingFace browser
+        #[arg(long)]
+        show_memory_fit_indicators: Option<bool>,
     },
     /// Reset all settings to defaults
     Reset {

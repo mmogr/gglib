@@ -83,7 +83,10 @@ pub async fn run_repl_with_prior(
     prior_messages: Vec<AgentMessage>,
 ) -> Result<()> {
     let config = AgentConfig::from_user_params(
-        Some(args.max_iterations),
+        Some(
+            args.max_iterations
+                .unwrap_or(gglib_core::DEFAULT_MAX_ITERATIONS),
+        ),
         args.max_parallel,
         args.tool_timeout_ms,
     )

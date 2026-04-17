@@ -116,8 +116,9 @@ pub enum Commands {
         #[arg(long)]
         port: Option<u16>,
         /// Maximum agent iterations before giving up
-        #[arg(long = "max-iterations", default_value = "25")]
-        max_iterations: usize,
+        /// [default: persisted setting, or 25 if unset]
+        #[arg(long = "max-iterations")]
+        max_iterations: Option<usize>,
         /// Tool allowlist; may be repeated or comma-separated.
         /// Omit to allow all tools. (e.g. "mcp_search,builtin_time")
         /// Note: the filter is evaluated once at session start. To change the
@@ -173,8 +174,9 @@ pub enum Commands {
         #[arg(long)]
         port: Option<u16>,
         /// Maximum agent iterations
-        #[arg(long = "max-iterations", default_value = "25")]
-        max_iterations: usize,
+        /// [default: persisted setting, or 25 if unset]
+        #[arg(long = "max-iterations")]
+        max_iterations: Option<usize>,
         /// Tool allowlist (empty = all tools)
         #[arg(long, value_delimiter = ',')]
         tools: Vec<String>,

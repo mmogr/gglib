@@ -13,6 +13,9 @@ pub const DEFAULT_PROXY_PORT: u16 = 8080;
 /// Default base port for llama-server instance allocation.
 pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
 
+/// Default context size for models when not specified by the user.
+pub const DEFAULT_CONTEXT_SIZE: u64 = 4096;
+
 /// Application settings structure.
 ///
 /// All fields are optional to support partial updates and graceful defaults.
@@ -85,6 +88,9 @@ pub struct Settings {
     // ── Setup wizard ────────────────────────────────────────────────
     /// Whether the first-run setup wizard has been completed.
     pub setup_completed: Option<bool>,
+
+    /// Custom prompt template for generating chat titles.
+    pub title_generation_prompt: Option<String>,
 }
 
 impl Settings {
@@ -93,13 +99,15 @@ impl Settings {
     pub const fn with_defaults() -> Self {
         Self {
             default_download_path: None,
-            default_context_size: Some(4096),
+            default_context_size: Some(DEFAULT_CONTEXT_SIZE),
             proxy_port: Some(DEFAULT_PROXY_PORT),
             llama_base_port: Some(DEFAULT_LLAMA_BASE_PORT),
             max_download_queue_size: Some(10),
             show_memory_fit_indicators: Some(true),
-            max_tool_iterations: Some(25),
-            max_stagnation_steps: Some(5),
+            #[allow(clippy::cast_possible_truncation)] // compile-time constants, always < u32::MAX
+            max_tool_iterations: Some(crate::domain::agent::DEFAULT_MAX_ITERATIONS as u32),
+            #[allow(clippy::cast_possible_truncation)]
+            max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             default_model_id: None,
             inference_defaults: None,
             voice_enabled: Some(false),
@@ -112,6 +120,7 @@ impl Settings {
             voice_auto_speak: Some(true),
             voice_input_device: None,
             setup_completed: None,
+            title_generation_prompt: None,
         }
     }
 
@@ -195,6 +204,9 @@ impl Settings {
         if let Some(ref v) = other.setup_completed {
             self.setup_completed = *v;
         }
+        if let Some(ref v) = other.title_generation_prompt {
+            self.title_generation_prompt.clone_from(v);
+        }
     }
 }
 
@@ -226,6 +238,7 @@ pub struct SettingsUpdate {
     pub voice_auto_speak: Option<Option<bool>>,
     pub voice_input_device: Option<Option<String>>,
     pub setup_completed: Option<Option<bool>>,
+    pub title_generation_prompt: Option<Option<String>>,
 }
 
 /// Settings validation error.

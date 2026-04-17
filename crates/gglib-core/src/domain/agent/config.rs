@@ -56,6 +56,12 @@ pub const DEFAULT_MAX_ITERATIONS: usize = 25;
 /// so the channel size accounts for the correct number of concurrent tool events.
 pub const DEFAULT_MAX_PARALLEL_TOOLS: usize = 5;
 
+/// Default value for [`AgentConfig::max_stagnation_steps`].
+///
+/// The agent loop aborts when the same assistant text has been seen more
+/// than this many times, preventing infinite stagnant output.
+pub const DEFAULT_MAX_STAGNATION_STEPS: usize = 5;
+
 /// Configuration that governs a single agentic loop run.
 ///
 /// All fields have sensible defaults via [`Default`] that match the historical
@@ -155,7 +161,7 @@ impl Default for AgentConfig {
             tool_timeout_ms: 30_000,
             context_budget_chars: 180_000,
             max_repeated_batch_steps: Some(2),
-            max_stagnation_steps: Some(5),
+            max_stagnation_steps: Some(DEFAULT_MAX_STAGNATION_STEPS),
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
         }

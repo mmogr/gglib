@@ -5,6 +5,7 @@ use axum::{Json, extract::State};
 use crate::{error::HttpError, state::AppState};
 use gglib_core::paths::llama_server_path;
 use gglib_core::ports::AppEventEmitter;
+use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 
@@ -61,8 +62,8 @@ async fn fetch_status(state: &AppState) -> ProxyStatus {
 fn to_runtime_config(cfg: &StartProxyConfig) -> RuntimeProxyConfig {
     RuntimeProxyConfig {
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
-        port: cfg.port.unwrap_or(11444),
-        default_context: cfg.default_context.unwrap_or(4096),
+        port: cfg.port.unwrap_or(DEFAULT_PROXY_PORT),
+        default_context: cfg.default_context.unwrap_or(DEFAULT_CONTEXT_SIZE),
     }
 }
 

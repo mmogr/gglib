@@ -20,6 +20,7 @@ use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
 use crate::handlers::agent_chat::drain::drain_event_stream;
 use crate::handlers::agent_chat::persistence::Conversation;
 use crate::handlers::agent_chat::repl::run_repl_with_history;
+use crate::handlers::inference::shared::resolve_max_iterations;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 
 /// System prompt for the agentic question mode.
@@ -37,7 +38,7 @@ pub async fn execute(
     model_arg: Option<String>,
     file: Option<String>,
     port: Option<u16>,
-    max_iterations: usize,
+    max_iterations: Option<usize>,
     tools: Vec<String>,
     tool_timeout_ms: Option<u64>,
     max_parallel: Option<usize>,
@@ -57,13 +58,14 @@ pub async fn execute(
     };
 
     // If no model was specified, look up the default from settings
+    let settings = ctx
+        .app
+        .settings()
+        .get()
+        .await
+        .map_err(|e| anyhow!("failed to load settings: {e}"))?;
+
     let params = if params.model_identifier.is_empty() {
-        let settings = ctx
-            .app
-            .settings()
-            .get()
-            .await
-            .map_err(|e| anyhow!("failed to load settings: {e}"))?;
         let default_id = settings.default_model_id.ok_or_else(|| {
             anyhow!(
                 "No model specified and no default model set.\n\
@@ -106,8 +108,11 @@ pub async fn execute(
     )
     .await?;
 
-    let config = AgentConfig::from_user_params(Some(max_iterations), max_parallel, tool_timeout_ms)
-        .map_err(|e| anyhow!("invalid agent config: {e}"))?;
+    let resolved_max_iterations = resolve_max_iterations(max_iterations, &settings);
+
+    let config =
+        AgentConfig::from_user_params(Some(resolved_max_iterations), max_parallel, tool_timeout_ms)
+            .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
     // Build messages
     let mut messages = vec![AgentMessage::System {

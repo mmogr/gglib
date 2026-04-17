@@ -30,6 +30,8 @@ use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 
+use gglib_core::settings::DEFAULT_LLAMA_BASE_PORT;
+
 // Path utilities from core
 use gglib_core::paths::{database_path, llama_server_path, resolve_models_dir};
 
@@ -48,7 +50,7 @@ impl CliConfig {
     /// Create config with default paths.
     pub fn with_defaults() -> Result<Self> {
         Ok(Self {
-            base_port: 9000,
+            base_port: DEFAULT_LLAMA_BASE_PORT,
             llama_server_path: llama_server_path()?,
             max_concurrent: 4,
         })

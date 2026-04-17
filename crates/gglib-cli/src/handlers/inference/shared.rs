@@ -6,7 +6,9 @@
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
+use gglib_core::Settings;
 use gglib_core::domain::InferenceConfig;
+use gglib_core::domain::agent::DEFAULT_MAX_ITERATIONS;
 use gglib_runtime::llama::{ContextResolution, ContextResolutionSource};
 
 /// Resolve inference parameters via the 3-level merge hierarchy.
@@ -33,6 +35,16 @@ pub async fn resolve_inference_config(
     config.merge_with(&InferenceConfig::with_hardcoded_defaults());
 
     Ok(config)
+}
+
+/// Resolve the maximum agent iterations via a 3-level fallback chain.
+///
+/// Merge order: CLI flag → persisted `Settings.max_tool_iterations` → `DEFAULT_MAX_ITERATIONS`.
+/// This mirrors the pattern in [`resolve_inference_config`] and keeps handler code clean.
+pub fn resolve_max_iterations(cli_override: Option<usize>, settings: &Settings) -> usize {
+    cli_override
+        .or_else(|| settings.max_tool_iterations.map(|v| v as usize))
+        .unwrap_or(DEFAULT_MAX_ITERATIONS)
 }
 
 /// Log context-size resolution to stderr.

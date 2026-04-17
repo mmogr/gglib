@@ -381,20 +381,33 @@ gglib config models-dir set /fast-ssd/llama_models
 ```
 
 #### `config settings <action>`
-Manage application settings including download queue configuration.
+Manage application settings including download queue configuration, agent loop parameters, and display preferences.
 
 **Actions:**
 - `show` – display current settings
-- `set --max-queue-size <N>` – set maximum download queue size (1-50)
+- `set` – update settings (see flags below)
 - `reset` – reset all settings to defaults
+
+**`set` flags:**
+- `--default-context-size <N>` – default context size (512-1000000)
+- `--proxy-port <PORT>` – OpenAI-compatible proxy port (≥ 1024)
+- `--llama-base-port <PORT>` – llama-server base port (≥ 1024)
+- `--max-download-queue-size <N>` – max download queue size (1-50)
+- `--default-download-path <PATH>` – default model download directory
+- `--max-tool-iterations <N>` – max agent loop iterations (1-50)
+- `--max-stagnation-steps <N>` – max stagnation steps before abort
+- `--show-memory-fit-indicators <BOOL>` – show memory fit in HF browser
 
 **Examples:**
 ```bash
 # View current settings
 gglib config settings show
 
+# Set max agent iterations to 40
+gglib config settings set --max-tool-iterations 40
+
 # Set max download queue size
-gglib config settings set --max-queue-size 20
+gglib config settings set --max-download-queue-size 20
 
 # Reset to defaults
 gglib config settings reset

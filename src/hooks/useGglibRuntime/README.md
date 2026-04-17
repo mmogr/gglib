@@ -54,7 +54,7 @@ preserves the multi-message UI layout from the previous client-side loop.
 
 | Option | Backend field | Default |
 |---|---|---|
-| `maxToolIterations` | `AgentConfig::max_iterations` | 25 |
+| `maxToolIterations` | `AgentConfig::max_iterations` | persisted setting, or 25 |
 | `supportsToolCalls` | `tool_filter: []` when `false` | all tools |
 
 Internal tuning parameters (`max_stagnation_steps`, `context_budget_chars`,
