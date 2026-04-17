@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CouncilAgent {
     /// Unique opaque identifier (e.g. a short slug or UUID).
+    /// Defaults to empty; call [`SuggestedCouncil::backfill_defaults`]
+    /// after deserialising LLM output to populate missing ids.
+    #[serde(default)]
     pub id: String,
 
     /// Human-readable role title (e.g. "Devil's Advocate", "Pragmatist").
@@ -20,6 +23,8 @@ pub struct CouncilAgent {
 
     /// CSS-compatible colour string for the agent's avatar and lane tint
     /// (e.g. `"#ef4444"` or `"rgb(239,68,68)"`).
+    /// Defaults to empty; backfilled after deserialisation.
+    #[serde(default)]
     pub color: String,
 
     /// 2-3 sentence persona definition.  Re-injected at the top of every
@@ -83,6 +88,40 @@ pub struct SuggestedCouncil {
     /// Suggested synthesis guidance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synthesis_guidance: Option<String>,
+}
+
+/// Default agent colours, cycled when the LLM omits `color`.
+const DEFAULT_AGENT_COLORS: &[&str] = &[
+    "#3b82f6", // blue
+    "#ef4444", // red
+    "#10b981", // emerald
+    "#f59e0b", // amber
+    "#8b5cf6", // violet
+    "#ec4899", // pink
+    "#06b6d4", // cyan
+    "#f97316", // orange
+];
+
+impl SuggestedCouncil {
+    /// Fill in any `id` or `color` fields that the LLM left empty.
+    ///
+    /// - `id` is derived by slugifying the agent `name` with a numeric suffix.
+    /// - `color` cycles through a palette of 8 distinct colours.
+    pub fn backfill_defaults(&mut self) {
+        for (i, agent) in self.agents.iter_mut().enumerate() {
+            if agent.id.is_empty() {
+                agent.id = format!(
+                    "{}-{}",
+                    agent.name.to_lowercase().replace(' ', "-"),
+                    i + 1,
+                );
+            }
+            if agent.color.is_empty() {
+                agent.color =
+                    DEFAULT_AGENT_COLORS[i % DEFAULT_AGENT_COLORS.len()].to_string();
+            }
+        }
+    }
 }
 
 // ─── validation ──────────────────────────────────────────────────────────────

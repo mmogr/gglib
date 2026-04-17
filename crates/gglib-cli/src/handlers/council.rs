@@ -94,7 +94,8 @@ pub async fn execute_suggest(
         return Err(anyhow!("LLM did not return a council suggestion"));
     }
 
-    let council: SuggestedCouncil = parse_suggested_council(&content)?;
+    let mut council: SuggestedCouncil = parse_suggested_council(&content)?;
+    council.backfill_defaults();
     let json = serde_json::to_string_pretty(&council)?;
     println!("{json}");
     Ok(())

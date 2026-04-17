@@ -76,7 +76,8 @@ pub async fn suggest(
         ));
     }
 
-    let council: SuggestedCouncil = parse_suggested_council(&content)?;
+    let mut council: SuggestedCouncil = parse_suggested_council(&content)?;
+    council.backfill_defaults();
     Ok(Json(CouncilSuggestResponse { council }))
 }
 
