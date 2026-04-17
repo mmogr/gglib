@@ -97,11 +97,11 @@ impl ConversationSettingsBuilder {
     /// Set agent loop parameters.
     pub fn agent_params(
         mut self,
-        max_iterations: usize,
+        max_iterations: Option<usize>,
         tool_timeout_ms: Option<u64>,
         max_parallel: Option<usize>,
     ) -> Self {
-        self.settings.max_iterations = Some(max_iterations);
+        self.settings.max_iterations = max_iterations;
         self.settings.tool_timeout_ms = tool_timeout_ms;
         self.settings.max_parallel = max_parallel;
         self

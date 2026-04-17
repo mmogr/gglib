@@ -41,6 +41,14 @@ pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // 1. If resuming, load the conversation first and merge saved settings
     //    into args so the agent is composed with the correct parameters.
     let mut args = args.clone();
+
+    // Resolve max_iterations from persisted settings when the CLI flag wasn't provided.
+    if args.max_iterations.is_none() {
+        if let Ok(settings) = ctx.app.settings().get().await {
+            args.max_iterations = settings.max_tool_iterations.map(|v| v as usize);
+        }
+    }
+
     let (persistence, prior_messages) = if let Some(conv_id) = args.continue_id {
         let (merged_args, conv, prior) = resume_conversation(ctx, &args, conv_id).await?;
         args = merged_args;
@@ -232,10 +240,9 @@ fn apply_saved_settings(
     }
 
     // Agent loop params — fill if the user didn't override.
-    if let Some(saved_max) = saved.max_iterations {
-        // 25 is the clap default — treat it as "not set by user".
-        if merged.max_iterations == 25 {
-            merged.max_iterations = saved_max;
+    if merged.max_iterations.is_none() {
+        if let Some(saved_max) = saved.max_iterations {
+            merged.max_iterations = Some(saved_max);
         }
     }
     if merged.tool_timeout_ms.is_none() {
