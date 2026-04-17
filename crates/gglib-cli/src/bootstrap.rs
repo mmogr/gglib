@@ -18,8 +18,8 @@ use async_trait::async_trait;
 use gglib_core::ModelRegistrar;
 use gglib_core::download::DownloadError;
 use gglib_core::ports::{
-    DownloadManagerConfig, DownloadManagerPort, GgufParserPort, ModelRepository,
-    NoopDownloadEmitter, NoopEmitter, ProcessRunner, Repos,
+    DownloadManagerConfig, DownloadManagerPort, GgufParserPort, ModelRegistrarPort,
+    ModelRepository, NoopDownloadEmitter, NoopEmitter, ProcessRunner, Repos,
 };
 use gglib_core::services::{AppCore, ModelVerificationService};
 use gglib_db::{CoreFactory, setup_database};
@@ -109,6 +109,11 @@ pub struct CliContext {
     pub llama_server_path: PathBuf,
     /// Base port for allocating llama-server instances (from CLI `--base-port`).
     pub base_port: u16,
+    /// Model registrar for download registration with full GGUF metadata.
+    ///
+    /// Shared with the download manager so both GUI and CLI download paths
+    /// use the identical registration logic.
+    pub model_registrar: Arc<dyn ModelRegistrarPort>,
     /// Shared HTTP client for LLM adapter calls.
     ///
     /// Constructed once at bootstrap and cloned into each agent session so that
@@ -162,7 +167,9 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     let models_dir_resolution = resolve_models_dir(None)?;
     let download_config = DownloadManagerConfig::new(models_dir_resolution.path);
 
-    // Create the model registrar (composes over model repository + GGUF parser)
+    // Create the model registrar (composes over model repository + GGUF parser).
+    // Stored on CliContext AND injected into the download manager so CLI
+    // download registration uses the same code path as the GUI.
     let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(
         pool.clone(),
     ));
@@ -184,7 +191,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     // Build the download manager
     let downloads: Arc<dyn DownloadManagerPort> =
         Arc::new(build_download_manager(DownloadManagerDeps {
-            model_registrar,
+            model_registrar: model_registrar.clone(),
             download_repo,
             hf_client: hf_client.clone(),
             event_emitter,
@@ -210,6 +217,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         downloads,
         gguf_parser,
         model_repo: repos.models,
+        model_registrar,
         llama_server_path: config.llama_server_path,
         base_port: config.base_port,
         http_client: reqwest::Client::new(),
@@ -224,6 +232,7 @@ pub fn bootstrap_with(
     runner: Arc<dyn ProcessRunner>,
     downloads: Arc<dyn DownloadManagerPort>,
     gguf_parser: Arc<dyn GgufParserPort>,
+    model_registrar: Arc<dyn ModelRegistrarPort>,
     llama_server_path: PathBuf,
 ) -> CliContext {
     let model_repo = repos.models.clone();
@@ -239,6 +248,7 @@ pub fn bootstrap_with(
         downloads,
         gguf_parser,
         model_repo,
+        model_registrar,
         llama_server_path,
         base_port: 9000,
         http_client: reqwest::Client::new(),
