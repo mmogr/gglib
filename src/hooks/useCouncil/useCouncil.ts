@@ -35,6 +35,14 @@ export interface UseCouncilReturn {
   cancel: () => void;
   /** Reset session to idle. */
   reset: () => void;
+  /** Update a single agent's properties. */
+  updateAgent: (agentId: string, changes: Partial<CouncilAgent>) => void;
+  /** Remove an agent by id. */
+  removeAgent: (agentId: string) => void;
+  /** Add a blank agent scaffold. */
+  addAgent: () => void;
+  /** Ask the LLM to fill/update a single agent's details by name. */
+  fillAgent: (agentId: string) => Promise<void>;
   /** Whether a deliberation is currently streaming. */
   isStreaming: boolean;
 }
@@ -220,5 +228,61 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
 
   const isStreaming = session.phase === 'deliberating' || session.phase === 'synthesizing';
 
-  return { session, suggest, refine, run, cancel, reset, isStreaming };
+  const updateAgent = useCallback((agentId: string, changes: Partial<CouncilAgent>) => {
+    dispatch({ type: 'UPDATE_AGENT', agentId, changes });
+  }, [dispatch]);
+
+  const removeAgent = useCallback((agentId: string) => {
+    dispatch({ type: 'REMOVE_AGENT', agentId });
+  }, [dispatch]);
+
+  const addAgent = useCallback(() => {
+    const id = `new-agent-${Date.now()}`;
+    const colors = ['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316'];
+    const idx = session.suggestedAgents.length % colors.length;
+    dispatch({
+      type: 'ADD_AGENT',
+      agent: {
+        id,
+        name: 'New Agent',
+        color: colors[idx],
+        persona: 'Define this agent\'s worldview and expertise.',
+        perspective: 'Describe their unique angle.',
+        contentiousness: 0.5,
+      },
+    });
+  }, [dispatch, session.suggestedAgents.length]);
+
+  const fillAgent = useCallback(async (agentId: string): Promise<void> => {
+    const target = session.suggestedAgents.find((a) => a.id === agentId);
+    if (!target) return;
+    // Send only agent names as context — avoids echoing full personas back.
+    const roster = session.suggestedAgents.map((a) => a.name).join(', ');
+    let result;
+    try {
+      result = await suggestCouncil({
+        port: serverPort,
+        topic: session.topic,
+        model,
+        agent_count: 1,
+        refinement: `The council already has these agents: [${roster}]. `
+          + `Generate details for the agent named '${target.name}' to complement them. `
+          + `Return a JSON with ONLY this one agent in the "agents" array — do NOT `
+          + `regenerate the other agents. Include id, name, persona (2-3 sentences), `
+          + `perspective (1 sentence), contentiousness (0.0-1.0), rounds, and synthesis_guidance.`,
+      });
+    } catch (err) {
+      appLogger.error('hook', 'Council fill failed', { error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+    const filled = result.agents.find((a) => a.name === target.name) ?? result.agents[0];
+    if (!filled) return;
+    dispatch({
+      type: 'UPDATE_AGENT',
+      agentId,
+      changes: { persona: filled.persona, perspective: filled.perspective, contentiousness: filled.contentiousness },
+    });
+  }, [serverPort, model, session.topic, session.suggestedAgents, dispatch]);
+
+  return { session, suggest, refine, run, cancel, reset, updateAgent, removeAgent, addAgent, fillAgent, isStreaming };
 }

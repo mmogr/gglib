@@ -7,18 +7,29 @@
  * @module components/Council/Setup/AgentCard
  */
 
-import type { FC } from 'react';
+import { type FC, useState } from 'react';
 import type { CouncilAgent } from '../../../types/council';
 import { contentiousnessColor, contentiousnessLabel } from '../../../types/council';
 import { cn } from '../../../utils/cn';
+import { EditableTextField } from './EditableTextField';
+import { AgentDiffBadge, type DiffStatus } from './AgentDiffBadge';
+import { Sparkles } from 'lucide-react';
+import { Icon } from '../../ui/Icon';
 
 interface AgentCardProps {
   agent: CouncilAgent;
+  diffStatus?: DiffStatus;
   onContentiousnessChange?: (agentId: string, value: number) => void;
+  onUpdate?: (agentId: string, changes: Partial<CouncilAgent>) => void;
+  onRemove?: (agentId: string) => void;
+  onFillAgent?: (agentId: string) => Promise<void>;
   disabled?: boolean;
 }
 
-export const AgentCard: FC<AgentCardProps> = ({ agent, onContentiousnessChange, disabled }) => {
+export const AgentCard: FC<AgentCardProps> = ({
+  agent, diffStatus = 'unchanged', onContentiousnessChange, onUpdate, onRemove, onFillAgent, disabled,
+}) => {
+  const [isFilling, setIsFilling] = useState(false);
   const color = contentiousnessColor(agent.contentiousness);
   const label = contentiousnessLabel(agent.contentiousness);
 
@@ -31,25 +42,76 @@ export const AgentCard: FC<AgentCardProps> = ({ agent, onContentiousnessChange, 
       )}
       style={{ '--agent-color': color } as React.CSSProperties}
     >
-      {/* Header: name + color dot */}
+      {/* Header: name + color dot + diff badge + delete */}
       <div className="flex items-center gap-sm">
         <span
           className="w-3 h-3 rounded-full shrink-0"
           style={{ backgroundColor: color }}
           aria-hidden
         />
-        <h4 className="text-sm font-medium text-text m-0">{agent.name}</h4>
+        <EditableTextField
+          value={agent.name}
+          onChange={(v) => onUpdate?.(agent.id, { name: v })}
+          disabled={disabled || !onUpdate}
+          className="text-sm font-medium text-text"
+          aria-label={`${agent.name} name`}
+        />
+        <AgentDiffBadge status={diffStatus} />
+        {onFillAgent && !disabled && (
+          <button
+            type="button"
+            onClick={async () => {
+              setIsFilling(true);
+              try { await onFillAgent(agent.id); } finally { setIsFilling(false); }
+            }}
+            disabled={isFilling}
+            className="text-text-muted hover:text-primary transition-colors p-0.5 disabled:pointer-events-none"
+            aria-label={`AI-fill ${agent.name}`}
+            title="Fill details with AI"
+          >
+            {isFilling ? (
+              <span className="inline-block w-[14px] h-[14px] border-2 border-text-muted border-t-primary rounded-full animate-spin-360" />
+            ) : (
+              <Icon icon={Sparkles} size={14} />
+            )}
+          </button>
+        )}
+        <div className="ml-auto">
+          {onRemove && !disabled && (
+            <button
+              type="button"
+              onClick={() => onRemove(agent.id)}
+              className="text-text-muted hover:text-danger transition-colors text-xs px-1"
+              aria-label={`Remove ${agent.name}`}
+            >
+              &times;
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Perspective (one-liner) */}
-      <p className="text-xs text-text-muted m-0 leading-relaxed">{agent.perspective}</p>
+      {/* Perspective (editable one-liner) */}
+      <EditableTextField
+        value={agent.perspective}
+        onChange={(v) => onUpdate?.(agent.id, { perspective: v })}
+        disabled={disabled || !onUpdate}
+        className="text-xs text-text-muted leading-relaxed"
+        aria-label={`${agent.name} perspective`}
+      />
 
-      {/* Persona (collapsed by default to save space) */}
+      {/* Persona (collapsed, editable) */}
       <details className="text-xs">
         <summary className="cursor-pointer text-text-secondary hover:text-text transition-colors">
           Persona
         </summary>
-        <p className="mt-xs text-text-muted leading-relaxed m-0">{agent.persona}</p>
+        <EditableTextField
+          value={agent.persona}
+          onChange={(v) => onUpdate?.(agent.id, { persona: v })}
+          disabled={disabled || !onUpdate}
+          multiline
+          className="mt-xs text-text-muted leading-relaxed"
+          aria-label={`${agent.name} persona`}
+        />
       </details>
 
       {/* Contentiousness slider */}

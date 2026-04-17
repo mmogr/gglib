@@ -19,9 +19,10 @@
 /// Placeholders: `{agent_count}`, `{user_topic}`.
 pub const COUNCIL_DESIGNER_PROMPT: &str = "\
 You are a council architect. Given a user's question or topic, design a council \
-of {agent_count} agents who will deliberate on it from diverse perspectives.
+of approximately {agent_count} agents who will deliberate on it from diverse perspectives.
 
 For each agent, provide:
+- id: A short kebab-case identifier (e.g., \"devils-advocate\", \"domain-expert\")
 - name: A concise role title (e.g., \"Devil's Advocate\", \"Domain Expert\", \"Pragmatist\")
 - persona: 2-3 sentences defining their worldview, expertise, and argumentative style
 - contentiousness: A number 0.0-1.0 (0.0 = fully collaborative, 1.0 = maximally adversarial)
@@ -39,11 +40,21 @@ Also suggest:
 
 Respond with ONLY the JSON object below — no explanation, no markdown fences, \
 no surrounding text:
- the JSON object below — no explanation, no markdown fences, \
-no surrounding text:
 {{ \"agents\": [...], \"rounds\": N, \"synthesis_guidance\": \"...\" }}
 
 Topic: \"{user_topic}\"";
+
+/// Addendum appended to the designer system prompt during refinement.
+///
+/// Instructs the LLM to make minimal, targeted changes and preserve
+/// stable agent IDs so the frontend can diff old vs new suggestions.
+pub const COUNCIL_REFINEMENT_ADDENDUM: &str = "\n\n\
+IMPORTANT — you are REFINING a previous suggestion based on user feedback.\n\
+- Make MINIMAL changes. Preserve agents the user does not mention.\n\
+- Keep the `id` field IDENTICAL for agents you do not modify.\n\
+- Only add, remove, or modify agents the user specifically requests.\n\
+- You may adjust the agent count freely — ignore the original count guidance.\n\
+- Respond with the COMPLETE updated JSON (all agents, not just changes).";
 
 // ─── agent turn ──────────────────────────────────────────────────────────────
 

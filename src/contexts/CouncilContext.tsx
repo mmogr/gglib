@@ -37,6 +37,9 @@ export type CouncilAction =
   | { type: 'SYNTHESIS_COMPLETE'; content: string }
   | { type: 'COUNCIL_ERROR'; error: string }
   | { type: 'COUNCIL_COMPLETE' }
+  | { type: 'UPDATE_AGENT'; agentId: string; changes: Partial<CouncilAgent> }
+  | { type: 'ADD_AGENT'; agent: CouncilAgent }
+  | { type: 'REMOVE_AGENT'; agentId: string }
   | { type: 'RESET' };
 
 // ─── Reducer ────────────────────────────────────────────────────────────────
@@ -137,6 +140,23 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
 
     case 'COUNCIL_COMPLETE':
       return { ...state, phase: 'complete' };
+
+    case 'UPDATE_AGENT':
+      return {
+        ...state,
+        suggestedAgents: state.suggestedAgents.map((a) =>
+          a.id === action.agentId ? { ...a, ...action.changes } : a,
+        ),
+      };
+
+    case 'ADD_AGENT':
+      return { ...state, suggestedAgents: [...state.suggestedAgents, action.agent] };
+
+    case 'REMOVE_AGENT':
+      return {
+        ...state,
+        suggestedAgents: state.suggestedAgents.filter((a) => a.id !== action.agentId),
+      };
 
     case 'RESET':
       return createEmptySession();

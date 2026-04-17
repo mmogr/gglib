@@ -8,10 +8,12 @@
  * @module components/Council/Setup/CouncilSetupPanel
  */
 
-import { type FC, useState, useCallback } from 'react';
+import { type FC, useState, useCallback, useEffect } from 'react';
 import type { CouncilAgent, CouncilConfig } from '../../../types/council';
 import { Button } from '../../ui/Button';
 import { AgentCard } from './AgentCard';
+import { AddAgentButton } from './AddAgentButton';
+import type { DiffStatus } from './AgentDiffBadge';
 import { cn } from '../../../utils/cn';
 
 interface CouncilSetupPanelProps {
@@ -19,8 +21,14 @@ interface CouncilSetupPanelProps {
   agents: CouncilAgent[];
   rounds: number;
   synthesisGuidance?: string;
+  /** Per-agent diff status after a refinement. Keyed by agent id. */
+  diffStatuses?: Record<string, DiffStatus>;
   onRun: (config: CouncilConfig) => void;
   onCancel: () => void;
+  onUpdateAgent?: (agentId: string, changes: Partial<CouncilAgent>) => void;
+  onRemoveAgent?: (agentId: string) => void;
+  onAddAgent?: () => void;
+  onFillAgent?: (agentId: string) => Promise<void>;
   disabled?: boolean;
 }
 
@@ -29,12 +37,22 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
   agents: initialAgents,
   rounds: initialRounds,
   synthesisGuidance,
+  diffStatuses,
   onRun,
   onCancel,
+  onUpdateAgent,
+  onRemoveAgent,
+  onAddAgent,
+  onFillAgent,
   disabled,
 }) => {
   const [agents, setAgents] = useState<CouncilAgent[]>(initialAgents);
   const [rounds, setRounds] = useState(initialRounds);
+
+  // Sync local state when context-driven changes arrive (add/remove/update agent).
+  useEffect(() => {
+    setAgents(initialAgents);
+  }, [initialAgents]);
 
   const handleContentiousnessChange = useCallback((agentId: string, value: number) => {
     setAgents((prev) =>
@@ -76,10 +94,15 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
           <AgentCard
             key={agent.id}
             agent={agent}
+            diffStatus={diffStatuses?.[agent.id]}
             onContentiousnessChange={handleContentiousnessChange}
+            onUpdate={onUpdateAgent}
+            onRemove={onRemoveAgent}
+            onFillAgent={onFillAgent}
             disabled={disabled}
           />
         ))}
+        {onAddAgent && !disabled && <AddAgentButton onClick={onAddAgent} disabled={disabled} />}
       </div>
 
       {/* Rounds control + Run */}

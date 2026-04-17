@@ -39,8 +39,8 @@ pub async fn suggest(
         state.mcp.clone(),
     );
 
-    // Build multi-turn refinement history when the client sends a prior
-    // suggestion and a follow-up message.
+    // Build multi-turn refinement history when the client sends a
+    // follow-up message (with or without a prior suggestion).
     let refinement_history = match (req.previous_suggestion, req.refinement) {
         (Some(prev), Some(feedback)) => {
             let prev_json = serde_json::to_string(&prev).map_err(|e| {
@@ -59,6 +59,14 @@ pub async fn suggest(
                 AgentMessage::User { content: feedback },
             ])
         }
+        // Fill mode: refinement without a prior suggestion — two-message
+        // thread so the LLM sees the topic AND the refinement instruction.
+        (None, Some(feedback)) => Some(vec![
+            AgentMessage::User {
+                content: req.topic.clone(),
+            },
+            AgentMessage::User { content: feedback },
+        ]),
         _ => None,
     };
 

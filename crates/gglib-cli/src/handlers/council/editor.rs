@@ -13,6 +13,15 @@ use super::stream::temperature_fg;
 
 // ─── Agent-level edits ──────────────────────────────────────────────────────
 
+/// Rename an agent.
+pub fn apply_name(agent: &mut CouncilAgent, new_name: &str) -> Result<()> {
+    if new_name.is_empty() {
+        bail!("name cannot be empty");
+    }
+    agent.name = new_name.to_owned();
+    Ok(())
+}
+
 /// Set the persona (system prompt flavour) for a single agent.
 pub fn apply_persona(agent: &mut CouncilAgent, new_persona: &str) -> Result<()> {
     if new_persona.is_empty() {

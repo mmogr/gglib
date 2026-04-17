@@ -11,17 +11,22 @@
  * @module components/Council/Messages/CouncilThread
  */
 
-import { type FC, useMemo } from 'react';
+import { type FC, useMemo, useRef } from 'react';
 import { useCouncilContext } from '../../../contexts/CouncilContext';
-import type { CouncilConfig } from '../../../types/council';
+import type { CouncilAgent, CouncilConfig } from '../../../types/council';
 import { CouncilMessage } from './CouncilMessage';
 import { SynthesisMessage } from './SynthesisMessage';
 import { RoundSeparator } from './RoundSeparator';
 import { CouncilSetupPanel } from '../Setup/CouncilSetupPanel';
+import type { DiffStatus } from '../Setup/AgentDiffBadge';
 
 export interface CouncilThreadProps {
   onRun: (config: CouncilConfig) => void;
   onCancel: () => void;
+  onUpdateAgent?: (agentId: string, changes: Partial<CouncilAgent>) => void;
+  onRemoveAgent?: (agentId: string) => void;
+  onAddAgent?: () => void;
+  onFillAgent?: (agentId: string) => Promise<void>;
 }
 
 type ThreadItem =
@@ -30,8 +35,39 @@ type ThreadItem =
   | { kind: 'streaming' }
   | { kind: 'synthesis' };
 
-export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
+export const CouncilThread: FC<CouncilThreadProps> = ({
+  onRun, onCancel, onUpdateAgent, onRemoveAgent, onAddAgent, onFillAgent,
+}) => {
   const { session } = useCouncilContext();
+  const prevAgentsRef = useRef<CouncilAgent[]>([]);
+
+  // Compute per-agent diff statuses after a refinement
+  const diffStatuses = useMemo<Record<string, DiffStatus>>(() => {
+    const prev = prevAgentsRef.current;
+    if (prev.length === 0) return {};
+    const prevMap = new Map(prev.map((a) => [a.id, a]));
+    const statuses: Record<string, DiffStatus> = {};
+    for (const agent of session.suggestedAgents) {
+      const old = prevMap.get(agent.id);
+      if (!old) {
+        statuses[agent.id] = 'new';
+      } else if (
+        old.name !== agent.name ||
+        old.persona !== agent.persona ||
+        old.perspective !== agent.perspective
+      ) {
+        statuses[agent.id] = 'modified';
+      } else {
+        statuses[agent.id] = 'unchanged';
+      }
+    }
+    return statuses;
+  }, [session.suggestedAgents]);
+
+  // Snapshot agents when entering setup so the next refinement can diff
+  if (session.phase === 'setup' && prevAgentsRef.current !== session.suggestedAgents) {
+    prevAgentsRef.current = session.suggestedAgents;
+  }
 
   // Build a flat list of render items with round separators injected
   const items = useMemo<ThreadItem[]>(() => {
@@ -96,8 +132,13 @@ export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
         agents={session.suggestedAgents}
         rounds={session.suggestedRounds}
         synthesisGuidance={session.suggestedSynthesisGuidance}
+        diffStatuses={diffStatuses}
         onRun={onRun}
         onCancel={onCancel}
+        onUpdateAgent={onUpdateAgent}
+        onRemoveAgent={onRemoveAgent}
+        onAddAgent={onAddAgent}
+        onFillAgent={onFillAgent}
       />
     );
   }
@@ -114,8 +155,13 @@ export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
           agents={session.suggestedAgents}
           rounds={session.suggestedRounds}
           synthesisGuidance={session.suggestedSynthesisGuidance}
+          diffStatuses={diffStatuses}
           onRun={onRun}
           onCancel={onCancel}
+          onUpdateAgent={onUpdateAgent}
+          onRemoveAgent={onRemoveAgent}
+          onAddAgent={onAddAgent}
+          onFillAgent={onFillAgent}
         />
       </>
     );
