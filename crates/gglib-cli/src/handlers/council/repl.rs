@@ -98,7 +98,11 @@ pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Resu
             }
             "name" => {
                 if let Some(idx) = parse_agent_idx(arg, config.agents.len()) {
-                    eprint!("  New name for #{} ({}): ", idx + 1, config.agents[idx].name);
+                    eprint!(
+                        "  New name for #{} ({}): ",
+                        idx + 1,
+                        config.agents[idx].name
+                    );
                     let _ = std::io::stderr().flush();
                     let input = rl.readline("  ")?;
                     let res = editor::apply_name(&mut config.agents[idx], input.trim());
@@ -115,10 +119,8 @@ pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Resu
                 }
             }
             "add" => {
-                let eprint_msg = format!(
-                    "  Name for the new agent (#{}): ",
-                    config.agents.len() + 1
-                );
+                let eprint_msg =
+                    format!("  Name for the new agent (#{}): ", config.agents.len() + 1);
                 eprint!("{eprint_msg}");
                 let _ = std::io::stderr().flush();
                 let input = rl.readline("  ")?;
@@ -214,7 +216,13 @@ fn offer_fill(rl: &mut DefaultEditor, agent_name: &str) -> Result<bool> {
 fn scaffold_agent(name: &str, idx: usize) -> CouncilAgent {
     let slug: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .trim_matches('-')
         .to_owned();
@@ -224,8 +232,7 @@ fn scaffold_agent(name: &str, idx: usize) -> CouncilAgent {
         format!("{slug}-{idx}")
     };
     let colors = [
-        "#3b82f6", "#ef4444", "#10b981", "#f59e0b",
-        "#8b5cf6", "#ec4899", "#06b6d4", "#f97316",
+        "#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316",
     ];
     CouncilAgent {
         id,

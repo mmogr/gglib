@@ -71,11 +71,7 @@ fn render_agent_table(agents: &[gglib_agent::council::config::CouncilAgent]) {
 /// Print a coloured before/after diff for the three AI-filled fields of an agent.
 pub fn render_agent_diff(idx: usize, old: &CouncilAgent, new: &CouncilAgent) {
     let color = temperature_fg(new.contentiousness);
-    eprintln!(
-        "\n  {BOLD}Agent #{} \"{}\"{RESET}",
-        idx + 1,
-        new.name,
-    );
+    eprintln!("\n  {BOLD}Agent #{} \"{}\"{RESET}", idx + 1, new.name,);
 
     if old.persona != new.persona {
         eprintln!("  {DIM}persona:{RESET}");
@@ -91,8 +87,7 @@ pub fn render_agent_diff(idx: usize, old: &CouncilAgent, new: &CouncilAgent) {
         let old_color = temperature_fg(old.contentiousness);
         eprintln!(
             "  {DIM}contentiousness:{RESET}  {old_color}{:.2}{RESET} → {color}{:.2}{RESET}",
-            old.contentiousness,
-            new.contentiousness,
+            old.contentiousness, new.contentiousness,
         );
     }
 
