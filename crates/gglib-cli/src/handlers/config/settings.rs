@@ -216,6 +216,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 voice_auto_speak: None,
                 voice_input_device: None,
                 setup_completed: None,
+                title_generation_prompt: None,
             };
 
             // Get current settings and apply updates for validation

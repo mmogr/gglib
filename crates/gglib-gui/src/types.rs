@@ -299,6 +299,8 @@ pub struct AppSettings {
     pub voice_input_device: Option<String>,
     // Setup wizard
     pub setup_completed: Option<bool>,
+    // Title generation
+    pub title_generation_prompt: Option<String>,
 }
 
 /// Request body for updating application settings.
@@ -328,6 +330,8 @@ pub struct UpdateSettingsRequest {
     pub voice_input_device: Option<Option<String>>,
     // Setup wizard
     pub setup_completed: Option<Option<bool>>,
+    // Title generation
+    pub title_generation_prompt: Option<Option<String>>,
 }
 
 // ============================================================================

@@ -88,6 +88,9 @@ pub struct Settings {
     // ── Setup wizard ────────────────────────────────────────────────
     /// Whether the first-run setup wizard has been completed.
     pub setup_completed: Option<bool>,
+
+    /// Custom prompt template for generating chat titles.
+    pub title_generation_prompt: Option<String>,
 }
 
 impl Settings {
@@ -115,6 +118,7 @@ impl Settings {
             voice_auto_speak: Some(true),
             voice_input_device: None,
             setup_completed: None,
+            title_generation_prompt: None,
         }
     }
 
@@ -198,6 +202,9 @@ impl Settings {
         if let Some(ref v) = other.setup_completed {
             self.setup_completed = *v;
         }
+        if let Some(ref v) = other.title_generation_prompt {
+            self.title_generation_prompt.clone_from(v);
+        }
     }
 }
 
@@ -229,6 +236,7 @@ pub struct SettingsUpdate {
     pub voice_auto_speak: Option<Option<bool>>,
     pub voice_input_device: Option<Option<String>>,
     pub setup_completed: Option<Option<bool>>,
+    pub title_generation_prompt: Option<Option<String>>,
 }
 
 /// Settings validation error.
