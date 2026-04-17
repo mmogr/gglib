@@ -15,7 +15,7 @@ pub mod utils;
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
     AssistantContent, ChatMessage, Conversation, ConversationUpdate, DEFAULT_MAX_ITERATIONS,
-    DEFAULT_MAX_PARALLEL_TOOLS, LlmStreamEvent, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
+    DEFAULT_MAX_PARALLEL_TOOLS, DEFAULT_MAX_STAGNATION_STEPS, LlmStreamEvent, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
     MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry,
     McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult, Message,
     MessageRole, Model, ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer,
@@ -42,8 +42,8 @@ pub use ports::{
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{
-    DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT, Settings, SettingsError, SettingsUpdate,
-    validate_settings,
+    DEFAULT_CONTEXT_SIZE, DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT, Settings, SettingsError,
+    SettingsUpdate, validate_settings,
 };
 
 // Re-export timing utility

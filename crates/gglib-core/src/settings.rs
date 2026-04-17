@@ -13,6 +13,9 @@ pub const DEFAULT_PROXY_PORT: u16 = 8080;
 /// Default base port for llama-server instance allocation.
 pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
 
+/// Default context size for models when not specified by the user.
+pub const DEFAULT_CONTEXT_SIZE: u64 = 4096;
+
 /// Application settings structure.
 ///
 /// All fields are optional to support partial updates and graceful defaults.
@@ -93,13 +96,13 @@ impl Settings {
     pub const fn with_defaults() -> Self {
         Self {
             default_download_path: None,
-            default_context_size: Some(4096),
+            default_context_size: Some(DEFAULT_CONTEXT_SIZE),
             proxy_port: Some(DEFAULT_PROXY_PORT),
             llama_base_port: Some(DEFAULT_LLAMA_BASE_PORT),
             max_download_queue_size: Some(10),
             show_memory_fit_indicators: Some(true),
-            max_tool_iterations: Some(25),
-            max_stagnation_steps: Some(5),
+            max_tool_iterations: Some(crate::domain::agent::DEFAULT_MAX_ITERATIONS as u32),
+            max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             default_model_id: None,
             inference_defaults: None,
             voice_enabled: Some(false),

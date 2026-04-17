@@ -23,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
+use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_mcp::McpService;
 
 /// Handle to a running proxy server.
@@ -94,8 +95,8 @@ impl Default for ProxyConfig {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 11444,
-            default_context: 4096,
+            port: DEFAULT_PROXY_PORT,
+            default_context: DEFAULT_CONTEXT_SIZE,
         }
     }
 }
