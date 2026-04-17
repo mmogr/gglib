@@ -1,22 +1,8 @@
 //! CLI handler for `gglib council` — council suggestion, editing, and
 //! deliberation.
 //!
-//! # Modes
-//!
-//! - `gglib council "<topic>"` — interactive: suggest → edit → run
-//! - `--suggest` — pipe-friendly: print suggested config as JSON
-//! - `--config council.json` — scripted: load config and run directly
-//! - `--config council.json --edit` — load config, edit interactively, then run
-//!
-//! # Module layout
-//!
-//! | File        | Responsibility                                      |
-//! |-------------|-----------------------------------------------------|
-//! | `mod.rs`    | Command routing and orchestration                   |
-//! | `stream.rs` | Live ANSI renderer for `CouncilEvent` SSE stream    |
-//! | `render.rs` | Static summary table and agent card display         |
-//! | `repl.rs`   | Rustyline editing REPL + command dispatch            |
-//! | `editor.rs` | Agent/round state mutation logic                    |
+//! Modes: `--suggest` (JSON), `--config` (scripted run), `--config --edit`
+//! (edit then run), or bare topic (interactive: suggest → edit → run).
 
 mod editor;
 mod render;
@@ -33,92 +19,108 @@ use gglib_agent::council::config::CouncilConfig;
 use gglib_agent::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_agent::council::{run_council, suggest_council};
 use gglib_core::domain::agent::AgentConfig;
-use gglib_runtime::compose_council_ports;
+use gglib_runtime::{CouncilPorts, compose_council_ports};
 
 use crate::bootstrap::CliContext;
 
 // ─── Suggest ────────────────────────────────────────────────────────────────
 
 pub async fn execute_suggest(
-    ctx: &CliContext,
-    topic: &str,
-    port: u16,
-    agent_count: u32,
-    model: Option<String>,
+    ctx: &CliContext, topic: &str, port: u16, agent_count: u32, model: Option<String>,
 ) -> Result<()> {
-    if let Err(e) = ctx.mcp.initialize().await {
-        tracing::warn!("MCP initialisation failed: {e}");
-    }
-
-    let ports = compose_council_ports(
-        format!("http://127.0.0.1:{port}"),
-        ctx.http_client.clone(),
-        model,
-        Arc::clone(&ctx.mcp),
-    );
-
+    let ports = init_ports(ctx, port, model).await;
     let council = suggest_council(ports.llm, ports.tool_executor, topic, agent_count).await?;
-    let json = serde_json::to_string_pretty(&council)?;
-    println!("{json}");
+    println!("{}", serde_json::to_string_pretty(&council)?);
     Ok(())
 }
 
 // ─── Run ────────────────────────────────────────────────────────────────────
 
 pub async fn execute_run(
-    ctx: &CliContext,
-    config_path: &PathBuf,
-    topic: &str,
-    port: u16,
-    model: Option<String>,
+    ctx: &CliContext, config_path: &PathBuf, topic: &str, port: u16, model: Option<String>,
 ) -> Result<()> {
-    let raw = std::fs::read_to_string(config_path)
-        .map_err(|e| anyhow!("cannot read config file '{}': {e}", config_path.display()))?;
-    let mut council: CouncilConfig =
-        serde_json::from_str(&raw).map_err(|e| anyhow!("invalid council config: {e}"))?;
-
-    if council.topic.is_empty() {
-        council.topic = topic.to_owned();
-    }
-
-    run_council_config(ctx, council, port, model).await
+    let config = load_config(config_path, topic)?;
+    let ports = init_ports(ctx, port, model).await;
+    run_with_ports(config, ports).await
 }
 
-// ─── Shared run helper ──────────────────────────────────────────────────────
+// ─── Interactive (suggest → edit → run) ─────────────────────────────────────
 
-/// Spawn the council orchestrator and stream events to the terminal.
-async fn run_council_config(
-    ctx: &CliContext,
-    council: CouncilConfig,
-    port: u16,
-    model: Option<String>,
+pub async fn execute_interactive(
+    ctx: &CliContext, topic: &str, port: u16, agent_count: u32, model: Option<String>,
 ) -> Result<()> {
+    let ports = init_ports(ctx, port, model).await;
+    let suggested = suggest_council(
+        Arc::clone(&ports.llm),
+        Arc::clone(&ports.tool_executor),
+        topic,
+        agent_count,
+    )
+    .await?;
+
+    render::render_suggested(&suggested);
+    let mut config = suggested.into_config(topic.to_owned());
+    edit_then_run(&mut config, ports).await
+}
+
+// ─── Edit (load → edit → run) ───────────────────────────────────────────────
+
+pub async fn execute_edit(
+    ctx: &CliContext, config_path: &PathBuf, topic: &str, port: u16, model: Option<String>,
+) -> Result<()> {
+    let mut config = load_config(config_path, topic)?;
+    let ports = init_ports(ctx, port, model).await;
+    render::render_config(&config);
+    edit_then_run(&mut config, ports).await
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+async fn init_ports(ctx: &CliContext, port: u16, model: Option<String>) -> CouncilPorts {
     if let Err(e) = ctx.mcp.initialize().await {
         tracing::warn!("MCP initialisation failed: {e}");
     }
-
-    let ports = compose_council_ports(
+    compose_council_ports(
         format!("http://127.0.0.1:{port}"),
         ctx.http_client.clone(),
         model,
         Arc::clone(&ctx.mcp),
-    );
+    )
+}
 
+fn load_config(path: &PathBuf, topic: &str) -> Result<CouncilConfig> {
+    let raw = std::fs::read_to_string(path)
+        .map_err(|e| anyhow!("cannot read config file '{}': {e}", path.display()))?;
+    let mut config: CouncilConfig =
+        serde_json::from_str(&raw).map_err(|e| anyhow!("invalid council config: {e}"))?;
+    if config.topic.is_empty() {
+        config.topic = topic.to_owned();
+    }
+    Ok(config)
+}
+
+async fn edit_then_run(config: &mut CouncilConfig, ports: CouncilPorts) -> Result<()> {
+    let tools: Vec<String> = ports
+        .tool_executor
+        .list_tools()
+        .await
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
+    match repl::edit_loop(config, &tools)? {
+        Some(()) => run_with_ports(config.clone(), ports).await,
+        None => Ok(()),
+    }
+}
+
+async fn run_with_ports(council: CouncilConfig, ports: CouncilPorts) -> Result<()> {
     let agent_config = AgentConfig::default();
-    let (council_tx, mut council_rx) =
-        mpsc::channel::<CouncilEvent>(COUNCIL_EVENT_CHANNEL_CAPACITY);
+    let (tx, mut rx) = mpsc::channel::<CouncilEvent>(COUNCIL_EVENT_CHANNEL_CAPACITY);
 
     tokio::spawn(async move {
-        run_council(
-            council,
-            agent_config,
-            ports.llm,
-            ports.tool_executor,
-            council_tx,
-        )
-        .await;
+        run_council(council, agent_config, ports.llm, ports.tool_executor, tx).await;
     });
 
-    stream::render_council_stream(&mut council_rx).await;
+    stream::render_council_stream(&mut rx).await;
     Ok(())
 }

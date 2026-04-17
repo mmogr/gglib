@@ -89,6 +89,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         Commands::Council {
             topic,
             suggest,
+            edit,
             config,
             agent_count,
             model,
@@ -96,14 +97,17 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         } => {
             if suggest {
                 handlers::council::execute_suggest(ctx, &topic, port, agent_count, model).await?;
+            } else if let Some(config_path) = config {
+                if edit {
+                    handlers::council::execute_edit(ctx, &config_path, &topic, port, model)
+                        .await?;
+                } else {
+                    handlers::council::execute_run(ctx, &config_path, &topic, port, model)
+                        .await?;
+                }
             } else {
-                let config_path = config.ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "--config <path> is required when running a council.\n\
-                         Use --suggest to generate a config first."
-                    )
-                })?;
-                handlers::council::execute_run(ctx, &config_path, &topic, port, model).await?;
+                handlers::council::execute_interactive(ctx, &topic, port, agent_count, model)
+                    .await?;
             }
         }
 

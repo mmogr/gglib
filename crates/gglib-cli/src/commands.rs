@@ -125,6 +125,9 @@ pub enum Commands {
         /// Generate a council config instead of running one
         #[arg(long)]
         suggest: bool,
+        /// Open the interactive editor before running
+        #[arg(long)]
+        edit: bool,
         /// Path to a council config JSON file (required unless --suggest)
         #[arg(long)]
         config: Option<PathBuf>,
