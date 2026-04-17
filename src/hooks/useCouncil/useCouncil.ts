@@ -41,6 +41,8 @@ export interface UseCouncilReturn {
   removeAgent: (agentId: string) => void;
   /** Add a blank agent scaffold. */
   addAgent: () => void;
+  /** Ask the LLM to fill/update a single agent's details by name. */
+  fillAgent: (agentId: string) => Promise<void>;
   /** Whether a deliberation is currently streaming. */
   isStreaming: boolean;
 }
@@ -251,5 +253,33 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
     });
   }, [dispatch, session.suggestedAgents.length]);
 
-  return { session, suggest, refine, run, cancel, reset, updateAgent, removeAgent, addAgent, isStreaming };
+  const fillAgent = useCallback(async (agentId: string): Promise<void> => {
+    const target = session.suggestedAgents.find((a) => a.id === agentId);
+    if (!target) return;
+    const prev = {
+      agents: session.suggestedAgents,
+      rounds: session.suggestedRounds,
+      synthesis_guidance: session.suggestedSynthesisGuidance,
+    };
+    const result = await suggestCouncil({
+      port: serverPort,
+      topic: session.topic,
+      model,
+      previous_suggestion: prev,
+      refinement: `The user wants to add/update an agent named '${target.name}'. `
+        + `Please generate a highly specific persona, perspective, and contentiousness `
+        + `score for this agent to complement the rest of the council. Return the full `
+        + `council JSON, but focus your creative updates strictly on the agent named '${target.name}'.`,
+    });
+    // Strict plucking: find the matching agent by name, discard everything else.
+    const filled = result.agents.find((a) => a.name === target.name) ?? result.agents[0];
+    if (!filled) return;
+    dispatch({
+      type: 'UPDATE_AGENT',
+      agentId,
+      changes: { persona: filled.persona, perspective: filled.perspective, contentiousness: filled.contentiousness },
+    });
+  }, [serverPort, model, session.topic, session.suggestedAgents, session.suggestedRounds, session.suggestedSynthesisGuidance, dispatch]);
+
+  return { session, suggest, refine, run, cancel, reset, updateAgent, removeAgent, addAgent, fillAgent, isStreaming };
 }

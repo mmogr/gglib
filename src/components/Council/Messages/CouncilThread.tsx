@@ -26,6 +26,7 @@ export interface CouncilThreadProps {
   onUpdateAgent?: (agentId: string, changes: Partial<CouncilAgent>) => void;
   onRemoveAgent?: (agentId: string) => void;
   onAddAgent?: () => void;
+  onFillAgent?: (agentId: string) => Promise<void>;
 }
 
 type ThreadItem =
@@ -35,7 +36,7 @@ type ThreadItem =
   | { kind: 'synthesis' };
 
 export const CouncilThread: FC<CouncilThreadProps> = ({
-  onRun, onCancel, onUpdateAgent, onRemoveAgent, onAddAgent,
+  onRun, onCancel, onUpdateAgent, onRemoveAgent, onAddAgent, onFillAgent,
 }) => {
   const { session } = useCouncilContext();
   const prevAgentsRef = useRef<CouncilAgent[]>([]);
@@ -137,6 +138,7 @@ export const CouncilThread: FC<CouncilThreadProps> = ({
         onUpdateAgent={onUpdateAgent}
         onRemoveAgent={onRemoveAgent}
         onAddAgent={onAddAgent}
+        onFillAgent={onFillAgent}
       />
     );
   }
@@ -159,6 +161,7 @@ export const CouncilThread: FC<CouncilThreadProps> = ({
           onUpdateAgent={onUpdateAgent}
           onRemoveAgent={onRemoveAgent}
           onAddAgent={onAddAgent}
+          onFillAgent={onFillAgent}
         />
       </>
     );

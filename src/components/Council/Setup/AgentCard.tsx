@@ -7,12 +7,14 @@
  * @module components/Council/Setup/AgentCard
  */
 
-import type { FC } from 'react';
+import { type FC, useState } from 'react';
 import type { CouncilAgent } from '../../../types/council';
 import { contentiousnessColor, contentiousnessLabel } from '../../../types/council';
 import { cn } from '../../../utils/cn';
 import { EditableTextField } from './EditableTextField';
 import { AgentDiffBadge, type DiffStatus } from './AgentDiffBadge';
+import { Sparkles } from 'lucide-react';
+import { Icon } from '../../ui/Icon';
 
 interface AgentCardProps {
   agent: CouncilAgent;
@@ -20,12 +22,14 @@ interface AgentCardProps {
   onContentiousnessChange?: (agentId: string, value: number) => void;
   onUpdate?: (agentId: string, changes: Partial<CouncilAgent>) => void;
   onRemove?: (agentId: string) => void;
+  onFillAgent?: (agentId: string) => Promise<void>;
   disabled?: boolean;
 }
 
 export const AgentCard: FC<AgentCardProps> = ({
-  agent, diffStatus = 'unchanged', onContentiousnessChange, onUpdate, onRemove, disabled,
+  agent, diffStatus = 'unchanged', onContentiousnessChange, onUpdate, onRemove, onFillAgent, disabled,
 }) => {
+  const [isFilling, setIsFilling] = useState(false);
   const color = contentiousnessColor(agent.contentiousness);
   const label = contentiousnessLabel(agent.contentiousness);
 
@@ -53,6 +57,25 @@ export const AgentCard: FC<AgentCardProps> = ({
           aria-label={`${agent.name} name`}
         />
         <AgentDiffBadge status={diffStatus} />
+        {onFillAgent && !disabled && (
+          <button
+            type="button"
+            onClick={async () => {
+              setIsFilling(true);
+              try { await onFillAgent(agent.id); } finally { setIsFilling(false); }
+            }}
+            disabled={isFilling}
+            className="text-text-muted hover:text-primary transition-colors p-0.5 disabled:pointer-events-none"
+            aria-label={`AI-fill ${agent.name}`}
+            title="Fill details with AI"
+          >
+            {isFilling ? (
+              <span className="inline-block w-[14px] h-[14px] border-2 border-text-muted border-t-primary rounded-full animate-spin-360" />
+            ) : (
+              <Icon icon={Sparkles} size={14} />
+            )}
+          </button>
+        )}
         <div className="ml-auto">
           {onRemove && !disabled && (
             <button

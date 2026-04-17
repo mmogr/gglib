@@ -28,6 +28,7 @@ interface CouncilSetupPanelProps {
   onUpdateAgent?: (agentId: string, changes: Partial<CouncilAgent>) => void;
   onRemoveAgent?: (agentId: string) => void;
   onAddAgent?: () => void;
+  onFillAgent?: (agentId: string) => Promise<void>;
   disabled?: boolean;
 }
 
@@ -42,6 +43,7 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
   onUpdateAgent,
   onRemoveAgent,
   onAddAgent,
+  onFillAgent,
   disabled,
 }) => {
   const [agents, setAgents] = useState<CouncilAgent[]>(initialAgents);
@@ -96,6 +98,7 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
             onContentiousnessChange={handleContentiousnessChange}
             onUpdate={onUpdateAgent}
             onRemove={onRemoveAgent}
+            onFillAgent={onFillAgent}
             disabled={disabled}
           />
         ))}
