@@ -119,18 +119,30 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             let settings = ctx.app.settings().get().await?;
             println!("Current application settings:");
             println!(
-                "  default_download_path:   {:?}",
+                "  default_download_path:       {:?}",
                 settings.default_download_path
             );
             println!(
-                "  default_context_size:    {:?}",
+                "  default_context_size:        {:?}",
                 settings.default_context_size
             );
-            println!("  proxy_port:              {:?}", settings.proxy_port);
-            println!("  llama_base_port:         {:?}", settings.llama_base_port);
+            println!("  proxy_port:                  {:?}", settings.proxy_port);
+            println!("  llama_base_port:             {:?}", settings.llama_base_port);
             println!(
-                "  max_download_queue_size: {:?}",
+                "  max_download_queue_size:     {:?}",
                 settings.max_download_queue_size
+            );
+            println!(
+                "  max_tool_iterations:         {:?}",
+                settings.max_tool_iterations
+            );
+            println!(
+                "  max_stagnation_steps:        {:?}",
+                settings.max_stagnation_steps
+            );
+            println!(
+                "  show_memory_fit_indicators:  {:?}",
+                settings.show_memory_fit_indicators
             );
 
             // Show default model with name if available
@@ -155,6 +167,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             llama_base_port,
             max_download_queue_size,
             default_download_path,
+            max_tool_iterations,
+            max_stagnation_steps,
+            show_memory_fit_indicators,
         } => {
             // Check if any settings were provided
             let has_default_download_path = default_download_path.is_some();
@@ -162,12 +177,18 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             let has_proxy_port = proxy_port.is_some();
             let has_llama_base_port = llama_base_port.is_some();
             let has_max_download_queue_size = max_download_queue_size.is_some();
+            let has_max_tool_iterations = max_tool_iterations.is_some();
+            let has_max_stagnation_steps = max_stagnation_steps.is_some();
+            let has_show_memory_fit_indicators = show_memory_fit_indicators.is_some();
 
             if !has_default_download_path
                 && !has_default_context_size
                 && !has_proxy_port
                 && !has_llama_base_port
                 && !has_max_download_queue_size
+                && !has_max_tool_iterations
+                && !has_max_stagnation_steps
+                && !has_show_memory_fit_indicators
             {
                 println!("No settings provided. Use --help to see available options.");
                 return Ok(());
@@ -180,9 +201,9 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 proxy_port: proxy_port.map(Some),
                 llama_base_port: llama_base_port.map(Some),
                 max_download_queue_size: max_download_queue_size.map(Some),
-                show_memory_fit_indicators: None,
-                max_tool_iterations: None,
-                max_stagnation_steps: None,
+                show_memory_fit_indicators: show_memory_fit_indicators.map(Some),
+                max_tool_iterations: max_tool_iterations.map(Some),
+                max_stagnation_steps: max_stagnation_steps.map(Some),
                 default_model_id: None,
                 inference_defaults: None,
                 voice_enabled: None,
@@ -214,6 +235,15 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             if let Some(Some(v)) = update.max_download_queue_size {
                 current.max_download_queue_size = Some(v);
             }
+            if let Some(Some(v)) = update.max_tool_iterations {
+                current.max_tool_iterations = Some(v);
+            }
+            if let Some(Some(v)) = update.max_stagnation_steps {
+                current.max_stagnation_steps = Some(v);
+            }
+            if let Some(Some(v)) = update.show_memory_fit_indicators {
+                current.show_memory_fit_indicators = Some(v);
+            }
 
             // Validate before saving
             validate_settings(&current)?;
@@ -240,6 +270,24 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 println!(
                     "  max_download_queue_size: {:?}",
                     updated.max_download_queue_size
+                );
+            }
+            if has_max_tool_iterations {
+                println!(
+                    "  max_tool_iterations: {:?}",
+                    updated.max_tool_iterations
+                );
+            }
+            if has_max_stagnation_steps {
+                println!(
+                    "  max_stagnation_steps: {:?}",
+                    updated.max_stagnation_steps
+                );
+            }
+            if has_show_memory_fit_indicators {
+                println!(
+                    "  show_memory_fit_indicators: {:?}",
+                    updated.show_memory_fit_indicators
                 );
             }
             Ok(())
