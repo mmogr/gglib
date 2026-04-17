@@ -2,10 +2,13 @@
 //!
 //! Commands:
 //!   show                — re-display the council summary table
+//!   name <N>            — rename agent N (offers AI-fill afterwards)
 //!   persona <N>         — edit agent N's persona (single-line prompt)
 //!   cont <N>            — edit agent N's contentiousness
 //!   tools <N>           — edit agent N's tool filter (prints list first)
+//!   fill <N>            — ask the LLM to fill agent N's details
 //!   rounds <N>          — set the number of deliberation rounds
+//!   add                 — add a new agent (prompts for name, offers fill)
 //!   remove <N>          — remove agent N
 //!   refine <msg>        — ask the LLM to revise the council
 //!   run                 — accept and run the council
@@ -17,7 +20,7 @@ use std::io::Write as _;
 use anyhow::Result;
 use rustyline::DefaultEditor;
 
-use gglib_agent::council::config::CouncilConfig;
+use gglib_agent::council::config::{CouncilAgent, CouncilConfig};
 
 use crate::presentation::style::{BOLD, DIM, RESET};
 
@@ -32,6 +35,8 @@ pub enum EditOutcome {
     Quit,
     /// User chose `refine <msg>` — caller should re-suggest then re-enter REPL.
     Refine(String),
+    /// User wants the LLM to fill an agent's details (by 0-based index).
+    Fill(usize),
 }
 
 /// Run the interactive editing REPL.
@@ -89,6 +94,44 @@ pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Resu
                     let res = editor::apply_persona(&mut config.agents[idx], input.trim());
                     report(res);
                     editor::print_agent_summary(idx, &config.agents[idx]);
+                }
+            }
+            "name" => {
+                if let Some(idx) = parse_agent_idx(arg, config.agents.len()) {
+                    eprint!("  New name for #{} ({}): ", idx + 1, config.agents[idx].name);
+                    let _ = std::io::stderr().flush();
+                    let input = rl.readline("  ")?;
+                    let res = editor::apply_name(&mut config.agents[idx], input.trim());
+                    report(res);
+                    editor::print_agent_summary(idx, &config.agents[idx]);
+                    if offer_fill(&mut rl, &config.agents[idx].name)? {
+                        return Ok(EditOutcome::Fill(idx));
+                    }
+                }
+            }
+            "fill" => {
+                if let Some(idx) = parse_agent_idx(arg, config.agents.len()) {
+                    return Ok(EditOutcome::Fill(idx));
+                }
+            }
+            "add" => {
+                let eprint_msg = format!(
+                    "  Name for the new agent (#{}): ",
+                    config.agents.len() + 1
+                );
+                eprint!("{eprint_msg}");
+                let _ = std::io::stderr().flush();
+                let input = rl.readline("  ")?;
+                let name = input.trim();
+                if name.is_empty() {
+                    eprintln!("  name cannot be empty");
+                } else {
+                    let idx = config.agents.len();
+                    config.agents.push(scaffold_agent(name, idx));
+                    render::render_config(config);
+                    if offer_fill(&mut rl, name)? {
+                        return Ok(EditOutcome::Fill(idx));
+                    }
                 }
             }
             "cont" => {
@@ -160,14 +203,52 @@ fn report(result: Result<()>) {
     }
 }
 
+/// Prompt the user to AI-fill details for a named agent. Returns `true` on "y".
+fn offer_fill(rl: &mut DefaultEditor, agent_name: &str) -> Result<bool> {
+    eprintln!("  Let the LLM fill in details for '{agent_name}'? [y/N] ");
+    let answer = rl.readline("  ")?;
+    Ok(matches!(answer.trim(), "y" | "Y" | "yes"))
+}
+
+/// Create a scaffold agent with a slugified ID and cycled color.
+fn scaffold_agent(name: &str, idx: usize) -> CouncilAgent {
+    let slug: String = name
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_owned();
+    let id = if slug.is_empty() {
+        format!("agent-{idx}")
+    } else {
+        format!("{slug}-{idx}")
+    };
+    let colors = [
+        "#3b82f6", "#ef4444", "#10b981", "#f59e0b",
+        "#8b5cf6", "#ec4899", "#06b6d4", "#f97316",
+    ];
+    CouncilAgent {
+        id,
+        name: name.to_owned(),
+        color: colors[idx % colors.len()].to_owned(),
+        persona: String::from("Define this agent's worldview and expertise."),
+        perspective: String::from("Describe their unique angle."),
+        contentiousness: 0.5,
+        tool_filter: None,
+    }
+}
+
 fn print_help() {
     eprintln!(
         "\n{BOLD}Council Editor Commands:{RESET}
   show             re-display the council summary
+  name <N>         rename agent N (offers AI-fill)
   persona <N>      edit agent N's persona
   cont <N>         edit agent N's contentiousness
   tools <N>        edit agent N's tool filter
+  fill <N>         ask the LLM to fill agent N's details
   rounds <N>       set number of rounds
+  add              add a new agent
   remove <N>       remove agent N
   refine <msg>     ask the LLM to revise the council
   save <path>      save config to JSON file

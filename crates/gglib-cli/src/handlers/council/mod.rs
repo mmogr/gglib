@@ -21,6 +21,7 @@ use tokio::sync::mpsc;
 
 use gglib_agent::council::config::CouncilConfig;
 use gglib_agent::council::config::SuggestedCouncil;
+use gglib_agent::council::config::CouncilAgent;
 use gglib_agent::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_agent::council::{run_council, suggest_council};
 use gglib_core::domain::agent::AgentConfig;
@@ -277,6 +278,9 @@ async fn edit_then_run(config: &mut CouncilConfig, ports: CouncilPorts) -> Resul
                 render::render_suggested(&suggested);
                 *config = suggested.into_config(config.topic.clone());
             }
+            repl::EditOutcome::Fill(idx) => {
+                handle_ai_fill(config, idx, &ports).await?;
+            }
         }
     }
 }
@@ -291,4 +295,87 @@ async fn run_with_ports(council: CouncilConfig, ports: CouncilPorts) -> Result<(
 
     stream::render_council_stream(&mut rx).await;
     Ok(())
+}
+
+/// Call `suggest_council` with a targeted refinement prompt for one agent,
+/// show a diff, and apply on confirmation.  Strict plucking: only the
+/// matching agent's persona/perspective/contentiousness are extracted.
+async fn handle_ai_fill(
+    config: &mut CouncilConfig,
+    idx: usize,
+    ports: &CouncilPorts,
+) -> Result<()> {
+    let target = &config.agents[idx];
+    let name = target.name.clone();
+    let old = target.clone();
+
+    eprintln!("{}  Filling details for '{}' \u{2026}{}", style::DIM, name, style::RESET);
+
+    let prev = SuggestedCouncil {
+        agents: config.agents.clone(),
+        rounds: config.rounds,
+        synthesis_guidance: config.synthesis_guidance.clone(),
+    };
+    let prev_json = serde_json::to_string(&prev)?;
+    let refinement = format!(
+        "The user wants to add/update an agent named '{name}'. \
+         Please generate a highly specific persona, perspective, and contentiousness \
+         score for this agent to complement the rest of the council. Return the full \
+         council JSON, but focus your creative updates strictly on the agent named '{name}'."
+    );
+    let history = vec![
+        AgentMessage::User { content: config.topic.clone() },
+        AgentMessage::Assistant {
+            content: AssistantContent { text: Some(prev_json), tool_calls: vec![] },
+        },
+        AgentMessage::User { content: refinement },
+    ];
+
+    let suggested = suggest_council(
+        Arc::clone(&ports.llm),
+        Arc::clone(&ports.tool_executor),
+        &config.topic,
+        config.agents.len() as u32,
+        Some(history),
+    )
+    .await?;
+
+    // Strict plucking: find matching agent by name, fallback to same index.
+    let filled = pluck_agent(&suggested.agents, &name, idx);
+    let Some(filled) = filled else {
+        eprintln!(
+            "  \x1b[31mThe LLM did not return an agent named '{}' — no changes applied.{}",
+            name, style::RESET
+        );
+        return Ok(());
+    };
+
+    // Build a preview agent with only the three target fields changed.
+    let preview = CouncilAgent {
+        persona: filled.persona.clone(),
+        perspective: filled.perspective.clone(),
+        contentiousness: filled.contentiousness,
+        ..old.clone()
+    };
+
+    render::render_agent_diff(idx, &old, &preview);
+
+    eprint!("  Apply these changes? [Y/n] ");
+    let _ = std::io::Write::flush(&mut std::io::stderr());
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    if matches!(answer.trim(), "" | "y" | "Y" | "yes") {
+        config.agents[idx].persona = filled.persona.clone();
+        config.agents[idx].perspective = filled.perspective.clone();
+        config.agents[idx].contentiousness = filled.contentiousness;
+        render::render_config(config);
+    } else {
+        eprintln!("  {}Discarded.{}", style::DIM, style::RESET);
+    }
+    Ok(())
+}
+
+/// Find an agent by name in the suggestion, falling back to same index.
+fn pluck_agent<'a>(agents: &'a [CouncilAgent], name: &str, idx: usize) -> Option<&'a CouncilAgent> {
+    agents.iter().find(|a| a.name == name).or_else(|| agents.get(idx))
 }

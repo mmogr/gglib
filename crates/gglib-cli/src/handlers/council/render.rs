@@ -3,7 +3,7 @@
 //! Renders a scannable table of agents with colour-coded contentiousness
 //! and an optional synthesis guidance line.
 
-use gglib_agent::council::config::{CouncilConfig, SuggestedCouncil};
+use gglib_agent::council::config::{CouncilAgent, CouncilConfig, SuggestedCouncil};
 
 use crate::presentation::style::{BOLD, DIM, RESET};
 
@@ -66,4 +66,41 @@ fn render_agent_table(agents: &[gglib_agent::council::config::CouncilAgent]) {
             perspective,
         );
     }
+}
+
+/// Print a coloured before/after diff for the three AI-filled fields of an agent.
+pub fn render_agent_diff(idx: usize, old: &CouncilAgent, new: &CouncilAgent) {
+    let color = temperature_fg(new.contentiousness);
+    eprintln!(
+        "\n  {BOLD}Agent #{} \"{}\"{RESET}",
+        idx + 1,
+        new.name,
+    );
+
+    if old.persona != new.persona {
+        eprintln!("  {DIM}persona:{RESET}");
+        eprintln!("    \x1b[31m- {}{RESET}", old.persona);
+        eprintln!("    \x1b[32m+ {}{RESET}", new.persona);
+    }
+    if old.perspective != new.perspective {
+        eprintln!("  {DIM}perspective:{RESET}");
+        eprintln!("    \x1b[31m- {}{RESET}", old.perspective);
+        eprintln!("    \x1b[32m+ {}{RESET}", new.perspective);
+    }
+    if (old.contentiousness - new.contentiousness).abs() > f32::EPSILON {
+        let old_color = temperature_fg(old.contentiousness);
+        eprintln!(
+            "  {DIM}contentiousness:{RESET}  {old_color}{:.2}{RESET} → {color}{:.2}{RESET}",
+            old.contentiousness,
+            new.contentiousness,
+        );
+    }
+
+    if old.persona == new.persona
+        && old.perspective == new.perspective
+        && (old.contentiousness - new.contentiousness).abs() <= f32::EPSILON
+    {
+        eprintln!("  {DIM}(no changes){RESET}");
+    }
+    eprintln!();
 }
