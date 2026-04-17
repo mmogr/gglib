@@ -15,6 +15,7 @@ use tracing::{debug, warn};
 use gglib_core::domain::Model;
 use gglib_core::events::{AppEvent, ServerSummary};
 use gglib_core::ports::{ProcessHandle, ServerConfig, ServerHealthStatus};
+use gglib_runtime::llama::args::resolve_reasoning_format;
 
 use crate::deps::GuiDeps;
 use crate::error::GuiError;
@@ -185,6 +186,17 @@ impl<'a> ServerOps<'a> {
             && format != "none"
         {
             config = config.with_reasoning_format(format.clone());
+        } else if request.reasoning_format.is_none() {
+            // Auto-detect reasoning format from model tags when frontend doesn't specify
+            let reasoning = resolve_reasoning_format(None, &model.tags);
+            if let Some(format) = reasoning.format {
+                debug!(
+                    format = %format,
+                    source = ?reasoning.source,
+                    "Auto-detected reasoning format from model tags"
+                );
+                config = config.with_reasoning_format(format);
+            }
         }
 
         if let Some(ref params) = request.inference_params {
