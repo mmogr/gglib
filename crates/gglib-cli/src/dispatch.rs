@@ -66,6 +66,27 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     crate::commands::ChatCommand::History { limit } => {
                         handlers::history::execute(ctx, limit).await?;
                     }
+                    crate::commands::ChatCommand::Council {
+                        topic,
+                        suggest,
+                        edit,
+                        config,
+                        agent_count,
+                        model,
+                        port,
+                    } => {
+                        if suggest {
+                            handlers::council::execute_suggest(ctx, &topic, port, agent_count, model).await?;
+                        } else if let Some(config_path) = config {
+                            if edit {
+                                handlers::council::execute_edit(ctx, &config_path, &topic, port, model).await?;
+                            } else {
+                                handlers::council::execute_run(ctx, &config_path, &topic, port, model).await?;
+                            }
+                        } else {
+                            handlers::council::execute_interactive(ctx, &topic, port, agent_count, model).await?;
+                        }
+                    }
                 }
             } else {
                 let args = handlers::inference::chat::ChatArgs {
@@ -84,28 +105,6 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     continue_id,
                 };
                 handlers::inference::chat::execute(ctx, args).await?;
-            }
-        }
-        Commands::Council {
-            topic,
-            suggest,
-            edit,
-            config,
-            agent_count,
-            model,
-            port,
-        } => {
-            if suggest {
-                handlers::council::execute_suggest(ctx, &topic, port, agent_count, model).await?;
-            } else if let Some(config_path) = config {
-                if edit {
-                    handlers::council::execute_edit(ctx, &config_path, &topic, port, model).await?;
-                } else {
-                    handlers::council::execute_run(ctx, &config_path, &topic, port, model).await?;
-                }
-            } else {
-                handlers::council::execute_interactive(ctx, &topic, port, agent_count, model)
-                    .await?;
             }
         }
 
