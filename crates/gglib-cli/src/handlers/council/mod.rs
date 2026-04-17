@@ -241,11 +241,7 @@ async fn edit_then_run(config: &mut CouncilConfig, ports: CouncilPorts) -> Resul
             repl::EditOutcome::Run => return run_with_ports(config.clone(), ports).await,
             repl::EditOutcome::Quit => return Ok(()),
             repl::EditOutcome::Refine(instruction) => {
-                eprintln!(
-                    "{}  Refining council …{}",
-                    style::DIM,
-                    style::RESET
-                );
+                eprintln!("{}  Refining council …{}", style::DIM, style::RESET);
 
                 let prev = SuggestedCouncil {
                     agents: config.agents.clone(),
