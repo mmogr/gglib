@@ -1,11 +1,14 @@
 //! Download handler.
 //!
-//! Downloads models from HuggingFace Hub and registers them in the database.
+//! Downloads models from HuggingFace Hub and registers them in the database
+//! via [`ModelRegistrarPort`], the same registration path used by the GUI.
+
+use std::str::FromStr;
 
 use anyhow::Result;
-use chrono::Utc;
-use gglib_core::domain::NewModel;
-use gglib_download::cli_exec::{self, CliDownloadRequest, list_quantizations};
+use gglib_core::download::Quantization;
+use gglib_core::ports::CompletedDownload;
+use gglib_download::cli_exec::{self, CliDownloadRequest, CliDownloadResult, list_quantizations};
 
 use crate::bootstrap::CliContext;
 use gglib_core::paths::resolve_models_dir;
@@ -43,32 +46,11 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     // Execute download (this handles progress display)
     let result = cli_exec::download(request).await?;
 
-    // Create model name from repo_id
-    let model_name = result
-        .repo_id
-        .split('/')
-        .next_back()
-        .unwrap_or(&result.repo_id)
-        .to_string();
+    // Register via the same ModelRegistrarPort that the GUI uses,
+    // ensuring full GGUF metadata extraction and parity.
+    let completed = build_completed_download(&result)?;
 
-    // Build NewModel for database registration
-    let mut new_model = NewModel::new(
-        format!("{}-{}", model_name, result.quantization),
-        result.primary_path.clone(),
-        0.0, // Will be populated from GGUF metadata during add
-        Utc::now(),
-    );
-    new_model.hf_repo_id = Some(result.repo_id.clone());
-    new_model.hf_commit_sha = Some(result.commit_sha.clone());
-    new_model.hf_filename = result
-        .primary_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .map(String::from);
-    new_model.quantization = Some(result.quantization.clone());
-    new_model.download_date = Some(Utc::now());
-
-    match ctx.app.models().add(new_model).await {
+    match ctx.model_registrar.register_model(&completed).await {
         Ok(model) => {
             println!("✓ Model registered in database:");
             println!("  ID: {}", model.id);
@@ -89,4 +71,38 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Map a [`CliDownloadResult`] to the [`CompletedDownload`] DTO that
+/// [`ModelRegistrarPort::register_model`] expects.
+fn build_completed_download(result: &CliDownloadResult) -> Result<CompletedDownload> {
+    let quantization = Quantization::from_str(&result.quantization)
+        .unwrap_or_default(); // falls back to Quantization::Unknown
+
+    let is_sharded = result.downloaded_paths.len() > 1;
+
+    let total_bytes = result
+        .downloaded_paths
+        .iter()
+        .map(|p| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0))
+        .sum();
+
+    let file_paths = if is_sharded {
+        Some(result.downloaded_paths.clone())
+    } else {
+        None
+    };
+
+    Ok(CompletedDownload {
+        primary_path: result.primary_path.clone(),
+        all_paths: result.downloaded_paths.clone(),
+        quantization,
+        repo_id: result.repo_id.clone(),
+        commit_sha: result.commit_sha.clone(),
+        is_sharded,
+        total_bytes,
+        file_paths,
+        hf_tags: vec![],
+        hf_file_entries: vec![],
+    })
 }
