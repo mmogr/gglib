@@ -4,6 +4,9 @@
 //! parses the LLM's JSON output, and returns a [`SuggestedCouncil`].
 //! Used by both the CLI and Axum consumers.
 
+use std::collections::HashSet;
+use std::sync::Arc;
+
 use anyhow::{Result, anyhow};
 use tokio::sync::mpsc;
 
@@ -13,8 +16,6 @@ use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use crate::AgentLoop;
 use crate::council::config::SuggestedCouncil;
 use crate::council::prompts::{COUNCIL_DESIGNER_PROMPT, COUNCIL_REFINEMENT_ADDENDUM};
-
-use std::sync::Arc;
 
 use gglib_core::ports::{LlmCompletionPort, ToolExecutorPort};
 
@@ -50,7 +51,10 @@ pub async fn suggest_council(
     let mut config = AgentConfig::default();
     config.max_iterations = 1;
 
-    let agent = AgentLoop::build(llm, tool_executor, None);
+    // The designer only returns JSON — no tools needed.  An empty filter
+    // prevents tool-happy models from burning the single iteration on a
+    // tool call (which triggers MaxIterationsReached).
+    let agent = AgentLoop::build(llm, tool_executor, Some(HashSet::new()));
     let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
 
     let handle = tokio::spawn(async move { agent.run(messages, config, tx).await });
