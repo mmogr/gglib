@@ -33,7 +33,9 @@ pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Resu
     loop {
         let line = match rl.readline(&format!("{BOLD}council>{RESET} ")) {
             Ok(l) => l,
-            Err(rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof) => {
+            Err(
+                rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
+            ) => {
                 eprintln!("{DIM}Aborted.{RESET}");
                 return Ok(None);
             }
@@ -77,7 +79,10 @@ pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Resu
             }
             "cont" => {
                 if let Some(idx) = parse_agent_idx(arg, config.agents.len()) {
-                    eprint!("  New contentiousness for {} (0.0–1.0): ", config.agents[idx].name);
+                    eprint!(
+                        "  New contentiousness for {} (0.0–1.0): ",
+                        config.agents[idx].name
+                    );
                     let _ = std::io::stderr().flush();
                     let input = rl.readline("  ")?;
                     let res = editor::apply_contentiousness(&mut config.agents[idx], input.trim());

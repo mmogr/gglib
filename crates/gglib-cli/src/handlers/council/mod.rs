@@ -26,7 +26,11 @@ use crate::bootstrap::CliContext;
 // ─── Suggest ────────────────────────────────────────────────────────────────
 
 pub async fn execute_suggest(
-    ctx: &CliContext, topic: &str, port: u16, agent_count: u32, model: Option<String>,
+    ctx: &CliContext,
+    topic: &str,
+    port: u16,
+    agent_count: u32,
+    model: Option<String>,
 ) -> Result<()> {
     let ports = init_ports(ctx, port, model).await;
     let council = suggest_council(ports.llm, ports.tool_executor, topic, agent_count).await?;
@@ -37,7 +41,11 @@ pub async fn execute_suggest(
 // ─── Run ────────────────────────────────────────────────────────────────────
 
 pub async fn execute_run(
-    ctx: &CliContext, config_path: &PathBuf, topic: &str, port: u16, model: Option<String>,
+    ctx: &CliContext,
+    config_path: &PathBuf,
+    topic: &str,
+    port: u16,
+    model: Option<String>,
 ) -> Result<()> {
     let config = load_config(config_path, topic)?;
     let ports = init_ports(ctx, port, model).await;
@@ -47,7 +55,11 @@ pub async fn execute_run(
 // ─── Interactive (suggest → edit → run) ─────────────────────────────────────
 
 pub async fn execute_interactive(
-    ctx: &CliContext, topic: &str, port: u16, agent_count: u32, model: Option<String>,
+    ctx: &CliContext,
+    topic: &str,
+    port: u16,
+    agent_count: u32,
+    model: Option<String>,
 ) -> Result<()> {
     let ports = init_ports(ctx, port, model).await;
     let suggested = suggest_council(
@@ -66,7 +78,11 @@ pub async fn execute_interactive(
 // ─── Edit (load → edit → run) ───────────────────────────────────────────────
 
 pub async fn execute_edit(
-    ctx: &CliContext, config_path: &PathBuf, topic: &str, port: u16, model: Option<String>,
+    ctx: &CliContext,
+    config_path: &PathBuf,
+    topic: &str,
+    port: u16,
+    model: Option<String>,
 ) -> Result<()> {
     let mut config = load_config(config_path, topic)?;
     let ports = init_ports(ctx, port, model).await;

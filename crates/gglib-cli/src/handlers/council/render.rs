@@ -13,7 +13,11 @@ use super::stream::temperature_fg;
 
 /// Print a colour-coded summary table for a suggested council.
 pub fn render_suggested(council: &SuggestedCouncil) {
-    eprintln!("\n{BOLD}Council Suggestion  ({} agents, {} rounds){RESET}", council.agents.len(), council.rounds);
+    eprintln!(
+        "\n{BOLD}Council Suggestion  ({} agents, {} rounds){RESET}",
+        council.agents.len(),
+        council.rounds
+    );
     render_agent_table(&council.agents);
     if let Some(ref guidance) = council.synthesis_guidance {
         eprintln!("  {DIM}Synthesis:{RESET} {guidance}");
@@ -23,7 +27,11 @@ pub fn render_suggested(council: &SuggestedCouncil) {
 
 /// Print a colour-coded summary table for a loaded council config.
 pub fn render_config(config: &CouncilConfig) {
-    eprintln!("\n{BOLD}Council Config  ({} agents, {} rounds){RESET}", config.agents.len(), config.rounds);
+    eprintln!(
+        "\n{BOLD}Council Config  ({} agents, {} rounds){RESET}",
+        config.agents.len(),
+        config.rounds
+    );
     eprintln!("  {DIM}Topic:{RESET} {}", config.topic);
     render_agent_table(&config.agents);
     if let Some(ref guidance) = config.synthesis_guidance {
