@@ -87,7 +87,7 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     port: config.port,
     mlock: config.mlock ?? false,
     jinja: config.jinja,
-    // reasoning_format is auto-detected from model tags on backend
+    // reasoning_format is auto-detected from model tags on backend when omitted
     reasoningFormat: undefined,
     inferenceParams,
   };
