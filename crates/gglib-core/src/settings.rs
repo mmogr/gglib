@@ -104,7 +104,9 @@ impl Settings {
             llama_base_port: Some(DEFAULT_LLAMA_BASE_PORT),
             max_download_queue_size: Some(10),
             show_memory_fit_indicators: Some(true),
+            #[allow(clippy::cast_possible_truncation)] // compile-time constants, always < u32::MAX
             max_tool_iterations: Some(crate::domain::agent::DEFAULT_MAX_ITERATIONS as u32),
+            #[allow(clippy::cast_possible_truncation)]
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             default_model_id: None,
             inference_defaults: None,

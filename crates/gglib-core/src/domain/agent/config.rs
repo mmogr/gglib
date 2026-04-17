@@ -60,7 +60,6 @@ pub const DEFAULT_MAX_PARALLEL_TOOLS: usize = 5;
 ///
 /// The agent loop aborts when the same assistant text has been seen more
 /// than this many times, preventing infinite stagnant output.
-
 pub const DEFAULT_MAX_STAGNATION_STEPS: usize = 5;
 
 /// Configuration that governs a single agentic loop run.

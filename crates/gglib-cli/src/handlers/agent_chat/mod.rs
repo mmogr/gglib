@@ -43,10 +43,10 @@ pub async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     let mut args = args.clone();
 
     // Resolve max_iterations from persisted settings when the CLI flag wasn't provided.
-    if args.max_iterations.is_none() {
-        if let Ok(settings) = ctx.app.settings().get().await {
-            args.max_iterations = settings.max_tool_iterations.map(|v| v as usize);
-        }
+    if args.max_iterations.is_none()
+        && let Ok(settings) = ctx.app.settings().get().await
+    {
+        args.max_iterations = settings.max_tool_iterations.map(|v| v as usize);
     }
 
     let (persistence, prior_messages) = if let Some(conv_id) = args.continue_id {
@@ -240,10 +240,10 @@ fn apply_saved_settings(
     }
 
     // Agent loop params — fill if the user didn't override.
-    if merged.max_iterations.is_none() {
-        if let Some(saved_max) = saved.max_iterations {
-            merged.max_iterations = Some(saved_max);
-        }
+    if merged.max_iterations.is_none()
+        && let Some(saved_max) = saved.max_iterations
+    {
+        merged.max_iterations = Some(saved_max);
     }
     if merged.tool_timeout_ms.is_none() {
         merged.tool_timeout_ms = saved.tool_timeout_ms;
