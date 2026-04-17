@@ -85,22 +85,25 @@ fn build_suggest_messages(
     refinement_history: Option<Vec<AgentMessage>>,
     topic: &str,
 ) -> Vec<AgentMessage> {
-    if let Some(history) = refinement_history {
-        let mut msgs = vec![AgentMessage::System {
-            content: system.to_owned(),
-        }];
-        msgs.extend(history);
-        msgs
-    } else {
-        vec![
-            AgentMessage::System {
+    refinement_history.map_or_else(
+        || {
+            vec![
+                AgentMessage::System {
+                    content: system.to_owned(),
+                },
+                AgentMessage::User {
+                    content: topic.to_owned(),
+                },
+            ]
+        },
+        |history| {
+            let mut msgs = vec![AgentMessage::System {
                 content: system.to_owned(),
-            },
-            AgentMessage::User {
-                content: topic.to_owned(),
-            },
-        ]
-    }
+            }];
+            msgs.extend(history);
+            msgs
+        },
+    )
 }
 
 // ─── Parsing helpers ─────────────────────────────────────────────────────────
