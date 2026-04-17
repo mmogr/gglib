@@ -118,6 +118,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
 | `config default <id>` | Set/show/clear the default model |
+| `chat council <topic>` | Interactive council: suggest → edit → run |
+| `chat council --suggest <topic>` | Suggest a council and print JSON |
 | `verify <id>` | Verify model integrity via SHA256 hash comparison |
 | `repair <id>` | Re-download corrupt shards for a model |
 | `completions <shell>` | Print a shell completion script to stdout |
@@ -233,6 +235,40 @@ reaches stdout. This works regardless of rendering mode.
 ```bash
 gglib config default 1
 ```
+
+### Council Command
+
+The `chat council` command lets you compose a multi-agent debate panel:
+
+```bash
+# Interactive mode: suggest → edit → run
+gglib chat council "Should we use microservices?"
+
+# Suggest-only: print the designed council as JSON
+gglib chat council --suggest "Pros and cons of Rust"
+
+# Load a saved config, edit, then run
+gglib chat council --config council.json --edit "My topic"
+```
+
+The interactive REPL editor supports these commands:
+
+| Command | Description |
+|---------|-------------|
+| `show` | Re-display the council summary |
+| `persona <N>` | Edit agent N's persona |
+| `cont <N>` | Edit agent N's contentiousness (0.0–1.0) |
+| `tools <N>` | Edit agent N's tool filter |
+| `rounds <N>` | Set number of deliberation rounds |
+| `remove <N>` | Remove agent N |
+| `refine <msg>` | Ask the LLM to revise the council |
+| `save <path>` | Save config to a JSON file |
+| `run` | Accept and run the council |
+| `quit` | Abort without running |
+
+The `refine` command sends your instruction to the LLM along with the current
+council as context, producing a targeted revision that preserves stable agent
+IDs and makes minimal changes. You can refine multiple times before running.
 
 ## Usage
 
