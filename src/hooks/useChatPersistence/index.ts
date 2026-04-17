@@ -188,46 +188,29 @@ export function useChatPersistence({
       })();
     }
 
+    // Collect new messages to save in a batch (avoids isPersistingRef skipping
+    // the second message when multiple are added simultaneously, e.g. council
+    // completion appends a user + assistant message in one setMessages call).
+    const newToSave: Array<{ m: ThreadMessageLike; text: string; digest: string }> = [];
+
     for (const m of messages) {
       if (!m.id || m.role === 'system') continue;
 
       // Hold off on assistant messages until streaming + timing are finalised
       if (m.role === 'assistant' && !(m.metadata as any)?.custom?.timingFinalized) continue;
 
-      if (processingRef.current.has(m.id) || isPersistingRef.current) continue;
+      if (processingRef.current.has(m.id)) continue;
 
       const currentDigest = digestMessage(m);
       const existingDbId = getDbId(m) ?? persistedByMessageId.current.get(m.id);
 
-      // Case 1: New message — save to DB
+      // Case 1: New message — queue for sequential save
       if (!existingDbId) {
         const text = threadMessageToTranscriptMarkdown(m as any);
         if (!text.trim()) continue;
         if (persistedByMessageId.current.has(m.id)) continue;
 
-        const messageId = m.id;
-        processingRef.current.add(messageId);
-        isPersistingRef.current = true;
-
-        (async () => {
-          try {
-            const dbId = await saveMessage(
-              conversationId,
-              m.role as 'user' | 'assistant' | 'system',
-              text,
-              buildSaveMetadata(m, getDurationForMessage(m, timingTracker)),
-            );
-            persistedByMessageId.current.set(messageId, dbId);
-            lastDigestByMessageId.current.set(messageId, currentDigest);
-            await syncConversations({ silent: true });
-          } catch (error) {
-            appLogger.error('hook.persistence', 'Failed to persist new message', { error });
-            persistedByMessageId.current.delete(messageId);
-          } finally {
-            processingRef.current.delete(messageId);
-            isPersistingRef.current = false;
-          }
-        })();
+        newToSave.push({ m, text, digest: currentDigest });
         continue;
       }
 
@@ -271,6 +254,37 @@ export function useChatPersistence({
 
         updateTimers.current.set(m.id, timer);
       }
+    }
+
+    // Save all new messages sequentially in a single batch
+    if (newToSave.length > 0 && !isPersistingRef.current) {
+      isPersistingRef.current = true;
+      (async () => {
+        try {
+          for (const { m, text, digest } of newToSave) {
+            const messageId = m.id!;
+            processingRef.current.add(messageId);
+            try {
+              const dbId = await saveMessage(
+                conversationId,
+                m.role as 'user' | 'assistant' | 'system',
+                text,
+                buildSaveMetadata(m, getDurationForMessage(m, timingTracker)),
+              );
+              persistedByMessageId.current.set(messageId, dbId);
+              lastDigestByMessageId.current.set(messageId, digest);
+            } catch (error) {
+              appLogger.error('hook.persistence', 'Failed to persist new message', { error, messageId });
+              persistedByMessageId.current.delete(messageId);
+            } finally {
+              processingRef.current.delete(messageId);
+            }
+          }
+          await syncConversations({ silent: true });
+        } finally {
+          isPersistingRef.current = false;
+        }
+      })();
     }
   }, [activeConversationId, messages, syncConversations]);
 
