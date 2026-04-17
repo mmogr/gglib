@@ -115,8 +115,8 @@ impl SuggestedCouncil {
 
     /// Fill in any `id` or `color` fields that the LLM left empty.
     ///
-    /// - `id` is derived by slugifying the agent `name` with a numeric suffix.
-    /// - `color` cycles through a palette of 8 distinct colours.
+    /// Existing non-empty values are preserved so that stable IDs from
+    /// a prior suggestion survive a refinement round.
     pub fn backfill_defaults(&mut self) {
         for (i, agent) in self.agents.iter_mut().enumerate() {
             if agent.id.is_empty() {
@@ -192,5 +192,38 @@ mod tests {
         }"##;
         let agent: CouncilAgent = serde_json::from_str(json).unwrap();
         assert!(agent.tool_filter.is_none());
+    }
+
+    #[test]
+    fn backfill_preserves_existing_ids_and_colors() {
+        let mut council = SuggestedCouncil {
+            agents: vec![
+                CouncilAgent {
+                    id: "kept-id".into(),
+                    name: "Kept".into(),
+                    color: "#aaa".into(),
+                    persona: String::new(),
+                    perspective: String::new(),
+                    contentiousness: 0.5,
+                    tool_filter: None,
+                },
+                CouncilAgent {
+                    id: String::new(),
+                    name: "New Agent".into(),
+                    color: String::new(),
+                    persona: String::new(),
+                    perspective: String::new(),
+                    contentiousness: 0.3,
+                    tool_filter: None,
+                },
+            ],
+            rounds: 2,
+            synthesis_guidance: None,
+        };
+        council.backfill_defaults();
+        assert_eq!(council.agents[0].id, "kept-id");
+        assert_eq!(council.agents[0].color, "#aaa");
+        assert_eq!(council.agents[1].id, "new-agent-2");
+        assert!(!council.agents[1].color.is_empty());
     }
 }

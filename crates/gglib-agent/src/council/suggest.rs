@@ -12,7 +12,7 @@ use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 
 use crate::AgentLoop;
 use crate::council::config::SuggestedCouncil;
-use crate::council::prompts::COUNCIL_DESIGNER_PROMPT;
+use crate::council::prompts::{COUNCIL_DESIGNER_PROMPT, COUNCIL_REFINEMENT_ADDENDUM};
 
 use std::sync::Arc;
 
@@ -37,9 +37,13 @@ pub async fn suggest_council(
     refinement_history: Option<Vec<AgentMessage>>,
 ) -> Result<SuggestedCouncil> {
     #[allow(clippy::literal_string_with_formatting_args)]
-    let system = COUNCIL_DESIGNER_PROMPT
+    let mut system = COUNCIL_DESIGNER_PROMPT
         .replace("{agent_count}", &agent_count.to_string())
         .replace("{user_topic}", topic);
+
+    if refinement_history.is_some() {
+        system.push_str(COUNCIL_REFINEMENT_ADDENDUM);
+    }
 
     let messages = build_suggest_messages(&system, refinement_history, topic);
 
@@ -228,5 +232,19 @@ mod tests {
     fn extract_json_no_json_returns_original() {
         let input = "no json here";
         assert_eq!(extract_json(input), input);
+    }
+
+    #[test]
+    fn designer_prompt_says_approximately() {
+        assert!(
+            COUNCIL_DESIGNER_PROMPT.contains("approximately {agent_count}"),
+            "prompt should use 'approximately' to allow flexible agent count"
+        );
+    }
+
+    #[test]
+    fn refinement_addendum_instructs_minimal_changes() {
+        assert!(COUNCIL_REFINEMENT_ADDENDUM.contains("MINIMAL changes"));
+        assert!(COUNCIL_REFINEMENT_ADDENDUM.contains("Keep the `id` field IDENTICAL"));
     }
 }
