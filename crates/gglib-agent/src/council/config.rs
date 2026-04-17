@@ -42,6 +42,9 @@ pub struct CouncilAgent {
     /// The raw float is stored for UI slider binding.  Prompt assembly
     /// maps it to a discrete instruction string via
     /// [`crate::council::prompts::contentiousness_to_instruction`].
+    ///
+    /// The alias covers a common LLM typo (`"contententiousness"`).
+    #[serde(alias = "contententiousness")]
     pub contentiousness: f32,
 
     /// Optional allowlist of tool names this agent may use.
