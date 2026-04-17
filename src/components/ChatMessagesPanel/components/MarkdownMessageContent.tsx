@@ -14,12 +14,28 @@ interface MarkdownMessageContentProps {
 }
 
 /**
- * Renders message content as markdown with syntax highlighting and GFM support.
- * Uses the message context from @assistant-ui/react if text prop is not provided.
+ * Inner component that reads text from the assistant-ui message context.
+ * Must only be rendered inside a MessageProvider.
  */
-const MarkdownMessageContent: React.FC<MarkdownMessageContentProps> = ({ text: propText }) => {
+const ContextAwareMarkdownContent: React.FC = () => {
   const message = useMessage();
-  const text = propText ?? threadMessageToTranscriptMarkdown(message);
+  const text = threadMessageToTranscriptMarkdown(message);
+  return <MarkdownRenderer text={text} />;
+};
+
+/**
+ * Renders message content as markdown with syntax highlighting and GFM support.
+ *
+ * When `text` is provided, renders standalone (no message context needed).
+ * When `text` is omitted, reads from the @assistant-ui/react message context.
+ */
+const MarkdownMessageContent: React.FC<MarkdownMessageContentProps> = ({ text }) => {
+  if (text != null) return <MarkdownRenderer text={text} />;
+  return <ContextAwareMarkdownContent />;
+};
+
+/** Pure markdown renderer — no hooks, no context dependency. */
+const MarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
 
   const components: Partial<Components> = {
     table: ({ children }) => (
