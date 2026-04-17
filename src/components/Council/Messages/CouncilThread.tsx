@@ -63,9 +63,29 @@ export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
     return result;
   }, [session.contributions, session.activeAgentId, session.currentRound, session.phase]);
 
-  // Idle / suggesting phases: nothing to render
-  if (session.phase === 'idle' || session.phase === 'suggesting') {
+  // Idle phase: nothing to render
+  if (session.phase === 'idle') {
     return null;
+  }
+
+  // Suggesting phase with no prior agents: nothing to render yet
+  if (session.phase === 'suggesting' && session.suggestedAgents.length === 0) {
+    return null;
+  }
+
+  // Suggesting phase during refinement: show setup panel disabled
+  if (session.phase === 'suggesting' && session.suggestedAgents.length > 0) {
+    return (
+      <CouncilSetupPanel
+        topic={session.topic}
+        agents={session.suggestedAgents}
+        rounds={session.suggestedRounds}
+        synthesisGuidance={session.suggestedSynthesisGuidance}
+        onRun={onRun}
+        onCancel={onCancel}
+        disabled
+      />
+    );
   }
 
   // Setup phase: show the setup panel
@@ -82,7 +102,26 @@ export const CouncilThread: FC<CouncilThreadProps> = ({ onRun, onCancel }) => {
     );
   }
 
-  // Error state
+  // Error state with existing agents: show setup panel with error banner
+  if (session.phase === 'error' && session.suggestedAgents.length > 0) {
+    return (
+      <>
+        <div className="w-full text-sm text-danger px-md py-sm">
+          Refinement failed: {session.error ?? 'Unknown error'}
+        </div>
+        <CouncilSetupPanel
+          topic={session.topic}
+          agents={session.suggestedAgents}
+          rounds={session.suggestedRounds}
+          synthesisGuidance={session.suggestedSynthesisGuidance}
+          onRun={onRun}
+          onCancel={onCancel}
+        />
+      </>
+    );
+  }
+
+  // Error state with no agents
   if (session.phase === 'error' && items.length === 0) {
     return (
       <div className="w-full text-sm text-danger px-md py-sm">

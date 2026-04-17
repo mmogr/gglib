@@ -21,6 +21,7 @@ import {
 
 export type CouncilAction =
   | { type: 'START_SUGGEST'; topic: string }
+  | { type: 'START_REFINE' }
   | { type: 'SUGGEST_COMPLETE'; agents: CouncilAgent[]; rounds: number; synthesisGuidance?: string }
   | { type: 'SUGGEST_ERROR'; error: string }
   | { type: 'START_DELIBERATION'; topic: string; totalRounds: number }
@@ -44,6 +45,9 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
   switch (action.type) {
     case 'START_SUGGEST':
       return { ...createEmptySession(), phase: 'suggesting', topic: action.topic };
+
+    case 'START_REFINE':
+      return { ...state, phase: 'suggesting', error: null };
 
     case 'SUGGEST_COMPLETE':
       return {

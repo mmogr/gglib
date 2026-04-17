@@ -148,7 +148,7 @@ export function useCouncil({ serverPort, model }: UseCouncilOptions): UseCouncil
       synthesis_guidance: session.suggestedSynthesisGuidance,
     };
 
-    dispatch({ type: 'START_SUGGEST', topic: session.topic });
+    dispatch({ type: 'START_REFINE' });
 
     try {
       const result = await suggestCouncil({

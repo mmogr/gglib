@@ -110,20 +110,37 @@ fn build_suggest_messages(
 
 /// Parse the LLM's response text as a [`SuggestedCouncil`].
 ///
-/// Handles optional markdown JSON fences that small models often emit.
+/// Tolerates chatty models that wrap JSON in markdown fences and/or
+/// prepend conversational prose.
 fn parse_suggested_council(raw: &str) -> Result<SuggestedCouncil> {
-    let trimmed = strip_markdown_json(raw);
-    serde_json::from_str(trimmed)
+    let json_str = extract_json(raw);
+    serde_json::from_str(json_str)
         .map_err(|e| anyhow!("failed to parse council suggestion: {e}\n\nRaw:\n{raw}"))
 }
 
-/// Strip optional ` ```json ... ``` ` fences from LLM output.
-fn strip_markdown_json(s: &str) -> &str {
-    let s = s.trim();
-    let s = s.strip_prefix("```json").unwrap_or(s);
-    let s = s.strip_prefix("```").unwrap_or(s);
-    let s = s.strip_suffix("```").unwrap_or(s);
-    s.trim()
+/// Extract the outermost JSON object from an LLM response.
+///
+/// Strategy (first match wins):
+/// 1. Raw `trim()` — model returned pure JSON.
+/// 2. Scan for the first `{` and last `}` — handles prose before/after
+///    fences, bare fences, or stray commentary.
+fn extract_json(s: &str) -> &str {
+    let trimmed = s.trim();
+
+    // Fast path: already starts with `{`
+    if trimmed.starts_with('{') {
+        return trimmed;
+    }
+
+    // Scan for the first `{` and last `}`
+    if let (Some(start), Some(end)) = (trimmed.find('{'), trimmed.rfind('}')) {
+        if end > start {
+            return &trimmed[start..=end];
+        }
+    }
+
+    // Nothing found — return as-is so the caller's serde error is descriptive
+    trimmed
 }
 
 #[cfg(test)]
@@ -177,20 +194,39 @@ mod tests {
     }
 
     #[test]
-    fn strip_plain_json() {
+    fn extract_plain_json() {
         let input = r#"{"agents": []}"#;
-        assert_eq!(strip_markdown_json(input), input);
+        assert_eq!(extract_json(input), input);
     }
 
     #[test]
-    fn strip_fenced_json() {
+    fn extract_fenced_json() {
         let input = "```json\n{\"agents\": []}\n```";
-        assert_eq!(strip_markdown_json(input), r#"{"agents": []}"#);
+        assert_eq!(extract_json(input), r#"{"agents": []}"#);
     }
 
     #[test]
-    fn strip_bare_fences() {
+    fn extract_bare_fences() {
         let input = "```\n{\"agents\": []}\n```";
-        assert_eq!(strip_markdown_json(input), r#"{"agents": []}"#);
+        assert_eq!(extract_json(input), r#"{"agents": []}"#);
+    }
+
+    #[test]
+    fn extract_json_with_prose_before_fences() {
+        let input = "Here is an expanded council of 6 agents:\n\n\
+                      ```json\n{\"agents\": [], \"rounds\": 4}\n```";
+        assert_eq!(extract_json(input), r#"{"agents": [], "rounds": 4}"#);
+    }
+
+    #[test]
+    fn extract_json_with_prose_before_and_after() {
+        let input = "Sure! Here you go:\n{\"agents\": []}\nHope that helps!";
+        assert_eq!(extract_json(input), r#"{"agents": []}"#);
+    }
+
+    #[test]
+    fn extract_json_no_json_returns_original() {
+        let input = "no json here";
+        assert_eq!(extract_json(input), input);
     }
 }
