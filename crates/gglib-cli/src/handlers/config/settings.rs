@@ -127,7 +127,10 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 settings.default_context_size
             );
             println!("  proxy_port:                  {:?}", settings.proxy_port);
-            println!("  llama_base_port:             {:?}", settings.llama_base_port);
+            println!(
+                "  llama_base_port:             {:?}",
+                settings.llama_base_port
+            );
             println!(
                 "  max_download_queue_size:     {:?}",
                 settings.max_download_queue_size
@@ -274,16 +277,10 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
                 );
             }
             if has_max_tool_iterations {
-                println!(
-                    "  max_tool_iterations: {:?}",
-                    updated.max_tool_iterations
-                );
+                println!("  max_tool_iterations: {:?}", updated.max_tool_iterations);
             }
             if has_max_stagnation_steps {
-                println!(
-                    "  max_stagnation_steps: {:?}",
-                    updated.max_stagnation_steps
-                );
+                println!("  max_stagnation_steps: {:?}", updated.max_stagnation_steps);
             }
             if has_show_memory_fit_indicators {
                 println!(

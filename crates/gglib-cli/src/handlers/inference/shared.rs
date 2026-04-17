@@ -6,9 +6,9 @@
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
+use gglib_core::Settings;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::agent::DEFAULT_MAX_ITERATIONS;
-use gglib_core::Settings;
 use gglib_runtime::llama::{ContextResolution, ContextResolutionSource};
 
 /// Resolve inference parameters via the 3-level merge hierarchy.
