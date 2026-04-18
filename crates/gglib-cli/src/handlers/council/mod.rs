@@ -207,12 +207,7 @@ async fn resolve_port(
         server_config = server_config.with_reasoning_format(format);
     }
 
-    let settings = ctx
-        .app
-        .settings()
-        .get()
-        .await
-        .unwrap_or_default();
+    let settings = ctx.app.settings().get().await.unwrap_or_default();
     let context_resolution = resolve_context_size(ContextInput {
         flag: ctx_size,
         model_context_length: model_id.context_length,
