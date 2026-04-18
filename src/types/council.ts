@@ -36,6 +36,9 @@ export type CouncilEvent =
   | AgentToolCallCompleteEvent
   | AgentTurnCompleteEvent
   | RoundSeparatorEvent
+  | JudgeStartEvent
+  | JudgeTextDeltaEvent
+  | JudgeSummaryEvent
   | SynthesisStartEvent
   | SynthesisTextDeltaEvent
   | SynthesisCompleteEvent
@@ -93,6 +96,23 @@ export interface RoundSeparatorEvent {
   round: number;
 }
 
+export interface JudgeStartEvent {
+  type: 'judge_start';
+  round: number;
+}
+
+export interface JudgeTextDeltaEvent {
+  type: 'judge_text_delta';
+  delta: string;
+}
+
+export interface JudgeSummaryEvent {
+  type: 'judge_summary';
+  round: number;
+  summary: string;
+  consensus_reached: boolean;
+}
+
 export interface SynthesisStartEvent {
   type: 'synthesis_start';
 }
@@ -145,6 +165,7 @@ export type CouncilPhase =
   | 'suggesting'
   | 'setup'
   | 'deliberating'
+  | 'judging'
   | 'synthesizing'
   | 'complete'
   | 'error';
@@ -177,6 +198,12 @@ export interface CouncilSession {
   activeToolCalls: AgentToolCall[];
   /** All completed contributions across rounds. */
   contributions: AgentContribution[];
+  /** Judge text accumulated during evaluation (streamed incrementally). */
+  judgeText: string;
+  /** Judge summary from the most recent evaluation. */
+  judgeSummary: string | null;
+  /** Whether the judge detected consensus. */
+  judgeConsensusReached: boolean;
   /** Synthesis text (streamed incrementally). */
   synthesisText: string;
   /** Error message if phase === 'error'. */
@@ -264,6 +291,9 @@ export function createEmptySession(): CouncilSession {
     activeAgentReasoning: '',
     activeToolCalls: [],
     contributions: [],
+    judgeText: '',
+    judgeSummary: null,
+    judgeConsensusReached: false,
     synthesisText: '',
     error: null,
   };

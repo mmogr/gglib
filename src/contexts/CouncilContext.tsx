@@ -32,6 +32,9 @@ export type CouncilAction =
   | { type: 'AGENT_TOOL_CALL_COMPLETE'; agentId: string; toolName: string; result: { content: string; isError: boolean }; displayName: string; durationDisplay: string }
   | { type: 'AGENT_TURN_COMPLETE'; contribution: AgentContribution }
   | { type: 'ROUND_SEPARATOR'; round: number }
+  | { type: 'JUDGE_START'; round: number }
+  | { type: 'JUDGE_TEXT_DELTA'; delta: string }
+  | { type: 'JUDGE_SUMMARY'; round: number; summary: string; consensusReached: boolean }
   | { type: 'SYNTHESIS_START' }
   | { type: 'SYNTHESIS_TEXT_DELTA'; delta: string }
   | { type: 'SYNTHESIS_COMPLETE'; content: string }
@@ -125,6 +128,20 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
 
     case 'ROUND_SEPARATOR':
       return { ...state, currentRound: action.round };
+
+    case 'JUDGE_START':
+      return { ...state, phase: 'judging', judgeText: '' };
+
+    case 'JUDGE_TEXT_DELTA':
+      return { ...state, judgeText: state.judgeText + action.delta };
+
+    case 'JUDGE_SUMMARY':
+      return {
+        ...state,
+        phase: 'deliberating',
+        judgeSummary: action.summary,
+        judgeConsensusReached: action.consensusReached,
+      };
 
     case 'SYNTHESIS_START':
       return { ...state, phase: 'synthesizing', synthesisText: '' };

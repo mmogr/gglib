@@ -17,7 +17,8 @@
 //! | `stream_bridge.rs`| `AgentEvent` → `CouncilEvent` mapper                |
 //! | `round.rs`        | Sequential round execution (per-agent turn driver)  |
 //! | `synthesis.rs`    | Synthesis pass (transcript → unified answer)        |
-//! | `orchestrator.rs` | Slim coordinator (rounds → synthesis sequencing)    |
+//! | `judge.rs`        | Post-round judge + adaptive early stopping          |
+//! | `orchestrator.rs` | Slim coordinator (rounds → judge → synthesis)       |
 //! | `suggest.rs`      | `suggest_council()` — shared suggest orchestration  |
 
 pub mod config;
@@ -25,13 +26,14 @@ pub mod events;
 pub mod history;
 pub mod orchestrator;
 pub mod prompts;
+mod judge;
 mod round;
 pub mod state;
 pub mod stream_bridge;
 pub mod suggest;
 mod synthesis;
 
-pub use config::{CouncilAgent, CouncilConfig, SuggestedCouncil};
+pub use config::{CouncilAgent, CouncilConfig, JudgeConfig, SuggestedCouncil};
 pub use events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 pub use orchestrator::run as run_council;
 pub use prompts::{contentiousness_tier_label, contentiousness_to_instruction};

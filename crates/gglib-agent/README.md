@@ -61,7 +61,8 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | `council/stream_bridge` | `AgentEvent` → `CouncilEvent` mapper |
 | `council/round` | Sequential round execution (per-agent turn driver) |
 | `council/synthesis` | Synthesis pass (transcript → unified answer) |
-| `council/orchestrator` | Slim coordinator (rounds → synthesis sequencing) |
+| `council/judge` | Post-round judge evaluation + adaptive early stopping |
+| `council/orchestrator` | Slim coordinator (rounds → judge → synthesis) |
 | `council/suggest` | `suggest_council()` — shared suggest orchestration |
 <!-- MODULE_TABLE_END -->
 

@@ -1,15 +1,18 @@
 //! Top-level coordinator for a council deliberation.
 //!
 //! This module is intentionally slim — it sequences the high-level phases
-//! (debate rounds → synthesis) and delegates all per-agent and per-phase
-//! logic to dedicated sub-modules:
+//! (debate rounds → optional judge → synthesis) and delegates all per-agent
+//! and per-phase logic to dedicated sub-modules:
 //!
 //! ```text
 //! orchestrator::run()
 //!   │
 //!   ├─ for each round 0..N
 //!   │   ├─ emit RoundSeparator (round > 0)
-//!   │   └─ round::run_sequential_round()      (round.rs)
+//!   │   ├─ round::run_sequential_round()      (round.rs)
+//!   │   └─ if judge enabled:
+//!   │       └─ judge::run_judge()              (judge.rs)
+//!   │           └─ if consensus && may_stop → break
 //!   │
 //!   └─ synthesis::run_synthesis()              (synthesis.rs)
 //! ```
@@ -17,21 +20,30 @@
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
+use tracing::info;
 
 use gglib_core::{AgentConfig, LlmCompletionPort, ToolExecutorPort};
 
 use super::config::CouncilConfig;
 use super::events::CouncilEvent;
+use super::judge::{may_stop_early, run_judge};
 use super::round::{RoundContext, run_sequential_round};
 use super::state::CouncilState;
 use super::synthesis::run_synthesis;
 
-/// Runs a full council deliberation: debate rounds → synthesis.
+/// Runs a full council deliberation: debate rounds → optional judge → synthesis.
 ///
 /// This function is the only public entry point.  It coordinates the
 /// high-level phase sequence and delegates per-agent turn execution to
-/// [`round::run_sequential_round`] and the synthesis pass to
+/// [`round::run_sequential_round`], optional judge evaluation to
+/// [`judge::run_judge`], and the synthesis pass to
 /// [`synthesis::run_synthesis`].
+///
+/// # Judge + Adaptive Early Stopping
+///
+/// When `config.judge` is `Some`, a neutral judge evaluates the debate
+/// after each round.  If the judge determines consensus has been reached
+/// and the minimum-rounds threshold is met, remaining rounds are skipped.
 ///
 /// # Errors
 ///
@@ -73,6 +85,37 @@ pub async fn run(
         }
 
         state.advance_round();
+
+        // ── optional judge evaluation ────────────────────────────────────
+        if let Some(ref judge_config) = config.judge {
+            let completed_rounds = round + 1;
+            let is_last_round = completed_rounds >= config.rounds;
+
+            // Skip judge on the final round — synthesis follows regardless.
+            if !is_last_round {
+                if let Some(verdict) = run_judge(
+                    round,
+                    config.rounds,
+                    judge_config,
+                    &llm,
+                    &tool_executor,
+                    &state,
+                    &council_tx,
+                    &config.topic,
+                )
+                .await
+                {
+                    if verdict.consensus_reached && may_stop_early(judge_config, completed_rounds) {
+                        info!(
+                            round,
+                            completed_rounds,
+                            "judge detected consensus — stopping early"
+                        );
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     // ── synthesis ────────────────────────────────────────────────────────

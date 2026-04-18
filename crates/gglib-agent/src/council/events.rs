@@ -81,6 +81,24 @@ pub enum CouncilEvent {
     /// divider — no gradient, no tension metric (v1).
     RoundSeparator { round: u32 },
 
+    // ── judge ────────────────────────────────────────────────────────────
+    /// The judge evaluation phase has begun for this round.
+    JudgeStart { round: u32 },
+
+    /// Incremental text token from the judge agent.
+    JudgeTextDelta { delta: String },
+
+    /// The judge has completed its evaluation.
+    ///
+    /// `summary` is the judge's narrative assessment.
+    /// `consensus_reached` indicates whether the judge determined
+    /// that the agents have converged on a shared position.
+    JudgeSummary {
+        round: u32,
+        summary: String,
+        consensus_reached: bool,
+    },
+
     // ── synthesis ────────────────────────────────────────────────────────
     /// The synthesis phase has begun.  The frontend renders a
     /// "Synthesising…" placeholder.
@@ -187,6 +205,15 @@ mod tests {
                 delta: "thinking...".into(),
             },
             CouncilEvent::RoundSeparator { round: 1 },
+            CouncilEvent::JudgeStart { round: 1 },
+            CouncilEvent::JudgeTextDelta {
+                delta: "evaluating".into(),
+            },
+            CouncilEvent::JudgeSummary {
+                round: 1,
+                summary: "Agents are converging.".into(),
+                consensus_reached: true,
+            },
             CouncilEvent::SynthesisStart,
             CouncilEvent::SynthesisTextDelta {
                 delta: "synth".into(),
