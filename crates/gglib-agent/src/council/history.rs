@@ -84,6 +84,13 @@ pub fn build_agent_system_prompt(
             prompt.push_str("\n\nDEBATE HISTORY:\n");
             prompt.push_str(&transcript);
             prompt.push_str(GUIDED_REBUTTAL_CUE);
+
+            // Anti-dogpile: show which claims earlier agents already
+            // addressed this round so this agent picks a different target.
+            let already = format_already_addressed(state, round, &agent.name);
+            if !already.is_empty() {
+                prompt.push_str(&already);
+            }
         }
     }
 
@@ -102,6 +109,34 @@ pub fn build_agent_system_prompt(
     }
 
     prompt
+}
+
+/// Summarise which prior claims earlier agents in this round have already
+/// rebutted, so the current agent can pick a different target.
+///
+/// Returns an empty string when no earlier agents have spoken this round
+/// or none of them produced a core claim.
+#[must_use]
+fn format_already_addressed(state: &CouncilState, round: u32, self_name: &str) -> String {
+    use std::fmt::Write;
+    let earlier: Vec<_> = state
+        .contributions_for_round(round)
+        .into_iter()
+        .filter(|c| c.agent.name != self_name)
+        .filter_map(|c| c.core_claim.as_deref().map(|claim| (&*c.agent.name, claim)))
+        .collect();
+
+    if earlier.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::from(
+        "\n\nCLAIMS ALREADY ADDRESSED THIS ROUND (choose a different target if possible):\n",
+    );
+    for (name, claim) in &earlier {
+        let _ = writeln!(out, "- {name}: \"{claim}\"");
+    }
+    out
 }
 
 /// Format prior contributions as a labelled transcript block.
@@ -382,5 +417,89 @@ mod tests {
         let prompt = build_agent_system_prompt(&a, "Topic", 0, 1, &state, Some(&dir));
         assert!(prompt.contains("filesystem tools (read_file, list_directory, grep_search)"));
         assert!(prompt.contains("Working directory: /tmp/my-project"));
+    }
+
+    // ── anti-dogpile tests ───────────────────────────────────────────────
+
+    #[test]
+    fn anti_dogpile_context_absent_for_first_agent_in_round() {
+        let mut state = CouncilState::new();
+        // Round 0 contributions
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Skeptic round 0.".into(),
+            core_claim: Some("Monoliths scale.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("p", "Pragmatist", 0.3),
+            content: "Pragmatist round 0.".into(),
+            core_claim: Some("Use what works.".into()),
+            round: 0,
+        });
+        state.advance_round();
+
+        // First agent in round 1 — no one has spoken yet this round
+        let a = agent("s", "Skeptic", 0.7);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
+        assert!(!prompt.contains("CLAIMS ALREADY ADDRESSED THIS ROUND"));
+    }
+
+    #[test]
+    fn anti_dogpile_context_present_for_later_agent() {
+        let mut state = CouncilState::new();
+        // Round 0
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Skeptic round 0.".into(),
+            core_claim: Some("Monoliths scale.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("p", "Pragmatist", 0.3),
+            content: "Pragmatist round 0.".into(),
+            core_claim: Some("Use what works.".into()),
+            round: 0,
+        });
+        state.advance_round();
+
+        // Round 1: Skeptic has already spoken
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Skeptic round 1.".into(),
+            core_claim: Some("Still monoliths.".into()),
+            round: 1,
+        });
+
+        // Now Pragmatist speaks — should see Skeptic's claim listed
+        let a = agent("p", "Pragmatist", 0.3);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
+        assert!(prompt.contains("CLAIMS ALREADY ADDRESSED THIS ROUND"));
+        assert!(prompt.contains("Skeptic: \"Still monoliths.\""));
+    }
+
+    #[test]
+    fn anti_dogpile_skips_agents_without_core_claim() {
+        let mut state = CouncilState::new();
+        // Round 0
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Round 0.".into(),
+            core_claim: None,
+            round: 0,
+        });
+        state.advance_round();
+
+        // Round 1: Skeptic spoke but without a core claim
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Skeptic round 1 no claim.".into(),
+            core_claim: None,
+            round: 1,
+        });
+
+        let a = agent("p", "Pragmatist", 0.3);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
+        assert!(!prompt.contains("CLAIMS ALREADY ADDRESSED THIS ROUND"));
     }
 }

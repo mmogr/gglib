@@ -82,8 +82,9 @@ RULES:
 prefixed with \"CORE CLAIM:\" (e.g., \"CORE CLAIM: Microservices add more operational cost \
 than they save for teams under 20 engineers.\"). If you cannot form a single claim, omit this line.";
 
-/// Appended to the system prompt when the agent has prior rounds to respond
-/// to.  Lets the agent autonomously choose which argument to rebut based on
+/// Appended when prior rounds exist.
+///
+/// Lets the agent autonomously choose which argument to rebut based on
 /// genuine conflict rather than a mechanically-assigned target.
 pub const GUIDED_REBUTTAL_CUE: &str = "\n\n\
 Review the previous round's core claims. Identify the argument that most \
@@ -336,7 +337,6 @@ mod tests {
 
     #[test]
     fn guided_rebuttal_cue_is_non_empty() {
-        assert!(!GUIDED_REBUTTAL_CUE.is_empty());
         assert!(GUIDED_REBUTTAL_CUE.contains("conflicts with your perspective"));
     }
 
