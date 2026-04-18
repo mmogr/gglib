@@ -98,6 +98,12 @@ pub enum CouncilEvent {
         summary: String,
         consensus_reached: bool,
     },
+    // ── compaction ────────────────────────────────────────────────────────
+    /// A completed round has been compacted into a shorter summary.
+    ///
+    /// The frontend/CLI can optionally display this.  The compacted text
+    /// replaces the full transcript in subsequent agents' context windows.
+    RoundCompacted { round: u32, summary: String },
 
     // ── synthesis ────────────────────────────────────────────────────────
     /// The synthesis phase has begun.  The frontend renders a
@@ -213,6 +219,10 @@ mod tests {
                 round: 1,
                 summary: "Agents are converging.".into(),
                 consensus_reached: true,
+            },
+            CouncilEvent::RoundCompacted {
+                round: 0,
+                summary: "[Skeptic]: Bad idea.\n[Pragmatist]: Good idea.".into(),
             },
             CouncilEvent::SynthesisStart,
             CouncilEvent::SynthesisTextDelta {

@@ -4,6 +4,16 @@
 //! organised by round.  It is the single mutable data structure that the
 //! orchestrator writes to and that [`crate::council::history`] reads from
 //! when assembling per-agent context.
+//!
+//! # Round compaction
+//!
+//! After a round completes, the orchestrator may store a compacted summary
+//! via [`CouncilState::set_compacted`].  When compacted text exists for a
+//! round, the history module uses the short summary instead of the full
+//! agent contributions, keeping the context window manageable in long
+//! debates.
+
+use std::collections::HashMap;
 
 use super::config::CouncilAgent;
 
@@ -59,6 +69,11 @@ pub struct CouncilState {
     contributions: Vec<AgentContribution>,
     /// Current round (zero-indexed).
     current_round: u32,
+    /// Compacted round summaries, keyed by zero-indexed round number.
+    ///
+    /// When the history module encounters a compacted round, it uses this
+    /// summary instead of replaying all individual contributions.
+    compacted: HashMap<u32, String>,
 }
 
 impl CouncilState {
@@ -115,6 +130,26 @@ impl CouncilState {
             .map(|r| (r, self.contributions_for_round(r)))
             .filter(|(_, cs)| !cs.is_empty())
             .collect()
+    }
+
+    /// Store a compacted summary for a completed round.
+    ///
+    /// The history module will use this instead of the full contributions
+    /// when building agent context for subsequent rounds.
+    pub fn set_compacted(&mut self, round: u32, summary: String) {
+        self.compacted.insert(round, summary);
+    }
+
+    /// Retrieve the compacted summary for a round, if any.
+    #[must_use]
+    pub fn compacted_summary(&self, round: u32) -> Option<&str> {
+        self.compacted.get(&round).map(String::as_str)
+    }
+
+    /// Whether a given round has been compacted.
+    #[must_use]
+    pub fn is_compacted(&self, round: u32) -> bool {
+        self.compacted.contains_key(&round)
     }
 }
 
@@ -216,5 +251,27 @@ mod tests {
         assert_eq!(rounds[0].1.len(), 2);
         assert_eq!(rounds[1].0, 1);
         assert_eq!(rounds[1].1.len(), 1);
+    }
+
+    // ── compaction ───────────────────────────────────────────────────────
+
+    #[test]
+    fn compacted_summary_round_trip() {
+        let mut state = CouncilState::new();
+        assert!(!state.is_compacted(0));
+        assert!(state.compacted_summary(0).is_none());
+
+        state.set_compacted(0, "Round 0 summary.".into());
+        assert!(state.is_compacted(0));
+        assert_eq!(state.compacted_summary(0), Some("Round 0 summary."));
+        assert!(!state.is_compacted(1));
+    }
+
+    #[test]
+    fn compacted_overwrites_previous() {
+        let mut state = CouncilState::new();
+        state.set_compacted(0, "First.".into());
+        state.set_compacted(0, "Second.".into());
+        assert_eq!(state.compacted_summary(0), Some("Second."));
     }
 }

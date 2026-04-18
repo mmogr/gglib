@@ -35,6 +35,7 @@ export type CouncilAction =
   | { type: 'JUDGE_START'; round: number }
   | { type: 'JUDGE_TEXT_DELTA'; delta: string }
   | { type: 'JUDGE_SUMMARY'; round: number; summary: string; consensusReached: boolean }
+  | { type: 'ROUND_COMPACTED'; round: number; summary: string }
   | { type: 'SYNTHESIS_START' }
   | { type: 'SYNTHESIS_TEXT_DELTA'; delta: string }
   | { type: 'SYNTHESIS_COMPLETE'; content: string }
@@ -142,6 +143,10 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
         judgeSummary: action.summary,
         judgeConsensusReached: action.consensusReached,
       };
+
+    case 'ROUND_COMPACTED':
+      // Informational only — no state change needed for the UI.
+      return state;
 
     case 'SYNTHESIS_START':
       return { ...state, phase: 'synthesizing', synthesisText: '' };

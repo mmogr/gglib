@@ -39,6 +39,7 @@ export type CouncilEvent =
   | JudgeStartEvent
   | JudgeTextDeltaEvent
   | JudgeSummaryEvent
+  | RoundCompactedEvent
   | SynthesisStartEvent
   | SynthesisTextDeltaEvent
   | SynthesisCompleteEvent
@@ -111,6 +112,12 @@ export interface JudgeSummaryEvent {
   round: number;
   summary: string;
   consensus_reached: boolean;
+}
+
+export interface RoundCompactedEvent {
+  type: 'round_compacted';
+  round: number;
+  summary: string;
 }
 
 export interface SynthesisStartEvent {

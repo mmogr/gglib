@@ -1,8 +1,8 @@
 //! Top-level coordinator for a council deliberation.
 //!
 //! This module is intentionally slim — it sequences the high-level phases
-//! (debate rounds → optional judge → synthesis) and delegates all per-agent
-//! and per-phase logic to dedicated sub-modules:
+//! (debate rounds → compaction → optional judge → synthesis) and delegates
+//! all per-agent and per-phase logic to dedicated sub-modules:
 //!
 //! ```text
 //! orchestrator::run()
@@ -10,6 +10,7 @@
 //!   ├─ for each round 0..N
 //!   │   ├─ emit RoundSeparator (round > 0)
 //!   │   ├─ round::run_sequential_round()      (round.rs)
+//!   │   ├─ compaction::compact_round()         (compaction.rs)
 //!   │   └─ if judge enabled:
 //!   │       └─ judge::run_judge()              (judge.rs)
 //!   │           └─ if consensus && may_stop → break
@@ -24,6 +25,7 @@ use tracing::info;
 
 use gglib_core::{AgentConfig, LlmCompletionPort, ToolExecutorPort};
 
+use super::compaction::compact_round;
 use super::config::CouncilConfig;
 use super::events::CouncilEvent;
 use super::judge::{may_stop_early, run_judge};
@@ -31,13 +33,22 @@ use super::round::{RoundContext, run_sequential_round};
 use super::state::CouncilState;
 use super::synthesis::run_synthesis;
 
-/// Runs a full council deliberation: debate rounds → optional judge → synthesis.
+/// Runs a full council deliberation: debate rounds → compaction → optional judge → synthesis.
 ///
 /// This function is the only public entry point.  It coordinates the
 /// high-level phase sequence and delegates per-agent turn execution to
-/// [`round::run_sequential_round`], optional judge evaluation to
+/// [`round::run_sequential_round`], round compaction to
+/// [`compaction::compact_round`], optional judge evaluation to
 /// [`judge::run_judge`], and the synthesis pass to
 /// [`synthesis::run_synthesis`].
+///
+/// # Round Compaction
+///
+/// After each round completes (except the most recent), the orchestrator
+/// runs a lightweight compaction pass that summarises the round's
+/// contributions into a short per-agent summary.  Subsequent agents see
+/// the compacted text instead of the full transcript, keeping context
+/// sizes manageable in long debates.
 ///
 /// # Judge + Adaptive Early Stopping
 ///
@@ -85,6 +96,11 @@ pub async fn run(
         }
 
         state.advance_round();
+
+        // ── compaction ───────────────────────────────────────────────────
+        // Summarise the just-completed round so that future agents see a
+        // compact version rather than the full transcript.
+        compact_round(round, &mut state, &llm, &tool_executor, &council_tx, &config.topic).await;
 
         // ── optional judge evaluation ────────────────────────────────────
         if let Some(ref judge_config) = config.judge {
