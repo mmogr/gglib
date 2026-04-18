@@ -57,7 +57,7 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | `council/events` | `CouncilEvent` SSE enum (wire format) |
 | `council/prompts` | Prompt templates + contentiousness mapping |
 | `council/state` | Round/contribution accumulator |
-| `council/history` | Per-turn context builder (identity + transcript) |
+| `council/history` | Per-turn context builder (identity + transcript + directed rebuttals) |
 | `council/stream_bridge` | `AgentEvent` → `CouncilEvent` mapper |
 | `council/round` | Sequential round execution (per-agent turn driver) |
 | `council/synthesis` | Synthesis pass (transcript → unified answer) |

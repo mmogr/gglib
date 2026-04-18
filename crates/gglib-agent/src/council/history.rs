@@ -6,17 +6,20 @@
 //!    persona, contentiousness instruction — re-injected every turn).
 //! 2. Formatting the debate transcript from prior rounds as a labelled
 //!    `[Agent Name]: content` block.
-//! 3. Appending round-phase suffixes (debate-history cue, final-round cue).
-//! 4. Wrapping the topic as a `User` message.
+//! 3. Selecting a directed rebuttal target (the prior-round agent with a
+//!    core claim whose contentiousness is most different from the current
+//!    agent), or falling back to a generic debate-history cue.
+//! 4. Appending round-phase suffixes (rebuttal/history cue, final-round cue).
+//! 5. Wrapping the topic as a `User` message.
 
 use gglib_core::AgentMessage;
 
 use super::config::CouncilAgent;
 use super::prompts::{
     AGENT_TURN_SYSTEM_PROMPT, DEBATE_HISTORY_SUFFIX, FINAL_ROUND_SUFFIX,
-    contentiousness_to_instruction,
+    TARGETED_REBUTTAL_CUE, contentiousness_to_instruction,
 };
-use super::state::CouncilState;
+use super::state::{AgentContribution, CouncilState};
 
 /// Build the message list for a single agent's turn in the council debate.
 ///
@@ -77,7 +80,19 @@ pub fn build_agent_system_prompt(
         if !transcript.is_empty() {
             prompt.push_str("\n\nDEBATE HISTORY:\n");
             prompt.push_str(&transcript);
-            prompt.push_str(DEBATE_HISTORY_SUFFIX);
+
+            // Directed rebuttal cue targeting the most opposed agent's
+            // core claim, or generic debate-history suffix as fallback.
+            if let Some(target) = select_rebuttal_target(agent, state, round) {
+                let claim = target.core_claim.as_deref().unwrap_or_default();
+                prompt.push_str(
+                    &TARGETED_REBUTTAL_CUE
+                        .replace("{target_name}", &target.agent.name)
+                        .replace("{target_claim}", claim),
+                );
+            } else {
+                prompt.push_str(DEBATE_HISTORY_SUFFIX);
+            }
         }
     }
 
@@ -117,6 +132,38 @@ fn format_transcript(state: &CouncilState, up_to_round: u32) -> String {
         }
     }
     out
+}
+
+/// Select the best rebuttal target for an agent entering a new round.
+///
+/// Picks the contribution from the **previous round** whose `core_claim` is
+/// present and whose contentiousness is most different from the current
+/// agent's — a lightweight proxy for "most semantically distant" without
+/// requiring embeddings.
+///
+/// Returns `None` when:
+/// - `round == 0` (no prior contributions exist)
+/// - no other agent produced a core claim in the previous round
+fn select_rebuttal_target<'a>(
+    agent: &CouncilAgent,
+    state: &'a CouncilState,
+    round: u32,
+) -> Option<&'a AgentContribution> {
+    if round == 0 {
+        return None;
+    }
+    let prev_round = round - 1;
+    state
+        .contributions_for_round(prev_round)
+        .into_iter()
+        .filter(|c| c.agent.id != agent.id && c.core_claim.is_some())
+        .max_by(|a, b| {
+            let dist_a = (a.agent.contentiousness - agent.contentiousness).abs();
+            let dist_b = (b.agent.contentiousness - agent.contentiousness).abs();
+            dist_a
+                .partial_cmp(&dist_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
 }
 
 /// Format the full transcript for the synthesis prompt (all rounds).
@@ -239,5 +286,132 @@ mod tests {
         });
         let transcript = format_synthesis_transcript(&state);
         assert!(transcript.contains("[Skeptic (Skeptic's angle)]: Bad idea."));
+    }
+
+    // ── directed rebuttal tests ──────────────────────────────────────────
+
+    #[test]
+    fn rebuttal_target_none_at_round_0() {
+        let state = CouncilState::new();
+        let a = agent("s", "Skeptic", 0.7);
+        assert!(select_rebuttal_target(&a, &state, 0).is_none());
+    }
+
+    #[test]
+    fn rebuttal_target_picks_most_opposed() {
+        let mut state = CouncilState::new();
+        // Round 0: three agents with core claims
+        state.push(AgentContribution {
+            agent: agent("c", "Collaborator", 0.1),
+            content: "We should cooperate.".into(),
+            core_claim: Some("Cooperation wins.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("b", "Balanced", 0.5),
+            content: "Both sides have merit.".into(),
+            core_claim: Some("Balance is key.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("d", "Devil", 0.9),
+            content: "Everything is wrong.".into(),
+            core_claim: Some("Total opposition.".into()),
+            round: 0,
+        });
+        state.advance_round();
+
+        // Current agent is Collaborator (0.1) — most distant is Devil (0.9)
+        let a = agent("c", "Collaborator", 0.1);
+        let target = select_rebuttal_target(&a, &state, 1).unwrap();
+        assert_eq!(target.agent.id, "d");
+        assert_eq!(
+            target.core_claim.as_deref(),
+            Some("Total opposition.")
+        );
+    }
+
+    #[test]
+    fn rebuttal_target_skips_self() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.9),
+            content: "My argument.".into(),
+            core_claim: Some("My claim.".into()),
+            round: 0,
+        });
+        state.advance_round();
+
+        // Only contribution in previous round is from self — no target
+        let a = agent("s", "Skeptic", 0.9);
+        assert!(select_rebuttal_target(&a, &state, 1).is_none());
+    }
+
+    #[test]
+    fn rebuttal_target_none_when_no_core_claims() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("a", "Alice", 0.3),
+            content: "Some argument.".into(),
+            core_claim: None,
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("b", "Bob", 0.8),
+            content: "Another argument.".into(),
+            core_claim: None,
+            round: 0,
+        });
+        state.advance_round();
+
+        let a = agent("a", "Alice", 0.3);
+        assert!(select_rebuttal_target(&a, &state, 1).is_none());
+    }
+
+    #[test]
+    fn rebuttal_cue_injected_in_prompt() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.9),
+            content: "Bad idea.".into(),
+            core_claim: Some("Monoliths scale better.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("p", "Pragmatist", 0.2),
+            content: "Let's be practical.".into(),
+            core_claim: Some("Use what works.".into()),
+            round: 0,
+        });
+        state.advance_round();
+
+        // Pragmatist (0.2) should target Skeptic (0.9) — most distant
+        let a = agent("p", "Pragmatist", 0.2);
+        let prompt = build_agent_system_prompt(&a, "Architecture", 1, 3, &state);
+
+        assert!(prompt.contains("DIRECTED REBUTTAL"));
+        assert!(prompt.contains("Skeptic's core claim"));
+        assert!(prompt.contains("Monoliths scale better."));
+        // Generic suffix should NOT appear when rebuttal cue is used
+        assert!(!prompt.contains("Respond to the strongest counterarguments"));
+    }
+
+    #[test]
+    fn generic_suffix_when_no_rebuttal_target() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("a", "Alice", 0.3),
+            content: "Some argument.".into(),
+            core_claim: None, // no core claim
+            round: 0,
+        });
+        state.advance_round();
+
+        let a = agent("b", "Bob", 0.7);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state);
+
+        assert!(prompt.contains("DEBATE HISTORY"));
+        assert!(prompt.contains("Respond to the strongest counterarguments"));
+        assert!(!prompt.contains("DIRECTED REBUTTAL"));
     }
 }

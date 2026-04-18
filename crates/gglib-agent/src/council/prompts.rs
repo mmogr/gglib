@@ -82,10 +82,22 @@ RULES:
 prefixed with \"CORE CLAIM:\" (e.g., \"CORE CLAIM: Microservices add more operational cost \
 than they save for teams under 20 engineers.\"). If you cannot form a single claim, omit this line.";
 
-/// Appended to the system prompt when the agent has prior rounds to respond to.
+/// Appended to the system prompt when the agent has prior rounds to respond to
+/// but no directed rebuttal target is available (no prior core claims).
 pub const DEBATE_HISTORY_SUFFIX: &str = "\n\n\
 Respond to the strongest counterarguments from previous rounds. \
 Strengthen, revise, or concede specific points.";
+
+/// Appended instead of [`DEBATE_HISTORY_SUFFIX`] when a directed rebuttal
+/// target has been selected.
+///
+/// Placeholders: `{target_name}`, `{target_claim}`.
+pub const TARGETED_REBUTTAL_CUE: &str = "\n\n\
+DIRECTED REBUTTAL: You must directly address {target_name}'s core claim: \
+\"{target_claim}\"\n\
+Explain specifically why you agree or disagree with this position from your \
+perspective. Strengthen, revise, or concede specific points — but do not \
+ignore their argument.";
 
 /// Appended to the system prompt in the last debate round.
 pub const FINAL_ROUND_SUFFIX: &str = "\n\n\
@@ -254,5 +266,11 @@ mod tests {
         assert!(JUDGE_PROMPT.contains("{round}"));
         assert!(JUDGE_PROMPT.contains("{total_rounds}"));
         assert!(JUDGE_PROMPT.contains("{transcript}"));
+    }
+
+    #[test]
+    fn rebuttal_cue_has_placeholders() {
+        assert!(TARGETED_REBUTTAL_CUE.contains("{target_name}"));
+        assert!(TARGETED_REBUTTAL_CUE.contains("{target_claim}"));
     }
 }
