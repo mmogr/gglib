@@ -131,7 +131,36 @@ Write the synthesis as a well-structured response. Do NOT simply list each agent
 Integrate and analyze the arguments to produce a genuinely higher-quality answer than any \
 single agent could provide alone.";
 
-// ─── contentiousness mapping ─────────────────────────────────────────────────
+// ─── round compaction ────────────────────────────────────────────────────────
+
+/// System prompt for the round-compaction pass.
+///
+/// Placeholders: `{round}`, `{transcript}`.
+///
+/// Each agent's contribution must be summarised with a
+/// `SUMMARY(agent_name): ...` line.  The parser in `compaction.rs` uses
+/// robust, case-insensitive matching to tolerate markdown wrapping and
+/// extra whitespace.
+pub const COMPACTION_PROMPT: &str = "\
+You are a concise note-taker for a multi-agent debate. Your job is to compress \
+a single round of debate into a brief summary that preserves each agent's core \
+position and key evidence.
+
+ROUND {round} TRANSCRIPT:
+{transcript}
+
+YOUR TASK:
+For each agent who spoke in this round, write exactly one line:
+SUMMARY(Agent Name): 1-2 sentence summary of their position and key evidence.
+
+Rules:
+- Preserve each agent's distinct position — do NOT merge or reconcile views.
+- Include any specific evidence, data points, or examples they cited.
+- Keep each summary to 1-2 sentences maximum.
+- Do NOT add any commentary, analysis, or additional text.
+- Use the exact agent name as it appears in the transcript.";
+
+// ─── judge ───────────────────────────────────────────────────────────────────
 
 /// System prompt for the post-round judge evaluation.
 ///
@@ -272,5 +301,11 @@ mod tests {
     fn rebuttal_cue_has_placeholders() {
         assert!(TARGETED_REBUTTAL_CUE.contains("{target_name}"));
         assert!(TARGETED_REBUTTAL_CUE.contains("{target_claim}"));
+    }
+
+    #[test]
+    fn compaction_prompt_has_placeholders() {
+        assert!(COMPACTION_PROMPT.contains("{round}"));
+        assert!(COMPACTION_PROMPT.contains("{transcript}"));
     }
 }

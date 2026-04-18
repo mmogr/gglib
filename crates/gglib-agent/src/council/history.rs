@@ -5,7 +5,8 @@
 //! 1. Constructing a system prompt with identity anchoring (agent name,
 //!    persona, contentiousness instruction — re-injected every turn).
 //! 2. Formatting the debate transcript from prior rounds as a labelled
-//!    `[Agent Name]: content` block.
+//!    `[Agent Name]: content` block.  Rounds that have been compacted are
+//!    replaced with their short summary, keeping context sizes manageable.
 //! 3. Selecting a directed rebuttal target (the prior-round agent with a
 //!    core claim whose contentiousness is most different from the current
 //!    agent), or falling back to a generic debate-history cue.
@@ -107,13 +108,19 @@ pub fn build_agent_system_prompt(
 
 /// Format prior contributions as a labelled transcript block.
 ///
+/// For rounds that have been compacted, the short summary is used in
+/// place of the full per-agent contributions.  The most recent round
+/// (`up_to_round - 1`) is always shown in full — compaction only
+/// applies to older rounds.
+///
 /// Output format:
 /// ```text
-/// === Round 1 ===
-/// [Skeptic]: Their argument text...
-/// [Pragmatist]: Their argument text...
+/// === Round 1 (compacted) ===
+/// [Skeptic]: Short summary of their position.
+/// [Pragmatist]: Short summary of their position.
 /// === Round 2 ===
-/// ...
+/// [Skeptic]: Their full argument text...
+/// [Pragmatist]: Their full argument text...
 /// ```
 ///
 /// Only includes rounds `0..round` (exclusive of the current round).
@@ -122,6 +129,13 @@ fn format_transcript(state: &CouncilState, up_to_round: u32) -> String {
     use std::fmt::Write;
     let mut out = String::new();
     for r in 0..up_to_round {
+        // Use compacted summary for older rounds if available.
+        if let Some(compacted) = state.compacted_summary(r) {
+            let _ = writeln!(out, "=== Round {} (compacted) ===", r + 1);
+            let _ = writeln!(out, "{compacted}");
+            continue;
+        }
+
         let contributions = state.contributions_for_round(r);
         if contributions.is_empty() {
             continue;
@@ -413,5 +427,73 @@ mod tests {
         assert!(prompt.contains("DEBATE HISTORY"));
         assert!(prompt.contains("Respond to the strongest counterarguments"));
         assert!(!prompt.contains("DIRECTED REBUTTAL"));
+    }
+
+    // ── compacted transcript tests ───────────────────────────────────────
+
+    #[test]
+    fn compacted_round_uses_summary() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Very long argument about monoliths...".into(),
+            core_claim: Some("Monoliths scale better.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("p", "Pragmatist", 0.3),
+            content: "Very long argument about microservices...".into(),
+            core_claim: Some("Use what works.".into()),
+            round: 0,
+        });
+        state.set_compacted(
+            0,
+            "[Skeptic]: Opposed the proposal.\n[Pragmatist]: Supported compromise.".into(),
+        );
+        state.advance_round();
+
+        // Round 1 contributions
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Round 1 full text from Skeptic.".into(),
+            core_claim: None,
+            round: 1,
+        });
+        state.advance_round();
+
+        // At round 2, round 0 should be compacted, round 1 should be full
+        let a = agent("s", "Skeptic", 0.7);
+        let prompt = build_agent_system_prompt(&a, "Topic", 2, 3, &state);
+
+        // Round 0 should show compacted summary
+        assert!(prompt.contains("=== Round 1 (compacted) ==="));
+        assert!(prompt.contains("[Skeptic]: Opposed the proposal."));
+        assert!(prompt.contains("[Pragmatist]: Supported compromise."));
+        // Full text from round 0 should NOT appear
+        assert!(!prompt.contains("Very long argument about monoliths"));
+
+        // Round 1 should show full text
+        assert!(prompt.contains("=== Round 2 ==="));
+        assert!(prompt.contains("Round 1 full text from Skeptic."));
+    }
+
+    #[test]
+    fn uncompacted_round_shows_full_text() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Full argument text.".into(),
+            core_claim: None,
+            round: 0,
+        });
+        state.advance_round();
+
+        // No compaction applied — should show full text
+        let a = agent("p", "Pragmatist", 0.3);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state);
+
+        assert!(prompt.contains("=== Round 1 ==="));
+        assert!(!prompt.contains("(compacted)"));
+        assert!(prompt.contains("Full argument text."));
     }
 }

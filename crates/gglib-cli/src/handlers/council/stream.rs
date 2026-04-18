@@ -131,6 +131,10 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 }
             }
 
+            CouncilEvent::RoundCompacted { round, .. } => {
+                eprintln!("{DIM}  ↹ Round {round} compacted{RESET}");
+            }
+
             CouncilEvent::SynthesisStart => {
                 in_synthesis = true;
                 eprintln!("\n\x1b[36m{BOLD}── Council Synthesis ──{RESET}");

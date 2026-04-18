@@ -18,7 +18,8 @@
 //! | `round.rs`        | Sequential round execution (per-agent turn driver)  |
 //! | `synthesis.rs`    | Synthesis pass (transcript → unified answer)        |
 //! | `judge.rs`        | Post-round judge + adaptive early stopping          |
-//! | `orchestrator.rs` | Slim coordinator (rounds → judge → synthesis)       |
+//! | `compaction.rs`   | LLM-driven round summarisation for context control  |
+//! | `orchestrator.rs` | Slim coordinator (rounds → compaction → judge → synthesis) |
 //! | `suggest.rs`      | `suggest_council()` — shared suggest orchestration  |
 
 pub mod config;
@@ -26,6 +27,7 @@ pub mod events;
 pub mod history;
 pub mod orchestrator;
 pub mod prompts;
+mod compaction;
 mod judge;
 mod round;
 pub mod state;
