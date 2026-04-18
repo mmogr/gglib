@@ -15,6 +15,7 @@
 //!   │       └─ judge::run_judge()              (judge.rs)
 //!   │           └─ if consensus && may_stop → break
 //!   │
+//!   ├─ stance::evaluate_stances()              (stance.rs)
 //!   └─ synthesis::run_synthesis()              (synthesis.rs)
 //! ```
 
@@ -30,10 +31,11 @@ use super::config::CouncilConfig;
 use super::events::CouncilEvent;
 use super::judge::{may_stop_early, run_judge};
 use super::round::{RoundContext, run_sequential_round};
+use super::stance::evaluate_stances;
 use super::state::CouncilState;
 use super::synthesis::run_synthesis;
 
-/// Runs a full council deliberation: debate rounds → compaction → optional judge → synthesis.
+/// Runs a full council deliberation: debate rounds → compaction → optional judge → stance evaluation → synthesis.
 ///
 /// This function is the only public entry point.  It coordinates the
 /// high-level phase sequence and delegates per-agent turn execution to
@@ -133,6 +135,9 @@ pub async fn run(
             }
         }
     }
+
+    // ── stance evaluation ────────────────────────────────────────────────
+    evaluate_stances(&state, &llm, &tool_executor, &council_tx, &config.topic).await;
 
     // ── synthesis ────────────────────────────────────────────────────────
     run_synthesis(

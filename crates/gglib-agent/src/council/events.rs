@@ -105,6 +105,13 @@ pub enum CouncilEvent {
     /// replaces the full transcript in subsequent agents' context windows.
     RoundCompacted { round: u32, summary: String },
 
+    // ── stance tracking ───────────────────────────────────────────────────
+    /// Per-agent stance trajectory evaluation emitted after all debate
+    /// rounds complete and before synthesis begins.
+    StanceMap {
+        stances: Vec<super::stance::AgentStance>,
+    },
+
     // ── synthesis ────────────────────────────────────────────────────────
     /// The synthesis phase has begun.  The frontend renders a
     /// "Synthesising…" placeholder.
@@ -223,6 +230,12 @@ mod tests {
             CouncilEvent::RoundCompacted {
                 round: 0,
                 summary: "[Skeptic]: Bad idea.\n[Pragmatist]: Good idea.".into(),
+            },
+            CouncilEvent::StanceMap {
+                stances: vec![crate::council::stance::AgentStance {
+                    agent_name: "Skeptic".into(),
+                    trajectory: crate::council::stance::StanceTrajectory::Held,
+                }],
             },
             CouncilEvent::SynthesisStart,
             CouncilEvent::SynthesisTextDelta {

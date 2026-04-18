@@ -40,6 +40,7 @@ export type CouncilEvent =
   | JudgeTextDeltaEvent
   | JudgeSummaryEvent
   | RoundCompactedEvent
+  | StanceMapEvent
   | SynthesisStartEvent
   | SynthesisTextDeltaEvent
   | SynthesisCompleteEvent
@@ -118,6 +119,18 @@ export interface RoundCompactedEvent {
   type: 'round_compacted';
   round: number;
   summary: string;
+}
+
+export type StanceTrajectory = 'held' | 'shifted' | 'conceded';
+
+export interface AgentStance {
+  agent_name: string;
+  trajectory: StanceTrajectory;
+}
+
+export interface StanceMapEvent {
+  type: 'stance_map';
+  stances: AgentStance[];
 }
 
 export interface SynthesisStartEvent {

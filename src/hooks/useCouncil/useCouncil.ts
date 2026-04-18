@@ -110,6 +110,8 @@ function eventToAction(event: CouncilEvent): CouncilAction | null {
       };
     case 'round_compacted':
       return { type: 'ROUND_COMPACTED', round: event.round, summary: event.summary };
+    case 'stance_map':
+      return { type: 'STANCE_MAP', stances: event.stances };
     case 'synthesis_start':
       return { type: 'SYNTHESIS_START' };
     case 'synthesis_text_delta':
