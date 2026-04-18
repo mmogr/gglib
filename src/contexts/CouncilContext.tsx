@@ -15,6 +15,7 @@ import {
   type CouncilAgent,
   type AgentContribution,
   type AgentToolCall,
+  type AgentStance,
 } from '../types/council';
 
 // ─── Actions ────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ export type CouncilAction =
   | { type: 'SUGGEST_COMPLETE'; agents: CouncilAgent[]; rounds: number; synthesisGuidance?: string }
   | { type: 'SUGGEST_ERROR'; error: string }
   | { type: 'START_DELIBERATION'; topic: string; totalRounds: number }
-  | { type: 'AGENT_TURN_START'; agentId: string; agentName: string; color: string; round: number; contentiousness: number }
+  | { type: 'AGENT_TURN_START'; agentId: string; agentName: string; color: string; round: number; contentiousness: number; rebuttalTarget?: string }
   | { type: 'AGENT_TEXT_DELTA'; agentId: string; delta: string }
   | { type: 'AGENT_REASONING_DELTA'; agentId: string; delta: string }
   | { type: 'AGENT_TOOL_CALL_START'; toolCall: AgentToolCall }
@@ -36,7 +37,7 @@ export type CouncilAction =
   | { type: 'JUDGE_TEXT_DELTA'; delta: string }
   | { type: 'JUDGE_SUMMARY'; round: number; summary: string; consensusReached: boolean }
   | { type: 'ROUND_COMPACTED'; round: number; summary: string }
-  | { type: 'STANCE_MAP'; stances: import('../types/council').AgentStance[] }
+  | { type: 'STANCE_MAP'; stances: AgentStance[] }
   | { type: 'SYNTHESIS_START' }
   | { type: 'SYNTHESIS_TEXT_DELTA'; delta: string }
   | { type: 'SYNTHESIS_COMPLETE'; content: string }
@@ -91,6 +92,7 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
         activeAgentText: '',
         activeAgentReasoning: '',
         activeToolCalls: [],
+        activeRebuttalTarget: action.rebuttalTarget,
         currentRound: action.round,
       };
 
@@ -115,7 +117,11 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
         ),
       };
 
-    case 'AGENT_TURN_COMPLETE':
+    case 'AGENT_TURN_COMPLETE': {
+      const enriched: AgentContribution = {
+        ...action.contribution,
+        rebuttalTarget: action.contribution.rebuttalTarget ?? state.activeRebuttalTarget,
+      };
       return {
         ...state,
         activeAgentId: null,
@@ -125,33 +131,42 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
         activeAgentText: '',
         activeAgentReasoning: '',
         activeToolCalls: [],
-        contributions: [...state.contributions, action.contribution],
+        activeRebuttalTarget: undefined,
+        contributions: [...state.contributions, enriched],
       };
+    }
 
     case 'ROUND_SEPARATOR':
       return { ...state, currentRound: action.round };
 
     case 'JUDGE_START':
-      return { ...state, phase: 'judging', judgeText: '' };
+      return { ...state, phase: 'judging', activeJudgeText: '', activeJudgeRound: action.round };
 
     case 'JUDGE_TEXT_DELTA':
-      return { ...state, judgeText: state.judgeText + action.delta };
+      return { ...state, activeJudgeText: state.activeJudgeText + action.delta };
 
     case 'JUDGE_SUMMARY':
       return {
         ...state,
         phase: 'deliberating',
-        judgeSummary: action.summary,
-        judgeConsensusReached: action.consensusReached,
+        judgeAssessments: [
+          ...state.judgeAssessments,
+          { round: action.round, summary: action.summary, consensusReached: action.consensusReached },
+        ],
+        activeJudgeText: '',
       };
 
     case 'ROUND_COMPACTED':
-      // Informational only — no state change needed for the UI.
-      return state;
+      return {
+        ...state,
+        compactedRounds: [
+          ...state.compactedRounds,
+          { round: action.round, summary: action.summary },
+        ],
+      };
 
     case 'STANCE_MAP':
-      // Informational only — stances are rendered from the event stream.
-      return state;
+      return { ...state, stances: action.stances };
 
     case 'SYNTHESIS_START':
       return { ...state, phase: 'synthesizing', synthesisText: '' };
