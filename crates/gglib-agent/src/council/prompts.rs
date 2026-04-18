@@ -221,6 +221,21 @@ Rules:
 - If the initial or final claim is missing, classify as \"Held\" (insufficient evidence to judge movement).
 - Output ONLY the STANCE lines — no explanation, no commentary, no additional text.";
 
+// ─── filesystem context ──────────────────────────────────────────────────────
+
+/// Appended to the agent system prompt when a working directory is available,
+/// informing the agent about filesystem tools.
+///
+/// The `"\n\nWorking directory: {cwd}"` line is appended separately by the
+/// caller so this constant stays format-arg-free.
+///
+/// Phrasing mirrors `agent_question::SYSTEM_PROMPT` to keep tool descriptions
+/// consistent across CLI entry-points.
+pub const FILESYSTEM_TOOLS_CONTEXT: &str = "\n\n\
+You have access to filesystem tools (read_file, list_directory, grep_search) \
+scoped to the user's working directory. Use them to find evidence supporting \
+your position.";
+
 // ─── contentiousness mapping ─────────────────────────────────────────────────
 
 /// Map a contentiousness float to a discrete behavioural instruction string.

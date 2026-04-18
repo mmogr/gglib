@@ -101,18 +101,25 @@ pub struct CouncilPorts {
 /// [`ToolExecutorPort`] separately, because
 /// [`gglib_agent::council::run_council`] creates per-agent `AgentLoop`
 /// instances internally (each with its own tool filter).
+///
+/// When `sandbox_root` is `Some`, filesystem tools (`read_file`,
+/// `list_directory`, `grep_search`) are enabled and scoped to that path.
 pub fn compose_council_ports(
     base_url: String,
     http_client: Client,
     model: Option<String>,
     mcp: Arc<McpService>,
+    sandbox_root: Option<PathBuf>,
 ) -> CouncilPorts {
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
         base_url,
         http_client,
         model,
     ));
-    let tool_executor: Arc<dyn ToolExecutorPort> = Arc::new(CombinedToolExecutor::new(mcp));
+    let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
+        Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
+        None => Arc::new(CombinedToolExecutor::new(mcp)),
+    };
     CouncilPorts { llm, tool_executor }
 }
 

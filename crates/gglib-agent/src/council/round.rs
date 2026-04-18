@@ -10,6 +10,7 @@
 //! - contribution recording (content + core claim extraction)
 
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
@@ -37,6 +38,7 @@ pub(super) struct RoundContext<'a> {
     pub llm: &'a Arc<dyn LlmCompletionPort>,
     pub tool_executor: &'a Arc<dyn ToolExecutorPort>,
     pub council_tx: &'a mpsc::Sender<CouncilEvent>,
+    pub cwd: Option<&'a Path>,
 }
 
 /// Execute a single debate round sequentially: each agent speaks in
@@ -82,7 +84,7 @@ async fn run_agent_turn(
     // Assemble context with identity anchoring + debate transcript.
     // This also returns the rebuttal target name (if any) for the start event.
     let (messages, rebuttal_target) =
-        build_agent_messages(agent, &ctx.config.topic, round, ctx.config.rounds, state);
+        build_agent_messages(agent, &ctx.config.topic, round, ctx.config.rounds, state, ctx.cwd);
 
     // Announce the turn (after building messages so we have the rebuttal target).
     let start = CouncilEvent::AgentTurnStart {
