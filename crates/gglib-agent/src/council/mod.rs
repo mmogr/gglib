@@ -19,7 +19,8 @@
 //! | `synthesis.rs`    | Synthesis pass (transcript → unified answer)        |
 //! | `judge.rs`        | Post-round judge + adaptive early stopping          |
 //! | `compaction.rs`   | LLM-driven round summarisation for context control  |
-//! | `orchestrator.rs` | Slim coordinator (rounds → compaction → judge → synthesis) |
+//! | `stance.rs`       | Post-debate stance tracking (Held/Shifted/Conceded)  |
+//! | `orchestrator.rs` | Slim coordinator (rounds → compaction → judge → stance → synthesis) |
 //! | `suggest.rs`      | `suggest_council()` — shared suggest orchestration  |
 
 pub mod config;
@@ -30,6 +31,7 @@ pub mod prompts;
 mod compaction;
 mod judge;
 mod round;
+pub mod stance;
 pub mod state;
 pub mod stream_bridge;
 pub mod suggest;

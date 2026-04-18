@@ -135,6 +135,25 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 eprintln!("{DIM}  ↹ Round {round} compacted{RESET}");
             }
 
+            CouncilEvent::StanceMap { stances } => {
+                eprintln!("\n{DIM}── Stance Trajectories ──{RESET}");
+                // Find the longest agent name for alignment.
+                let max_name = stances.iter().map(|s| s.agent_name.len()).max().unwrap_or(0);
+                for s in &stances {
+                    let label = s.trajectory.label();
+                    let color = match s.trajectory {
+                        gglib_agent::council::stance::StanceTrajectory::Held => "\x1b[32m",
+                        gglib_agent::council::stance::StanceTrajectory::Shifted => "\x1b[33m",
+                        gglib_agent::council::stance::StanceTrajectory::Conceded => "\x1b[31m",
+                    };
+                    eprintln!(
+                        "  {BOLD}{:<width$}{RESET}  {color}{label}{RESET}",
+                        s.agent_name,
+                        width = max_name,
+                    );
+                }
+            }
+
             CouncilEvent::SynthesisStart => {
                 in_synthesis = true;
                 eprintln!("\n\x1b[36m{BOLD}── Council Synthesis ──{RESET}");

@@ -62,7 +62,9 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | `council/round` | Sequential round execution (per-agent turn driver) |
 | `council/synthesis` | Synthesis pass (transcript → unified answer) |
 | `council/judge` | Post-round judge evaluation + adaptive early stopping |
-| `council/orchestrator` | Slim coordinator (rounds → judge → synthesis) |
+| `council/compaction` | LLM-driven round summarisation for context control |
+| `council/stance` | Post-debate stance tracking (Held/Shifted/Conceded) |
+| `council/orchestrator` | Slim coordinator (rounds → compaction → judge → stance → synthesis) |
 | `council/suggest` | `suggest_council()` — shared suggest orchestration |
 <!-- MODULE_TABLE_END -->
 

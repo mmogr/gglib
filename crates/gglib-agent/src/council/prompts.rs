@@ -190,6 +190,37 @@ CONSENSUS_REACHED: false
 
 Do NOT add any text after the CONSENSUS_REACHED line.";
 
+// ─── stance evaluation ───────────────────────────────────────────────────────
+
+/// System prompt for the post-debate stance evaluation pass.
+///
+/// Placeholders: `{topic}`, `{claims}`.
+///
+/// The parser in `stance.rs` expects one `STANCE(Agent Name): Held|Shifted|Conceded`
+/// line per agent.  Parsing is case-insensitive, whitespace-tolerant, and
+/// strips markdown formatting artefacts.
+pub const STANCE_PROMPT: &str = "\
+You are an impartial analyst reviewing a multi-agent debate on the topic: \"{topic}\"
+
+For each agent below you are given their INITIAL core claim (from round 1) \
+and their FINAL core claim (from the last round). Your task is to classify \
+how each agent's position evolved during the debate.
+
+{claims}
+
+For each agent, output exactly one line:
+STANCE(Agent Name): <trajectory>
+
+Where <trajectory> is one of:
+- Held — the agent's final position is substantively the same as their initial position
+- Shifted — the agent materially changed their position but did not fully adopt an opposing view
+- Conceded — the agent abandoned their initial position and adopted a substantially different or opposing view
+
+Rules:
+- Compare the MEANING of the claims, not the exact wording. Minor rephrasing is \"Held\".
+- If the initial or final claim is missing, classify as \"Held\" (insufficient evidence to judge movement).
+- Output ONLY the STANCE lines — no explanation, no commentary, no additional text.";
+
 // ─── contentiousness mapping ─────────────────────────────────────────────────
 
 /// Map a contentiousness float to a discrete behavioural instruction string.
@@ -307,5 +338,11 @@ mod tests {
     fn compaction_prompt_has_placeholders() {
         assert!(COMPACTION_PROMPT.contains("{round}"));
         assert!(COMPACTION_PROMPT.contains("{transcript}"));
+    }
+
+    #[test]
+    fn stance_prompt_has_placeholders() {
+        assert!(STANCE_PROMPT.contains("{topic}"));
+        assert!(STANCE_PROMPT.contains("{claims}"));
     }
 }
