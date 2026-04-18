@@ -89,17 +89,10 @@ async fn run_agent_turn(
         .map(|names| names.iter().cloned().collect::<HashSet<String>>());
 
     // Build the agent loop with per-agent tool restrictions.
-    let agent_loop =
-        AgentLoop::build(Arc::clone(ctx.llm), Arc::clone(ctx.tool_executor), filter);
+    let agent_loop = AgentLoop::build(Arc::clone(ctx.llm), Arc::clone(ctx.tool_executor), filter);
 
     // Assemble context with identity anchoring + debate transcript.
-    let messages = build_agent_messages(
-        agent,
-        &ctx.config.topic,
-        round,
-        ctx.config.rounds,
-        state,
-    );
+    let messages = build_agent_messages(agent, &ctx.config.topic, round, ctx.config.rounds, state);
 
     // Delegate to AgentLoop — stagnation + loop guards are active
     // via agent_config settings (max_stagnation_steps, max_repeated_batch_steps).

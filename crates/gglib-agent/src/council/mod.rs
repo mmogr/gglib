@@ -23,13 +23,13 @@
 //! | `orchestrator.rs` | Slim coordinator (rounds → compaction → judge → stance → synthesis) |
 //! | `suggest.rs`      | `suggest_council()` — shared suggest orchestration  |
 
+mod compaction;
 pub mod config;
 pub mod events;
 pub mod history;
+mod judge;
 pub mod orchestrator;
 pub mod prompts;
-mod compaction;
-mod judge;
 mod round;
 pub mod stance;
 pub mod state;

@@ -88,7 +88,11 @@ pub(super) async fn run_judge(
     ];
 
     // Judge gets no tools — pure evaluation.
-    let agent = AgentLoop::build(Arc::clone(llm), Arc::clone(tool_executor), Some(HashSet::new()));
+    let agent = AgentLoop::build(
+        Arc::clone(llm),
+        Arc::clone(tool_executor),
+        Some(HashSet::new()),
+    );
     let mut config = AgentConfig::default();
     config.max_iterations = 1;
 
@@ -162,7 +166,10 @@ fn parse_judge_verdict(raw: &str, round: u32) -> JudgeVerdict {
     }
 
     if marker_line_idx.is_none() {
-        debug!(round, "judge output missing CONSENSUS_REACHED marker, defaulting to false");
+        debug!(
+            round,
+            "judge output missing CONSENSUS_REACHED marker, defaulting to false"
+        );
     }
 
     // Summary = everything before the marker line (or the full text if no marker).
@@ -184,10 +191,7 @@ fn parse_judge_verdict(raw: &str, round: u32) -> JudgeVerdict {
 /// contain the marker.
 fn extract_consensus_value(line: &str) -> Option<bool> {
     // Strip common markdown wrappers.
-    let cleaned: String = line
-        .chars()
-        .filter(|c| *c != '*' && *c != '`')
-        .collect();
+    let cleaned: String = line.chars().filter(|c| *c != '*' && *c != '`').collect();
 
     let lower = cleaned.to_lowercase();
 
@@ -344,14 +348,26 @@ mod tests {
 
     #[test]
     fn extract_plain() {
-        assert_eq!(extract_consensus_value("CONSENSUS_REACHED: true"), Some(true));
-        assert_eq!(extract_consensus_value("CONSENSUS_REACHED: false"), Some(false));
+        assert_eq!(
+            extract_consensus_value("CONSENSUS_REACHED: true"),
+            Some(true)
+        );
+        assert_eq!(
+            extract_consensus_value("CONSENSUS_REACHED: false"),
+            Some(false)
+        );
     }
 
     #[test]
     fn extract_with_markdown() {
-        assert_eq!(extract_consensus_value("**CONSENSUS_REACHED:** true"), Some(true));
-        assert_eq!(extract_consensus_value("`CONSENSUS_REACHED`: false"), Some(false));
+        assert_eq!(
+            extract_consensus_value("**CONSENSUS_REACHED:** true"),
+            Some(true)
+        );
+        assert_eq!(
+            extract_consensus_value("`CONSENSUS_REACHED`: false"),
+            Some(false)
+        );
     }
 
     #[test]

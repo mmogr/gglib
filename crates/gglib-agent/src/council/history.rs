@@ -17,8 +17,8 @@ use gglib_core::AgentMessage;
 
 use super::config::CouncilAgent;
 use super::prompts::{
-    AGENT_TURN_SYSTEM_PROMPT, DEBATE_HISTORY_SUFFIX, FINAL_ROUND_SUFFIX,
-    TARGETED_REBUTTAL_CUE, contentiousness_to_instruction,
+    AGENT_TURN_SYSTEM_PROMPT, DEBATE_HISTORY_SUFFIX, FINAL_ROUND_SUFFIX, TARGETED_REBUTTAL_CUE,
+    contentiousness_to_instruction,
 };
 use super::state::{AgentContribution, CouncilState};
 
@@ -339,10 +339,7 @@ mod tests {
         let a = agent("c", "Collaborator", 0.1);
         let target = select_rebuttal_target(&a, &state, 1).unwrap();
         assert_eq!(target.agent.id, "d");
-        assert_eq!(
-            target.core_claim.as_deref(),
-            Some("Total opposition.")
-        );
+        assert_eq!(target.core_claim.as_deref(), Some("Total opposition."));
     }
 
     #[test]

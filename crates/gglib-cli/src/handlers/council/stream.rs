@@ -104,9 +104,7 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
             }
 
             CouncilEvent::JudgeStart { round } => {
-                eprintln!(
-                    "\n{DIM}── Judge evaluating round {round} ──{RESET}"
-                );
+                eprintln!("\n{DIM}── Judge evaluating round {round} ──{RESET}");
             }
 
             CouncilEvent::JudgeTextDelta { delta } => {
@@ -125,9 +123,7 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                         "  \x1b[32m✓{RESET}  {BOLD}Consensus reached{RESET}  {DIM}{summary}{RESET}"
                     );
                 } else {
-                    eprintln!(
-                        "  {DIM}○  No consensus — debate continues  {summary}{RESET}"
-                    );
+                    eprintln!("  {DIM}○  No consensus — debate continues  {summary}{RESET}");
                 }
             }
 
@@ -138,7 +134,11 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
             CouncilEvent::StanceMap { stances } => {
                 eprintln!("\n{DIM}── Stance Trajectories ──{RESET}");
                 // Find the longest agent name for alignment.
-                let max_name = stances.iter().map(|s| s.agent_name.len()).max().unwrap_or(0);
+                let max_name = stances
+                    .iter()
+                    .map(|s| s.agent_name.len())
+                    .max()
+                    .unwrap_or(0);
                 for s in &stances {
                     let label = s.trajectory.label();
                     let color = match s.trajectory {

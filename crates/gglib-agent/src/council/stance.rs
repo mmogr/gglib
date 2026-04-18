@@ -171,7 +171,10 @@ pub(super) async fn evaluate_stances(
     let pairs = gather_claim_pairs(state);
 
     // If no agent ever produced a core claim, skip entirely.
-    if pairs.iter().all(|p| p.initial.is_none() && p.r#final.is_none()) {
+    if pairs
+        .iter()
+        .all(|p| p.initial.is_none() && p.r#final.is_none())
+    {
         debug!("no core claims found — skipping stance evaluation");
         return;
     }
@@ -278,10 +281,7 @@ pub(crate) fn parse_stances(raw: &str, agent_names: &[&str]) -> StanceMap {
 
 /// Try to extract a `STANCE(Name): Trajectory` from a single line.
 fn extract_stance_line(line: &str, agent_names: &[&str]) -> Option<AgentStance> {
-    let cleaned = line
-        .trim()
-        .replace("**", "")
-        .replace(['`', '*'], "");
+    let cleaned = line.trim().replace("**", "").replace(['`', '*'], "");
     let lower = cleaned.to_lowercase();
 
     // Find "stance(" case-insensitively
@@ -293,7 +293,9 @@ fn extract_stance_line(line: &str, agent_names: &[&str]) -> Option<AgentStance> 
     let name_raw = after_paren[..close_paren].trim();
 
     // Validate the name against known agents (case-insensitive)
-    let matched_name = agent_names.iter().find(|n| n.eq_ignore_ascii_case(name_raw))?;
+    let matched_name = agent_names
+        .iter()
+        .find(|n| n.eq_ignore_ascii_case(name_raw))?;
 
     // Get the trajectory after the colon
     let rest = after_paren[close_paren + 1..].trim();
@@ -309,10 +311,7 @@ fn extract_stance_line(line: &str, agent_names: &[&str]) -> Option<AgentStance> 
 
 /// Fallback parser: `[Agent Name]: Trajectory`
 fn extract_bracket_stance(line: &str, agent_names: &[&str]) -> Option<AgentStance> {
-    let cleaned = line
-        .trim()
-        .replace("**", "")
-        .replace(['`', '*'], "");
+    let cleaned = line.trim().replace("**", "").replace(['`', '*'], "");
     let trimmed = cleaned.trim();
 
     if !trimmed.starts_with('[') {
@@ -322,7 +321,9 @@ fn extract_bracket_stance(line: &str, agent_names: &[&str]) -> Option<AgentStanc
     let close_bracket = trimmed.find(']')?;
     let name_raw = trimmed[1..close_bracket].trim();
 
-    let matched_name = agent_names.iter().find(|n| n.eq_ignore_ascii_case(name_raw))?;
+    let matched_name = agent_names
+        .iter()
+        .find(|n| n.eq_ignore_ascii_case(name_raw))?;
 
     let rest = trimmed[close_bracket + 1..].trim();
     let trajectory_str = rest.strip_prefix(':').unwrap_or(rest).trim();
@@ -621,10 +622,7 @@ STANCE(Optimist): Conceded";
 
     #[test]
     fn trajectory_shifted() {
-        assert_eq!(
-            parse_trajectory("Shifted"),
-            Some(StanceTrajectory::Shifted)
-        );
+        assert_eq!(parse_trajectory("Shifted"), Some(StanceTrajectory::Shifted));
         assert_eq!(
             parse_trajectory("shifted position"),
             Some(StanceTrajectory::Shifted)

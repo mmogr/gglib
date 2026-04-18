@@ -138,7 +138,10 @@ pub(super) async fn compact_round(
     let _ = council_tx
         .send(CouncilEvent::RoundCompacted {
             round,
-            summary: state.compacted_summary(round).unwrap_or_default().to_owned(),
+            summary: state
+                .compacted_summary(round)
+                .unwrap_or_default()
+                .to_owned(),
         })
         .await;
 }
@@ -198,10 +201,7 @@ pub(super) fn parse_compacted_summaries(
 /// parsing.
 fn extract_summary_line(line: &str) -> Option<(String, String)> {
     // Strip markdown wrappers.
-    let cleaned: String = line
-        .chars()
-        .filter(|c| *c != '*' && *c != '`')
-        .collect();
+    let cleaned: String = line.chars().filter(|c| *c != '*' && *c != '`').collect();
 
     let lower = cleaned.to_lowercase();
 
@@ -242,9 +242,7 @@ fn extract_bracket_line(line: &str, expected_agents: &[String]) -> Option<(Strin
     let name = after_bracket[..close_idx].trim();
 
     // Only accept if the name matches a known agent.
-    let matched = expected_agents
-        .iter()
-        .any(|a| a.eq_ignore_ascii_case(name));
+    let matched = expected_agents.iter().any(|a| a.eq_ignore_ascii_case(name));
     if !matched {
         return None;
     }
@@ -270,8 +268,7 @@ mod tests {
     #[test]
     fn canonical_summary_line() {
         let (name, text) =
-            extract_summary_line("SUMMARY(Skeptic): They argued against the proposal.")
-                .unwrap();
+            extract_summary_line("SUMMARY(Skeptic): They argued against the proposal.").unwrap();
         assert_eq!(name, "Skeptic");
         assert_eq!(text, "They argued against the proposal.");
     }
@@ -288,8 +285,7 @@ mod tests {
     #[test]
     fn backtick_wrapping() {
         let (name, text) =
-            extract_summary_line("`SUMMARY(Expert)`: Domain-specific evidence was cited.")
-                .unwrap();
+            extract_summary_line("`SUMMARY(Expert)`: Domain-specific evidence was cited.").unwrap();
         assert_eq!(name, "Expert");
         assert_eq!(text, "Domain-specific evidence was cited.");
     }
@@ -297,8 +293,7 @@ mod tests {
     #[test]
     fn lowercase_summary() {
         let (name, text) =
-            extract_summary_line("summary(devil's advocate): Everything is wrong.")
-                .unwrap();
+            extract_summary_line("summary(devil's advocate): Everything is wrong.").unwrap();
         assert_eq!(name, "devil's advocate");
         assert_eq!(text, "Everything is wrong.");
     }
@@ -306,8 +301,7 @@ mod tests {
     #[test]
     fn extra_spacing() {
         let (name, text) =
-            extract_summary_line("SUMMARY ( Skeptic ) :  They had concerns.  ")
-                .unwrap();
+            extract_summary_line("SUMMARY ( Skeptic ) :  They had concerns.  ").unwrap();
         assert_eq!(name, "Skeptic");
         assert_eq!(text, "They had concerns.");
     }
@@ -338,8 +332,7 @@ mod tests {
     #[test]
     fn bracket_line_matches_known_agent() {
         let agents = vec!["Skeptic".into(), "Pragmatist".into()];
-        let (name, text) =
-            extract_bracket_line("[Skeptic]: They disagreed.", &agents).unwrap();
+        let (name, text) = extract_bracket_line("[Skeptic]: They disagreed.", &agents).unwrap();
         assert_eq!(name, "Skeptic");
         assert_eq!(text, "They disagreed.");
     }
@@ -347,8 +340,7 @@ mod tests {
     #[test]
     fn bracket_line_case_insensitive_match() {
         let agents = vec!["Skeptic".into()];
-        let (name, _) =
-            extract_bracket_line("[skeptic]: Something.", &agents).unwrap();
+        let (name, _) = extract_bracket_line("[skeptic]: Something.", &agents).unwrap();
         assert_eq!(name, "skeptic");
     }
 
@@ -373,11 +365,7 @@ SUMMARY(Skeptic): Bad idea overall.
 SUMMARY(Pragmatist): Practical compromise needed.
 SUMMARY(Expert): Evidence supports option B.";
 
-        let agents = vec![
-            "Skeptic".into(),
-            "Pragmatist".into(),
-            "Expert".into(),
-        ];
+        let agents = vec!["Skeptic".into(), "Pragmatist".into(), "Expert".into()];
         let result = parse_compacted_summaries(raw, &agents);
         assert_eq!(result.len(), 3);
         assert_eq!(result[0].0, "Skeptic");

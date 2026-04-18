@@ -102,7 +102,15 @@ pub async fn run(
         // ── compaction ───────────────────────────────────────────────────
         // Summarise the just-completed round so that future agents see a
         // compact version rather than the full transcript.
-        compact_round(round, &mut state, &llm, &tool_executor, &council_tx, &config.topic).await;
+        compact_round(
+            round,
+            &mut state,
+            &llm,
+            &tool_executor,
+            &council_tx,
+            &config.topic,
+        )
+        .await;
 
         // ── optional judge evaluation ────────────────────────────────────
         if let Some(ref judge_config) = config.judge {
@@ -126,8 +134,7 @@ pub async fn run(
                     if verdict.consensus_reached && may_stop_early(judge_config, completed_rounds) {
                         info!(
                             round,
-                            completed_rounds,
-                            "judge detected consensus — stopping early"
+                            completed_rounds, "judge detected consensus — stopping early"
                         );
                         break;
                     }
