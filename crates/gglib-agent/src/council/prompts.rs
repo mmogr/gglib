@@ -121,6 +121,36 @@ single agent could provide alone.";
 
 // ─── contentiousness mapping ─────────────────────────────────────────────────
 
+/// System prompt for the post-round judge evaluation.
+///
+/// Placeholders: `{topic}`, `{round}`, `{total_rounds}`, `{transcript}`.
+///
+/// The judge must end with a `CONSENSUS_REACHED:` line.  The parser in
+/// `judge.rs` uses robust, case-insensitive matching to tolerate markdown
+/// wrapping, extra whitespace, or conversational filler.
+pub const JUDGE_PROMPT: &str = "\
+You are a neutral judge evaluating a structured multi-agent debate on the topic: \"{topic}\"
+
+This is the end of round {round} (of a maximum of {total_rounds}).
+
+DEBATE TRANSCRIPT SO FAR:
+{transcript}
+
+YOUR TASK:
+1. Summarise the current state of the debate in 2-4 sentences: what are the key positions, \
+where do agents agree, and what genuine disagreements remain?
+2. Determine whether consensus has been reached. Consensus means the agents' core positions \
+have converged to a shared conclusion — not that they agree on every detail, but that there \
+is a clear dominant answer with no substantive opposition remaining.
+
+IMPORTANT: You MUST end your response with exactly one of these two lines:
+CONSENSUS_REACHED: true
+CONSENSUS_REACHED: false
+
+Do NOT add any text after the CONSENSUS_REACHED line.";
+
+// ─── contentiousness mapping ─────────────────────────────────────────────────
+
 /// Map a contentiousness float to a discrete behavioural instruction string.
 ///
 /// Small models cannot interpret a raw float like `0.7`.  This function maps
@@ -216,5 +246,13 @@ mod tests {
     #[test]
     fn negative_contentiousness_treated_as_collaborative() {
         assert!(contentiousness_to_instruction(-0.5).contains("collaborative"));
+    }
+
+    #[test]
+    fn judge_prompt_has_placeholders() {
+        assert!(JUDGE_PROMPT.contains("{topic}"));
+        assert!(JUDGE_PROMPT.contains("{round}"));
+        assert!(JUDGE_PROMPT.contains("{total_rounds}"));
+        assert!(JUDGE_PROMPT.contains("{transcript}"));
     }
 }

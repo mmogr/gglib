@@ -24,17 +24,23 @@ export interface CouncilAgent {
   tool_filter?: string[];
 }
 
+export interface JudgeConfig {
+  min_rounds_before_stop?: number;
+}
+
 export interface CouncilConfig {
   agents: CouncilAgent[];
   topic: string;
   rounds: number;
   synthesis_guidance?: string;
+  judge?: JudgeConfig;
 }
 
 export interface SuggestedCouncil {
   agents: CouncilAgent[];
   rounds: number;
   synthesis_guidance?: string;
+  judge?: JudgeConfig;
 }
 
 // ─── Suggest ────────────────────────────────────────────────────────────────

@@ -103,6 +103,34 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 eprintln!("\n{DIM}═══════════════════ Round {round} ═══════════════════{RESET}");
             }
 
+            CouncilEvent::JudgeStart { round } => {
+                eprintln!(
+                    "\n{DIM}── Judge evaluating round {round} ──{RESET}"
+                );
+            }
+
+            CouncilEvent::JudgeTextDelta { delta } => {
+                eprint!("{DIM}{delta}{RESET}");
+                let _ = io::stderr().flush();
+            }
+
+            CouncilEvent::JudgeSummary {
+                consensus_reached,
+                summary,
+                ..
+            } => {
+                eprintln!();
+                if consensus_reached {
+                    eprintln!(
+                        "  \x1b[32m✓{RESET}  {BOLD}Consensus reached{RESET}  {DIM}{summary}{RESET}"
+                    );
+                } else {
+                    eprintln!(
+                        "  {DIM}○  No consensus — debate continues  {summary}{RESET}"
+                    );
+                }
+            }
+
             CouncilEvent::SynthesisStart => {
                 in_synthesis = true;
                 eprintln!("\n\x1b[36m{BOLD}── Council Synthesis ──{RESET}");

@@ -248,6 +248,7 @@ async fn edit_then_run(config: &mut CouncilConfig, ports: CouncilPorts) -> Resul
                     agents: config.agents.clone(),
                     rounds: config.rounds,
                     synthesis_guidance: config.synthesis_guidance.clone(),
+                    judge: config.judge.clone(),
                 };
                 let prev_json = serde_json::to_string(&prev)?;
 
