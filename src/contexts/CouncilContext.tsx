@@ -26,7 +26,7 @@ export type CouncilAction =
   | { type: 'SUGGEST_COMPLETE'; agents: CouncilAgent[]; rounds: number; synthesisGuidance?: string }
   | { type: 'SUGGEST_ERROR'; error: string }
   | { type: 'START_DELIBERATION'; topic: string; totalRounds: number }
-  | { type: 'AGENT_TURN_START'; agentId: string; agentName: string; color: string; round: number; contentiousness: number; rebuttalTarget?: string }
+  | { type: 'AGENT_TURN_START'; agentId: string; agentName: string; color: string; round: number; contentiousness: number }
   | { type: 'AGENT_TEXT_DELTA'; agentId: string; delta: string }
   | { type: 'AGENT_REASONING_DELTA'; agentId: string; delta: string }
   | { type: 'AGENT_TOOL_CALL_START'; toolCall: AgentToolCall }
@@ -92,7 +92,6 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
         activeAgentText: '',
         activeAgentReasoning: '',
         activeToolCalls: [],
-        activeRebuttalTarget: action.rebuttalTarget,
         currentRound: action.round,
       };
 
@@ -118,10 +117,6 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
       };
 
     case 'AGENT_TURN_COMPLETE': {
-      const enriched: AgentContribution = {
-        ...action.contribution,
-        rebuttalTarget: action.contribution.rebuttalTarget ?? state.activeRebuttalTarget,
-      };
       return {
         ...state,
         activeAgentId: null,
@@ -131,8 +126,7 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
         activeAgentText: '',
         activeAgentReasoning: '',
         activeToolCalls: [],
-        activeRebuttalTarget: undefined,
-        contributions: [...state.contributions, enriched],
+        contributions: [...state.contributions, action.contribution],
       };
     }
 

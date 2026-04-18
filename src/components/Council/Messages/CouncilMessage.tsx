@@ -69,7 +69,6 @@ export interface CouncilMessageProps {
     text: string;
     reasoning: string;
     toolCalls: AgentToolCall[];
-    rebuttalTarget?: string;
   };
 }
 
@@ -82,7 +81,6 @@ export const CouncilMessage: FC<CouncilMessageProps> = ({ contribution, streamin
   const reasoning = streaming?.reasoning ?? '';
   const toolCalls = streaming?.toolCalls ?? [];
   const coreClaim = contribution?.coreClaim;
-  const rebuttalTarget = contribution?.rebuttalTarget ?? streaming?.rebuttalTarget;
   const isStreaming = !!streaming;
 
   return (
@@ -106,11 +104,6 @@ export const CouncilMessage: FC<CouncilMessageProps> = ({ contribution, streamin
         <span className="text-sm font-semibold text-text">{source.agentName}</span>
         {contribution && (
           <span className="text-xs text-text-muted">Round {contribution.round + 1}</span>
-        )}
-        {rebuttalTarget && (
-          <span className="text-xs text-text-secondary italic">
-            ↳ responding to {rebuttalTarget}
-          </span>
         )}
       </div>
 

@@ -82,8 +82,7 @@ async fn run_agent_turn(
     let agent_loop = AgentLoop::build(Arc::clone(ctx.llm), Arc::clone(ctx.tool_executor), filter);
 
     // Assemble context with identity anchoring + debate transcript.
-    // This also returns the rebuttal target name (if any) for the start event.
-    let (messages, rebuttal_target) = build_agent_messages(
+    let messages = build_agent_messages(
         agent,
         &ctx.config.topic,
         round,
@@ -92,14 +91,13 @@ async fn run_agent_turn(
         ctx.cwd,
     );
 
-    // Announce the turn (after building messages so we have the rebuttal target).
+    // Announce the turn.
     let start = CouncilEvent::AgentTurnStart {
         agent_id: agent.id.clone(),
         agent_name: agent.name.clone(),
         color: agent.color.clone(),
         round,
         contentiousness: agent.contentiousness,
-        rebuttal_target,
     };
     if ctx.council_tx.send(start).await.is_err() {
         return Err(());

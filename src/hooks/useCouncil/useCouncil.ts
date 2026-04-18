@@ -58,7 +58,6 @@ function eventToAction(event: CouncilEvent): CouncilAction | null {
         color: event.color,
         round: event.round,
         contentiousness: event.contentiousness,
-        rebuttalTarget: event.rebuttal_target,
       };
     case 'agent_text_delta':
       return { type: 'AGENT_TEXT_DELTA', agentId: event.agent_id, delta: event.delta };

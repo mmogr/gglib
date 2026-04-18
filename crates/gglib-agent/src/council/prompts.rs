@@ -82,22 +82,13 @@ RULES:
 prefixed with \"CORE CLAIM:\" (e.g., \"CORE CLAIM: Microservices add more operational cost \
 than they save for teams under 20 engineers.\"). If you cannot form a single claim, omit this line.";
 
-/// Appended to the system prompt when the agent has prior rounds to respond to
-/// but no directed rebuttal target is available (no prior core claims).
-pub const DEBATE_HISTORY_SUFFIX: &str = "\n\n\
-Respond to the strongest counterarguments from previous rounds. \
-Strengthen, revise, or concede specific points.";
-
-/// Appended instead of [`DEBATE_HISTORY_SUFFIX`] when a directed rebuttal
-/// target has been selected.
-///
-/// Placeholders: `{target_name}`, `{target_claim}`.
-pub const TARGETED_REBUTTAL_CUE: &str = "\n\n\
-DIRECTED REBUTTAL: You must directly address {target_name}'s core claim: \
-\"{target_claim}\"\n\
-Explain specifically why you agree or disagree with this position from your \
-perspective. Strengthen, revise, or concede specific points — but do not \
-ignore their argument.";
+/// Appended to the system prompt when the agent has prior rounds to respond
+/// to.  Lets the agent autonomously choose which argument to rebut based on
+/// genuine conflict rather than a mechanically-assigned target.
+pub const GUIDED_REBUTTAL_CUE: &str = "\n\n\
+Review the previous round's core claims. Identify the argument that most \
+directly conflicts with your perspective and construct a focused rebuttal \
+against it. Strengthen, revise, or concede specific points.";
 
 /// Appended to the system prompt in the last debate round.
 pub const FINAL_ROUND_SUFFIX: &str = "\n\n\
@@ -344,9 +335,9 @@ mod tests {
     }
 
     #[test]
-    fn rebuttal_cue_has_placeholders() {
-        assert!(TARGETED_REBUTTAL_CUE.contains("{target_name}"));
-        assert!(TARGETED_REBUTTAL_CUE.contains("{target_claim}"));
+    fn guided_rebuttal_cue_is_non_empty() {
+        assert!(!GUIDED_REBUTTAL_CUE.is_empty());
+        assert!(GUIDED_REBUTTAL_CUE.contains("conflicts with your perspective"));
     }
 
     #[test]

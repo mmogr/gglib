@@ -252,7 +252,6 @@ export const CouncilThread: FC<CouncilThreadProps> = ({
                   text: session.activeAgentText,
                   reasoning: session.activeAgentReasoning,
                   toolCalls: session.activeToolCalls,
-                  rebuttalTarget: session.activeRebuttalTarget,
                 }}
               />
             );

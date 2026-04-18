@@ -54,7 +54,6 @@ export interface AgentTurnStartEvent {
   color: string;
   round: number;
   contentiousness: number;
-  rebuttal_target?: string;
 }
 
 export interface AgentTextDeltaEvent {
@@ -168,8 +167,6 @@ export interface AgentContribution {
   content: string;
   coreClaim?: string;
   round: number;
-  /** Name of the agent whose claim is being rebutted, if any. */
-  rebuttalTarget?: string;
 }
 
 /** Tool call in progress or completed. */
@@ -244,8 +241,6 @@ export interface CouncilSession {
   stances: AgentStance[];
   /** Compacted round summaries. */
   compactedRounds: CompactedRound[];
-  /** Rebuttal target for the currently speaking agent. */
-  activeRebuttalTarget?: string;
   /** Synthesis text (streamed incrementally). */
   synthesisText: string;
   /** Error message if phase === 'error'. */
