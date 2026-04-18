@@ -15,7 +15,9 @@
 //! | `state.rs`        | Round/contribution accumulator                      |
 //! | `history.rs`      | Per-turn context builder (identity + transcript)    |
 //! | `stream_bridge.rs`| `AgentEvent` → `CouncilEvent` mapper                |
-//! | `orchestrator.rs` | Round×agent loop driver + synthesis dispatch         |
+//! | `round.rs`        | Sequential round execution (per-agent turn driver)  |
+//! | `synthesis.rs`    | Synthesis pass (transcript → unified answer)        |
+//! | `orchestrator.rs` | Slim coordinator (rounds → synthesis sequencing)    |
 //! | `suggest.rs`      | `suggest_council()` — shared suggest orchestration  |
 
 pub mod config;
@@ -23,9 +25,11 @@ pub mod events;
 pub mod history;
 pub mod orchestrator;
 pub mod prompts;
+mod round;
 pub mod state;
 pub mod stream_bridge;
 pub mod suggest;
+mod synthesis;
 
 pub use config::{CouncilAgent, CouncilConfig, SuggestedCouncil};
 pub use events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
