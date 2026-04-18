@@ -28,7 +28,9 @@ use gglib_core::domain::agent::AgentConfig;
 use gglib_core::{AgentMessage, AssistantContent, ProcessHandle, ServerConfig};
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;
-use gglib_runtime::llama::args::{resolve_jinja_flag, resolve_reasoning_format};
+use gglib_runtime::llama::args::{
+    ContextInput, resolve_context_size, resolve_jinja_flag, resolve_reasoning_format,
+};
 
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
@@ -43,8 +45,9 @@ pub async fn execute_suggest(
     port: Option<u16>,
     agent_count: u32,
     model: Option<String>,
+    ctx_size: Option<String>,
 ) -> Result<()> {
-    let (ports, handle) = init_session(ctx, port, model).await?;
+    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
     let res = suggest_council(ports.llm, ports.tool_executor, topic, agent_count, None).await;
     stop_server(ctx, &handle).await;
     let council = res?;
@@ -61,9 +64,10 @@ pub async fn execute_run(
     topic: &str,
     port: Option<u16>,
     model: Option<String>,
+    ctx_size: Option<String>,
 ) -> Result<()> {
     let config = load_config(config_path, topic)?;
-    let (ports, handle) = init_session(ctx, port, model).await?;
+    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
     let res = run_with_ports(config, ports).await;
     stop_server(ctx, &handle).await;
     res
@@ -78,8 +82,9 @@ pub async fn execute_interactive(
     port: Option<u16>,
     agent_count: u32,
     model: Option<String>,
+    ctx_size: Option<String>,
 ) -> Result<()> {
-    let (ports, handle) = init_session(ctx, port, model).await?;
+    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
     let suggested = suggest_council(
         Arc::clone(&ports.llm),
         Arc::clone(&ports.tool_executor),
@@ -105,9 +110,10 @@ pub async fn execute_edit(
     topic: &str,
     port: Option<u16>,
     model: Option<String>,
+    ctx_size: Option<String>,
 ) -> Result<()> {
     let mut config = load_config(config_path, topic)?;
-    let (ports, handle) = init_session(ctx, port, model).await?;
+    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
     render::render_config(&config);
     let res = edit_then_run(&mut config, ports).await;
     stop_server(ctx, &handle).await;
@@ -123,8 +129,9 @@ async fn init_session(
     ctx: &CliContext,
     port: Option<u16>,
     model: Option<String>,
+    ctx_size: Option<String>,
 ) -> Result<(CouncilPorts, Option<ProcessHandle>)> {
-    let (resolved_port, handle) = resolve_port(ctx, port, &model).await?;
+    let (resolved_port, handle) = resolve_port(ctx, port, &model, ctx_size).await?;
 
     if let Err(e) = ctx.mcp.initialize().await {
         tracing::warn!("MCP initialisation failed: {e}");
@@ -149,6 +156,7 @@ async fn resolve_port(
     ctx: &CliContext,
     port: Option<u16>,
     model_arg: &Option<String>,
+    ctx_size: Option<String>,
 ) -> Result<(u16, Option<ProcessHandle>)> {
     if let Some(p) = port {
         return Ok((p, None));
@@ -197,6 +205,21 @@ async fn resolve_port(
     let reasoning = resolve_reasoning_format(None, &model_id.tags);
     if let Some(format) = reasoning.format {
         server_config = server_config.with_reasoning_format(format);
+    }
+
+    let settings = ctx
+        .app
+        .settings()
+        .get()
+        .await
+        .unwrap_or_default();
+    let context_resolution = resolve_context_size(ContextInput {
+        flag: ctx_size,
+        model_context_length: model_id.context_length,
+        settings_default: settings.default_context_size,
+    })?;
+    if let Some(ctx) = context_resolution.value {
+        server_config = server_config.with_context_size(u64::from(ctx));
     }
 
     style::print_info_banner("Council", "\u{1f3db}\u{fe0f}");

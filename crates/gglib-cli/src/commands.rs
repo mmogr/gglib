@@ -50,6 +50,8 @@ pub enum ChatCommand {
         /// Reuse an already-running llama-server on this port (skips auto-start)
         #[arg(long)]
         port: Option<u16>,
+        #[command(flatten)]
+        context: ContextArgs,
     },
 }
 

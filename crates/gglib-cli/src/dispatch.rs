@@ -74,6 +74,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         agent_count,
                         model,
                         port,
+                        context,
                     } => {
                         if suggest {
                             handlers::council::execute_suggest(
@@ -82,6 +83,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                                 port,
                                 agent_count,
                                 model,
+                                context.ctx_size.clone(),
                             )
                             .await?;
                         } else if let Some(config_path) = config {
@@ -92,6 +94,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                                     &topic,
                                     port,
                                     model,
+                                    context.ctx_size.clone(),
                                 )
                                 .await?;
                             } else {
@@ -101,6 +104,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                                     &topic,
                                     port,
                                     model,
+                                    context.ctx_size.clone(),
                                 )
                                 .await?;
                             }
@@ -111,6 +115,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                                 port,
                                 agent_count,
                                 model,
+                                context.ctx_size,
                             )
                             .await?;
                         }
