@@ -70,18 +70,6 @@ async fn run_agent_turn(
     ctx: &RoundContext<'_>,
     state: &mut CouncilState,
 ) -> Result<(), ()> {
-    // Announce the turn.
-    let start = CouncilEvent::AgentTurnStart {
-        agent_id: agent.id.clone(),
-        agent_name: agent.name.clone(),
-        color: agent.color.clone(),
-        round,
-        contentiousness: agent.contentiousness,
-    };
-    if ctx.council_tx.send(start).await.is_err() {
-        return Err(());
-    }
-
     // Build per-agent tool filter.
     let filter = agent
         .tool_filter
@@ -92,7 +80,22 @@ async fn run_agent_turn(
     let agent_loop = AgentLoop::build(Arc::clone(ctx.llm), Arc::clone(ctx.tool_executor), filter);
 
     // Assemble context with identity anchoring + debate transcript.
-    let messages = build_agent_messages(agent, &ctx.config.topic, round, ctx.config.rounds, state);
+    // This also returns the rebuttal target name (if any) for the start event.
+    let (messages, rebuttal_target) =
+        build_agent_messages(agent, &ctx.config.topic, round, ctx.config.rounds, state);
+
+    // Announce the turn (after building messages so we have the rebuttal target).
+    let start = CouncilEvent::AgentTurnStart {
+        agent_id: agent.id.clone(),
+        agent_name: agent.name.clone(),
+        color: agent.color.clone(),
+        round,
+        contentiousness: agent.contentiousness,
+        rebuttal_target,
+    };
+    if ctx.council_tx.send(start).await.is_err() {
+        return Err(());
+    }
 
     // Delegate to AgentLoop — stagnation + loop guards are active
     // via agent_config settings (max_stagnation_steps, max_repeated_batch_steps).

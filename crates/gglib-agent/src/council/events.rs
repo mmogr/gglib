@@ -34,6 +34,9 @@ pub enum CouncilEvent {
         color: String,
         round: u32,
         contentiousness: f32,
+        /// Name of the agent whose claim is being rebutted, if any.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        rebuttal_target: Option<String>,
     },
 
     /// Incremental text token from the current agent's response.
@@ -143,11 +146,13 @@ mod tests {
             color: "#ef4444".into(),
             round: 1,
             contentiousness: 0.8,
+            rebuttal_target: None,
         };
         let json = serde_json::to_value(&event).unwrap();
         assert_eq!(json["type"], "agent_turn_start");
         assert_eq!(json["agent_name"], "Skeptic");
         assert_eq!(json["round"], 1);
+        assert!(json.get("rebuttal_target").is_none());
     }
 
     #[test]
@@ -208,6 +213,7 @@ mod tests {
                 color: "#000".into(),
                 round: 1,
                 contentiousness: 0.5,
+                rebuttal_target: Some("B".into()),
             },
             CouncilEvent::AgentTextDelta {
                 agent_id: "a".into(),

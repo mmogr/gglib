@@ -42,12 +42,16 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 agent_name,
                 round,
                 contentiousness,
+                rebuttal_target,
                 ..
             } => {
                 let color = temperature_fg(contentiousness);
                 current_agent_color = color;
                 in_synthesis = false;
                 eprintln!("\n{color}{BOLD}── {agent_name}{RESET}  {DIM}(round {round}){RESET}");
+                if let Some(target) = rebuttal_target {
+                    eprintln!("  {DIM}↳ responding to {target}{RESET}");
+                }
             }
 
             CouncilEvent::AgentTextDelta { delta, .. } => {

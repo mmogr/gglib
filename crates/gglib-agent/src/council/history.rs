@@ -24,9 +24,10 @@ use super::state::{AgentContribution, CouncilState};
 
 /// Build the message list for a single agent's turn in the council debate.
 ///
-/// Returns `[System(prompt), User(topic)]` — a two-message conversation
-/// that the `AgentLoop` will extend with tool calls and responses during
-/// its own run.
+/// Returns `(messages, rebuttal_target)` — the messages are
+/// `[System(prompt), User(topic)]` that the `AgentLoop` will extend with
+/// tool calls and responses during its own run.  `rebuttal_target` is the
+/// name of the agent whose claim is being rebutted, if any.
 ///
 /// # Arguments
 ///
@@ -42,19 +43,24 @@ pub fn build_agent_messages(
     round: u32,
     total_rounds: u32,
     state: &CouncilState,
-) -> Vec<AgentMessage> {
-    let system_prompt = build_agent_system_prompt(agent, topic, round, total_rounds, state);
-    vec![
+) -> (Vec<AgentMessage>, Option<String>) {
+    let (system_prompt, rebuttal_target) =
+        build_agent_system_prompt(agent, topic, round, total_rounds, state);
+    let messages = vec![
         AgentMessage::System {
             content: system_prompt,
         },
         AgentMessage::User {
             content: topic.to_owned(),
         },
-    ]
+    ];
+    (messages, rebuttal_target)
 }
 
 /// Assemble the full system prompt for a single agent turn.
+///
+/// Returns `(prompt, rebuttal_target_name)`.  The target name is `Some`
+/// only when a directed rebuttal cue was injected into the prompt.
 ///
 /// This is separated from [`build_agent_messages`] for testability.
 #[must_use]
@@ -64,7 +70,7 @@ pub fn build_agent_system_prompt(
     round: u32,
     total_rounds: u32,
     state: &CouncilState,
-) -> String {
+) -> (String, Option<String>) {
     let instruction = contentiousness_to_instruction(agent.contentiousness);
 
     #[allow(clippy::literal_string_with_formatting_args)]
@@ -74,6 +80,8 @@ pub fn build_agent_system_prompt(
         .replace("{topic}", topic)
         .replace("{perspective}", &agent.perspective)
         .replace("{contentiousness_instruction}", instruction);
+
+    let mut rebuttal_target = None;
 
     // Inject debate history from prior rounds.
     if round > 0 {
@@ -91,6 +99,7 @@ pub fn build_agent_system_prompt(
                         .replace("{target_name}", &target.agent.name)
                         .replace("{target_claim}", claim),
                 );
+                rebuttal_target = Some(target.agent.name.clone());
             } else {
                 prompt.push_str(DEBATE_HISTORY_SUFFIX);
             }
@@ -103,7 +112,7 @@ pub fn build_agent_system_prompt(
         prompt.push_str(FINAL_ROUND_SUFFIX);
     }
 
-    prompt
+    (prompt, rebuttal_target)
 }
 
 /// Format prior contributions as a labelled transcript block.
@@ -223,13 +232,14 @@ mod tests {
     fn round_0_no_history() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Test topic", 0, 3, &state);
+        let (prompt, target) = build_agent_system_prompt(&a, "Test topic", 0, 3, &state);
 
         assert!(prompt.contains("You are Skeptic."));
         assert!(prompt.contains("Skeptic is a test agent."));
         assert!(prompt.contains("rigorous critic"));
         assert!(!prompt.contains("DEBATE HISTORY"));
         assert!(!prompt.contains("FINAL ROUND"));
+        assert!(target.is_none());
     }
 
     #[test]
@@ -250,7 +260,7 @@ mod tests {
         state.advance_round();
 
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Test topic", 1, 3, &state);
+        let (prompt, _target) = build_agent_system_prompt(&a, "Test topic", 1, 3, &state);
 
         assert!(prompt.contains("DEBATE HISTORY:"));
         assert!(prompt.contains("=== Round 1 ==="));
@@ -264,7 +274,7 @@ mod tests {
     fn final_round_suffix_appended() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Topic", 2, 3, &state);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 2, 3, &state);
         assert!(prompt.contains("FINAL ROUND"));
     }
 
@@ -272,7 +282,7 @@ mod tests {
     fn single_round_is_also_final() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Topic", 0, 1, &state);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 0, 1, &state);
         assert!(prompt.contains("FINAL ROUND"));
     }
 
@@ -280,13 +290,14 @@ mod tests {
     fn build_agent_messages_structure() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let msgs = build_agent_messages(&a, "My topic", 0, 2, &state);
+        let (msgs, target) = build_agent_messages(&a, "My topic", 0, 2, &state);
 
         assert_eq!(msgs.len(), 2);
         assert!(
             matches!(&msgs[0], AgentMessage::System { content } if content.contains("Skeptic"))
         );
         assert!(matches!(&msgs[1], AgentMessage::User { content } if content == "My topic"));
+        assert!(target.is_none());
     }
 
     #[test]
@@ -398,13 +409,14 @@ mod tests {
 
         // Pragmatist (0.2) should target Skeptic (0.9) — most distant
         let a = agent("p", "Pragmatist", 0.2);
-        let prompt = build_agent_system_prompt(&a, "Architecture", 1, 3, &state);
+        let (prompt, target) = build_agent_system_prompt(&a, "Architecture", 1, 3, &state);
 
         assert!(prompt.contains("DIRECTED REBUTTAL"));
         assert!(prompt.contains("Skeptic's core claim"));
         assert!(prompt.contains("Monoliths scale better."));
         // Generic suffix should NOT appear when rebuttal cue is used
         assert!(!prompt.contains("Respond to the strongest counterarguments"));
+        assert_eq!(target.as_deref(), Some("Skeptic"));
     }
 
     #[test]
@@ -419,11 +431,12 @@ mod tests {
         state.advance_round();
 
         let a = agent("b", "Bob", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state);
+        let (prompt, target) = build_agent_system_prompt(&a, "Topic", 1, 3, &state);
 
         assert!(prompt.contains("DEBATE HISTORY"));
         assert!(prompt.contains("Respond to the strongest counterarguments"));
         assert!(!prompt.contains("DIRECTED REBUTTAL"));
+        assert!(target.is_none());
     }
 
     // ── compacted transcript tests ───────────────────────────────────────
@@ -460,7 +473,7 @@ mod tests {
 
         // At round 2, round 0 should be compacted, round 1 should be full
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Topic", 2, 3, &state);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 2, 3, &state);
 
         // Round 0 should show compacted summary
         assert!(prompt.contains("=== Round 1 (compacted) ==="));
@@ -487,7 +500,7 @@ mod tests {
 
         // No compaction applied — should show full text
         let a = agent("p", "Pragmatist", 0.3);
-        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 1, 3, &state);
 
         assert!(prompt.contains("=== Round 1 ==="));
         assert!(!prompt.contains("(compacted)"));
