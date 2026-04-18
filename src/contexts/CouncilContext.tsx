@@ -36,7 +36,7 @@ export type CouncilAction =
   | { type: 'JUDGE_TEXT_DELTA'; delta: string }
   | { type: 'JUDGE_SUMMARY'; round: number; summary: string; consensusReached: boolean }
   | { type: 'ROUND_COMPACTED'; round: number; summary: string }
-  | { type: 'STANCE_MAP'; stances: import('./types/council').AgentStance[] }
+  | { type: 'STANCE_MAP'; stances: import('../types/council').AgentStance[] }
   | { type: 'SYNTHESIS_START' }
   | { type: 'SYNTHESIS_TEXT_DELTA'; delta: string }
   | { type: 'SYNTHESIS_COMPLETE'; content: string }
