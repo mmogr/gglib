@@ -13,7 +13,7 @@
 //! | `events.rs`       | `CouncilEvent` SSE enum (wire format)               |
 //! | `prompts.rs`      | Prompt templates + contentiousness mapping          |
 //! | `state.rs`        | Round/contribution accumulator                      |
-//! | `history.rs`      | Per-turn context builder (identity + transcript)    |
+//! | `history.rs`      | Per-turn context builder (identity + transcript + directed rebuttals) |
 //! | `stream_bridge.rs`| `AgentEvent` → `CouncilEvent` mapper                |
 //! | `round.rs`        | Sequential round execution (per-agent turn driver)  |
 //! | `synthesis.rs`    | Synthesis pass (transcript → unified answer)        |

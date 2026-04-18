@@ -51,6 +51,7 @@ pub(super) struct JudgeVerdict {
 ///
 /// Returns `None` if the channel is closed or the judge produces no
 /// output (the orchestrator should treat this as "no consensus").
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn run_judge(
     round: u32,
     total_rounds: u32,
@@ -165,16 +166,10 @@ fn parse_judge_verdict(raw: &str, round: u32) -> JudgeVerdict {
     }
 
     // Summary = everything before the marker line (or the full text if no marker).
-    let summary = match marker_line_idx {
-        Some(idx) => lines[..idx]
-            .iter()
-            .copied()
-            .collect::<Vec<_>>()
-            .join("\n")
-            .trim()
-            .to_owned(),
-        None => raw.trim().to_owned(),
-    };
+    let summary = marker_line_idx.map_or_else(
+        || raw.trim().to_owned(),
+        |idx| lines[..idx].to_vec().join("\n").trim().to_owned(),
+    );
 
     JudgeVerdict {
         summary,
@@ -221,7 +216,7 @@ fn extract_consensus_value(line: &str) -> Option<bool> {
 ///
 /// Returns `true` if the completed round count meets the minimum threshold
 /// configured in [`JudgeConfig`].
-pub(super) fn may_stop_early(judge_config: &JudgeConfig, completed_rounds: u32) -> bool {
+pub(super) const fn may_stop_early(judge_config: &JudgeConfig, completed_rounds: u32) -> bool {
     completed_rounds >= judge_config.min_rounds_before_stop
 }
 
