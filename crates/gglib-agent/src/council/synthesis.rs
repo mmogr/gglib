@@ -89,30 +89,83 @@ pub(super) async fn run_synthesis(
     // Bridge synthesis events — map TextDelta → SynthesisTextDelta.
     let synth_content = bridge_synthesis_events(synth_agent_rx, council_tx).await;
 
-    let _ = synth_handle.await;
+    // Check for task-level failures (panic, join error).
+    match synth_handle.await {
+        Ok(Err(e)) => {
+            tracing::error!(%e, "synthesis agent loop failed");
+            // The bridge already forwarded any AgentEvent::Error, but if the
+            // task returned an error without emitting one (shouldn't happen,
+            // but defensive), emit it now.
+            if synth_content.is_none() {
+                let _ = send(
+                    council_tx,
+                    CouncilEvent::CouncilError {
+                        message: format!("Synthesis agent error: {e}"),
+                    },
+                )
+                .await;
+            }
+        }
+        Err(join_err) => {
+            tracing::error!(%join_err, "synthesis task panicked");
+            let _ = send(
+                council_tx,
+                CouncilEvent::CouncilError {
+                    message: "Synthesis task panicked".into(),
+                },
+            )
+            .await;
+        }
+        Ok(Ok(_)) => {}
+    }
 
     let content = synth_content.unwrap_or_default();
     let _ = send(council_tx, CouncilEvent::SynthesisComplete { content }).await;
     let _ = send(council_tx, CouncilEvent::CouncilComplete).await;
 }
 
-/// Bridge synthesis-phase events (only text deltas are relevant).
+/// Bridge synthesis-phase events, forwarding text deltas and errors.
 async fn bridge_synthesis_events(
     mut rx: mpsc::Receiver<AgentEvent>,
     tx: &mpsc::Sender<CouncilEvent>,
 ) -> Option<String> {
     let mut content: Option<String> = None;
+    let mut has_streamed = false;
     while let Some(event) = rx.recv().await {
         match event {
             AgentEvent::TextDelta { content: delta } => {
+                has_streamed = true;
                 let _ = tx.send(CouncilEvent::SynthesisTextDelta { delta }).await;
             }
             AgentEvent::FinalAnswer { content: answer } => {
                 content = Some(answer);
             }
+            AgentEvent::Error { message } => {
+                let _ = tx
+                    .send(CouncilEvent::CouncilError {
+                        message: format!("Synthesis failed: {message}"),
+                    })
+                    .await;
+            }
             _ => {}
         }
     }
+
+    // Safety net: if FinalAnswer arrived but no TextDelta events were
+    // streamed (e.g. non-streaming LLM response), emit the full answer
+    // as a single delta so the user sees it.
+    if !has_streamed {
+        if let Some(ref answer) = content {
+            if !answer.is_empty() {
+                let _ = tx
+                    .send(CouncilEvent::SynthesisTextDelta {
+                        delta: answer.clone(),
+                    })
+                    .await;
+            }
+        }
+    }
+
     content
 }
 
