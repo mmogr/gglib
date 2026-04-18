@@ -83,8 +83,14 @@ async fn run_agent_turn(
 
     // Assemble context with identity anchoring + debate transcript.
     // This also returns the rebuttal target name (if any) for the start event.
-    let (messages, rebuttal_target) =
-        build_agent_messages(agent, &ctx.config.topic, round, ctx.config.rounds, state, ctx.cwd);
+    let (messages, rebuttal_target) = build_agent_messages(
+        agent,
+        &ctx.config.topic,
+        round,
+        ctx.config.rounds,
+        state,
+        ctx.cwd,
+    );
 
     // Announce the turn (after building messages so we have the rebuttal target).
     let start = CouncilEvent::AgentTurnStart {

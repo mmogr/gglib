@@ -296,7 +296,15 @@ async fn run_with_ports(council: CouncilConfig, ports: CouncilPorts) -> Result<(
     let cwd = std::env::current_dir().ok();
 
     tokio::spawn(async move {
-        run_council(council, agent_config, ports.llm, ports.tool_executor, tx, cwd).await;
+        run_council(
+            council,
+            agent_config,
+            ports.llm,
+            ports.tool_executor,
+            tx,
+            cwd,
+        )
+        .await;
     });
 
     stream::render_council_stream(&mut rx).await;

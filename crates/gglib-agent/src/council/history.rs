@@ -19,8 +19,8 @@ use gglib_core::AgentMessage;
 
 use super::config::CouncilAgent;
 use super::prompts::{
-    AGENT_TURN_SYSTEM_PROMPT, DEBATE_HISTORY_SUFFIX, FILESYSTEM_TOOLS_CONTEXT,
-    FINAL_ROUND_SUFFIX, TARGETED_REBUTTAL_CUE, contentiousness_to_instruction,
+    AGENT_TURN_SYSTEM_PROMPT, DEBATE_HISTORY_SUFFIX, FILESYSTEM_TOOLS_CONTEXT, FINAL_ROUND_SUFFIX,
+    TARGETED_REBUTTAL_CUE, contentiousness_to_instruction,
 };
 use super::state::{AgentContribution, CouncilState};
 
