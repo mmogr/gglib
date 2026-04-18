@@ -130,11 +130,14 @@ async fn init_session(
         tracing::warn!("MCP initialisation failed: {e}");
     }
 
+    let cwd = std::env::current_dir().ok();
+
     let ports = compose_council_ports(
         format!("http://127.0.0.1:{resolved_port}"),
         ctx.http_client.clone(),
         model,
         Arc::clone(&ctx.mcp),
+        cwd,
     );
     Ok((ports, handle))
 }
@@ -290,8 +293,18 @@ async fn run_with_ports(council: CouncilConfig, ports: CouncilPorts) -> Result<(
     let agent_config = AgentConfig::default();
     let (tx, mut rx) = mpsc::channel::<CouncilEvent>(COUNCIL_EVENT_CHANNEL_CAPACITY);
 
+    let cwd = std::env::current_dir().ok();
+
     tokio::spawn(async move {
-        run_council(council, agent_config, ports.llm, ports.tool_executor, tx).await;
+        run_council(
+            council,
+            agent_config,
+            ports.llm,
+            ports.tool_executor,
+            tx,
+            cwd,
+        )
+        .await;
     });
 
     stream::render_council_stream(&mut rx).await;

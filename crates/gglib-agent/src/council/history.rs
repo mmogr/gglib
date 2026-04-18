@@ -13,12 +13,14 @@
 //! 4. Appending round-phase suffixes (rebuttal/history cue, final-round cue).
 //! 5. Wrapping the topic as a `User` message.
 
+use std::path::Path;
+
 use gglib_core::AgentMessage;
 
 use super::config::CouncilAgent;
 use super::prompts::{
-    AGENT_TURN_SYSTEM_PROMPT, DEBATE_HISTORY_SUFFIX, FINAL_ROUND_SUFFIX, TARGETED_REBUTTAL_CUE,
-    contentiousness_to_instruction,
+    AGENT_TURN_SYSTEM_PROMPT, DEBATE_HISTORY_SUFFIX, FILESYSTEM_TOOLS_CONTEXT, FINAL_ROUND_SUFFIX,
+    TARGETED_REBUTTAL_CUE, contentiousness_to_instruction,
 };
 use super::state::{AgentContribution, CouncilState};
 
@@ -43,9 +45,10 @@ pub fn build_agent_messages(
     round: u32,
     total_rounds: u32,
     state: &CouncilState,
+    cwd: Option<&Path>,
 ) -> (Vec<AgentMessage>, Option<String>) {
     let (system_prompt, rebuttal_target) =
-        build_agent_system_prompt(agent, topic, round, total_rounds, state);
+        build_agent_system_prompt(agent, topic, round, total_rounds, state, cwd);
     let messages = vec![
         AgentMessage::System {
             content: system_prompt,
@@ -70,6 +73,7 @@ pub fn build_agent_system_prompt(
     round: u32,
     total_rounds: u32,
     state: &CouncilState,
+    cwd: Option<&Path>,
 ) -> (String, Option<String>) {
     let instruction = contentiousness_to_instruction(agent.contentiousness);
 
@@ -110,6 +114,14 @@ pub fn build_agent_system_prompt(
     let is_final = total_rounds > 0 && round == total_rounds - 1;
     if is_final {
         prompt.push_str(FINAL_ROUND_SUFFIX);
+    }
+
+    // Filesystem context — when a working directory is available, tell
+    // the agent about filesystem tools so it can inspect the codebase.
+    if let Some(dir) = cwd {
+        use std::fmt::Write as _;
+        prompt.push_str(FILESYSTEM_TOOLS_CONTEXT);
+        write!(prompt, "\n\nWorking directory: {}", dir.display()).unwrap();
     }
 
     (prompt, rebuttal_target)
@@ -232,7 +244,7 @@ mod tests {
     fn round_0_no_history() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let (prompt, target) = build_agent_system_prompt(&a, "Test topic", 0, 3, &state);
+        let (prompt, target) = build_agent_system_prompt(&a, "Test topic", 0, 3, &state, None);
 
         assert!(prompt.contains("You are Skeptic."));
         assert!(prompt.contains("Skeptic is a test agent."));
@@ -260,7 +272,7 @@ mod tests {
         state.advance_round();
 
         let a = agent("s", "Skeptic", 0.7);
-        let (prompt, _target) = build_agent_system_prompt(&a, "Test topic", 1, 3, &state);
+        let (prompt, _target) = build_agent_system_prompt(&a, "Test topic", 1, 3, &state, None);
 
         assert!(prompt.contains("DEBATE HISTORY:"));
         assert!(prompt.contains("=== Round 1 ==="));
@@ -274,7 +286,7 @@ mod tests {
     fn final_round_suffix_appended() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 2, 3, &state);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 2, 3, &state, None);
         assert!(prompt.contains("FINAL ROUND"));
     }
 
@@ -282,7 +294,7 @@ mod tests {
     fn single_round_is_also_final() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 0, 1, &state);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 0, 1, &state, None);
         assert!(prompt.contains("FINAL ROUND"));
     }
 
@@ -290,7 +302,7 @@ mod tests {
     fn build_agent_messages_structure() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let (msgs, target) = build_agent_messages(&a, "My topic", 0, 2, &state);
+        let (msgs, target) = build_agent_messages(&a, "My topic", 0, 2, &state, None);
 
         assert_eq!(msgs.len(), 2);
         assert!(
@@ -409,7 +421,7 @@ mod tests {
 
         // Pragmatist (0.2) should target Skeptic (0.9) — most distant
         let a = agent("p", "Pragmatist", 0.2);
-        let (prompt, target) = build_agent_system_prompt(&a, "Architecture", 1, 3, &state);
+        let (prompt, target) = build_agent_system_prompt(&a, "Architecture", 1, 3, &state, None);
 
         assert!(prompt.contains("DIRECTED REBUTTAL"));
         assert!(prompt.contains("Skeptic's core claim"));
@@ -431,7 +443,7 @@ mod tests {
         state.advance_round();
 
         let a = agent("b", "Bob", 0.7);
-        let (prompt, target) = build_agent_system_prompt(&a, "Topic", 1, 3, &state);
+        let (prompt, target) = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
 
         assert!(prompt.contains("DEBATE HISTORY"));
         assert!(prompt.contains("Respond to the strongest counterarguments"));
@@ -473,7 +485,7 @@ mod tests {
 
         // At round 2, round 0 should be compacted, round 1 should be full
         let a = agent("s", "Skeptic", 0.7);
-        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 2, 3, &state);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 2, 3, &state, None);
 
         // Round 0 should show compacted summary
         assert!(prompt.contains("=== Round 1 (compacted) ==="));
@@ -500,10 +512,31 @@ mod tests {
 
         // No compaction applied — should show full text
         let a = agent("p", "Pragmatist", 0.3);
-        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 1, 3, &state);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
 
         assert!(prompt.contains("=== Round 1 ==="));
         assert!(!prompt.contains("(compacted)"));
         assert!(prompt.contains("Full argument text."));
+    }
+
+    // ── filesystem context tests ─────────────────────────────────────────
+
+    #[test]
+    fn cwd_none_omits_filesystem_context() {
+        let state = CouncilState::new();
+        let a = agent("s", "Skeptic", 0.7);
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 0, 1, &state, None);
+        assert!(!prompt.contains("filesystem tools"));
+        assert!(!prompt.contains("Working directory"));
+    }
+
+    #[test]
+    fn cwd_some_injects_filesystem_context() {
+        let state = CouncilState::new();
+        let a = agent("s", "Skeptic", 0.7);
+        let dir = std::path::PathBuf::from("/tmp/my-project");
+        let (prompt, _) = build_agent_system_prompt(&a, "Topic", 0, 1, &state, Some(&dir));
+        assert!(prompt.contains("filesystem tools (read_file, list_directory, grep_search)"));
+        assert!(prompt.contains("Working directory: /tmp/my-project"));
     }
 }

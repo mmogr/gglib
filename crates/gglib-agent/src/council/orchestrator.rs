@@ -19,6 +19,7 @@
 //!   └─ synthesis::run_synthesis()              (synthesis.rs)
 //! ```
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
@@ -70,6 +71,7 @@ pub async fn run(
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
     council_tx: mpsc::Sender<CouncilEvent>,
+    cwd: Option<PathBuf>,
 ) {
     let mut state = CouncilState::new();
 
@@ -79,6 +81,7 @@ pub async fn run(
         llm: &llm,
         tool_executor: &tool_executor,
         council_tx: &council_tx,
+        cwd: cwd.as_deref(),
     };
 
     // ── debate rounds ────────────────────────────────────────────────────
