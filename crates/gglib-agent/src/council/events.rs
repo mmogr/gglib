@@ -43,6 +43,18 @@ pub enum CouncilEvent {
     /// expose `CoT`).  Rendered in a collapsible "thinking" block.
     AgentReasoningDelta { agent_id: String, delta: String },
 
+    /// Prompt-processing progress during an agent's LLM call.
+    ///
+    /// Emitted during pre-fill so the frontend can show how far along
+    /// the token ingestion is for this agent's turn.
+    AgentProgress {
+        agent_id: String,
+        processed: u32,
+        total: u32,
+        cached: u32,
+        time_ms: u64,
+    },
+
     /// The current agent has initiated a tool call.  The frontend shows a
     /// spinner with `display_name` and an optional `args_summary`.
     AgentToolCallStart {
@@ -116,6 +128,17 @@ pub enum CouncilEvent {
     /// The synthesis phase has begun.  The frontend renders a
     /// "Synthesising…" placeholder.
     SynthesisStart,
+
+    /// Prompt-processing progress during the synthesis LLM call.
+    ///
+    /// Emitted during pre-fill so the frontend can show how far along
+    /// the token ingestion is (e.g. "processing prompt: 4096 / 12288").
+    SynthesisProgress {
+        processed: u32,
+        total: u32,
+        cached: u32,
+        time_ms: u64,
+    },
 
     /// Incremental text token from the synthesiser agent.
     SynthesisTextDelta { delta: String },
@@ -237,7 +260,20 @@ mod tests {
                     trajectory: crate::council::stance::StanceTrajectory::Held,
                 }],
             },
+            CouncilEvent::AgentProgress {
+                agent_id: "a".into(),
+                processed: 100,
+                total: 500,
+                cached: 50,
+                time_ms: 42,
+            },
             CouncilEvent::SynthesisStart,
+            CouncilEvent::SynthesisProgress {
+                processed: 200,
+                total: 1000,
+                cached: 100,
+                time_ms: 84,
+            },
             CouncilEvent::SynthesisTextDelta {
                 delta: "synth".into(),
             },

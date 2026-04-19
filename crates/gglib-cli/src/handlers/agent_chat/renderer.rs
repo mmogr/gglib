@@ -126,6 +126,10 @@ pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_del
         AgentEvent::Error { message } => {
             eprintln!("\n  ❌  {message}");
         }
+
+        AgentEvent::PromptProgress { .. } => {
+            // Prompt pre-fill progress — silently ignored in CLI for now.
+        }
     }
 }
 

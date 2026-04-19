@@ -39,6 +39,8 @@ export type CouncilAction =
   | { type: 'ROUND_COMPACTED'; round: number; summary: string }
   | { type: 'STANCE_MAP'; stances: AgentStance[] }
   | { type: 'SYNTHESIS_START' }
+  | { type: 'SYNTHESIS_PROGRESS'; processed: number; total: number; cached: number; timeMs: number }
+  | { type: 'AGENT_PROGRESS'; agentId: string; processed: number; total: number; cached: number; timeMs: number }
   | { type: 'SYNTHESIS_TEXT_DELTA'; delta: string }
   | { type: 'SYNTHESIS_COMPLETE'; content: string }
   | { type: 'COUNCIL_ERROR'; error: string }
@@ -163,10 +165,17 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
       return { ...state, stances: action.stances };
 
     case 'SYNTHESIS_START':
-      return { ...state, phase: 'synthesizing', synthesisText: '' };
+      return { ...state, phase: 'synthesizing', synthesisText: '', synthesisProgress: null };
+
+    case 'SYNTHESIS_PROGRESS':
+      return { ...state, synthesisProgress: { processed: action.processed, total: action.total, cached: action.cached, timeMs: action.timeMs } };
+
+    case 'AGENT_PROGRESS':
+      // Progress events are informational; store for display if needed.
+      return state;
 
     case 'SYNTHESIS_TEXT_DELTA':
-      return { ...state, synthesisText: state.synthesisText + action.delta };
+      return { ...state, synthesisText: state.synthesisText + action.delta, synthesisProgress: null };
 
     case 'SYNTHESIS_COMPLETE':
       return { ...state, synthesisText: action.content };

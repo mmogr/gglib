@@ -100,6 +100,15 @@ export interface AgentErrorEvent {
   message: string;
 }
 
+/** Prompt pre-fill progress from the LLM backend. */
+export interface AgentPromptProgressEvent {
+  type: 'prompt_progress';
+  processed: number;
+  total: number;
+  cached: number;
+  time_ms: number;
+}
+
 /**
  * Union of all events emitted by the backend agentic loop over SSE.
  *
@@ -113,4 +122,5 @@ export type AgentEvent =
   | AgentToolCallCompleteEvent
   | AgentIterationCompleteEvent
   | AgentFinalAnswerEvent
-  | AgentErrorEvent;
+  | AgentErrorEvent
+  | AgentPromptProgressEvent;

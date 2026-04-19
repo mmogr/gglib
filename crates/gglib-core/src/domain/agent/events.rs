@@ -79,6 +79,22 @@ pub enum AgentEvent {
         content: String,
     },
 
+    /// Prompt-processing progress from the LLM backend.
+    ///
+    /// Emitted during the pre-fill phase when llama-server is streaming
+    /// `prompt_progress` frames.  Surfaces token-level progress so the UI
+    /// can show "processing prompt: 2048 / 8192 tokens".
+    PromptProgress {
+        /// Number of tokens processed so far.
+        processed: u32,
+        /// Total number of tokens in the prompt.
+        total: u32,
+        /// Number of tokens served from KV cache (already processed).
+        cached: u32,
+        /// Elapsed wall-clock time in milliseconds since processing began.
+        time_ms: u64,
+    },
+
     /// A fatal error has terminated the loop.
     Error {
         /// Human-readable description of the failure.
@@ -136,6 +152,22 @@ pub enum LlmStreamEvent {
         name: Option<String>,
         /// Partial arguments JSON string fragment (accumulate with `push_str`).
         arguments: Option<String>,
+    },
+
+    /// Prompt-processing progress from llama-server.
+    ///
+    /// Emitted when the request includes `return_progress: true`.  These
+    /// frames arrive during the pre-fill phase (before any `TextDelta`),
+    /// giving real-time visibility into how far along token ingestion is.
+    PromptProgress {
+        /// Number of tokens processed so far.
+        processed: u32,
+        /// Total number of tokens in the prompt.
+        total: u32,
+        /// Number of tokens served from KV cache (already processed).
+        cached: u32,
+        /// Elapsed wall-clock time in milliseconds since processing began.
+        time_ms: u64,
     },
 
     /// Signals the end of the stream.
