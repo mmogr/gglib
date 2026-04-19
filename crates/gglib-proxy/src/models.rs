@@ -83,7 +83,45 @@ pub struct ToolCallFunctionDelta {
 // Chat Completion Request/Response Types
 // =============================================================================
 
-/// Request to /v1/chat/completions endpoint.
+/// Minimal routing envelope extracted from inbound `/v1/chat/completions` requests.
+///
+/// The proxy only needs three fields to route a request to the correct
+/// llama-server instance. Everything else in the body — message content,
+/// sampling parameters, tool definitions, stop sequences, etc. — is forwarded
+/// verbatim as raw bytes and is llama-server's responsibility to validate.
+///
+/// By deserialising into this narrow struct instead of the full
+/// [`ChatCompletionRequest`], the proxy is immune to any OpenAI field whose
+/// type doesn't match our local Rust types: `content` as an array of content
+/// parts, `stop` as a bare string, future extensions like `reasoning_effort`,
+/// audio inputs, etc.
+///
+/// Unknown fields are silently ignored by serde (default behaviour without
+/// `deny_unknown_fields`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChatRoutingEnvelope {
+    /// Model name or ID used to select the llama-server instance.
+    pub model: String,
+    /// Whether the client expects a streaming SSE response.
+    #[serde(default)]
+    pub stream: bool,
+    /// Optional context window override (Ollama-compatible).
+    pub num_ctx: Option<u64>,
+}
+
+/// Full OpenAI-compatible chat completion request.
+///
+/// This type is kept for response construction, testing, and documentation
+/// purposes. It is **not** used to parse inbound proxy requests — see
+/// [`ChatRoutingEnvelope`] for that.
+///
+/// # Note on `content`
+///
+/// `ChatMessage.content` is typed as `Option<String>` here. The OpenAI API
+/// also allows an array of content parts; callers constructing this type
+/// should use `content: None` plus `tool_calls` for tool-only messages.
+/// Inbound array-form content passes through the proxy untouched because the
+/// proxy never deserialises it into this struct.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatCompletionRequest {
     /// Model name to use.
@@ -819,5 +857,69 @@ mod tests {
         assert!(json.get("content").is_none() || json["content"].is_null());
         assert_eq!(json["tool_calls"][0]["id"], "call_1");
         assert_eq!(json["tool_calls"][0]["function"]["name"], "search");
+    }
+
+    // =========================================================================
+    // ChatRoutingEnvelope tests
+    // =========================================================================
+
+    #[test]
+    fn routing_envelope_extracts_model_stream_num_ctx() {
+        let json = r#"{
+            "model": "llama-3",
+            "stream": true,
+            "num_ctx": 16384,
+            "messages": [{"role": "user", "content": "hello"}],
+            "temperature": 0.7
+        }"#;
+        let env: ChatRoutingEnvelope = serde_json::from_str(json).unwrap();
+        assert_eq!(env.model, "llama-3");
+        assert!(env.stream);
+        assert_eq!(env.num_ctx, Some(16384));
+    }
+
+    #[test]
+    fn routing_envelope_stream_defaults_false() {
+        let json = r#"{"model": "test", "messages": []}"#;
+        let env: ChatRoutingEnvelope = serde_json::from_str(json).unwrap();
+        assert!(!env.stream);
+        assert!(env.num_ctx.is_none());
+    }
+
+    /// Regression test for #438: content as an array of content parts must not
+    /// cause a 400 from the proxy. The routing envelope ignores `messages`
+    /// entirely, so any valid-JSON content form passes through.
+    #[test]
+    fn routing_envelope_accepts_array_form_content() {
+        let json = r#"{
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Hello"},
+                        {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}
+                    ]
+                }
+            ]
+        }"#;
+        let env: ChatRoutingEnvelope = serde_json::from_str(json).unwrap();
+        assert_eq!(env.model, "gpt-4o");
+    }
+
+    /// Regression test for #438: stop as a bare string (valid per OpenAI spec)
+    /// must not cause a 400.
+    #[test]
+    fn routing_envelope_accepts_stop_as_bare_string() {
+        let json = r#"{"model": "test", "messages": [], "stop": "END"}"#;
+        let env: ChatRoutingEnvelope = serde_json::from_str(json).unwrap();
+        assert_eq!(env.model, "test");
+    }
+
+    #[test]
+    fn routing_envelope_rejects_missing_model() {
+        let json = r#"{"messages": [], "stream": false}"#;
+        let result: Result<ChatRoutingEnvelope, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "model is required");
     }
 }

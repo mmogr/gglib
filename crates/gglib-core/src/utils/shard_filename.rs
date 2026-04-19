@@ -25,11 +25,11 @@ pub fn base_shard_filename(name: &str) -> String {
     match (a, b, c) {
         (Some(m), Some("of"), Some(prefix_and_n)) if m.chars().all(|ch| ch.is_ascii_digit()) => {
             // prefix_and_n is "<prefix>-<n>" where n should also be digits
-            if let Some((prefix, n)) = prefix_and_n.rsplit_once('-') {
-                if n.chars().all(|ch| ch.is_ascii_digit()) {
-                    // Valid shard pattern found
-                    return format!("{prefix}{ext}");
-                }
+            if let Some((prefix, n)) = prefix_and_n.rsplit_once('-')
+                && n.chars().all(|ch| ch.is_ascii_digit())
+            {
+                // Valid shard pattern found
+                return format!("{prefix}{ext}");
             }
             // Doesn't match pattern, return original
             name.to_string()

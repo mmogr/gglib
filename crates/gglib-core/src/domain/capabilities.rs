@@ -371,22 +371,22 @@ fn merge_consecutive_system_messages(messages: Vec<ChatMessage>) -> Vec<ChatMess
     let mut result: Vec<ChatMessage> = Vec::with_capacity(messages.len());
 
     for msg in messages {
-        if let Some(last) = result.last_mut() {
-            if last.role == "system" && msg.role == "system" {
-                // Merge: append content with separator
-                let last_content = last.content.take().unwrap_or_default();
-                let new_content = msg.content.unwrap_or_default();
+        if let Some(last) = result.last_mut()
+            && last.role == "system" && msg.role == "system"
+        {
+            // Merge: append content with separator
+            let last_content = last.content.take().unwrap_or_default();
+            let new_content = msg.content.unwrap_or_default();
 
-                last.content = Some(if last_content.is_empty() {
-                    new_content
-                } else if new_content.is_empty() {
-                    last_content
-                } else {
-                    format!("{last_content}\n\n{new_content}")
-                });
+            last.content = Some(if last_content.is_empty() {
+                new_content
+            } else if new_content.is_empty() {
+                last_content
+            } else {
+                format!("{last_content}\n\n{new_content}")
+            });
 
-                continue; // Don't push, we merged into last
-            }
+            continue; // Don't push, we merged into last
         }
         result.push(msg);
     }
