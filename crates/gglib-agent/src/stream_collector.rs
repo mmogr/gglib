@@ -153,6 +153,11 @@ pub async fn collect_stream(
                 let _ = tx.send(AgentEvent::ReasoningDelta { content }).await;
             }
 
+            LlmStreamEvent::PromptProgress { processed, total, cached, time_ms } => {
+                // Forward pre-fill progress so consumers can display it.
+                let _ = tx.send(AgentEvent::PromptProgress { processed, total, cached, time_ms }).await;
+            }
+
             LlmStreamEvent::ToolCallDelta {
                 index,
                 id,

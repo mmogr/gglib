@@ -42,6 +42,8 @@ export type CouncilEvent =
   | RoundCompactedEvent
   | StanceMapEvent
   | SynthesisStartEvent
+  | SynthesisProgressEvent
+  | AgentProgressEvent
   | SynthesisTextDeltaEvent
   | SynthesisCompleteEvent
   | CouncilErrorEvent
@@ -135,6 +137,23 @@ export interface StanceMapEvent {
 
 export interface SynthesisStartEvent {
   type: 'synthesis_start';
+}
+
+export interface SynthesisProgressEvent {
+  type: 'synthesis_progress';
+  processed: number;
+  total: number;
+  cached: number;
+  time_ms: number;
+}
+
+export interface AgentProgressEvent {
+  type: 'agent_progress';
+  agent_id: string;
+  processed: number;
+  total: number;
+  cached: number;
+  time_ms: number;
 }
 
 export interface SynthesisTextDeltaEvent {
@@ -243,6 +262,8 @@ export interface CouncilSession {
   compactedRounds: CompactedRound[];
   /** Synthesis text (streamed incrementally). */
   synthesisText: string;
+  /** Pre-fill progress during synthesis (null when not in pre-fill). */
+  synthesisProgress: { processed: number; total: number; cached: number; timeMs: number } | null;
   /** Error message if phase === 'error'. */
   error: string | null;
 }
@@ -343,6 +364,7 @@ export function createEmptySession(): CouncilSession {
     stances: [],
     compactedRounds: [],
     synthesisText: '',
+    synthesisProgress: null,
     error: null,
   };
 }

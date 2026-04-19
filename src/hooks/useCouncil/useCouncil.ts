@@ -114,6 +114,10 @@ function eventToAction(event: CouncilEvent): CouncilAction | null {
       return { type: 'STANCE_MAP', stances: event.stances };
     case 'synthesis_start':
       return { type: 'SYNTHESIS_START' };
+    case 'synthesis_progress':
+      return { type: 'SYNTHESIS_PROGRESS', processed: event.processed, total: event.total, cached: event.cached, timeMs: event.time_ms };
+    case 'agent_progress':
+      return { type: 'AGENT_PROGRESS', agentId: event.agent_id, processed: event.processed, total: event.total, cached: event.cached, timeMs: event.time_ms };
     case 'synthesis_text_delta':
       return { type: 'SYNTHESIS_TEXT_DELTA', delta: event.delta };
     case 'synthesis_complete':
