@@ -622,21 +622,19 @@ impl ModelVerificationService {
 
             // Find matching remote file by path
             if let Some(remote_file) = remote_files.iter().find(|f| f.path == local_file.file_path)
+                && let Some(ref remote_oid) = remote_file.oid
+                && local_oid != remote_oid
             {
-                if let Some(ref remote_oid) = remote_file.oid {
-                    if local_oid != remote_oid {
-                        let old_oid_str: String = local_oid.clone();
-                        let new_oid_str: String = remote_oid.clone();
-                        #[allow(clippy::cast_sign_loss)]
-                        let index = local_file.file_index as usize;
-                        changes.push(ShardUpdate {
-                            index,
-                            file_path: local_file.file_path.clone(),
-                            old_oid: old_oid_str,
-                            new_oid: new_oid_str,
-                        });
-                    }
-                }
+                let old_oid_str: String = local_oid.clone();
+                let new_oid_str: String = remote_oid.clone();
+                #[allow(clippy::cast_sign_loss)]
+                let index = local_file.file_index as usize;
+                changes.push(ShardUpdate {
+                    index,
+                    file_path: local_file.file_path.clone(),
+                    old_oid: old_oid_str,
+                    new_oid: new_oid_str,
+                });
             }
         }
 
@@ -733,15 +731,15 @@ impl ModelVerificationService {
         // Delete corrupt/missing files
         for file in &shards_to_repair {
             let resolved_path = base_dir.join(&file.file_path);
-            if resolved_path.exists() {
-                if let Err(e) = tokio::fs::remove_file(&resolved_path).await {
-                    tracing::warn!(
-                        model_id = model_id,
-                        file_path = %file.file_path,
-                        error = %e,
-                        "Failed to delete corrupt file"
-                    );
-                }
+            if resolved_path.exists()
+                && let Err(e) = tokio::fs::remove_file(&resolved_path).await
+            {
+                tracing::warn!(
+                    model_id = model_id,
+                    file_path = %file.file_path,
+                    error = %e,
+                    "Failed to delete corrupt file"
+                );
             }
         }
 

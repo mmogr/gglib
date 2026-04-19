@@ -263,31 +263,31 @@ pub enum SettingsError {
 /// Validate settings values.
 pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
     // Validate context size
-    if let Some(ctx_size) = settings.default_context_size {
-        if !(512..=1_000_000).contains(&ctx_size) {
-            return Err(SettingsError::InvalidContextSize(ctx_size));
-        }
+    if let Some(ctx_size) = settings.default_context_size
+        && !(512..=1_000_000).contains(&ctx_size)
+    {
+        return Err(SettingsError::InvalidContextSize(ctx_size));
     }
 
     // Validate proxy port
-    if let Some(port) = settings.proxy_port {
-        if port < 1024 {
-            return Err(SettingsError::InvalidPort(port));
-        }
+    if let Some(port) = settings.proxy_port
+        && port < 1024
+    {
+        return Err(SettingsError::InvalidPort(port));
     }
 
     // Validate llama-server base port
-    if let Some(port) = settings.llama_base_port {
-        if port < 1024 {
-            return Err(SettingsError::InvalidPort(port));
-        }
+    if let Some(port) = settings.llama_base_port
+        && port < 1024
+    {
+        return Err(SettingsError::InvalidPort(port));
     }
 
     // Validate max download queue size
-    if let Some(queue_size) = settings.max_download_queue_size {
-        if !(1..=50).contains(&queue_size) {
-            return Err(SettingsError::InvalidQueueSize(queue_size));
-        }
+    if let Some(queue_size) = settings.max_download_queue_size
+        && !(1..=50).contains(&queue_size)
+    {
+        return Err(SettingsError::InvalidQueueSize(queue_size));
     }
 
     // Validate download path if specified
@@ -313,42 +313,42 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 /// Checks that all specified parameters are within valid ranges.
 pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String> {
     // Validate temperature (0.0 - 2.0)
-    if let Some(temp) = config.temperature {
-        if !(0.0..=2.0).contains(&temp) {
-            return Err(format!(
-                "Temperature must be between 0.0 and 2.0, got {temp}"
-            ));
-        }
+    if let Some(temp) = config.temperature
+        && !(0.0..=2.0).contains(&temp)
+    {
+        return Err(format!(
+            "Temperature must be between 0.0 and 2.0, got {temp}"
+        ));
     }
 
     // Validate top_p (0.0 - 1.0)
-    if let Some(top_p) = config.top_p {
-        if !(0.0..=1.0).contains(&top_p) {
-            return Err(format!("Top P must be between 0.0 and 1.0, got {top_p}"));
-        }
+    if let Some(top_p) = config.top_p
+        && !(0.0..=1.0).contains(&top_p)
+    {
+        return Err(format!("Top P must be between 0.0 and 1.0, got {top_p}"));
     }
 
     // Validate top_k (must be positive)
-    if let Some(top_k) = config.top_k {
-        if top_k <= 0 {
-            return Err(format!("Top K must be positive, got {top_k}"));
-        }
+    if let Some(top_k) = config.top_k
+        && top_k <= 0
+    {
+        return Err(format!("Top K must be positive, got {top_k}"));
     }
 
     // Validate max_tokens (must be positive)
-    if let Some(max_tokens) = config.max_tokens {
-        if max_tokens == 0 {
-            return Err("Max tokens must be positive".to_string());
-        }
+    if let Some(max_tokens) = config.max_tokens
+        && max_tokens == 0
+    {
+        return Err("Max tokens must be positive".to_string());
     }
 
     // Validate repeat_penalty (must be positive)
-    if let Some(repeat_penalty) = config.repeat_penalty {
-        if repeat_penalty <= 0.0 {
-            return Err(format!(
-                "Repeat penalty must be positive, got {repeat_penalty}"
-            ));
-        }
+    if let Some(repeat_penalty) = config.repeat_penalty
+        && repeat_penalty <= 0.0
+    {
+        return Err(format!(
+            "Repeat penalty must be positive, got {repeat_penalty}"
+        ));
     }
 
     Ok(())

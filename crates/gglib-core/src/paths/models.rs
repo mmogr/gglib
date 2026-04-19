@@ -65,13 +65,13 @@ pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution,
         });
     }
 
-    if let Ok(env_path) = env::var("GGLIB_MODELS_DIR") {
-        if !env_path.trim().is_empty() {
-            return Ok(ModelsDirResolution {
-                path: normalize_user_path(&env_path)?,
-                source: ModelsDirSource::EnvVar,
-            });
-        }
+    if let Ok(env_path) = env::var("GGLIB_MODELS_DIR")
+        && !env_path.trim().is_empty()
+    {
+        return Ok(ModelsDirResolution {
+            path: normalize_user_path(&env_path)?,
+            source: ModelsDirSource::EnvVar,
+        });
     }
 
     Ok(ModelsDirResolution {
