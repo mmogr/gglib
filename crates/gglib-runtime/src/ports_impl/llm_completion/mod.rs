@@ -271,9 +271,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             self.client.post(&self.url).json(&body).send(),
         )
         .await
-        .map_err(|_| {
-            anyhow!("llama-server connection timed out after {timeout_secs}s")
-        })?
+        .map_err(|_| anyhow!("llama-server connection timed out after {timeout_secs}s"))?
         .map_err(|e| anyhow!("request to llama-server failed: {e}"))?;
 
         if !response.status().is_success() {

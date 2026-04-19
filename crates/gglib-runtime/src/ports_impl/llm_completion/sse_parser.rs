@@ -58,7 +58,12 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
         let cached = pp["cache"].as_u64().unwrap_or(0) as u32;
         let time_ms = pp["time_ms"].as_u64().unwrap_or(0);
         return Ok(SseParseResult::Events(vec![
-            LlmStreamEvent::PromptProgress { processed, total, cached, time_ms },
+            LlmStreamEvent::PromptProgress {
+                processed,
+                total,
+                cached,
+                time_ms,
+            },
         ]));
     }
 
@@ -413,7 +418,12 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
-            LlmStreamEvent::PromptProgress { processed: 2048, total: 8192, cached: 512, time_ms: 1234 }
+            LlmStreamEvent::PromptProgress {
+                processed: 2048,
+                total: 8192,
+                cached: 512,
+                time_ms: 1234
+            }
         ));
     }
 
@@ -434,6 +444,9 @@ mod tests {
             Ok(SseParseResult::Events(e)) => e,
             other => panic!("unexpected: {other:?}"),
         };
-        assert!(!events.is_empty(), "prompt_progress frame must not be skipped");
+        assert!(
+            !events.is_empty(),
+            "prompt_progress frame must not be skipped"
+        );
     }
 }

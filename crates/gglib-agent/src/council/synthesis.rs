@@ -137,8 +137,20 @@ async fn bridge_synthesis_events(
                 has_streamed = true;
                 let _ = tx.send(CouncilEvent::SynthesisTextDelta { delta }).await;
             }
-            AgentEvent::PromptProgress { processed, total, cached, time_ms } => {
-                let _ = tx.send(CouncilEvent::SynthesisProgress { processed, total, cached, time_ms }).await;
+            AgentEvent::PromptProgress {
+                processed,
+                total,
+                cached,
+                time_ms,
+            } => {
+                let _ = tx
+                    .send(CouncilEvent::SynthesisProgress {
+                        processed,
+                        total,
+                        cached,
+                        time_ms,
+                    })
+                    .await;
             }
             AgentEvent::FinalAnswer { content: answer } => {
                 content = Some(answer);
