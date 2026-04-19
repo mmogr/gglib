@@ -53,6 +53,19 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | `stream_collector` | Consumes `LlmStreamEvent` stream, forwards text live |
 | `tool_execution` | Parallel tool dispatch with semaphore + timeout |
 | `util` | Shared internal utilities |
+| `council/config` | `CouncilConfig`, `CouncilAgent`, `SuggestedCouncil` |
+| `council/events` | `CouncilEvent` SSE enum (wire format) |
+| `council/prompts` | Prompt templates + contentiousness mapping |
+| `council/state` | Round/contribution accumulator |
+| `council/history` | Per-turn context builder (identity + transcript + directed rebuttals) |
+| `council/stream_bridge` | `AgentEvent` → `CouncilEvent` mapper |
+| `council/round` | Sequential round execution (per-agent turn driver) |
+| `council/synthesis` | Synthesis pass (transcript → unified answer) |
+| `council/judge` | Post-round judge evaluation + adaptive early stopping |
+| `council/compaction` | LLM-driven round summarisation for context control |
+| `council/stance` | Post-debate stance tracking (Held/Shifted/Conceded) |
+| `council/orchestrator` | Slim coordinator (rounds → compaction → judge → stance → synthesis) |
+| `council/suggest` | `suggest_council()` — shared suggest orchestration |
 <!-- MODULE_TABLE_END -->
 
 <details>

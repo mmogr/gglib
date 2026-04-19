@@ -15,6 +15,9 @@ import { type FC, useMemo, useRef } from 'react';
 import { useCouncilContext } from '../../../contexts/CouncilContext';
 import type { CouncilAgent, CouncilConfig } from '../../../types/council';
 import { CouncilMessage } from './CouncilMessage';
+import { JudgeMessage } from './JudgeMessage';
+import { StanceTable } from './StanceTable';
+import { CompactionNotice } from './CompactionNotice';
 import { SynthesisMessage } from './SynthesisMessage';
 import { RoundSeparator } from './RoundSeparator';
 import { CouncilSetupPanel } from '../Setup/CouncilSetupPanel';
@@ -32,6 +35,10 @@ export interface CouncilThreadProps {
 type ThreadItem =
   | { kind: 'round'; round: number }
   | { kind: 'contribution'; index: number }
+  | { kind: 'judge'; assessmentIndex: number }
+  | { kind: 'judge-streaming' }
+  | { kind: 'stances' }
+  | { kind: 'compacted'; compactedIndex: number }
   | { kind: 'streaming' }
   | { kind: 'synthesis' };
 
@@ -74,13 +81,48 @@ export const CouncilThread: FC<CouncilThreadProps> = ({
     const result: ThreadItem[] = [];
     let lastRound = -1;
 
+    // Lookup maps for post-round items
+    const judgeByRound = new Map(session.judgeAssessments.map((a, i) => [a.round, i]));
+    const compactedByRound = new Map(session.compactedRounds.map((c, i) => [c.round, i]));
+    const lastJudgeRound = session.judgeAssessments.length > 0
+      ? session.judgeAssessments[session.judgeAssessments.length - 1].round
+      : -1;
+
+    const pushPostRound = (round: number) => {
+      const jIdx = judgeByRound.get(round);
+      if (jIdx !== undefined) {
+        result.push({ kind: 'judge', assessmentIndex: jIdx });
+        // Show stances after the most recent completed judge
+        if (round === lastJudgeRound && session.stances.length > 0) {
+          result.push({ kind: 'stances' });
+        }
+      }
+      const cIdx = compactedByRound.get(round);
+      if (cIdx !== undefined) {
+        result.push({ kind: 'compacted', compactedIndex: cIdx });
+      }
+    };
+
     for (let i = 0; i < session.contributions.length; i++) {
       const c = session.contributions[i];
       if (c.round !== lastRound) {
+        // Inject post-round items for the previous round before starting a new one
+        if (lastRound >= 0) pushPostRound(lastRound);
         result.push({ kind: 'round', round: c.round });
         lastRound = c.round;
       }
       result.push({ kind: 'contribution', index: i });
+    }
+
+    // Post-round items for the final round of contributions
+    if (lastRound >= 0) pushPostRound(lastRound);
+
+    // Streaming judge evaluation
+    if (session.phase === 'judging') {
+      result.push({ kind: 'judge-streaming' });
+      if (session.stances.length > 0) {
+        result.push({ kind: 'stances' });
+      }
     }
 
     // Active streaming turn
@@ -97,7 +139,11 @@ export const CouncilThread: FC<CouncilThreadProps> = ({
     }
 
     return result;
-  }, [session.contributions, session.activeAgentId, session.currentRound, session.phase]);
+  }, [
+    session.contributions, session.activeAgentId, session.currentRound,
+    session.phase, session.judgeAssessments, session.stances,
+    session.compactedRounds,
+  ]);
 
   // Idle phase: nothing to render
   if (session.phase === 'idle') {
@@ -209,6 +255,39 @@ export const CouncilThread: FC<CouncilThreadProps> = ({
                 }}
               />
             );
+
+          case 'judge': {
+            const a = session.judgeAssessments[item.assessmentIndex];
+            return (
+              <JudgeMessage
+                key={`judge-${a.round}`}
+                assessment={a}
+              />
+            );
+          }
+
+          case 'judge-streaming':
+            return (
+              <JudgeMessage
+                key="judge-streaming"
+                streamingText={session.activeJudgeText}
+                streamingRound={session.activeJudgeRound}
+              />
+            );
+
+          case 'stances':
+            return <StanceTable key={`stances-${session.stances.length}`} stances={session.stances} />;
+
+          case 'compacted': {
+            const cr = session.compactedRounds[item.compactedIndex];
+            return (
+              <CompactionNotice
+                key={`compacted-${cr.round}`}
+                round={cr.round}
+                summary={cr.summary}
+              />
+            );
+          }
 
           case 'synthesis':
             return (

@@ -97,6 +97,21 @@ function eventToAction(event: CouncilEvent): CouncilAction | null {
       };
     case 'round_separator':
       return { type: 'ROUND_SEPARATOR', round: event.round };
+    case 'judge_start':
+      return { type: 'JUDGE_START', round: event.round };
+    case 'judge_text_delta':
+      return { type: 'JUDGE_TEXT_DELTA', delta: event.delta };
+    case 'judge_summary':
+      return {
+        type: 'JUDGE_SUMMARY',
+        round: event.round,
+        summary: event.summary,
+        consensusReached: event.consensus_reached,
+      };
+    case 'round_compacted':
+      return { type: 'ROUND_COMPACTED', round: event.round, summary: event.summary };
+    case 'stance_map':
+      return { type: 'STANCE_MAP', stances: event.stances };
     case 'synthesis_start':
       return { type: 'SYNTHESIS_START' };
     case 'synthesis_text_delta':

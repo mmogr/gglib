@@ -36,6 +36,11 @@ export type CouncilEvent =
   | AgentToolCallCompleteEvent
   | AgentTurnCompleteEvent
   | RoundSeparatorEvent
+  | JudgeStartEvent
+  | JudgeTextDeltaEvent
+  | JudgeSummaryEvent
+  | RoundCompactedEvent
+  | StanceMapEvent
   | SynthesisStartEvent
   | SynthesisTextDeltaEvent
   | SynthesisCompleteEvent
@@ -93,6 +98,41 @@ export interface RoundSeparatorEvent {
   round: number;
 }
 
+export interface JudgeStartEvent {
+  type: 'judge_start';
+  round: number;
+}
+
+export interface JudgeTextDeltaEvent {
+  type: 'judge_text_delta';
+  delta: string;
+}
+
+export interface JudgeSummaryEvent {
+  type: 'judge_summary';
+  round: number;
+  summary: string;
+  consensus_reached: boolean;
+}
+
+export interface RoundCompactedEvent {
+  type: 'round_compacted';
+  round: number;
+  summary: string;
+}
+
+export type StanceTrajectory = 'held' | 'shifted' | 'conceded';
+
+export interface AgentStance {
+  agent_name: string;
+  trajectory: StanceTrajectory;
+}
+
+export interface StanceMapEvent {
+  type: 'stance_map';
+  stances: AgentStance[];
+}
+
 export interface SynthesisStartEvent {
   type: 'synthesis_start';
 }
@@ -139,12 +179,26 @@ export interface AgentToolCall {
   durationDisplay?: string;
 }
 
+/** Judge assessment for a single round. */
+export interface JudgeAssessment {
+  round: number;
+  summary: string;
+  consensusReached: boolean;
+}
+
+/** Summary of a compacted round. */
+export interface CompactedRound {
+  round: number;
+  summary: string;
+}
+
 /** Session lifecycle phases. */
 export type CouncilPhase =
   | 'idle'
   | 'suggesting'
   | 'setup'
   | 'deliberating'
+  | 'judging'
   | 'synthesizing'
   | 'complete'
   | 'error';
@@ -177,6 +231,16 @@ export interface CouncilSession {
   activeToolCalls: AgentToolCall[];
   /** All completed contributions across rounds. */
   contributions: AgentContribution[];
+  /** Judge assessments, one per evaluated round. */
+  judgeAssessments: JudgeAssessment[];
+  /** Judge text accumulated during current evaluation (streamed). */
+  activeJudgeText: string;
+  /** Round currently being evaluated by the judge. */
+  activeJudgeRound: number;
+  /** Stance trajectories from the post-debate evaluation. */
+  stances: AgentStance[];
+  /** Compacted round summaries. */
+  compactedRounds: CompactedRound[];
   /** Synthesis text (streamed incrementally). */
   synthesisText: string;
   /** Error message if phase === 'error'. */
@@ -230,6 +294,12 @@ export interface SerializableCouncilSession {
   totalRounds: number;
   contributions: AgentContribution[];
   synthesisText: string;
+  /** Judge assessments, one per evaluated round. */
+  judgeAssessments?: JudgeAssessment[];
+  /** Stance trajectories from the post-debate evaluation. */
+  stances?: AgentStance[];
+  /** Compacted round summaries. */
+  compactedRounds?: CompactedRound[];
   /** Non-null only for sessions that ended in error. */
   error?: string | null;
 }
@@ -241,6 +311,9 @@ export function toSerializableSession(s: CouncilSession): SerializableCouncilSes
     totalRounds: s.totalRounds,
     contributions: s.contributions,
     synthesisText: s.synthesisText,
+    ...(s.judgeAssessments.length > 0 ? { judgeAssessments: s.judgeAssessments } : {}),
+    ...(s.stances.length > 0 ? { stances: s.stances } : {}),
+    ...(s.compactedRounds.length > 0 ? { compactedRounds: s.compactedRounds } : {}),
     ...(s.error ? { error: s.error } : {}),
   };
 }
@@ -264,6 +337,11 @@ export function createEmptySession(): CouncilSession {
     activeAgentReasoning: '',
     activeToolCalls: [],
     contributions: [],
+    judgeAssessments: [],
+    activeJudgeText: '',
+    activeJudgeRound: 0,
+    stances: [],
+    compactedRounds: [],
     synthesisText: '',
     error: null,
   };

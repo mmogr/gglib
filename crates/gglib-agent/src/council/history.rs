@@ -5,24 +5,28 @@
 //! 1. Constructing a system prompt with identity anchoring (agent name,
 //!    persona, contentiousness instruction — re-injected every turn).
 //! 2. Formatting the debate transcript from prior rounds as a labelled
-//!    `[Agent Name]: content` block.
-//! 3. Appending round-phase suffixes (debate-history cue, final-round cue).
-//! 4. Wrapping the topic as a `User` message.
+//!    `[Agent Name]: content` block.  Rounds that have been compacted are
+//!    replaced with their short summary, keeping context sizes manageable.
+//! 3. Appending a guided rebuttal cue that lets the agent autonomously
+//!    choose which prior argument to rebut based on genuine conflict.
+//! 4. Appending round-phase suffixes (rebuttal cue, final-round cue).
+//! 5. Wrapping the topic as a `User` message.
+
+use std::path::Path;
 
 use gglib_core::AgentMessage;
 
 use super::config::CouncilAgent;
 use super::prompts::{
-    AGENT_TURN_SYSTEM_PROMPT, DEBATE_HISTORY_SUFFIX, FINAL_ROUND_SUFFIX,
+    AGENT_TURN_SYSTEM_PROMPT, FILESYSTEM_TOOLS_CONTEXT, FINAL_ROUND_SUFFIX, GUIDED_REBUTTAL_CUE,
     contentiousness_to_instruction,
 };
 use super::state::CouncilState;
 
 /// Build the message list for a single agent's turn in the council debate.
 ///
-/// Returns `[System(prompt), User(topic)]` — a two-message conversation
-/// that the `AgentLoop` will extend with tool calls and responses during
-/// its own run.
+/// Returns `[System(prompt), User(topic)]` that the `AgentLoop` will extend
+/// with tool calls and responses during its own run.
 ///
 /// # Arguments
 ///
@@ -38,8 +42,9 @@ pub fn build_agent_messages(
     round: u32,
     total_rounds: u32,
     state: &CouncilState,
+    cwd: Option<&Path>,
 ) -> Vec<AgentMessage> {
-    let system_prompt = build_agent_system_prompt(agent, topic, round, total_rounds, state);
+    let system_prompt = build_agent_system_prompt(agent, topic, round, total_rounds, state, cwd);
     vec![
         AgentMessage::System {
             content: system_prompt,
@@ -60,6 +65,7 @@ pub fn build_agent_system_prompt(
     round: u32,
     total_rounds: u32,
     state: &CouncilState,
+    cwd: Option<&Path>,
 ) -> String {
     let instruction = contentiousness_to_instruction(agent.contentiousness);
 
@@ -77,7 +83,14 @@ pub fn build_agent_system_prompt(
         if !transcript.is_empty() {
             prompt.push_str("\n\nDEBATE HISTORY:\n");
             prompt.push_str(&transcript);
-            prompt.push_str(DEBATE_HISTORY_SUFFIX);
+            prompt.push_str(GUIDED_REBUTTAL_CUE);
+
+            // Anti-dogpile: show which claims earlier agents already
+            // addressed this round so this agent picks a different target.
+            let already = format_already_addressed(state, round, &agent.name);
+            if !already.is_empty() {
+                prompt.push_str(&already);
+            }
         }
     }
 
@@ -87,18 +100,60 @@ pub fn build_agent_system_prompt(
         prompt.push_str(FINAL_ROUND_SUFFIX);
     }
 
+    // Filesystem context — when a working directory is available, tell
+    // the agent about filesystem tools so it can inspect the codebase.
+    if let Some(dir) = cwd {
+        use std::fmt::Write as _;
+        prompt.push_str(FILESYSTEM_TOOLS_CONTEXT);
+        write!(prompt, "\n\nWorking directory: {}", dir.display()).unwrap();
+    }
+
     prompt
+}
+
+/// Summarise which prior claims earlier agents in this round have already
+/// rebutted, so the current agent can pick a different target.
+///
+/// Returns an empty string when no earlier agents have spoken this round
+/// or none of them produced a core claim.
+#[must_use]
+fn format_already_addressed(state: &CouncilState, round: u32, self_name: &str) -> String {
+    use std::fmt::Write;
+    let earlier: Vec<_> = state
+        .contributions_for_round(round)
+        .into_iter()
+        .filter(|c| c.agent.name != self_name)
+        .filter_map(|c| c.core_claim.as_deref().map(|claim| (&*c.agent.name, claim)))
+        .collect();
+
+    if earlier.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::from(
+        "\n\nCLAIMS ALREADY ADDRESSED THIS ROUND (choose a different target if possible):\n",
+    );
+    for (name, claim) in &earlier {
+        let _ = writeln!(out, "- {name}: \"{claim}\"");
+    }
+    out
 }
 
 /// Format prior contributions as a labelled transcript block.
 ///
+/// For rounds that have been compacted, the short summary is used in
+/// place of the full per-agent contributions.  The most recent round
+/// (`up_to_round - 1`) is always shown in full — compaction only
+/// applies to older rounds.
+///
 /// Output format:
 /// ```text
-/// === Round 1 ===
-/// [Skeptic]: Their argument text...
-/// [Pragmatist]: Their argument text...
+/// === Round 1 (compacted) ===
+/// [Skeptic]: Short summary of their position.
+/// [Pragmatist]: Short summary of their position.
 /// === Round 2 ===
-/// ...
+/// [Skeptic]: Their full argument text...
+/// [Pragmatist]: Their full argument text...
 /// ```
 ///
 /// Only includes rounds `0..round` (exclusive of the current round).
@@ -107,6 +162,13 @@ fn format_transcript(state: &CouncilState, up_to_round: u32) -> String {
     use std::fmt::Write;
     let mut out = String::new();
     for r in 0..up_to_round {
+        // Use compacted summary for older rounds if available.
+        if let Some(compacted) = state.compacted_summary(r) {
+            let _ = writeln!(out, "=== Round {} (compacted) ===", r + 1);
+            let _ = writeln!(out, "{compacted}");
+            continue;
+        }
+
         let contributions = state.contributions_for_round(r);
         if contributions.is_empty() {
             continue;
@@ -162,7 +224,7 @@ mod tests {
     fn round_0_no_history() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Test topic", 0, 3, &state);
+        let prompt = build_agent_system_prompt(&a, "Test topic", 0, 3, &state, None);
 
         assert!(prompt.contains("You are Skeptic."));
         assert!(prompt.contains("Skeptic is a test agent."));
@@ -189,13 +251,13 @@ mod tests {
         state.advance_round();
 
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Test topic", 1, 3, &state);
+        let prompt = build_agent_system_prompt(&a, "Test topic", 1, 3, &state, None);
 
         assert!(prompt.contains("DEBATE HISTORY:"));
         assert!(prompt.contains("=== Round 1 ==="));
         assert!(prompt.contains("[Skeptic]: I disagree strongly."));
         assert!(prompt.contains("[Pragmatist]: Let's find middle ground."));
-        assert!(prompt.contains("Respond to the strongest counterarguments"));
+        assert!(prompt.contains("conflicts with your perspective"));
         assert!(!prompt.contains("FINAL ROUND"));
     }
 
@@ -203,7 +265,7 @@ mod tests {
     fn final_round_suffix_appended() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Topic", 2, 3, &state);
+        let prompt = build_agent_system_prompt(&a, "Topic", 2, 3, &state, None);
         assert!(prompt.contains("FINAL ROUND"));
     }
 
@@ -211,7 +273,7 @@ mod tests {
     fn single_round_is_also_final() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let prompt = build_agent_system_prompt(&a, "Topic", 0, 1, &state);
+        let prompt = build_agent_system_prompt(&a, "Topic", 0, 1, &state, None);
         assert!(prompt.contains("FINAL ROUND"));
     }
 
@@ -219,7 +281,7 @@ mod tests {
     fn build_agent_messages_structure() {
         let state = CouncilState::new();
         let a = agent("s", "Skeptic", 0.7);
-        let msgs = build_agent_messages(&a, "My topic", 0, 2, &state);
+        let msgs = build_agent_messages(&a, "My topic", 0, 2, &state, None);
 
         assert_eq!(msgs.len(), 2);
         assert!(
@@ -239,5 +301,205 @@ mod tests {
         });
         let transcript = format_synthesis_transcript(&state);
         assert!(transcript.contains("[Skeptic (Skeptic's angle)]: Bad idea."));
+    }
+
+    // ── guided rebuttal cue tests ─────────────────────────────────────────
+
+    #[test]
+    fn guided_rebuttal_cue_in_prompt() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.9),
+            content: "Bad idea.".into(),
+            core_claim: Some("Monoliths scale better.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("p", "Pragmatist", 0.2),
+            content: "Let's be practical.".into(),
+            core_claim: Some("Use what works.".into()),
+            round: 0,
+        });
+        state.advance_round();
+
+        let a = agent("p", "Pragmatist", 0.2);
+        let prompt = build_agent_system_prompt(&a, "Architecture", 1, 3, &state, None);
+
+        // Guided rebuttal cue should appear — no directed rebuttal
+        assert!(prompt.contains("conflicts with your perspective"));
+        assert!(!prompt.contains("DIRECTED REBUTTAL"));
+    }
+
+    // ── compacted transcript tests ───────────────────────────────────────
+
+    #[test]
+    fn compacted_round_uses_summary() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Very long argument about monoliths...".into(),
+            core_claim: Some("Monoliths scale better.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("p", "Pragmatist", 0.3),
+            content: "Very long argument about microservices...".into(),
+            core_claim: Some("Use what works.".into()),
+            round: 0,
+        });
+        state.set_compacted(
+            0,
+            "[Skeptic]: Opposed the proposal.\n[Pragmatist]: Supported compromise.".into(),
+        );
+        state.advance_round();
+
+        // Round 1 contributions
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Round 1 full text from Skeptic.".into(),
+            core_claim: None,
+            round: 1,
+        });
+        state.advance_round();
+
+        // At round 2, round 0 should be compacted, round 1 should be full
+        let a = agent("s", "Skeptic", 0.7);
+        let prompt = build_agent_system_prompt(&a, "Topic", 2, 3, &state, None);
+
+        // Round 0 should show compacted summary
+        assert!(prompt.contains("=== Round 1 (compacted) ==="));
+        assert!(prompt.contains("[Skeptic]: Opposed the proposal."));
+        assert!(prompt.contains("[Pragmatist]: Supported compromise."));
+        // Full text from round 0 should NOT appear
+        assert!(!prompt.contains("Very long argument about monoliths"));
+
+        // Round 1 should show full text
+        assert!(prompt.contains("=== Round 2 ==="));
+        assert!(prompt.contains("Round 1 full text from Skeptic."));
+    }
+
+    #[test]
+    fn uncompacted_round_shows_full_text() {
+        let mut state = CouncilState::new();
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Full argument text.".into(),
+            core_claim: None,
+            round: 0,
+        });
+        state.advance_round();
+
+        // No compaction applied — should show full text
+        let a = agent("p", "Pragmatist", 0.3);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
+
+        assert!(prompt.contains("=== Round 1 ==="));
+        assert!(!prompt.contains("(compacted)"));
+        assert!(prompt.contains("Full argument text."));
+    }
+
+    // ── filesystem context tests ─────────────────────────────────────────
+
+    #[test]
+    fn cwd_none_omits_filesystem_context() {
+        let state = CouncilState::new();
+        let a = agent("s", "Skeptic", 0.7);
+        let prompt = build_agent_system_prompt(&a, "Topic", 0, 1, &state, None);
+        assert!(!prompt.contains("filesystem tools"));
+        assert!(!prompt.contains("Working directory"));
+    }
+
+    #[test]
+    fn cwd_some_injects_filesystem_context() {
+        let state = CouncilState::new();
+        let a = agent("s", "Skeptic", 0.7);
+        let dir = std::path::PathBuf::from("/tmp/my-project");
+        let prompt = build_agent_system_prompt(&a, "Topic", 0, 1, &state, Some(&dir));
+        assert!(prompt.contains("filesystem tools (read_file, list_directory, grep_search)"));
+        assert!(prompt.contains("Working directory: /tmp/my-project"));
+    }
+
+    // ── anti-dogpile tests ───────────────────────────────────────────────
+
+    #[test]
+    fn anti_dogpile_context_absent_for_first_agent_in_round() {
+        let mut state = CouncilState::new();
+        // Round 0 contributions
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Skeptic round 0.".into(),
+            core_claim: Some("Monoliths scale.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("p", "Pragmatist", 0.3),
+            content: "Pragmatist round 0.".into(),
+            core_claim: Some("Use what works.".into()),
+            round: 0,
+        });
+        state.advance_round();
+
+        // First agent in round 1 — no one has spoken yet this round
+        let a = agent("s", "Skeptic", 0.7);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
+        assert!(!prompt.contains("CLAIMS ALREADY ADDRESSED THIS ROUND"));
+    }
+
+    #[test]
+    fn anti_dogpile_context_present_for_later_agent() {
+        let mut state = CouncilState::new();
+        // Round 0
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Skeptic round 0.".into(),
+            core_claim: Some("Monoliths scale.".into()),
+            round: 0,
+        });
+        state.push(AgentContribution {
+            agent: agent("p", "Pragmatist", 0.3),
+            content: "Pragmatist round 0.".into(),
+            core_claim: Some("Use what works.".into()),
+            round: 0,
+        });
+        state.advance_round();
+
+        // Round 1: Skeptic has already spoken
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Skeptic round 1.".into(),
+            core_claim: Some("Still monoliths.".into()),
+            round: 1,
+        });
+
+        // Now Pragmatist speaks — should see Skeptic's claim listed
+        let a = agent("p", "Pragmatist", 0.3);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
+        assert!(prompt.contains("CLAIMS ALREADY ADDRESSED THIS ROUND"));
+        assert!(prompt.contains("Skeptic: \"Still monoliths.\""));
+    }
+
+    #[test]
+    fn anti_dogpile_skips_agents_without_core_claim() {
+        let mut state = CouncilState::new();
+        // Round 0
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Round 0.".into(),
+            core_claim: None,
+            round: 0,
+        });
+        state.advance_round();
+
+        // Round 1: Skeptic spoke but without a core claim
+        state.push(AgentContribution {
+            agent: agent("s", "Skeptic", 0.7),
+            content: "Skeptic round 1 no claim.".into(),
+            core_claim: None,
+            round: 1,
+        });
+
+        let a = agent("p", "Pragmatist", 0.3);
+        let prompt = build_agent_system_prompt(&a, "Topic", 1, 3, &state, None);
+        assert!(!prompt.contains("CLAIMS ALREADY ADDRESSED THIS ROUND"));
     }
 }

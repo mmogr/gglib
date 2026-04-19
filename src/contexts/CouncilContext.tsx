@@ -15,6 +15,7 @@ import {
   type CouncilAgent,
   type AgentContribution,
   type AgentToolCall,
+  type AgentStance,
 } from '../types/council';
 
 // ─── Actions ────────────────────────────────────────────────────────────────
@@ -32,6 +33,11 @@ export type CouncilAction =
   | { type: 'AGENT_TOOL_CALL_COMPLETE'; agentId: string; toolName: string; result: { content: string; isError: boolean }; displayName: string; durationDisplay: string }
   | { type: 'AGENT_TURN_COMPLETE'; contribution: AgentContribution }
   | { type: 'ROUND_SEPARATOR'; round: number }
+  | { type: 'JUDGE_START'; round: number }
+  | { type: 'JUDGE_TEXT_DELTA'; delta: string }
+  | { type: 'JUDGE_SUMMARY'; round: number; summary: string; consensusReached: boolean }
+  | { type: 'ROUND_COMPACTED'; round: number; summary: string }
+  | { type: 'STANCE_MAP'; stances: AgentStance[] }
   | { type: 'SYNTHESIS_START' }
   | { type: 'SYNTHESIS_TEXT_DELTA'; delta: string }
   | { type: 'SYNTHESIS_COMPLETE'; content: string }
@@ -110,7 +116,7 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
         ),
       };
 
-    case 'AGENT_TURN_COMPLETE':
+    case 'AGENT_TURN_COMPLETE': {
       return {
         ...state,
         activeAgentId: null,
@@ -122,9 +128,39 @@ export function councilReducer(state: CouncilSession, action: CouncilAction): Co
         activeToolCalls: [],
         contributions: [...state.contributions, action.contribution],
       };
+    }
 
     case 'ROUND_SEPARATOR':
       return { ...state, currentRound: action.round };
+
+    case 'JUDGE_START':
+      return { ...state, phase: 'judging', activeJudgeText: '', activeJudgeRound: action.round };
+
+    case 'JUDGE_TEXT_DELTA':
+      return { ...state, activeJudgeText: state.activeJudgeText + action.delta };
+
+    case 'JUDGE_SUMMARY':
+      return {
+        ...state,
+        phase: 'deliberating',
+        judgeAssessments: [
+          ...state.judgeAssessments,
+          { round: action.round, summary: action.summary, consensusReached: action.consensusReached },
+        ],
+        activeJudgeText: '',
+      };
+
+    case 'ROUND_COMPACTED':
+      return {
+        ...state,
+        compactedRounds: [
+          ...state.compactedRounds,
+          { round: action.round, summary: action.summary },
+        ],
+      };
+
+    case 'STANCE_MAP':
+      return { ...state, stances: action.stances };
 
     case 'SYNTHESIS_START':
       return { ...state, phase: 'synthesizing', synthesisText: '' };

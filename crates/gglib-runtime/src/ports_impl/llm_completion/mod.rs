@@ -41,12 +41,14 @@ mod sse_decoder;
 mod sse_parser;
 use sse_decoder::SseStreamDecoder;
 
-/// Timeout (seconds) for the `.send()` phase of each LLM request.
+/// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
-/// Covers TCP connect + TLS handshake + HTTP response headers.  Does **not**
-/// apply to the streaming body, which can take arbitrarily long during prompt
-/// pre-fill.  Chosen conservatively; the llama-server is always local.
-const LLM_CONNECT_TIMEOUT_SECS: u64 = 30;
+/// Covers TCP connect + TLS handshake + HTTP response headers.  Because
+/// llama-server does not send response headers until prompt pre-fill
+/// completes, this effectively caps time-to-first-token.  Large prompts
+/// (e.g. council synthesis transcripts) can require significant pre-fill
+/// time, so the default is generous.
+const DEFAULT_SEND_TIMEOUT_SECS: u64 = 120;
 
 // =============================================================================
 // Adapter struct
@@ -69,6 +71,9 @@ pub struct LlmCompletionAdapter {
     client: Client,
     /// Optional sampling overrides injected into every request body.
     sampling: Option<InferenceConfig>,
+    /// Timeout (seconds) for the `.send()` phase (connect through response
+    /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
+    send_timeout_secs: u64,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -116,6 +121,7 @@ impl LlmCompletionAdapter {
             model: model.unwrap_or_default(),
             client,
             sampling: None,
+            send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
         }
     }
 
@@ -123,6 +129,14 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_sampling(mut self, sampling: Option<InferenceConfig>) -> Self {
         self.sampling = sampling;
+        self
+    }
+
+    /// Override the send-phase timeout (connect through first response
+    /// headers).  The default is [`DEFAULT_SEND_TIMEOUT_SECS`] (120 s).
+    #[must_use]
+    pub fn with_send_timeout(mut self, secs: u64) -> Self {
+        self.send_timeout_secs = secs;
         self
     }
 }
@@ -245,18 +259,17 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         }
 
         // Gate the connect + first-byte phase with a hard timeout so a
-        // stalled or slow llama-server doesn’t hang the agent task
-        // indefinitely.  The timeout covers only `.send()` (connect through
-        // HTTP response headers); subsequent streaming body reads are not
-        // gated here because prompt pre-fill can be arbitrarily long.
+        // stalled or unresponsive llama-server doesn't hang the agent task
+        // indefinitely.  The timeout covers `.send()` — TCP connect through
+        // HTTP response headers — which includes prompt pre-fill because
+        // llama-server doesn't send headers until pre-fill finishes.
+        let timeout_secs = self.send_timeout_secs;
         let response = tokio::time::timeout(
-            std::time::Duration::from_secs(LLM_CONNECT_TIMEOUT_SECS),
+            std::time::Duration::from_secs(timeout_secs),
             self.client.post(&self.url).json(&body).send(),
         )
         .await
-        .map_err(|_| {
-            anyhow!("llama-server connection timed out after {LLM_CONNECT_TIMEOUT_SECS}s")
-        })?
+        .map_err(|_| anyhow!("llama-server connection timed out after {timeout_secs}s"))?
         .map_err(|e| anyhow!("request to llama-server failed: {e}"))?;
 
         if !response.status().is_success() {

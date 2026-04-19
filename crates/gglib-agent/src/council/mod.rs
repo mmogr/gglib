@@ -13,21 +13,31 @@
 //! | `events.rs`       | `CouncilEvent` SSE enum (wire format)               |
 //! | `prompts.rs`      | Prompt templates + contentiousness mapping          |
 //! | `state.rs`        | Round/contribution accumulator                      |
-//! | `history.rs`      | Per-turn context builder (identity + transcript)    |
+//! | `history.rs`      | Per-turn context builder (identity + transcript + directed rebuttals) |
 //! | `stream_bridge.rs`| `AgentEvent` → `CouncilEvent` mapper                |
-//! | `orchestrator.rs` | Round×agent loop driver + synthesis dispatch         |
+//! | `round.rs`        | Sequential round execution (per-agent turn driver)  |
+//! | `synthesis.rs`    | Synthesis pass (transcript → unified answer)        |
+//! | `judge.rs`        | Post-round judge + adaptive early stopping          |
+//! | `compaction.rs`   | LLM-driven round summarisation for context control  |
+//! | `stance.rs`       | Post-debate stance tracking (Held/Shifted/Conceded)  |
+//! | `orchestrator.rs` | Slim coordinator (rounds → compaction → judge → stance → synthesis) |
 //! | `suggest.rs`      | `suggest_council()` — shared suggest orchestration  |
 
+mod compaction;
 pub mod config;
 pub mod events;
 pub mod history;
+mod judge;
 pub mod orchestrator;
 pub mod prompts;
+mod round;
+pub mod stance;
 pub mod state;
 pub mod stream_bridge;
 pub mod suggest;
+mod synthesis;
 
-pub use config::{CouncilAgent, CouncilConfig, SuggestedCouncil};
+pub use config::{CouncilAgent, CouncilConfig, JudgeConfig, SuggestedCouncil};
 pub use events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 pub use orchestrator::run as run_council;
 pub use prompts::{contentiousness_tier_label, contentiousness_to_instruction};

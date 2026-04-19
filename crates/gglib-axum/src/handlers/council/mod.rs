@@ -37,6 +37,7 @@ pub async fn suggest(
         state.http_client.clone(),
         req.model.clone(),
         state.mcp.clone(),
+        None,
     );
 
     // Build multi-turn refinement history when the client sends a
@@ -104,6 +105,7 @@ pub async fn run(
         state.http_client.clone(),
         req.model.clone(),
         state.mcp.clone(),
+        None,
     );
 
     let agent_config: AgentConfig = req.config.map_or_else(AgentConfig::default, Into::into);
@@ -119,6 +121,7 @@ pub async fn run(
             ports.llm,
             ports.tool_executor,
             council_tx,
+            None,
         )
         .await;
     });

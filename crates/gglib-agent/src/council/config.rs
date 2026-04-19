@@ -74,6 +74,37 @@ pub struct CouncilConfig {
     /// final answer's focus (e.g. "prioritise actionable recommendations").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synthesis_guidance: Option<String>,
+
+    /// Optional judge configuration for adaptive early stopping.
+    ///
+    /// When present, a neutral judge agent evaluates the debate after each
+    /// round and may terminate early if consensus is detected.  When
+    /// absent, the council always runs the full `rounds` count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge: Option<JudgeConfig>,
+}
+
+// ─── judge config ────────────────────────────────────────────────────────────
+
+/// Configuration for the optional post-round judge.
+///
+/// The judge is a neutral LLM pass that evaluates the debate transcript
+/// after each round, summarises the current state, and decides whether
+/// consensus has been reached (triggering early stopping).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JudgeConfig {
+    /// Minimum number of rounds before the judge may stop the debate.
+    ///
+    /// Prevents premature consensus on the very first round.
+    /// Defaults to `1` (allow stopping after round 1, i.e. at least 2
+    /// rounds of debate if the first round yields consensus).
+    #[serde(default = "default_min_rounds_before_stop")]
+    pub min_rounds_before_stop: u32,
+}
+
+/// Default: allow early stopping after at least 1 completed round.
+const fn default_min_rounds_before_stop() -> u32 {
+    1
 }
 
 // ─── suggested council (returned by /api/council/suggest) ────────────────────
@@ -95,6 +126,10 @@ pub struct SuggestedCouncil {
     /// Suggested synthesis guidance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synthesis_guidance: Option<String>,
+
+    /// Suggested judge configuration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge: Option<JudgeConfig>,
 }
 
 /// Default agent colours, cycled when the LLM omits `color`.
@@ -117,6 +152,7 @@ impl SuggestedCouncil {
             topic,
             rounds: self.rounds,
             synthesis_guidance: self.synthesis_guidance,
+            judge: self.judge,
         }
     }
 
@@ -226,6 +262,7 @@ mod tests {
             ],
             rounds: 2,
             synthesis_guidance: None,
+            judge: None,
         };
         council.backfill_defaults();
         assert_eq!(council.agents[0].id, "kept-id");

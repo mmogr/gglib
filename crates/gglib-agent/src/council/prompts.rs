@@ -82,10 +82,14 @@ RULES:
 prefixed with \"CORE CLAIM:\" (e.g., \"CORE CLAIM: Microservices add more operational cost \
 than they save for teams under 20 engineers.\"). If you cannot form a single claim, omit this line.";
 
-/// Appended to the system prompt when the agent has prior rounds to respond to.
-pub const DEBATE_HISTORY_SUFFIX: &str = "\n\n\
-Respond to the strongest counterarguments from previous rounds. \
-Strengthen, revise, or concede specific points.";
+/// Appended when prior rounds exist.
+///
+/// Lets the agent autonomously choose which argument to rebut based on
+/// genuine conflict rather than a mechanically-assigned target.
+pub const GUIDED_REBUTTAL_CUE: &str = "\n\n\
+Review the previous round's core claims. Identify the argument that most \
+directly conflicts with your perspective and construct a focused rebuttal \
+against it. Strengthen, revise, or concede specific points.";
 
 /// Appended to the system prompt in the last debate round.
 pub const FINAL_ROUND_SUFFIX: &str = "\n\n\
@@ -118,6 +122,111 @@ FULL DEBATE TRANSCRIPT:
 Write the synthesis as a well-structured response. Do NOT simply list each agent's position. \
 Integrate and analyze the arguments to produce a genuinely higher-quality answer than any \
 single agent could provide alone.";
+
+// ─── round compaction ────────────────────────────────────────────────────────
+
+/// System prompt for the round-compaction pass.
+///
+/// Placeholders: `{round}`, `{transcript}`.
+///
+/// Each agent's contribution must be summarised with a
+/// `SUMMARY(agent_name): ...` line.  The parser in `compaction.rs` uses
+/// robust, case-insensitive matching to tolerate markdown wrapping and
+/// extra whitespace.
+pub const COMPACTION_PROMPT: &str = "\
+You are a concise note-taker for a multi-agent debate. Your job is to compress \
+a single round of debate into a brief summary that preserves each agent's core \
+position and key evidence.
+
+ROUND {round} TRANSCRIPT:
+{transcript}
+
+YOUR TASK:
+For each agent who spoke in this round, write exactly one line:
+SUMMARY(Agent Name): 1-2 sentence summary of their position and key evidence.
+
+Rules:
+- Preserve each agent's distinct position — do NOT merge or reconcile views.
+- Include any specific evidence, data points, or examples they cited.
+- Keep each summary to 1-2 sentences maximum.
+- Do NOT add any commentary, analysis, or additional text.
+- Use the exact agent name as it appears in the transcript.";
+
+// ─── judge ───────────────────────────────────────────────────────────────────
+
+/// System prompt for the post-round judge evaluation.
+///
+/// Placeholders: `{topic}`, `{round}`, `{total_rounds}`, `{transcript}`.
+///
+/// The judge must end with a `CONSENSUS_REACHED:` line.  The parser in
+/// `judge.rs` uses robust, case-insensitive matching to tolerate markdown
+/// wrapping, extra whitespace, or conversational filler.
+pub const JUDGE_PROMPT: &str = "\
+You are a neutral judge evaluating a structured multi-agent debate on the topic: \"{topic}\"
+
+This is the end of round {round} (of a maximum of {total_rounds}).
+
+DEBATE TRANSCRIPT SO FAR:
+{transcript}
+
+YOUR TASK:
+1. Summarise the current state of the debate in 2-4 sentences: what are the key positions, \
+where do agents agree, and what genuine disagreements remain?
+2. Determine whether consensus has been reached. Consensus means the agents' core positions \
+have converged to a shared conclusion — not that they agree on every detail, but that there \
+is a clear dominant answer with no substantive opposition remaining.
+
+IMPORTANT: You MUST end your response with exactly one of these two lines:
+CONSENSUS_REACHED: true
+CONSENSUS_REACHED: false
+
+Do NOT add any text after the CONSENSUS_REACHED line.";
+
+// ─── stance evaluation ───────────────────────────────────────────────────────
+
+/// System prompt for the post-debate stance evaluation pass.
+///
+/// Placeholders: `{topic}`, `{claims}`.
+///
+/// The parser in `stance.rs` expects one `STANCE(Agent Name): Held|Shifted|Conceded`
+/// line per agent.  Parsing is case-insensitive, whitespace-tolerant, and
+/// strips markdown formatting artefacts.
+pub const STANCE_PROMPT: &str = "\
+You are an impartial analyst reviewing a multi-agent debate on the topic: \"{topic}\"
+
+For each agent below you are given their INITIAL core claim (from round 1) \
+and their FINAL core claim (from the last round). Your task is to classify \
+how each agent's position evolved during the debate.
+
+{claims}
+
+For each agent, output exactly one line:
+STANCE(Agent Name): <trajectory>
+
+Where <trajectory> is one of:
+- Held — the agent's final position is substantively the same as their initial position
+- Shifted — the agent materially changed their position but did not fully adopt an opposing view
+- Conceded — the agent abandoned their initial position and adopted a substantially different or opposing view
+
+Rules:
+- Compare the MEANING of the claims, not the exact wording. Minor rephrasing is \"Held\".
+- If the initial or final claim is missing, classify as \"Held\" (insufficient evidence to judge movement).
+- Output ONLY the STANCE lines — no explanation, no commentary, no additional text.";
+
+// ─── filesystem context ──────────────────────────────────────────────────────
+
+/// Appended to the agent system prompt when a working directory is available,
+/// informing the agent about filesystem tools.
+///
+/// The `"\n\nWorking directory: {cwd}"` line is appended separately by the
+/// caller so this constant stays format-arg-free.
+///
+/// Phrasing mirrors `agent_question::SYSTEM_PROMPT` to keep tool descriptions
+/// consistent across CLI entry-points.
+pub const FILESYSTEM_TOOLS_CONTEXT: &str = "\n\n\
+You have access to filesystem tools (read_file, list_directory, grep_search) \
+scoped to the user's working directory. Use them to find evidence supporting \
+your position.";
 
 // ─── contentiousness mapping ─────────────────────────────────────────────────
 
@@ -216,5 +325,30 @@ mod tests {
     #[test]
     fn negative_contentiousness_treated_as_collaborative() {
         assert!(contentiousness_to_instruction(-0.5).contains("collaborative"));
+    }
+
+    #[test]
+    fn judge_prompt_has_placeholders() {
+        assert!(JUDGE_PROMPT.contains("{topic}"));
+        assert!(JUDGE_PROMPT.contains("{round}"));
+        assert!(JUDGE_PROMPT.contains("{total_rounds}"));
+        assert!(JUDGE_PROMPT.contains("{transcript}"));
+    }
+
+    #[test]
+    fn guided_rebuttal_cue_is_non_empty() {
+        assert!(GUIDED_REBUTTAL_CUE.contains("conflicts with your perspective"));
+    }
+
+    #[test]
+    fn compaction_prompt_has_placeholders() {
+        assert!(COMPACTION_PROMPT.contains("{round}"));
+        assert!(COMPACTION_PROMPT.contains("{transcript}"));
+    }
+
+    #[test]
+    fn stance_prompt_has_placeholders() {
+        assert!(STANCE_PROMPT.contains("{topic}"));
+        assert!(STANCE_PROMPT.contains("{claims}"));
     }
 }
