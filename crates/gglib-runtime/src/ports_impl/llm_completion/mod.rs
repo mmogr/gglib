@@ -43,12 +43,13 @@ use sse_decoder::SseStreamDecoder;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
-/// Covers TCP connect + TLS handshake + HTTP response headers.  Because
-/// llama-server does not send response headers until prompt pre-fill
-/// completes, this effectively caps time-to-first-token.  Large prompts
-/// (e.g. council synthesis transcripts) can require significant pre-fill
-/// time, so the default is generous.
-const DEFAULT_SEND_TIMEOUT_SECS: u64 = 120;
+/// With `return_progress: true` in the request body, llama-server sends HTTP
+/// response headers immediately (before prompt pre-fill), so `.send()`
+/// completes in well under a second for any reachable server.  This timeout
+/// is therefore a **safety net** against a truly unreachable or hung server,
+/// not a pre-fill time limit.  The generous value avoids false positives
+/// while still bounding resource usage for a dead connection.
+const DEFAULT_SEND_TIMEOUT_SECS: u64 = 600;
 
 // =============================================================================
 // Adapter struct
@@ -235,6 +236,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             "model": self.model,
             "messages": openai_messages,
             "stream": true,
+            "return_progress": true,
         });
         if !openai_tools.is_empty() {
             body["tools"] = json!(openai_tools);

@@ -159,6 +159,10 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 eprintln!("\n\x1b[36m{BOLD}── Council Synthesis ──{RESET}");
             }
 
+            CouncilEvent::SynthesisProgress { .. } | CouncilEvent::AgentProgress { .. } => {
+                // Prompt pre-fill progress — silently ignored in CLI for now.
+            }
+
             CouncilEvent::SynthesisTextDelta { delta } => {
                 print!("{delta}");
                 let _ = io::stdout().flush();

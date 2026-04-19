@@ -48,6 +48,25 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     let parsed: serde_json::Value = serde_json::from_str(data)
         .map_err(|e| anyhow!("SSE frame JSON parse error: {e} — data: {data}"))?;
 
+    // ── Prompt-progress frames (llama-server `return_progress: true`) ────
+    // These arrive during the pre-fill phase and have no `choices` array.
+    // We check for them *before* the choices guard so they aren't silently
+    // dropped as "no choices" frames.
+    if let Some(pp) = parsed.get("prompt_progress") {
+        let processed = pp["processed"].as_u64().unwrap_or(0) as u32;
+        let total = pp["total"].as_u64().unwrap_or(0) as u32;
+        let cached = pp["cache"].as_u64().unwrap_or(0) as u32;
+        let time_ms = pp["time_ms"].as_u64().unwrap_or(0);
+        return Ok(SseParseResult::Events(vec![
+            LlmStreamEvent::PromptProgress {
+                processed,
+                total,
+                cached,
+                time_ms,
+            },
+        ]));
+    }
+
     // Guard against keepalive / error frames that carry no `choices` array.
     // Without this check every field access falls through to `Value::Null`,
     // events are silently dropped, and a `finish_reason: "stop"` in such a
@@ -378,6 +397,56 @@ mod tests {
         assert!(
             matches!(&events[1], LlmStreamEvent::TextDelta { content } if content == "ok"),
             "TextDelta must come second"
+        );
+    }
+
+    #[test]
+    fn prompt_progress_frame_produces_progress_event() {
+        let frame = serde_json::json!({
+            "prompt_progress": {
+                "processed": 2048,
+                "total": 8192,
+                "cache": 512,
+                "time_ms": 1234
+            }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            LlmStreamEvent::PromptProgress {
+                processed: 2048,
+                total: 8192,
+                cached: 512,
+                time_ms: 1234
+            }
+        ));
+    }
+
+    #[test]
+    fn prompt_progress_frame_not_confused_with_choices() {
+        // A prompt_progress frame has no `choices` array.  The parser should
+        // recognise it as progress, not drop it as a no-choices keepalive.
+        let frame = serde_json::json!({
+            "prompt_progress": {
+                "processed": 100,
+                "total": 100,
+                "cache": 0,
+                "time_ms": 50
+            }
+        })
+        .to_string();
+        let events = match parse_sse_frame(&frame) {
+            Ok(SseParseResult::Events(e)) => e,
+            other => panic!("unexpected: {other:?}"),
+        };
+        assert!(
+            !events.is_empty(),
+            "prompt_progress frame must not be skipped"
         );
     }
 }

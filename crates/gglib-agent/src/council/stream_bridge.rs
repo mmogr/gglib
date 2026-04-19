@@ -49,6 +49,19 @@ pub async fn bridge_agent_events(
                 delta: content,
             },
 
+            AgentEvent::PromptProgress {
+                processed,
+                total,
+                cached,
+                time_ms,
+            } => CouncilEvent::AgentProgress {
+                agent_id: id.clone(),
+                processed,
+                total,
+                cached,
+                time_ms,
+            },
+
             AgentEvent::ToolCallStart {
                 tool_call,
                 display_name,
