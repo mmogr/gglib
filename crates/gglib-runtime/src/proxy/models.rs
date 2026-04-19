@@ -79,6 +79,20 @@ pub struct ToolCallFunctionDelta {
 // Chat Completion Request/Response Types
 // =============================================================================
 
+/// Minimal routing envelope for inbound `/v1/chat/completions` requests.
+///
+/// Mirrors `gglib_proxy::models::ChatRoutingEnvelope`. The proxy only reads
+/// these three fields; everything else is forwarded as raw bytes to llama-server.
+/// Using a narrow struct prevents strict deserialization from rejecting valid
+/// OpenAI request variants (e.g. array-form `content`, bare-string `stop`).
+#[derive(Debug, Deserialize)]
+pub struct ChatRoutingEnvelope {
+    pub model: String,
+    #[serde(default)]
+    pub stream: bool,
+    pub num_ctx: Option<u64>,
+}
+
 /// Request to /v1/chat/completions endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatCompletionRequest {

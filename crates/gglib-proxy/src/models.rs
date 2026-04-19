@@ -858,4 +858,68 @@ mod tests {
         assert_eq!(json["tool_calls"][0]["id"], "call_1");
         assert_eq!(json["tool_calls"][0]["function"]["name"], "search");
     }
+
+    // =========================================================================
+    // ChatRoutingEnvelope tests
+    // =========================================================================
+
+    #[test]
+    fn routing_envelope_extracts_model_stream_num_ctx() {
+        let json = r#"{
+            "model": "llama-3",
+            "stream": true,
+            "num_ctx": 16384,
+            "messages": [{"role": "user", "content": "hello"}],
+            "temperature": 0.7
+        }"#;
+        let env: ChatRoutingEnvelope = serde_json::from_str(json).unwrap();
+        assert_eq!(env.model, "llama-3");
+        assert!(env.stream);
+        assert_eq!(env.num_ctx, Some(16384));
+    }
+
+    #[test]
+    fn routing_envelope_stream_defaults_false() {
+        let json = r#"{"model": "test", "messages": []}"#;
+        let env: ChatRoutingEnvelope = serde_json::from_str(json).unwrap();
+        assert!(!env.stream);
+        assert!(env.num_ctx.is_none());
+    }
+
+    /// Regression test for #438: content as an array of content parts must not
+    /// cause a 400 from the proxy. The routing envelope ignores `messages`
+    /// entirely, so any valid-JSON content form passes through.
+    #[test]
+    fn routing_envelope_accepts_array_form_content() {
+        let json = r#"{
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Hello"},
+                        {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}
+                    ]
+                }
+            ]
+        }"#;
+        let env: ChatRoutingEnvelope = serde_json::from_str(json).unwrap();
+        assert_eq!(env.model, "gpt-4o");
+    }
+
+    /// Regression test for #438: stop as a bare string (valid per OpenAI spec)
+    /// must not cause a 400.
+    #[test]
+    fn routing_envelope_accepts_stop_as_bare_string() {
+        let json = r#"{"model": "test", "messages": [], "stop": "END"}"#;
+        let env: ChatRoutingEnvelope = serde_json::from_str(json).unwrap();
+        assert_eq!(env.model, "test");
+    }
+
+    #[test]
+    fn routing_envelope_rejects_missing_model() {
+        let json = r#"{"messages": [], "stream": false}"#;
+        let result: Result<ChatRoutingEnvelope, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "model is required");
+    }
 }

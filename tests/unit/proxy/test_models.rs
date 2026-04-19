@@ -1,5 +1,76 @@
 //! Unit tests for proxy API models serialization and deserialization.
 
+// =============================================================================
+// ChatRoutingEnvelope tests (regression for #438)
+// =============================================================================
+
+/// Routing envelope must accept `content` as an array of content parts.
+/// This is valid per the OpenAI spec and sent by clients such as the GitHub
+/// Copilot LLM Gateway. The old ChatCompletionRequest rejected this with a 400.
+#[test]
+fn test_routing_envelope_accepts_array_content() {
+    let json_str = r#"{
+        "model": "gpt-4o",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Explain this image."},
+                    {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}}
+                ]
+            }
+        ]
+    }"#;
+
+    let env: gglib_runtime::proxy::models::ChatRoutingEnvelope =
+        serde_json::from_str(json_str).expect("array-form content must not cause a parse error");
+
+    assert_eq!(env.model, "gpt-4o");
+    assert!(!env.stream);
+}
+
+/// Routing envelope must accept `stop` as a bare string, not just an array.
+#[test]
+fn test_routing_envelope_accepts_stop_as_string() {
+    let json_str = r#"{
+        "model": "llama-3",
+        "messages": [],
+        "stop": "END"
+    }"#;
+
+    let env: gglib_runtime::proxy::models::ChatRoutingEnvelope =
+        serde_json::from_str(json_str).expect("stop as a bare string must not cause a parse error");
+
+    assert_eq!(env.model, "llama-3");
+}
+
+/// Routing envelope requires the `model` field; everything else is optional.
+#[test]
+fn test_routing_envelope_rejects_missing_model() {
+    let json_str = r#"{"messages": [], "stream": false}"#;
+
+    let result: Result<gglib_runtime::proxy::models::ChatRoutingEnvelope, _> =
+        serde_json::from_str(json_str);
+
+    assert!(result.is_err(), "model field is required");
+}
+
+/// Routing envelope defaults stream to false when omitted.
+#[test]
+fn test_routing_envelope_stream_defaults_false() {
+    let json_str = r#"{"model": "llama-3", "messages": []}"#;
+
+    let env: gglib_runtime::proxy::models::ChatRoutingEnvelope =
+        serde_json::from_str(json_str).unwrap();
+
+    assert!(!env.stream);
+    assert!(env.num_ctx.is_none());
+}
+
+// =============================================================================
+// ChatCompletionRequest tests (full schema, used for response types / tests)
+// =============================================================================
+
 /// Test `ChatCompletionRequest` deserialization
 #[test]
 fn test_chat_completion_request_deserialize_minimal() {
