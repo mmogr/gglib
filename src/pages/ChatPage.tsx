@@ -30,6 +30,7 @@ import {
   deleteConversation,
   updateConversationTitle,
   updateConversationSystemPrompt,
+  getMessages,
   DEFAULT_TITLE_GENERATION_PROMPT,
 } from '../services/clients/chat';
 import type { ConversationSummary } from '../services/clients/chat';
@@ -391,18 +392,21 @@ export default function ChatPage({
     }
   };
 
-  const handleExportConversation = () => {
-    // Export would require access to runtime - simplified version
+  const handleExportConversation = async () => {
     if (!activeConversation) return;
-    // For now, just export conversation metadata
-    const data = { conversation: activeConversation };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `conversation-${activeConversation.id}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      const messages = await getMessages(activeConversation.id);
+      const data = { conversation: activeConversation, messages };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `conversation-${activeConversation.id}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const handleUpdateSystemPrompt = async (prompt: string | null) => {
