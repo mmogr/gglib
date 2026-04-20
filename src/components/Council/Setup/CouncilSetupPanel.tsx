@@ -8,13 +8,14 @@
  * @module components/Council/Setup/CouncilSetupPanel
  */
 
-import { type FC, useState, useCallback, useEffect } from 'react';
+import { type FC, useState, useCallback, useEffect, useMemo } from 'react';
 import type { CouncilAgent, CouncilConfig } from '../../../types/council';
 import { Button } from '../../ui/Button';
 import { AgentCard } from './AgentCard';
 import { AddAgentButton } from './AddAgentButton';
 import type { DiffStatus } from './AgentDiffBadge';
 import { cn } from '../../../utils/cn';
+import { getToolRegistry } from '../../../services/tools/registry';
 
 interface CouncilSetupPanelProps {
   topic: string;
@@ -48,6 +49,10 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
 }) => {
   const [agents, setAgents] = useState<CouncilAgent[]>(initialAgents);
   const [rounds, setRounds] = useState(initialRounds);
+
+  // Snapshot available tools from the registry at mount time.
+  // The registry is already populated at app init (built-ins + active MCP servers).
+  const availableTools = useMemo(() => getToolRegistry().getAllAsBackendTools(), []);
 
   // Sync local state when context-driven changes arrive (add/remove/update agent).
   useEffect(() => {
@@ -99,6 +104,7 @@ export const CouncilSetupPanel: FC<CouncilSetupPanelProps> = ({
             onUpdate={onUpdateAgent}
             onRemove={onRemoveAgent}
             onFillAgent={onFillAgent}
+            availableTools={availableTools}
             disabled={disabled}
           />
         ))}

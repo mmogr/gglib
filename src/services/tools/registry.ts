@@ -126,6 +126,39 @@ export class ToolRegistry {
   }
 
   /**
+   * Resolve the backend wire name for a sanitized registry key.
+   *
+   * - MCP tools registered via `registerWithNameMapping` become `serverId:originalName`
+   *   (the format the backend council/agent handlers expect).
+   * - Built-in tools (and any tool without a name mapping) keep their sanitized name.
+   *
+   * This is the single source of truth used by both the agentic chat tool-filter
+   * and the council per-agent tool-picker.
+   */
+  getBackendName(sanitizedName: string): string {
+    const entry = this._nameMap.get(sanitizedName);
+    if (entry !== undefined) {
+      return `${entry.serverId}:${entry.originalName}`;
+    }
+    return sanitizedName;
+  }
+
+  /**
+   * Return all registered tools as `{ displayName, backendName, description }` triples.
+   *
+   * `displayName` is the human-readable name shown in the UI (sanitized name).
+   * `backendName` is the wire name sent to the backend (see `getBackendName`).
+   * `description` is the tool's LLM-facing description string.
+   */
+  getAllAsBackendTools(): Array<{ displayName: string; backendName: string; description: string }> {
+    return Array.from(this.tools.entries()).map(([sanitized, tool]) => ({
+      displayName: sanitized,
+      backendName: this.getBackendName(sanitized),
+      description: tool.definition.function.description ?? '',
+    }));
+  }
+
+  /**
    * Register a tool using a simplified builder pattern.
    * @param name - Function name
    * @param description - Description for the LLM
