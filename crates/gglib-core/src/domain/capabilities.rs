@@ -372,7 +372,8 @@ fn merge_consecutive_system_messages(messages: Vec<ChatMessage>) -> Vec<ChatMess
 
     for msg in messages {
         if let Some(last) = result.last_mut()
-            && last.role == "system" && msg.role == "system"
+            && last.role == "system"
+            && msg.role == "system"
         {
             // Merge: append content with separator
             let last_content = last.content.take().unwrap_or_default();
