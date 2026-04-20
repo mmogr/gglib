@@ -134,16 +134,7 @@ export async function streamAgentChat(options: StreamAgentChatOptions): Promise<
     if (enabled.length === 0) {
       toolFilter = null;
     } else {
-      toolFilter = enabled.map((def) => {
-        const sanitized = def.function.name;
-        const serverId = registry.getServerId(sanitized);
-        const original = registry.getOriginalName(sanitized);
-        if (serverId !== undefined && original !== undefined) {
-          return `${serverId}:${original}`;
-        }
-        // Fallback for tools registered via register() without a name mapping
-        return sanitized;
-      });
+      toolFilter = enabled.map((def) => registry.getBackendName(def.function.name));
     }
   }
 

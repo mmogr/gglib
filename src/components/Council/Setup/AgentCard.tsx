@@ -1,13 +1,14 @@
 /**
  * Single agent card for council setup.
  *
- * Displays agent persona, perspective, and a contentiousness slider.
+ * Displays agent persona, perspective, a contentiousness slider, and a
+ * collapsible tool-filter picker that matches CLI `tools <N>` parity.
  * Injects `--agent-color` CSS custom property for ambient tinting.
  *
  * @module components/Council/Setup/AgentCard
  */
 
-import { type FC, useState } from 'react';
+import { type FC, useState, useCallback } from 'react';
 import type { CouncilAgent } from '../../../types/council';
 import { contentiousnessColor, contentiousnessLabel } from '../../../types/council';
 import { cn } from '../../../utils/cn';
@@ -16,6 +17,15 @@ import { AgentDiffBadge, type DiffStatus } from './AgentDiffBadge';
 import { Sparkles } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 
+export interface AvailableTool {
+  /** Sanitized name shown in the UI (e.g. `web_search`). */
+  displayName: string;
+  /** Wire name sent to the backend (e.g. `my_server:web_search` for MCP, or plain for built-ins). */
+  backendName: string;
+  /** LLM-facing description surfaced as tooltip/secondary text. */
+  description: string;
+}
+
 interface AgentCardProps {
   agent: CouncilAgent;
   diffStatus?: DiffStatus;
@@ -23,15 +33,62 @@ interface AgentCardProps {
   onUpdate?: (agentId: string, changes: Partial<CouncilAgent>) => void;
   onRemove?: (agentId: string) => void;
   onFillAgent?: (agentId: string) => Promise<void>;
+  /**
+   * Full list of tools available to the backend.  When provided, renders a
+   * collapsible tool-picker that maps to `CouncilAgent.tool_filter`.
+   */
+  availableTools?: AvailableTool[];
   disabled?: boolean;
 }
 
 export const AgentCard: FC<AgentCardProps> = ({
-  agent, diffStatus = 'unchanged', onContentiousnessChange, onUpdate, onRemove, onFillAgent, disabled,
+  agent, diffStatus = 'unchanged', onContentiousnessChange, onUpdate, onRemove, onFillAgent, availableTools, disabled,
 }) => {
   const [isFilling, setIsFilling] = useState(false);
   const color = contentiousnessColor(agent.contentiousness);
   const label = contentiousnessLabel(agent.contentiousness);
+
+  // ── Tool-filter helpers ────────────────────────────────────────────────────
+
+  const isToolEnabled = useCallback(
+    (backendName: string) =>
+      agent.tool_filter === undefined || agent.tool_filter.includes(backendName),
+    [agent.tool_filter],
+  );
+
+  const handleToolToggle = useCallback(
+    (backendName: string, checked: boolean) => {
+      if (!onUpdate || !availableTools) return;
+      const allBackendNames = availableTools.map((t) => t.backendName);
+      const current: string[] =
+        agent.tool_filter ?? allBackendNames; // undefined → all enabled
+      const next = checked
+        ? [...current, backendName].filter((n, i, a) => a.indexOf(n) === i)
+        : current.filter((n) => n !== backendName);
+      // all checked → revert to undefined (no filter); keep explicit array otherwise
+      const newFilter =
+        next.length === allBackendNames.length ? undefined : next;
+      onUpdate(agent.id, { tool_filter: newFilter });
+    },
+    [agent.id, agent.tool_filter, availableTools, onUpdate],
+  );
+
+  const handleSetAll = useCallback(() => {
+    onUpdate?.(agent.id, { tool_filter: undefined });
+  }, [agent.id, onUpdate]);
+
+  const handleSetNone = useCallback(() => {
+    onUpdate?.(agent.id, { tool_filter: [] });
+  }, [agent.id, onUpdate]);
+
+  // ── Tool-filter summary label ──────────────────────────────────────────────
+
+  const toolSummary = (() => {
+    if (!availableTools || availableTools.length === 0) return null;
+    if (agent.tool_filter === undefined) return 'All tools';
+    const count = agent.tool_filter.length;
+    return `${count} of ${availableTools.length} tool${availableTools.length !== 1 ? 's' : ''}`;
+  })();
 
   return (
     <div
@@ -113,6 +170,73 @@ export const AgentCard: FC<AgentCardProps> = ({
           aria-label={`${agent.name} persona`}
         />
       </details>
+
+      {/* Tool filter (collapsed, only when tools are available) */}
+      {availableTools && availableTools.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-text-secondary hover:text-text transition-colors flex items-center gap-xs">
+            <span>Tools</span>
+            <span
+              className={cn(
+                'ml-1 px-xs rounded text-[10px] font-medium',
+                agent.tool_filter === undefined
+                  ? 'bg-surface-alt text-text-muted'
+                  : agent.tool_filter.length === 0
+                    ? 'bg-danger/15 text-danger'
+                    : 'bg-primary/15 text-primary',
+              )}
+            >
+              {toolSummary}
+            </span>
+            {!disabled && onUpdate && (
+              <span className="ml-auto flex gap-xs" onClick={(e) => e.preventDefault()}>
+                <button
+                  type="button"
+                  onClick={handleSetAll}
+                  className="text-text-muted hover:text-text transition-colors px-1"
+                  title="Allow all tools"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSetNone}
+                  className="text-text-muted hover:text-text transition-colors px-1"
+                  title="Disallow all tools"
+                >
+                  None
+                </button>
+              </span>
+            )}
+          </summary>
+          <div className="mt-xs flex flex-col gap-xs pl-xs">
+            {availableTools.map((tool) => (
+              <label
+                key={tool.backendName}
+                className="flex items-start gap-sm cursor-pointer group"
+              >
+                <input
+                  type="checkbox"
+                  checked={isToolEnabled(tool.backendName)}
+                  onChange={(e) => handleToolToggle(tool.backendName, e.target.checked)}
+                  disabled={disabled || !onUpdate}
+                  className="mt-0.5 shrink-0 accent-[var(--agent-color)] disabled:cursor-not-allowed"
+                />
+                <span className="flex flex-col">
+                  <span className="text-text-secondary group-hover:text-text transition-colors">
+                    {tool.displayName}
+                  </span>
+                  {tool.description && (
+                    <span className="text-text-muted text-[10px] leading-snug">
+                      {tool.description}
+                    </span>
+                  )}
+                </span>
+              </label>
+            ))}
+          </div>
+        </details>
+      )}
 
       {/* Contentiousness slider */}
       <div className="flex flex-col gap-xs mt-xs">
