@@ -69,6 +69,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 - **Ports-only dependency**: Depends only on `gglib-core` (no sqlx, no gglib-runtime)
 - **Bind externally**: `serve()` takes a pre-bound `TcpListener` from supervisor
+- **Router, not validator**: Inbound `/v1/chat/completions` requests are parsed into a narrow `ChatRoutingEnvelope` (just `model`, `stream`, `num_ctx`) and then forwarded as raw bytes. Unknown fields and OpenAI content variants (array-form `content`, bare-string `stop`, future extensions) pass through unchanged. Schema validation is llama-server's responsibility.
 - **Domain → API mapping**: OpenAI types live here, domain types in gglib-core
 
 ## Module Architecture

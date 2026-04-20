@@ -142,10 +142,11 @@ impl McpServerConfig {
                 }
 
                 // working_dir MUST be absolute if specified
-                if let Some(ref cwd) = self.working_dir {
-                    if !cwd.is_empty() && !std::path::Path::new(cwd).is_absolute() {
-                        return Err(format!("Stdio server working_dir must be absolute: {cwd}"));
-                    }
+                if let Some(ref cwd) = self.working_dir
+                    && !cwd.is_empty()
+                    && !std::path::Path::new(cwd).is_absolute()
+                {
+                    return Err(format!("Stdio server working_dir must be absolute: {cwd}"));
                 }
 
                 Ok(())

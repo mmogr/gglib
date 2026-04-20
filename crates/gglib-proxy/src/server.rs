@@ -24,7 +24,7 @@ use gglib_mcp::McpService;
 use crate::forward::forward_chat_completion;
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
-use crate::models::{ChatCompletionRequest, ErrorResponse, ModelsResponse};
+use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelsResponse};
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]
@@ -139,9 +139,13 @@ async fn chat_completions(
 ) -> Response {
     debug!("POST /v1/chat/completions");
 
-    // Parse the request to extract model name and streaming flag
-    let request: ChatCompletionRequest = match serde_json::from_slice(&body) {
-        Ok(req) => req,
+    // Extract the three routing fields from the request body.
+    // ChatRoutingEnvelope only captures `model`, `stream`, and `num_ctx`;
+    // all other fields are ignored by serde and the raw bytes are forwarded
+    // unchanged. This makes the proxy immune to content-array messages,
+    // stop as a bare string, and any future OpenAI request extensions.
+    let envelope: ChatRoutingEnvelope = match serde_json::from_slice(&body) {
+        Ok(env) => env,
         Err(e) => {
             error!("Failed to parse request: {e}");
             return (
@@ -155,9 +159,9 @@ async fn chat_completions(
         }
     };
 
-    let model_name = request.model.clone();
-    let is_streaming = request.stream;
-    let num_ctx = request.num_ctx;
+    let model_name = envelope.model.clone();
+    let is_streaming = envelope.stream;
+    let num_ctx = envelope.num_ctx;
 
     info!(
         model = %model_name,
