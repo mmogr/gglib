@@ -40,10 +40,10 @@ mod synthesis;
 pub mod tool_filter_parser;
 
 pub use config::{CouncilAgent, CouncilConfig, JudgeConfig, SuggestedCouncil};
-pub use tool_filter_parser::parse_tool_filter;
 pub use events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 pub use orchestrator::run as run_council;
 pub use prompts::{contentiousness_tier_label, contentiousness_to_instruction};
 pub use state::{AgentContribution, CouncilState, extract_core_claim};
 pub use stream_bridge::{bridge_agent_events, emit_turn_complete};
 pub use suggest::suggest_council;
+pub use tool_filter_parser::parse_tool_filter;

@@ -68,10 +68,7 @@ use anyhow::{Result, bail};
 ///
 /// Returns `Ok(None)` when all tools should be allowed; `Ok(Some(names))` for
 /// an explicit subset; `Err` on invalid syntax or out-of-range indices.
-pub fn parse_tool_filter(
-    input: &str,
-    available: &[String],
-) -> Result<Option<Vec<String>>> {
+pub fn parse_tool_filter(input: &str, available: &[String]) -> Result<Option<Vec<String>>> {
     let trimmed = input.trim();
 
     // Fast path: empty or literal "all"
