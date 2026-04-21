@@ -266,6 +266,23 @@ The interactive REPL editor supports these commands:
 | `run` | Accept and run the council |
 | `quit` | Abort without running |
 
+The `tools <N>` command accepts a rich filter expression:
+
+| Expression | Meaning |
+|------------|---------|
+| `all` | All available tools (clears the filter) |
+| `5` | Tool at position 5 in the numbered list |
+| `5:9` | Tools at positions 5 through 9 (inclusive) |
+| `name` | Tool whose name matches exactly |
+| `!6` | All tools *except* position 6 |
+| `!5:9` | All tools *except* positions 5–9 |
+| `!name` | All tools *except* the named one |
+| `5:9,!6` | Positions 5–9, excluding 6 → gives 5, 7, 8, 9 |
+
+Tokens are comma-separated; inclusion and exclusion tokens can be freely mixed.
+When only exclusions are given (e.g. `!6`), the implicit inclusion set is
+all available tools.
+
 The `refine` command sends your instruction to the LLM along with the current
 council as context, producing a targeted revision that preserves stable agent
 IDs and makes minimal changes. You can refine multiple times before running.

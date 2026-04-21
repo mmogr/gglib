@@ -152,7 +152,7 @@ pub fn edit_loop(config: &mut CouncilConfig, available_tools: &[String]) -> Resu
             "tools" => {
                 if let Some(idx) = parse_agent_idx(arg, config.agents.len()) {
                     editor::print_available_tools(available_tools);
-                    eprintln!("  Enter comma-separated tool names, or \"all\":");
+                    eprintln!("  Enter names, numbers (5), ranges (5:9), exclusions (!6, !5:9), or \"all\":");
                     let input = rl.readline("  ")?;
                     let res = editor::apply_tool_filter(
                         &mut config.agents[idx],

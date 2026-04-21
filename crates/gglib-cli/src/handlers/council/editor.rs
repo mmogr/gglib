@@ -6,6 +6,7 @@
 use anyhow::{Result, anyhow, bail};
 
 use gglib_agent::council::config::{CouncilAgent, CouncilConfig, clamp_contentiousness};
+use gglib_agent::council::parse_tool_filter;
 
 use crate::presentation::style::{BOLD, DIM, RESET};
 
@@ -43,34 +44,15 @@ pub fn apply_contentiousness(agent: &mut CouncilAgent, input: &str) -> Result<()
 
 /// Set the tool filter for a single agent.
 ///
-/// `available` is the full list of tool names from the executor — printed
-/// for the user before this function is called.  Passing `"all"` or an
-/// empty string clears the filter (agent gets all tools).
+/// Delegates to [`parse_tool_filter`] for the full supported syntax:
+/// exact names, 1-based numeric indices, `N:M` ranges, and `!`-prefixed
+/// exclusions.  Passing `"all"` or an empty string clears the filter.
 pub fn apply_tool_filter(
     agent: &mut CouncilAgent,
     input: &str,
     available: &[String],
 ) -> Result<()> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("all") {
-        agent.tool_filter = None;
-        return Ok(());
-    }
-
-    let selected: Vec<String> = trimmed
-        .split(',')
-        .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    // Validate every name exists in the available set
-    for name in &selected {
-        if !available.iter().any(|a| a == name) {
-            bail!("unknown tool: {name}");
-        }
-    }
-
-    agent.tool_filter = Some(selected);
+    agent.tool_filter = parse_tool_filter(input, available)?;
     Ok(())
 }
 

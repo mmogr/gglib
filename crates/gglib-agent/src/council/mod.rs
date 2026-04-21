@@ -22,6 +22,7 @@
 //! | `stance.rs`       | Post-debate stance tracking (Held/Shifted/Conceded)  |
 //! | `orchestrator.rs` | Slim coordinator (rounds → compaction → judge → stance → synthesis) |
 //! | `suggest.rs`      | `suggest_council()` — shared suggest orchestration  |
+//! | `tool_filter_parser.rs` | `parse_tool_filter()` — shared tool-filter expression parser |
 
 mod compaction;
 pub mod config;
@@ -36,8 +37,10 @@ pub mod state;
 pub mod stream_bridge;
 pub mod suggest;
 mod synthesis;
+pub mod tool_filter_parser;
 
 pub use config::{CouncilAgent, CouncilConfig, JudgeConfig, SuggestedCouncil};
+pub use tool_filter_parser::parse_tool_filter;
 pub use events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 pub use orchestrator::run as run_council;
 pub use prompts::{contentiousness_tier_label, contentiousness_to_instruction};
