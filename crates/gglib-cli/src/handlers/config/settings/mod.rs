@@ -3,6 +3,10 @@
 //! These three sub-handlers were the original `config` dispatch targets.
 //! They now live inside the `config/` directory alongside llama, assistant-ui,
 //! check-deps, and paths.
+//!
+//! All display/formatting logic is in the sibling [`settings_display`] module.
+
+mod settings_display;
 
 use std::collections::BTreeSet;
 
@@ -16,6 +20,21 @@ use gglib_core::paths::{
     resolve_models_dir,
 };
 use gglib_core::{Settings, SettingsUpdate, validate_settings};
+
+use settings_display::{print_display_rows, print_sections, settings_display_rows, settings_to_sections};
+
+/// Resolve the display string for `default-model-id`, performing a DB lookup when set.
+///
+/// Returns `Some("42 (ModelName)")`, `Some("42 (not found)")`, or `None`.
+async fn resolve_model_display(ctx: &CliContext, settings: &Settings) -> Result<Option<String>> {
+    match settings.default_model_id {
+        Some(model_id) => match ctx.app.models().get_by_id(model_id).await? {
+            Some(model) => Ok(Some(format!("{} ({})", model_id, model.name))),
+            None => Ok(Some(format!("{} (not found)", model_id))),
+        },
+        None => Ok(None),
+    }
+}
 
 /// Handle the `config default` command for managing the default model.
 ///
@@ -115,61 +134,6 @@ pub fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
     }
 }
 
-/// Resolve the display string for `default-model-id`, performing a DB lookup when set.
-///
-/// Returns `Some("42 (ModelName)")`, `Some("42 (not found)")`, or `None`.
-async fn resolve_model_display(ctx: &CliContext, settings: &Settings) -> Result<Option<String>> {
-    match settings.default_model_id {
-        Some(model_id) => match ctx.app.models().get_by_id(model_id).await? {
-            Some(model) => Ok(Some(format!("{} ({})", model_id, model.name))),
-            None => Ok(Some(format!("{} (not found)", model_id))),
-        },
-        None => Ok(None),
-    }
-}
-
-/// Build display rows for a [`Settings`] value as `(kebab-case-key, bare-value)` pairs.
-///
-/// Keys are derived dynamically from `serde_json::to_value` by replacing every `_` with `-`,
-/// so new fields added to [`Settings`] appear here automatically without manual updates.
-/// `default-model-id` is substituted with the pre-resolved `model_display` string (or `"None"`).
-///
-/// Values use clean bare JSON representation (`4096`, `true`, `"None"`) rather than Rust's
-/// `Debug` format (`Some(4096)`, `None`).
-fn settings_display_rows(
-    settings: &Settings,
-    model_display: Option<String>,
-) -> Vec<(String, String)> {
-    let obj = match serde_json::to_value(settings) {
-        Ok(serde_json::Value::Object(m)) => m,
-        _ => return Vec::new(),
-    };
-
-    obj.into_iter()
-        .map(|(snake_key, val)| {
-            let kebab_key = snake_key.replace('_', "-");
-            let display_val = if kebab_key == "default-model-id" {
-                model_display.clone().unwrap_or_else(|| "None".to_owned())
-            } else {
-                match val {
-                    serde_json::Value::Null => "None".to_owned(),
-                    serde_json::Value::String(s) => s,
-                    other => other.to_string(),
-                }
-            };
-            (kebab_key, display_val)
-        })
-        .collect()
-}
-
-/// Print display rows with dynamic column alignment.
-fn print_display_rows(rows: &[(String, String)]) {
-    let max_key_len = rows.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
-    for (key, val) in rows {
-        println!("  {:<width$}  {}", key, val, width = max_key_len);
-    }
-}
-
 pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Result<()> {
     match command {
         SettingsCommand::Show => {
@@ -177,7 +141,7 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             let model_display = resolve_model_display(ctx, &settings).await?;
             let rows = settings_display_rows(&settings, model_display);
             println!("Current application settings:");
-            print_display_rows(&rows);
+            print_sections(&settings_to_sections(&rows));
             Ok(())
         }
         SettingsCommand::Set {
@@ -278,9 +242,16 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
             let updated = ctx.app.settings().update(update).await?;
             let model_display = resolve_model_display(ctx, &updated).await?;
             let all_rows = settings_display_rows(&updated, model_display);
+
+            // Match exact key OR any dot-notation sub-row that starts with
+            // "{changed_key}." — needed for nested fields such as inference-defaults.
             let changed_rows: Vec<_> = all_rows
                 .into_iter()
-                .filter(|(k, _)| changed.contains(k.as_str()))
+                .filter(|(k, _)| {
+                    changed
+                        .iter()
+                        .any(|c| k == c || k.starts_with(&format!("{c}.")))
+                })
                 .collect();
 
             println!("✓ Settings updated successfully:");
@@ -308,61 +279,8 @@ pub async fn handle_settings(ctx: &CliContext, command: SettingsCommand) -> Resu
 
 #[cfg(test)]
 mod tests {
-    use gglib_core::Settings;
-
-    use super::settings_display_rows;
-
     #[test]
-    fn settings_display_rows_uses_kebab_case_keys() {
-        let settings = Settings::default();
-        let rows = settings_display_rows(&settings, None);
-
-        assert!(!rows.is_empty(), "should produce at least one row");
-
-        for (key, _) in &rows {
-            assert!(
-                key.chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
-                "key {key:?} must contain only [a-z0-9-]"
-            );
-            assert!(
-                !key.contains('_'),
-                "key {key:?} must not contain underscores"
-            );
-        }
-
-        // No duplicate keys
-        let mut seen = std::collections::BTreeSet::new();
-        for (key, _) in &rows {
-            assert!(seen.insert(key.clone()), "duplicate key {key:?}");
-        }
-    }
-
-    #[test]
-    fn settings_display_rows_model_display_override() {
-        let settings = Settings {
-            default_model_id: Some(42),
-            ..Default::default()
-        };
-        let rows = settings_display_rows(&settings, Some("42 (TestModel)".to_owned()));
-        let model_row = rows
-            .iter()
-            .find(|(k, _)| k == "default-model-id")
-            .expect("default-model-id row should be present");
-        assert_eq!(model_row.1, "42 (TestModel)");
-    }
-
-    #[test]
-    fn settings_display_rows_null_displays_as_none() {
-        let settings = Settings {
-            default_download_path: None,
-            ..Default::default()
-        };
-        let rows = settings_display_rows(&settings, None);
-        let row = rows
-            .iter()
-            .find(|(k, _)| k == "default-download-path")
-            .expect("default-download-path should be present");
-        assert_eq!(row.1, "None");
+    fn test_config_handler_exists() {
+        // Placeholder test — substantive tests live in settings_display.rs.
     }
 }
