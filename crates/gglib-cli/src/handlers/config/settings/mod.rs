@@ -21,7 +21,9 @@ use gglib_core::paths::{
 };
 use gglib_core::{Settings, SettingsUpdate, validate_settings};
 
-use settings_display::{print_display_rows, print_sections, settings_display_rows, settings_to_sections};
+use settings_display::{
+    print_display_rows, print_sections, settings_display_rows, settings_to_sections,
+};
 
 /// Resolve the display string for `default-model-id`, performing a DB lookup when set.
 ///

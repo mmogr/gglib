@@ -186,8 +186,8 @@ pub(super) fn print_display_rows(rows: &[(String, String)]) {
 
 #[cfg(test)]
 mod tests {
-    use gglib_core::domain::InferenceConfig;
     use gglib_core::Settings;
+    use gglib_core::domain::InferenceConfig;
 
     use super::{camel_to_kebab, settings_display_rows, settings_to_sections};
 
@@ -217,7 +217,10 @@ mod tests {
                     .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '.'),
                 "key {key:?} must contain only [a-z0-9-.] characters"
             );
-            assert!(!key.contains('_'), "key {key:?} must not contain underscores");
+            assert!(
+                !key.contains('_'),
+                "key {key:?} must not contain underscores"
+            );
         }
 
         // No duplicate keys.
@@ -338,7 +341,12 @@ mod tests {
 
         let general = &sections[0];
         assert_eq!(general.title, "General");
-        assert!(general.rows.iter().any(|(k, _)| k == "default-context-size"));
+        assert!(
+            general
+                .rows
+                .iter()
+                .any(|(k, _)| k == "default-context-size")
+        );
         assert!(general.rows.iter().any(|(k, _)| k == "proxy-port"));
 
         // Inference prefix stripped.
