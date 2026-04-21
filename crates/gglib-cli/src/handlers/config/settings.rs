@@ -149,9 +149,7 @@ fn settings_display_rows(
         .map(|(snake_key, val)| {
             let kebab_key = snake_key.replace('_', "-");
             let display_val = if kebab_key == "default-model-id" {
-                model_display
-                    .clone()
-                    .unwrap_or_else(|| "None".to_owned())
+                model_display.clone().unwrap_or_else(|| "None".to_owned())
             } else {
                 match val {
                     serde_json::Value::Null => "None".to_owned(),
@@ -323,7 +321,8 @@ mod tests {
 
         for (key, _) in &rows {
             assert!(
-                key.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+                key.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
                 "key {key:?} must contain only [a-z0-9-]"
             );
             assert!(
