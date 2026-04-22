@@ -66,6 +66,7 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | `council/stance` | Post-debate stance tracking (Held/Shifted/Conceded) |
 | `council/orchestrator` | Slim coordinator (rounds → compaction → judge → stance → synthesis) |
 | `council/suggest` | `suggest_council()` — shared suggest orchestration |
+| `council/tool_filter_parser` | `parse_tool_filter()` — shared tool-filter expression parser |
 <!-- MODULE_TABLE_END -->
 
 <details>
