@@ -94,7 +94,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`settings.rs`** — `SettingsOps` application settings persistence
 - **`mcp.rs`** — `McpOps` MCP server configuration and management
 - **`types.rs`** — Shared DTOs and type definitions for GUI layer
-- **`voice.rs`** — `VoiceOps` voice pipeline operations — 19 thin delegates to `VoicePipelinePort` (status, models, devices, load/unload, mode, PTT, speak, audio control)
 
 ## Design Principles
 
@@ -125,7 +124,6 @@ use std::sync::Arc;
 #     model_repo: Arc<dyn gglib_core::ports::ModelRepository>,
 #     system_probe: Arc<dyn gglib_core::ports::SystemProbePort>,
 #     gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
-#     voice: Arc<dyn gglib_core::ports::VoicePipelinePort>,
 # ) {
 // Construct backend with dependency injection
 let deps = GuiDeps::new(
@@ -141,7 +139,6 @@ let deps = GuiDeps::new(
     model_repo,
     system_probe,
     gguf_parser,
-    voice,
 );
 
 let backend = GuiBackend::new(deps);
