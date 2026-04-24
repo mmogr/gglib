@@ -352,12 +352,6 @@ jobs:
           npm install
           npm run build
 
-      - name: Set Windows linker args (sherpa-onnx ETW symbols)
-        if: matrix.os == 'windows-2022'
-        shell: pwsh
-        run: |
-          echo "RUSTFLAGS=$env:RUSTFLAGS -C link-arg=Advapi32.lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} -p gglib-cli
 
@@ -482,12 +476,6 @@ jobs:
             libssl-dev \
             libasound2-dev \
             pkg-config
-
-      - name: Set Windows linker args (sherpa-onnx ETW symbols)
-        if: matrix.os == 'windows-2022'
-        shell: pwsh
-        run: |
-          echo "RUSTFLAGS=$env:RUSTFLAGS -C link-arg=Advapi32.lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build Tauri app
         run: |

@@ -56,11 +56,11 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 │  │repositories │  │             │  │   client    │  │             │      │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘      │
 │                                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │
-│  │gglib-runtime│  │gglib-download│  │gglib-proxy  │  │gglib-voice  │      │
-│  │llama.cpp    │  │   Download   │  │OpenAI proxy │  │ Voice mode  │      │
-│  │ management  │  │   manager    │  │             │  │ STT/TTS/VAD │      │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │gglib-runtime│  │gglib-download│  │gglib-proxy  │             │
+│  │llama.cpp    │  │   Download   │  │OpenAI proxy │             │
+│  │ management  │  │   manager    │  │             │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -107,7 +107,6 @@ the composition root.
 | **[gglib-runtime](gglib-runtime/)** | llama.cpp installation, configuration, and process management. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) |
 | **[gglib-download](gglib-download/)** | Multi-file download manager with queue, progress tracking, and resume capability. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) |
 | **[gglib-proxy](gglib-proxy/)** | OpenAI-compatible proxy with automatic model routing and swapping. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) |
-| **[gglib-voice](gglib-voice/)** | Voice mode pipeline with local STT (Whisper), TTS (Kokoro), and VAD (Silero) via sherpa-onnx. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-loc.json) |
 
 ### Facade Layer
 
@@ -225,16 +224,6 @@ Model Context Protocol integration:
 - Manage stdio communication
 - Track server health
 - Tool discovery
-
-#### gglib-voice
-Voice mode pipeline:
-- Audio capture (cpal) with resampling to 16 kHz mono
-- Speech-to-text via sherpa-onnx (Whisper ONNX, 7 model sizes)
-- Text-to-speech via sherpa-onnx (Kokoro v0.19, 11 voices)
-- Voice activity detection (Silero neural-net VAD + energy fallback)
-- Echo gate to suppress mic during TTS playback
-- Pipeline state machine orchestrating the full conversation loop
-- Safe audio threading via actor pattern (no unsafe code)
 
 ### Adapter Layer
 

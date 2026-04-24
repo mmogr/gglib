@@ -1,58 +1,17 @@
 .PHONY: help install build test clean clean-llama clean-all run-serve run-proxy check fmt lint doc build-gui build-tauri build-all check-deps check-rust llama-install-auto
 
-# Environment Variables
-# 32 MB — LLVM optimisation passes (SROAPass) on sherpa-onnx FFI code can
-# overflow the default thread stack on Linux.
-export RUST_MIN_STACK := 33554432
-
 # Platform specific configuration
 UNAME_S := $(shell uname -s)
-IS_WSL  := $(shell grep -qi microsoft /proc/version 2>/dev/null && echo 1 || echo 0)
 ifeq ($(UNAME_S),Linux)
     export LIBSQLITE3_SYS_USE_PKG_CONFIG := 1
     # Fix Node.js/npm segfault on WSL2 (io_uring not fully supported by WSL2 kernel)
     export UV_USE_IO_URING := 0
-    # Cap cmake parallelism for sherpa-onnx / heavy C++ deps — GCC 13 ICEs
-    # under high parallelism with openfst template-heavy code.
-    export CMAKE_BUILD_PARALLEL_LEVEL := 4
-    ifeq ($(IS_WSL),1)
-        # sherpa-rs-sys v0.6 unconditionally overwrites CMAKE_BUILD_PARALLEL_LEVEL
-        # with available_parallelism() (= nproc) inside its build.rs, bypassing
-        # the export above.  On WSL2 this triggers -j32 onnxruntime cmake builds;
-        # each worker peaks at ~2-4 GB, so -j32 can hit 64-128 GB and crash the VM.
-        #
-        # Fix: wrap cargo with taskset, which constrains sched_getaffinity() so
-        # available_parallelism() inside the build script sees WSL_BUILD_JOBS
-        # cores instead of nproc.  macOS never reaches this branch.
-        #
-        # WSL_BUILD_JOBS = min(nproc, floor(MemAvailable_GB / WSL_GB_PER_JOB))
-        # Override WSL_GB_PER_JOB at the command line if your profile differs:
-        #   WSL_GB_PER_JOB=2 make setup
-        WSL_GB_PER_JOB ?= 4
-        WSL_BUILD_JOBS  := $(shell awk -v cores=$$(nproc) -v gb_per_job=$(WSL_GB_PER_JOB) \
-            '/MemAvailable/ { mem_gb = int($$2 / 1024 / 1024); \
-             jobs = int(mem_gb / gb_per_job); \
-             if (jobs < 1) jobs = 1; \
-             if (jobs > cores) jobs = cores; \
-             print jobs }' /proc/meminfo)
-        TASKSET := taskset -c 0-$(shell expr $(WSL_BUILD_JOBS) - 1)
-    endif
 endif
-# Non-WSL / macOS: TASKSET is empty — cargo invocations are unchanged
-TASKSET ?=
 
 # Define cargo command that sources Rust environment if needed (for non-interactive shells like VS Code tasks)
 # This is a portable solution that works on Linux/macOS/Windows
 CARGO_ENV := $(shell if [ -f "$$HOME/.cargo/env" ]; then echo ". $$HOME/.cargo/env &&"; fi)
 CARGO := $(CARGO_ENV) cargo
-
-# On WSL2, TASKSET is non-empty but CARGO may start with shell built-ins (e.g. ". ~/.cargo/env &&")
-# which taskset cannot exec directly.  Wrap CARGO in `sh -c '...' --` so taskset gets a real
-# executable, then pass build args via positional parameters ($$@).
-ifneq ($(TASKSET),)
-CARGO := $(TASKSET) sh -c '$(CARGO_ENV) cargo "$$@"' --
-TASKSET :=
-endif
 
 # Cargo Optimization Flags
 export CARGO_PROFILE_RELEASE_LTO := thin

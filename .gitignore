@@ -15,7 +15,6 @@
 
 # Data and databases
 /data
-/voice_models
 *.db
 *.db-journal
 *.db-shm
