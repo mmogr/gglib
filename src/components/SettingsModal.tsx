@@ -9,11 +9,10 @@ import type { McpServerInfo } from "../services/clients/mcp";
 import { McpServersPanel } from "./McpServersPanel";
 import { AddMcpServerModal } from "./AddMcpServerModal";
 import { GeneralSettings } from "./SettingsModal/GeneralSettings";
-import { VoiceSettings } from "./SettingsModal/VoiceSettings";
 import { Modal } from "./ui/Modal";
 import { cn } from '../utils/cn';
 
-type SettingsTab = "general" | "mcp" | "voice";
+type SettingsTab = "general" | "mcp";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -201,16 +200,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           >
             MCP Servers
           </button>
-          <button
-            type="button"
-            className={cn(
-              'px-md py-sm bg-none border-none border-b-2 border-b-transparent text-text-secondary text-sm font-semibold cursor-pointer transition-all duration-200 hover:text-text',
-              activeTab === "voice" && 'text-primary border-b-primary',
-            )}
-            onClick={() => setActiveTab("voice")}
-          >
-            Voice
-          </button>
         </div>
 
         {/* General Settings Tab */}
@@ -287,10 +276,6 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               />
             )}
           </>
-        )}
-        {/* Voice Settings Tab */}
-        {activeTab === "voice" && (
-          <VoiceSettings onClose={onClose} />
         )}
       </Modal>
     </>

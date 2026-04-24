@@ -8,7 +8,7 @@ import {
   useThread,
 } from '@assistant-ui/react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
-import { AlertTriangle, Download, Mic, MicOff, Pencil, RotateCcw, Sparkles } from 'lucide-react';
+import { AlertTriangle, Download, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { getMessages, deleteMessage } from '../../services/clients/chat';
 import type { ConversationSummary } from '../../services/clients/chat';
@@ -30,9 +30,7 @@ import type { MessageActionsContextValue } from './components';
 import { useChatPersistence, useTitleGeneration } from './hooks';
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
-import { VoiceProvider, useVoiceContextValue } from './context/VoiceContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
-import type { UseVoiceModeReturn } from '../../hooks/useVoiceMode';
 import { cn } from '../../utils/cn';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
 import { ToolSupportIndicator } from '../ToolSupportIndicator';
@@ -63,8 +61,6 @@ interface ChatMessagesPanelProps {
   showToast: (message: string, type?: ToastType, duration?: number) => void;
   timingTracker: ReasoningTimingTracker | null;
   currentStreamingAssistantMessageId: string | null;
-  /** Voice mode hook return (optional — only in Tauri) */
-  voice?: UseVoiceModeReturn;
   /**
    * Whether the active model supports tool/function calling.
    * null = unknown (capability status not yet resolved).
@@ -98,7 +94,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   showToast,
   timingTracker,
   currentStreamingAssistantMessageId,
-  voice,
   supportsToolCalls,
   toolFormat,
   councilSubmitRef,
@@ -171,9 +166,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // and ThinkingBlock re-renders are isolated. If performance issues arise on long
   // threads, migrate to useSyncExternalStore for ticker subscription.
   const tick = useSharedTicker(!!currentStreamingAssistantMessageId, 100);
-
-  // Build a stable voice context value for message bubble components
-  const voiceContextValue = useVoiceContextValue(voice);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Persistence hook — handles message hydration and persistence
@@ -457,18 +449,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
         </div>
         <div className="flex gap-sm shrink-0">
           <ToolsPopover />
-          {voice?.isSupported && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(voice.isActive && 'text-error')}
-              onClick={() => voice.isActive ? voice.stop() : voice.start()}
-              title={voice.isActive ? 'Stop voice mode' : 'Start voice mode'}
-              iconOnly
-            >
-              <Icon icon={voice.isActive ? MicOff : Mic} size={14} />
-            </Button>
-          )}
           <Button variant="ghost" size="sm" onClick={onClearConversation} title="Restart conversation" iconOnly>
             <Icon icon={RotateCcw} size={14} />
           </Button>
@@ -577,7 +557,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           ) : (
             <MessageActionsContext.Provider value={messageActionsValue}>
               <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
-              <VoiceProvider value={voiceContextValue}>
                 <ThreadPrimitive.Root
                   key={activeConversationId ?? 'thread-root'}
                   className="flex flex-col h-full min-h-0"
@@ -657,7 +636,6 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                   </ComposerPrimitive.Root>
                 </div>
               </ThreadPrimitive.Root>
-              </VoiceProvider>
               </ThinkingTimingProvider>
             </MessageActionsContext.Provider>
           )}

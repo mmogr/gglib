@@ -21,7 +21,6 @@ export * from './mcp';
 export * from './events';
 export * from './chat';
 export * from './verification';
-export * from './voice';
 
 // Import sub-interfaces for composition
 import type { ModelsTransport } from './models';
@@ -34,7 +33,6 @@ import type { McpTransport } from './mcp';
 import type { EventsTransport } from './events';
 import type { ChatTransport } from './chat';
 import type { VerificationTransport } from './verification';
-import type { VoiceTransport } from './voice';
 import type { BuiltinTransport } from './builtin';
 
 /**
@@ -57,5 +55,4 @@ export interface Transport
     EventsTransport,
     ChatTransport,
     VerificationTransport,
-    VoiceTransport,
     BuiltinTransport {}

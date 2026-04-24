@@ -8,7 +8,6 @@ import { ChatMessagesPanel } from '../components/ChatMessagesPanel';
 import { ConsoleInfoPanel } from '../components/ConsoleInfoPanel';
 import { ConsoleLogPanel } from '../components/ConsoleLogPanel';
 import { GenericToolUI } from '../components/ToolUI';
-import { VoiceOverlay } from '../components/VoiceOverlay';
 import TwoPanelLayout from '../components/TwoPanelLayout';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -16,7 +15,6 @@ import { Textarea } from '../components/ui/Textarea';
 import { useGglibRuntime, DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
-import { useVoiceModeContext } from '../contexts/VoiceModeContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { CouncilProvider } from '../contexts/CouncilContext';
@@ -112,7 +110,7 @@ export default function ChatPage({
   const councilSubmitRef = useRef<((text: string) => void) | null>(null);
 
   // Runtime - now with external message state
-  const { runtime, messages, setMessages, isRunning, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
+  const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     selectedServerPort: serverPort,
     onError: (error) => setChatError(error.message),
@@ -147,54 +145,6 @@ export default function ChatPage({
   // because ChatPage is only opened when a server is already running
   const serverState = useServerState(modelId);
   const isServerRunning = serverState?.status !== 'stopped' && serverState?.status !== 'crashed';
-
-  // Voice mode — shared singleton from App-level VoiceModeProvider.
-  // The provider reads the same settings defaults so behaviour is identical
-  // to the previous per-component useVoiceMode() call.
-  const voice = useVoiceModeContext();
-
-  // Send voice transcript as a chat message
-  const handleVoiceTranscript = useCallback((text: string) => {
-    if (!text.trim()) return;
-    setNextMessageMeta({ isVoice: true });
-    runtime.thread.append({
-      role: 'user',
-      content: [{ type: 'text', text }],
-    });
-  }, [runtime, setNextMessageMeta]);
-
-  // Auto-speak: when the LLM finishes responding, speak the last assistant message
-  const wasRunningRef = useRef(false);
-  useEffect(() => {
-    if (wasRunningRef.current && !isRunning && voice?.isActive && voice?.autoSpeak && voice?.ttsLoaded) {
-      // Find the last assistant message and extract only visible text.
-      // Thinking blocks are stripped by the Rust pipeline's strip_markdown();
-      // no need to strip them here.
-      const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
-      if (lastAssistant) {
-        const content = lastAssistant.content;
-        let text = '';
-        if (typeof content === 'string') {
-          text = content;
-        } else if (Array.isArray(content)) {
-          text = content
-            .filter((p): p is { type: 'text'; text: string } =>
-              (p as { type: string }).type === 'text'
-            )
-            .map(p => p.text)
-            .join(' ');
-        }
-        // The Rust voice pipeline strips thinking blocks in strip_markdown();
-        // calling stripThinkingBlocks() here is redundant and has been removed.
-        if (text) {
-          voice?.speak(text).catch(err => {
-            appLogger.error('hook.runtime', 'Auto-speak failed', { error: String(err) });
-          });
-        }
-      }
-    }
-    wasRunningRef.current = isRunning;
-  }, [isRunning, voice, messages]);
 
   // Track previous status for transition-only toast
   const prevStatusRef = useRef(serverState?.status);
@@ -471,7 +421,6 @@ export default function ChatPage({
               showToast={showToast}
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
-              voice={voice ?? undefined}
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
               councilSubmitRef={councilSubmitRef}
@@ -482,8 +431,6 @@ export default function ChatPage({
         />
         </CouncilProvider>
 
-        {/* Voice overlay (floating controls when voice mode is active) */}
-        <VoiceOverlay voice={voice} onTranscript={handleVoiceTranscript} />
       </AssistantRuntimeProvider>
 
       {/* Console Tab Content - always mounted, hidden when not active */}

@@ -10,7 +10,6 @@ import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
-import { VoiceModeProvider } from "./contexts/VoiceModeContext";
 import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
@@ -158,7 +157,6 @@ function AppContent() {
 
   return (
     <SettingsProvider showToast={showToast}>
-      <VoiceModeProvider>
       <div className="flex flex-col h-screen overflow-hidden">
         <Header
           onOpenSettings={() => setIsSettingsOpen(true)}
@@ -189,7 +187,6 @@ function AppContent() {
         />
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </div>
-      </VoiceModeProvider>
     </SettingsProvider>
   );
 }
