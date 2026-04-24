@@ -3,8 +3,6 @@
 //! Handlers are organized into domain-scoped subdirectories:
 //! - [`model`]  — CRUD, verification, downloads, HuggingFace discovery
 //! - [`config`] — settings, system setup
-//!
-//! Top-level modules for other domains:
 
 pub mod agent;
 pub mod builtin;
@@ -17,5 +15,3 @@ pub mod model;
 pub mod port_utils;
 pub mod proxy;
 pub mod servers;
-pub mod voice;
-pub mod voice_ws;

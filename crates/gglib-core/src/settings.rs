@@ -57,34 +57,6 @@ pub struct Settings {
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
 
-    // ── Voice settings ─────────────────────────────────────────────
-    /// Whether voice mode is enabled.
-    pub voice_enabled: Option<bool>,
-
-    /// Voice interaction mode: "ptt" (push-to-talk) or "vad" (voice activity detection).
-    pub voice_interaction_mode: Option<String>,
-
-    /// Selected whisper STT model ID (e.g., "base.en", "small.en-q5_1").
-    pub voice_stt_model: Option<String>,
-
-    /// Selected TTS voice ID (e.g., `af_sarah`, `am_michael`).
-    pub voice_tts_voice: Option<String>,
-
-    /// TTS playback speed multiplier (0.5–2.0, default 1.0).
-    pub voice_tts_speed: Option<f32>,
-
-    /// VAD speech detection threshold (0.0–1.0, default 0.5).
-    pub voice_vad_threshold: Option<f32>,
-
-    /// VAD minimum silence duration in ms before utterance ends (default 700).
-    pub voice_vad_silence_ms: Option<u32>,
-
-    /// Whether to automatically speak LLM responses via TTS.
-    pub voice_auto_speak: Option<bool>,
-
-    /// Preferred audio input device name (None = system default).
-    pub voice_input_device: Option<String>,
-
     // ── Setup wizard ────────────────────────────────────────────────
     /// Whether the first-run setup wizard has been completed.
     pub setup_completed: Option<bool>,
@@ -110,15 +82,6 @@ impl Settings {
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             default_model_id: None,
             inference_defaults: None,
-            voice_enabled: Some(false),
-            voice_interaction_mode: None,
-            voice_stt_model: None,
-            voice_tts_voice: None,
-            voice_tts_speed: Some(1.0),
-            voice_vad_threshold: None,
-            voice_vad_silence_ms: None,
-            voice_auto_speak: Some(true),
-            voice_input_device: None,
             setup_completed: None,
             title_generation_prompt: None,
         }
@@ -174,33 +137,6 @@ impl Settings {
         if let Some(ref inference_defaults) = other.inference_defaults {
             self.inference_defaults.clone_from(inference_defaults);
         }
-        if let Some(ref v) = other.voice_enabled {
-            self.voice_enabled = *v;
-        }
-        if let Some(ref v) = other.voice_interaction_mode {
-            self.voice_interaction_mode.clone_from(v);
-        }
-        if let Some(ref v) = other.voice_stt_model {
-            self.voice_stt_model.clone_from(v);
-        }
-        if let Some(ref v) = other.voice_tts_voice {
-            self.voice_tts_voice.clone_from(v);
-        }
-        if let Some(ref v) = other.voice_tts_speed {
-            self.voice_tts_speed = *v;
-        }
-        if let Some(ref v) = other.voice_vad_threshold {
-            self.voice_vad_threshold = *v;
-        }
-        if let Some(ref v) = other.voice_vad_silence_ms {
-            self.voice_vad_silence_ms = *v;
-        }
-        if let Some(ref v) = other.voice_auto_speak {
-            self.voice_auto_speak = *v;
-        }
-        if let Some(ref v) = other.voice_input_device {
-            self.voice_input_device.clone_from(v);
-        }
         if let Some(ref v) = other.setup_completed {
             self.setup_completed = *v;
         }
@@ -228,15 +164,6 @@ pub struct SettingsUpdate {
     pub max_stagnation_steps: Option<Option<u32>>,
     pub default_model_id: Option<Option<i64>>,
     pub inference_defaults: Option<Option<InferenceConfig>>,
-    pub voice_enabled: Option<Option<bool>>,
-    pub voice_interaction_mode: Option<Option<String>>,
-    pub voice_stt_model: Option<Option<String>>,
-    pub voice_tts_voice: Option<Option<String>>,
-    pub voice_tts_speed: Option<Option<f32>>,
-    pub voice_vad_threshold: Option<Option<f32>>,
-    pub voice_vad_silence_ms: Option<Option<u32>>,
-    pub voice_auto_speak: Option<Option<bool>>,
-    pub voice_input_device: Option<Option<String>>,
     pub setup_completed: Option<Option<bool>>,
     pub title_generation_prompt: Option<Option<String>>,
 }

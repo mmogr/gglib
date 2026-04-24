@@ -27,7 +27,6 @@ gglib-runtime = { workspace = true, features = ["cli"] }
 gglib-tauri.workspace = true
 gglib-axum.workspace = true
 gglib-gui.workspace = true
-gglib-voice.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 # Note: axum and tower-http are used via gglib-axum re-exports, no direct dependency needed

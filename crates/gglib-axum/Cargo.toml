@@ -20,7 +20,6 @@ gglib-gui = { path = "../gglib-gui" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
-gglib-voice = { path = "../gglib-voice" }  # Composition root: constructs VoiceService and injects into GuiDeps
 
 # Shared deps
 chrono = { workspace = true }
