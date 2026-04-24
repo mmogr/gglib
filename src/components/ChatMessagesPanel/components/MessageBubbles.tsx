@@ -1,11 +1,11 @@
-import React, { useContext, useCallback } from 'react';
+import React, { useContext } from 'react';
 import {
   ComposerPrimitive,
   MessagePrimitive,
   ActionBarPrimitive,
   useMessage,
 } from '@assistant-ui/react';
-import { Bot, Copy, Loader2, Mic, Pencil, Trash2, User as UserIcon, Volume2 } from 'lucide-react';
+import { Bot, Copy, Pencil, Trash2, User as UserIcon } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
 import ThinkingBlock from '../ThinkingBlock';
@@ -16,8 +16,6 @@ import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
 import type { GglibMessageCustom } from '../../../types/messages';
 import type { SerializableCouncilSession } from '../../../types/council';
-import { useVoiceContextOptional } from '../context/VoiceContext';
-import { stripThinkingBlocks } from '../../../utils/stripThinkingBlocks';
 import { extractReasoningText } from '../../../utils/messages';
 
 import { cn } from '../../../utils/cn';
@@ -28,75 +26,12 @@ const ACTION_BTN =
   'bg-transparent border-none cursor-pointer py-xs px-sm rounded-base text-sm opacity-70 transition-all duration-150 hover:opacity-100 hover:bg-surface-elevated';
 
 /**
- * Check if a message originated from voice input/output.
- */
-function isVoiceMessage(message: ReturnType<typeof useMessage>): boolean {
-  const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
-  return custom?.isVoice === true;
-}
-
-/**
- * Extract speakable text from a message's content parts.
- */
-function extractSpeakableText(message: ReturnType<typeof useMessage>): string {
-  const content = (message as any)?.content;
-  let text = '';
-  if (typeof content === 'string') {
-    text = content;
-  } else if (Array.isArray(content)) {
-    text = content
-      .filter((p: any): p is { type: 'text'; text: string } => p?.type === 'text')
-      .map((p: any) => p.text)
-      .join(' ');
-  }
-  return stripThinkingBlocks(text);
-}
-
-/**
- * Speak button for assistant messages.
- * Only renders when voice mode is active and TTS is loaded.
- */
-const SpeakButton: React.FC<{ message: ReturnType<typeof useMessage> }> = ({ message }) => {
-  const voiceCtx = useVoiceContextOptional();
-
-  const handleSpeak = useCallback(() => {
-    if (!voiceCtx) return;
-    const text = extractSpeakableText(message);
-    if (text) {
-      voiceCtx.speak(text);
-    }
-  }, [voiceCtx, message]);
-
-  // Don't render unless voice mode is active with TTS ready
-  if (!voiceCtx?.isActive || !voiceCtx?.ttsLoaded) return null;
-
-  const busy = voiceCtx.isSpeaking || voiceCtx.isTtsGenerating;
-
-  return (
-    <button
-      className={cn(ACTION_BTN, 'hover:text-accent disabled:opacity-35 disabled:cursor-not-allowed')}
-      onClick={handleSpeak}
-      disabled={busy}
-      title={busy ? 'TTS is busy' : 'Read aloud'}
-      aria-label="Read aloud"
-    >
-      <Icon
-        icon={voiceCtx.isTtsGenerating ? Loader2 : Volume2}
-        size={14}
-        className={voiceCtx.isTtsGenerating ? 'animate-spin-360' : undefined}
-      />
-    </button>
-  );
-};
-
-/**
  * Message bubble for assistant responses.
  * Handles thinking blocks and markdown rendering.
  */
 export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
   const timing = useThinkingTiming();
-  const isVoice = isVoiceMessage(message);
   const timestamp = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
@@ -157,7 +92,7 @@ export const AssistantMessageBubble: React.FC = () => {
     <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
-          <Icon icon={isVoice ? Volume2 : Bot} size={18} />
+          <Icon icon={Bot} size={18} />
         </div>
         <div>
           <div className="font-medium text-sm">Assistant</div>
@@ -186,7 +121,6 @@ export const AssistantMessageBubble: React.FC = () => {
       </div>
       <ToolExecutionProgress />
       <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-        <SpeakButton message={message} />
         <ActionBarPrimitive.Copy />
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
@@ -200,7 +134,6 @@ export const AssistantMessageBubble: React.FC = () => {
 export const UserMessageBubble: React.FC = () => {
   const message = useMessage();
   const messageActions = useContext(MessageActionsContext);
-  const isVoice = isVoiceMessage(message);
   const timestamp = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
@@ -216,10 +149,10 @@ export const UserMessageBubble: React.FC = () => {
     <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-primary/10 border border-primary phone:ml-xl">
       <div className="flex items-center gap-sm">
         <div className="text-lg" aria-hidden>
-          <Icon icon={isVoice ? Mic : UserIcon} size={18} />
+          <Icon icon={UserIcon} size={18} />
         </div>
         <div>
-          <div className="font-medium text-sm">{isVoice ? 'You (voice)' : 'You'}</div>
+          <div className="font-medium text-sm">You</div>
           <div className="text-xs text-text-muted">{timestamp}</div>
         </div>
       </div>
