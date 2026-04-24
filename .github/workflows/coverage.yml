@@ -61,10 +61,6 @@ jobs:
 
       - name: Run Rust tests with coverage
         run: |
-          # NOTE: Do NOT use --all-features here. It enables cuda/directml in
-          # sherpa-rs which downloads a CUDA-flavoured native library that
-          # requires system CUDA libs not present on the CI runner, causing
-          # undefined-symbol linker errors for SherpaOnnx VAD functions.
           cargo llvm-cov \
             -p gglib-core \
             -p gglib-db \
@@ -78,7 +74,6 @@ jobs:
             -p gglib-gui \
             -p gglib-cli \
             -p gglib-axum \
-            -p gglib-voice \
             --lcov --output-path lcov.info 2>&1 | tee rust-test-output.txt
 
       - name: Run per-crate Rust coverage
@@ -102,7 +97,6 @@ jobs:
           cargo llvm-cov report --package gglib-gui --lcov --output-path gglib-gui-lcov.info
           cargo llvm-cov report --package gglib-cli --lcov --output-path gglib-cli-lcov.info
           cargo llvm-cov report --package gglib-axum --lcov --output-path gglib-axum-lcov.info
-          cargo llvm-cov report --package gglib-voice --lcov --output-path gglib-voice-lcov.info
 
       - name: Run TypeScript tests with coverage
         run: npm run test:coverage -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
@@ -122,7 +116,6 @@ jobs:
             --package gglib-gui \
             --package gglib-cli \
             --package gglib-axum \
-            --package gglib-voice \
             --html
 
       - name: Archive coverage report
@@ -145,7 +138,6 @@ jobs:
             gglib-gui-lcov.info
             gglib-cli-lcov.info
             gglib-axum-lcov.info
-            gglib-voice-lcov.info
             coverage/
             rust-test-output.txt
             ts-test-output.txt

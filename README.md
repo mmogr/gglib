@@ -99,11 +99,11 @@ Cargo workspace with compile-time enforced boundaries. Adapters → infrastructu
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                              Infrastructure Layer                                   │
 │                                                                                     │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐       │
-│  │  gglib-db  │ │ gglib-gguf │ │ gglib-mcp  │ │ gglib-proxy│ │gglib-voice │       │
-│  │   SQLite   │ │ GGUF file  │ │    MCP     │ │  OpenAI-   │ │Voice mode  │       │
-│  │   repos    │ │   parser   │ │  servers   │ │  compat    │ │STT/TTS/VAD │       │
-│  └────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘       │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐                      │
+│  │  gglib-db  │ │ gglib-gguf │ │ gglib-mcp  │ │ gglib-proxy│                      │
+│  │   SQLite   │ │ GGUF file  │ │    MCP     │ │  OpenAI-   │                      │
+│  │   repos    │ │   parser   │ │  servers   │ │  compat    │                      │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────┘                      │
 │                                                                                     │
 │  ╔═══════════════════════════════════════════════════════════════════════════════╗  │
 │  ║                          External Gateways                                    ║  │
@@ -210,7 +210,6 @@ Only `gglib-runtime` spawns llama-server processes; only `gglib-download` talks 
 | [gglib-mcp](crates/gglib-mcp) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-complexity.json) |
 | [gglib-proxy](crates/gglib-proxy) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-complexity.json) |
 | [gglib-runtime](crates/gglib-runtime) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-complexity.json) |
-| [gglib-voice](crates/gglib-voice) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-voice-complexity.json) |
 
 #### Facade Layer
 | Crate | Tests | Coverage | LOC | Complexity |
@@ -249,7 +248,6 @@ Each crate has its own README with architecture diagrams, module breakdowns, and
 | **Infra** | [gglib-mcp](crates/gglib-mcp/README.md) | MCP server management |
 | **Infra** | [gglib-proxy](crates/gglib-proxy/README.md) | OpenAI-compatible proxy server |
 | **Infra** | [gglib-runtime](crates/gglib-runtime/README.md) | Process manager & system probes |
-| **Infra** | [gglib-voice](crates/gglib-voice/README.md) | Voice pipeline (STT/TTS/VAD) |
 | **Facade** | [gglib-gui](crates/gglib-gui/README.md) | Shared GUI backend (feature parity) |
 | **Adapter** | [gglib-cli](crates/gglib-cli/README.md) | CLI interface |
 | **Adapter** | [gglib-axum](crates/gglib-axum/README.md) | HTTP API server |
