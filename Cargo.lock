@@ -1880,7 +1880,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1895,7 +1895,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -1923,7 +1923,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1959,14 +1959,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2024,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2044,7 +2044,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "gglib-core",
  "memmap2",
@@ -2082,7 +2082,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gui"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "async-trait",
  "dirs",
@@ -2103,7 +2103,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2120,7 +2120,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2137,7 +2137,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2160,7 +2160,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2192,7 +2192,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
