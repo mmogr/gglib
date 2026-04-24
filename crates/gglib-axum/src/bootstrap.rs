@@ -23,9 +23,9 @@ use gglib_gui::{GuiBackend, GuiDeps};
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
+
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
-use gglib_voice::{RemoteAudioRegistry, VoiceService};
 
 use crate::sse::SseBroadcaster;
 
@@ -121,14 +121,6 @@ pub struct AxumContext {
     /// the entire process lifetime.  Handlers clone the client cheaply (it is
     /// internally `Arc`-backed).
     pub http_client: Client,
-    /// Remote audio registry used by the WebSocket audio data plane.
-    ///
-    /// The WebSocket handler calls `register_remote_audio` before the browser
-    /// issues `POST /api/voice/start`, so the pipeline picks up the
-    /// browser-backed source/sink instead of local cpal/rodio devices.
-    /// Kept on `AxumContext` directly (not via `GuiBackend`) so that
-    /// network-transport concerns stay out of the GUI facade.
-    pub voice_registry: Arc<dyn RemoteAudioRegistry>,
     /// Concurrency limiter for `POST /api/agent/chat` sessions.
     ///
     /// Each active agent SSE stream holds one permit.  When all permits are
@@ -254,22 +246,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // GGUF parser for model metadata extraction
     let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
 
-    // 9a. Voice service — implements VoicePipelinePort for the 13 data/config ops.
-    // Shares the SSE broadcaster as its event emitter so download progress
-    // events reach SSE subscribers without any Tauri dependency.
-    //
-    // We keep a concrete Arc<VoiceService> so we can cast it to two different
-    // trait objects:
-    //   • Arc<dyn VoicePipelinePort>    → injected into GuiDeps
-    //   • Arc<dyn RemoteAudioRegistry>  → stored on AxumContext for WS handler
-    let voice_concrete = Arc::new(VoiceService::new(
-        sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>
-    ));
-    let voice_service: Arc<dyn gglib_core::ports::VoicePipelinePort> =
-        Arc::clone(&voice_concrete) as Arc<dyn gglib_core::ports::VoicePipelinePort>;
-    let voice_registry: Arc<dyn RemoteAudioRegistry> =
-        Arc::clone(&voice_concrete) as Arc<dyn RemoteAudioRegistry>;
-
     let deps = GuiDeps::new(
         Arc::clone(&core),
         downloads.clone(),
@@ -283,7 +259,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         model_repo,
         system_probe,
         gguf_parser,
-        voice_service,
     );
     let gui = Arc::new(GuiBackend::new(deps));
 
@@ -321,7 +296,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         runner,
         sse,
         http_client: Client::new(),
-        voice_registry,
         agent_semaphore: Arc::new(tokio::sync::Semaphore::new(
             config.max_concurrent_agent_loops,
         )),
