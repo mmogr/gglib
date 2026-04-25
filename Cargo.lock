@@ -1958,6 +1958,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-bootstrap"
+version = "0.7.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "gglib-core",
+ "gglib-db",
+ "gglib-download",
+ "gglib-gguf",
+ "gglib-hf",
+ "gglib-runtime",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "gglib-build-info"
 version = "0.7.2"
 dependencies = [
