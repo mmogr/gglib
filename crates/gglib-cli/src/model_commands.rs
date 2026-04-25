@@ -105,9 +105,16 @@ pub enum ModelCommand {
         force: bool,
     },
 
-    /// Download a GGUF model from HuggingFace Hub
+    /// Download a GGUF model from HuggingFace Hub.
+    ///
+    /// Routes through the shared download queue (same path as the GUI), so
+    /// progress is rendered in the terminal and multiple models can be added
+    /// interactively while a download is in flight.
+    ///
+    /// In a TTY, press **[a]** to add another model to the queue or **[q]** / Ctrl-C
+    /// to cancel all pending downloads.
     Download {
-        /// HuggingFace model repository (e.g., "microsoft/DialoGPT-medium")
+        /// HuggingFace model repository (e.g., "bartowski/Qwen2.5-7B-Instruct-GGUF")
         model_id: String,
         /// Specific quantization to download (e.g., "Q4_K_M", "F16")
         #[arg(short, long)]
@@ -118,7 +125,11 @@ pub enum ModelCommand {
         /// Skip adding to database after download (models are registered by default)
         #[arg(long)]
         skip_db: bool,
-        /// HuggingFace token for private models
+        /// HuggingFace token for private models (for `--list-quants` only).
+        ///
+        /// For downloads, set the `HF_TOKEN` environment variable instead.
+        /// It is read at startup and wired into the download manager config,
+        /// mirroring how the GUI handles authentication.
         #[arg(long)]
         token: Option<String>,
         /// Skip confirmation prompt

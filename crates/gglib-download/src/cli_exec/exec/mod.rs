@@ -21,14 +21,10 @@ pub use python_bridge::{FastDownloadRequest, run_fast_download};
 
 /// Execute a download request and return the result.
 ///
-/// This function:
-/// 1. Resolves the quantization files from `HuggingFace`
-/// 2. Downloads the files using the Python helper
-/// 3. Returns the paths for the handler to register
-///
-/// Note: This does NOT register the model in the database - that's the
-/// handler's responsibility using `ctx.app().models().add()`.
-pub async fn download(request: CliDownloadRequest) -> Result<CliDownloadResult> {
+/// Used internally by [`update_model`] for the force-redownload path.
+/// Interactive CLI downloads now route through [`DownloadManagerPort::queue_smart`]
+/// instead of calling this function directly.
+pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadResult> {
     let quant = request.quantization.as_ref().ok_or_else(|| {
         anyhow!("Please specify a quantization. Use --list-quants to see available options.")
     })?;

@@ -145,14 +145,22 @@ gglib proxy --host 0.0.0.0 --port 8080 --llama-port 5500
 ### HuggingFace Hub Integration
 
 #### `model download <repo_id> [OPTIONS]`
-Download a model from HuggingFace Hub.
+Download a model from HuggingFace Hub with interactive queue support.
 
 **Options:**
 - `--quantization <QUANT>`, `-q`: Specific quantization to download (e.g., "Q4_K_M", "F16")
 - `--list-quants`: List available quantizations for the model
-- `--skip-db`: Skip adding to database after download (models are registered by default)
-- `--token <TOKEN>`: HuggingFace token for private models
+- `--token <TOKEN>`: HuggingFace token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
 - `--force`, `-f`: Skip confirmation prompt
+
+**Interactive mode (TTY):**
+- After queuing a download, the terminal enters a live progress monitor
+- **[a]** — add another model to the queue while the current one is downloading
+- **[q]** / Ctrl-C — cancel all pending downloads and exit
+- Non-TTY environments (CI, pipes) automatically fall back to a plain monitor
+
+**Authentication:**
+For downloading private models, set the `HF_TOKEN` environment variable. It is read at startup and wired into the download manager, mirroring how the GUI handles authentication.
 
 **Example:**
 ```bash
@@ -162,8 +170,8 @@ gglib model download microsoft/DialoGPT-medium --list-quants
 # Download specific quantization (auto-registered in database)
 gglib model download microsoft/DialoGPT-medium --quantization Q4_K_M
 
-# Download without registering in database
-gglib model download microsoft/DialoGPT-medium -q Q4_K_M --skip-db
+# Download a private model using HF_TOKEN
+HF_TOKEN=hf_... gglib model download my-org/private-model -q Q4_K_M
 ```
 
 #### `model search <query> [OPTIONS]`

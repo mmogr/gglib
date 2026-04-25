@@ -11,7 +11,7 @@ HuggingFace Hub download command handlers for the CLI.
 
 ## Purpose
 
-This module handles all download-related commands that interact with HuggingFace Hub, including searching for models, browsing popular models, downloading GGUF files, checking for updates, and updating existing models.
+This module handles all download-related commands that interact with HuggingFace Hub, including searching for models, browsing popular models, downloading GGUF files with interactive queue management, checking for updates, and updating existing models.
 
 ## Architecture
 
@@ -20,18 +20,21 @@ This module handles all download-related commands that interact with HuggingFace
 │                    download Module                               │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  CLI → Handler → cli_exec → HF Client → Database Registration   │
-│       (this)     (download) (hf crate)   (db crate)             │
+│  CLI → exec.rs ──queue_smart()──► DownloadManagerPort           │
+│              └───────────────────► interactive.rs (TUI monitor) │
+│                                        ↕  [a]/[q] hotkeys        │
+│                                   CliDownloadEventEmitter        │
+│                                   (indicatif MultiProgress)      │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Flow:**
-1. User issues download command via CLI
-2. Handler validates and prepares arguments
-3. Delegates to `gglib-download::cli_exec` for actual download
-4. Automatically registers downloaded model in database (unless `--skip-db`)
-5. Displays progress and confirmation
+1. User issues `gglib model download <repo>` command
+2. `exec.rs` queues it via `DownloadManagerPort::queue_smart` (same code path as the GUI)
+3. `interactive.rs` renders progress via `CliDownloadEventEmitter` (indicatif bars)
+4. In TTY mode: `[a]` prompts for another model to add to the queue; `[q]` cancels all
+5. Model registration on completion is handled by the download manager (via `ModelRegistrarPort`)
 
 ## Modules
 
@@ -41,6 +44,7 @@ This module handles all download-related commands that interact with HuggingFace
 | [`browse.rs`](browse.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-browse-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-browse-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-browse-coverage.json) |
 | [`check_updates.rs`](check_updates.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-check_updates-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-check_updates-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-check_updates-coverage.json) |
 | [`exec.rs`](exec.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-exec-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-exec-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-exec-coverage.json) |
+| [`interactive.rs`](interactive.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-interactive-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-interactive-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-interactive-coverage.json) |
 | [`search.rs`](search.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-search-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-search-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-search-coverage.json) |
 | [`update_model.rs`](update_model.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-update_model-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-update_model-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-download-update_model-coverage.json) |
 <!-- module-table:end -->
@@ -82,35 +86,38 @@ gglib model browse popular --limit 10
 gglib model browse recent --size 7B
 ```
 
-### `download` (exec)
-Download a model from HuggingFace Hub.
+### `download` (exec + interactive)
+Download a model from HuggingFace Hub with interactive queue support.
 
-**Module:** `exec.rs`
+**Module:** `exec.rs` (orchestrator), `interactive.rs` (TUI monitor)
 
 **Options:**
 - `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "Q4_K_M")
-- `--list-quants` - List available quantizations
-- `--skip-db` - Skip database registration
-- `--token <TOKEN>` - HuggingFace token for private models
+- `--list-quants` - List available quantizations (uses `--token` if provided)
+- `--token <TOKEN>` - HuggingFace token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
 - `--force` / `-f` - Skip confirmation prompt
 
+**Interactive mode (TTY):**
+- `[a]` — add another model to the queue while a download is running
+- `[q]` / Ctrl-C — cancel all pending downloads and exit cleanly
+- Falls back to a plain polling monitor when stdout is not a TTY (CI, pipes)
+
 **Flow:**
-1. Query HuggingFace Hub for repo info
-2. Show available quantizations (if `--list-quants`)
-3. Download GGUF file to models directory
-4. Parse GGUF metadata
-5. Register in database (unless `--skip-db`)
+1. Queue initial model via `DownloadManagerPort::queue_smart` (same path as GUI)
+2. Enter the interactive monitor loop
+3. Download manager handles progress events → `CliDownloadEventEmitter` renders indicatif bars
+4. On completion, model is registered automatically (via `ModelRegistrarPort`)
 
 **Example:**
 ```bash
 # List available quantizations
 gglib model download microsoft/DialoGPT-medium --list-quants
 
-# Download specific quantization
+# Download specific quantization — enters live queue monitor
 gglib model download microsoft/DialoGPT-medium -q Q4_K_M
 
-# Download without database registration
-gglib model download microsoft/DialoGPT-medium -q Q4_K_M --skip-db
+# Download with HF token for private repos (set env var for downloads)
+HF_TOKEN=hf_... gglib model download my-org/private-model -q Q4_K_M
 ```
 
 ### `check-updates`

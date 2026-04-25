@@ -30,8 +30,12 @@ pub use resolver::HfQuantizationResolver;
 mod quant_selector;
 pub use quant_selector::{QuantizationSelection, QuantizationSelector, SelectionError};
 
-// CLI execution module (transitional - synchronous CLI downloads)
+// CLI execution module (list_quantizations + Python bridge helpers)
 pub mod cli_exec;
+
+// CLI terminal progress emitter
+mod cli_emitter;
+pub use cli_emitter::CliDownloadEventEmitter;
 
 // Public API - modular download manager
 mod manager;

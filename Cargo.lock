@@ -1973,6 +1973,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
+ "console 0.16.3",
  "crossterm",
  "dotenvy",
  "gglib-agent",

@@ -19,10 +19,11 @@ use gglib_core::ModelRegistrar;
 use gglib_core::download::DownloadError;
 use gglib_core::ports::{
     DownloadManagerConfig, DownloadManagerPort, GgufParserPort, ModelRegistrarPort,
-    ModelRepository, NoopDownloadEmitter, NoopEmitter, ProcessRunner, Repos,
+    ModelRepository, NoopEmitter, ProcessRunner, Repos,
 };
 use gglib_core::services::{AppCore, ModelVerificationService};
 use gglib_db::{CoreFactory, setup_database};
+use gglib_download::CliDownloadEventEmitter;
 use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::GgufParser;
@@ -122,6 +123,12 @@ pub struct CliContext {
     /// TCP connections to llama-server are pooled across REPL turns, matching
     /// the connection-pooling behaviour of the Axum handler.
     pub http_client: reqwest::Client,
+    /// Terminal progress emitter used by the interactive download monitor.
+    ///
+    /// Shared with the download manager so bar updates flow from manager events,
+    /// and with the interactive monitor so it can suspend rendering while
+    /// prompting for additional model IDs.
+    pub download_emitter: Arc<CliDownloadEventEmitter>,
 }
 
 /// Bootstrap the CLI application.
@@ -167,7 +174,9 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
 
     // 6. Create download manager with injected ports
     let models_dir_resolution = resolve_models_dir(None)?;
-    let download_config = DownloadManagerConfig::new(models_dir_resolution.path);
+    let hf_token = std::env::var("HF_TOKEN").ok();
+    let download_config =
+        DownloadManagerConfig::new(models_dir_resolution.path).with_hf_token(hf_token);
 
     // Create the model registrar (composes over model repository + GGUF parser).
     // Stored on CliContext AND injected into the download manager so CLI
@@ -187,8 +196,9 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     // Create the HuggingFace client
     let hf_client = Arc::new(DefaultHfClient::new(&HfClientConfig::default()));
 
-    // Create no-op event emitter (CLI doesn't need real-time events)
-    let event_emitter = Arc::new(NoopDownloadEmitter::new());
+    // Create CLI terminal emitter — renders indicatif progress bars and exposes
+    // the MultiProgress handle for interactive suspend/resume.
+    let download_emitter = Arc::new(CliDownloadEventEmitter::new());
 
     // Build the download manager
     let downloads: Arc<dyn DownloadManagerPort> =
@@ -196,7 +206,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
             model_registrar: model_registrar.clone(),
             download_repo,
             hf_client: hf_client.clone(),
-            event_emitter,
+            event_emitter: Arc::clone(&download_emitter),
             config: download_config,
         }));
 
@@ -223,6 +233,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         llama_server_path: config.llama_server_path,
         base_port: config.base_port,
         http_client: reqwest::Client::new(),
+        download_emitter,
     })
 }
 
@@ -254,6 +265,7 @@ pub fn bootstrap_with(
         llama_server_path,
         base_port: 9000,
         http_client: reqwest::Client::new(),
+        download_emitter: Arc::new(CliDownloadEventEmitter::new()),
     }
 }
 
