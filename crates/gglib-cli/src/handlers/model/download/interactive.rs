@@ -226,10 +226,7 @@ async fn handle_add_to_queue(
 
     let (model_id, quant) = entry;
     match Arc::clone(downloads).queue_smart(model_id, quant).await {
-        Ok((pos, shards)) => {
-            mp.println(format!("↳ queued at position {pos} ({shards} shard(s))"))
-                .ok();
-        }
+        Ok(_) => {}
         Err(e) => {
             mp.println(format!("✗ Queue error: {e}")).ok();
         }
