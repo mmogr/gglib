@@ -53,9 +53,7 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
         .await?;
 
     if shard_count > 1 {
-        println!(
-            "↳ queued at position {position} ({shard_count} shards)",
-        );
+        println!("↳ queued at position {position} ({shard_count} shards)",);
     } else {
         println!("↳ queued at position {position}");
     }
@@ -68,4 +66,3 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     )
     .await
 }
-

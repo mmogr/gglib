@@ -21,9 +21,9 @@ use gglib_core::ports::{
     DownloadManagerConfig, DownloadManagerPort, GgufParserPort, ModelRegistrarPort,
     ModelRepository, NoopEmitter, ProcessRunner, Repos,
 };
-use gglib_download::CliDownloadEventEmitter;
 use gglib_core::services::{AppCore, ModelVerificationService};
 use gglib_db::{CoreFactory, setup_database};
+use gglib_download::CliDownloadEventEmitter;
 use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::GgufParser;
@@ -175,8 +175,8 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
     // 6. Create download manager with injected ports
     let models_dir_resolution = resolve_models_dir(None)?;
     let hf_token = std::env::var("HF_TOKEN").ok();
-    let download_config = DownloadManagerConfig::new(models_dir_resolution.path)
-        .with_hf_token(hf_token);
+    let download_config =
+        DownloadManagerConfig::new(models_dir_resolution.path).with_hf_token(hf_token);
 
     // Create the model registrar (composes over model repository + GGUF parser).
     // Stored on CliContext AND injected into the download manager so CLI

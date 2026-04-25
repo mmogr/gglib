@@ -8,8 +8,8 @@
 //! can call [`MultiProgress::suspend`] while prompting for user input.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressStyle};
@@ -20,8 +20,7 @@ use gglib_core::ports::DownloadEventEmitterPort;
 // ─── Style constants ─────────────────────────────────────────────────────────
 
 const SPINNER_TEMPLATE: &str = "{spinner:.cyan} {wide_msg}";
-const BAR_TEMPLATE: &str =
-    "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes} @ {bytes_per_sec} eta {eta}";
+const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes} @ {bytes_per_sec} eta {eta}";
 const TICK_INTERVAL: Duration = Duration::from_millis(120);
 
 // ─── CliDownloadEventEmitter ─────────────────────────────────────────────────
@@ -113,10 +112,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                             bar.set_length(total);
                         }
                         bar.set_position(downloaded);
-                        bar.set_message(format!(
-                            "{id} {}",
-                            HumanBytes(downloaded)
-                        ));
+                        bar.set_message(format!("{id} {}", HumanBytes(downloaded)));
                     }
                 }
             }
