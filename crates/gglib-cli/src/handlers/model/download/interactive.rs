@@ -27,11 +27,13 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use gglib_core::download::QueueSnapshot;
 use gglib_core::ports::DownloadManagerPort;
 use gglib_download::CliDownloadEventEmitter;
+
+use crate::utils::input::{prompt_string, prompt_string_with_default};
 
 // ─── Public entry point ──────────────────────────────────────────────────────
 
@@ -104,7 +106,7 @@ async fn run_tty_monitor(
 ) -> Result<()> {
     let mp = emitter.multi_progress();
 
-    let _raw = match RawModeGuard::acquire() {
+    let mut raw = match RawModeGuard::acquire() {
         Ok(g) => g,
         Err(_) => return run_plain_monitor(downloads).await,
     };
@@ -125,9 +127,9 @@ async fn run_tty_monitor(
                     kind: KeyEventKind::Press,
                     ..
                 })) => {
-                    // Inline input via temporary ProgressBars — no stdin
-                    // prompts, so nothing leaks into the scrollback buffer.
-                    handle_add_to_queue(&downloads, &mp).await;
+                    // suspend() inside handle_add_to_queue clears and redraws
+                    // all managed bars (including hint_bar) automatically.
+                    handle_add_to_queue(&downloads, &mp, &mut raw).await;
                 }
 
                 Ok(Event::Key(KeyEvent {
@@ -164,19 +166,15 @@ async fn run_tty_monitor(
             seen_items = true;
         }
 
-        // Create the hint bar the first time we see activity, then keep
-        // its message in sync with the live queue counts on every tick.
-        let hint_msg = build_hint_message(snapshot.active_count, snapshot.pending_count);
+        // Create the hint bar the first time we see activity.
         if seen_items && hint_bar.is_none() {
             let style = ProgressStyle::with_template("{msg}")
                 .unwrap_or_else(|_| ProgressStyle::default_bar());
             let bar = ProgressBar::new(0);
             bar.set_style(style);
-            bar.set_message(hint_msg.clone());
+            bar.set_message("[a] queue another  [q] quit");
             hint_bar = Some(mp.add(bar));
             last_item_count = item_count;
-        } else if let Some(bar) = &hint_bar {
-            bar.set_message(hint_msg);
         }
 
         // Re-anchor hint to the bottom whenever new items appear.
@@ -202,132 +200,72 @@ async fn run_tty_monitor(
     if let Some(bar) = hint_bar {
         bar.finish_and_clear();
     }
-    drop(_raw);
+    drop(raw);
     Ok(())
 }
 
 /// Prompt the user for a new model ID and queue it.
 ///
-/// Uses [`prompt_in_bar`] for input — the prompt is rendered as a temporary
-/// managed `ProgressBar`, so keystrokes never reach stdout and there is no
-/// scrollback leakage. The terminal stays in raw mode throughout.
-async fn handle_add_to_queue(downloads: &Arc<dyn DownloadManagerPort>, mp: &MultiProgress) {
-    // — Model ID prompt —
-    let model_id_raw = match prompt_in_bar(mp, "Model ID").await {
-        Ok(Some(s)) if !s.is_empty() => s,
-        _ => return, // empty input, Esc, or Ctrl-C — silently abort
-    };
+/// Disables raw mode while reading stdin, wraps the blocking read in
+/// [`tokio::task::block_in_place`] so Tokio can keep running download tasks
+/// on other threads, then re-enables raw mode before returning.
+async fn handle_add_to_queue(
+    downloads: &Arc<dyn DownloadManagerPort>,
+    mp: &indicatif::MultiProgress,
+    raw: &mut RawModeGuard,
+) {
+    // Step off raw mode so the terminal echoes characters correctly.
+    raw.disable();
 
-    // Accept inline `-q` flag so the user can paste a full command-line
-    // fragment, e.g. `owner/repo -q Q4_K_M`.
-    let (model_id, inline_quant) = parse_inline_quant(&model_id_raw);
-
-    // — Quantization prompt (skipped if `-q` was inline) —
-    let quant = if inline_quant.is_some() {
-        inline_quant
-    } else {
-        match prompt_in_bar(mp, "Quantization (optional, e.g. Q4_K_M)").await {
-            Ok(Some(s)) if !s.is_empty() => Some(s),
-            Ok(_) => None,
-            Err(_) => return,
-        }
-    };
-
-    if let Err(e) = Arc::clone(downloads).queue_smart(model_id, quant).await {
-        // Show the error in a transient managed bar so it doesn't leak
-        // into the scrollback. Auto-clears after 3 seconds.
-        let style =
-            ProgressStyle::with_template("{msg}").unwrap_or_else(|_| ProgressStyle::default_bar());
-        let bar = mp.add(ProgressBar::new(0));
-        bar.set_style(style);
-        bar.set_message(format!("✗ Queue error: {e}"));
-        tokio::time::sleep(Duration::from_secs(3)).await;
-        bar.finish_and_clear();
-    }
-}
-
-/// Read a single line of user input from a temporary `ProgressBar`.
-///
-/// The bar is rendered as `{label}: {buffer}_` and updates live as the user
-/// types. Reads keystrokes via crossterm in raw mode, so nothing is echoed
-/// to stdout and no scrollback artifacts are produced.
-///
-/// # Returns
-/// - `Ok(Some(text))` on Enter (text may be empty if user pressed Enter immediately)
-/// - `Ok(None)` on Esc (user cancelled)
-/// - `Err(_)` on Ctrl-C (caller should treat as cancel)
-async fn prompt_in_bar(mp: &MultiProgress, label: &str) -> Result<Option<String>> {
-    let style = ProgressStyle::with_template("{prefix}: {msg}")
-        .unwrap_or_else(|_| ProgressStyle::default_bar());
-    let bar = mp.add(ProgressBar::new(0));
-    bar.set_style(style);
-    bar.set_prefix(label.to_string());
-    bar.set_message("_".to_string());
-
-    let mut buffer = String::new();
-
-    loop {
-        if crossterm::event::poll(Duration::ZERO).unwrap_or(false)
-            && let Ok(Event::Key(KeyEvent {
-                code,
-                modifiers,
-                kind: KeyEventKind::Press,
-                ..
-            })) = crossterm::event::read()
-        {
-            match code {
-                KeyCode::Enter => {
-                    bar.finish_and_clear();
-                    return Ok(Some(buffer.trim().to_string()));
-                }
-                KeyCode::Esc => {
-                    bar.finish_and_clear();
-                    return Ok(None);
-                }
-                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    bar.finish_and_clear();
-                    return Err(anyhow::anyhow!("input cancelled"));
-                }
-                KeyCode::Backspace => {
-                    buffer.pop();
-                    bar.set_message(format!("{buffer}_"));
-                }
-                KeyCode::Char(c) => {
-                    buffer.push(c);
-                    bar.set_message(format!("{buffer}_"));
-                }
-                _ => {}
+    // block_in_place: Tokio moves other tasks away from this thread while
+    // we block on stdin, ensuring background downloads keep progressing.
+    let prompt_result = tokio::task::block_in_place(|| {
+        mp.suspend(|| -> Result<Option<(String, Option<String>)>> {
+            let model_id_raw = prompt_string("Model ID")?;
+            if model_id_raw.is_empty() {
+                return Ok(None);
             }
-        }
+            // Accept inline `-q` flag so the user can paste a full
+            // command-line fragment, e.g. `owner/repo -q Q4_K_M`.
+            let (model_id, inline_quant) = parse_inline_quant(&model_id_raw);
+            let quant = if inline_quant.is_some() {
+                inline_quant
+            } else {
+                let quant_str =
+                    prompt_string_with_default("Quantization (optional, e.g. Q4_K_M)", None)?;
+                if quant_str.is_empty() {
+                    None
+                } else {
+                    Some(quant_str)
+                }
+            };
+            Ok(Some((model_id, quant)))
+        })
+    });
 
-        // Yield to let Tokio run download tasks; their bars tick via
-        // their own enable_steady_tick from indicatif's draw thread.
-        tokio::time::sleep(Duration::from_millis(30)).await;
+    // Best-effort re-enable; if it fails the plain monitor loop continues.
+    let _ = raw.enable();
+
+    let entry = match prompt_result {
+        Ok(Some(entry)) => entry,
+        Ok(None) => return, // user pressed Enter with no input
+        Err(e) => {
+            mp.println(format!("✗ Input error: {e}")).ok();
+            return;
+        }
+    };
+
+    let (model_id, quant) = entry;
+    match Arc::clone(downloads).queue_smart(model_id, quant).await {
+        Ok(_) => {}
+        Err(e) => {
+            mp.println(format!("✗ Queue error: {e}")).ok();
+        }
     }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-/// Build the hint bar message including live queue counts.
-///
-/// Examples:
-/// - `[a] queue another  [q] quit  •  1 downloading`
-/// - `[a] queue another  [q] quit  •  2 downloading, 1 queued`
-fn build_hint_message(active: u32, pending: u32) -> String {
-    let mut msg = String::from("[a] queue another  [q] quit");
-    if active > 0 || pending > 0 {
-        msg.push_str("  •  ");
-        if active > 0 {
-            msg.push_str(&format!("{active} downloading"));
-        }
-        if pending > 0 {
-            if active > 0 {
-                msg.push_str(", ");
-            }
-            msg.push_str(&format!("{pending} queued"));
-        }
-    }
-    msg
-}
+
 /// Parse an optional inline `-q <quant>` suffix from a raw model ID string.
 ///
 /// Accepts the fragment that a user might copy from a CLI invocation, e.g.
@@ -362,19 +300,37 @@ fn print_failures(snapshot: &QueueSnapshot) {
 /// RAII guard that enables crossterm raw mode on construction and disables it
 /// on drop, ensuring the terminal is always restored even if the caller returns
 /// early via `?`.
-struct RawModeGuard;
+struct RawModeGuard {
+    active: bool,
+}
 
 impl RawModeGuard {
     /// Enable raw mode and return a guard. Returns an error if the terminal
     /// does not support raw mode.
     fn acquire() -> Result<Self> {
         enable_raw_mode()?;
-        Ok(Self)
+        Ok(Self { active: true })
+    }
+
+    /// Disable raw mode and mark the guard as inactive.
+    fn disable(&mut self) {
+        if self.active {
+            let _ = disable_raw_mode();
+            self.active = false;
+        }
+    }
+
+    /// Re-enable raw mode. Returns an error on failure; the guard stays
+    /// inactive so `Drop` won't attempt a double-disable.
+    fn enable(&mut self) -> Result<()> {
+        enable_raw_mode()?;
+        self.active = true;
+        Ok(())
     }
 }
 
 impl Drop for RawModeGuard {
     fn drop(&mut self) {
-        let _ = disable_raw_mode();
+        self.disable();
     }
 }
