@@ -57,6 +57,35 @@ impl CliDownloadEventEmitter {
     pub fn multi_progress(&self) -> Arc<MultiProgress> {
         Arc::clone(&self.multi_progress)
     }
+
+    /// Pause the steady-tick animation thread on every active bar.
+    ///
+    /// indicatif's `enable_steady_tick` spawns a background thread that
+    /// redraws the bar at a fixed interval to keep spinners animating.
+    /// That thread can race with [`MultiProgress::suspend`]: if it fires
+    /// in the narrow window between suspend acquiring its draw lock and
+    /// the user's prompt closure starting, the extra frame can be left in
+    /// scrollback as a visual artifact above the prompts. Callers that are
+    /// about to suspend the display for blocking input should call this
+    /// first and [`Self::resume_animation`] when done.
+    pub fn pause_animation(&self) {
+        if let Ok(bars) = self.bars.lock() {
+            for bar in bars.values() {
+                bar.disable_steady_tick();
+            }
+        }
+    }
+
+    /// Re-enable the steady-tick animation thread on every active bar.
+    ///
+    /// Pairs with [`Self::pause_animation`].
+    pub fn resume_animation(&self) {
+        if let Ok(bars) = self.bars.lock() {
+            for bar in bars.values() {
+                bar.enable_steady_tick(TICK_INTERVAL);
+            }
+        }
+    }
 }
 
 impl Default for CliDownloadEventEmitter {

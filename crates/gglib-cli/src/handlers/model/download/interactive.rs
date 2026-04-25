@@ -193,7 +193,7 @@ async fn run_tty_monitor(
                         // Reader is now parked on cmd_rx.recv() — stdin is
                         // free for us to call Term::read_line() inside the
                         // suspend block.
-                        handle_add_to_queue(&downloads, &mp).await;
+                        handle_add_to_queue(&downloads, &emitter, &mp).await;
                         // Tell reader to resume reading keys.
                         let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
@@ -288,10 +288,19 @@ async fn run_tty_monitor(
 /// Prompt the user (via `console::Term::read_line`) for a new model ID
 /// and queue it. Runs entirely in cooked mode inside `MultiProgress::suspend`,
 /// so termios `OPOST` stays enabled and indicatif resumes cleanly afterward.
+///
+/// Steady-tick animation on all active bars is paused for the duration of the
+/// prompt. Without this, indicatif's per-bar background ticker can race with
+/// `suspend` and emit one last redraw frame just as suspend is clearing the
+/// region, leaving that frame stranded in scrollback above the prompt.
 async fn handle_add_to_queue(
     downloads: &Arc<dyn DownloadManagerPort>,
+    emitter: &Arc<CliDownloadEventEmitter>,
     mp: &indicatif::MultiProgress,
 ) {
+    // Quiesce indicatif's animation threads so suspend has exclusive control.
+    emitter.pause_animation();
+
     // block_in_place: Tokio moves other tasks away from this thread while
     // we block on stdin, ensuring background downloads keep progressing.
     let prompt_result = tokio::task::block_in_place(|| {
@@ -325,6 +334,9 @@ async fn handle_add_to_queue(
             Ok(Some((model_id, quant)))
         })
     });
+
+    // Restart steady-tick now that suspend has returned and bars are back.
+    emitter.resume_animation();
 
     let entry = match prompt_result {
         Ok(Some(entry)) => entry,
