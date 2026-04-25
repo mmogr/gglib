@@ -27,6 +27,7 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use gglib_core::download::QueueSnapshot;
 use gglib_core::ports::DownloadManagerPort;
@@ -110,8 +111,12 @@ async fn run_tty_monitor(
         Err(_) => return run_plain_monitor(downloads).await,
     };
 
+    // hint_bar: a static ProgressBar owned by the MultiProgress that holds
+    // the [a]/[q] hint text. Using a managed bar (rather than mp.println)
+    // keeps indicatif's line-count accurate, so suspend/resume never tears.
+    let mut hint_bar: Option<ProgressBar> = None;
     let mut seen_items = false;
-    let mut hint_shown = false;
+    let mut last_item_count: u32 = 0;
 
     loop {
         // ── Non-blocking keypress check (zero-timeout poll) ───────────────
@@ -122,10 +127,9 @@ async fn run_tty_monitor(
                     kind: KeyEventKind::Press,
                     ..
                 })) => {
+                    // suspend() inside handle_add_to_queue clears and redraws
+                    // all managed bars (including hint_bar) automatically.
                     handle_add_to_queue(&downloads, &mp, &mut raw).await;
-                    // Reset so the polling loop reprints the hint cleanly on
-                    // the next tick, after the bars have fully re-rendered.
-                    hint_shown = false;
                 }
 
                 Ok(Event::Key(KeyEvent {
@@ -156,15 +160,30 @@ async fn run_tty_monitor(
 
         // ── Completion / progress check ───────────────────────────────────
         let snapshot = downloads.get_queue_snapshot().await?;
+        let item_count = snapshot.active_count + snapshot.pending_count;
 
-        if snapshot.active_count > 0 || snapshot.pending_count > 0 {
+        if item_count > 0 {
             seen_items = true;
         }
 
-        // Show the hint once, anchored under the first progress bar.
-        if seen_items && !hint_shown {
-            mp.println("[a] queue another  [q] quit").ok();
-            hint_shown = true;
+        // Create the hint bar the first time we see activity.
+        if seen_items && hint_bar.is_none() {
+            let style = ProgressStyle::with_template("{msg}")
+                .unwrap_or_else(|_| ProgressStyle::default_bar());
+            let bar = ProgressBar::new(0);
+            bar.set_style(style);
+            bar.set_message("[a] queue another  [q] quit");
+            hint_bar = Some(mp.add(bar));
+            last_item_count = item_count;
+        }
+
+        // Re-anchor hint to the bottom whenever new items appear.
+        if item_count > last_item_count {
+            if let Some(bar) = &hint_bar {
+                mp.remove(bar);
+                mp.add(bar.clone());
+            }
+            last_item_count = item_count;
         }
 
         // Fast-fail: exit immediately if a failure appeared before we ever
@@ -177,6 +196,10 @@ async fn run_tty_monitor(
         }
     }
 
+    // Clear the hint bar cleanly before restoring the terminal.
+    if let Some(bar) = hint_bar {
+        bar.finish_and_clear();
+    }
     drop(raw);
     Ok(())
 }
@@ -210,7 +233,11 @@ async fn handle_add_to_queue(
             } else {
                 let quant_str =
                     prompt_string_with_default("Quantization (optional, e.g. Q4_K_M)", None)?;
-                if quant_str.is_empty() { None } else { Some(quant_str) }
+                if quant_str.is_empty() {
+                    None
+                } else {
+                    Some(quant_str)
+                }
             };
             Ok(Some((model_id, quant)))
         })
