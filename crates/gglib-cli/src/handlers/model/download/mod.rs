@@ -9,6 +9,7 @@
 mod browse;
 mod check_updates;
 mod exec;
+mod interactive;
 mod search;
 mod update_model;
 
