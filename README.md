@@ -15,7 +15,7 @@ GGLib keeps a catalog of your GGUFs, handles downloading from HuggingFace, and s
 ## Quick look
 
 ```bash
-# Download a model from HuggingFace
+# Download a model from HuggingFace (interactive queue — press [a] to add more, [q] to cancel)
 gglib model download bartowski/Qwen2.5-7B-Instruct-GGUF
 
 # List what you have
