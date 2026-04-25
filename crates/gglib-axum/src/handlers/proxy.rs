@@ -54,7 +54,7 @@ fn to_api_status(s: RuntimeProxyStatus) -> ProxyStatus {
 
 /// Fetch current proxy status from backend.
 async fn fetch_status(state: &AppState) -> ProxyStatus {
-    let s = state.gui.proxy_status().await;
+    let s = state.proxy.status().await;
     to_api_status(s)
 }
 
@@ -89,8 +89,8 @@ pub async fn start(
 
     // Idempotent: if already running (Conflict), treat as success
     match state
-        .gui
-        .proxy_start(runtime_cfg, cfg.llama_base_port, llama_path)
+        .proxy
+        .start(runtime_cfg, cfg.llama_base_port, llama_path)
         .await
     {
         Ok(_addr) => {}
@@ -119,7 +119,7 @@ pub async fn start(
 /// Stop the proxy (idempotent).
 pub async fn stop(State(state): State<AppState>) -> Result<Json<ProxyStatus>, HttpError> {
     // Idempotent: if not running (Conflict), treat as success
-    match state.gui.proxy_stop().await {
+    match state.proxy.stop().await {
         Ok(()) => {
             // Emit proxy stopped event on clean shutdown
             state

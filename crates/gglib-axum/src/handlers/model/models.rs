@@ -10,7 +10,7 @@ use gglib_gui::types::{AddModelRequest, GuiModel, RemoveModelRequest, UpdateMode
 
 /// List all models.
 pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<GuiModel>>, HttpError> {
-    Ok(Json(state.gui.list_models().await?))
+    Ok(Json(state.models.list().await?))
 }
 
 /// Get a single model by ID.
@@ -18,7 +18,7 @@ pub async fn get(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<GuiModel>, HttpError> {
-    Ok(Json(state.gui.get_model(id).await?))
+    Ok(Json(state.models.get(id).await?))
 }
 
 /// Add a new model from a local file.
@@ -26,7 +26,7 @@ pub async fn add(
     State(state): State<AppState>,
     Json(req): Json<AddModelRequest>,
 ) -> Result<Json<GuiModel>, HttpError> {
-    Ok(Json(state.gui.add_model(req).await?))
+    Ok(Json(state.models.add(req).await?))
 }
 
 /// Update an existing model.
@@ -35,7 +35,7 @@ pub async fn update(
     Path(id): Path<i64>,
     Json(req): Json<UpdateModelRequest>,
 ) -> Result<Json<GuiModel>, HttpError> {
-    Ok(Json(state.gui.update_model(id, req).await?))
+    Ok(Json(state.models.update(id, req).await?))
 }
 
 /// Remove a model.
@@ -44,12 +44,12 @@ pub async fn remove(
     Path(id): Path<i64>,
     Json(req): Json<RemoveModelRequest>,
 ) -> Result<Json<String>, HttpError> {
-    Ok(Json(state.gui.remove_model(id, req).await?))
+    Ok(Json(state.models.remove(id, req).await?))
 }
 
 /// Get all unique tags.
 pub async fn list_tags(State(state): State<AppState>) -> Result<Json<Vec<String>>, HttpError> {
-    Ok(Json(state.gui.list_tags().await?))
+    Ok(Json(state.models.list_tags().await?))
 }
 
 /// Get tags for a specific model.
@@ -57,7 +57,7 @@ pub async fn get_model_tags(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Vec<String>>, HttpError> {
-    Ok(Json(state.gui.get_model_tags(id).await?))
+    Ok(Json(state.models.get_tags(id).await?))
 }
 
 /// Add a tag to a model.
@@ -65,7 +65,7 @@ pub async fn add_tag(
     State(state): State<AppState>,
     Path((id, tag)): Path<(i64, String)>,
 ) -> Result<(), HttpError> {
-    state.gui.add_model_tag(id, tag).await?;
+    state.models.add_tag(id, tag).await?;
     Ok(())
 }
 
@@ -81,7 +81,7 @@ pub async fn add_tag_body(
     Path(id): Path<i64>,
     Json(request): Json<AddTagRequest>,
 ) -> Result<(), HttpError> {
-    state.gui.add_model_tag(id, request.tag).await?;
+    state.models.add_tag(id, request.tag).await?;
     Ok(())
 }
 
@@ -90,7 +90,7 @@ pub async fn remove_tag(
     State(state): State<AppState>,
     Path((id, tag)): Path<(i64, String)>,
 ) -> Result<(), HttpError> {
-    state.gui.remove_model_tag(id, tag).await?;
+    state.models.remove_tag(id, tag).await?;
     Ok(())
 }
 
@@ -99,12 +99,12 @@ pub async fn get_by_tag(
     State(state): State<AppState>,
     Path(tag): Path<String>,
 ) -> Result<Json<Vec<i64>>, HttpError> {
-    Ok(Json(state.gui.get_models_by_tag(tag).await?))
+    Ok(Json(state.models.get_by_tag(tag).await?))
 }
 
 /// Get filter options for the model list UI.
 pub async fn filter_options(
     State(state): State<AppState>,
 ) -> Result<Json<ModelFilterOptions>, HttpError> {
-    Ok(Json(state.gui.get_model_filter_options().await?))
+    Ok(Json(state.models.get_filter_options().await?))
 }

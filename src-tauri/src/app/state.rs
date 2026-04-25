@@ -1,8 +1,9 @@
 //! Application state shared across all Tauri commands.
 
-use gglib_axum::EmbeddedApiInfo;
-use gglib_tauri::gui_backend::GuiBackend;
 use std::sync::Arc;
+
+use gglib_axum::EmbeddedApiInfo;
+use gglib_gui::{DownloadOps, ServerOps};
 use tauri::async_runtime::JoinHandle;
 use tokio::sync::RwLock;
 
@@ -13,8 +14,10 @@ use crate::menu::AppMenu;
 /// This struct is managed by Tauri and accessible to all commands
 /// via `tauri::State<'_, AppState>`.
 pub struct AppState {
-    /// Shared GUI backend (new architecture from gglib-tauri)
-    pub gui: Arc<GuiBackend>,
+    /// Server lifecycle operations.
+    pub servers: Arc<ServerOps>,
+    /// Download queue operations.
+    pub downloads: Arc<DownloadOps>,
     /// Embedded API server info (port and auth token)
     pub embedded_api: EmbeddedApiInfo,
     /// Menu state for dynamic updates
@@ -39,9 +42,14 @@ pub struct BackgroundTasks {
 
 impl AppState {
     /// Create a new application state.
-    pub fn new(gui: Arc<GuiBackend>, embedded_api: EmbeddedApiInfo) -> Self {
+    pub fn new(
+        servers: Arc<ServerOps>,
+        downloads: Arc<DownloadOps>,
+        embedded_api: EmbeddedApiInfo,
+    ) -> Self {
         Self {
-            gui,
+            servers,
+            downloads,
             embedded_api,
             menu: Arc::new(RwLock::new(None)),
             selected_model_id: Arc::new(RwLock::new(None)),

@@ -1,27 +1,37 @@
 //! Model CRUD operations for GUI backend.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use gglib_core::ModelFilterOptions;
 use gglib_core::domain::Model;
+use gglib_core::ports::{GgufParserPort, ProcessRunner};
+use gglib_core::services::AppCore;
 
-use crate::deps::GuiDeps;
 use crate::error::GuiError;
 use crate::types::{AddModelRequest, GuiModel, RemoveModelRequest, UpdateModelRequest};
 
-/// Model operations handler.
-pub struct ModelOps<'a> {
-    deps: &'a GuiDeps,
+/// Dependencies for model operations.
+pub struct ModelDeps {
+    pub core: Arc<AppCore>,
+    pub runner: Arc<dyn ProcessRunner>,
+    pub gguf_parser: Arc<dyn GgufParserPort>,
 }
 
-impl<'a> ModelOps<'a> {
-    pub fn new(deps: &'a GuiDeps) -> Self {
+/// Model operations handler.
+pub struct ModelOps {
+    deps: ModelDeps,
+}
+
+impl ModelOps {
+    pub fn new(deps: ModelDeps) -> Self {
         Self { deps }
     }
 
     /// Resolve model by ID, returning GUI error if not found.
     async fn resolve_model(&self, id: i64) -> Result<Model, GuiError> {
         self.deps
+            .core
             .models()
             .get_by_id(id)
             .await
@@ -59,6 +69,7 @@ impl<'a> ModelOps<'a> {
     pub async fn list(&self) -> Result<Vec<GuiModel>, GuiError> {
         let models = self
             .deps
+            .core
             .models()
             .list()
             .await
@@ -86,8 +97,9 @@ impl<'a> ModelOps<'a> {
         // Delegate to shared core logic for model import with full metadata extraction
         let model = self
             .deps
+            .core
             .models()
-            .import_from_file(&path, self.deps.gguf_parser().as_ref(), None)
+            .import_from_file(&path, self.deps.gguf_parser.as_ref(), None)
             .await
             .map_err(|e| match e {
                 gglib_core::ports::CoreError::Validation(msg) => GuiError::ValidationFailed(msg),
@@ -123,6 +135,7 @@ impl<'a> ModelOps<'a> {
         }
 
         self.deps
+            .core
             .models()
             .update(&model)
             .await
@@ -150,6 +163,7 @@ impl<'a> ModelOps<'a> {
         }
 
         self.deps
+            .core
             .models()
             .delete(id)
             .await
@@ -161,6 +175,7 @@ impl<'a> ModelOps<'a> {
     /// List all unique tags.
     pub async fn list_tags(&self) -> Result<Vec<String>, GuiError> {
         self.deps
+            .core
             .models()
             .list_tags()
             .await
@@ -170,6 +185,7 @@ impl<'a> ModelOps<'a> {
     /// Add a tag to a model.
     pub async fn add_tag(&self, model_id: i64, tag: String) -> Result<(), GuiError> {
         self.deps
+            .core
             .models()
             .add_tag(model_id, tag)
             .await
@@ -179,6 +195,7 @@ impl<'a> ModelOps<'a> {
     /// Remove a tag from a model.
     pub async fn remove_tag(&self, model_id: i64, tag: String) -> Result<(), GuiError> {
         self.deps
+            .core
             .models()
             .remove_tag(model_id, &tag)
             .await
@@ -188,6 +205,7 @@ impl<'a> ModelOps<'a> {
     /// Get all tags for a specific model.
     pub async fn get_tags(&self, model_id: i64) -> Result<Vec<String>, GuiError> {
         self.deps
+            .core
             .models()
             .get_tags(model_id)
             .await
@@ -198,6 +216,7 @@ impl<'a> ModelOps<'a> {
     pub async fn get_by_tag(&self, tag: String) -> Result<Vec<i64>, GuiError> {
         let models = self
             .deps
+            .core
             .models()
             .get_by_tag(&tag)
             .await
@@ -208,6 +227,7 @@ impl<'a> ModelOps<'a> {
     /// Get filter options for the model library UI.
     pub async fn get_filter_options(&self) -> Result<ModelFilterOptions, GuiError> {
         self.deps
+            .core
             .models()
             .get_filter_options()
             .await

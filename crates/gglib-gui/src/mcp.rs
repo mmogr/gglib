@@ -6,7 +6,6 @@ use gglib_mcp::{
     McpEnvEntry, McpServerConfig, McpServerStatus, McpServerType, McpService, McpTool, NewMcpServer,
 };
 
-use crate::deps::GuiDeps;
 use crate::error::GuiError;
 use crate::types::{
     CreateMcpServerRequest, McpEnvEntryDto, McpServerConfigDto, McpServerDto, McpServerInfo,
@@ -14,14 +13,19 @@ use crate::types::{
     UpdateMcpServerRequest,
 };
 
-/// MCP server operations handler.
-pub struct McpOps<'a> {
-    mcp: &'a Arc<McpService>,
+/// Dependencies for MCP operations.
+pub struct McpDeps {
+    pub mcp: Arc<McpService>,
 }
 
-impl<'a> McpOps<'a> {
-    pub fn new(deps: &'a GuiDeps) -> Self {
-        Self { mcp: &deps.mcp }
+/// MCP server operations handler.
+pub struct McpOps {
+    mcp: Arc<McpService>,
+}
+
+impl McpOps {
+    pub fn new(deps: McpDeps) -> Self {
+        Self { mcp: deps.mcp }
     }
 
     /// Convert McpTool to McpToolInfo.

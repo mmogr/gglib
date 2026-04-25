@@ -43,7 +43,7 @@ pub struct ReorderFullRequest {
 
 /// Get the current download queue.
 pub async fn list(State(state): State<AppState>) -> Json<QueueSnapshot> {
-    let snapshot = state.gui.get_download_queue().await;
+    let snapshot = state.downloads.get_queue_snapshot().await;
 
     tracing::debug!(
         target: "gglib.download",
@@ -62,7 +62,7 @@ pub async fn queue(
     State(state): State<AppState>,
     Json(req): Json<QueueDownloadRequest>,
 ) -> Result<Json<QueueDownloadResponse>, HttpError> {
-    let (position, shard_count) = state.gui.queue_download(req.model_id, req.quant).await?;
+    let (position, shard_count) = state.downloads.queue_download(req.model_id, req.quant).await?;
     Ok(Json(QueueDownloadResponse {
         position,
         shard_count,
@@ -74,7 +74,7 @@ pub async fn remove(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(), HttpError> {
-    state.gui.remove_from_download_queue(&id).await?;
+    state.downloads.remove_from_queue(&id).await?;
     Ok(())
 }
 
@@ -87,7 +87,7 @@ pub async fn cancel(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(), HttpError> {
-    match state.gui.cancel_download(&id).await {
+    match state.downloads.cancel_download(&id).await {
         Ok(()) => Ok(()),
         // Treat NotFound as success (idempotent cancel)
         Err(gglib_gui::GuiError::NotFound { .. }) => Ok(()),
@@ -102,8 +102,8 @@ pub async fn reorder(
 ) -> Result<Json<usize>, HttpError> {
     Ok(Json(
         state
-            .gui
-            .reorder_download_queue(&req.model_id, req.position)
+            .downloads
+            .reorder_queue(&req.model_id, req.position)
             .await?,
     ))
 }
@@ -113,7 +113,7 @@ pub async fn reorder_full(
     State(state): State<AppState>,
     Json(req): Json<ReorderFullRequest>,
 ) -> Result<(), HttpError> {
-    state.gui.reorder_download_queue_full(&req.ids).await?;
+    state.downloads.reorder_queue_full(&req.ids).await?;
     Ok(())
 }
 
@@ -122,13 +122,13 @@ pub async fn cancel_shard_group(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(), HttpError> {
-    state.gui.cancel_shard_group(&id).await?;
+    state.downloads.cancel_shard_group(&id).await?;
     Ok(())
 }
 
 /// Clear all failed downloads.
 pub async fn clear_failed(State(state): State<AppState>) {
-    state.gui.clear_failed_downloads().await;
+    state.downloads.clear_failed().await;
 }
 
 #[cfg(test)]

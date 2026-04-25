@@ -33,4 +33,3 @@ pub use server_events::TauriServerEvents;
 
 // Re-export GuiError for app crate to use in error mapping
 pub use gglib_gui::GuiError;
-pub use gui_backend::{GuiBackend, GuiDeps};

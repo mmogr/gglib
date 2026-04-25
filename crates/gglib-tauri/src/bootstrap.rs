@@ -22,20 +22,22 @@ use gglib_core::ports::{
     AppEventBridge, AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, HfClientPort,
     ModelRepository, NoopDownloadEmitter, NoopEmitter, ProcessRunner, Repos,
 };
-use gglib_core::services::{AppCore, ModelService, SettingsService};
+use gglib_core::services::AppCore;
 use gglib_db::{CoreFactory, setup_database};
 use gglib_download::{DownloadManagerDeps, DownloadManagerImpl, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::{GgufParser, ToolSupportDetector};
+use gglib_gui::{
+    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
+    ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
+};
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
+use crate::TauriEventEmitter;
 use tauri::AppHandle;
-
-use crate::event_emitter::TauriEventEmitter;
-use crate::gui_backend::{GuiBackend, GuiDeps};
 
 // Path utilities from core
 use gglib_core::paths::{
@@ -74,20 +76,23 @@ pub struct TauriContext {
     pub mcp: Arc<McpService>,
     /// Download manager (concrete type for worker control).
     pub download_manager: Arc<DownloadManagerImpl>,
-    /// Download manager as trait object (for code that doesn't need worker control).
-    pub downloads: Arc<dyn DownloadManagerPort>,
     /// HuggingFace client for model discovery.
     pub hf_client: Arc<dyn HfClientPort>,
-    /// Model service (Arc-wrapped for GuiBackend).
-    pub models: Arc<ModelService>,
-    /// Settings service (Arc-wrapped for GuiBackend).
-    pub settings: Arc<SettingsService>,
     /// Event emitter for GUI health events.
     pub event_emitter: Arc<dyn AppEventEmitter>,
     /// Proxy supervisor for lifecycle management.
     pub proxy_supervisor: Arc<ProxySupervisor>,
     /// Model repository for catalog access.
     pub model_repo: Arc<dyn ModelRepository>,
+    // 7 domain ops
+    pub models: Arc<ModelOps>,
+    pub servers: Arc<ServerOps>,
+    pub downloads: Arc<DownloadOps>,
+    pub settings: Arc<SettingsOps>,
+    /// Named mcp_ops to avoid clashing with `mcp: Arc<McpService>` above.
+    pub mcp_ops: Arc<McpOps>,
+    pub proxy: Arc<ProxyOps>,
+    pub setup: Arc<SetupOps>,
     /// AppHandle for creating ServerEvents adapter.
     ///
     /// Optional to support test/bootstrap_early paths.
@@ -116,59 +121,9 @@ impl TauriContext {
         &self.download_manager
     }
 
-    /// Access the download manager as trait object.
-    pub fn downloads(&self) -> &Arc<dyn DownloadManagerPort> {
-        &self.downloads
-    }
-
     /// Access the HuggingFace client.
     pub fn hf_client(&self) -> &Arc<dyn HfClientPort> {
         &self.hf_client
-    }
-
-    /// Build a GuiBackend from this context.
-    ///
-    /// This creates the GUI-specific facade that Tauri commands use.
-    /// Call this once in setup() and store the result in AppState.
-    ///
-    /// Note: If app_handle is None (from bootstrap_early), this will use
-    /// NoopServerEvents instead of TauriServerEvents.
-    pub fn build_gui_backend(&self) -> GuiBackend {
-        // Create appropriate ServerEvents implementation
-        let server_events: Arc<dyn gglib_core::events::ServerEvents> =
-            if let Some(app_handle) = &self.app_handle {
-                Arc::new(crate::TauriServerEvents::new(app_handle.clone()))
-            } else {
-                tracing::debug!("TauriContext has no AppHandle; using NoopServerEvents");
-                Arc::new(gglib_core::events::NoopServerEvents)
-            };
-
-        // Tool support detector for capability detection
-        let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
-            Arc::new(ToolSupportDetector::new());
-
-        // System probe for memory and hardware detection
-        let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
-            Arc::new(DefaultSystemProbe::new());
-
-        // GGUF parser for model metadata extraction
-        let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
-
-        let deps = GuiDeps::new(
-            Arc::clone(&self.app),
-            self.downloads.clone(),
-            self.hf_client.clone(),
-            self.runner.clone(),
-            self.mcp.clone(),
-            self.event_emitter.clone(),
-            server_events,
-            tool_detector,
-            self.proxy_supervisor.clone(),
-            self.model_repo.clone(),
-            system_probe,
-            gguf_parser,
-        );
-        GuiBackend::new(deps)
     }
 }
 
@@ -267,7 +222,6 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         event_emitter,
         config: download_config,
     }));
-    // Also keep trait object for code that doesn't need worker control
     let downloads: Arc<dyn DownloadManagerPort> = download_manager.clone();
 
     // 6. Create ModelVerificationService with download trigger adapter
@@ -282,26 +236,69 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     ));
     let app = Arc::new(app.with_verification(verification_service));
 
-    // Create Arc-wrapped services for GuiBackend
-    let models = Arc::new(ModelService::new(repos.models.clone()));
-    let settings = Arc::new(SettingsService::new(repos.settings.clone()));
-
     // 7. Create proxy infrastructure
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
+
+    // 8. Build 7 domain ops
+    let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
+    let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
+        Arc::new(ToolSupportDetector::new());
+    let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
+        Arc::new(DefaultSystemProbe::new());
+    let server_events: Arc<dyn gglib_core::events::ServerEvents> =
+        Arc::new(crate::TauriServerEvents::new(app_handle.clone()));
+
+    let models = Arc::new(ModelOps::new(ModelDeps {
+        core: Arc::clone(&app),
+        runner: runner.clone(),
+        gguf_parser,
+    }));
+    let servers = Arc::new(ServerOps::new(ServerDeps {
+        core: Arc::clone(&app),
+        runner: runner.clone(),
+        emitter: tauri_emitter.clone(),
+        server_events,
+        tool_detector: tool_detector.clone(),
+    }));
+    let download_ops = Arc::new(DownloadOps::new(DownloadDeps {
+        downloads: downloads.clone(),
+        hf: hf_client.clone(),
+        tool_detector,
+    }));
+    let settings = Arc::new(SettingsOps::new(SettingsDeps {
+        core: Arc::clone(&app),
+        system_probe: system_probe.clone(),
+        downloads: downloads.clone(),
+    }));
+    let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
+    let proxy = Arc::new(ProxyOps::new(ProxyDeps {
+        supervisor: proxy_supervisor.clone(),
+        model_repo: model_repo.clone(),
+        mcp: mcp.clone(),
+        core: Arc::clone(&app),
+    }));
+    let setup = Arc::new(SetupOps::new(SetupDeps {
+        core: Arc::clone(&app),
+        system_probe,
+    }));
 
     Ok(TauriContext {
         app,
         runner,
         mcp,
         download_manager,
-        downloads,
         hf_client,
-        models,
-        settings,
         event_emitter: tauri_emitter.clone(),
         proxy_supervisor,
         model_repo,
+        models,
+        servers,
+        downloads: download_ops,
+        settings,
+        mcp_ops,
+        proxy,
+        setup,
         app_handle: Some(app_handle),
     })
 }
@@ -320,25 +317,74 @@ pub fn bootstrap_with(
         Arc::new(NoopEmitter),
     ));
     let downloads: Arc<dyn DownloadManagerPort> = download_manager.clone();
-    let models = Arc::new(ModelService::new(repos.models.clone()));
-    let settings = Arc::new(SettingsService::new(repos.settings.clone()));
 
     // Create proxy infrastructure for tests
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
+
+    // Build 7 domain ops (Noop for tests — no server events, no hardware probing)
+    let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
+    let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
+        Arc::new(ToolSupportDetector::new());
+    let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
+        Arc::new(DefaultSystemProbe::new());
+    let server_events: Arc<dyn gglib_core::events::ServerEvents> = if let Some(ref h) = app_handle
+    {
+        Arc::new(crate::TauriServerEvents::new(h.clone()))
+    } else {
+        Arc::new(gglib_core::events::NoopServerEvents)
+    };
+
+    let models_ops = Arc::new(ModelOps::new(ModelDeps {
+        core: Arc::clone(&app),
+        runner: runner.clone(),
+        gguf_parser,
+    }));
+    let servers_ops = Arc::new(ServerOps::new(ServerDeps {
+        core: Arc::clone(&app),
+        runner: runner.clone(),
+        emitter: Arc::new(NoopEmitter),
+        server_events,
+        tool_detector: tool_detector.clone(),
+    }));
+    let download_ops = Arc::new(DownloadOps::new(DownloadDeps {
+        downloads: downloads.clone(),
+        hf: hf_client.clone(),
+        tool_detector,
+    }));
+    let settings_ops = Arc::new(SettingsOps::new(SettingsDeps {
+        core: Arc::clone(&app),
+        system_probe: system_probe.clone(),
+        downloads: downloads.clone(),
+    }));
+    let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
+    let proxy_ops = Arc::new(ProxyOps::new(ProxyDeps {
+        supervisor: proxy_supervisor.clone(),
+        model_repo: model_repo.clone(),
+        mcp: mcp.clone(),
+        core: Arc::clone(&app),
+    }));
+    let setup_ops = Arc::new(SetupOps::new(SetupDeps {
+        core: Arc::clone(&app),
+        system_probe,
+    }));
 
     TauriContext {
         app,
         runner,
         mcp,
         download_manager,
-        downloads,
         hf_client,
-        models,
-        settings,
         event_emitter: Arc::new(NoopEmitter),
         proxy_supervisor,
         model_repo,
+        models: models_ops,
+        servers: servers_ops,
+        downloads: download_ops,
+        settings: settings_ops,
+        mcp_ops,
+        proxy: proxy_ops,
+        setup: setup_ops,
         app_handle,
     }
 }
@@ -430,31 +476,69 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
     ));
     let app = Arc::new(app.with_verification(verification_service));
 
-    // Create Arc-wrapped services for GuiBackend
-    let models = Arc::new(ModelService::new(repos.models.clone()));
-    let settings = Arc::new(SettingsService::new(repos.settings.clone()));
-
-    // For bootstrap_early, we don't have an AppHandle yet.
-    // Store None - build_gui_backend() will use NoopServerEvents.
-    // This is safe and idiomatic - the caller gets Noop events until they
-    // bootstrap with a real AppHandle via the main bootstrap() function.
-
     // Create proxy infrastructure
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
+
+    // 7. Build 7 domain ops (no AppHandle → NoopServerEvents)
+    let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
+    let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
+        Arc::new(ToolSupportDetector::new());
+    let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
+        Arc::new(DefaultSystemProbe::new());
+    let server_events: Arc<dyn gglib_core::events::ServerEvents> =
+        Arc::new(gglib_core::events::NoopServerEvents);
+
+    let models = Arc::new(ModelOps::new(ModelDeps {
+        core: Arc::clone(&app),
+        runner: runner.clone(),
+        gguf_parser,
+    }));
+    let servers = Arc::new(ServerOps::new(ServerDeps {
+        core: Arc::clone(&app),
+        runner: runner.clone(),
+        emitter: Arc::new(NoopEmitter),
+        server_events,
+        tool_detector: tool_detector.clone(),
+    }));
+    let download_ops = Arc::new(DownloadOps::new(DownloadDeps {
+        downloads: downloads.clone(),
+        hf: hf_client.clone(),
+        tool_detector,
+    }));
+    let settings = Arc::new(SettingsOps::new(SettingsDeps {
+        core: Arc::clone(&app),
+        system_probe: system_probe.clone(),
+        downloads: downloads.clone(),
+    }));
+    let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
+    let proxy = Arc::new(ProxyOps::new(ProxyDeps {
+        supervisor: proxy_supervisor.clone(),
+        model_repo: model_repo.clone(),
+        mcp: mcp.clone(),
+        core: Arc::clone(&app),
+    }));
+    let setup = Arc::new(SetupOps::new(SetupDeps {
+        core: Arc::clone(&app),
+        system_probe,
+    }));
 
     Ok(TauriContext {
         app,
         runner,
         mcp,
         download_manager,
-        downloads,
         hf_client,
-        models,
-        settings,
         event_emitter: Arc::new(NoopEmitter),
         proxy_supervisor,
         model_repo,
+        models,
+        servers,
+        downloads: download_ops,
+        settings,
+        mcp_ops,
+        proxy,
+        setup,
         app_handle: None,
     })
 }

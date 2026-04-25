@@ -13,7 +13,7 @@ use gglib_gui::types::{
 
 /// List all MCP servers.
 pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<McpServerInfo>>, HttpError> {
-    Ok(Json(state.gui.list_mcp_servers().await?))
+    Ok(Json(state.mcp_ops.list().await?))
 }
 
 /// Add a new MCP server.
@@ -21,7 +21,7 @@ pub async fn add(
     State(state): State<AppState>,
     Json(req): Json<CreateMcpServerRequest>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
-    Ok(Json(state.gui.add_mcp_server(req).await?))
+    Ok(Json(state.mcp_ops.add(req).await?))
 }
 
 /// Update an MCP server.
@@ -30,12 +30,12 @@ pub async fn update(
     Path(id): Path<i64>,
     Json(req): Json<UpdateMcpServerRequest>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
-    Ok(Json(state.gui.update_mcp_server(id, req).await?))
+    Ok(Json(state.mcp_ops.update(id, req).await?))
 }
 
 /// Remove an MCP server.
 pub async fn remove(State(state): State<AppState>, Path(id): Path<i64>) -> Result<(), HttpError> {
-    state.gui.remove_mcp_server(id).await?;
+    state.mcp_ops.remove(id).await?;
     Ok(())
 }
 
@@ -44,7 +44,7 @@ pub async fn start(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
-    Ok(Json(state.gui.start_mcp_server(id).await?))
+    Ok(Json(state.mcp_ops.start(id).await?))
 }
 
 /// Stop an MCP server.
@@ -52,7 +52,7 @@ pub async fn stop(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
-    Ok(Json(state.gui.stop_mcp_server(id).await?))
+    Ok(Json(state.mcp_ops.stop(id).await?))
 }
 
 /// List tools from a running MCP server.
@@ -60,7 +60,7 @@ pub async fn list_tools(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<Vec<McpToolInfo>>, HttpError> {
-    Ok(Json(state.gui.list_mcp_tools(id).await?))
+    Ok(Json(state.mcp_ops.list_tools(id).await?))
 }
 
 /// Request body for calling an MCP tool (includes server ID).
@@ -77,7 +77,7 @@ pub async fn call_tool(
     Json(req): Json<CallToolRequest>,
 ) -> Result<Json<McpToolCallResponse>, HttpError> {
     Ok(Json(
-        state.gui.call_mcp_tool(req.server_id, req.call).await?,
+        state.mcp_ops.call_tool(req.server_id, req.call).await?,
     ))
 }
 
@@ -88,5 +88,5 @@ pub async fn resolve_path(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<gglib_core::ports::ResolutionStatus>, HttpError> {
-    Ok(Json(state.gui.resolve_mcp_server_path(id).await?))
+    Ok(Json(state.mcp_ops.resolve_path(id).await?))
 }

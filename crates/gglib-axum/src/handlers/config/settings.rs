@@ -10,7 +10,7 @@ use gglib_gui::types::{AppSettings, ModelsDirectoryInfo, UpdateSettingsRequest};
 
 /// Get application settings.
 pub async fn get(State(state): State<AppState>) -> Result<Json<AppSettings>, HttpError> {
-    Ok(Json(state.gui.get_settings().await?))
+    Ok(Json(state.settings.get().await?))
 }
 
 /// Update application settings.
@@ -18,7 +18,7 @@ pub async fn update(
     State(state): State<AppState>,
     Json(req): Json<UpdateSettingsRequest>,
 ) -> Result<Json<AppSettings>, HttpError> {
-    Ok(Json(state.gui.update_settings(req).await?))
+    Ok(Json(state.settings.update(req).await?))
 }
 
 /// Get system memory information.
@@ -29,7 +29,7 @@ pub async fn update(
 pub async fn memory(
     State(state): State<AppState>,
 ) -> Result<Json<Option<SystemMemoryInfoDto>>, HttpError> {
-    let mem_opt = state.gui.get_system_memory()?;
+    let mem_opt = state.settings.get_system_memory()?;
     Ok(Json(mem_opt.map(SystemMemoryInfoDto::from)))
 }
 
@@ -37,7 +37,7 @@ pub async fn memory(
 pub async fn models_directory(
     State(state): State<AppState>,
 ) -> Result<Json<ModelsDirectoryInfo>, HttpError> {
-    Ok(Json(state.gui.get_models_directory_info()?))
+    Ok(Json(state.settings.get_models_directory_info()?))
 }
 
 /// Update request for models directory.
@@ -51,5 +51,5 @@ pub async fn update_models_directory(
     State(state): State<AppState>,
     Json(req): Json<UpdateModelsDirectoryRequest>,
 ) -> Result<Json<ModelsDirectoryInfo>, HttpError> {
-    Ok(Json(state.gui.update_models_directory(req.path)?))
+    Ok(Json(state.settings.update_models_directory(req.path)?))
 }

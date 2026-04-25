@@ -10,8 +10,6 @@ use tokio as _;
 #[cfg(test)]
 use tokio_test as _;
 
-mod backend;
-mod deps;
 mod error;
 
 mod downloads;
@@ -24,18 +22,16 @@ pub mod setup;
 pub mod types;
 
 // Primary exports
-pub use backend::GuiBackend;
-pub use deps::GuiDeps;
 pub use error::GuiError;
-pub use proxy::ProxyOps;
 
-// Re-export operation modules for direct access if needed
-pub use downloads::DownloadOps;
-pub use mcp::McpOps;
-pub use models::ModelOps;
-pub use servers::ServerOps;
-pub use settings::SettingsOps;
-pub use setup::SetupOps;
+// Domain ops + their Deps
+pub use downloads::{DownloadDeps, DownloadOps};
+pub use mcp::{McpDeps, McpOps};
+pub use models::{ModelDeps, ModelOps};
+pub use proxy::{ProxyDeps, ProxyOps};
+pub use servers::{ServerDeps, ServerOps};
+pub use settings::{SettingsDeps, SettingsOps};
+pub use setup::{SetupDeps, SetupOps};
 
 // Re-export commonly used types from gglib-core for convenience
 pub use gglib_core::ModelFilterOptions;

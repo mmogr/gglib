@@ -39,7 +39,7 @@ pub async fn sync_menu_state_internal(
 
     // Check if selected model has a running server
     let selected_model_server_active = if let Some(id) = selected_id {
-        let servers = state.gui.list_servers().await;
+        let servers = state.servers.list_servers().await;
         servers.iter().any(|s| s.model_id == id)
     } else {
         false

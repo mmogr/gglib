@@ -19,7 +19,10 @@ use gglib_download::{DownloadManagerDeps, build_download_manager};
 use reqwest::Client;
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::{GgufParser, ToolSupportDetector};
-use gglib_gui::{GuiBackend, GuiDeps};
+use gglib_gui::{
+    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
+    ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
+};
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
@@ -101,14 +104,19 @@ impl ServerConfig {
 /// This struct holds all initialized services for the web server.
 /// It mirrors `TauriContext` but is tailored for the Axum web adapter.
 pub struct AxumContext {
-    /// The GUI backend facade (shared with Tauri).
-    pub gui: Arc<GuiBackend>,
+    // 7 domain ops
+    pub models: Arc<ModelOps>,
+    pub servers: Arc<ServerOps>,
+    pub downloads: Arc<DownloadOps>,
+    pub settings: Arc<SettingsOps>,
+    /// Named mcp_ops to avoid clashing with `mcp: Arc<McpService>` below.
+    pub mcp_ops: Arc<McpOps>,
+    pub proxy: Arc<ProxyOps>,
+    pub setup: Arc<SetupOps>,
     /// The core application facade.
     pub core: Arc<AppCore>,
     /// MCP service for managing MCP servers.
     pub mcp: Arc<McpService>,
-    /// Download manager as trait object.
-    pub downloads: Arc<dyn DownloadManagerPort>,
     /// HuggingFace client for model discovery.
     pub hf_client: Arc<dyn HfClientPort>,
     /// Process runner for server lifecycle management.
@@ -226,10 +234,11 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     ));
     let core = Arc::new(core.with_verification(verification_service));
 
-    // 9. Build GuiBackend using shared GuiDeps
+    // 9. Build 7 domain ops
     // SSE broadcaster implements AppEventEmitter for health event emission
     // Create server events adapter for lifecycle events
-    let server_events = Arc::new(crate::sse::AxumServerEvents::new((*sse).clone()));
+    let server_events: Arc<dyn gglib_core::events::ServerEvents> =
+        Arc::new(crate::sse::AxumServerEvents::new((*sse).clone()));
 
     // Tool support detector for capability detection
     let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
@@ -246,34 +255,62 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // GGUF parser for model metadata extraction
     let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
 
-    let deps = GuiDeps::new(
-        Arc::clone(&core),
-        downloads.clone(),
-        hf_client.clone(),
-        runner.clone(),
-        mcp.clone(),
-        sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>,
-        server_events as Arc<dyn gglib_core::events::ServerEvents>,
-        tool_detector,
-        proxy_supervisor,
-        model_repo,
-        system_probe,
+    let sse_emitter: Arc<dyn AppEventEmitter> = sse.clone();
+
+    let models = Arc::new(ModelOps::new(ModelDeps {
+        core: Arc::clone(&core),
+        runner: runner.clone(),
         gguf_parser,
-    );
-    let gui = Arc::new(GuiBackend::new(deps));
+    }));
+
+    let servers = Arc::new(ServerOps::new(ServerDeps {
+        core: Arc::clone(&core),
+        runner: runner.clone(),
+        emitter: sse_emitter,
+        server_events,
+        tool_detector: tool_detector.clone(),
+    }));
+
+    let download_ops = Arc::new(DownloadOps::new(DownloadDeps {
+        downloads: downloads.clone(),
+        hf: hf_client.clone(),
+        tool_detector,
+    }));
+
+    let settings = Arc::new(SettingsOps::new(SettingsDeps {
+        core: Arc::clone(&core),
+        system_probe: system_probe.clone(),
+        downloads: downloads.clone(),
+    }));
+
+    let mcp_ops = Arc::new(McpOps::new(McpDeps {
+        mcp: mcp.clone(),
+    }));
+
+    let proxy = Arc::new(ProxyOps::new(ProxyDeps {
+        supervisor: proxy_supervisor,
+        model_repo,
+        mcp: mcp.clone(),
+        core: Arc::clone(&core),
+    }));
+
+    let setup = Arc::new(SetupOps::new(SetupDeps {
+        core: Arc::clone(&core),
+        system_probe,
+    }));
 
     // Emit initial server snapshot after initialization
     tokio::spawn({
-        let gui = Arc::clone(&gui);
+        let servers = Arc::clone(&servers);
         async move {
-            gui.emit_initial_snapshot().await;
+            servers.emit_initial_snapshot().await;
         }
     });
 
     // Spawn proxy crash watcher — emits ProxyCrashed when the task exits unexpectedly.
     // Uses the watch channel from ProxySupervisor (zero polling).
     tokio::spawn({
-        let mut rx = gui.proxy_exit_receiver();
+        let mut rx = proxy.exit_receiver();
         let sse = Arc::clone(&sse);
         async move {
             // Skip the initial value; only react to actual changes.
@@ -288,10 +325,15 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     });
 
     Ok(AxumContext {
-        gui,
+        models,
+        servers,
+        downloads: download_ops,
+        settings,
+        mcp_ops,
+        proxy,
+        setup,
         core,
         mcp,
-        downloads,
         hf_client,
         runner,
         sse,
