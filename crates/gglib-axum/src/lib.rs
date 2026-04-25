@@ -39,7 +39,6 @@ pub mod handlers;
 pub mod routes;
 pub mod sse;
 pub mod state;
-pub(crate) mod ws_audio;
 
 // Re-export primary types
 pub use bootstrap::{AxumContext, CorsConfig, ServerConfig, bootstrap, start_server};

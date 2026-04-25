@@ -13,7 +13,6 @@ import {
   SERVER_EVENT_NAMES,
   LOG_EVENT_NAMES,
   VERIFICATION_EVENT_NAMES,
-  VOICE_EVENT_NAMES,
 } from './eventNames';
 
 const eventModulePromise = import('@tauri-apps/api/event');
@@ -28,7 +27,6 @@ const TAURI_EVENT_NAMES: Record<AppEventType, readonly string[]> = {
   'log': LOG_EVENT_NAMES,
   'proxy': PROXY_EVENT_NAMES,
   'verification': VERIFICATION_EVENT_NAMES,
-  'voice': VOICE_EVENT_NAMES,
 };
 
 /**

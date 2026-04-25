@@ -21,7 +21,7 @@ env:
   ALL_CRATES: >-
     gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp
     gglib-agent gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum
-    gglib-tauri gglib-build-info gglib-voice
+    gglib-tauri gglib-build-info
 
 jobs:
   # =============================================================================
@@ -272,12 +272,6 @@ jobs:
           GUI_TEST="$(find artifacts -name 'rust-test-gglib-gui.txt' -type f 2>/dev/null | head -1)"
           for MODULE in backend deps error downloads models servers settings mcp proxy types; do
             extract_module_tests "$GUI_TEST" "$MODULE" "gglib-gui-$MODULE"
-          done
-          
-          # gglib-voice modules
-          VOICE_TEST="$(find artifacts -name 'rust-test-gglib-voice.txt' -type f 2>/dev/null | head -1)"
-          for MODULE in audio_thread capture error gate models pipeline playback stt text_utils tts vad backend; do
-            extract_module_tests "$VOICE_TEST" "$MODULE" "gglib-voice-$MODULE"
           done
           
           # --- Boundary badge ---
@@ -568,14 +562,6 @@ jobs:
           for MODULE in backend deps error downloads models servers settings mcp proxy types; do
             extract_module_cov "$GUI_LCOV" "src/$MODULE.rs" "gglib-gui-$MODULE"
           done
-          
-          # gglib-voice modules (single files)
-          VOICE_LCOV="$(find artifacts -name 'gglib-voice-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in audio_thread capture error gate models pipeline playback stt text_utils tts vad; do
-            extract_module_cov "$VOICE_LCOV" "src/$MODULE.rs" "gglib-voice-$MODULE"
-          done
-          # gglib-voice backend submodule (directory, not single file)
-          extract_module_cov "$VOICE_LCOV" "src/backend/" "gglib-voice-backend"
           
           # =============================================================================
           # Per-file coverage extraction (dynamic discovery)
@@ -918,20 +904,6 @@ jobs:
             echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-hf-client-loc.json"
             echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-hf-client-complexity.json"
             echo "  gglib-hf/client: $LOC loc, $COMPLEXITY complexity"
-          fi
-          
-          # =============================================================================
-          # Per-module badges for gglib-voice
-          # =============================================================================
-          if [ -d "crates/gglib-voice/src/backend" ]; then
-            SCC_DATA=$(scc "crates/gglib-voice/src/backend" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-            LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-            COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-            LOC_COL=$(loc_color $LOC)
-            CX_COL=$(cx_color $COMPLEXITY)
-            echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/gglib-voice-backend-loc.json"
-            echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/gglib-voice-backend-complexity.json"
-            echo "  gglib-voice/backend: $LOC loc, $COMPLEXITY complexity"
           fi
           
           # =============================================================================

@@ -15,14 +15,13 @@ members = [
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
-    "crates/gglib-voice",
     # Tauri desktop app (gglib-app binary)
     "src-tauri",
 ]
 
 # Shared package metadata for all workspace crates
 [workspace.package]
-version = "0.7.1"
+version = "0.7.2"
 edition = "2024"
 license = "GPLv3"
 repository = "https://github.com/mmogr/gglib"
@@ -102,7 +101,6 @@ gglib-runtime = { path = "crates/gglib-runtime" }
 gglib-axum = { path = "crates/gglib-axum" }
 gglib-gui = { path = "crates/gglib-gui" }
 gglib-tauri = { path = "crates/gglib-tauri" }
-gglib-voice = { path = "crates/gglib-voice" }
 gglib-build-info = { path = "crates/gglib-build-info" }
 
 # Workspace-wide lints for consistency

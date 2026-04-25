@@ -65,8 +65,6 @@ export type GglibMessageCustom = {
   dbId?: number;
   turnId?: string;
   iteration?: number;
-  /** Whether this message originated from voice input/output */
-  isVoice?: boolean;
   /** Set once the final iteration is complete; triggers persisted transcript regeneration. */
   timingFinalized?: boolean;
   /** Thinking duration in seconds (restored from metadata on load). */

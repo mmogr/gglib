@@ -140,7 +140,6 @@ jobs:
           cargo test -p gglib-cli --verbose 2>&1 | tee rust-test-gglib-cli.txt
           cargo test -p gglib-axum --verbose 2>&1 | tee rust-test-gglib-axum.txt
           cargo test -p gglib-tauri --verbose 2>&1 | tee rust-test-gglib-tauri.txt
-          cargo test -p gglib-voice --verbose 2>&1 | tee rust-test-gglib-voice.txt
 
       - name: Run doctests
         run: cargo test --doc --verbose
@@ -165,7 +164,6 @@ jobs:
             rust-test-gglib-cli.txt
             rust-test-gglib-axum.txt
             rust-test-gglib-tauri.txt
-            rust-test-gglib-voice.txt
           retention-days: 30
 
   test-frontend:
@@ -296,12 +294,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev
-
-      - name: Set Windows linker args (sherpa-onnx ETW symbols)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          echo "RUSTFLAGS=$env:RUSTFLAGS -C link-arg=Advapi32.lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Check gglib-cli compilation
         run: cargo test -p gglib-cli --no-run

@@ -13,7 +13,6 @@ use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
 use gglib_download::cli_exec::preflight_fast_helper;
 use gglib_runtime::process::get_log_manager;
 use gglib_tauri::bootstrap::{TauriConfig, bootstrap};
-use gglib_voice::RemoteAudioRegistry;
 #[cfg(target_os = "macos")]
 use menu::state_sync::sync_menu_state_or_log;
 use std::sync::Arc;
@@ -115,11 +114,6 @@ fn main() {
                 runner: ctx.runner.clone(),
                 sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
                 http_client: reqwest::Client::new(),
-                // Desktop app: voice_registry is provided so the HTTP control
-                // plane can drive audio via LocalAudioSource/LocalAudioSink.
-                // The browser opens the WS audio endpoint only in web/embedded
-                // mode; there are no Tauri-specific voice command handlers anymore.
-                voice_registry: ctx.voice_service.clone() as Arc<dyn RemoteAudioRegistry>,
                 agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
             };
 

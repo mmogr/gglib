@@ -218,42 +218,6 @@ check_dep() {
     fi
 }
 
-# Check if libclang-dev is installed (needed by bindgen for Rust FFI bindings)
-# libclang doesn't have a pkg-config file, so we check for the shared library directly
-check_libclang() {
-    local description="Required for Rust FFI bindings (bindgen/sherpa-rs)"
-    local found=false
-    local version=""
-
-    # Method 1: Check via llvm-config
-    if command_exists llvm-config; then
-        local libdir
-        libdir=$(llvm-config --libdir 2>/dev/null)
-        if [ -n "$libdir" ] && ls "$libdir"/libclang*.so* >/dev/null 2>&1; then
-            found=true
-            version=$(llvm-config --version 2>/dev/null)
-        fi
-    fi
-
-    # Method 2: Check standard library paths
-    if [ "$found" = false ]; then
-        if ls /usr/lib/*/libclang*.so* >/dev/null 2>&1 || ls /usr/lib/llvm-*/lib/libclang*.so* >/dev/null 2>&1; then
-            found=true
-            version="installed"
-        fi
-    fi
-
-    if [ "$found" = true ]; then
-        printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "libclang-dev" "✓" "$version" "$description"
-        PRESENT_REQUIRED+=("libclang-dev")
-        return 0
-    else
-        printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "libclang-dev" "✗" "MISSING" "$description"
-        MISSING_REQUIRED+=("libclang-dev")
-        return 1
-    fi
-}
-
 # Check library with pkg-config
 check_lib() {
     local name=$1
@@ -374,7 +338,7 @@ print_install_instructions() {
         case "$dep" in
             cargo|rustc) need_rust=true ;;
             node|npm) need_node=true ;;
-            git|make|gcc|g++|pkg-config|libssl-dev|cmake|libclang-dev|libsqlite3-dev) need_build_tools=true ;;
+            git|make|gcc|g++|pkg-config|libssl-dev|cmake|libsqlite3-dev) need_build_tools=true ;;
             patchelf|webkit2gtk-4.1|librsvg|libappindicator-gtk3) need_gtk=true ;;
             CUDA|GPU) need_cuda=true ;;
             "Vulkan headers") need_vulkan_headers=true ;;
@@ -461,7 +425,7 @@ print_install_instructions() {
                     debian)
                         echo -e "   ${YELLOW}# Ubuntu/Debian:${RESET}"
                         echo "   sudo apt update && sudo apt install -y \\"
-                        echo "     build-essential git pkg-config libssl-dev libcurl4-openssl-dev cmake libasound2-dev libclang-dev libsqlite3-dev"
+                        echo "     build-essential git pkg-config libssl-dev libcurl4-openssl-dev cmake libasound2-dev libsqlite3-dev"
                         ;;
                     fedora)
                         echo -e "   ${YELLOW}# Fedora:${RESET}"
@@ -691,7 +655,7 @@ print_install_instructions() {
                     if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ] || [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ]; then
                         local cmd="sudo apt update && sudo apt install -y"
                         [ "$need_node" = true ] && cmd="$cmd nodejs npm"
-                        [ "$need_build_tools" = true ] && cmd="$cmd build-essential git pkg-config libssl-dev libcurl4-openssl-dev patchelf cmake libasound2-dev libclang-dev libsqlite3-dev"
+                        [ "$need_build_tools" = true ] && cmd="$cmd build-essential git pkg-config libssl-dev libcurl4-openssl-dev patchelf cmake libasound2-dev libsqlite3-dev"
                         [ "$need_gtk" = true ] && cmd="$cmd libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev"
                         [ "$need_vulkan_headers" = true ] && cmd="$cmd libvulkan-dev"
                         [ "$need_glslc" = true ] && cmd="$cmd glslc"
@@ -780,10 +744,8 @@ main() {
         else
             check_lib "libappindicator-gtk3" "Required for Tauri system tray support" "true" "ayatana-appindicator3-0.1"
         fi
-        check_lib "libasound2-dev" "Required for voice/audio support (gglib-voice)" "true" "alsa"
+        check_lib "libasound2-dev" "Required for audio support (ALSA)" "true" "alsa"
         check_lib "libsqlite3-dev" "Required for database support" "true" "sqlite3"
-        # libclang-dev: no pkg-config file, check for library files directly
-        check_libclang
 
         # WSL2-specific checks
         if grep -qi microsoft /proc/version 2>/dev/null; then

@@ -106,12 +106,10 @@ pub(super) fn settings_display_rows(
 /// - `inference-defaults.*` → **Inference Defaults** (prefix stripped from key)
 /// - Bare `inference-defaults` (null) → **Inference Defaults**, shown as
 ///   `(none configured)`
-/// - `voice-*` → **Voice** (`voice-` prefix stripped from key)
 /// - Anything else → **General**
 pub(super) fn settings_to_sections(flat_rows: &[(String, String)]) -> Vec<DisplaySection> {
     let mut general: Vec<(String, String)> = Vec::new();
     let mut inference: Vec<(String, String)> = Vec::new();
-    let mut voice: Vec<(String, String)> = Vec::new();
 
     for (key, val) in flat_rows {
         if let Some(sub) = key.strip_prefix("inference-defaults.") {
@@ -119,8 +117,6 @@ pub(super) fn settings_to_sections(flat_rows: &[(String, String)]) -> Vec<Displa
         } else if key == "inference-defaults" {
             // The whole nested struct is unset; show a placeholder.
             inference.push(("(none configured)".to_owned(), String::new()));
-        } else if let Some(sub) = key.strip_prefix("voice-") {
-            voice.push((sub.to_owned(), val.clone()));
         } else {
             general.push((key.clone(), val.clone()));
         }
@@ -137,12 +133,6 @@ pub(super) fn settings_to_sections(flat_rows: &[(String, String)]) -> Vec<Displa
         sections.push(DisplaySection {
             title: "Inference Defaults",
             rows: inference,
-        });
-    }
-    if !voice.is_empty() {
-        sections.push(DisplaySection {
-            title: "Voice",
-            rows: voice,
         });
     }
     sections
@@ -331,13 +321,11 @@ mod tests {
             ),
             ("inference-defaults.top-k".to_owned(), "20".to_owned()),
             ("proxy-port".to_owned(), "8080".to_owned()),
-            ("voice-enabled".to_owned(), "false".to_owned()),
-            ("voice-tts-speed".to_owned(), "1.0".to_owned()),
         ];
 
         let sections = settings_to_sections(&flat);
 
-        assert_eq!(sections.len(), 3);
+        assert_eq!(sections.len(), 2);
 
         let general = &sections[0];
         assert_eq!(general.title, "General");
@@ -354,12 +342,6 @@ mod tests {
         assert_eq!(inference.title, "Inference Defaults");
         assert!(inference.rows.iter().any(|(k, _)| k == "temperature"));
         assert!(inference.rows.iter().any(|(k, _)| k == "top-k"));
-
-        // Voice prefix stripped.
-        let voice = &sections[2];
-        assert_eq!(voice.title, "Voice");
-        assert!(voice.rows.iter().any(|(k, _)| k == "enabled"));
-        assert!(voice.rows.iter().any(|(k, _)| k == "tts-speed"));
     }
 
     #[test]
