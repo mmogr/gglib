@@ -5,7 +5,7 @@
 //!
 //! # What lives here
 //!
-//! - [`list_quantizations`] — HuggingFace quant listing for `--list-quants`
+//! - [`list_quantizations`] — `HuggingFace` quant listing for `--list-quants`
 //! - [`check_update`] / [`update_model`] — update path for `model upgrade`
 //! - Python bridge helpers ([`ensure_fast_helper_ready`], [`run_fast_download`]) shared
 //!   with the async download manager
