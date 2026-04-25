@@ -19,7 +19,17 @@ use gglib_core::ports::DownloadEventEmitterPort;
 
 // ─── Style constants ─────────────────────────────────────────────────────────
 
-const SPINNER_TEMPLATE: &str = "{spinner:.cyan} {wide_msg}";
+// A single unified template is used for the entire lifetime of the bar.
+//
+// Earlier iterations switched between a spinner-only template and a bar
+// template once the first `ShardProgress` event arrived with a known total
+// size. That `set_style` call could race with the steady-tick redraw and
+// indicatif's draw-target line tracking, leaving the spinner frame stranded
+// in scrollback while the new template drew fresh one line below it.
+//
+// The unified template renders fine even when the bar's length is unknown
+// (the bar widget appears empty until `set_length` is called with a real
+// total) and avoids the mid-stream style switch entirely.
 const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes} @ {bytes_per_sec} eta {eta}";
 const TICK_INTERVAL: Duration = Duration::from_millis(120);
 
@@ -109,12 +119,18 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                     _ => id.clone(),
                 };
 
-                let spinner_style = ProgressStyle::with_template(SPINNER_TEMPLATE)
-                    .unwrap_or_else(|_| ProgressStyle::default_spinner())
+                // Always create the bar with the unified BAR_TEMPLATE — see
+                // module-level comment on `BAR_TEMPLATE` for why we never
+                // switch styles mid-stream. Length 0 is a sentinel meaning
+                // "total not yet known"; the bar widget renders empty until
+                // a Progress/ShardProgress event supplies a real length.
+                let style = ProgressStyle::with_template(BAR_TEMPLATE)
+                    .unwrap_or_else(|_| ProgressStyle::default_bar())
+                    .progress_chars("█▓░")
                     .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
 
-                let bar = self.multi_progress.add(ProgressBar::new_spinner());
-                bar.set_style(spinner_style);
+                let bar = self.multi_progress.add(ProgressBar::new(0));
+                bar.set_style(style);
                 bar.enable_steady_tick(TICK_INTERVAL);
                 bar.set_message(label);
 
@@ -133,11 +149,10 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
             } => {
                 if let Ok(bars) = self.bars.lock() {
                     if let Some(bar) = bars.get(&id) {
+                        // First time we see a real total, set length. No
+                        // set_style — the unified template is already in
+                        // place from DownloadStarted.
                         if total > 0 && bar.length().unwrap_or(0) == 0 {
-                            let bar_style = ProgressStyle::with_template(BAR_TEMPLATE)
-                                .unwrap_or_else(|_| ProgressStyle::default_bar())
-                                .progress_chars("█▓░");
-                            bar.set_style(bar_style);
                             bar.set_length(total);
                         }
                         bar.set_position(downloaded);
@@ -156,11 +171,10 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
             } => {
                 if let Ok(bars) = self.bars.lock() {
                     if let Some(bar) = bars.get(&id) {
+                        // Update length on first real total or whenever the
+                        // total changes (e.g. final shard size resolved).
+                        // No set_style — unified template stays in place.
                         if aggregate_total > 0 && bar.length().unwrap_or(0) != aggregate_total {
-                            let bar_style = ProgressStyle::with_template(BAR_TEMPLATE)
-                                .unwrap_or_else(|_| ProgressStyle::default_bar())
-                                .progress_chars("█▓░");
-                            bar.set_style(bar_style);
                             bar.set_length(aggregate_total);
                         }
                         bar.set_position(aggregate_downloaded);
