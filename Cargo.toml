@@ -5,6 +5,7 @@ members = [
     "crates/gglib-db",
     "crates/gglib-download",
     "crates/gglib-gguf",
+    "crates/gglib-bootstrap",
     "crates/gglib-gui",
     "crates/gglib-hf",
     "crates/gglib-build-info",
@@ -90,6 +91,7 @@ tempfile = "3.8"
 mockall = "0.14"
 
 # Internal crates (for migration)
+gglib-bootstrap = { path = "crates/gglib-bootstrap" }
 gglib-core = { path = "crates/gglib-core" }
 gglib-db = { path = "crates/gglib-db", features = ["test-utils"] }
 gglib-download = { path = "crates/gglib-download" }

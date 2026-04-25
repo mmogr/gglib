@@ -1,0 +1,34 @@
+[package]
+name = "gglib-bootstrap"
+version.workspace = true
+edition.workspace = true
+description = "Shared composition root for gglib adapters — wires infrastructure without adapter concerns"
+license.workspace = true
+publish = false
+build = "build.rs"
+
+[lib]
+name = "gglib_bootstrap"
+path = "src/lib.rs"
+
+[dependencies]
+# Internal crates — strictly infrastructure wiring only; no adapter crates (mcp, tauri, axum)
+gglib-core = { path = "../gglib-core" }
+gglib-db = { path = "../gglib-db" }
+gglib-download = { path = "../gglib-download" }
+gglib-gguf = { path = "../gglib-gguf" }
+gglib-hf = { path = "../gglib-hf" }
+gglib-runtime = { path = "../gglib-runtime" }
+
+# Async runtime — full features match the adapters that consume this crate
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[lints]
+workspace = true
