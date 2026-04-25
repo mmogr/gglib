@@ -60,12 +60,32 @@ pub async fn run_interactive_monitor(
 ///
 /// indicatif degrades gracefully on non-TTY stdout, so progress bars
 /// still emit periodic lines. We just poll for completion.
+///
+/// The loop will not exit until it has observed at least one non-empty
+/// snapshot (`seen_items`), which prevents a premature exit caused by
+/// the Tokio runner task not yet being scheduled when the first poll
+/// fires. Fast-fail exits early if `recent_failures` appears before any
+/// items were ever seen active (e.g. instant auth error).
 async fn run_plain_monitor(downloads: Arc<dyn DownloadManagerPort>) -> Result<()> {
+    // Brief initial yield so the async runner task can be scheduled and
+    // move the queued item from pending → active before we first poll.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
     let mut interval = tokio::time::interval(Duration::from_millis(250));
+    let mut seen_items = false;
     loop {
         interval.tick().await;
         let snapshot = downloads.get_queue_snapshot().await?;
-        if is_queue_finished(&snapshot) {
+
+        if snapshot.active_count > 0 || snapshot.pending_count > 0 {
+            seen_items = true;
+        }
+
+        // Fast-fail: a failure appeared before we ever saw activity.
+        // This covers instant errors (auth, missing Python helper, etc.).
+        let has_failure = !snapshot.recent_failures.is_empty();
+
+        if (seen_items || has_failure) && is_queue_finished(&snapshot) {
             print_failures(&snapshot);
             return Ok(());
         }
@@ -90,7 +110,8 @@ async fn run_tty_monitor(
         Err(_) => return run_plain_monitor(downloads).await,
     };
 
-    mp.println("[a] add to queue  [q] quit").ok();
+    let mut seen_items = false;
+    let mut hint_shown = false;
 
     loop {
         // ── Non-blocking keypress check (zero-timeout poll) ───────────────
@@ -102,7 +123,8 @@ async fn run_tty_monitor(
                     ..
                 })) => {
                     handle_add_to_queue(&downloads, &mp, &mut raw).await;
-                    mp.println("[a] add to queue  [q] quit").ok();
+                    // Re-print so the hint is visible below any new bar.
+                    mp.println("[a] queue another  [q] quit").ok();
                 }
 
                 Ok(Event::Key(KeyEvent {
@@ -131,9 +153,24 @@ async fn run_tty_monitor(
         // ── Async yield — lets Tokio run download worker tasks ────────────
         tokio::time::sleep(Duration::from_millis(250)).await;
 
-        // ── Completion check ──────────────────────────────────────────────
+        // ── Completion / progress check ───────────────────────────────────
         let snapshot = downloads.get_queue_snapshot().await?;
-        if is_queue_finished(&snapshot) {
+
+        if snapshot.active_count > 0 || snapshot.pending_count > 0 {
+            seen_items = true;
+        }
+
+        // Show the hint once, anchored under the first progress bar.
+        if seen_items && !hint_shown {
+            mp.println("[a] queue another  [q] quit").ok();
+            hint_shown = true;
+        }
+
+        // Fast-fail: exit immediately if a failure appeared before we ever
+        // saw any activity (instant auth error, missing Python helper, etc.).
+        let has_failure = !snapshot.recent_failures.is_empty();
+
+        if (seen_items || has_failure) && is_queue_finished(&snapshot) {
             print_failures(&snapshot);
             break;
         }

@@ -48,15 +48,9 @@ pub async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
 
     // Queue the initial download via the shared manager (same code path as GUI).
     let quant = args.quantization.map(String::from);
-    let (position, shard_count) = Arc::clone(&ctx.downloads)
+    Arc::clone(&ctx.downloads)
         .queue_smart(args.model_id.to_string(), quant)
         .await?;
-
-    if shard_count > 1 {
-        println!("↳ queued at position {position} ({shard_count} shards)",);
-    } else {
-        println!("↳ queued at position {position}");
-    }
 
     // Hand off to the interactive monitor — all progress rendering, keypress
     // handling, TTY/non-TTY detection, and failure reporting live there.
