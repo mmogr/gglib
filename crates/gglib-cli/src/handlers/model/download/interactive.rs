@@ -123,8 +123,9 @@ async fn run_tty_monitor(
                     ..
                 })) => {
                     handle_add_to_queue(&downloads, &mp, &mut raw).await;
-                    // Re-print so the hint is visible below any new bar.
-                    mp.println("[a] queue another  [q] quit").ok();
+                    // Reset so the polling loop reprints the hint cleanly on
+                    // the next tick, after the bars have fully re-rendered.
+                    hint_shown = false;
                 }
 
                 Ok(Event::Key(KeyEvent {
@@ -197,16 +198,19 @@ async fn handle_add_to_queue(
     // we block on stdin, ensuring background downloads keep progressing.
     let prompt_result = tokio::task::block_in_place(|| {
         mp.suspend(|| -> Result<Option<(String, Option<String>)>> {
-            let model_id = prompt_string("Model ID")?;
-            if model_id.is_empty() {
+            let model_id_raw = prompt_string("Model ID")?;
+            if model_id_raw.is_empty() {
                 return Ok(None);
             }
-            let quant_str =
-                prompt_string_with_default("Quantization (optional, e.g. Q4_K_M)", None)?;
-            let quant = if quant_str.is_empty() {
-                None
+            // Accept inline `-q` flag so the user can paste a full
+            // command-line fragment, e.g. `owner/repo -q Q4_K_M`.
+            let (model_id, inline_quant) = parse_inline_quant(&model_id_raw);
+            let quant = if inline_quant.is_some() {
+                inline_quant
             } else {
-                Some(quant_str)
+                let quant_str =
+                    prompt_string_with_default("Quantization (optional, e.g. Q4_K_M)", None)?;
+                if quant_str.is_empty() { None } else { Some(quant_str) }
             };
             Ok(Some((model_id, quant)))
         })
@@ -234,6 +238,23 @@ async fn handle_add_to_queue(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/// Parse an optional inline `-q <quant>` suffix from a raw model ID string.
+///
+/// Accepts the fragment that a user might copy from a CLI invocation, e.g.
+/// `owner/repo -q Q4_K_M`. Splits on the first ` -q ` token (case-sensitive)
+/// and returns `(model_id, Some(quantization))`. If no flag is found, returns
+/// the original string unchanged and `None`.
+fn parse_inline_quant(s: &str) -> (String, Option<String>) {
+    if let Some((model, quant)) = s.split_once(" -q ") {
+        let model = model.trim().to_string();
+        let quant = quant.trim().to_string();
+        if !model.is_empty() && !quant.is_empty() {
+            return (model, Some(quant));
+        }
+    }
+    (s.trim().to_string(), None)
+}
 
 /// Returns `true` when there are no active or pending downloads.
 fn is_queue_finished(snapshot: &QueueSnapshot) -> bool {
