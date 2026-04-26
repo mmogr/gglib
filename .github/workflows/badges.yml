@@ -20,8 +20,8 @@ concurrency:
 env:
   ALL_CRATES: >-
     gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp
-    gglib-agent gglib-proxy gglib-runtime gglib-gui gglib-cli gglib-axum
-    gglib-tauri gglib-build-info
+    gglib-agent gglib-proxy gglib-runtime gglib-app-services gglib-bootstrap
+    gglib-cli gglib-axum gglib-tauri gglib-build-info
 
 jobs:
   # =============================================================================
@@ -268,11 +268,17 @@ jobs:
             extract_module_tests "$AGENT_TEST" "$MODULE" "gglib-agent-$MODULE"
           done
           
-          # gglib-gui modules
-          GUI_TEST="$(find artifacts -name 'rust-test-gglib-gui.txt' -type f 2>/dev/null | head -1)"
-          for MODULE in backend deps error downloads models servers settings mcp proxy types; do
-            extract_module_tests "$GUI_TEST" "$MODULE" "gglib-gui-$MODULE"
+          # gglib-app-services modules
+          APP_SVC_TEST="$(find artifacts -name 'rust-test-gglib-app-services.txt' -type f 2>/dev/null | head -1)"
+          for MODULE in error downloads models servers settings mcp proxy types setup; do
+            extract_module_tests "$APP_SVC_TEST" "$MODULE" "gglib-app-services-$MODULE"
           done
+          
+          # gglib-bootstrap (no sub-modules — single composition root file)
+          BOOTSTRAP_TEST="$(find artifacts -name 'rust-test-gglib-bootstrap.txt' -type f 2>/dev/null | head -1)"
+          if [ -n "$BOOTSTRAP_TEST" ] && [ -f "$BOOTSTRAP_TEST" ]; then
+            extract_module_tests "$BOOTSTRAP_TEST" "bootstrap" "gglib-bootstrap-bootstrap"
+          fi
           
           # --- Boundary badge ---
           # Download boundary results from separate artifact
@@ -557,11 +563,15 @@ jobs:
             extract_module_cov "$AGENT_LCOV" "src/$MODULE/" "gglib-agent-$MODULE"
           done
           
-          # gglib-gui modules
-          GUI_LCOV="$(find artifacts -name 'gglib-gui-lcov.info' -type f 2>/dev/null | head -1)"
-          for MODULE in backend deps error downloads models servers settings mcp proxy types; do
-            extract_module_cov "$GUI_LCOV" "src/$MODULE.rs" "gglib-gui-$MODULE"
+          # gglib-app-services modules
+          APP_SVC_LCOV="$(find artifacts -name 'gglib-app-services-lcov.info' -type f 2>/dev/null | head -1)"
+          for MODULE in error downloads models servers settings mcp proxy types setup; do
+            extract_module_cov "$APP_SVC_LCOV" "src/$MODULE.rs" "gglib-app-services-$MODULE"
           done
+          
+          # gglib-bootstrap (single composition root)
+          BOOTSTRAP_LCOV="$(find artifacts -name 'gglib-bootstrap-lcov.info' -type f 2>/dev/null | head -1)"
+          extract_module_cov "$BOOTSTRAP_LCOV" "src/bootstrap.rs" "gglib-bootstrap-bootstrap"
           
           # =============================================================================
           # Per-file coverage extraction (dynamic discovery)
