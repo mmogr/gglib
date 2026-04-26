@@ -13,11 +13,10 @@ path = "src/main.rs"
 [dependencies]
 gglib-agent = { path = "../gglib-agent" }
 gglib-axum = { path = "../gglib-axum" }
+gglib-bootstrap = { path = "../gglib-bootstrap" }
 gglib-build-info = { path = "../gglib-build-info" }
 gglib-core = { path = "../gglib-core" }
-gglib-db = { path = "../gglib-db" }
 gglib-download = { path = "../gglib-download" }
-gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root
 gglib-hf = { path = "../gglib-hf" }
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }
@@ -40,7 +39,6 @@ hf-hub = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 dotenvy = "0.15"
 rustyline = "14"
 tracing = { workspace = true }

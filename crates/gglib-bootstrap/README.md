@@ -58,11 +58,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                                 gglib-bootstrap                                     │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
-│              ┌─────────────────────────────────────────┐                            │
-│              │                 lib.rs                   │                            │
-│              │  BootstrapConfig  ·  CoreBootstrap       │                            │
-│              │  BuiltCore  ·  CoreBootstrap::build()    │                            │
-│              └─────────────────────────────────────────┘                            │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌────────────────────┐        │
+│   │ config.rs   │  │ built.rs    │  │ builder.rs  │  │ download_trigger.rs│        │
+│   │BootstrapCfg │  │ BuiltCore   │  │CoreBootstrap│  │  (private adapter) │        │
+│   └─────────────┘  └─────────────┘  └─────────────┘  └────────────────────┘        │
+│         └───────────────┴────────┬───────┴────────────────┘                         │
+│                                  ▼                                                  │
+│                 lib.rs (declares modules + re-exports)                              │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```

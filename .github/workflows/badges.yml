@@ -274,10 +274,12 @@ jobs:
             extract_module_tests "$APP_SVC_TEST" "$MODULE" "gglib-app-services-$MODULE"
           done
           
-          # gglib-bootstrap (no sub-modules — single composition root file)
+          # gglib-bootstrap modules (split: config, built, builder, download_trigger)
           BOOTSTRAP_TEST="$(find artifacts -name 'rust-test-gglib-bootstrap.txt' -type f 2>/dev/null | head -1)"
           if [ -n "$BOOTSTRAP_TEST" ] && [ -f "$BOOTSTRAP_TEST" ]; then
-            extract_module_tests "$BOOTSTRAP_TEST" "bootstrap" "gglib-bootstrap-bootstrap"
+            for MODULE in config built builder download_trigger; do
+              extract_module_tests "$BOOTSTRAP_TEST" "$MODULE" "gglib-bootstrap-$MODULE"
+            done
           fi
           
           # --- Boundary badge ---
@@ -569,9 +571,11 @@ jobs:
             extract_module_cov "$APP_SVC_LCOV" "src/$MODULE.rs" "gglib-app-services-$MODULE"
           done
           
-          # gglib-bootstrap (single composition root)
+          # gglib-bootstrap modules (split across config/built/builder/download_trigger)
           BOOTSTRAP_LCOV="$(find artifacts -name 'gglib-bootstrap-lcov.info' -type f 2>/dev/null | head -1)"
-          extract_module_cov "$BOOTSTRAP_LCOV" "src/bootstrap.rs" "gglib-bootstrap-bootstrap"
+          for MODULE in config built builder download_trigger; do
+            extract_module_cov "$BOOTSTRAP_LCOV" "src/$MODULE.rs" "gglib-bootstrap-$MODULE"
+          done
           
           # =============================================================================
           # Per-file coverage extraction (dynamic discovery)
