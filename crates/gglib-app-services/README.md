@@ -44,20 +44,19 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │  backend    │  │    deps     │  │   error     │  │   types     │                 │
-│  │ GuiBackend  │  │  GuiDeps    │  │  GuiError   │  │  Shared DTOs│                 │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                 │
-│         │                │                │                │                        │
-│         ▼                ▼                ▼                ▼                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
 │  │  downloads  │  │   models    │  │   servers   │  │  settings   │                 │
-│  │DownloadOps  │  │  ModelOps   │  │ ServerOps   │  │ SettingsOps │                 │
+│  │ DownloadOps │  │  ModelOps   │  │  ServerOps  │  │ SettingsOps │                 │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
 │                                                                                     │
-│              ┌─────────────┐   ┌─────────────┐                                      │
-│              │     mcp     │   │    voice    │                                      │
-│              │   McpOps    │   │  VoiceOps   │                                      │
-│              └─────────────┘   └─────────────┘                                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
+│  │    error    │  │    types    │  │     mcp     │  │    proxy    │                 │
+│  │  GuiError   │  │ Shared DTOs │  │   McpOps    │  │  ProxyOps   │                 │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
+│                                                                                     │
+│              ┌─────────────┐                                                         │
+│              │    setup    │                                                         │
+│              │  SetupOps   │                                                         │
+│              └─────────────┘                                                         │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -68,8 +67,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 <!-- module-table:start -->
 | Module | LOC | Complexity | Coverage |
 |--------|-----|------------|----------|
-| [`backend.rs`](src/backend.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-backend-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-backend-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-backend-coverage.json) |
-| [`deps.rs`](src/deps.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-deps-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-deps-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-deps-coverage.json) |
 | [`downloads.rs`](src/downloads.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-downloads-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-downloads-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-downloads-coverage.json) |
 | [`error.rs`](src/error.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-error-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-error-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-error-coverage.json) |
 | [`mcp.rs`](src/mcp.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-mcp-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-mcp-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-mcp-coverage.json) |
@@ -79,26 +76,25 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | [`settings.rs`](src/settings.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-settings-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-settings-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-settings-coverage.json) |
 | [`setup.rs`](src/setup.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-setup-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-setup-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-setup-coverage.json) |
 | [`types.rs`](src/types.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-types-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-types-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-types-coverage.json) |
-| [`voice.rs`](src/voice.rs) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-voice-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-voice-complexity.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-voice-coverage.json) |
 <!-- module-table:end -->
 
 </details>
 
 **Module Descriptions:**
-- **`backend.rs`** — `GuiBackend` main facade with all GUI operations
-- **`deps.rs`** — `GuiDeps` dependency injection struct for construction
-- **`error.rs`** — `GuiError` semantic error type for GUI operations
 - **`downloads.rs`** — `DownloadOps` download queue and progress operations
+- **`error.rs`** — `GuiError` semantic error type for all app-service operations
+- **`mcp.rs`** — `McpOps` MCP server configuration and management
 - **`models.rs`** — `ModelOps` model CRUD and listing operations
+- **`proxy.rs`** — `ProxyOps` OpenAI-compatible proxy lifecycle management
 - **`servers.rs`** — `ServerOps` llama.cpp server lifecycle management
 - **`settings.rs`** — `SettingsOps` application settings persistence
-- **`mcp.rs`** — `McpOps` MCP server configuration and management
-- **`types.rs`** — Shared DTOs and type definitions for GUI layer
+- **`setup.rs`** — `SetupOps` first-run setup and dependency checking
+- **`types.rs`** — Shared DTOs and type definitions for the service layer
 
 ## Design Principles
 
 1. **No Adapter Dependencies** — Must not depend on tauri, axum, tower, etc.
-2. **Pure Orchestration** — All deps injected via `GuiDeps`
+2. **Pure Orchestration** — All deps injected via per-domain `*Deps` structs
 3. **Trait-Based Injection** — Uses port traits, not concrete impls
 4. **Semantic Errors** — Returns `GuiError`, adapters map to their error types
 5. **Feature Parity** — Ensures desktop and web UIs have identical capabilities
