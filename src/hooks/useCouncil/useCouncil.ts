@@ -87,7 +87,7 @@ function eventToAction(event: CouncilEvent): CouncilAction | null {
       // wire into UI surface (banner / toast / inline note) when the council
       // pages add a warning track.  Logging at warn level ensures the message
       // is visible in DevTools and the appLogger transport.
-      appLogger.warn('[council] system warning', {
+      appLogger.warn('hook', 'council: parallel-tool-limit soft-recovery', {
         agentId: event.agent_id,
         message: event.message,
         suggestedAction: event.suggested_action,
