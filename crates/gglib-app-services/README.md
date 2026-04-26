@@ -106,46 +106,36 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ## Usage
 
 ```rust
-use gglib_gui::{GuiBackend, GuiDeps};
+use gglib_app_services::{ModelOps, ModelDeps, ServerOps, ServerDeps};
 use std::sync::Arc;
 
 # // This example shows the typical usage pattern.
-# // In practice, dependencies would be injected from main or a factory.
+# // In practice, dependencies would be injected from the adapter bootstrap.
 # fn example(
 #     core: Arc<gglib_core::services::AppCore>,
-#     downloads: Arc<dyn gglib_core::ports::DownloadManagerPort>,
-#     hf: Arc<dyn gglib_core::ports::HfClientPort>,
 #     runner: Arc<dyn gglib_core::ports::ProcessRunner>,
-#     mcp: Arc<gglib_mcp::McpService>,
+#     gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
 #     emitter: Arc<dyn gglib_core::ports::AppEventEmitter>,
 #     server_events: Arc<dyn gglib_core::events::ServerEvents>,
 #     tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort>,
-#     proxy_supervisor: Arc<gglib_runtime::proxy::ProxySupervisor>,
-#     model_repo: Arc<dyn gglib_core::ports::ModelRepository>,
-#     system_probe: Arc<dyn gglib_core::ports::SystemProbePort>,
-#     gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort>,
 # ) {
-// Construct backend with dependency injection
-let deps = GuiDeps::new(
-    core,
-    downloads,
-    hf,
+// Construct per-domain ops with injected dependencies
+let model_ops = ModelOps::new(ModelDeps {
+    core: core.clone(),
+    runner: runner.clone(),
+    gguf_parser,
+});
+
+let server_ops = ServerOps::new(ServerDeps {
+    core: core.clone(),
     runner,
-    mcp,
     emitter,
     server_events,
     tool_detector,
-    proxy_supervisor,
-    model_repo,
-    system_probe,
-    gguf_parser,
-);
+});
 
-let backend = GuiBackend::new(deps);
-
-// Use backend operations (async examples shown in comments)
-// let models = backend.list_models().await?;
-// let queue = backend.get_download_queue().await;
-// backend.start_server(model_id, request).await?;
+// Use ops asynchronously in handlers
+// let models = model_ops.list().await?;
+// server_ops.start(model_id, request).await?;
 # }
 ```
