@@ -5,7 +5,9 @@ use axum::extract::{Path, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_app_services::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
+use gglib_app_services::types::{
+    ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse,
+};
 
 /// List all running servers.
 pub async fn list(State(state): State<AppState>) -> Json<Vec<ServerInfo>> {

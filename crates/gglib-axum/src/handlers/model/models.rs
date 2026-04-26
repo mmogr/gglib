@@ -5,8 +5,10 @@ use axum::extract::{Path, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
+use gglib_app_services::types::{
+    AddModelRequest, GuiModel, RemoveModelRequest, UpdateModelRequest,
+};
 use gglib_core::ModelFilterOptions;
-use gglib_app_services::types::{AddModelRequest, GuiModel, RemoveModelRequest, UpdateModelRequest};
 
 /// List all models.
 pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<GuiModel>>, HttpError> {

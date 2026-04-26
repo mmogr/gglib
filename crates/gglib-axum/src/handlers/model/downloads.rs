@@ -62,7 +62,10 @@ pub async fn queue(
     State(state): State<AppState>,
     Json(req): Json<QueueDownloadRequest>,
 ) -> Result<Json<QueueDownloadResponse>, HttpError> {
-    let (position, shard_count) = state.downloads.queue_download(req.model_id, req.quant).await?;
+    let (position, shard_count) = state
+        .downloads
+        .queue_download(req.model_id, req.quant)
+        .await?;
     Ok(Json(QueueDownloadResponse {
         position,
         shard_count,

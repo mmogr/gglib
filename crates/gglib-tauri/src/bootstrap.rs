@@ -26,17 +26,17 @@ use gglib_core::services::AppCore;
 use gglib_db::{CoreFactory, setup_database};
 use gglib_download::{DownloadManagerDeps, DownloadManagerImpl, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
-use gglib_gguf::{GgufParser, ToolSupportDetector};
+use crate::TauriEventEmitter;
 use gglib_app_services::{
     DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
     ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
+use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
-use crate::TauriEventEmitter;
 use tauri::AppHandle;
 
 // Path utilities from core
@@ -328,8 +328,7 @@ pub fn bootstrap_with(
         Arc::new(ToolSupportDetector::new());
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
         Arc::new(DefaultSystemProbe::new());
-    let server_events: Arc<dyn gglib_core::events::ServerEvents> = if let Some(ref h) = app_handle
-    {
+    let server_events: Arc<dyn gglib_core::events::ServerEvents> = if let Some(ref h) = app_handle {
         Arc::new(crate::TauriServerEvents::new(h.clone()))
     } else {
         Arc::new(gglib_core::events::NoopServerEvents)

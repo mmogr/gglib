@@ -22,7 +22,9 @@ pub async fn quantizations(
     State(state): State<AppState>,
     Path(model_id): Path<String>,
 ) -> Result<Json<HfQuantizationsResponse>, HttpError> {
-    Ok(Json(state.downloads.get_model_quantizations(&model_id).await?))
+    Ok(Json(
+        state.downloads.get_model_quantizations(&model_id).await?,
+    ))
 }
 
 /// Check if a model supports tool/function calling.

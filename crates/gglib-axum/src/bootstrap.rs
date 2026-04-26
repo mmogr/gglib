@@ -18,11 +18,11 @@ use gglib_db::{CoreFactory, setup_database};
 use gglib_download::{DownloadManagerDeps, build_download_manager};
 use reqwest::Client;
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
-use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_app_services::{
     DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
     ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
+use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
 use gglib_runtime::LlamaServerRunner;
@@ -283,9 +283,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         downloads: downloads.clone(),
     }));
 
-    let mcp_ops = Arc::new(McpOps::new(McpDeps {
-        mcp: mcp.clone(),
-    }));
+    let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
 
     let proxy = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor,

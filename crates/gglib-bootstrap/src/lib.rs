@@ -50,7 +50,6 @@ use async_trait::async_trait;
 
 use gglib_core::ModelRegistrar;
 // tokio is a required runtime dependency (async fn build uses it transitively)
-use tokio as _;
 use gglib_core::download::DownloadError;
 use gglib_core::ports::{
     AppEventBridge, AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort,
@@ -59,6 +58,7 @@ use gglib_core::ports::{
 use gglib_core::services::{AppCore, ModelVerificationService};
 use gglib_db::{CoreFactory, ModelFilesRepository, setup_database};
 use gglib_download::{DownloadManagerDeps, build_download_manager};
+use tokio as _;
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::GgufParser;
 use gglib_hf::{DefaultHfClient, HfClientConfig};
@@ -214,10 +214,8 @@ impl CoreBootstrap {
         let model_registrar_concrete = Arc::new(ModelRegistrar::new(
             repos.models.clone(),
             gguf_parser.clone(),
-            Some(
-                Arc::clone(&model_files_repo)
-                    as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>,
-            ),
+            Some(Arc::clone(&model_files_repo)
+                as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
         ));
         let model_registrar: Arc<dyn ModelRegistrarPort> = model_registrar_concrete.clone();
 
@@ -260,16 +258,16 @@ impl CoreBootstrap {
         let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
         let verification_service = Arc::new(ModelVerificationService::new(
             Arc::clone(&model_repo),
-            Arc::clone(&model_files_repo)
-                as Arc<dyn gglib_core::services::ModelFilesReaderPort>,
+            Arc::clone(&model_files_repo) as Arc<dyn gglib_core::services::ModelFilesReaderPort>,
             hf_client.clone(),
             download_trigger,
         ));
 
         // 12. AppCore — fully wired with verification
-        let app = Arc::new(AppCore::new(repos.clone(), Arc::clone(&runner)).with_verification(
-            verification_service,
-        ));
+        let app = Arc::new(
+            AppCore::new(repos.clone(), Arc::clone(&runner))
+                .with_verification(verification_service),
+        );
 
         tracing::debug!(
             db_path = %config.db_path.display(),

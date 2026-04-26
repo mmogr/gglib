@@ -15,8 +15,8 @@ use tracing::{debug, warn};
 use gglib_core::domain::Model;
 use gglib_core::events::{AppEvent, ServerSummary};
 use gglib_core::ports::{
-    AppEventEmitter, ProcessHandle, ProcessRunner, ServerConfig,
-    ServerHealthStatus, ToolSupportDetectorPort,
+    AppEventEmitter, ProcessHandle, ProcessRunner, ServerConfig, ServerHealthStatus,
+    ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
 use gglib_runtime::llama::args::resolve_reasoning_format;

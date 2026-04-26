@@ -10,9 +10,9 @@ use tokio_test as _;
 
 // Dependencies used by bootstrap and gui_backend modules
 use anyhow as _;
+use gglib_app_services as _;
 use gglib_db as _;
 use gglib_download as _;
-use gglib_app_services as _;
 use gglib_hf as _;
 use gglib_runtime as _;
 use tokio as _;

@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use crate::dto::system::VulkanStatusDto;
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_app_services::setup::SetupStatus;
+use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, detect_optimal_acceleration, run_llama_source_build, vulkan_status,
 };
