@@ -93,11 +93,6 @@ pub struct TauriContext {
     pub mcp_ops: Arc<McpOps>,
     pub proxy: Arc<ProxyOps>,
     pub setup: Arc<SetupOps>,
-    /// AppHandle for creating ServerEvents adapter.
-    ///
-    /// Optional to support test/bootstrap_early paths.
-    /// Production bootstrap MUST pass Some(app_handle) via the main bootstrap() function.
-    app_handle: Option<AppHandle>,
 }
 
 impl TauriContext {
@@ -299,7 +294,6 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         mcp_ops,
         proxy,
         setup,
-        app_handle: Some(app_handle),
     })
 }
 
@@ -384,7 +378,6 @@ pub fn bootstrap_with(
         mcp_ops,
         proxy: proxy_ops,
         setup: setup_ops,
-        app_handle,
     }
 }
 
@@ -538,7 +531,6 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         mcp_ops,
         proxy,
         setup,
-        app_handle: None,
     })
 }
 /// Adapter to implement DownloadTriggerPort for DownloadManagerPort.
