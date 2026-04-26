@@ -29,7 +29,7 @@ use std::io::{self, Write as _};
 
 use gglib_core::domain::agent::AgentEvent;
 
-use crate::presentation::style::{BOLD, DANGER, DIM, RESET, SUCCESS};
+use crate::presentation::style::{BOLD, DANGER, DIM, RESET, SUCCESS, WARNING};
 
 use super::tool_format::format_tool_result;
 
@@ -125,6 +125,18 @@ pub fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_text_del
 
         AgentEvent::Error { message } => {
             eprintln!("\n  ❌  {message}");
+        }
+
+        AgentEvent::SystemWarning {
+            message,
+            suggested_action,
+        } => {
+            if !quiet {
+                eprintln!("\n  {WARNING}⚠  {BOLD}{message}{RESET}");
+                if let Some(action) = suggested_action {
+                    eprintln!("  {DIM}→ {action}{RESET}");
+                }
+            }
         }
 
         AgentEvent::PromptProgress { .. } => {

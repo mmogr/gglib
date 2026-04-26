@@ -19,9 +19,12 @@ pub const MAX_ITERATIONS_CEILING: usize = 50;
 
 /// Hard ceiling on `max_parallel_tools` accepted from external callers.
 ///
-/// 20 concurrent tools per iteration is far beyond any practical need and
-/// prevents thread-pool saturation from crafted requests.
-pub const MAX_PARALLEL_TOOLS_CEILING: usize = 20;
+/// 50 concurrent tools per iteration is far beyond any practical need and
+/// prevents thread-pool saturation from crafted requests.  Modern reasoning
+/// models occasionally request large parallel batches (10–25 calls); the
+/// ceiling must comfortably exceed the default to leave headroom for users
+/// who legitimately want to raise the limit.
+pub const MAX_PARALLEL_TOOLS_CEILING: usize = 50;
 
 /// Hard ceiling on `tool_timeout_ms` accepted from external callers (60 s).
 ///
@@ -51,10 +54,16 @@ pub const DEFAULT_MAX_ITERATIONS: usize = 25;
 
 /// Default value for [`AgentConfig::max_parallel_tools`].
 ///
-/// Mirrors `MAX_PARALLEL_TOOLS = 5` from the TypeScript frontend.
+/// Set to 25 to comfortably accommodate modern reasoning models (Qwen3-MoE,
+/// DeepSeek-R1, etc.) that routinely request 6–10 parallel tool calls per
+/// turn during exploration-heavy tasks (e.g. codebase reviews).  An overflow
+/// is no longer fatal — the loop now soft-recovers by injecting a synthetic
+/// tool error and asking the model to retry with a smaller batch — but a
+/// generous default avoids triggering that recovery path under normal load.
+///
 /// Used both in [`AgentConfig::default`] and in [`super::events::AGENT_EVENT_CHANNEL_CAPACITY`]
 /// so the channel size accounts for the correct number of concurrent tool events.
-pub const DEFAULT_MAX_PARALLEL_TOOLS: usize = 5;
+pub const DEFAULT_MAX_PARALLEL_TOOLS: usize = 25;
 
 /// Default value for [`AgentConfig::max_stagnation_steps`].
 ///

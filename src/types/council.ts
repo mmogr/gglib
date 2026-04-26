@@ -34,6 +34,7 @@ export type CouncilEvent =
   | AgentReasoningDeltaEvent
   | AgentToolCallStartEvent
   | AgentToolCallCompleteEvent
+  | AgentSystemWarningEvent
   | AgentTurnCompleteEvent
   | RoundSeparatorEvent
   | JudgeStartEvent
@@ -85,6 +86,24 @@ export interface AgentToolCallCompleteEvent {
   result: { content: string; is_error: boolean };
   display_name: string;
   duration_display: string;
+}
+
+/**
+ * Non-fatal warning surfaced by the agent loop during a turn.
+ *
+ * Mirrors `CouncilEvent::AgentSystemWarning` (Rust).  Currently emitted when
+ * the model requests more parallel tool calls than the configured limit and
+ * the loop auto-recovers by feeding a synthetic error back to the model.
+ *
+ * Render this prominently (e.g. as a banner attached to the agent's bubble);
+ * the council deliberation continues normally.
+ */
+export interface AgentSystemWarningEvent {
+  type: 'agent_system_warning';
+  agent_id: string;
+  message: string;
+  /** Optional actionable hint (e.g. a CLI command to raise a limit). */
+  suggested_action?: string;
 }
 
 export interface AgentTurnCompleteEvent {

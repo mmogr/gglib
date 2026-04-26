@@ -82,6 +82,17 @@ function eventToAction(event: CouncilEvent): CouncilAction | null {
         displayName: event.display_name,
         durationDisplay: event.duration_display,
       };
+    case 'agent_system_warning':
+      // Surface the recoverable warning to the user.  No reducer action yet —
+      // wire into UI surface (banner / toast / inline note) when the council
+      // pages add a warning track.  Logging at warn level ensures the message
+      // is visible in DevTools and the appLogger transport.
+      appLogger.warn('[council] system warning', {
+        agentId: event.agent_id,
+        message: event.message,
+        suggestedAction: event.suggested_action,
+      });
+      return null;
     case 'agent_turn_complete':
       return {
         type: 'AGENT_TURN_COMPLETE',

@@ -87,6 +87,15 @@ pub async fn bridge_agent_events(
                 duration_display,
             },
 
+            AgentEvent::SystemWarning {
+                message,
+                suggested_action,
+            } => CouncilEvent::AgentSystemWarning {
+                agent_id: id.clone(),
+                message,
+                suggested_action,
+            },
+
             AgentEvent::FinalAnswer { content } => {
                 final_content = Some(content);
                 // Don't emit a council event here — the orchestrator emits

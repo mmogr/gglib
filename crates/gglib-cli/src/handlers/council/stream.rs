@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 
 use gglib_agent::council::events::CouncilEvent;
 
-use crate::presentation::style::{BOLD, DIM, RESET};
+use crate::presentation::style::{BOLD, DIM, RESET, WARNING};
 
 // ─── Temperature colours (contentiousness → ANSI 256-colour) ────────────────
 
@@ -90,6 +90,18 @@ pub async fn render_council_stream(rx: &mut mpsc::Receiver<CouncilEvent>) {
                 eprintln!(
                     "  {icon_color}{icon}{RESET}  {BOLD}{display_name}{RESET}  {DIM}{duration_display}{RESET}"
                 );
+            }
+
+            CouncilEvent::AgentSystemWarning {
+                message,
+                suggested_action,
+                ..
+            } => {
+                // Yellow ⚠ on stderr, prominent so it isn't lost in deltas.
+                eprintln!("\n  {WARNING}⚠  {BOLD}{message}{RESET}");
+                if let Some(action) = suggested_action {
+                    eprintln!("  {DIM}→ {action}{RESET}");
+                }
             }
 
             CouncilEvent::AgentTurnComplete { core_claim, .. } => {
