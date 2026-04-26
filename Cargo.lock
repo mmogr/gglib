@@ -2006,7 +2006,6 @@ name = "gglib-cli"
 version = "0.7.2"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "clap",
  "clap_complete",
@@ -2015,11 +2014,10 @@ dependencies = [
  "dotenvy",
  "gglib-agent",
  "gglib-axum",
+ "gglib-bootstrap",
  "gglib-build-info",
  "gglib-core",
- "gglib-db",
  "gglib-download",
- "gglib-gguf",
  "gglib-hf",
  "gglib-mcp",
  "gglib-runtime",

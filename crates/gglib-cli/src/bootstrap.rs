@@ -1,35 +1,23 @@
-//! CLI bootstrap - the composition root.
+//! CLI bootstrap - the composition root for the CLI adapter.
 //!
-//! This module is the ONLY place where infrastructure is wired together
-//! for the CLI adapter. All concrete implementations are instantiated here:
-//! - Database pool and repositories (via gglib-db)
-//! - Process runner (via gglib-runtime)
-//! - Core services (via gglib-core)
-//! - MCP service (via gglib-mcp)
-//! - Download manager (via gglib-download)
-//!
-//! Command handlers receive the fully-composed AppCore and delegate work to it.
+//! Shared infrastructure (DB, runner, download manager, model registrar,
+//! verification service, …) is wired by [`gglib_bootstrap::CoreBootstrap`].
+//! This module is the only place where CLI-specific concerns are added on
+//! top: the indicatif-based download emitter, the MCP service (with a
+//! `NoopEmitter` since there is no UI surface), and the shared HTTP client.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use async_trait::async_trait;
-use gglib_core::ModelRegistrar;
-use gglib_core::download::DownloadError;
+use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    DownloadManagerConfig, DownloadManagerPort, GgufParserPort, ModelRegistrarPort,
-    ModelRepository, NoopEmitter, ProcessRunner, Repos,
+    AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelRegistrarPort, ModelRepository,
+    NoopEmitter, ProcessRunner, Repos,
 };
-use gglib_core::services::{AppCore, ModelVerificationService};
-use gglib_db::{CoreFactory, setup_database};
+use gglib_core::services::AppCore;
 use gglib_download::CliDownloadEventEmitter;
-use gglib_download::{DownloadManagerDeps, build_download_manager};
-// GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
-use gglib_gguf::GgufParser;
-use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
-use gglib_runtime::LlamaServerRunner;
 
 use gglib_core::settings::DEFAULT_LLAMA_BASE_PORT;
 
@@ -58,46 +46,13 @@ impl CliConfig {
     }
 }
 
-/// Adapter to implement DownloadTriggerPort for DownloadManagerPort.
-struct DownloadTriggerAdapter {
-    download_manager: Arc<dyn DownloadManagerPort>,
-}
-
-#[async_trait]
-impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
-    async fn queue_download(
-        &self,
-        repo_id: String,
-        quantization: Option<String>,
-    ) -> anyhow::Result<String> {
-        use gglib_core::download::Quantization;
-        use gglib_core::ports::DownloadRequest;
-        use std::str::FromStr;
-
-        // Convert quantization string to enum, default to Q4_K_M if not specified
-        let quant = quantization
-            .as_ref()
-            .and_then(|q| Quantization::from_str(q).ok())
-            .unwrap_or(Quantization::Q4KM); // Reasonable default
-
-        let request = DownloadRequest::new(repo_id, quant);
-        let id = self
-            .download_manager
-            .queue_download(request)
-            .await
-            .map_err(|e: DownloadError| anyhow::anyhow!("Failed to queue download: {}", e))?;
-
-        Ok(id.to_string())
-    }
-}
-
 /// Fully composed application context for CLI commands.
 ///
 /// This struct owns all the infrastructure and provides access to
 /// the AppCore for command handlers.
 pub struct CliContext {
     /// The core application facade.
-    pub app: AppCore,
+    pub app: Arc<AppCore>,
     /// Process runner for direct server operations.
     pub runner: Arc<dyn ProcessRunner>,
     /// MCP service for managing MCP servers.
@@ -133,94 +88,46 @@ pub struct CliContext {
 
 /// Bootstrap the CLI application.
 ///
-/// This is the composition root. It:
-/// 1. Creates the database pool and repositories
-/// 2. Creates the process runner
-/// 3. Assembles the AppCore from services
-/// 4. Creates the MCP service with injected repository
-/// 5. Creates the download manager with injected ports
-///
-/// # Arguments
-///
-/// * `config` - CLI configuration options
-///
-/// # Returns
-///
-/// A fully composed `CliContext` ready for command dispatch.
+/// Delegates all shared wiring to [`CoreBootstrap::build`] and adds the
+/// CLI-specific layer: the indicatif emitter (which doubles as the
+/// `AppEventEmitter` for the shared bootstrap, ignoring non-download
+/// variants), the MCP service, and the shared HTTP client.
 pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
-    // 1. Create database pool with full schema setup
-    let db_path = database_path()?;
-    let pool = setup_database(&db_path).await?;
-    let repos = CoreFactory::build_repos(pool.clone());
+    // CLI terminal emitter — renders indicatif progress bars and exposes
+    // the MultiProgress handle for interactive suspend/resume. Implements
+    // both `DownloadEventEmitterPort` (for the indicatif renderer) and
+    // `AppEventEmitter` (so it plugs into the shared bootstrap event
+    // pipeline like Axum/Tauri); non-download AppEvent variants are
+    // ignored — the CLI has no UI surface for them.
+    let download_emitter = Arc::new(CliDownloadEventEmitter::new());
+    let emitter: Arc<dyn AppEventEmitter> = Arc::clone(&download_emitter) as _;
 
-    // 2. Create process runner
-    let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
-        config.llama_server_path.clone(),
-        config.max_concurrent,
-    ));
+    // Resolve paths/env up-front so BootstrapConfig holds only resolved data.
+    let models_resolution = resolve_models_dir(None)?;
+    let bootstrap_config = BootstrapConfig {
+        db_path: database_path()?,
+        llama_server_path: config.llama_server_path.clone(),
+        max_concurrent: config.max_concurrent,
+        models_dir: models_resolution.path,
+        hf_token: std::env::var("HF_TOKEN").ok(),
+    };
 
-    // 3. Create GGUF parser (shared across model registrar and handlers)
-    let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
+    let BuiltCore {
+        app,
+        runner,
+        downloads,
+        hf_client: _,
+        gguf_parser,
+        repos,
+        model_registrar,
+    } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
-    // 4. Create initial AppCore (will add verification service later)
-    let mut app = AppCore::new(repos.clone(), runner.clone());
-
-    // 5. Create MCP service with injected repository
-    // CLI uses NoopEmitter since there's no frontend to broadcast events to
+    // CLI uses NoopEmitter for the MCP service since there's no frontend
+    // to broadcast lifecycle events to.
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),
     ));
-
-    // 6. Create download manager with injected ports
-    let models_dir_resolution = resolve_models_dir(None)?;
-    let hf_token = std::env::var("HF_TOKEN").ok();
-    let download_config =
-        DownloadManagerConfig::new(models_dir_resolution.path).with_hf_token(hf_token);
-
-    // Create the model registrar (composes over model repository + GGUF parser).
-    // Stored on CliContext AND injected into the download manager so CLI
-    // download registration uses the same code path as the GUI.
-    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(
-        pool.clone(),
-    ));
-    let model_registrar = Arc::new(ModelRegistrar::new(
-        repos.models.clone(),
-        gguf_parser.clone(), // Share the parser
-        Some(model_files_repo.clone() as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
-    ));
-
-    // Create the download state repository
-    let download_repo = CoreFactory::download_state_repository(pool);
-
-    // Create the HuggingFace client
-    let hf_client = Arc::new(DefaultHfClient::new(&HfClientConfig::default()));
-
-    // Create CLI terminal emitter — renders indicatif progress bars and exposes
-    // the MultiProgress handle for interactive suspend/resume.
-    let download_emitter = Arc::new(CliDownloadEventEmitter::new());
-
-    // Build the download manager
-    let downloads: Arc<dyn DownloadManagerPort> =
-        Arc::new(build_download_manager(DownloadManagerDeps {
-            model_registrar: model_registrar.clone(),
-            download_repo,
-            hf_client: hf_client.clone(),
-            event_emitter: Arc::clone(&download_emitter),
-            config: download_config,
-        }));
-
-    // 7. Create ModelVerificationService with download trigger adapter
-    let download_trigger = Arc::new(DownloadTriggerAdapter {
-        download_manager: downloads.clone(),
-    });
-    let verification_service = Arc::new(ModelVerificationService::new(
-        repos.models.clone(),
-        model_files_repo.clone(),
-        hf_client.clone(),
-        download_trigger,
-    ));
-    app = app.with_verification(verification_service);
 
     Ok(CliContext {
         app,
@@ -239,7 +146,8 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
 
 /// Bootstrap with custom repos and runner (for testing).
 ///
-/// Note: Uses a stub download manager that does nothing.
+/// Note: callers provide their own download manager (typically a stub that
+/// does nothing). This path bypasses [`CoreBootstrap::build`] entirely.
 pub fn bootstrap_with(
     repos: Repos,
     runner: Arc<dyn ProcessRunner>,
@@ -249,7 +157,7 @@ pub fn bootstrap_with(
     llama_server_path: PathBuf,
 ) -> CliContext {
     let model_repo = repos.models.clone();
-    let app = AppCore::new(repos.clone(), runner.clone());
+    let app = Arc::new(AppCore::new(repos.clone(), runner.clone()));
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),
@@ -278,3 +186,4 @@ mod tests {
         // In real tests, we'd use bootstrap_with() with mocks
     }
 }
+
