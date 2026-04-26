@@ -1,43 +1,33 @@
-//! Tauri bootstrap - the composition root.
+//! Tauri bootstrap - the composition root for the Tauri desktop adapter.
 //!
-//! This module is the ONLY place where infrastructure is wired together
-//! for the Tauri desktop adapter. All concrete implementations are
-//! instantiated here:
-//! - Database pool and repositories (via gglib-db)
-//! - Process runner (via gglib-runtime)
-//! - Core services (via gglib-core)
-//! - MCP service (via gglib-mcp)
-//! - Download manager (via gglib-download)
-//!
-//! Tauri command handlers receive the fully-composed TauriContext and
-//! delegate work to AppCore.
+//! Shared infrastructure (DB, runner, GGUF parser, model registrar/files,
+//! HF client, download manager, model verification, AppCore-with-verification)
+//! is wired by [`gglib_bootstrap::CoreBootstrap`]. This module adds Tauri-
+//! specific concerns on top: the `TauriEventEmitter` (which doubles as the
+//! `AppEventEmitter` for the shared bootstrap), the MCP service, the seven
+//! domain ops, and the proxy supervisor.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use async_trait::async_trait;
-use gglib_core::ModelRegistrar;
-use gglib_core::ports::{
-    AppEventBridge, AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, HfClientPort,
-    ModelRepository, NoopDownloadEmitter, NoopEmitter, ProcessRunner, Repos,
-};
-use gglib_core::services::AppCore;
-use gglib_db::{CoreFactory, setup_database};
-use gglib_download::{DownloadManagerDeps, build_download_manager};
-// GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
-use crate::TauriEventEmitter;
 use gglib_app_services::{
     DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
     ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
+use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
+use gglib_core::ports::{
+    AppEventEmitter, DownloadManagerPort, HfClientPort, ModelRepository, NoopEmitter,
+    ProcessRunner, Repos,
+};
+use gglib_core::services::AppCore;
 use gglib_gguf::{GgufParser, ToolSupportDetector};
-use gglib_hf::{DefaultHfClient, HfClientConfig};
 use gglib_mcp::McpService;
-use gglib_runtime::LlamaServerRunner;
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
 use tauri::AppHandle;
+
+use crate::TauriEventEmitter;
 
 // Path utilities from core
 use gglib_core::paths::{
@@ -129,22 +119,6 @@ impl TauriContext {
 }
 
 /// Bootstrap the Tauri desktop application.
-///
-/// This is the composition root. It:
-/// 1. Creates the database pool and repositories
-/// 2. Creates the process runner
-/// 3. Assembles the AppCore from services
-/// 4. Creates the MCP service with injected repository
-/// 5. Creates the download manager with injected dependencies
-///
-/// # Arguments
-///
-/// * `config` - Tauri configuration options
-/// * `app_handle` - Tauri AppHandle for event emission
-///
-/// # Returns
-///
-/// A fully composed `TauriContext` ready for command handlers.
 pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<TauriContext> {
     // Log resolved paths at startup for diagnostics
     let db_path = database_path()?;
@@ -163,86 +137,42 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         "Tauri bootstrap resolved paths"
     );
 
-    // 1. Create database pool with full schema setup
-    let pool = setup_database(&db_path).await?;
-    let repos = CoreFactory::build_repos(pool.clone());
+    // 1. Tauri event emitter — doubles as AppEventEmitter for the shared bootstrap.
+    let tauri_emitter: Arc<dyn AppEventEmitter> =
+        Arc::new(TauriEventEmitter::new(app_handle.clone()));
 
-    // 2. Create process runner
-    let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
-        config.llama_server_path.clone(),
-        config.max_concurrent,
-    ));
+    // 2. Shared infrastructure via gglib-bootstrap.
+    let bootstrap_config = BootstrapConfig {
+        db_path,
+        llama_server_path: config.llama_server_path.clone(),
+        max_concurrent: config.max_concurrent,
+        models_dir: models_resolution.path,
+        hf_token: None,
+    };
+    let BuiltCore {
+        app,
+        runner,
+        downloads,
+        hf_client,
+        gguf_parser,
+        repos,
+        model_registrar: _,
+    } = CoreBootstrap::build(bootstrap_config, Arc::clone(&tauri_emitter)).await?;
 
-    // 3. Create AppCore (without Arc yet - we'll add verification first)
-    let app = AppCore::new(repos.clone(), runner.clone());
-
-    // 4. Create MCP service with injected repository
-    // For Tauri, we'll eventually use a real event emitter that broadcasts to frontend.
-    // For now, use NoopEmitter until the Tauri event bridge is implemented.
+    // 3. MCP service — NoopEmitter until the Tauri MCP event bridge is wired.
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),
     ));
-
-    // Validate configured servers and start any with auto_start enabled.
     if let Err(e) = mcp.initialize().await {
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
 
-    // 5. Create download manager with injected dependencies
-    let download_config = DownloadManagerConfig::new(models_resolution.path);
-
-    // Create the model registrar (composes over model repository + GGUF parser)
-    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(
-        pool.clone(),
-    ));
-    let model_registrar = Arc::new(ModelRegistrar::new(
-        repos.models.clone(),
-        Arc::new(GgufParser::new()), // Real GGUF parser for metadata extraction
-        Some(model_files_repo.clone() as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
-    ));
-
-    // Create the download state repository
-    let download_repo = CoreFactory::download_state_repository(pool);
-
-    // Create the HuggingFace client (concrete type for deps, trait object for storage)
-    let hf_client_concrete = Arc::new(DefaultHfClient::new(&HfClientConfig::default()));
-    let hf_client: Arc<dyn HfClientPort> = hf_client_concrete.clone();
-
-    // Create the real event emitter bridge: TauriEventEmitter -> AppEventBridge
-    // This wires download events through to the Tauri frontend
-    let tauri_emitter: Arc<dyn AppEventEmitter> =
-        Arc::new(TauriEventEmitter::new(app_handle.clone()));
-    let event_emitter = Arc::new(AppEventBridge::new(tauri_emitter.clone()));
-
-    // Build the download manager. Stored as a trait object — no caller in
-    // the Tauri adapter depends on `DownloadManagerImpl`-only methods.
-    let downloads: Arc<dyn DownloadManagerPort> = Arc::new(build_download_manager(DownloadManagerDeps {
-        model_registrar,
-        download_repo,
-        hf_client: hf_client_concrete,
-        event_emitter,
-        config: download_config,
-    }));
-
-    // 6. Create ModelVerificationService with download trigger adapter
-    let download_trigger = Arc::new(DownloadTriggerAdapter {
-        download_manager: downloads.clone(),
-    });
-    let verification_service = Arc::new(gglib_core::services::ModelVerificationService::new(
-        repos.models.clone(),
-        model_files_repo.clone(),
-        hf_client.clone(),
-        download_trigger,
-    ));
-    let app = Arc::new(app.with_verification(verification_service));
-
-    // 7. Create proxy infrastructure
+    // 4. Proxy infrastructure.
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
 
-    // 8. Build 7 domain ops
-    let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
+    // 5. Build 7 domain ops.
     let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
         Arc::new(ToolSupportDetector::new());
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
@@ -258,7 +188,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     let servers = Arc::new(ServerOps::new(ServerDeps {
         core: Arc::clone(&app),
         runner: runner.clone(),
-        emitter: tauri_emitter.clone(),
+        emitter: Arc::clone(&tauri_emitter),
         server_events,
         tool_detector: tool_detector.clone(),
     }));
@@ -288,9 +218,9 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         app,
         runner,
         mcp,
-        download_manager: downloads.clone(),
+        download_manager: downloads,
         hf_client,
-        event_emitter: tauri_emitter.clone(),
+        event_emitter: tauri_emitter,
         proxy_supervisor,
         model_repo,
         models,
@@ -387,7 +317,7 @@ pub fn bootstrap_with(
     }
 }
 
-/// Bootstrap without AppHandle - uses NoopDownloadEmitter.
+/// Bootstrap without AppHandle - uses a Noop emitter for download events.
 ///
 /// This variant is for cases where bootstrap must happen before
 /// Tauri's setup() phase (e.g., starting embedded API server).
@@ -412,73 +342,40 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         "Tauri bootstrap_early resolved paths"
     );
 
-    // 1. Create database pool with full schema setup
-    let pool = setup_database(&db_path).await?;
-    let repos = CoreFactory::build_repos(pool.clone());
+    // 1. Shared infrastructure with a Noop emitter (no AppHandle yet, so
+    //    download events have nowhere to go).
+    let emitter: Arc<dyn AppEventEmitter> = Arc::new(NoopEmitter);
+    let bootstrap_config = BootstrapConfig {
+        db_path,
+        llama_server_path: config.llama_server_path.clone(),
+        max_concurrent: config.max_concurrent,
+        models_dir: models_resolution.path,
+        hf_token: None,
+    };
+    let BuiltCore {
+        app,
+        runner,
+        downloads,
+        hf_client,
+        gguf_parser,
+        repos,
+        model_registrar: _,
+    } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
-    // 2. Create process runner
-    let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
-        config.llama_server_path.clone(),
-        config.max_concurrent,
-    ));
-
-    // 3. Create AppCore (without Arc yet - we'll add verification first)
-    let app = AppCore::new(repos.clone(), runner.clone());
-
-    // 4. Create MCP service
+    // 2. MCP service.
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
         Arc::new(NoopEmitter),
     ));
-
-    // Validate configured servers and start any with auto_start enabled.
     if let Err(e) = mcp.initialize().await {
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
 
-    // 5. Create download manager with noop emitter (no AppHandle available yet)
-    let download_config = DownloadManagerConfig::new(models_resolution.path);
-
-    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(
-        pool.clone(),
-    ));
-    let model_registrar = Arc::new(ModelRegistrar::new(
-        repos.models.clone(),
-        Arc::new(GgufParser::new()), // Real GGUF parser for metadata extraction
-        Some(model_files_repo.clone() as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
-    ));
-
-    let download_repo = CoreFactory::download_state_repository(pool);
-    let hf_client_concrete = Arc::new(DefaultHfClient::new(&HfClientConfig::default()));
-    let hf_client: Arc<dyn HfClientPort> = hf_client_concrete.clone();
-    let event_emitter = Arc::new(NoopDownloadEmitter::new());
-
-    let downloads: Arc<dyn DownloadManagerPort> = Arc::new(build_download_manager(DownloadManagerDeps {
-        model_registrar,
-        download_repo,
-        hf_client: hf_client_concrete,
-        event_emitter,
-        config: download_config,
-    }));
-
-    // 6. Create ModelVerificationService with download trigger adapter
-    let download_trigger = Arc::new(DownloadTriggerAdapter {
-        download_manager: downloads.clone(),
-    });
-    let verification_service = Arc::new(gglib_core::services::ModelVerificationService::new(
-        repos.models.clone(),
-        model_files_repo.clone(),
-        hf_client.clone(),
-        download_trigger,
-    ));
-    let app = Arc::new(app.with_verification(verification_service));
-
-    // Create proxy infrastructure
+    // 3. Proxy infrastructure.
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
 
-    // 7. Build 7 domain ops (no AppHandle → NoopServerEvents)
-    let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
+    // 4. Build 7 domain ops (no AppHandle → NoopServerEvents).
     let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
         Arc::new(ToolSupportDetector::new());
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
@@ -524,7 +421,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         app,
         runner,
         mcp,
-        download_manager: downloads.clone(),
+        download_manager: downloads,
         hf_client,
         event_emitter: Arc::new(NoopEmitter),
         proxy_supervisor,
@@ -538,38 +435,10 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         setup,
     })
 }
-/// Adapter to implement DownloadTriggerPort for DownloadManagerPort.
-struct DownloadTriggerAdapter {
-    download_manager: Arc<dyn DownloadManagerPort>,
-}
-
-#[async_trait]
-impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
-    async fn queue_download(
-        &self,
-        repo_id: String,
-        quantization: Option<String>,
-    ) -> anyhow::Result<String> {
-        use gglib_core::download::{DownloadError, Quantization};
-        use gglib_core::ports::DownloadRequest;
-        use std::str::FromStr;
-
-        // Convert quantization string to enum, default to Q4_K_M if not specified
-        let quant = quantization
-            .as_ref()
-            .and_then(|q| Quantization::from_str(q).ok())
-            .unwrap_or(Quantization::Q4KM);
-
-        let request = DownloadRequest::new(repo_id, quant);
-        let id = self
-            .download_manager
-            .queue_download(request)
-            .await
-            .map_err(|e: DownloadError| anyhow::anyhow!("Failed to queue download: {}", e))?;
-
-        Ok(id.to_string())
-    }
-}
+/// `bootstrap_with` is the only place where the verification service is
+/// not constructed by [`CoreBootstrap`]; it deliberately does not attach
+/// one because the test path supplies its own download manager and does
+/// not need the file-verification flow.
 
 #[cfg(test)]
 mod tests {

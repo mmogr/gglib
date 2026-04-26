@@ -2207,13 +2207,10 @@ name = "gglib-tauri"
 version = "0.7.2"
 dependencies = [
  "anyhow",
- "async-trait",
  "gglib-app-services",
+ "gglib-bootstrap",
  "gglib-core",
- "gglib-db",
- "gglib-download",
  "gglib-gguf",
- "gglib-hf",
  "gglib-mcp",
  "gglib-runtime",
  "serde",
