@@ -1,31 +1,28 @@
-//! Axum server bootstrap - the composition root.
+//! Axum server bootstrap - the composition root for the Axum web adapter.
 //!
-//! This module is the ONLY place where infrastructure is wired together
-//! for the Axum web adapter. All concrete implementations are instantiated here.
+//! Shared infrastructure (DB, runner, GGUF parser, model registrar/files,
+//! HF client, download manager, model verification, AppCore-with-verification)
+//! is wired by [`gglib_bootstrap::CoreBootstrap`]. This module adds the
+//! Axum-specific layer on top: the SSE broadcaster (which doubles as the
+//! `AppEventEmitter` for the shared bootstrap), the MCP service with SSE
+//! emission, the seven domain ops, and the proxy crash watcher.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use async_trait::async_trait;
-use gglib_core::ModelRegistrar;
-use gglib_core::ports::{
-    AppEventBridge, AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, HfClientPort,
-    ModelRepository, ProcessRunner,
-};
-use gglib_core::services::AppCore;
-use gglib_db::{CoreFactory, setup_database};
-use gglib_download::{DownloadManagerDeps, build_download_manager};
-use reqwest::Client;
-// GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_app_services::{
     DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
     ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
-use gglib_gguf::{GgufParser, ToolSupportDetector};
-use gglib_hf::{DefaultHfClient, HfClientConfig};
+use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
+use gglib_core::ports::{
+    AppEventEmitter, HfClientPort, ModelRepository, ProcessRunner,
+};
+use gglib_core::services::AppCore;
+use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
-use gglib_runtime::LlamaServerRunner;
+use reqwest::Client;
 
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::system::DefaultSystemProbe;
@@ -139,9 +136,6 @@ pub struct AxumContext {
 }
 
 /// Bootstrap the Axum server with all services.
-///
-/// This mirrors the Tauri bootstrap pattern exactly, using the same
-/// `GuiDeps` → `GuiBackend` construction.
 pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // Log resolved paths at startup for diagnostics
     let db_path = database_path()?;
@@ -160,101 +154,53 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         "Axum bootstrap resolved paths"
     );
 
-    // 1. Create database pool with full schema setup
-    let pool = setup_database(&db_path).await?;
-    let repos = CoreFactory::build_repos(pool.clone());
+    // 1. SSE broadcaster — doubles as AppEventEmitter for the shared bootstrap
+    //    and feeds DownloadEvents through AppEventBridge to the download manager.
+    let sse = Arc::new(SseBroadcaster::with_defaults());
 
-    // 2. Create process runner
-    let runner: Arc<dyn ProcessRunner> = Arc::new(LlamaServerRunner::new(
-        config.llama_server_path.clone(),
-        config.max_concurrent,
-    ));
+    // 2. Shared infrastructure via gglib-bootstrap.
+    let bootstrap_config = BootstrapConfig {
+        db_path,
+        llama_server_path: config.llama_server_path.clone(),
+        max_concurrent: config.max_concurrent,
+        models_dir: models_resolution.path,
+        hf_token: None,
+    };
+    let emitter: Arc<dyn AppEventEmitter> = sse.clone();
+    let BuiltCore {
+        app: core,
+        runner,
+        downloads,
+        hf_client,
+        gguf_parser,
+        repos,
+        model_registrar: _,
+    } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
-    // 3. Create initial AppCore (will add verification service later)
-    let core = AppCore::new(repos.clone(), runner.clone());
-
-    // 4. Bootstrap capabilities for existing models
+    // 3. Bootstrap capabilities for existing models (idempotent; fine to run
+    //    after AppCore has verification attached).
     if let Err(e) = core.models().bootstrap_capabilities().await {
         tracing::warn!("Failed to bootstrap model capabilities: {}", e);
     }
 
-    // 5. Create SSE broadcaster for real-time events
-    let sse = Arc::new(SseBroadcaster::with_defaults());
-
-    // 6. Create MCP service with SSE emitter
+    // 4. MCP service with SSE emitter.
     let mcp = Arc::new(McpService::new(
         repos.mcp_servers.clone(),
-        sse.clone() as Arc<dyn gglib_core::ports::AppEventEmitter>,
+        sse.clone() as Arc<dyn AppEventEmitter>,
     ));
-
-    // Validate configured servers and start any with auto_start enabled.
-    // Without this, McpManager.servers stays empty and the agent loop
-    // will never see any tool definitions.
     if let Err(e) = mcp.initialize().await {
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
 
-    // 7. Create download manager with SSE emitter
-    let download_config = DownloadManagerConfig::new(models_resolution.path);
-
-    let model_files_repo = Arc::new(gglib_db::repositories::ModelFilesRepository::new(
-        pool.clone(),
-    ));
-    let model_registrar = Arc::new(ModelRegistrar::new(
-        repos.models.clone(),
-        Arc::new(GgufParser::new()),
-        Some(model_files_repo.clone() as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
-    ));
-
-    let download_repo = CoreFactory::download_state_repository(pool);
-    let hf_client_concrete = Arc::new(DefaultHfClient::new(&HfClientConfig::default()));
-    let hf_client: Arc<dyn HfClientPort> = hf_client_concrete.clone();
-
-    // Use AppEventBridge to convert DownloadEvent -> AppEvent -> SSE
-    let event_emitter = Arc::new(AppEventBridge::new(sse.clone()));
-
-    let download_manager = Arc::new(build_download_manager(DownloadManagerDeps {
-        model_registrar,
-        download_repo,
-        hf_client: hf_client_concrete,
-        event_emitter,
-        config: download_config,
-    }));
-    let downloads: Arc<dyn DownloadManagerPort> = download_manager.clone();
-
-    // 8. Create ModelVerificationService with download trigger adapter
-    let download_trigger = Arc::new(DownloadTriggerAdapter {
-        download_manager: downloads.clone(),
-    });
-    let verification_service = Arc::new(gglib_core::services::ModelVerificationService::new(
-        repos.models.clone(),
-        model_files_repo,
-        hf_client.clone(),
-        download_trigger,
-    ));
-    let core = Arc::new(core.with_verification(verification_service));
-
-    // 9. Build 7 domain ops
-    // SSE broadcaster implements AppEventEmitter for health event emission
-    // Create server events adapter for lifecycle events
+    // 5. Build 7 domain ops.
     let server_events: Arc<dyn gglib_core::events::ServerEvents> =
         Arc::new(crate::sse::AxumServerEvents::new((*sse).clone()));
-
-    // Tool support detector for capability detection
     let tool_detector: Arc<dyn gglib_core::ports::ToolSupportDetectorPort> =
         Arc::new(ToolSupportDetector::new());
-
-    // Create proxy infrastructure
     let proxy_supervisor = Arc::new(ProxySupervisor::new());
     let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
-
-    // System probe for memory and hardware detection
     let system_probe: Arc<dyn gglib_core::ports::SystemProbePort> =
         Arc::new(DefaultSystemProbe::new());
-
-    // GGUF parser for model metadata extraction
-    let gguf_parser: Arc<dyn gglib_core::ports::GgufParserPort> = Arc::new(GgufParser::new());
-
     let sse_emitter: Arc<dyn AppEventEmitter> = sse.clone();
 
     let models = Arc::new(ModelOps::new(ModelDeps {
@@ -340,39 +286,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
             config.max_concurrent_agent_loops,
         )),
     })
-}
-
-/// Adapter to implement DownloadTriggerPort for DownloadManagerPort.
-struct DownloadTriggerAdapter {
-    download_manager: Arc<dyn DownloadManagerPort>,
-}
-
-#[async_trait]
-impl gglib_core::services::DownloadTriggerPort for DownloadTriggerAdapter {
-    async fn queue_download(
-        &self,
-        repo_id: String,
-        quantization: Option<String>,
-    ) -> anyhow::Result<String> {
-        use gglib_core::download::{DownloadError, Quantization};
-        use gglib_core::ports::DownloadRequest;
-        use std::str::FromStr;
-
-        // Convert quantization string to enum, default to Q4_K_M if not specified
-        let quant = quantization
-            .as_ref()
-            .and_then(|q| Quantization::from_str(q).ok())
-            .unwrap_or(Quantization::Q4KM);
-
-        let request = DownloadRequest::new(repo_id, quant);
-        let id = self
-            .download_manager
-            .queue_download(request)
-            .await
-            .map_err(|e: DownloadError| anyhow::anyhow!("Failed to queue download: {}", e))?;
-
-        Ok(id.to_string())
-    }
 }
 
 /// Start the web server on the specified port.
