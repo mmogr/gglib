@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_gui::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
+use gglib_app_services::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
 
 /// List all running servers.
 pub async fn list(State(state): State<AppState>) -> Json<Vec<ServerInfo>> {
@@ -101,7 +101,7 @@ use tokio_stream::wrappers::BroadcastStream;
 pub async fn get_logs(
     State(state): State<AppState>,
     Path(port): Path<u16>,
-) -> Json<Vec<gglib_gui::types::ServerLogEntry>> {
+) -> Json<Vec<gglib_app_services::types::ServerLogEntry>> {
     Json(state.servers.get_logs(port))
 }
 

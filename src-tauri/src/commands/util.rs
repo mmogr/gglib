@@ -5,7 +5,7 @@
 use crate::app::AppState;
 use crate::menu::state_sync;
 use gglib_axum::EmbeddedApiInfo;
-use gglib_gui::types::ServerLogEntry;
+use gglib_app_services::types::ServerLogEntry;
 use tauri::AppHandle;
 
 /// Get embedded API server info (port and auth token).

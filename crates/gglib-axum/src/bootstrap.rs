@@ -19,7 +19,7 @@ use gglib_download::{DownloadManagerDeps, build_download_manager};
 use reqwest::Client;
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::{GgufParser, ToolSupportDetector};
-use gglib_gui::{
+use gglib_app_services::{
     DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
     ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };

@@ -12,7 +12,7 @@ use tokio_test as _;
 use anyhow as _;
 use gglib_db as _;
 use gglib_download as _;
-use gglib_gui as _;
+use gglib_app_services as _;
 use gglib_hf as _;
 use gglib_runtime as _;
 use tokio as _;
@@ -32,4 +32,4 @@ pub use event_emitter::TauriEventEmitter;
 pub use server_events::TauriServerEvents;
 
 // Re-export GuiError for app crate to use in error mapping
-pub use gglib_gui::GuiError;
+pub use gglib_app_services::GuiError;
