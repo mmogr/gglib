@@ -125,8 +125,12 @@ Cargo workspace with compile-time enforced boundaries. Adapters → infrastructu
 │                                   Facade Layer                                      │
 │                                                                                     │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                              gglib-app-services                                      │   │
-│   │         Shared GUI backend (ensures feature parity across adapters)         │   │
+│   │                              gglib-app-services                             │   │
+│   │         Shared service ops (ensures feature parity across adapters)         │   │
+│   └─────────────────────────────────────────────────────────────────────────────┘   │
+│   ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│   │                              gglib-bootstrap                                │   │
+│   │         Shared composition root (infra wiring for all adapters)             │   │
 │   └─────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -215,6 +219,7 @@ Only `gglib-runtime` spawns llama-server processes; only `gglib-download` talks 
 | Crate | Tests | Coverage | LOC | Complexity |
 |-------|-------|----------|-----|------------|
 | [gglib-app-services](crates/gglib-app-services) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-complexity.json) |
+| [gglib-bootstrap](crates/gglib-bootstrap) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-complexity.json) |
 
 #### Adapter Layer
 | Crate | Tests | Coverage | LOC | Complexity |
@@ -248,7 +253,8 @@ Each crate has its own README with architecture diagrams, module breakdowns, and
 | **Infra** | [gglib-mcp](crates/gglib-mcp/README.md) | MCP server management |
 | **Infra** | [gglib-proxy](crates/gglib-proxy/README.md) | OpenAI-compatible proxy server |
 | **Infra** | [gglib-runtime](crates/gglib-runtime/README.md) | Process manager & system probes |
-| **Facade** | [gglib-app-services](crates/gglib-app-services/README.md) | Shared GUI backend (feature parity) |
+| **Facade** | [gglib-app-services](crates/gglib-app-services/README.md) | Shared application service ops (feature parity) |
+| **Facade** | [gglib-bootstrap](crates/gglib-bootstrap/README.md) | Shared composition root (infra wiring) |
 | **Adapter** | [gglib-cli](crates/gglib-cli/README.md) | CLI interface |
 | **Adapter** | [gglib-axum](crates/gglib-axum/README.md) | HTTP API server |
 | **Adapter** | [gglib-tauri](crates/gglib-tauri/README.md) | Desktop GUI (Tauri + React) |
@@ -304,10 +310,10 @@ Download from the [Releases page](https://github.com/mmogr/gglib/releases):
 
 | Platform | Archive | Post-install |
 |----------|---------|--------------|
-| **macOS (Apple Silicon)** | `gglib-app-services-*-aarch64-apple-darwin.tar.gz` | Run `macos-install.command` to remove quarantine |
-| **macOS (Intel)** | `gglib-app-services-*-x86_64-apple-darwin.tar.gz` | Same as above |
-| **Linux** | `gglib-app-services-*-x86_64-unknown-linux-gnu.tar.gz` | Run `gglib-app-services` |
-| **Windows** | `gglib-app-services-*-x86_64-pc-windows-msvc.zip` | Run `gglib-app-services.exe` |
+| **macOS (Apple Silicon)** | `gglib-gui-*-aarch64-apple-darwin.tar.gz` | Run `macos-install.command` to remove quarantine |
+| **macOS (Intel)** | `gglib-gui-*-x86_64-apple-darwin.tar.gz` | Same as above |
+| **Linux** | `gglib-gui-*-x86_64-unknown-linux-gnu.tar.gz` | Run `gglib-gui` |
+| **Windows** | `gglib-gui-*-x86_64-pc-windows-msvc.zip` | Run `gglib-gui.exe` |
 
 ### From Source
 

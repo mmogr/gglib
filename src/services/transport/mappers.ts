@@ -10,7 +10,7 @@ import type { CreateConversationParams, SaveMessageParams } from '../transport/t
 
 /**
  * Request shape matching Rust's StartServerRequest.
- * Must stay in sync with gglib-gui/src/types.rs::StartServerRequest
+ * Must stay in sync with gglib-app-services/src/types.rs::StartServerRequest
  */
 export interface StartServerRequest {
   contextLength?: number;
