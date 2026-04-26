@@ -435,10 +435,10 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         setup,
     })
 }
-/// `bootstrap_with` is the only place where the verification service is
-/// not constructed by [`CoreBootstrap`]; it deliberately does not attach
-/// one because the test path supplies its own download manager and does
-/// not need the file-verification flow.
+// `bootstrap_with` is the only place where the verification service is
+// not constructed by `CoreBootstrap`; it deliberately does not attach
+// one because the test path supplies its own download manager and does
+// not need the file-verification flow.
 
 #[cfg(test)]
 mod tests {

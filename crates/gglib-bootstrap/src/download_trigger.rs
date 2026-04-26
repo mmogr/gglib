@@ -13,8 +13,8 @@ use gglib_core::download::DownloadError;
 use gglib_core::ports::DownloadManagerPort;
 use gglib_core::services::DownloadTriggerPort;
 
-pub(crate) struct DownloadTriggerAdapter {
-    pub(crate) download_manager: Arc<dyn DownloadManagerPort>,
+pub struct DownloadTriggerAdapter {
+    pub download_manager: Arc<dyn DownloadManagerPort>,
 }
 
 #[async_trait]

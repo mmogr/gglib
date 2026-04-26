@@ -161,6 +161,59 @@ main() {
         FAILED=1
     fi
     log ""
+
+    # Source-level guards: shared composition root (gglib-bootstrap) is the
+    # ONLY place where the following infrastructure entry points may be
+    # called from adapters. This prevents Phase 1/2/3 of #458 from regressing.
+    log "📦 gglib-bootstrap (sole call site for shared infra entry points)"
+    BOOTSTRAP_GUARDS=(
+        "setup_database"
+        "build_download_manager"
+        "ModelVerificationService::new"
+        "ModelRegistrar::new"
+    )
+    # Allowed to call: gglib-bootstrap (the shared root), gglib-db (defines
+    # setup_database), gglib-download (defines build_download_manager),
+    # gglib-core (defines ModelVerificationService/ModelRegistrar). Adapter
+    # crates must go through CoreBootstrap::build instead.
+    BOOTSTRAP_ALLOWED_DIRS=(
+        "crates/gglib-bootstrap"
+        "crates/gglib-db"
+        "crates/gglib-download"
+        "crates/gglib-core"
+    )
+    bootstrap_violations=()
+    for symbol in "${BOOTSTRAP_GUARDS[@]}"; do
+        # Find every Rust source line that mentions the symbol, then
+        # filter out the allowed directories.
+        # shellcheck disable=SC2207
+        hits=($(grep -rln --include='*.rs' "$symbol" crates 2>/dev/null || true))
+        for hit in "${hits[@]:-}"; do
+            allowed=0
+            for dir in "${BOOTSTRAP_ALLOWED_DIRS[@]}"; do
+                if [[ "$hit" == "$dir"/* ]]; then
+                    allowed=1
+                    break
+                fi
+            done
+            if [[ $allowed -eq 0 ]]; then
+                bootstrap_violations+=("$symbol -> $hit")
+            fi
+        done
+    done
+    if [[ ${#bootstrap_violations[@]} -gt 0 ]]; then
+        log "${RED}FAIL${NC}: gglib-bootstrap source guard"
+        for v in "${bootstrap_violations[@]}"; do
+            log "  $v"
+        done
+        FAILED=1
+        violations_json=$(printf '"%s",' "${bootstrap_violations[@]}" | sed 's/,$//')
+        RESULTS+=("{\"crate\": \"gglib-bootstrap-source-guard\", \"status\": \"fail\", \"violations\": [$violations_json]}")
+    else
+        log "${GREEN}PASS${NC}: gglib-bootstrap source guard"
+        RESULTS+=("{\"crate\": \"gglib-bootstrap-source-guard\", \"status\": \"pass\", \"violations\": []}")
+    fi
+    log ""
     
     # Build JSON output
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

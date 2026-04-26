@@ -186,4 +186,3 @@ mod tests {
         // In real tests, we'd use bootstrap_with() with mocks
     }
 }
-

@@ -16,9 +16,7 @@ use gglib_app_services::{
     ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
-use gglib_core::ports::{
-    AppEventEmitter, HfClientPort, ModelRepository, ProcessRunner,
-};
+use gglib_core::ports::{AppEventEmitter, HfClientPort, ModelRepository, ProcessRunner};
 use gglib_core::services::AppCore;
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
