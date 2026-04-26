@@ -76,7 +76,7 @@ use gglib_runtime::LlamaServerRunner;
 /// that adapters own their own path strategies.
 #[derive(Debug, Clone)]
 pub struct BootstrapConfig {
-    /// Absolute path to the SQLite database file.
+    /// Absolute path to the `SQLite` database file.
     pub db_path: PathBuf,
     /// Absolute path to the llama-server binary.
     pub llama_server_path: PathBuf,
@@ -84,7 +84,7 @@ pub struct BootstrapConfig {
     pub max_concurrent: usize,
     /// Absolute path to the directory where model files are stored.
     pub models_dir: PathBuf,
-    /// Optional HuggingFace API token for authenticated downloads.
+    /// Optional `HuggingFace` API token for authenticated downloads.
     pub hf_token: Option<String>,
 }
 
@@ -103,7 +103,7 @@ pub struct BuiltCore {
     pub runner: Arc<dyn ProcessRunner>,
     /// Download manager trait object.
     pub downloads: Arc<dyn DownloadManagerPort>,
-    /// HuggingFace HTTP client.
+    /// `HuggingFace` HTTP client.
     pub hf_client: Arc<dyn HfClientPort>,
     /// GGUF file parser for metadata extraction and capability detection.
     pub gguf_parser: Arc<dyn GgufParserPort>,
