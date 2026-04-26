@@ -15,7 +15,8 @@ use std::time::Duration;
 use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressStyle};
 
 use gglib_core::download::DownloadEvent;
-use gglib_core::ports::DownloadEventEmitterPort;
+use gglib_core::events::AppEvent;
+use gglib_core::ports::{AppEventEmitter, DownloadEventEmitterPort};
 
 // ─── Style constants ─────────────────────────────────────────────────────────
 
@@ -220,5 +221,29 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
         // CliDownloadEventEmitter is not Clone (Mutex), so we return a NoopDownloadEmitter
         // for the rare code path that needs a boxed clone. The real emitter is shared via Arc.
         Box::new(gglib_core::ports::NoopDownloadEmitter::new())
+    }
+}
+
+/// Routes the CLI emitter through the unified `AppEventEmitter` pipeline.
+///
+/// This impl exists so the CLI bootstrap can pass an `Arc<dyn AppEventEmitter>`
+/// to [`gglib_bootstrap::CoreBootstrap::build`] just like Axum and Tauri do.
+/// The shared bootstrap wraps it in `AppEventBridge`, which converts
+/// `DownloadEvent` → `AppEvent::Download { event }`. Here we unwrap that
+/// variant and forward the inner `DownloadEvent` to the indicatif renderer.
+///
+/// Non-download `AppEvent` variants (server lifecycle, model lifecycle, MCP,
+/// proxy) are deliberately ignored — the CLI has no UI surface for them.
+impl AppEventEmitter for CliDownloadEventEmitter {
+    fn emit(&self, event: AppEvent) {
+        if let AppEvent::Download { event } = event {
+            <Self as DownloadEventEmitterPort>::emit(self, event);
+        }
+    }
+
+    fn clone_box(&self) -> Box<dyn AppEventEmitter> {
+        // See DownloadEventEmitterPort::clone_box above — the real emitter
+        // is shared via Arc; this fallback is for the rare boxed-clone path.
+        Box::new(gglib_core::ports::NoopEmitter::new())
     }
 }
