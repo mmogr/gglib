@@ -12,7 +12,7 @@
 //! | [`test_loop_detection`]                 | Repeated tool-call batch → [`AgentError::LoopDetected`] |
 //! | [`test_stagnation_detected_integration`] | Repeated text response → [`AgentError::StagnationDetected`] |
 //! | [`test_stagnation_fires_before_finalize`] | Stagnation catches repeated final answer |
-//! | [`test_too_many_tool_calls_integration`] | Oversized tool-call batch → [`AgentError::ParallelToolLimitExceeded`] |
+//! | [`test_too_many_tool_calls_integration`] | Oversized tool-call batch → soft-recovery via synthetic tool error + [`AgentEvent::SystemWarning`] |
 
 mod common;
 
@@ -219,16 +219,23 @@ async fn test_stagnation_detected_integration() {
     );
 }
 
-/// **Too many tool calls**: when the LLM returns more tool calls in a single
-/// batch than `max_parallel_tools` allows, the loop must terminate immediately
-/// with [`AgentError::ParallelToolLimitExceeded`] and emit [`AgentEvent::Error`].
+/// **Too many tool calls (soft recovery)**: when the LLM returns more tool
+/// calls in a single batch than `max_parallel_tools` allows, the loop must
+/// **not** terminate.  Instead it:
 ///
-/// The batch is rejected *before* any tool is executed — this is checked by
-/// asserting that the tool executor is never called.
+/// 1. Emits an [`AgentEvent::SystemWarning`] with an actionable hint so the
+///    user sees what happened (rather than a silent stall).
+/// 2. Synthesises one tool-result-shaped error per requested tool call,
+///    feeding the overflow back to the model so it can self-correct.
+/// 3. Continues the loop without executing any of the over-budget calls.
+///
+/// On the second iteration the model returns a normal answer; the run must
+/// complete successfully.
 #[tokio::test]
 async fn test_too_many_tool_calls_integration() {
-    // LLM emits 3 tool calls in one response; limit is 2.
-    let batch = MockLlmResponse {
+    // First response: 3 tool calls (over the limit of 2) — must trigger
+    // soft recovery, NOT abort.
+    let overflow_batch = MockLlmResponse {
         reasoning: None,
         content: None,
         tool_calls: vec![
@@ -250,7 +257,15 @@ async fn test_too_many_tool_calls_integration() {
         ],
         finish_reason: "tool_calls".into(),
     };
-    let llm = Arc::new(MockLlmPort::new().push(batch));
+    // Second response: a normal final answer the model produces after seeing
+    // the synthetic "batch limit exceeded" tool-result.
+    let recovery = MockLlmResponse {
+        reasoning: None,
+        content: Some("retried with smaller batches".into()),
+        tool_calls: vec![],
+        finish_reason: "stop".into(),
+    };
+    let llm = Arc::new(MockLlmPort::new().push(overflow_batch).push(recovery));
     let executor = MockToolExecutorPort::new().with_tool(
         ToolDefinition::new("search"),
         MockToolBehavior::Immediate {
@@ -267,7 +282,7 @@ async fn test_too_many_tool_calls_integration() {
                 content: "search for things".into(),
             }],
             common::for_test(|c| {
-                c.max_parallel_tools = 2; // 3 calls > 2 → rejected
+                c.max_parallel_tools = 2; // 3 calls > 2 → soft-recovered
                 c.max_repeated_batch_steps = None;
             }),
             tx,
@@ -276,25 +291,41 @@ async fn test_too_many_tool_calls_integration() {
 
     let events = collect_events(rx).await;
 
-    // Must produce the dedicated error variant.
+    // Must complete normally (no hard error).
     assert!(
-        matches!(
-            result,
-            Err(AgentError::ParallelToolLimitExceeded { count: 3, limit: 2 })
-        ),
-        "expected ParallelToolLimitExceeded {{ count: 3, limit: 2 }}, got: {result:?}"
+        result.is_ok(),
+        "expected Ok after soft-recovery, got: {result:?}"
     );
 
-    // An AgentEvent::Error must have been emitted before the stream closes.
+    // A SystemWarning must have been emitted with both fields populated.
+    let warning = events.iter().find_map(|e| match e {
+        AgentEvent::SystemWarning {
+            message,
+            suggested_action,
+        } => Some((message.clone(), suggested_action.clone())),
+        _ => None,
+    });
+    let (warn_msg, warn_action) = warning
+        .expect("AgentEvent::SystemWarning must be emitted when parallel tool limit is exceeded");
     assert!(
-        has_error_event(&events),
-        "AgentEvent::Error must be emitted on ParallelToolLimitExceeded"
+        warn_msg.contains('3') && warn_msg.contains('2'),
+        "warning must mention attempted count (3) and limit (2): {warn_msg}"
+    );
+    assert!(
+        warn_action.is_some_and(|a| a.contains("max-parallel-tools")),
+        "warning must include an actionable suggestion referencing the setting key"
     );
 
-    // The tool must never have been called — the batch is rejected before execution.
+    // The hard-error path must NOT have fired.
     assert!(
-        !has_final_answer(&events),
-        "FinalAnswer must not be emitted when the batch is rejected"
+        !has_error_event(&events),
+        "AgentEvent::Error must not be emitted when soft-recovering"
+    );
+
+    // The final answer from the second LLM response must have been produced.
+    assert!(
+        has_final_answer(&events),
+        "FinalAnswer must be emitted after soft-recovery completes"
     );
 }
 

@@ -75,6 +75,22 @@ pub enum CouncilEvent {
         duration_display: String,
     },
 
+    /// A non-fatal warning surfaced by the agent loop during this turn.
+    ///
+    /// Used to inform the user that the loop encountered a recoverable
+    /// condition (e.g. parallel-tool-limit overflow that triggered an
+    /// auto-retry).  The CLI/GUI should render this prominently but the
+    /// council deliberation continues normally.
+    ///
+    /// `suggested_action` is an optional, user-facing actionable hint
+    /// (e.g. a CLI command to permanently raise a limit).
+    AgentSystemWarning {
+        agent_id: String,
+        message: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        suggested_action: Option<String>,
+    },
+
     /// The current agent's turn is finished.
     ///
     /// `core_claim` is extracted from a `CORE CLAIM: ...` marker in the

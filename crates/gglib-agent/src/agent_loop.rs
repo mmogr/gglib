@@ -272,12 +272,74 @@ impl AgentLoopPort for AgentLoop {
             let response = self.call_and_collect(&messages, &tools, &tx).await?;
 
             if response.tool_calls.len() > config.max_parallel_tools {
-                let error = AgentError::ParallelToolLimitExceeded {
-                    count: response.tool_calls.len(),
-                    limit: config.max_parallel_tools,
-                };
-                emit_error_event(&tx, &error.to_string()).await;
-                return Err(error);
+                // Soft recovery (was: hard `Err(ParallelToolLimitExceeded)`).
+                //
+                // Modern reasoning models occasionally request very large
+                // parallel batches; aborting the entire turn made the council
+                // appear to "stall" with no visible cause.  Instead we:
+                //
+                // 1. Emit a visible `SystemWarning` to the SSE stream so the
+                //    user sees what happened and gets an actionable hint.
+                // 2. Synthesise tool-result messages that report the overflow
+                //    back to the model as a tool error, so it can self-correct
+                //    by retrying with a smaller batch.
+                // 3. Append assistant + synthetic results to history and
+                //    continue the loop.
+                let count = response.tool_calls.len();
+                let limit = config.max_parallel_tools;
+
+                let synthetic_error = format!(
+                    "ERROR: You requested {count} tool calls in a single batch, but the \
+                     parallel tool-call limit is {limit}.  None of the {count} calls were \
+                     executed.  Please retry your request, issuing at most {limit} tool \
+                     calls per turn (you can split a large batch across multiple turns)."
+                );
+                let synthetic_results: Vec<ToolResult> = response
+                    .tool_calls
+                    .iter()
+                    .map(|tc| ToolResult {
+                        tool_call_id: tc.id.clone(),
+                        content: synthetic_error.clone(),
+                        success: false,
+                    })
+                    .collect();
+
+                let suggested_action = format!(
+                    "To permanently raise this limit, run: \
+                     `gglib config settings set --max-parallel-tools <N>` \
+                     (current: {limit}, ceiling: {ceiling})",
+                    ceiling = gglib_core::MAX_PARALLEL_TOOLS_CEILING,
+                );
+                let warning_message = format!(
+                    "Agent attempted {count} parallel tool calls (limit is {limit}). \
+                     Auto-recovering: the model will retry in smaller batches."
+                );
+                warn!(
+                    count,
+                    limit, "parallel tool limit exceeded; soft-recovering"
+                );
+                let _ = tx
+                    .send(AgentEvent::SystemWarning {
+                        message: warning_message,
+                        suggested_action: Some(suggested_action),
+                    })
+                    .await;
+
+                append_iteration_messages(
+                    &mut messages,
+                    response.content,
+                    response.tool_calls,
+                    synthetic_results,
+                );
+                messages = prune_for_budget(std::mem::take(&mut messages), &config);
+
+                let _ = tx
+                    .send(AgentEvent::IterationComplete {
+                        iteration: iteration + 1,
+                        tool_calls: count,
+                    })
+                    .await;
+                continue;
             }
 
             debug!(
