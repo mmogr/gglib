@@ -24,7 +24,7 @@ use gglib_core::ports::{
 };
 use gglib_core::services::AppCore;
 use gglib_db::{CoreFactory, setup_database};
-use gglib_download::{DownloadManagerDeps, DownloadManagerImpl, build_download_manager};
+use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use crate::TauriEventEmitter;
 use gglib_app_services::{
@@ -74,8 +74,14 @@ pub struct TauriContext {
     pub runner: Arc<dyn ProcessRunner>,
     /// MCP service for managing MCP servers.
     pub mcp: Arc<McpService>,
-    /// Download manager (concrete type for worker control).
-    pub download_manager: Arc<DownloadManagerImpl>,
+    /// Download manager.
+    ///
+    /// Stored as a trait object — no caller in the Tauri adapter depends
+    /// on concrete-type methods, so leaking `DownloadManagerImpl` would be
+    /// a hexagonal-boundary violation. If a worker-control hook is needed
+    /// in future, extend `DownloadManagerPort` rather than re-introducing
+    /// the concrete type here.
+    pub download_manager: Arc<dyn DownloadManagerPort>,
     /// HuggingFace client for model discovery.
     pub hf_client: Arc<dyn HfClientPort>,
     /// Event emitter for GUI health events.
@@ -111,8 +117,8 @@ impl TauriContext {
         Arc::clone(&self.mcp)
     }
 
-    /// Access the download manager (concrete type for worker control).
-    pub fn download_manager(&self) -> &Arc<DownloadManagerImpl> {
+    /// Access the download manager.
+    pub fn download_manager(&self) -> &Arc<dyn DownloadManagerPort> {
         &self.download_manager
     }
 
@@ -209,15 +215,15 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         Arc::new(TauriEventEmitter::new(app_handle.clone()));
     let event_emitter = Arc::new(AppEventBridge::new(tauri_emitter.clone()));
 
-    // Build the download manager with real event emission (concrete type for worker control)
-    let download_manager = Arc::new(build_download_manager(DownloadManagerDeps {
+    // Build the download manager. Stored as a trait object — no caller in
+    // the Tauri adapter depends on `DownloadManagerImpl`-only methods.
+    let downloads: Arc<dyn DownloadManagerPort> = Arc::new(build_download_manager(DownloadManagerDeps {
         model_registrar,
         download_repo,
         hf_client: hf_client_concrete,
         event_emitter,
         config: download_config,
     }));
-    let downloads: Arc<dyn DownloadManagerPort> = download_manager.clone();
 
     // 6. Create ModelVerificationService with download trigger adapter
     let download_trigger = Arc::new(DownloadTriggerAdapter {
@@ -282,7 +288,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         app,
         runner,
         mcp,
-        download_manager,
+        download_manager: downloads.clone(),
         hf_client,
         event_emitter: tauri_emitter.clone(),
         proxy_supervisor,
@@ -301,7 +307,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
 pub fn bootstrap_with(
     repos: Repos,
     runner: Arc<dyn ProcessRunner>,
-    download_manager: Arc<DownloadManagerImpl>,
+    download_manager: Arc<dyn DownloadManagerPort>,
     hf_client: Arc<dyn HfClientPort>,
     app_handle: Option<AppHandle>,
 ) -> TauriContext {
@@ -447,14 +453,13 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
     let hf_client: Arc<dyn HfClientPort> = hf_client_concrete.clone();
     let event_emitter = Arc::new(NoopDownloadEmitter::new());
 
-    let download_manager = Arc::new(build_download_manager(DownloadManagerDeps {
+    let downloads: Arc<dyn DownloadManagerPort> = Arc::new(build_download_manager(DownloadManagerDeps {
         model_registrar,
         download_repo,
         hf_client: hf_client_concrete,
         event_emitter,
         config: download_config,
     }));
-    let downloads: Arc<dyn DownloadManagerPort> = download_manager.clone();
 
     // 6. Create ModelVerificationService with download trigger adapter
     let download_trigger = Arc::new(DownloadTriggerAdapter {
@@ -519,7 +524,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         app,
         runner,
         mcp,
-        download_manager,
+        download_manager: downloads.clone(),
         hf_client,
         event_emitter: Arc::new(NoopEmitter),
         proxy_supervisor,
