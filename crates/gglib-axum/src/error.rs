@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use gglib_core::ports::chat_history::ChatHistoryError;
 use gglib_core::{CoreError, ProcessError, RepositoryError};
-use gglib_gui::GuiError;
+use gglib_app_services::GuiError;
 use serde::Serialize;
 use thiserror::Error;
 

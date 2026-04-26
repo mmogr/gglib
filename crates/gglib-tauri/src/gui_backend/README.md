@@ -4,21 +4,21 @@
 
 GUI backend bridge module.
 
-This module is a thin bridge that re-exports types and the `GuiBackend` from the shared `gglib-gui` crate. Tauri command handlers import from here, maintaining existing import paths while delegating to shared code.
+This module is a thin bridge that re-exports types and the `GuiBackend` from the shared `gglib-app-services` crate. Tauri command handlers import from here, maintaining existing import paths while delegating to shared code.
 
 ## Re-exports
 
 | Type | Source |
 |------|--------|
-| `GuiBackend` | `gglib-gui` |
-| `GuiDeps` | `gglib-gui` |
-| `GuiError` | `gglib-gui` |
+| `GuiBackend` | `gglib-app-services` |
+| `GuiDeps` | `gglib-app-services` |
+| `GuiError` | `gglib-app-services` |
 | `QueueSnapshot` | `gglib-core` |
 | `ModelFilterOptions` | `gglib-core` |
 
 ## Design
 
-This pattern allows `gglib-gui` to contain the shared backend logic while `gglib-tauri` focuses on Tauri-specific command registration.
+This pattern allows `gglib-app-services` to contain the shared backend logic while `gglib-tauri` focuses on Tauri-specific command registration.
 
 <!-- module-docs:end -->
 

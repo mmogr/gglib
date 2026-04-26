@@ -1,14 +1,14 @@
 [package]
-name = "gglib-gui"
+name = "gglib-app-services"
 version.workspace = true
 edition.workspace = true
-description = "Shared GUI backend facade for gglib adapters (Tauri, Axum)"
+description = "Shared application service ops for gglib adapters (Tauri, Axum)"
 license.workspace = true
 publish = false
 build = "build.rs"
 
 [lib]
-name = "gglib_gui"
+name = "gglib_app_services"
 path = "src/lib.rs"
 
 [dependencies]

@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_gui::types::{
+use gglib_app_services::types::{
     HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, ToolSupportResponse,
 };
 

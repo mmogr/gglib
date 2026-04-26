@@ -6,7 +6,7 @@ members = [
     "crates/gglib-download",
     "crates/gglib-gguf",
     "crates/gglib-bootstrap",
-    "crates/gglib-gui",
+    "crates/gglib-app-services",
     "crates/gglib-hf",
     "crates/gglib-build-info",
     "crates/gglib-mcp",
@@ -101,7 +101,7 @@ gglib-mcp = { path = "crates/gglib-mcp" }
 gglib-agent = { path = "crates/gglib-agent" }
 gglib-runtime = { path = "crates/gglib-runtime" }
 gglib-axum = { path = "crates/gglib-axum" }
-gglib-gui = { path = "crates/gglib-gui" }
+gglib-app-services = { path = "crates/gglib-app-services" }
 gglib-tauri = { path = "crates/gglib-tauri" }
 gglib-build-info = { path = "crates/gglib-build-info" }
 

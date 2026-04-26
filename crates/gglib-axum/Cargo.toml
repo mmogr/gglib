@@ -16,7 +16,7 @@ gglib-core = { path = "../gglib-core" }
 gglib-db = { path = "../gglib-db" }
 gglib-download = { path = "../gglib-download" }
 gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root
-gglib-gui = { path = "../gglib-gui" }
+gglib-app-services = { path = "../gglib-app-services" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }

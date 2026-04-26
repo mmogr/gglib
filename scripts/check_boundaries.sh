@@ -132,8 +132,8 @@ main() {
     fi
     log ""
     
-    log "📦 gglib-gui (service facade - no UI adapters)"
-    if ! check_crate_deps "gglib-gui" "${DOMAIN_FORBIDDEN[@]}"; then
+    log "📦 gglib-app-services (service facade - no UI adapters)"
+    if ! check_crate_deps "gglib-app-services" "${DOMAIN_FORBIDDEN[@]}"; then
         FAILED=1
     fi
     log ""

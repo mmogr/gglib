@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use gglib_axum::EmbeddedApiInfo;
-use gglib_gui::{DownloadOps, ServerOps};
+use gglib_app_services::{DownloadOps, ServerOps};
 use tauri::async_runtime::JoinHandle;
 use tokio::sync::RwLock;
 

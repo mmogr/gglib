@@ -90,7 +90,7 @@ pub async fn cancel(
     match state.downloads.cancel_download(&id).await {
         Ok(()) => Ok(()),
         // Treat NotFound as success (idempotent cancel)
-        Err(gglib_gui::GuiError::NotFound { .. }) => Ok(()),
+        Err(gglib_app_services::GuiError::NotFound { .. }) => Ok(()),
         Err(e) => Err(e.into()),
     }
 }

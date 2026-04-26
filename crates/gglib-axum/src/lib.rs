@@ -19,7 +19,7 @@ use anyhow as _;
 use chrono as _;
 use futures_util as _;
 use gglib_db as _;
-use gglib_gui as _;
+use gglib_app_services as _;
 use gglib_mcp as _;
 use gglib_runtime as _;
 use serde as _;

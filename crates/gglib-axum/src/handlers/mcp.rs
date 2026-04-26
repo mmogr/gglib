@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_gui::types::{
+use gglib_app_services::types::{
     CreateMcpServerRequest, McpServerInfo, McpToolCallRequest, McpToolCallResponse, McpToolInfo,
     UpdateMcpServerRequest,
 };

@@ -46,7 +46,7 @@ The workspace is organized into layers. Dependencies flow strictly inward.
 ├─────────▼─────────────────▼──────────────────▼──────────────┤
 │  Shared Backend                                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ gglib-runtime│  │  gglib-agent │  │  gglib-gui   │      │
+│  │ gglib-runtime│  │  gglib-agent │  │  gglib-app-services   │      │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
 │         │                 │                  │               │
 ├─────────▼─────────────────▼──────────────────▼──────────────┤
@@ -192,7 +192,7 @@ The CI runs `scripts/check_boundaries.sh` on every push and pull request. Violat
 
 **`gglib-runtime`**, **`gglib-agent`**, **`gglib-download`**, **`gglib-hf`** — May depend on `gglib-core`, `gglib-db`, and peer library crates in the same layer. Must not depend on any surface crate.
 
-**`gglib-gui`** — Backend bridge used by both `gglib-axum` and `gglib-tauri`. No surface-specific code.
+**`gglib-app-services`** — Backend bridge used by both `gglib-axum` and `gglib-tauri`. No surface-specific code.
 
 **Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) — May depend on anything in lower layers. Must not depend on each other.
 
@@ -204,8 +204,8 @@ If your change requires adding a dependency from a lower layer to a higher layer
 
 | Feature | Includes | Use in |
 |---|---|---|
-| *(default)* | Inference and server management | `gglib-axum`, `gglib-gui` |
-| `prebuilt` | Pre-built binary download support | `gglib-tauri`, `gglib-gui` |
+| *(default)* | Inference and server management | `gglib-axum`, `gglib-app-services` |
+| `prebuilt` | Pre-built binary download support | `gglib-tauri`, `gglib-app-services` |
 | `cli` | Source build pipeline (`build/`, `install/`) — implies `prebuilt` | `gglib-cli`, any crate that drives source builds |
 
 When adding a new flag-gated import in a surface crate, ensure its `Cargo.toml` declares the correct `features = [...]` value. A missing feature flag will produce a confusing "function not found" compile error rather than a clear feature gate message.

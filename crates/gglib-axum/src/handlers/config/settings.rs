@@ -6,7 +6,7 @@ use axum::extract::State;
 use crate::dto::SystemMemoryInfoDto;
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_gui::types::{AppSettings, ModelsDirectoryInfo, UpdateSettingsRequest};
+use gglib_app_services::types::{AppSettings, ModelsDirectoryInfo, UpdateSettingsRequest};
 
 /// Get application settings.
 pub async fn get(State(state): State<AppState>) -> Result<Json<AppSettings>, HttpError> {
