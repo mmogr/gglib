@@ -75,10 +75,7 @@ async fn parallel_cleanup(state: &AppState) -> Result<(), String> {
     }
 
     // Run server stop and download cancel in parallel
-    let (servers_result, _) = tokio::join!(
-        state.gui.stop_all_servers(),
-        state.gui.cancel_all_downloads()
-    );
+    let (servers_result, _) = tokio::join!(state.servers.stop_all(), state.downloads.cancel_all());
 
     // Map server errors to string
     servers_result.map_err(|e| format!("Failed to stop servers: {}", e))

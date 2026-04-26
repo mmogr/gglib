@@ -19,7 +19,7 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                            FACADE LAYER                                    │
 │                        ┌──────────────┐                                    │
-│                        │  gglib-gui   │                                    │
+│                        │  gglib-app-services   │                                    │
 │                        │Shared UI core│                                    │
 │                        └──────┬───────┘                                    │
 └───────────────────────────────┼────────────────────────────────────────────┘
@@ -70,7 +70,7 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 ```text
 Adapter Layer
     ↓
-Facade Layer (gglib-gui)
+Facade Layer (gglib-app-services)
     ↓
 Core Layer (gglib-core)    Core Layer (gglib-core)
     ↓                              ↓
@@ -112,7 +112,7 @@ the composition root.
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
-| **[gglib-gui](gglib-gui/)** | Shared business logic for GUI applications (ensures feature parity). | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-loc.json) |
+| **[gglib-app-services](gglib-app-services/)** | Shared business logic for GUI applications (ensures feature parity). | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-loc.json) |
 
 ### Adapter Layer
 
@@ -243,7 +243,7 @@ REST API endpoints:
 - `POST /api/chat/completions` - Chat endpoint
 - `GET /api/events` - SSE event stream
 
-#### gglib-gui
+#### gglib-app-services
 Shared GUI logic:
 - Backend service orchestration
 - State management

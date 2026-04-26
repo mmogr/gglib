@@ -71,7 +71,8 @@ jobs:
             -p gglib-agent \
             -p gglib-proxy \
             -p gglib-runtime \
-            -p gglib-gui \
+            -p gglib-app-services \
+            -p gglib-bootstrap \
             -p gglib-cli \
             -p gglib-axum \
             --lcov --output-path lcov.info 2>&1 | tee rust-test-output.txt
@@ -94,7 +95,8 @@ jobs:
           cargo llvm-cov report --package gglib-agent --lcov --output-path gglib-agent-lcov.info
           cargo llvm-cov report --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
           cargo llvm-cov report --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
-          cargo llvm-cov report --package gglib-gui --lcov --output-path gglib-gui-lcov.info
+          cargo llvm-cov report --package gglib-app-services --lcov --output-path gglib-app-services-lcov.info
+          cargo llvm-cov report --package gglib-bootstrap --lcov --output-path gglib-bootstrap-lcov.info
           cargo llvm-cov report --package gglib-cli --lcov --output-path gglib-cli-lcov.info
           cargo llvm-cov report --package gglib-axum --lcov --output-path gglib-axum-lcov.info
 
@@ -113,7 +115,8 @@ jobs:
             --package gglib-agent \
             --package gglib-proxy \
             --package gglib-runtime \
-            --package gglib-gui \
+            --package gglib-app-services \
+            --package gglib-bootstrap \
             --package gglib-cli \
             --package gglib-axum \
             --html
@@ -135,7 +138,8 @@ jobs:
             gglib-agent-lcov.info
             gglib-proxy-lcov.info
             gglib-runtime-lcov.info
-            gglib-gui-lcov.info
+            gglib-app-services-lcov.info
+            gglib-bootstrap-lcov.info
             gglib-cli-lcov.info
             gglib-axum-lcov.info
             coverage/

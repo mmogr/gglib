@@ -125,8 +125,12 @@ Cargo workspace with compile-time enforced boundaries. Adapters → infrastructu
 │                                   Facade Layer                                      │
 │                                                                                     │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                              gglib-gui                                      │   │
-│   │         Shared GUI backend (ensures feature parity across adapters)         │   │
+│   │                              gglib-app-services                             │   │
+│   │         Shared service ops (ensures feature parity across adapters)         │   │
+│   └─────────────────────────────────────────────────────────────────────────────┘   │
+│   ┌─────────────────────────────────────────────────────────────────────────────┐   │
+│   │                              gglib-bootstrap                                │   │
+│   │         Shared composition root (infra wiring for all adapters)             │   │
 │   └─────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -214,7 +218,8 @@ Only `gglib-runtime` spawns llama-server processes; only `gglib-download` talks 
 #### Facade Layer
 | Crate | Tests | Coverage | LOC | Complexity |
 |-------|-------|----------|-----|------------|
-| [gglib-gui](crates/gglib-gui) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gui-complexity.json) |
+| [gglib-app-services](crates/gglib-app-services) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-complexity.json) |
+| [gglib-bootstrap](crates/gglib-bootstrap) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-tests.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-coverage.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-loc.json) | ![](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-complexity.json) |
 
 #### Adapter Layer
 | Crate | Tests | Coverage | LOC | Complexity |
@@ -248,7 +253,8 @@ Each crate has its own README with architecture diagrams, module breakdowns, and
 | **Infra** | [gglib-mcp](crates/gglib-mcp/README.md) | MCP server management |
 | **Infra** | [gglib-proxy](crates/gglib-proxy/README.md) | OpenAI-compatible proxy server |
 | **Infra** | [gglib-runtime](crates/gglib-runtime/README.md) | Process manager & system probes |
-| **Facade** | [gglib-gui](crates/gglib-gui/README.md) | Shared GUI backend (feature parity) |
+| **Facade** | [gglib-app-services](crates/gglib-app-services/README.md) | Shared application service ops (feature parity) |
+| **Facade** | [gglib-bootstrap](crates/gglib-bootstrap/README.md) | Shared composition root (infra wiring) |
 | **Adapter** | [gglib-cli](crates/gglib-cli/README.md) | CLI interface |
 | **Adapter** | [gglib-axum](crates/gglib-axum/README.md) | HTTP API server |
 | **Adapter** | [gglib-tauri](crates/gglib-tauri/README.md) | Desktop GUI (Tauri + React) |

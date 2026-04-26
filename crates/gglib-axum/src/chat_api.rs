@@ -381,7 +381,7 @@ pub async fn proxy_chat(
     validate_port(&state, request.port).await?;
 
     // Look up the model by port to determine capabilities
-    let servers = state.gui.list_servers().await;
+    let servers = state.servers.list_servers().await;
     let server = servers.iter().find(|s| s.port == request.port);
 
     let (capabilities, model_defaults) = if let Some(server) = server {

@@ -100,16 +100,17 @@ fn main() {
                 bootstrap(config, app_handle).await
             }).expect("Failed to bootstrap application");
 
-            // Build GUI backend from context
-            let gui = Arc::new(ctx.build_gui_backend());
-
-            // Build AxumContext for the embedded server
-            // This mirrors TauriContext but is used by Axum handlers
+            // Build AxumContext for the embedded server using the 7 domain ops from ctx
             let axum_ctx = gglib_axum::AxumContext {
-                gui: gui.clone(),
+                models: ctx.models.clone(),
+                servers: ctx.servers.clone(),
+                downloads: ctx.downloads.clone(),
+                settings: ctx.settings.clone(),
+                mcp_ops: ctx.mcp_ops.clone(),
+                proxy: ctx.proxy.clone(),
+                setup: ctx.setup.clone(),
                 core: ctx.app.clone(),
                 mcp: ctx.mcp.clone(),
-                downloads: ctx.downloads.clone(),
                 hf_client: ctx.hf_client.clone(),
                 runner: ctx.runner.clone(),
                 sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
@@ -129,7 +130,7 @@ fn main() {
             });
 
             // Create and manage app state
-            let app_state = AppState::new(gui.clone(), embedded_api);
+            let app_state = AppState::new(ctx.servers.clone(), ctx.downloads.clone(), embedded_api);
 
             // Store the embedded server handle for cleanup
             {
@@ -345,10 +346,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Emit server:snapshot on app init to seed frontend registry
     {
         let state: tauri::State<AppState> = app.state();
-        let gui = state.gui.clone();
+        let servers = state.servers.clone();
 
         tauri::async_runtime::spawn(async move {
-            gui.emit_initial_snapshot().await;
+            servers.emit_initial_snapshot().await;
         });
     }
 

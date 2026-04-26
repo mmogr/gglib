@@ -14,12 +14,24 @@ use tracing::{debug, warn};
 
 use gglib_core::domain::Model;
 use gglib_core::events::{AppEvent, ServerSummary};
-use gglib_core::ports::{ProcessHandle, ServerConfig, ServerHealthStatus};
+use gglib_core::ports::{
+    AppEventEmitter, ProcessHandle, ProcessRunner, ServerConfig, ServerHealthStatus,
+    ToolSupportDetectorPort,
+};
+use gglib_core::services::AppCore;
 use gglib_runtime::llama::args::resolve_reasoning_format;
 
-use crate::deps::GuiDeps;
 use crate::error::GuiError;
 use crate::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
+
+/// Dependencies for server lifecycle operations.
+pub struct ServerDeps {
+    pub core: Arc<AppCore>,
+    pub runner: Arc<dyn ProcessRunner>,
+    pub emitter: Arc<dyn AppEventEmitter>,
+    pub server_events: Arc<dyn gglib_core::events::ServerEvents>,
+    pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
+}
 
 /// Handle for a running health monitor task.
 struct MonitorHandle {
@@ -119,13 +131,13 @@ impl Drop for ServerMonitorRegistry {
 }
 
 /// Server operations handler.
-pub struct ServerOps<'a> {
-    deps: &'a GuiDeps,
+pub struct ServerOps {
+    deps: ServerDeps,
     monitors: Arc<Mutex<ServerMonitorRegistry>>,
 }
 
-impl<'a> ServerOps<'a> {
-    pub fn new(deps: &'a GuiDeps) -> Self {
+impl ServerOps {
+    pub fn new(deps: ServerDeps) -> Self {
         Self {
             deps,
             monitors: Arc::new(Mutex::new(ServerMonitorRegistry::new())),
@@ -135,6 +147,7 @@ impl<'a> ServerOps<'a> {
     /// Resolve model by ID, returning error if not found.
     async fn resolve_model(&self, id: i64) -> Result<Model, GuiError> {
         self.deps
+            .core
             .models()
             .get_by_id(id)
             .await
@@ -234,6 +247,7 @@ impl<'a> ServerOps<'a> {
         use crate::proxy::resolve_llama_base_port;
         let settings = self
             .deps
+            .core
             .settings()
             .get()
             .await
@@ -256,7 +270,7 @@ impl<'a> ServerOps<'a> {
                 healthy: Some(false),
             };
             self.deps
-                .server_events()
+                .server_events
                 .error(&error_summary, &e.to_string());
 
             // Map ProcessError to semantic GuiError
@@ -318,7 +332,7 @@ impl<'a> ServerOps<'a> {
             port: handle.port,
             healthy: Some(true), // Assume healthy on successful start
         };
-        self.deps.server_events().started(&summary);
+        self.deps.server_events.started(&summary);
 
         // Spawn health monitor after successful start
         self.spawn_health_monitor(handle.clone(), id).await;
@@ -337,7 +351,7 @@ impl<'a> ServerOps<'a> {
         };
 
         let cancel_token = CancellationToken::new();
-        let emitter = Arc::clone(self.deps.emitter());
+        let emitter = Arc::clone(&self.deps.emitter);
         let port = handle.port;
 
         // Create monitor with 10-second check interval
@@ -412,7 +426,7 @@ impl<'a> ServerOps<'a> {
             port: handle.port,
             healthy: None, // Unknown during shutdown
         };
-        self.deps.server_events().stopping(&summary);
+        self.deps.server_events.stopping(&summary);
 
         // Cancel monitoring first
         let server_id = {
@@ -428,12 +442,12 @@ impl<'a> ServerOps<'a> {
         // Then stop the server process
         self.deps.runner.stop(&handle).await.map_err(|e| {
             // Emit error event on stop failure
-            self.deps.server_events().error(&summary, &e.to_string());
+            self.deps.server_events.error(&summary, &e.to_string());
             GuiError::Internal(format!("Failed to stop server: {e}"))
         })?;
 
         // Emit stopped event after successful stop
-        self.deps.server_events().stopped(&summary);
+        self.deps.server_events.stopped(&summary);
 
         Ok(format!("Server for model {} stopped", id))
     }
@@ -463,6 +477,53 @@ impl<'a> ServerOps<'a> {
         }
 
         Ok(())
+    }
+
+    /// Build a server snapshot for event emission.
+    pub async fn build_server_snapshot(
+        &self,
+    ) -> Result<Vec<gglib_core::events::ServerSummary>, GuiError> {
+        let servers = self.list_servers().await;
+        let mut summaries = Vec::with_capacity(servers.len());
+
+        for server in servers {
+            match self.deps.core.models().get_by_id(server.model_id).await {
+                Ok(Some(model)) => {
+                    summaries.push(gglib_core::events::ServerSummary {
+                        id: format!("server-{}", server.model_id),
+                        model_id: server.model_id.to_string(),
+                        model_name: model.name,
+                        port: server.port,
+                        healthy: None,
+                    });
+                }
+                Ok(None) => {
+                    summaries.push(gglib_core::events::ServerSummary {
+                        id: format!("server-{}", server.model_id),
+                        model_id: server.model_id.to_string(),
+                        model_name: format!("Model {}", server.model_id),
+                        port: server.port,
+                        healthy: None,
+                    });
+                }
+                Err(_) => continue,
+            }
+        }
+
+        Ok(summaries)
+    }
+
+    /// Emit an initial server snapshot to connected clients (200ms delay).
+    pub async fn emit_initial_snapshot(&self) {
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        match self.build_server_snapshot().await {
+            Ok(snapshot) => {
+                self.deps.server_events.snapshot(&snapshot);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to build initial server snapshot: {}", e);
+            }
+        }
     }
 
     /// List all running servers as GUI DTOs.

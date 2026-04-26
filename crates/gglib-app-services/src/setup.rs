@@ -3,9 +3,13 @@
 //! Handles first-run system status checks, llama.cpp installation,
 //! and Python fast-download helper provisioning.
 
+use std::sync::Arc;
+
 use serde::Serialize;
 
-use crate::deps::GuiDeps;
+use gglib_core::ports::SystemProbePort;
+use gglib_core::services::AppCore;
+
 use crate::error::GuiError;
 
 /// Combined setup status returned by the setup-status endpoint.
@@ -64,13 +68,19 @@ pub struct SystemMemoryDto {
     pub is_apple_silicon: bool,
 }
 
-/// Setup operations handler.
-pub struct SetupOps<'a> {
-    deps: &'a GuiDeps,
+/// Dependencies for setup operations.
+pub struct SetupDeps {
+    pub core: Arc<AppCore>,
+    pub system_probe: Arc<dyn SystemProbePort>,
 }
 
-impl<'a> SetupOps<'a> {
-    pub fn new(deps: &'a GuiDeps) -> Self {
+/// Setup operations handler.
+pub struct SetupOps {
+    deps: SetupDeps,
+}
+
+impl SetupOps {
+    pub fn new(deps: SetupDeps) -> Self {
         Self { deps }
     }
 
@@ -79,6 +89,7 @@ impl<'a> SetupOps<'a> {
         // Check if setup was previously completed
         let settings = self
             .deps
+            .core
             .settings()
             .get()
             .await
@@ -165,7 +176,7 @@ impl<'a> SetupOps<'a> {
             };
             // Best-effort persist — a failure here must not block the user
             // from reaching the app.
-            let _ = self.deps.settings().update(update).await;
+            let _ = self.deps.core.settings().update(update).await;
         }
 
         Ok(SetupStatus {

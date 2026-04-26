@@ -11,6 +11,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use gglib_core::ports::{ModelCatalogPort, ModelRepository, ModelRuntimePort};
+use gglib_core::services::AppCore;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use gglib_mcp::McpService;
 use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
@@ -56,6 +57,14 @@ pub(crate) fn resolve_llama_base_port(
     Ok((port, source))
 }
 
+/// Dependencies for proxy operations.
+pub struct ProxyDeps {
+    pub supervisor: Arc<ProxySupervisor>,
+    pub model_repo: Arc<dyn ModelRepository>,
+    pub mcp: Arc<McpService>,
+    pub core: Arc<AppCore>,
+}
+
 /// Proxy operations facade.
 ///
 /// Provides GUI-friendly interface to proxy lifecycle management.
@@ -64,19 +73,17 @@ pub struct ProxyOps {
     supervisor: Arc<ProxySupervisor>,
     model_repo: Arc<dyn ModelRepository>,
     mcp: Arc<McpService>,
+    core: Arc<AppCore>,
 }
 
 impl ProxyOps {
     /// Create proxy operations with the required dependencies.
-    pub fn new(
-        supervisor: Arc<ProxySupervisor>,
-        model_repo: Arc<dyn ModelRepository>,
-        mcp: Arc<McpService>,
-    ) -> Self {
+    pub fn new(deps: ProxyDeps) -> Self {
         Self {
-            supervisor,
-            model_repo,
-            mcp,
+            supervisor: deps.supervisor,
+            model_repo: deps.model_repo,
+            mcp: deps.mcp,
+            core: deps.core,
         }
     }
 
@@ -87,19 +94,19 @@ impl ProxyOps {
     ///
     /// # Arguments
     ///
-    /// * `settings_service` - Settings service for resolving llama-server base port
     /// * `config` - Proxy server configuration (host, port, default context)
     /// * `llama_base_port_override` - Optional override for llama-server base port
     /// * `llama_server_path` - Path to llama-server binary
     pub async fn start(
         &self,
-        settings_service: &gglib_core::services::SettingsService,
         config: ProxyConfig,
         llama_base_port_override: Option<u16>,
         llama_server_path: String,
     ) -> Result<SocketAddr, GuiError> {
         // Resolve the llama-server base port from override, settings, or default
-        let settings = settings_service
+        let settings = self
+            .core
+            .settings()
             .get()
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to load settings: {}", e)))?;
@@ -155,6 +162,11 @@ impl ProxyOps {
     /// Get the current proxy status.
     pub async fn status(&self) -> ProxyStatus {
         self.supervisor.status().await
+    }
+
+    /// Get a watch receiver for proxy exit events.
+    pub fn exit_receiver(&self) -> tokio::sync::watch::Receiver<ProxyStatus> {
+        self.supervisor.exit_receiver()
     }
 }
 #[cfg(test)]

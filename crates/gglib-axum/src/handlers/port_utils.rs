@@ -27,7 +27,7 @@ pub(crate) async fn validate_port(state: &AppState, port: u16) -> Result<(), Htt
     }
 
     // Check that the port belongs to a server we started.
-    let servers = state.gui.list_servers().await;
+    let servers = state.servers.list_servers().await;
     if !servers.iter().any(|s| s.port == port) {
         return Err(HttpError::BadRequest(format!(
             "No running server found on port {port}. Start a server first."

@@ -7,26 +7,32 @@ use gglib_core::ports::{
     DownloadManagerPort, HfClientPort, HfSearchOptions, ToolSupportDetectorPort,
 };
 
-use crate::deps::GuiDeps;
 use crate::error::GuiError;
 use crate::types::{
     HfModelSummary, HfQuantization, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
     HfSortField, ToolSupportResponse,
 };
 
-/// Download and HuggingFace operations handler.
-pub struct DownloadOps<'a> {
-    downloads: &'a Arc<dyn DownloadManagerPort>,
-    hf_client: &'a Arc<dyn HfClientPort>,
-    tool_detector: &'a Arc<dyn ToolSupportDetectorPort>,
+/// Dependencies for download and HuggingFace operations.
+pub struct DownloadDeps {
+    pub downloads: Arc<dyn DownloadManagerPort>,
+    pub hf: Arc<dyn HfClientPort>,
+    pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
 }
 
-impl<'a> DownloadOps<'a> {
-    pub fn new(deps: &'a GuiDeps) -> Self {
+/// Download and HuggingFace operations handler.
+pub struct DownloadOps {
+    downloads: Arc<dyn DownloadManagerPort>,
+    hf_client: Arc<dyn HfClientPort>,
+    tool_detector: Arc<dyn ToolSupportDetectorPort>,
+}
+
+impl DownloadOps {
+    pub fn new(deps: DownloadDeps) -> Self {
         Self {
-            downloads: &deps.downloads,
-            hf_client: &deps.hf,
-            tool_detector: &deps.tool_detector,
+            downloads: deps.downloads,
+            hf_client: deps.hf,
+            tool_detector: deps.tool_detector,
         }
     }
 
@@ -46,7 +52,7 @@ impl<'a> DownloadOps<'a> {
         quantization: Option<String>,
     ) -> Result<(usize, usize), GuiError> {
         // Use queue_smart which handles quantization selection in the domain layer
-        Arc::clone(self.downloads)
+        Arc::clone(&self.downloads)
             .queue_smart(model_id, quantization)
             .await
             .map_err(|e| GuiError::Internal(e.to_string()))

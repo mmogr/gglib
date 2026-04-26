@@ -5,11 +5,13 @@ use axum::extract::{Path, State};
 
 use crate::error::HttpError;
 use crate::state::AppState;
-use gglib_gui::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
+use gglib_app_services::types::{
+    ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse,
+};
 
 /// List all running servers.
 pub async fn list(State(state): State<AppState>) -> Json<Vec<ServerInfo>> {
-    Json(state.gui.list_servers().await)
+    Json(state.servers.list_servers().await)
 }
 
 /// Get tool support status for a running server's model.
@@ -22,7 +24,7 @@ pub async fn tool_support(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<ToolSupportResponse>, HttpError> {
-    Ok(Json(state.gui.get_server_tool_support(id).await?))
+    Ok(Json(state.servers.get_server_tool_support(id).await?))
 }
 
 // ============================================================================
@@ -35,7 +37,7 @@ pub async fn start(
     Path(id): Path<i64>,
     Json(req): Json<StartServerRequest>,
 ) -> Result<Json<StartServerResponse>, HttpError> {
-    Ok(Json(state.gui.start_server(id, req).await?))
+    Ok(Json(state.servers.start(id, req).await?))
 }
 
 /// Stop a model server (path-based: model ID in URL).
@@ -43,7 +45,7 @@ pub async fn stop(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<String>, HttpError> {
-    Ok(Json(state.gui.stop_server(id).await?))
+    Ok(Json(state.servers.stop(id).await?))
 }
 
 // ============================================================================
@@ -70,7 +72,7 @@ pub async fn start_body(
     let model_id = body.model_id.ok_or_else(|| {
         HttpError::BadRequest("Missing model_id (or id) in request body".to_string())
     })?;
-    Ok(Json(state.gui.start_server(model_id, body.config).await?))
+    Ok(Json(state.servers.start(model_id, body.config).await?))
 }
 
 /// Request body for stopping a server via collection route.
@@ -84,7 +86,7 @@ pub async fn stop_body(
     State(state): State<AppState>,
     Json(body): Json<StopServerBody>,
 ) -> Result<Json<String>, HttpError> {
-    Ok(Json(state.gui.stop_server(body.model_id).await?))
+    Ok(Json(state.servers.stop(body.model_id).await?))
 }
 
 // ============================================================================
@@ -101,8 +103,8 @@ use tokio_stream::wrappers::BroadcastStream;
 pub async fn get_logs(
     State(state): State<AppState>,
     Path(port): Path<u16>,
-) -> Json<Vec<gglib_gui::types::ServerLogEntry>> {
-    Json(state.gui.get_server_logs(port))
+) -> Json<Vec<gglib_app_services::types::ServerLogEntry>> {
+    Json(state.servers.get_logs(port))
 }
 
 /// Stream server logs via SSE for a specific port.
@@ -113,7 +115,7 @@ pub async fn stream_logs(
     State(state): State<AppState>,
     Path(port): Path<u16>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-    let receiver = state.gui.subscribe_server_logs();
+    let receiver = state.servers.subscribe_logs();
 
     let stream = BroadcastStream::new(receiver).filter_map(move |result| {
         match result {
@@ -148,6 +150,6 @@ pub async fn stream_logs(
 
 /// Clear logs for a specific server port (DELETE endpoint).
 pub async fn clear_logs(State(state): State<AppState>, Path(port): Path<u16>) -> Json<String> {
-    state.gui.clear_server_logs(port);
+    state.servers.clear_logs(port);
     Json(format!("Logs cleared for port {}", port))
 }

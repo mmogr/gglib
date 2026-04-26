@@ -12,15 +12,15 @@ use serde::{Deserialize, Serialize};
 use crate::dto::system::VulkanStatusDto;
 use crate::error::HttpError;
 use crate::state::AppState;
+use gglib_app_services::setup::SetupStatus;
 use gglib_core::paths::{llama_cpp_dir, llama_server_path};
-use gglib_gui::setup::SetupStatus;
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, detect_optimal_acceleration, run_llama_source_build, vulkan_status,
 };
 
 /// Get the full system setup status for the first-run wizard.
 pub async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, HttpError> {
-    Ok(Json(state.gui.get_setup_status().await?))
+    Ok(Json(state.setup.get_status().await?))
 }
 
 /// Get Vulkan build-readiness status.
@@ -38,7 +38,7 @@ pub async fn install_llama(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     let (tx, rx) = tokio::sync::mpsc::channel::<LlamaProgressEvent>(64);
-    let gui = state.gui.clone();
+    let setup = state.setup.clone();
 
     tokio::spawn(async move {
         let tx_progress = tx.clone();
@@ -48,7 +48,7 @@ pub async fn install_llama(
                 let _ = tx_progress.try_send(LlamaProgressEvent::Progress { downloaded, total });
             });
 
-        match gui.install_llama(callback).await {
+        match setup.install_llama(callback).await {
             Ok(()) => {
                 let _ = tx.send(LlamaProgressEvent::Complete).await;
             }
@@ -81,7 +81,7 @@ pub async fn install_llama(
 
 /// Set up the Python fast-download helper environment.
 pub async fn setup_python(State(state): State<AppState>) -> Result<Json<()>, HttpError> {
-    state.gui.setup_python_env().await?;
+    state.setup.setup_python_env().await?;
     Ok(Json(()))
 }
 

@@ -1899,12 +1899,12 @@ version = "0.7.2"
 dependencies = [
  "async-trait",
  "dotenvy",
+ "gglib-app-services",
  "gglib-axum",
  "gglib-build-info",
  "gglib-core",
  "gglib-db",
  "gglib-download",
- "gglib-gui",
  "gglib-mcp",
  "gglib-runtime",
  "gglib-tauri",
@@ -1922,6 +1922,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-app-services"
+version = "0.7.2"
+dependencies = [
+ "async-trait",
+ "dirs",
+ "futures-util",
+ "gglib-core",
+ "gglib-download",
+ "gglib-hf",
+ "gglib-mcp",
+ "gglib-runtime",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-test",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "gglib-axum"
 version = "0.7.2"
 dependencies = [
@@ -1932,11 +1953,11 @@ dependencies = [
  "futures-core",
  "futures-util",
  "gglib-agent",
+ "gglib-app-services",
  "gglib-core",
  "gglib-db",
  "gglib-download",
  "gglib-gguf",
- "gglib-gui",
  "gglib-hf",
  "gglib-mcp",
  "gglib-runtime",
@@ -1955,6 +1976,22 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "gglib-bootstrap"
+version = "0.7.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "gglib-core",
+ "gglib-db",
+ "gglib-download",
+ "gglib-gguf",
+ "gglib-hf",
+ "gglib-runtime",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2082,27 +2119,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gglib-gui"
-version = "0.7.2"
-dependencies = [
- "async-trait",
- "dirs",
- "futures-util",
- "gglib-core",
- "gglib-download",
- "gglib-hf",
- "gglib-mcp",
- "gglib-runtime",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-test",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
 name = "gglib-hf"
 version = "0.7.2"
 dependencies = [
@@ -2197,11 +2213,11 @@ version = "0.7.2"
 dependencies = [
  "anyhow",
  "async-trait",
+ "gglib-app-services",
  "gglib-core",
  "gglib-db",
  "gglib-download",
  "gglib-gguf",
- "gglib-gui",
  "gglib-hf",
  "gglib-mcp",
  "gglib-runtime",

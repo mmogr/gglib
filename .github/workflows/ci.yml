@@ -136,7 +136,8 @@ jobs:
           cargo test -p gglib-agent --verbose 2>&1 | tee rust-test-gglib-agent.txt
           cargo test -p gglib-proxy --verbose 2>&1 | tee rust-test-gglib-proxy.txt
           cargo test -p gglib-runtime --verbose 2>&1 | tee rust-test-gglib-runtime.txt
-          cargo test -p gglib-gui --verbose 2>&1 | tee rust-test-gglib-gui.txt
+          cargo test -p gglib-app-services --verbose 2>&1 | tee rust-test-gglib-app-services.txt
+          cargo test -p gglib-bootstrap --verbose 2>&1 | tee rust-test-gglib-bootstrap.txt
           cargo test -p gglib-cli --verbose 2>&1 | tee rust-test-gglib-cli.txt
           cargo test -p gglib-axum --verbose 2>&1 | tee rust-test-gglib-axum.txt
           cargo test -p gglib-tauri --verbose 2>&1 | tee rust-test-gglib-tauri.txt
@@ -160,7 +161,8 @@ jobs:
             rust-test-gglib-agent.txt
             rust-test-gglib-proxy.txt
             rust-test-gglib-runtime.txt
-            rust-test-gglib-gui.txt
+            rust-test-gglib-app-services.txt
+            rust-test-gglib-bootstrap.txt
             rust-test-gglib-cli.txt
             rust-test-gglib-axum.txt
             rust-test-gglib-tauri.txt

@@ -1,10 +1,13 @@
 //! Settings operations for GUI backend.
 
+use std::sync::Arc;
+
 use gglib_core::SettingsUpdate;
 use gglib_core::paths::{ModelsDirSource, resolve_models_dir};
+use gglib_core::ports::{DownloadManagerPort, SystemProbePort};
+use gglib_core::services::AppCore;
 use gglib_core::utils::system::SystemMemoryInfo;
 
-use crate::deps::GuiDeps;
 use crate::error::GuiError;
 use crate::types::{AppSettings, ModelsDirectoryInfo, UpdateSettingsRequest};
 
@@ -17,13 +20,20 @@ fn format_source(source: ModelsDirSource) -> &'static str {
     }
 }
 
-/// Settings operations handler.
-pub struct SettingsOps<'a> {
-    deps: &'a GuiDeps,
+/// Dependencies for settings operations.
+pub struct SettingsDeps {
+    pub core: Arc<AppCore>,
+    pub system_probe: Arc<dyn SystemProbePort>,
+    pub downloads: Arc<dyn DownloadManagerPort>,
 }
 
-impl<'a> SettingsOps<'a> {
-    pub fn new(deps: &'a GuiDeps) -> Self {
+/// Settings operations handler.
+pub struct SettingsOps {
+    deps: SettingsDeps,
+}
+
+impl SettingsOps {
+    pub fn new(deps: SettingsDeps) -> Self {
         Self { deps }
     }
 
@@ -87,6 +97,7 @@ impl<'a> SettingsOps<'a> {
     pub async fn get(&self) -> Result<AppSettings, GuiError> {
         let settings = self
             .deps
+            .core
             .settings()
             .get()
             .await
@@ -127,6 +138,7 @@ impl<'a> SettingsOps<'a> {
 
         let settings = self
             .deps
+            .core
             .settings()
             .update(update)
             .await
