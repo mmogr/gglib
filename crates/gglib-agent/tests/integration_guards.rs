@@ -305,9 +305,8 @@ async fn test_too_many_tool_calls_integration() {
         } => Some((message.clone(), suggested_action.clone())),
         _ => None,
     });
-    let (warn_msg, warn_action) = warning.expect(
-        "AgentEvent::SystemWarning must be emitted when parallel tool limit is exceeded",
-    );
+    let (warn_msg, warn_action) = warning
+        .expect("AgentEvent::SystemWarning must be emitted when parallel tool limit is exceeded");
     assert!(
         warn_msg.contains('3') && warn_msg.contains('2'),
         "warning must mention attempted count (3) and limit (2): {warn_msg}"

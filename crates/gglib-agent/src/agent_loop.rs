@@ -314,7 +314,10 @@ impl AgentLoopPort for AgentLoop {
                     "Agent attempted {count} parallel tool calls (limit is {limit}). \
                      Auto-recovering: the model will retry in smaller batches."
                 );
-                warn!(count, limit, "parallel tool limit exceeded; soft-recovering");
+                warn!(
+                    count,
+                    limit, "parallel tool limit exceeded; soft-recovering"
+                );
                 let _ = tx
                     .send(AgentEvent::SystemWarning {
                         message: warning_message,
