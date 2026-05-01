@@ -281,10 +281,7 @@ fn check_vulkan_headers() -> bool {
     // 2. Hardcoded fallback paths per OS.
     #[cfg(target_os = "linux")]
     {
-        let roots: &[&Path] = &[
-            Path::new("/usr/include"),
-            Path::new("/usr/local/include"),
-        ];
+        let roots: &[&Path] = &[Path::new("/usr/include"), Path::new("/usr/local/include")];
         if header_exists_in(roots, REL) {
             return true;
         }
@@ -330,10 +327,7 @@ fn check_spirv_headers() -> bool {
     // 2. Hardcoded fallback paths per OS.
     #[cfg(target_os = "linux")]
     {
-        let roots: &[&Path] = &[
-            Path::new("/usr/include"),
-            Path::new("/usr/local/include"),
-        ];
+        let roots: &[&Path] = &[Path::new("/usr/include"), Path::new("/usr/local/include")];
         if header_exists_in(roots, REL_PRIMARY) || header_exists_in(roots, REL_ALTERNATE) {
             return true;
         }
@@ -472,10 +466,7 @@ mod tests {
             has_headers: false,
             has_glslc: true,
             has_spirv_headers: false,
-            missing: vec![
-                MissingPackage::VulkanHeaders,
-                MissingPackage::SpirvHeaders,
-            ],
+            missing: vec![MissingPackage::VulkanHeaders, MissingPackage::SpirvHeaders],
         };
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains("hasLoader"));

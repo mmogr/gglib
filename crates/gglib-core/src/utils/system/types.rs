@@ -86,7 +86,7 @@ pub struct GpuInfo {
     ///
     /// Required by llama.cpp's `ggml-vulkan.cpp` at build time. Ships
     /// as a separate package on Linux (e.g. `spirv-headers`) and is
-    /// bundled in the LunarG Vulkan SDK on Windows.
+    /// bundled in the `LunarG` Vulkan SDK on Windows.
     pub vulkan_spirv_headers: bool,
 }
 

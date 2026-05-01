@@ -221,7 +221,9 @@ fn determine_acceleration(
         let (accel, warnings) = detect_optimal_acceleration_with_diagnostics();
         if !warnings.is_empty() {
             println!();
-            println!("\x1b[1;33m⚠  GPU acceleration unavailable — falling back to CPU build\x1b[0m");
+            println!(
+                "\x1b[1;33m⚠  GPU acceleration unavailable — falling back to CPU build\x1b[0m"
+            );
             println!();
             for msg in &warnings {
                 for line in msg.lines() {
