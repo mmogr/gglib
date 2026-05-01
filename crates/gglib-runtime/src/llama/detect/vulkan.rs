@@ -30,9 +30,51 @@
 //! invoking CMake, allowing the CLI and GUI to surface distro-specific
 //! install instructions.
 
+use std::path::{Path, PathBuf};
+
 use serde::{Deserialize, Serialize};
 
-use super::tools::command_succeeds;
+use super::tools::{command_stdout, command_succeeds};
+
+// ============================================================================
+// Probe helpers (unit-testable, dependency-injection friendly)
+// ============================================================================
+
+/// Return `true` if `<root>/<rel>` exists for any `root` in `roots`.
+///
+/// Pure function over filesystem state — used by the header probes so that
+/// tests can construct fake filesystem layouts in `tempfile::TempDir`s
+/// without touching the developer's real `/usr/include`.
+fn header_exists_in(roots: &[&Path], rel: &str) -> bool {
+    roots.iter().any(|root| root.join(rel).exists())
+}
+
+/// Query `pkg-config --variable=includedir <pkg>` and return the result
+/// as a `PathBuf` if the package is known and the value is non-empty.
+///
+/// Returns `None` when pkg-config is missing, the package is unknown, or
+/// the include directory string is empty/whitespace.
+fn pkg_config_includedir(pkg: &str) -> Option<PathBuf> {
+    if !command_succeeds("pkg-config", &["--exists", pkg]) {
+        return None;
+    }
+    let raw = command_stdout("pkg-config", &["--variable=includedir", pkg])?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(trimmed))
+    }
+}
+
+/// Return the LunarG Vulkan SDK install root from the `VULKAN_SDK` env var.
+///
+/// Wrapping the env read in a function makes it trivial to swap with a
+/// stub in tests so that a developer's local SDK never leaks into CI.
+#[allow(dead_code)] // Used by Windows-only code paths and the SPIR-V probe (next commit).
+fn vulkan_sdk_dir() -> Option<PathBuf> {
+    std::env::var_os("VULKAN_SDK").map(PathBuf::from)
+}
 
 /// A component required for a Vulkan-accelerated build that is missing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,7 +203,6 @@ fn check_vulkan_loader() -> bool {
     // Fall back to checking for the loader library on disk
     #[cfg(target_os = "linux")]
     {
-        use std::path::Path;
         if Path::new("/usr/lib/x86_64-linux-gnu/libvulkan.so.1").exists()
             || Path::new("/usr/lib64/libvulkan.so.1").exists()
             || Path::new("/usr/lib/libvulkan.so.1").exists()
@@ -187,34 +228,47 @@ fn check_vulkan_loader() -> bool {
 
 /// Check whether Vulkan development headers are installed.
 ///
-/// Checks for the actual `vulkan/vulkan.h` header file that CMake's
-/// `FindVulkan.cmake` needs to set `Vulkan_INCLUDE_DIR`. We cannot
-/// rely on `pkg-config --exists vulkan` alone because on some distros
-/// (e.g. Arch) the `.pc` file ships with the runtime loader package,
-/// not the headers package.
+/// Probe order (uniform across platforms):
+/// 1. `pkg-config --variable=includedir vulkan` → check
+///    `<includedir>/vulkan/vulkan.h`. Works on NixOS, Homebrew, and any
+///    distro that publishes a `.pc` file for the headers package.
+/// 2. Hardcoded Linux paths (`/usr/include`, `/usr/local/include`).
+/// 3. Hardcoded Windows path under `%VULKAN_SDK%/Include`.
+///
+/// We deliberately do not rely on `pkg-config --exists vulkan` alone —
+/// on some distros (e.g. Arch) the `.pc` file ships with the runtime
+/// loader package, not the headers package, so we always verify the
+/// `vulkan.h` file is reachable from the include dir.
 fn check_vulkan_headers() -> bool {
-    use std::path::Path;
+    const REL: &str = "vulkan/vulkan.h";
 
-    // Direct header-file check — mirrors what CMake's FindVulkan does.
+    // 1. pkg-config first — handles non-standard prefixes uniformly.
+    if let Some(includedir) = pkg_config_includedir("vulkan")
+        && includedir.join(REL).exists()
+    {
+        return true;
+    }
+
+    // 2. Hardcoded fallback paths per OS.
     #[cfg(target_os = "linux")]
     {
-        if Path::new("/usr/include/vulkan/vulkan.h").exists()
-            || Path::new("/usr/local/include/vulkan/vulkan.h").exists()
-        {
+        let roots: &[&Path] = &[
+            Path::new("/usr/include"),
+            Path::new("/usr/local/include"),
+        ];
+        if header_exists_in(roots, REL) {
             return true;
         }
     }
 
-    // On other platforms, fall back to pkg-config with a cflags probe
-    // that verifies the include directory actually contains the header.
-    if command_succeeds("pkg-config", &["--exists", "vulkan"])
-        && let Some(includedir) =
-            super::tools::command_stdout("pkg-config", &["--variable=includedir", "vulkan"])
-        && Path::new(includedir.trim())
-            .join("vulkan/vulkan.h")
-            .exists()
+    #[cfg(target_os = "windows")]
     {
-        return true;
+        if let Some(sdk) = vulkan_sdk_dir() {
+            let include = sdk.join("Include");
+            if include.join(REL).exists() {
+                return true;
+            }
+        }
     }
 
     false
@@ -223,6 +277,35 @@ fn check_vulkan_headers() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_header_exists_in_finds_existing_header() {
+        let dir = TempDir::new().unwrap();
+        let nested = dir.path().join("vulkan");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("vulkan.h"), "// stub header").unwrap();
+
+        assert!(header_exists_in(&[dir.path()], "vulkan/vulkan.h"));
+    }
+
+    #[test]
+    fn test_header_exists_in_returns_false_when_absent() {
+        let dir = TempDir::new().unwrap();
+        assert!(!header_exists_in(&[dir.path()], "vulkan/vulkan.h"));
+    }
+
+    #[test]
+    fn test_header_exists_in_searches_multiple_roots() {
+        let dir1 = TempDir::new().unwrap();
+        let dir2 = TempDir::new().unwrap();
+        let nested = dir2.path().join("foo");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("bar.h"), "").unwrap();
+
+        // Only dir2 has the file, but the search covers both.
+        assert!(header_exists_in(&[dir1.path(), dir2.path()], "foo/bar.h"));
+    }
 
     #[test]
     fn test_vulkan_status_ready_when_all_present() {
