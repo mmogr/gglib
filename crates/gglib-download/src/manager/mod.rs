@@ -819,10 +819,11 @@ impl DownloadManagerImpl {
         // Phase 1 of finalization: bytes are on disk, we are about to gather
         // metadata (HF tags etc.). Emit a status transition so the UI shows
         // "Finalizing" instead of looking frozen at 100%.
-        self.event_emitter.emit(DownloadEvent::DownloadStatusChanged {
-            id: event_id.clone(),
-            status: gglib_core::download::DownloadStatus::Finalizing,
-        });
+        self.event_emitter
+            .emit(DownloadEvent::DownloadStatusChanged {
+                id: event_id.clone(),
+                status: gglib_core::download::DownloadStatus::Finalizing,
+            });
 
         // Fetch HF model info to get tags (soft fail if unavailable)
         let hf_tags = self
@@ -851,10 +852,11 @@ impl DownloadManagerImpl {
         };
 
         // Phase 2 of finalization: writing the model row to the database.
-        self.event_emitter.emit(DownloadEvent::DownloadStatusChanged {
-            id: event_id.clone(),
-            status: gglib_core::download::DownloadStatus::Registering,
-        });
+        self.event_emitter
+            .emit(DownloadEvent::DownloadStatusChanged {
+                id: event_id.clone(),
+                status: gglib_core::download::DownloadStatus::Registering,
+            });
 
         // Register model (soft-fail)
         match self.model_registrar.register_model(&completed).await {
@@ -1517,8 +1519,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
         // are still cleaning up. Without this the CLI would exit with
         // partially-written files and no DB row — exactly the symptom
         // tracked in #466.
-        let drain_deadline =
-            tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        let drain_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
         let mut poll = tokio::time::interval(std::time::Duration::from_millis(50));
         poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {

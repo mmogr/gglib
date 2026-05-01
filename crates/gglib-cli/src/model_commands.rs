@@ -111,8 +111,14 @@ pub enum ModelCommand {
     /// progress is rendered in the terminal and multiple models can be added
     /// interactively while a download is in flight.
     ///
-    /// In a TTY, press **[a]** to add another model to the queue or **[q]** / Ctrl-C
-    /// to cancel all pending downloads.
+    /// In a TTY, press **[a]** to add another model to the queue. Press
+    /// **[q]** / `Esc` / `Ctrl-C` once to drain (active downloads keep
+    /// running, hint becomes `Draining... press q again to force quit`);
+    /// press it again to cancel all in-flight jobs and exit.
+    ///
+    /// While a download is in flight the bar surfaces the lifecycle phase:
+    /// `Downloading` → `Finalizing` (gathering HF metadata) → `Registering`
+    /// (writing model row) → terminal `Completed` / `Failed` / `Cancelled`.
     Download {
         /// HuggingFace model repository (e.g., "bartowski/Qwen2.5-7B-Instruct-GGUF")
         model_id: String,
