@@ -7,6 +7,7 @@ mod progress;
 pub mod python_bridge;
 mod python_env;
 mod python_protocol;
+mod xet_poller;
 
 use std::fs;
 
@@ -82,6 +83,7 @@ pub(super) async fn download(request: CliDownloadRequest) -> Result<CliDownloadR
         token: request.token.as_deref(),
         force: request.force,
         progress: None,
+        expected_total: None,
         cancel_token: None,
     };
 

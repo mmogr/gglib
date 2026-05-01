@@ -185,8 +185,8 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
     // Create progress callback that updates watch channel
     let progress_tx = job.progress_tx.clone();
     let seq_clone = Arc::clone(&seq);
-    let progress_callback: Box<dyn Fn(u64, u64) + Send + Sync> =
-        Box::new(move |downloaded: u64, total: u64| {
+    let progress_callback: crate::cli_exec::ProgressCallback =
+        Arc::new(move |downloaded: u64, total: u64| {
             let current_seq = seq_clone.fetch_add(1, Ordering::Relaxed);
             // send_modify avoids clone and is infallible
             progress_tx.send_modify(|state| {
@@ -205,7 +205,12 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         files: &job.destination.files,
         token: deps.config.hf_token.as_deref(),
         force: false,
-        progress: Some(&progress_callback),
+        progress: Some(Arc::clone(&progress_callback)),
+        // TODO(#466 follow-up): plumb shard_info.file_size from the manager so
+        // synthetic progress events from `xet_poller` can show a real % bar.
+        // For now an unknown total is acceptable \u2014 the bar will display
+        // downloaded bytes and is no longer frozen at 0/0.
+        expected_total: None,
         cancel_token: Some(job.cancel.clone()),
     };
 

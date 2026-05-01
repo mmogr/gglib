@@ -99,7 +99,14 @@ class JsonProgressBar(tqdm):
         # tqdm 4.67 tightened attribute slots, so guard access to desc.
         self._label = getattr(self, "desc", None) or desc or ""
         self._last_emit = 0.0
-        self._emit(force=True)
+        # Skip the initial forced emit when the total is unknown — emitting
+        # `progress {0,0}` at construction misleads the Rust bridge into
+        # showing "0 B/0 B" for the entire transfer on the hf-xet path
+        # (where tqdm is never driven). The Rust-side stat fallback
+        # (`xet_poller`) handles this case; only emit here when we actually
+        # have a non-zero total to advertise.
+        if self.total:
+            self._emit(force=True)
 
     def update(self, n=1):  # type: ignore[override]
         if getattr(self, "disable", False):
