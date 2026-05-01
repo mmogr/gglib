@@ -177,6 +177,10 @@ async fn run_tty_monitor(
     let mut hint_bar: Option<ProgressBar> = None;
     let mut seen_items = false;
     let mut last_item_count: u32 = 0;
+    // Two-step quit: first `q`/Ctrl-C arms `quitting=true` and lets active
+    // downloads drain naturally; the second press calls `cancel_all()`.
+    // Auto-exit fires when the queue empties on its own.
+    let mut quitting = false;
 
     let mut tick = tokio::time::interval(Duration::from_millis(250));
     // Skip the initial fire-immediately tick so we don't redraw before
@@ -198,9 +202,20 @@ async fn run_tty_monitor(
                         let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
                     Some(Key::Char('q')) | Some(Key::Escape) => {
-                        downloads.cancel_all().await.ok();
-                        let _ = cmd_tx.send(ReaderCmd::Stop).await;
-                        break Ok(());
+                        if quitting {
+                            // Second press → force quit.
+                            downloads.cancel_all().await.ok();
+                            let _ = cmd_tx.send(ReaderCmd::Stop).await;
+                            break Ok(());
+                        }
+                        // First press → arm drain mode and update the hint.
+                        quitting = true;
+                        if let Some(bar) = &hint_bar {
+                            bar.set_message(
+                                "Draining... press q again to force quit".to_string(),
+                            );
+                        }
+                        let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
                     Some(_) => {
                         // Ignore other keys; tell reader to keep going.
@@ -216,9 +231,17 @@ async fn run_tty_monitor(
 
             // ── Ctrl-C from terminal (signal, not a key) ──────────────────
             _ = tokio::signal::ctrl_c() => {
-                downloads.cancel_all().await.ok();
-                let _ = cmd_tx.send(ReaderCmd::Stop).await;
-                break Ok(());
+                if quitting {
+                    downloads.cancel_all().await.ok();
+                    let _ = cmd_tx.send(ReaderCmd::Stop).await;
+                    break Ok(());
+                }
+                quitting = true;
+                if let Some(bar) = &hint_bar {
+                    bar.set_message(
+                        "Draining... press q again to force quit".to_string(),
+                    );
+                }
             }
 
             // ── 250 ms render / completion tick ────────────────────────────
@@ -245,11 +268,19 @@ async fn run_tty_monitor(
                 }
 
                 // Update live counts in the hint message every tick.
+                // While quitting, keep the drain hint pinned so the user
+                // doesn't lose the "press q again" instruction.
                 if let Some(bar) = &hint_bar {
-                    bar.set_message(build_hint_message(
-                        snapshot.active_count,
-                        snapshot.pending_count,
-                    ));
+                    if quitting {
+                        bar.set_message(
+                            "Draining... press q again to force quit".to_string(),
+                        );
+                    } else {
+                        bar.set_message(build_hint_message(
+                            snapshot.active_count,
+                            snapshot.pending_count,
+                        ));
+                    }
                 }
 
                 // Re-anchor hint to the bottom whenever new items appear.

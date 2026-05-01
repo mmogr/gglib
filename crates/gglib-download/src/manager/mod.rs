@@ -1508,9 +1508,32 @@ impl DownloadManagerPort for DownloadManagerImpl {
             }
         }
 
-        // Clear queue
+        // Clear queue (drops everything still pending).
         self.queue.write().await.clear();
         self.emit_queue_snapshot().await;
+
+        // Bounded drain: wait up to 5s for active downloads to actually
+        // finalize so we don't return while the Python helper subprocesses
+        // are still cleaning up. Without this the CLI would exit with
+        // partially-written files and no DB row — exactly the symptom
+        // tracked in #466.
+        let drain_deadline =
+            tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut poll = tokio::time::interval(std::time::Duration::from_millis(50));
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            poll.tick().await;
+            if self.active.lock().await.is_empty() {
+                break;
+            }
+            if tokio::time::Instant::now() >= drain_deadline {
+                tracing::warn!(
+                    "cancel_all drain deadline exceeded; returning while jobs still draining"
+                );
+                break;
+            }
+        }
+
         tracing::info!("Cancelled all downloads");
         Ok(())
     }
