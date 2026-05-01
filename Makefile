@@ -1,4 +1,4 @@
-.PHONY: help install build test clean clean-llama clean-all run-serve run-proxy check fmt lint doc build-gui build-tauri build-all check-deps check-rust llama-install-auto
+.PHONY: help install build test clean clean-llama clean-all run-serve run-proxy check fmt lint doc build-gui build-tauri build-all check-deps check-deps-verify check-rust llama-install-auto
 
 # Platform specific configuration
 UNAME_S := $(shell uname -s)
@@ -35,8 +35,18 @@ check-rust:
 		exit 1; \
 	fi
 
-# Comprehensive dependency check using Rust
+# Comprehensive dependency check.
+# `setup` only depends on the bootstrap (bash) check, which is fast,
+# pre-build, and authoritative for SPIR-V/Vulkan readiness. The Rust
+# `config check-deps` adds extra parity checks for the GUI bootstrap
+# path; run it explicitly via `make check-deps-verify` when you want
+# both reports.
 check-deps: check-deps-bootstrap
+
+# Run BOTH the bash bootstrap check and the Rust `config check-deps`
+# command. Useful for cross-validating that the two implementations
+# agree on which deps are missing. Not part of `make setup`.
+check-deps-verify: check-deps-bootstrap
 	@echo ""
 	@echo "Running detailed dependency verification..."
 	@$(CARGO) run -p gglib-cli --quiet -- config check-deps
@@ -296,11 +306,16 @@ build-tauri:
 
 # Full setup from scratch
 # Note: build-tauri builds both gglib-app and gglib-cli, install just copies the binary
+# llama-install-auto runs last and is REQUIRED to succeed when a GPU
+# runtime is detected: it would otherwise silently produce a CPU-only
+# llama-server, which is almost certainly not what the user wants if
+# they have a GPU. The script itself short-circuits to --cpu-only on
+# bare-CPU machines.
 setup: check-deps build-gui build-tauri install
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@$(CARGO) run -p gglib-cli -- config models-dir prompt
 	@echo "✓ Core setup complete!"
-	@$(MAKE) llama-install-auto || echo "⚠ llama.cpp installation failed (optional)"
+	@$(MAKE) llama-install-auto
 
 # Development workflow
 dev: fmt lint test
