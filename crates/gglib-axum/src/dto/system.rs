@@ -105,6 +105,8 @@ pub struct VulkanStatusDto {
     pub has_headers: bool,
     /// The `glslc` SPIR-V shader compiler is available.
     pub has_glslc: bool,
+    /// SPIR-V headers (`spirv/unified1/spirv.hpp`) are installed.
+    pub has_spirv_headers: bool,
     /// Whether all components needed for a Vulkan build are present.
     pub ready_for_build: bool,
     /// Components that are missing (empty if fully ready).
@@ -118,6 +120,7 @@ impl From<VulkanStatus> for VulkanStatusDto {
             has_loader: status.has_loader,
             has_headers: status.has_headers,
             has_glslc: status.has_glslc,
+            has_spirv_headers: status.has_spirv_headers,
             ready_for_build,
             missing: status.missing.into_iter().map(Into::into).collect(),
         }
@@ -142,6 +145,7 @@ impl From<MissingPackage> for MissingPackageDto {
             MissingPackage::VulkanLoader => "vulkanLoader",
             MissingPackage::VulkanHeaders => "vulkanHeaders",
             MissingPackage::Glslc => "glslc",
+            MissingPackage::SpirvHeaders => "spirvHeaders",
         };
         Self {
             id: id.to_string(),
@@ -178,6 +182,7 @@ mod vulkan_dto_tests {
             has_loader: true,
             has_headers: true,
             has_glslc: true,
+            has_spirv_headers: true,
             missing: vec![],
         };
         let dto: VulkanStatusDto = status.into();
@@ -191,6 +196,7 @@ mod vulkan_dto_tests {
             has_loader: true,
             has_headers: false,
             has_glslc: true,
+            has_spirv_headers: true,
             missing: vec![MissingPackage::VulkanHeaders],
         };
         let dto: VulkanStatusDto = status.into();
@@ -201,18 +207,41 @@ mod vulkan_dto_tests {
     }
 
     #[test]
+    fn test_vulkan_status_dto_from_missing_spirv_headers() {
+        let status = VulkanStatus {
+            has_loader: true,
+            has_headers: true,
+            has_glslc: true,
+            has_spirv_headers: false,
+            missing: vec![MissingPackage::SpirvHeaders],
+        };
+        let dto: VulkanStatusDto = status.into();
+        assert!(!dto.ready_for_build);
+        assert!(!dto.has_spirv_headers);
+        assert_eq!(dto.missing.len(), 1);
+        assert_eq!(dto.missing[0].id, "spirvHeaders");
+        assert!(!dto.missing[0].install_hints.is_empty());
+    }
+
+    #[test]
     fn test_vulkan_status_dto_camel_case() {
         let status = VulkanStatus {
             has_loader: true,
             has_headers: false,
             has_glslc: false,
-            missing: vec![MissingPackage::VulkanHeaders, MissingPackage::Glslc],
+            has_spirv_headers: false,
+            missing: vec![
+                MissingPackage::VulkanHeaders,
+                MissingPackage::Glslc,
+                MissingPackage::SpirvHeaders,
+            ],
         };
         let dto: VulkanStatusDto = status.into();
         let json = serde_json::to_value(&dto).unwrap();
         assert!(json.get("hasLoader").is_some());
         assert!(json.get("hasHeaders").is_some());
         assert!(json.get("hasGlslc").is_some());
+        assert!(json.get("hasSpirvHeaders").is_some());
         assert!(json.get("readyForBuild").is_some());
         assert!(json.get("missing").is_some());
     }

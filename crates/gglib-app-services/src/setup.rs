@@ -48,6 +48,7 @@ pub struct GpuInfoDto {
     pub cuda_version: Option<String>,
     pub vulkan_headers_installed: bool,
     pub vulkan_glslc_installed: bool,
+    pub vulkan_spirv_headers_installed: bool,
 }
 
 /// Models directory status.
@@ -117,6 +118,7 @@ impl SetupOps {
             cuda_version: gpu_info_raw.cuda_version,
             vulkan_headers_installed: gpu_info_raw.vulkan_headers,
             vulkan_glslc_installed: gpu_info_raw.vulkan_glslc,
+            vulkan_spirv_headers_installed: gpu_info_raw.vulkan_spirv_headers,
         };
 
         // Models directory

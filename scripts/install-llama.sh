@@ -45,6 +45,21 @@ detect_gpu_flags() {
                     return
                     ;;
             esac
+
+            # acceleration is null — strict-fail when a GPU runtime IS
+            # detected but build deps are incomplete. The user almost
+            # certainly wants to install the missing package and re-run,
+            # not get a slow CPU build silently.
+            local has_loader
+            has_loader=$(echo "$json" | grep -oE '"hasLoader"\s*:\s*true' | head -1)
+            if [ -n "$has_loader" ]; then
+                echo "" >&2
+                echo -e "\033[1;31m❌ Vulkan GPU detected but build dependencies are missing.\033[0m" >&2
+                echo "" >&2
+                echo "Run \`gglib config llama detect\` to see which packages to install," >&2
+                echo "then re-run \`make setup\`. Refusing to silently downgrade to a CPU build." >&2
+                exit 1
+            fi
         fi
     fi
 
@@ -57,8 +72,39 @@ detect_gpu_flags() {
         echo "🚀 CUDA $CUDA_VERSION detected: Installing with CUDA support" >&2
         echo "--cuda"
     elif command -v vulkaninfo >/dev/null 2>&1 && vulkaninfo --summary >/dev/null 2>&1; then
-        echo "🎮 Vulkan detected: Installing with Vulkan support" >&2
-        echo "--vulkan"
+        # Vulkan loader present — verify build deps inline before
+        # promising a Vulkan build. If anything is missing, hard-fail
+        # rather than silently degrading.
+        local missing_inline=()
+        command -v glslc >/dev/null 2>&1 || missing_inline+=("glslc")
+        if ! { [ -f /usr/include/vulkan/vulkan.h ] \
+            || [ -f /usr/local/include/vulkan/vulkan.h ] \
+            || (command -v pkg-config >/dev/null 2>&1 && pkg-config --exists vulkan 2>/dev/null); }; then
+            missing_inline+=("Vulkan headers (libvulkan-dev)")
+        fi
+        if ! { (command -v pkg-config >/dev/null 2>&1 && pkg-config --exists SPIRV-Headers 2>/dev/null) \
+            || [ -f /usr/include/spirv/unified1/spirv.hpp ] \
+            || [ -f /usr/local/include/spirv/unified1/spirv.hpp ] \
+            || [ -f /usr/include/spirv-headers/spirv.hpp ] \
+            || [ -f /usr/local/include/spirv-headers/spirv.hpp ] \
+            || { [ -n "${VULKAN_SDK:-}" ] && [ -f "$VULKAN_SDK/Include/spirv/unified1/spirv.hpp" ]; }; }; then
+            missing_inline+=("SPIR-V headers (spirv-headers)")
+        fi
+
+        if [ ${#missing_inline[@]} -eq 0 ]; then
+            echo "🎮 Vulkan detected: Installing with Vulkan support" >&2
+            echo "--vulkan"
+        else
+            echo "" >&2
+            echo -e "\033[1;31m❌ Vulkan GPU detected but build dependencies are missing:\033[0m" >&2
+            for m in "${missing_inline[@]}"; do
+                echo "    - $m" >&2
+            done
+            echo "" >&2
+            echo "Install the missing packages and re-run \`make setup\`." >&2
+            echo "Refusing to silently downgrade to a CPU build." >&2
+            exit 1
+        fi
     else
         echo "💻 No GPU acceleration detected: Installing CPU-only version" >&2
         echo "--cpu-only"

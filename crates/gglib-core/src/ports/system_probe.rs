@@ -115,6 +115,7 @@ mod tests {
                 has_vulkan: false,
                 vulkan_headers: false,
                 vulkan_glslc: false,
+                vulkan_spirv_headers: false,
             },
             memory: SystemMemoryInfo {
                 total_ram_bytes: 16 * 1024 * 1024 * 1024,

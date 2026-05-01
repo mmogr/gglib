@@ -256,10 +256,12 @@ impl SystemProbePort for DefaultSystemProbe {
                 }),
             );
 
-            // When the runtime is present, also show build-header status
-            // so users understand why a build might still fail.
+            // When the runtime is present, the build-time deps below
+            // are *required* — auto-detect picks Vulkan and the build
+            // would fail without them, so flag them as hard misses
+            // rather than silently degrading to a CPU build.
             deps.push(
-                Dependency::optional(
+                Dependency::required(
                     "Vulkan headers",
                     "Development headers required to build with -DGGML_VULKAN=ON",
                 )
@@ -274,7 +276,7 @@ impl SystemProbePort for DefaultSystemProbe {
             );
 
             deps.push(
-                Dependency::optional("glslc", "SPIR-V shader compiler required for Vulkan builds")
+                Dependency::required("glslc", "SPIR-V shader compiler required for Vulkan builds")
                     .with_hint("apt install glslc")
                     .with_status(if gpu_info.vulkan_glslc {
                         DependencyStatus::Present {
@@ -283,6 +285,21 @@ impl SystemProbePort for DefaultSystemProbe {
                     } else {
                         DependencyStatus::Missing
                     }),
+            );
+
+            deps.push(
+                Dependency::required(
+                    "SPIR-V headers",
+                    "spirv/unified1/spirv.hpp required to build with -DGGML_VULKAN=ON",
+                )
+                .with_hint("apt install spirv-headers")
+                .with_status(if gpu_info.vulkan_spirv_headers {
+                    DependencyStatus::Present {
+                        version: "available".to_string(),
+                    }
+                } else {
+                    DependencyStatus::Missing
+                }),
             );
         } else if !gpu_info.has_metal {
             // Only suggest Vulkan on non-macOS (macOS uses Metal)

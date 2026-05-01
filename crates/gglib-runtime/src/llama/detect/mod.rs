@@ -80,19 +80,23 @@ impl std::fmt::Display for Acceleration {
     }
 }
 
-/// Detect the optimal acceleration type for the current system.
+/// Detect the optimal acceleration type for the current system, strictly.
 ///
 /// Returns an error if no supported GPU acceleration (Metal, CUDA, or
-/// Vulkan) is found. CPU-only inference is not supported.
+/// Vulkan) is **fully buildable**. For Vulkan, that means the loader,
+/// headers, `glslc`, **and** SPIR-V headers are all present (see
+/// [`VulkanStatus::ready_for_build`]).
 ///
-/// Note: for Vulkan, this only checks for the runtime loader — use
-/// [`vulkan_status`] to verify build-readiness (headers + glslc).
+/// When a GPU runtime is detected but the build dependencies are
+/// incomplete (e.g. Vulkan loader present but SPIR-V headers missing),
+/// this returns `Err` so the caller can surface install hints — we do
+/// not silently degrade to CPU when the user has a usable GPU.
 pub fn detect_optimal_acceleration() -> Result<Acceleration> {
     if cfg!(target_os = "macos") && metal::has_metal_support() {
         Ok(Acceleration::Metal)
     } else if cuda::has_cuda_toolkit() {
         Ok(Acceleration::Cuda)
-    } else if vulkan_status().has_loader {
+    } else if vulkan_status().ready_for_build() {
         Ok(Acceleration::Vulkan)
     } else {
         bail!(

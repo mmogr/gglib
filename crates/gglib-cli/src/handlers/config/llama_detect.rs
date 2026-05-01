@@ -56,9 +56,14 @@ fn print_json(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanSta
         Err(_) => (None, false),
     };
 
-    let vulkan_status = match accel {
-        Ok(Acceleration::Vulkan) => Some(serde_json::to_value(vk).unwrap()),
-        _ => None,
+    // Emit the Vulkan status block whenever the loader is detected,
+    // even if the strict detector rejected Vulkan because of missing
+    // build deps. This keeps `check-deps.sh` and the GUI able to
+    // surface the *specific* missing component (e.g. SPIR-V headers).
+    let vulkan_status = if vk.has_loader {
+        Some(serde_json::to_value(vk).unwrap())
+    } else {
+        None
     };
 
     let output = serde_json::json!({
@@ -83,34 +88,42 @@ fn print_human(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanSt
         Ok(a) => {
             println!("  Detected: {}", a.display_name());
             println!();
-
-            if *a == Acceleration::Vulkan {
-                println!("Vulkan Build Readiness");
-                println!("----------------------");
-                let check = |ok: bool| if ok { "✓" } else { "✗" };
-                println!("  Vulkan runtime (loader): {}", check(vk.has_loader));
-                println!("  Vulkan dev headers:      {}", check(vk.has_headers));
-                println!("  SPIR-V compiler (glslc): {}", check(vk.has_glslc));
-                println!();
-
-                if vk.ready_for_build() {
-                    println!("  ✓ Ready to build with -DGGML_VULKAN=ON");
-                } else {
-                    println!("  ✗ Not ready — install missing components:");
-                    println!();
-                    for pkg in &vk.missing {
-                        println!("  {}:", pkg.label());
-                        for (distro, cmd) in pkg.install_hints() {
-                            println!("    {distro:16} {cmd}");
-                        }
-                    }
-                }
-            } else {
+            if *a != Acceleration::Vulkan {
                 println!("  ✓ Ready to build with {}", a.display_name());
             }
         }
         Err(e) => {
-            println!("  ✗ {e}");
+            println!("  ✗ No fully-buildable GPU acceleration detected.");
+            println!("    ({e})");
+            println!();
+        }
+    }
+
+    // Always surface the Vulkan probe when the loader is present, even
+    // if the strict detector rejected Vulkan because of a missing
+    // build-time dep like SPIR-V headers. Without this the user only
+    // sees "no GPU" and not *what* is missing.
+    if vk.has_loader {
+        println!("Vulkan Build Readiness");
+        println!("----------------------");
+        let check = |ok: bool| if ok { "✓" } else { "✗" };
+        println!("  Vulkan runtime (loader): {}", check(vk.has_loader));
+        println!("  Vulkan dev headers:      {}", check(vk.has_headers));
+        println!("  SPIR-V compiler (glslc): {}", check(vk.has_glslc));
+        println!("  SPIR-V headers:          {}", check(vk.has_spirv_headers));
+        println!();
+
+        if vk.ready_for_build() {
+            println!("  ✓ Ready to build with -DGGML_VULKAN=ON");
+        } else {
+            println!("  ✗ Not ready — install missing components:");
+            println!();
+            for pkg in &vk.missing {
+                println!("  {}:", pkg.label());
+                for (distro, cmd) in pkg.install_hints() {
+                    println!("    {distro:16} {cmd}");
+                }
+            }
         }
     }
 }

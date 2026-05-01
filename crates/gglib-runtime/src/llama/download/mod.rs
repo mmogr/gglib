@@ -958,6 +958,7 @@ mod tests {
             has_vulkan: false,
             vulkan_headers: false,
             vulkan_glslc: false,
+            vulkan_spirv_headers: false,
         };
         let result = windows_availability_for_gpu(&gpu);
         match result {
@@ -991,6 +992,7 @@ mod tests {
             has_vulkan: true,
             vulkan_headers: false,
             vulkan_glslc: false,
+            vulkan_spirv_headers: false,
         };
         let result = windows_availability_for_gpu(&gpu);
         match result {
@@ -1025,6 +1027,7 @@ mod tests {
             has_vulkan: true,
             vulkan_headers: false,
             vulkan_glslc: false,
+            vulkan_spirv_headers: false,
         };
         let result = windows_availability_for_gpu(&gpu);
         match result {
@@ -1051,6 +1054,7 @@ mod tests {
             has_vulkan: false,
             vulkan_headers: false,
             vulkan_glslc: false,
+            vulkan_spirv_headers: false,
         };
         let result = windows_availability_for_gpu(&gpu);
         assert!(
