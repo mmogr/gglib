@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use gglib_core::paths::{gglib_data_dir, is_prebuilt_binary, llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, BuildPhase, PrebuiltAvailability, check_dependencies,
-    check_disk_space, check_prebuilt_availability, detect_optimal_acceleration_with_diagnostics,
+    check_disk_space, check_prebuilt_availability, detect_optimal_acceleration,
     download_prebuilt_binaries, run_llama_source_build, vulkan_status,
 };
 
@@ -85,21 +85,20 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     check_dependencies()?;
     println!();
 
-    // Step 2: Determine acceleration. The flags that the user passed
-    // (--cuda / --metal / --vulkan) imply an explicit opt-in: any
-    // missing build dependency must hard-fail with actionable hints.
-    // Auto-detect (no flag), by contrast, degrades gracefully to a
-    // CPU-only build with a clear warning so a missing optional
-    // package doesn't abort `make setup`.
-    let explicit_gpu = cuda || metal || vulkan;
-    let acceleration = determine_acceleration(cuda, metal, vulkan, explicit_gpu)?;
+    // Step 2: Determine acceleration. Whether the user passed an
+    // explicit GPU flag (--cuda / --metal / --vulkan) or relied on
+    // auto-detect, missing build dependencies hard-fail with
+    // actionable hints. We do **not** silently degrade to a CPU
+    // build when a GPU runtime is detected — the user almost
+    // certainly wants to fix the missing package and re-run.
+    let acceleration = determine_acceleration(cuda, metal, vulkan)?;
     println!("Selected acceleration: {}", acceleration.display_name());
 
     // Step 2b: Vulkan build-readiness pre-flight.
-    // Only reached when Vulkan was explicitly requested -- the
-    // auto-detect path now disqualifies Vulkan inside
-    // `determine_acceleration` and falls back to CPU before reaching
-    // here.
+    // Reached for both explicit `--vulkan` and auto-detected Vulkan;
+    // the strict detector already rejects an unbuildable Vulkan, so
+    // this is mostly defence-in-depth (catches the `--vulkan` case
+    // where the user opts in despite missing deps).
     if acceleration == Acceleration::Vulkan {
         let vk = vulkan_status();
         if !vk.ready_for_build() {
@@ -189,12 +188,7 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     Ok(())
 }
 
-fn determine_acceleration(
-    cuda: bool,
-    metal: bool,
-    vulkan: bool,
-    explicit_gpu: bool,
-) -> Result<Acceleration> {
+fn determine_acceleration(cuda: bool, metal: bool, vulkan: bool) -> Result<Acceleration> {
     let flags_set = [cuda, metal, vulkan].iter().filter(|&&x| x).count();
 
     if flags_set > 1 {
@@ -212,34 +206,15 @@ fn determine_acceleration(
     } else if vulkan {
         Ok(Acceleration::Vulkan)
     } else {
-        // Auto-detect path: degrade to CPU when no GPU is fully
-        // buildable. The diagnostic warnings explain *why* (e.g.
-        // 'SPIR-V headers (spirv-headers)') so the downgrade isn't
-        // silent.
-        debug_assert!(!explicit_gpu, "explicit GPU flag should bypass auto-detect");
-        let _ = explicit_gpu;
-        let (accel, warnings) = detect_optimal_acceleration_with_diagnostics();
-        if !warnings.is_empty() {
-            println!();
-            println!(
-                "\x1b[1;33m⚠  GPU acceleration unavailable — falling back to CPU build\x1b[0m"
-            );
-            println!();
-            for msg in &warnings {
-                for line in msg.lines() {
-                    println!("  {line}");
-                }
-                println!();
-            }
-            println!(
-                "\x1b[1;33mTip:\x1b[0m re-run \x1b[1mgglib config llama install --vulkan\x1b[0m\n\
-                 after installing the components above to build with GPU\n\
-                 acceleration. Or pass \x1b[1m--cuda\x1b[0m / \x1b[1m--metal\x1b[0m for a\n\
-                 different backend."
-            );
-            println!();
-        }
-        Ok(accel)
+        // Auto-detect: strict. If a GPU runtime is detected but
+        // the build deps are incomplete, the strict detector
+        // returns Err and we propagate it — a missing
+        // `spirv-headers` should be surfaced, not silently
+        // swapped for a slow CPU build. Step 2b above (when the
+        // user passes --vulkan) and `check_dependencies()` in
+        // step 1 already cover the explicit-opt-in case with
+        // tailored install hints.
+        detect_optimal_acceleration()
     }
 }
 

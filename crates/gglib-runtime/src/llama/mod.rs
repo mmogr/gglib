@@ -73,8 +73,7 @@ pub use prompt::CliPrompt;
 
 // Core functionality
 pub use detect::{
-    Acceleration, MissingPackage, VulkanStatus, detect_optimal_acceleration,
-    detect_optimal_acceleration_with_diagnostics, vulkan_status,
+    Acceleration, MissingPackage, VulkanStatus, detect_optimal_acceleration, vulkan_status,
 };
 pub use download::check_llama_installed;
 #[cfg(feature = "cli")]
