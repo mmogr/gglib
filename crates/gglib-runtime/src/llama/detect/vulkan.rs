@@ -86,6 +86,13 @@ pub enum MissingPackage {
     VulkanHeaders,
     /// SPIR-V shader compiler (`glslc`).
     Glslc,
+    /// SPIR-V headers (`spirv/unified1/spirv.hpp`).
+    ///
+    /// llama.cpp's `ggml-vulkan.cpp` includes this header directly. It is
+    /// shipped as a separate package on every Linux distribution
+    /// (independent of `vulkan-headers`) and is bundled inside the LunarG
+    /// Vulkan SDK on Windows.
+    SpirvHeaders,
 }
 
 impl MissingPackage {
@@ -95,6 +102,7 @@ impl MissingPackage {
             MissingPackage::VulkanLoader => "Vulkan loader (libvulkan)",
             MissingPackage::VulkanHeaders => "Vulkan development headers",
             MissingPackage::Glslc => "SPIR-V shader compiler (glslc)",
+            MissingPackage::SpirvHeaders => "SPIR-V headers (spirv-headers)",
         }
     }
 
@@ -118,6 +126,15 @@ impl MissingPackage {
                 ("Ubuntu/Debian", "sudo apt install glslc"),
                 ("Fedora", "sudo dnf install glslc"),
             ],
+            MissingPackage::SpirvHeaders => vec![
+                ("Arch", "sudo pacman -S spirv-headers"),
+                ("Ubuntu/Debian", "sudo apt install spirv-headers"),
+                ("Fedora", "sudo dnf install spirv-headers-devel"),
+                (
+                    "Windows",
+                    "Install the LunarG Vulkan SDK from https://vulkan.lunarg.com/sdk/home (bundles SPIRV-Headers)",
+                ),
+            ],
         }
     }
 }
@@ -135,33 +152,40 @@ pub struct VulkanStatus {
     pub has_headers: bool,
     /// The `glslc` SPIR-V shader compiler is available.
     pub has_glslc: bool,
+    /// SPIR-V headers (`spirv/unified1/spirv.hpp`) are installed.
+    ///
+    /// Required by llama.cpp's `ggml-vulkan.cpp` at build time and ships
+    /// as a separate package from the Vulkan loader/headers on Linux.
+    pub has_spirv_headers: bool,
     /// Components that are missing (empty if fully ready).
     pub missing: Vec<MissingPackage>,
 }
 
 impl VulkanStatus {
-    /// Returns `true` if all three components needed for a
-    /// `-DGGML_VULKAN=ON` build are present.
+    /// Returns `true` if all components needed for a `-DGGML_VULKAN=ON`
+    /// build are present.
     pub fn ready_for_build(&self) -> bool {
-        self.has_loader && self.has_headers && self.has_glslc
+        self.has_loader && self.has_headers && self.has_glslc && self.has_spirv_headers
     }
 }
 
 /// Probe the system for Vulkan build-readiness.
 ///
-/// Checks for the Vulkan loader, development headers, and the `glslc`
-/// shader compiler. macOS always returns a fully-absent status because
-/// it uses Metal instead of Vulkan.
+/// Checks for the Vulkan loader, development headers, SPIR-V headers,
+/// and the `glslc` shader compiler. macOS always returns a fully-absent
+/// status because it uses Metal instead of Vulkan.
 pub fn vulkan_status() -> VulkanStatus {
     if cfg!(target_os = "macos") {
         return VulkanStatus {
             has_loader: false,
             has_headers: false,
             has_glslc: false,
+            has_spirv_headers: false,
             missing: vec![
                 MissingPackage::VulkanLoader,
                 MissingPackage::VulkanHeaders,
                 MissingPackage::Glslc,
+                MissingPackage::SpirvHeaders,
             ],
         };
     }
@@ -169,6 +193,7 @@ pub fn vulkan_status() -> VulkanStatus {
     let has_loader = check_vulkan_loader();
     let has_headers = check_vulkan_headers();
     let has_glslc = command_succeeds("glslc", &["--version"]);
+    let has_spirv_headers = check_spirv_headers();
 
     let mut missing = Vec::new();
     if !has_loader {
@@ -180,11 +205,15 @@ pub fn vulkan_status() -> VulkanStatus {
     if !has_glslc {
         missing.push(MissingPackage::Glslc);
     }
+    if !has_spirv_headers {
+        missing.push(MissingPackage::SpirvHeaders);
+    }
 
     VulkanStatus {
         has_loader,
         has_headers,
         has_glslc,
+        has_spirv_headers,
         missing,
     }
 }
@@ -274,6 +303,55 @@ fn check_vulkan_headers() -> bool {
     false
 }
 
+/// Check whether SPIR-V headers (`spirv/unified1/spirv.hpp`) are installed.
+///
+/// llama.cpp's `ggml-vulkan.cpp` `#include`s `<spirv/unified1/spirv.hpp>`
+/// (with `<spirv-headers/spirv.hpp>` as an `__has_include` fallback).
+/// This is provided by the **separate** SPIRV-Headers package — distinct
+/// from `vulkan-headers` on every Linux distribution. On Windows it ships
+/// inside the LunarG Vulkan SDK.
+///
+/// Probe order (uniform across platforms):
+/// 1. `pkg-config --variable=includedir SPIRV-Headers`.
+/// 2. Hardcoded Linux paths (`/usr/include`, `/usr/local/include`).
+/// 3. Hardcoded Windows path under `%VULKAN_SDK%/Include`.
+fn check_spirv_headers() -> bool {
+    // Both header layouts that ggml-vulkan.cpp accepts via __has_include.
+    const REL_PRIMARY: &str = "spirv/unified1/spirv.hpp";
+    const REL_ALTERNATE: &str = "spirv-headers/spirv.hpp";
+
+    // 1. pkg-config first (works on NixOS, Homebrew, custom prefixes).
+    if let Some(includedir) = pkg_config_includedir("SPIRV-Headers")
+        && (includedir.join(REL_PRIMARY).exists() || includedir.join(REL_ALTERNATE).exists())
+    {
+        return true;
+    }
+
+    // 2. Hardcoded fallback paths per OS.
+    #[cfg(target_os = "linux")]
+    {
+        let roots: &[&Path] = &[
+            Path::new("/usr/include"),
+            Path::new("/usr/local/include"),
+        ];
+        if header_exists_in(roots, REL_PRIMARY) || header_exists_in(roots, REL_ALTERNATE) {
+            return true;
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(sdk) = vulkan_sdk_dir() {
+            let include = sdk.join("Include");
+            if include.join(REL_PRIMARY).exists() || include.join(REL_ALTERNATE).exists() {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +391,7 @@ mod tests {
             has_loader: true,
             has_headers: true,
             has_glslc: true,
+            has_spirv_headers: true,
             missing: vec![],
         };
         assert!(status.ready_for_build());
@@ -324,6 +403,7 @@ mod tests {
             has_loader: true,
             has_headers: false,
             has_glslc: true,
+            has_spirv_headers: true,
             missing: vec![MissingPackage::VulkanHeaders],
         };
         assert!(!status.ready_for_build());
@@ -335,7 +415,20 @@ mod tests {
             has_loader: true,
             has_headers: true,
             has_glslc: false,
+            has_spirv_headers: true,
             missing: vec![MissingPackage::Glslc],
+        };
+        assert!(!status.ready_for_build());
+    }
+
+    #[test]
+    fn test_vulkan_status_not_ready_without_spirv_headers() {
+        let status = VulkanStatus {
+            has_loader: true,
+            has_headers: true,
+            has_glslc: true,
+            has_spirv_headers: false,
+            missing: vec![MissingPackage::SpirvHeaders],
         };
         assert!(!status.ready_for_build());
     }
@@ -345,12 +438,31 @@ mod tests {
         assert!(!MissingPackage::VulkanLoader.label().is_empty());
         assert!(!MissingPackage::VulkanHeaders.label().is_empty());
         assert!(!MissingPackage::Glslc.label().is_empty());
+        assert!(!MissingPackage::SpirvHeaders.label().is_empty());
     }
 
     #[test]
     fn test_missing_package_install_hints_non_empty() {
+        assert!(!MissingPackage::VulkanLoader.install_hints().is_empty());
         assert!(!MissingPackage::VulkanHeaders.install_hints().is_empty());
         assert!(!MissingPackage::Glslc.install_hints().is_empty());
+        assert!(!MissingPackage::SpirvHeaders.install_hints().is_empty());
+    }
+
+    #[test]
+    fn test_spirv_headers_install_hints_mention_lunarg_on_windows() {
+        // The Windows hint must steer users to the LunarG SDK installer
+        // (no winget/choco package exists for SPIRV-Headers proper).
+        let hints = MissingPackage::SpirvHeaders.install_hints();
+        let windows_hint = hints
+            .iter()
+            .find(|(label, _)| *label == "Windows")
+            .expect("Windows hint missing");
+        assert!(
+            windows_hint.1.to_lowercase().contains("lunarg"),
+            "Windows SPIR-V hint must reference LunarG SDK, got: {}",
+            windows_hint.1
+        );
     }
 
     #[test]
@@ -359,12 +471,18 @@ mod tests {
             has_loader: true,
             has_headers: false,
             has_glslc: true,
-            missing: vec![MissingPackage::VulkanHeaders],
+            has_spirv_headers: false,
+            missing: vec![
+                MissingPackage::VulkanHeaders,
+                MissingPackage::SpirvHeaders,
+            ],
         };
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains("hasLoader"));
         assert!(json.contains("hasHeaders"));
         assert!(json.contains("hasGlslc"));
+        assert!(json.contains("hasSpirvHeaders"));
         assert!(json.contains("vulkanHeaders"));
+        assert!(json.contains("spirvHeaders"));
     }
 }
