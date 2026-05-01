@@ -61,10 +61,37 @@ pub fn print_gpu_status(probe: &dyn SystemProbePort) {
         println!("  {}✓ GPU acceleration available{}", SUCCESS, RESET);
     } else if gpu_info.has_vulkan {
         println!("  {}✓ Vulkan GPU detected{}", SUCCESS, RESET);
-        println!(
-            "  {}✓ GPU acceleration available via Vulkan{}",
-            SUCCESS, RESET
-        );
+        if gpu_info.vulkan_headers && gpu_info.vulkan_glslc && gpu_info.vulkan_spirv_headers {
+            println!(
+                "  {}✓ GPU acceleration available via Vulkan{}",
+                SUCCESS, RESET
+            );
+        } else {
+            let mut missing: Vec<&str> = Vec::new();
+            if !gpu_info.vulkan_headers {
+                missing.push("Vulkan dev headers");
+            }
+            if !gpu_info.vulkan_glslc {
+                missing.push("glslc");
+            }
+            if !gpu_info.vulkan_spirv_headers {
+                missing.push("SPIR-V headers");
+            }
+            println!(
+                "  {}✗ Vulkan loader detected, but build dependencies are missing: {}{}",
+                DANGER,
+                missing.join(", "),
+                RESET
+            );
+            println!(
+                "  {}  Install the missing components above to enable GPU acceleration.{}",
+                DANGER, RESET
+            );
+            println!(
+                "  {}  Run `gglib config llama detect` for per-distro install hints.{}",
+                DANGER, RESET
+            );
+        }
     } else {
         println!(
             "  {}✗ No supported GPU detected (Metal/CUDA/Vulkan required){}",

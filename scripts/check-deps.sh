@@ -616,7 +616,7 @@ print_install_instructions() {
     # gracefully degrades to a CPU build, but Vulkan acceleration
     # requires it.
     if [ "$need_spirv_headers" = true ]; then
-        echo -e "${BOLD}${step}. Install SPIR-V headers (required for Vulkan acceleration):${RESET}"
+        echo -e "${BOLD}${step}. Install SPIR-V headers (required — Vulkan GPU detected, build deps missing):${RESET}"
         case "$os" in
             linux)
                 case "$distro" in
@@ -881,16 +881,17 @@ main() {
                     printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "Install: glslc or shaderc (via package manager)"
                     MISSING_REQUIRED+=("glslc")
                 fi
-                # SPIR-V headers are reported as OPTIONAL: gglib's
-                # auto-detect install path now degrades gracefully to a
-                # CPU build when they're missing, so this row should
-                # never block `make setup`. It still prints a clear
-                # warning so the user knows GPU acceleration is off.
+                # SPIR-V headers are REQUIRED when the Vulkan loader
+                # is present: gglib's auto-detect now hard-fails the
+                # build instead of silently degrading to CPU, so the
+                # user gets a chance to install the package and
+                # actually use their GPU.
                 if [ -n "$has_spirv_headers" ]; then
                     printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "✓" "installed" "spirv/unified1/spirv.hpp (Vulkan build)"
+                    PRESENT_REQUIRED+=("SPIR-V headers")
                 else
-                    printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "!" "MISSING" "Vulkan disabled — CPU fallback build (install for GPU)"
-                    MISSING_OPTIONAL+=("SPIR-V headers")
+                    printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "✗" "MISSING" "Required for Vulkan GPU build (loader detected)"
+                    MISSING_REQUIRED+=("SPIR-V headers")
                 fi
             fi
         else
@@ -918,9 +919,10 @@ main() {
             fi
             if [ "$spirv_found" = true ]; then
                 printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "✓" "installed" "spirv/unified1/spirv.hpp (Vulkan build)"
+                PRESENT_REQUIRED+=("SPIR-V headers")
             else
-                printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "!" "MISSING" "Vulkan disabled — CPU fallback build (install for GPU)"
-                MISSING_OPTIONAL+=("SPIR-V headers")
+                printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "✗" "MISSING" "Required for Vulkan GPU build (loader detected)"
+                MISSING_REQUIRED+=("SPIR-V headers")
             fi
         fi
     elif [ "$os" = "linux" ] || [ "$os" = "windows" ]; then
