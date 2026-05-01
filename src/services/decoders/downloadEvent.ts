@@ -26,6 +26,7 @@ const KNOWN_DOWNLOAD_EVENT_TYPES = new Set([
   'download_completed',
   'download_failed',
   'download_cancelled',
+  'download_status_changed',
   'queue_run_complete',
 ]);
 

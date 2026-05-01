@@ -19,7 +19,7 @@ function snapshotIsBusy(items: DownloadSummary[]): boolean {
   return items.some(i => i.status === 'queued' || i.status === 'downloading');
 }
 
-export type DownloadProgressStatus = 'started' | 'progress' | 'completed' | 'error';
+export type DownloadProgressStatus = 'started' | 'progress' | 'finalizing' | 'registering' | 'completed' | 'error';
 
 export interface DownloadProgressView {
   status: DownloadProgressStatus;
@@ -159,6 +159,18 @@ function eventToProgress(event: DownloadEvent): DownloadProgressView | null {
       return { status: 'error', id: event.id, message: event.error };
     case 'download_cancelled':
       return { status: 'error', id: event.id, message: 'Cancelled' };
+    case 'download_status_changed':
+      // Non-terminal lifecycle transitions (Finalizing, Registering) emitted
+      // after bytes are on disk but before the model row is written. Treated
+      // as progress so the UI keeps the download card mounted with a clear
+      // status label instead of looking frozen at 100%.
+      if (event.status === 'finalizing') {
+        return { status: 'finalizing', id: event.id, message: 'Finalizing…' };
+      }
+      if (event.status === 'registering') {
+        return { status: 'registering', id: event.id, message: 'Registering…' };
+      }
+      return null;
     default:
       return null;
   }

@@ -132,6 +132,14 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
   const percentage = progress?.percentage ?? undefined;
   const shard = progress?.shard;
   const isSharded = !!(shard && shard.total > 1);
+  // Lifecycle label: surfaces Finalizing/Registering between bytes-on-disk
+  // and the terminal Completed event so the UI doesn't look frozen at 100%.
+  const phaseLabel = (() => {
+    if (progress?.status === 'finalizing') return 'Finalizing';
+    if (progress?.status === 'registering') return 'Registering';
+    if (isSharded && shard) return `Downloading shard ${shard.index + 1}/${shard.total}`;
+    return 'Downloading';
+  })();
 
   return (
     <div className="bg-background border-b border-border rounded-none p-base mb-0">
@@ -142,7 +150,7 @@ const GlobalDownloadStatus: FC<GlobalDownloadStatusProps> = ({
               <Icon icon={Download} size={16} />
             </span>
             <span className="text-sm font-medium text-text">
-              {isSharded && shard ? `Downloading shard ${shard.index + 1}/${shard.total}` : 'Downloading'}
+              {phaseLabel}
             </span>
             {queueCount > 0 && (
               <div className="relative">

@@ -810,6 +810,20 @@ impl DownloadManagerImpl {
             .first()
             .expect("GroupComplete should have at least one path");
 
+        // Canonical event ID matches the one used for progress / completion.
+        let event_id = format!(
+            "{}:{}",
+            complete.metadata.repo_id, complete.metadata.quantization
+        );
+
+        // Phase 1 of finalization: bytes are on disk, we are about to gather
+        // metadata (HF tags etc.). Emit a status transition so the UI shows
+        // "Finalizing" instead of looking frozen at 100%.
+        self.event_emitter.emit(DownloadEvent::DownloadStatusChanged {
+            id: event_id.clone(),
+            status: gglib_core::download::DownloadStatus::Finalizing,
+        });
+
         // Fetch HF model info to get tags (soft fail if unavailable)
         let hf_tags = self
             .hf_client
@@ -836,6 +850,12 @@ impl DownloadManagerImpl {
             hf_file_entries: complete.metadata.file_entries,
         };
 
+        // Phase 2 of finalization: writing the model row to the database.
+        self.event_emitter.emit(DownloadEvent::DownloadStatusChanged {
+            id: event_id.clone(),
+            status: gglib_core::download::DownloadStatus::Registering,
+        });
+
         // Register model (soft-fail)
         match self.model_registrar.register_model(&completed).await {
             Ok(model) => {
@@ -848,10 +868,7 @@ impl DownloadManagerImpl {
 
                 // Emit completion event
                 self.event_emitter.emit(DownloadEvent::DownloadCompleted {
-                    id: format!(
-                        "{}:{}",
-                        complete.metadata.repo_id, complete.metadata.quantization
-                    ),
+                    id: event_id,
                     message: Some(format!(
                         "Downloaded {} to {}",
                         if completed.is_sharded {
@@ -869,6 +886,12 @@ impl DownloadManagerImpl {
                     path = %primary_path.display(),
                     "Failed to register model - files downloaded but won't appear in library"
                 );
+                // Surface the failure as a terminal event so the UI doesn't
+                // sit on "Registering" forever when registration soft-fails.
+                self.event_emitter.emit(DownloadEvent::DownloadFailed {
+                    id: event_id,
+                    error: format!("Registration failed: {e}"),
+                });
             }
         }
     }
