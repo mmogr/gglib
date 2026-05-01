@@ -284,6 +284,21 @@ impl SystemProbePort for DefaultSystemProbe {
                         DependencyStatus::Missing
                     }),
             );
+
+            deps.push(
+                Dependency::optional(
+                    "SPIR-V headers",
+                    "spirv/unified1/spirv.hpp required to build with -DGGML_VULKAN=ON",
+                )
+                .with_hint("apt install spirv-headers")
+                .with_status(if gpu_info.vulkan_spirv_headers {
+                    DependencyStatus::Present {
+                        version: "available".to_string(),
+                    }
+                } else {
+                    DependencyStatus::Missing
+                }),
+            );
         } else if !gpu_info.has_metal {
             // Only suggest Vulkan on non-macOS (macOS uses Metal)
             #[cfg(not(target_os = "macos"))]

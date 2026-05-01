@@ -82,6 +82,12 @@ pub struct GpuInfo {
     pub vulkan_headers: bool,
     /// SPIR-V shader compiler (`glslc`) available.
     pub vulkan_glslc: bool,
+    /// SPIR-V headers installed (`spirv/unified1/spirv.hpp`).
+    ///
+    /// Required by llama.cpp's `ggml-vulkan.cpp` at build time. Ships
+    /// as a separate package on Linux (e.g. `spirv-headers`) and is
+    /// bundled in the LunarG Vulkan SDK on Windows.
+    pub vulkan_spirv_headers: bool,
 }
 
 /// System memory information for model fit calculations.

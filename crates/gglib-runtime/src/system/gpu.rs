@@ -24,6 +24,7 @@ pub fn detect_gpu_info() -> GpuInfo {
         has_vulkan: vk.has_loader,
         vulkan_headers: vk.has_headers,
         vulkan_glslc: vk.has_glslc,
+        vulkan_spirv_headers: vk.has_spirv_headers,
     }
 }
 
