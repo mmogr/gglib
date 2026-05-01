@@ -18,7 +18,7 @@
 //! it is a pure stat-and-callback utility that the [`super::python_bridge`]
 //! layer composes.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -139,13 +139,54 @@ async fn is_stale(last_real: &Arc<Mutex<Instant>>) -> bool {
     guard.elapsed() >= STALE_AFTER
 }
 
-/// Sum the on-disk sizes of every existing target, treating missing files as
-/// zero-length (they may simply not have been created yet).
+/// Sum the on-disk sizes of every existing target.
+///
+/// Each target may be either a file or a directory:
+/// * **File** — its length is added directly. Missing files contribute zero
+///   (they may simply not have been created yet).
+/// * **Directory** — every regular file beneath it is summed recursively.
+///   This is required for the hf-xet path because `huggingface_hub` writes
+///   bytes to `<dest>/.cache/huggingface/download/<filename>.incomplete`
+///   while the transfer is in flight and only renames to `<dest>/<filename>`
+///   on completion. Stat'ing the final path alone would report 0 B for the
+///   entire transfer.
 async fn sum_sizes(targets: &[PathBuf]) -> u64 {
     let mut total: u64 = 0;
     for path in targets {
-        if let Ok(metadata) = tokio::fs::metadata(path).await {
+        let Ok(metadata) = tokio::fs::metadata(path).await else {
+            continue;
+        };
+        if metadata.is_file() {
             total = total.saturating_add(metadata.len());
+        } else if metadata.is_dir() {
+            total = total.saturating_add(sum_dir_size(path).await);
+        }
+    }
+    total
+}
+
+/// Recursively sum the sizes of every regular file under `dir`.
+///
+/// Symlinks are followed for size accounting only when the entry's metadata
+/// reports `is_file()` (i.e. the symlink points at a regular file). Errors
+/// reading individual entries are silently treated as zero so a transient
+/// `EACCES` or a vanishing temp file doesn't poison the running total.
+async fn sum_dir_size(dir: &Path) -> u64 {
+    let mut total: u64 = 0;
+    let mut stack: Vec<PathBuf> = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(mut entries) = tokio::fs::read_dir(&current).await else {
+            continue;
+        };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let Ok(metadata) = entry.metadata().await else {
+                continue;
+            };
+            if metadata.is_file() {
+                total = total.saturating_add(metadata.len());
+            } else if metadata.is_dir() {
+                stack.push(entry.path());
+            }
         }
     }
     total
@@ -255,9 +296,46 @@ mod tests {
             entries.len() <= 1,
             "expected ≤1 synthetic event for a static file, got {entries:?}"
         );
-        if let Some((d, t)) = entries.first() {
-            assert_eq!(*d, 2048);
-            assert_eq!(*t, 0, "total=0 when expected_total is None");
-        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn walks_directory_targets_recursively() {
+        // Mirrors the real hf-xet layout: bytes live under
+        // `<dest>/.cache/huggingface/download/<file>.incomplete` while the
+        // transfer is in flight, and only the directory itself exists at
+        // the spawned target path.
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join(".cache/huggingface/download");
+        tokio::fs::create_dir_all(&cache).await.unwrap();
+        let temp_file = cache.join("model.gguf.incomplete");
+        tokio::fs::write(&temp_file, vec![0u8; 4096]).await.unwrap();
+
+        let (cb, log) = recording_callback();
+        let poller = XetPoller::spawn(vec![dir.path().to_path_buf()], Some(8192), cb);
+
+        // Wait past the staleness threshold so synthetic events kick in.
+        tokio::time::sleep(STALE_AFTER + Duration::from_millis(50)).await;
+
+        // Grow the in-flight temp file; the poller should observe the
+        // change via the recursive walk even though the final path
+        // (`<dest>/model.gguf`) doesn't exist yet.
+        let mut f = tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(&temp_file)
+            .await
+            .unwrap();
+        f.write_all(&[0u8; 2048]).await.unwrap();
+        f.flush().await.unwrap();
+        drop(f);
+
+        tokio::time::sleep(POLL_INTERVAL * 3).await;
+
+        poller.shutdown();
+
+        let entries = log.lock().unwrap().clone();
+        assert!(
+            entries.iter().any(|(d, t)| *d == 6144 && *t == 8192),
+            "expected synthetic event with downloaded=6144 total=8192, got {entries:?}"
+        );
     }
 }

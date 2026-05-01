@@ -8,7 +8,7 @@
 //! The orchestrator spawns a Python subprocess, streams its output,
 //! and dispatches progress events to callbacks or CLI display.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use gglib_core::utils::process::async_cmd;
@@ -204,12 +204,15 @@ async fn run_download_process(
     // Spawn the xet stat-fallback poller. It only emits synthetic progress
     // events when the Python helper goes silent (typical of the hf-xet fast
     // path); while real `tqdm` events are flowing it stays dormant.
+    //
+    // We hand the poller the destination *directory* (not the per-file
+    // final paths) because `huggingface_hub` streams bytes into a
+    // `<dest>/.cache/huggingface/download/<filename>.incomplete` temp file
+    // while the transfer is in flight and only renames to the final path on
+    // completion. The poller walks the directory recursively so the
+    // in-progress bytes are accounted for.
     let xet_poller = request.progress.as_ref().map(|cb| {
-        let targets: Vec<PathBuf> = request
-            .files
-            .iter()
-            .map(|f| request.destination.join(f))
-            .collect();
+        let targets = vec![request.destination.to_path_buf()];
         XetPoller::spawn(targets, request.expected_total, Arc::clone(cb))
     });
 
