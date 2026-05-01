@@ -316,6 +316,7 @@ print_install_instructions() {
     local need_cuda=false
     local need_vulkan_headers=false
     local need_glslc=false
+    local need_spirv_headers=false
     local cuda_not_in_path=false
     
     # Check if CUDA is installed but not in PATH (Linux/Windows only)
@@ -334,7 +335,7 @@ print_install_instructions() {
         fi
     fi
     
-    for dep in "${MISSING_REQUIRED[@]}"; do
+    for dep in "${MISSING_REQUIRED[@]}" "${MISSING_OPTIONAL[@]}"; do
         case "$dep" in
             cargo|rustc) need_rust=true ;;
             node|npm) need_node=true ;;
@@ -343,6 +344,7 @@ print_install_instructions() {
             CUDA|GPU) need_cuda=true ;;
             "Vulkan headers") need_vulkan_headers=true ;;
             glslc) need_glslc=true ;;
+            "SPIR-V headers") need_spirv_headers=true ;;
         esac
     done
     
@@ -607,7 +609,43 @@ print_install_instructions() {
         echo ""
         ((step++))
     fi
-    
+
+    # 8. SPIR-V headers (spirv/unified1/spirv.hpp) - shipped separately
+    # from vulkan-headers on every Linux distro; bundled in LunarG SDK
+    # on Windows. Optional from the script's POV: auto-detect install
+    # gracefully degrades to a CPU build, but Vulkan acceleration
+    # requires it.
+    if [ "$need_spirv_headers" = true ]; then
+        echo -e "${BOLD}${step}. Install SPIR-V headers (required for Vulkan acceleration):${RESET}"
+        case "$os" in
+            linux)
+                case "$distro" in
+                    debian)
+                        echo -e "   ${YELLOW}# Ubuntu/Debian:${RESET}"
+                        echo "   sudo apt install -y spirv-headers"
+                        ;;
+                    fedora)
+                        echo -e "   ${YELLOW}# Fedora:${RESET}"
+                        echo "   sudo dnf install -y spirv-headers-devel"
+                        ;;
+                    arch)
+                        echo -e "   ${YELLOW}# Arch Linux:${RESET}"
+                        echo "   sudo pacman -S spirv-headers"
+                        ;;
+                    *)
+                        echo -e "   ${YELLOW}Install the 'spirv-headers' package from your package manager${RESET}"
+                        ;;
+                esac
+                ;;
+            windows)
+                echo -e "   ${YELLOW}Install the LunarG Vulkan SDK (bundles SPIRV-Headers):${RESET}"
+                echo -e "   ${YELLOW}https://vulkan.lunarg.com/sdk/home${RESET}"
+                ;;
+        esac
+        echo ""
+        ((step++))
+    fi
+
     # Quick install summary
     echo -e "${BOLD}Quick Install (copy-paste):${RESET}"
     
@@ -642,7 +680,7 @@ print_install_instructions() {
             echo -e "  ${YELLOW}1. Install Rust: https://win.rustup.rs/x86_64${RESET}"
             echo -e "  ${YELLOW}2. Install Node.js: https://nodejs.org${RESET}"
             echo -e "  ${YELLOW}3. Install VS Build Tools: https://visualstudio.microsoft.com/downloads/${RESET}"
-            if [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ]; then
+            if [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ] || [ "$need_spirv_headers" = true ]; then
                 echo -e "  ${YELLOW}4. Install Vulkan SDK: https://vulkan.lunarg.com/sdk/home${RESET}"
             fi
             ;;
@@ -652,13 +690,14 @@ print_install_instructions() {
                     if [ "$need_rust" = true ]; then
                         echo -e "  ${YELLOW}curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh${RESET}"
                     fi
-                    if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ] || [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ]; then
+                    if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ] || [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ] || [ "$need_spirv_headers" = true ]; then
                         local cmd="sudo apt update && sudo apt install -y"
                         [ "$need_node" = true ] && cmd="$cmd nodejs npm"
                         [ "$need_build_tools" = true ] && cmd="$cmd build-essential git pkg-config libssl-dev libcurl4-openssl-dev patchelf cmake libasound2-dev libsqlite3-dev"
                         [ "$need_gtk" = true ] && cmd="$cmd libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev"
                         [ "$need_vulkan_headers" = true ] && cmd="$cmd libvulkan-dev"
                         [ "$need_glslc" = true ] && cmd="$cmd glslc"
+                        [ "$need_spirv_headers" = true ] && cmd="$cmd spirv-headers"
                         echo -e "  ${YELLOW}${cmd}${RESET}"
                     fi
                     ;;
@@ -671,18 +710,20 @@ print_install_instructions() {
                     [ "$need_gtk" = true ] && echo -e "  ${YELLOW}sudo dnf install -y webkit2gtk4.1-devel librsvg2-devel gtk3-devel libappindicator-gtk3-devel${RESET}"
                     [ "$need_vulkan_headers" = true ] && echo -e "  ${YELLOW}sudo dnf install -y vulkan-devel${RESET}"
                     [ "$need_glslc" = true ] && echo -e "  ${YELLOW}sudo dnf install -y glslc${RESET}"
+                    [ "$need_spirv_headers" = true ] && echo -e "  ${YELLOW}sudo dnf install -y spirv-headers-devel${RESET}"
                     ;;
                 arch)
                     if [ "$need_rust" = true ]; then
                         echo -e "  ${YELLOW}curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh${RESET}"
                     fi
-                    if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ] || [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ]; then
+                    if [ "$need_node" = true ] || [ "$need_build_tools" = true ] || [ "$need_gtk" = true ] || [ "$need_vulkan_headers" = true ] || [ "$need_glslc" = true ] || [ "$need_spirv_headers" = true ]; then
                         local cmd="sudo pacman -S"
                         [ "$need_node" = true ] && cmd="$cmd nodejs npm"
                         [ "$need_build_tools" = true ] && cmd="$cmd base-devel git pkg-config openssl patchelf cmake"
                         [ "$need_gtk" = true ] && cmd="$cmd webkit2gtk-4.1 librsvg gtk3 libappindicator-gtk3"
                         [ "$need_vulkan_headers" = true ] && cmd="$cmd vulkan-headers"
                         [ "$need_glslc" = true ] && cmd="$cmd shaderc"
+                        [ "$need_spirv_headers" = true ] && cmd="$cmd spirv-headers"
                         echo -e "  ${YELLOW}${cmd}${RESET}"
                     fi
                     ;;
@@ -822,9 +863,10 @@ main() {
             local vk_json
             vk_json=$("$gglib_bin" config llama detect --json 2>/dev/null) || true
             if [ -n "$vk_json" ]; then
-                local has_headers has_glslc
+                local has_headers has_glslc has_spirv_headers
                 has_headers=$(echo "$vk_json" | grep -oE '"hasHeaders"\s*:\s*true' | head -1)
                 has_glslc=$(echo "$vk_json" | grep -oE '"hasGlslc"\s*:\s*true' | head -1)
+                has_spirv_headers=$(echo "$vk_json" | grep -oE '"hasSpirvHeaders"\s*:\s*true' | head -1)
                 if [ -n "$has_headers" ]; then
                     printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "Vulkan headers" "✓" "installed" "vulkan/vulkan.h development headers"
                     PRESENT_REQUIRED+=("Vulkan headers")
@@ -839,15 +881,46 @@ main() {
                     printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "Install: glslc or shaderc (via package manager)"
                     MISSING_REQUIRED+=("glslc")
                 fi
+                # SPIR-V headers are reported as OPTIONAL: gglib's
+                # auto-detect install path now degrades gracefully to a
+                # CPU build when they're missing, so this row should
+                # never block `make setup`. It still prints a clear
+                # warning so the user knows GPU acceleration is off.
+                if [ -n "$has_spirv_headers" ]; then
+                    printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "✓" "installed" "spirv/unified1/spirv.hpp (Vulkan build)"
+                else
+                    printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "!" "MISSING" "Vulkan disabled — CPU fallback build (install for GPU)"
+                    MISSING_OPTIONAL+=("SPIR-V headers")
+                fi
             fi
         else
-            # Fallback: no gglib binary yet — basic glslc check only
+            # Fallback: no gglib binary yet — probe glslc + SPIR-V headers
+            # directly. pkg-config first (NixOS / Homebrew safe) then a
+            # couple of well-known prefixes.
             if command_exists glslc; then
                 printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "glslc" "✓" "installed" "SPIR-V shader compiler (required for Vulkan build)"
                 PRESENT_REQUIRED+=("glslc")
             else
                 printf "%-20s ${RED}%-2s %-12s${RESET} %-50s\n" "glslc" "✗" "MISSING" "SPIR-V shader compiler (required for Vulkan build)"
                 MISSING_REQUIRED+=("glslc")
+            fi
+
+            local spirv_found=false
+            if command_exists pkg-config && pkg-config --exists SPIRV-Headers 2>/dev/null; then
+                spirv_found=true
+            elif [ -f "/usr/include/spirv/unified1/spirv.hpp" ] \
+                 || [ -f "/usr/local/include/spirv/unified1/spirv.hpp" ] \
+                 || [ -f "/usr/include/spirv-headers/spirv.hpp" ] \
+                 || [ -f "/usr/local/include/spirv-headers/spirv.hpp" ]; then
+                spirv_found=true
+            elif [ -n "$VULKAN_SDK" ] && [ -f "$VULKAN_SDK/Include/spirv/unified1/spirv.hpp" ]; then
+                spirv_found=true
+            fi
+            if [ "$spirv_found" = true ]; then
+                printf "%-20s ${GREEN}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "✓" "installed" "spirv/unified1/spirv.hpp (Vulkan build)"
+            else
+                printf "%-20s ${YELLOW}%-2s %-12s${RESET} %-50s\n" "SPIR-V headers" "!" "MISSING" "Vulkan disabled — CPU fallback build (install for GPU)"
+                MISSING_OPTIONAL+=("SPIR-V headers")
             fi
         fi
     elif [ "$os" = "linux" ] || [ "$os" = "windows" ]; then
@@ -863,6 +936,15 @@ main() {
     
     if [ ${#MISSING_REQUIRED[@]} -eq 0 ]; then
         echo -e "${GREEN}✓ All required dependencies are installed!${RESET} (${#PRESENT_REQUIRED[@]}/$total_required)"
+        if [ ${#MISSING_OPTIONAL[@]} -gt 0 ]; then
+            echo ""
+            echo -e "${YELLOW}!  ${#MISSING_OPTIONAL[@]} optional component(s) missing — build will continue with reduced acceleration:${RESET}"
+            for dep in "${MISSING_OPTIONAL[@]}"; do
+                echo -e "   ${YELLOW}- ${dep}${RESET}"
+            done
+            echo ""
+            print_install_instructions
+        fi
         echo ""
         echo -e "${BOLD}You can now run: ${BLUE}make setup${RESET}"
         return 0
