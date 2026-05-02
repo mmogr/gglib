@@ -1,13 +1,16 @@
 //! `SQLite` implementation of the `SettingsRepository` trait.
 
 use async_trait::async_trait;
+use serde_json::{Map, Value};
 use sqlx::{Row, SqlitePool};
 
 use gglib_core::{RepositoryError, Settings, SettingsRepository};
 
 /// `SQLite` implementation of the `SettingsRepository` trait.
 ///
-/// Stores settings as a JSON blob in a key-value table for flexibility.
+/// Stores each setting as an individual row in the key-value table, using the
+/// `serde` field name as the key and a compact JSON encoding as the value.
+/// `None`-valued fields are not stored; an absent row means "use default".
 pub struct SqliteSettingsRepository {
     pool: SqlitePool,
 }
@@ -39,36 +42,68 @@ impl SqliteSettingsRepository {
     }
 }
 
-const SETTINGS_KEY: &str = "app_settings";
-
 #[async_trait]
 impl SettingsRepository for SqliteSettingsRepository {
     async fn load(&self) -> Result<Settings, RepositoryError> {
-        let row = sqlx::query("SELECT value FROM settings_kv WHERE key = ?")
-            .bind(SETTINGS_KEY)
-            .fetch_optional(&self.pool)
+        let rows = sqlx::query("SELECT key, value FROM settings_kv")
+            .fetch_all(&self.pool)
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
-        match row {
-            Some(r) => {
-                let json: String = r.get("value");
-                serde_json::from_str(&json).map_err(|e| RepositoryError::Storage(e.to_string()))
-            }
-            None => Ok(Settings::with_defaults()),
+        let mut map = Map::new();
+        for row in rows {
+            let key: String = row.get("key");
+            let raw: String = row.get("value");
+            let val: Value = serde_json::from_str(&raw)
+                .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+            map.insert(key, val);
         }
+
+        serde_json::from_value(Value::Object(map))
+            .map_err(|e| RepositoryError::Storage(e.to_string()))
     }
 
     async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
-        let json =
-            serde_json::to_string(settings).map_err(|e| RepositoryError::Storage(e.to_string()))?;
+        let map = match serde_json::to_value(settings)
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?
+        {
+            Value::Object(m) => m,
+            other => {
+                return Err(RepositoryError::Storage(format!(
+                    "expected object, got {other}"
+                )))
+            }
+        };
+
         let updated_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-        sqlx::query("INSERT OR REPLACE INTO settings_kv (key, value, updated_at) VALUES (?, ?, ?)")
-            .bind(SETTINGS_KEY)
-            .bind(&json)
-            .bind(&updated_at)
-            .execute(&self.pool)
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+
+        for (key, value) in &map {
+            if value.is_null() {
+                sqlx::query("DELETE FROM settings_kv WHERE key = ?")
+                    .bind(key)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+            } else {
+                sqlx::query(
+                    "INSERT OR REPLACE INTO settings_kv (key, value, updated_at) VALUES (?, ?, ?)",
+                )
+                .bind(key)
+                .bind(value.to_string())
+                .bind(&updated_at)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+            }
+        }
+
+        tx.commit()
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
@@ -81,13 +116,14 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_load_returns_defaults_when_empty() {
+    async fn test_load_returns_all_none_when_empty() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         let repo = SqliteSettingsRepository::new(pool);
         repo.ensure_table().await.unwrap();
 
+        // Empty table → all fields are None; application layer supplies defaults.
         let settings = repo.load().await.unwrap();
-        assert_eq!(settings, Settings::with_defaults());
+        assert_eq!(settings, Settings::default());
     }
 
     #[tokio::test]
@@ -107,5 +143,37 @@ mod tests {
 
         assert_eq!(loaded.default_context_size, Some(8192));
         assert_eq!(loaded.proxy_port, Some(9090));
+    }
+
+    #[tokio::test]
+    async fn test_none_fields_are_deleted_from_db() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let repo = SqliteSettingsRepository::new(pool.clone());
+        repo.ensure_table().await.unwrap();
+
+        // Save with a Some value — should create a row for proxy_port.
+        let mut settings = Settings {
+            proxy_port: Some(9090),
+            ..Settings::default()
+        };
+        repo.save(&settings).await.unwrap();
+
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT value FROM settings_kv WHERE key = 'proxy_port'")
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+        assert!(row.is_some(), "proxy_port row should exist after saving Some");
+
+        // Now set that field to None and save again — row should be gone.
+        settings.proxy_port = None;
+        repo.save(&settings).await.unwrap();
+
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT value FROM settings_kv WHERE key = 'proxy_port'")
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+        assert!(row.is_none(), "proxy_port row should be deleted after saving None");
     }
 }
