@@ -10,7 +10,109 @@ use gglib_core::utils::process::async_cmd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::process::Child;
+use tokio::sync::oneshot;
 use tracing::{debug, warn};
+
+/// Maximum number of stderr lines retained in the ring buffer.
+const STDERR_RING_CAPACITY: usize = 50;
+
+/// Carries the process-exit information produced by [`spawn_with_exit_watch`].
+///
+/// The sender half is consumed by a background watcher task that monitors the
+/// child's stderr pipe. When the pipe hits EOF (meaning the process has
+/// exited or closed its stderr), it fires the sender with the buffered lines.
+/// The receiver half is passed to `wait_for_http_health_or_exit` so the health
+/// loop can fast-fail the moment llama-server dies.
+pub struct StartupWatcher {
+    /// Fires when llama-server's stderr closes, carrying the last N lines.
+    ///
+    /// `None` is sent only if the task is dropped before EOF (should not
+    /// happen in practice).
+    pub exit_rx: oneshot::Receiver<Vec<String>>,
+}
+
+/// Spawn llama-server and attach a stderr watcher for fast startup-failure detection.
+///
+/// This function is identical to calling [`build_and_spawn`] and then
+/// [`spawn_log_readers`], but additionally:
+///
+/// 1. Captures stderr through a ring buffer (last [`STDERR_RING_CAPACITY`] lines).
+/// 2. Returns a [`StartupWatcher`] whose `exit_rx` fires as soon as llama-server's
+///    stderr pipe closes (i.e., the process has exited or crashed).
+///
+/// The `exit_rx` should be passed to `wait_for_http_health_or_exit` so the
+/// health loop can abort immediately on process death instead of waiting for
+/// the full timeout.
+///
+/// stdout is still forwarded to the `log_sink` as usual.
+pub fn spawn_with_exit_watch(
+    llama_server_path: Option<&Path>,
+    config: &ServerConfig,
+    port: u16,
+    log_sink: Option<Arc<dyn ServerLogSinkPort>>,
+) -> anyhow::Result<(Child, StartupWatcher)> {
+    let mut child = build_and_spawn(llama_server_path, config, port)?;
+
+    // Wire stdout to the log sink (fire-and-forget, same as before).
+    if let Some(stdout) = child.stdout.take() {
+        spawn_stream_reader(stdout, port, "stdout", log_sink.clone());
+    }
+
+    // Stderr: dual-purpose — forward to log sink AND feed the ring buffer.
+    let (exit_tx, exit_rx) = oneshot::channel::<Vec<String>>();
+
+    if let Some(stderr) = child.stderr.take() {
+        let sink = log_sink.clone();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncBufReadExt, BufReader};
+
+            let mut reader = BufReader::new(stderr);
+            let mut buf: Vec<u8> = Vec::with_capacity(1024);
+            let mut ring: Vec<String> = Vec::with_capacity(STDERR_RING_CAPACITY);
+
+            loop {
+                buf.clear();
+                match reader.read_until(b'\n', &mut buf).await {
+                    Ok(0) => break, // EOF — process exited
+                    Ok(_) => {
+                        // Trim trailing newline(s)
+                        if buf.last() == Some(&b'\n') {
+                            buf.pop();
+                            if buf.last() == Some(&b'\r') {
+                                buf.pop();
+                            }
+                        }
+                        // Lossy UTF-8 so non-UTF8 bytes from C/C++ tools don't abort the reader.
+                        let line = String::from_utf8_lossy(&buf).into_owned();
+                        debug!(port = %port, stream_type = "stderr", "stderr: {}", line);
+                        if let Some(ref s) = sink {
+                            s.append(port, "stderr", line.clone());
+                        }
+                        // Ring buffer: drop the oldest entry when full.
+                        if ring.len() >= STDERR_RING_CAPACITY {
+                            ring.remove(0);
+                        }
+                        ring.push(line);
+                    }
+                    Err(e) => {
+                        debug!(port = %port, error = %e, "stderr reader exiting due to read error");
+                        break;
+                    }
+                }
+            }
+
+            debug!(port = %port, "stderr watcher task exiting, sending exit signal");
+            // Best-effort send; the receiver may have been dropped if startup succeeded.
+            let _ = exit_tx.send(ring);
+        });
+    } else {
+        // No stderr pipe — send an empty buffer immediately so the receiver
+        // never blocks forever waiting for a signal that never arrives.
+        let _ = exit_tx.send(Vec::new());
+    }
+
+    Ok((child, StartupWatcher { exit_rx }))
+}
 
 /// Select the llama-server path to use.
 ///
