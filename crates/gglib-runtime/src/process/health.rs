@@ -6,6 +6,8 @@ use tokio::sync::oneshot;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, info};
 
+use crate::command::CapturedOutput;
+
 /// Wait for HTTP health check to succeed
 ///
 /// Polls the llama-server's /health endpoint until it returns 200 OK
@@ -91,11 +93,11 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 ///
 /// Races a 1-second HTTP-poll sleep against the `exit_rx` oneshot from
 /// [`crate::command::spawn_with_exit_watch`].  When the receiver fires, the
-/// loop returns immediately with the last N stderr lines in the error message.
+/// loop returns immediately with the captured output in the error message.
 pub async fn wait_for_http_health_or_exit(
     port: u16,
     timeout_secs: u64,
-    exit_rx: oneshot::Receiver<Vec<String>>,
+    exit_rx: oneshot::Receiver<CapturedOutput>,
 ) -> Result<()> {
     let health_url = format!("http://127.0.0.1:{}/health", port);
     info!("Waiting for llama-server to be ready at {}", health_url);
@@ -114,16 +116,13 @@ pub async fn wait_for_http_health_or_exit(
         tokio::select! {
             biased;
 
-            // Process exited — fail fast with its stderr output.
-            stderr_lines = &mut exit_rx => {
-                let lines = stderr_lines.unwrap_or_default();
-                let context = if lines.is_empty() {
-                    String::from("(no stderr output captured)")
-                } else {
-                    lines.join("\n")
-                };
+            // Process exited — fail fast with its captured output.
+            captured = &mut exit_rx => {
+                let context = captured
+                    .unwrap_or_default()
+                    .best_effort_context();
                 return Err(anyhow::anyhow!(
-                    "llama-server exited unexpectedly before becoming ready.\n\nStderr output:\n{}",
+                    "llama-server exited unexpectedly before becoming ready.\n\nOutput:\n{}",
                     context
                 ));
             }

@@ -11,6 +11,8 @@ use tokio::sync::oneshot;
 use tokio::time::sleep;
 use tracing::{debug, info};
 
+use crate::command::CapturedOutput;
+
 /// Check HTTP health of a server at the given port.
 ///
 /// Makes a single request to the health endpoint and returns
@@ -113,17 +115,17 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 /// [`oneshot::Receiver`] that fires when llama-server's stderr pipe closes
 /// (produced by [`crate::command::spawn_with_exit_watch`]).  When the receiver
 /// fires, the loop aborts immediately and returns a descriptive error containing
-/// the last lines of stderr output, rather than waiting for `timeout_secs`.
+/// the captured output from the process, rather than waiting for `timeout_secs`.
 ///
 /// # Arguments
 ///
 /// * `port` — Port the server is expected to listen on
 /// * `timeout_secs` — Maximum seconds to wait before giving up
-/// * `exit_rx` — Fires with last N stderr lines when the process exits
+/// * `exit_rx` — Fires with captured stdout/stderr when the process exits
 pub async fn wait_for_http_health_or_exit(
     port: u16,
     timeout_secs: u64,
-    exit_rx: oneshot::Receiver<Vec<String>>,
+    exit_rx: oneshot::Receiver<CapturedOutput>,
 ) -> Result<()> {
     let health_url = format!("http://127.0.0.1:{}/health", port);
     info!("Waiting for llama-server to be ready at {}", health_url);
@@ -142,16 +144,13 @@ pub async fn wait_for_http_health_or_exit(
         tokio::select! {
             biased;
 
-            // Process exited — fail fast with its stderr output.
-            stderr_lines = &mut exit_rx => {
-                let lines = stderr_lines.unwrap_or_default();
-                let context = if lines.is_empty() {
-                    String::from("(no stderr output captured)")
-                } else {
-                    lines.join("\n")
-                };
+            // Process exited — fail fast with its captured output.
+            captured = &mut exit_rx => {
+                let context = captured
+                    .unwrap_or_default()
+                    .best_effort_context();
                 return Err(anyhow::anyhow!(
-                    "llama-server exited unexpectedly before becoming ready.\n\nStderr output:\n{}",
+                    "llama-server exited unexpectedly before becoming ready.\n\nOutput:\n{}",
                     context
                 ));
             }
