@@ -50,6 +50,13 @@ pub struct DownloadJob {
     pub cancel: CancellationToken,
     /// Progress sender for this job.
     pub progress_tx: watch::Sender<ProgressUpdate>,
+    /// Expected total bytes from HF metadata, if known.
+    ///
+    /// Used by the stat-fallback poller (`xet_poller`) so synthetic progress
+    /// events carry a real total. Without it the CLI bar renders `0 B/0 B`
+    /// for the entire transfer because the hf-xet fast path never drives
+    /// tqdm to publish a `(0, total)` initial event.
+    pub expected_total: Option<u64>,
 }
 
 /// Progress update sent through the watch channel.
@@ -206,11 +213,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         token: deps.config.hf_token.as_deref(),
         force: false,
         progress: Some(Arc::clone(&progress_callback)),
-        // TODO(#466 follow-up): plumb shard_info.file_size from the manager so
-        // synthetic progress events from `xet_poller` can show a real % bar.
-        // For now an unknown total is acceptable \u2014 the bar will display
-        // downloaded bytes and is no longer frozen at 0/0.
-        expected_total: None,
+        expected_total: job.expected_total,
         cancel_token: Some(job.cancel.clone()),
     };
 

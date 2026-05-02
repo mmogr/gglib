@@ -259,6 +259,11 @@ pub struct DownloadManagerImpl {
     /// Event emitter for download events.
     event_emitter: Arc<dyn DownloadEventEmitterPort>,
     /// `HuggingFace` client for fetching model metadata.
+    ///
+    /// Currently retained for future use (e.g. lazy tag refresh).
+    /// Not invoked during finalization to keep registration fast and
+    /// avoid blocking on a slow/stalled HTTP call.
+    #[allow(dead_code)]
     hf_client: Arc<dyn HfClientPort>,
     /// File resolver.
     resolver: HfQuantizationResolver,
@@ -439,6 +444,11 @@ impl DownloadManagerImpl {
                     revision: item.revision.clone(),
                     cancel: cancel.clone(),
                     progress_tx,
+                    // Plumb the per-shard file size from HF metadata so the
+                    // stat-fallback poller (`xet_poller`) can emit synthetic
+                    // progress events with a real total. Without this the
+                    // hf-xet fast path leaves the CLI bar stuck at `0 B/0 B`.
+                    expected_total: item.shard_info.as_ref().and_then(|s| s.file_size),
                 };
 
                 // Emit started event (include shard info if this is a sharded download)
@@ -825,14 +835,14 @@ impl DownloadManagerImpl {
                 status: gglib_core::download::DownloadStatus::Finalizing,
             });
 
-        // Fetch HF model info to get tags (soft fail if unavailable)
-        let hf_tags = self
-            .hf_client
-            .get_model_info(&complete.metadata.repo_id)
-            .await
-            .ok()
-            .map(|info| info.tags)
-            .unwrap_or_default();
+        // Tags are nice-to-have metadata fetched lazily elsewhere; we
+        // intentionally do NOT make a network call here. Any synchronous
+        // HF API call during finalization risks wedging registration on
+        // a slow/stalled connection (the underlying HTTP client has no
+        // robust read timeout). Falling back to an empty tag list keeps
+        // finalization fast and predictable; tags can be refreshed later
+        // by a model rescan.
+        let hf_tags: Vec<String> = Vec::new();
 
         let completed = CompletedDownload {
             primary_path: primary_path.clone(),
