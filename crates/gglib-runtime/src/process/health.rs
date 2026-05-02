@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use sysinfo::{Pid, ProcessStatus, System};
+use tokio::sync::oneshot;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, info};
 
@@ -48,6 +49,108 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
                         Ok(body) => {
                             // llama-server health endpoint returns JSON with status info
                             // Check for llama-server specific content
+                            if body.contains("status")
+                                || body.contains("slots")
+                                || body.contains("error")
+                                || body.is_empty()
+                            {
+                                info!("llama-server is ready on port {}", port);
+                                return Ok(());
+                            } else {
+                                debug!("Health check returned unexpected response: {}", body);
+                                if attempt > 5 {
+                                    return Err(anyhow::anyhow!(
+                                        "Port {} is responding but doesn't appear to be llama-server",
+                                        port
+                                    ));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            debug!("Failed to read health response: {}", e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("Health check failed: {}, retrying...", e);
+            }
+        }
+
+        if attempt >= max_attempts {
+            return Err(anyhow::anyhow!(
+                "llama-server failed to start within {}s on port {}. Check if the port is available.",
+                max_attempts,
+                port
+            ));
+        }
+    }
+}
+
+/// Wait for HTTP health check to succeed, aborting early if the process exits.
+///
+/// Races a 1-second HTTP-poll sleep against the `exit_rx` oneshot from
+/// [`crate::command::spawn_with_exit_watch`].  When the receiver fires, the
+/// loop returns immediately with the last N stderr lines in the error message.
+pub async fn wait_for_http_health_or_exit(
+    port: u16,
+    timeout_secs: u64,
+    exit_rx: oneshot::Receiver<Vec<String>>,
+) -> Result<()> {
+    let health_url = format!("http://127.0.0.1:{}/health", port);
+    info!("Waiting for llama-server to be ready at {}", health_url);
+
+    let max_attempts = timeout_secs;
+    let mut attempt = 0u64;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()?;
+
+    let mut exit_rx = exit_rx;
+
+    loop {
+        attempt += 1;
+
+        tokio::select! {
+            biased;
+
+            // Process exited — fail fast with its stderr output.
+            stderr_lines = &mut exit_rx => {
+                let lines = stderr_lines.unwrap_or_default();
+                let context = if lines.is_empty() {
+                    String::from("(no stderr output captured)")
+                } else {
+                    lines.join("\n")
+                };
+                return Err(anyhow::anyhow!(
+                    "llama-server exited unexpectedly before becoming ready.\n\nStderr output:\n{}",
+                    context
+                ));
+            }
+
+            _ = sleep(Duration::from_secs(1)) => {}
+        }
+
+        match client.get(&health_url).send().await {
+            Ok(response) => {
+                let status = response.status();
+
+                if !status.is_success() {
+                    debug!(
+                        "Health check returned status {} (expected 200), retrying...",
+                        status
+                    );
+
+                    if (status.as_u16() == 403 || status.as_u16() == 404) && attempt > 3 {
+                        return Err(anyhow::anyhow!(
+                            "Port {} appears to be in use by another service (status {}). Try using a different port range.",
+                            port,
+                            status
+                        ));
+                    }
+                } else {
+                    match response.text().await {
+                        Ok(body) => {
                             if body.contains("status")
                                 || body.contains("slots")
                                 || body.contains("error")

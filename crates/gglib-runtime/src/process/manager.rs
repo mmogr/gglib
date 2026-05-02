@@ -5,7 +5,7 @@
 //! - **SingleSwap**: Auto-swapping single model with smart context handling (Proxy use case)
 
 use super::core::GuiProcessCore;
-use super::health::wait_for_http_health;
+use super::health::wait_for_http_health_or_exit;
 use super::types::ServerInfo;
 use anyhow::{Result, anyhow};
 use gglib_core::ports::{
@@ -142,14 +142,14 @@ impl ProcessManager {
         }
 
         // Spawn the process
-        let allocated_port = core.spawn(config).await?;
+        let (allocated_port, watcher) = core.spawn(config).await?;
 
         // Release the lock before waiting
         drop(core);
 
-        // Wait for server to be ready by polling health endpoint
+        // Wait for server to be ready, aborting early if the process exits.
         debug!(port = %allocated_port, "Waiting for llama-server to be ready");
-        wait_for_http_health(allocated_port, 30).await?;
+        wait_for_http_health_or_exit(allocated_port, 30, watcher.exit_rx).await?;
         debug!("llama-server is ready and accepting requests");
 
         Ok(allocated_port)
@@ -278,15 +278,15 @@ impl ProcessManager {
         .with_context_size(effective_ctx)
         .with_jinja(); // Enable jinja by default for proxy
 
-        let port = {
+        let (port, watcher) = {
             let mut core = self.core.write().await;
             core.spawn(config)
                 .await
                 .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?
         };
 
-        // 6. Wait for health check
-        if let Err(e) = wait_for_http_health(port, 120).await {
+        // 6. Wait for health check, failing fast if the process exits.
+        if let Err(e) = wait_for_http_health_or_exit(port, 120, watcher.exit_rx).await {
             // DON'T update current_model on failure - guard will clear loading
             return Err(ModelRuntimeError::HealthCheckFailed(e.to_string()));
         }

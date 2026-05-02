@@ -9,7 +9,7 @@
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
 use super::types::{RunningProcess, ServerInfo};
-use crate::command::{build_and_spawn, spawn_log_readers};
+use crate::command::{self, StartupWatcher};
 use crate::pidfile::{delete_pidfile, write_pidfile};
 use anyhow::{Result, anyhow};
 use gglib_core::ports::ServerConfig;
@@ -45,10 +45,12 @@ impl GuiProcessCore {
         }
     }
 
-    /// Spawn a new llama-server process
+    /// Spawn a new llama-server process.
     ///
-    /// Returns the port number for the spawned process.
-    pub async fn spawn(&mut self, config: ServerConfig) -> Result<u16> {
+    /// Returns the allocated port and a `StartupWatcher`.  The caller **must**
+    /// pass the watcher to `wait_for_http_health_or_exit` so that a crash
+    /// during startup is detected immediately.
+    pub async fn spawn(&mut self, config: ServerConfig) -> Result<(u16, StartupWatcher)> {
         let model_id = config.model_id as u32;
 
         if self.processes.contains_key(&model_id) {
@@ -64,7 +66,9 @@ impl GuiProcessCore {
 
         let port = self.resolve_port(config.port)?;
         let llama_path = Path::new(&self.llama_server_path);
-        let mut child = build_and_spawn(Some(llama_path), &config, port)?;
+        use crate::process::LogManagerSink;
+        let log_sink = Some(Arc::new(LogManagerSink) as Arc<dyn gglib_core::ports::ServerLogSinkPort>);
+        let (child, watcher) = command::spawn_with_exit_watch(Some(llama_path), &config, port, log_sink)?;
         let pid = child
             .id()
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;
@@ -73,8 +77,6 @@ impl GuiProcessCore {
         if let Err(e) = write_pidfile(config.model_id, pid, port) {
             debug!("Failed to write PID file: {}", e);
         }
-
-        self.spawn_log_readers(&mut child, port);
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -92,12 +94,7 @@ impl GuiProcessCore {
         let running = RunningProcess::new(info, child);
         self.processes.insert(model_id, running);
 
-        Ok(port)
-    }
-
-    fn spawn_log_readers(&self, child: &mut tokio::process::Child, port: u16) {
-        use crate::process::LogManagerSink;
-        spawn_log_readers(child, port, Some(Arc::new(LogManagerSink)));
+        Ok((port, watcher))
     }
 
     fn resolve_port(&self, requested: Option<u16>) -> Result<u16> {
