@@ -258,12 +258,7 @@ pub struct DownloadManagerImpl {
     _download_repo: Arc<dyn DownloadStateRepositoryPort>,
     /// Event emitter for download events.
     event_emitter: Arc<dyn DownloadEventEmitterPort>,
-    /// `HuggingFace` client for fetching model metadata.
-    ///
-    /// Currently retained for future use (e.g. lazy tag refresh).
-    /// Not invoked during finalization to keep registration fast and
-    /// avoid blocking on a slow/stalled HTTP call.
-    #[allow(dead_code)]
+    /// `HuggingFace` client for fetching model metadata (e.g. tags at registration time).
     hf_client: Arc<dyn HfClientPort>,
     /// File resolver.
     resolver: HfQuantizationResolver,
@@ -620,7 +615,16 @@ impl DownloadManagerImpl {
 
     /// Finalize a job after it completes or fails.
     ///
-    /// Verifies the lease to prevent stale commits.
+    /// Verifies the lease first (to prevent double-finalization), then runs
+    /// `handle_job_result` (which includes model registration) while the item
+    /// is **still present** in the active map. Only after that completes is the
+    /// item removed from `active` and the snapshot emitted.
+    ///
+    /// This ordering is critical: the CLI interactive monitor exits as soon as
+    /// `active_count == 0`. Removing the item before registration completes
+    /// would allow the CLI to exit mid-insert, dropping the tokio runtime and
+    /// silently losing the DB row.
+    ///
     /// Lock order: active → queue.
     async fn finalize_job(
         &self,
@@ -628,27 +632,31 @@ impl DownloadManagerImpl {
         lease: LeaseId,
         result: Result<CompletedJob, DownloadError>,
     ) {
-        // Verify lease and remove from active
-        if !self.verify_and_remove_lease(&item.id, lease).await {
+        // Step 1 — verify lease (guards against stale/duplicate finalization)
+        // without yet removing the item from the active map.
+        if !self.verify_lease(&item.id, lease).await {
             tracing::debug!(id = %item.id, "Ignoring stale finalize (lease mismatch)");
             return;
         }
 
-        // Handle the result with shard coordination
+        // Step 2 — run registration while still in the active map so the
+        // CLI monitor cannot race past registration.
         self.handle_job_result(item, result).await;
 
-        // Emit updated snapshot
+        // Step 3 — now safe to remove from active map and notify watchers.
+        self.remove_from_active(&item.id).await;
         self.emit_queue_snapshot().await;
     }
 
-    /// Verify lease matches and remove from active map.
-    async fn verify_and_remove_lease(&self, id: &DownloadId, lease: LeaseId) -> bool {
-        let mut active = self.active.lock().await;
-        active
-            .get(id)
-            .is_some_and(|job| job.lease == lease)
-            .then(|| active.remove(id))
-            .is_some()
+    /// Check that the stored lease matches `lease` without removing the entry.
+    async fn verify_lease(&self, id: &DownloadId, lease: LeaseId) -> bool {
+        let active = self.active.lock().await;
+        active.get(id).is_some_and(|job| job.lease == lease)
+    }
+
+    /// Remove an entry from the active map unconditionally.
+    async fn remove_from_active(&self, id: &DownloadId) {
+        self.active.lock().await.remove(id);
     }
 
     /// Handle the result of a completed job.
@@ -835,14 +843,33 @@ impl DownloadManagerImpl {
                 status: gglib_core::download::DownloadStatus::Finalizing,
             });
 
-        // Tags are nice-to-have metadata fetched lazily elsewhere; we
-        // intentionally do NOT make a network call here. Any synchronous
-        // HF API call during finalization risks wedging registration on
-        // a slow/stalled connection (the underlying HTTP client has no
-        // robust read timeout). Falling back to an empty tag list keeps
-        // finalization fast and predictable; tags can be refreshed later
-        // by a model rescan.
-        let hf_tags: Vec<String> = Vec::new();
+        // Fetch HF model tags (nice-to-have metadata). Bounded by a strict
+        // 5-second timeout: a stalled/slow connection must never delay the
+        // DB insert. On timeout or error we log a warning and proceed with
+        // an empty tag list — a failed tag fetch is never a hard failure.
+        let hf_tags = match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            self.hf_client.get_model_info(&complete.metadata.repo_id),
+        )
+        .await
+        {
+            Ok(Ok(info)) => info.tags,
+            Ok(Err(e)) => {
+                tracing::warn!(
+                    error = %e,
+                    repo_id = %complete.metadata.repo_id,
+                    "Failed to fetch HF tags during finalization; registering without tags",
+                );
+                Vec::new()
+            }
+            Err(_elapsed) => {
+                tracing::warn!(
+                    repo_id = %complete.metadata.repo_id,
+                    "Timed out fetching HF tags (5 s); registering without tags",
+                );
+                Vec::new()
+            }
+        };
 
         let completed = CompletedDownload {
             primary_path: primary_path.clone(),
