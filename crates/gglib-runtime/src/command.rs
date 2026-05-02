@@ -33,11 +33,11 @@ pub struct StartupWatcher {
 
 /// Spawn llama-server and attach a stderr watcher for fast startup-failure detection.
 ///
-/// This function is identical to calling [`build_and_spawn`] and then
-/// [`spawn_log_readers`], but additionally:
+/// This function spawns the process (via [`build_and_spawn`]) and additionally:
 ///
-/// 1. Captures stderr through a ring buffer (last [`STDERR_RING_CAPACITY`] lines).
-/// 2. Returns a [`StartupWatcher`] whose `exit_rx` fires as soon as llama-server's
+/// 1. Wires stdout to `log_sink` fire-and-forget via a background task.
+/// 2. Captures stderr through a ring buffer (last [`STDERR_RING_CAPACITY`] lines).
+/// 3. Returns a [`StartupWatcher`] whose `exit_rx` fires as soon as llama-server's
 ///    stderr pipe closes (i.e., the process has exited or crashed).
 ///
 /// The `exit_rx` should be passed to `wait_for_http_health_or_exit` so the
@@ -259,25 +259,6 @@ pub fn build_and_spawn(
         .map_err(|e| anyhow::anyhow!("Failed to spawn llama-server: {}", e))?;
 
     Ok(child)
-}
-
-/// Spawn background tasks to stream stdout/stderr logs asynchronously.
-///
-/// The tasks read lines from the process output and log them
-/// via tracing. If a log sink is provided, lines are also forwarded there.
-/// They exit when the streams close.
-pub fn spawn_log_readers(
-    child: &mut Child,
-    port: u16,
-    log_sink: Option<Arc<dyn ServerLogSinkPort>>,
-) {
-    if let Some(stdout) = child.stdout.take() {
-        spawn_stream_reader(stdout, port, "stdout", log_sink.clone());
-    }
-
-    if let Some(stderr) = child.stderr.take() {
-        spawn_stream_reader(stderr, port, "stderr", log_sink);
-    }
 }
 
 /// A no-op log sink that discards all log lines.
