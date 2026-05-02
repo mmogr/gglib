@@ -54,8 +54,8 @@ impl SettingsRepository for SqliteSettingsRepository {
         for row in rows {
             let key: String = row.get("key");
             let raw: String = row.get("value");
-            let val: Value = serde_json::from_str(&raw)
-                .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+            let val: Value =
+                serde_json::from_str(&raw).map_err(|e| RepositoryError::Storage(e.to_string()))?;
             map.insert(key, val);
         }
 
@@ -71,7 +71,7 @@ impl SettingsRepository for SqliteSettingsRepository {
             other => {
                 return Err(RepositoryError::Storage(format!(
                     "expected object, got {other}"
-                )))
+                )));
             }
         };
 
@@ -163,7 +163,10 @@ mod tests {
                 .fetch_optional(&pool)
                 .await
                 .unwrap();
-        assert!(row.is_some(), "proxy_port row should exist after saving Some");
+        assert!(
+            row.is_some(),
+            "proxy_port row should exist after saving Some"
+        );
 
         // Now set that field to None and save again — row should be gone.
         settings.proxy_port = None;
@@ -174,6 +177,9 @@ mod tests {
                 .fetch_optional(&pool)
                 .await
                 .unwrap();
-        assert!(row.is_none(), "proxy_port row should be deleted after saving None");
+        assert!(
+            row.is_none(),
+            "proxy_port row should be deleted after saving None"
+        );
     }
 }
