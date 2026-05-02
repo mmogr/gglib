@@ -49,7 +49,10 @@ impl ProcessCore {
     /// pass the `StartupWatcher` to `wait_for_http_health_or_exit` so that a
     /// crash during startup is detected immediately instead of waiting for the
     /// full health-check timeout.
-    pub async fn spawn(&mut self, config: &ServerConfig) -> Result<(ProcessHandle, StartupWatcher)> {
+    pub async fn spawn(
+        &mut self,
+        config: &ServerConfig,
+    ) -> Result<(ProcessHandle, StartupWatcher)> {
         if self.processes.contains_key(&config.model_id) {
             return Err(anyhow!("Model {} is already running", config.model_id));
         }
@@ -65,13 +68,10 @@ impl ProcessCore {
 
         // Use spawn_with_exit_watch so we get a StartupWatcher for fast-fail detection.
         use crate::process::LogManagerSink;
-        let log_sink = Some(std::sync::Arc::new(LogManagerSink) as std::sync::Arc<dyn gglib_core::ports::ServerLogSinkPort>);
-        let (child, watcher) = command::spawn_with_exit_watch(
-            Some(&self.llama_server_path),
-            config,
-            port,
-            log_sink,
-        )?;
+        let log_sink = Some(std::sync::Arc::new(LogManagerSink)
+            as std::sync::Arc<dyn gglib_core::ports::ServerLogSinkPort>);
+        let (child, watcher) =
+            command::spawn_with_exit_watch(Some(&self.llama_server_path), config, port, log_sink)?;
 
         let pid = child
             .id()

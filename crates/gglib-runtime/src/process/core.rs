@@ -67,8 +67,10 @@ impl GuiProcessCore {
         let port = self.resolve_port(config.port)?;
         let llama_path = Path::new(&self.llama_server_path);
         use crate::process::LogManagerSink;
-        let log_sink = Some(Arc::new(LogManagerSink) as Arc<dyn gglib_core::ports::ServerLogSinkPort>);
-        let (child, watcher) = command::spawn_with_exit_watch(Some(llama_path), &config, port, log_sink)?;
+        let log_sink =
+            Some(Arc::new(LogManagerSink) as Arc<dyn gglib_core::ports::ServerLogSinkPort>);
+        let (child, watcher) =
+            command::spawn_with_exit_watch(Some(llama_path), &config, port, log_sink)?;
         let pid = child
             .id()
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;
