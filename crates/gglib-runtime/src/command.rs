@@ -12,6 +12,14 @@ use tokio::process::Child;
 use tokio::sync::oneshot;
 use tracing::{debug, warn};
 
+/// Shared ownership of a spawned child process.
+///
+/// The child is wrapped in `Option` so it can be `take()`n exactly once
+/// (by the caller that will ultimately `wait` on it or kill it).
+/// The `Mutex` lets the background watcher task call `try_wait()` to
+/// obtain the exit status without owning the `Child`.
+pub type SharedChild = Arc<std::sync::Mutex<Option<Child>>>;
+
 /// Maximum number of lines retained in each stream's ring buffer.
 const RING_CAPACITY: usize = 50;
 
@@ -22,6 +30,10 @@ pub struct CapturedOutput {
     pub stdout: Vec<String>,
     /// Last N lines from stderr.
     pub stderr: Vec<String>,
+    /// Normal exit code, if the process exited normally.
+    pub exit_code: Option<i32>,
+    /// Unix signal number that killed the process, if any.
+    pub exit_signal: Option<i32>,
 }
 
 impl CapturedOutput {
@@ -31,13 +43,23 @@ impl CapturedOutput {
     /// stderr is typically empty on failure. This method returns stdout when
     /// available, falling back to stderr, then a placeholder.
     pub fn best_effort_context(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+
         if !self.stdout.is_empty() {
-            self.stdout.join("\n")
+            parts.push(self.stdout.join("\n"));
         } else if !self.stderr.is_empty() {
-            self.stderr.join("\n")
+            parts.push(self.stderr.join("\n"));
         } else {
-            String::from("(no output captured)")
+            parts.push(String::from("(no output from llama-server)"));
         }
+
+        match (self.exit_code, self.exit_signal) {
+            (Some(code), _) => parts.push(format!("Exit code: {code}")),
+            (None, Some(sig)) => parts.push(format!("Killed by signal: {sig}")),
+            _ => {}
+        }
+
+        parts.join("\n")
     }
 }
 
@@ -81,21 +103,30 @@ pub fn spawn_with_exit_watch(
     config: &ServerConfig,
     port: u16,
     log_sink: Option<Arc<dyn ServerLogSinkPort>>,
-) -> anyhow::Result<(Child, StartupWatcher)> {
+) -> anyhow::Result<(SharedChild, StartupWatcher)> {
     let mut child = build_and_spawn(llama_server_path, config, port)?;
 
     // Stdout and stderr: both are captured in ring buffers for error diagnostics,
     // and forwarded to the log sink. llama-server writes most output (including
     // error messages) to stdout, so we must capture both streams.
     //
-    // Architecture: we use a shared Arc<Mutex<>> for the captured output, and
-    // the stderr task fires the oneshot when stderr closes (process has exited).
-    // The stdout task fills its ring before that point.
+    // Architecture:
+    // - Captured output is shared via `Arc<Mutex<CapturedOutput>>`.
+    // - The child is shared via `SharedChild` (`Arc<Mutex<Option<Child>>>`) so the
+    //   stderr watcher task can call `try_wait()` to get the exit status.
+    // - Stdout/stderr pipes are taken *before* the child is placed into the Arc.
+    // - The stderr task fires the oneshot with the captured output (including exit
+    //   code/signal) when stderr closes.
     let (exit_tx, exit_rx) = oneshot::channel::<CapturedOutput>();
     let captured = std::sync::Arc::new(std::sync::Mutex::new(CapturedOutput::default()));
 
+    // Take pipes before moving the child into the shared Arc.
+    let stdout_pipe = child.stdout.take();
+    let stderr_pipe = child.stderr.take();
+    let child_arc: SharedChild = Arc::new(std::sync::Mutex::new(Some(child)));
+
     // Stdout ring — captures output and sends to log sink.
-    if let Some(stdout) = child.stdout.take() {
+    if let Some(stdout) = stdout_pipe {
         let sink = log_sink.clone();
         let captured_stdout = captured.clone();
         tokio::spawn(async move {
@@ -139,7 +170,8 @@ pub fn spawn_with_exit_watch(
     }
 
     // Stderr ring — fires the exit signal when stderr closes (process has exited).
-    if let Some(stderr) = child.stderr.take() {
+    if let Some(stderr) = stderr_pipe {
+        let child_for_task = child_arc.clone();
         let sink = log_sink.clone();
         let captured_stderr = captured.clone();
         tokio::spawn(async move {
@@ -181,11 +213,47 @@ pub fn spawn_with_exit_watch(
             debug!(port = %port, "stderr watcher task exiting, sending exit signal");
             // Give the stdout task a moment to flush its remaining lines.
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+            // Collect exit status from the child before sending the captured output.
+            // The child is a zombie at this point (pipes closed = process exited), so
+            // try_wait() is non-blocking and safe to call from a Mutex guard.
+            let (exit_code, exit_signal) = {
+                let exit_status = child_for_task
+                    .lock()
+                    .ok()
+                    .and_then(|mut guard| guard.as_mut().and_then(|c| c.try_wait().ok().flatten()));
+                match exit_status {
+                    Some(status) => {
+                        let code = status.code();
+                        #[cfg(unix)]
+                        let signal = {
+                            use std::os::unix::process::ExitStatusExt;
+                            status.signal()
+                        };
+                        #[cfg(not(unix))]
+                        let signal: Option<i32> = None;
+                        debug!(
+                            port = %port,
+                            exit_code = ?code,
+                            exit_signal = ?signal,
+                            "llama-server exit status"
+                        );
+                        (code, signal)
+                    }
+                    None => {
+                        debug!(port = %port, "could not retrieve llama-server exit status");
+                        (None, None)
+                    }
+                }
+            };
+
             let output = captured_stderr
                 .lock()
                 .map(|cap| CapturedOutput {
                     stdout: cap.stdout.clone(),
                     stderr: cap.stderr.clone(),
+                    exit_code,
+                    exit_signal,
                 })
                 .unwrap_or_default();
             // Best-effort send; the receiver may have been dropped if startup succeeded.
@@ -197,7 +265,7 @@ pub fn spawn_with_exit_watch(
         let _ = exit_tx.send(CapturedOutput::default());
     }
 
-    Ok((child, StartupWatcher { exit_rx }))
+    Ok((child_arc, StartupWatcher { exit_rx }))
 }
 
 /// Select the llama-server path to use.

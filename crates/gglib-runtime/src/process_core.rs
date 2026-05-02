@@ -9,17 +9,16 @@ use std::collections::HashMap;
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::process::Child;
 use tracing::debug;
 
-use crate::command::{self, StartupWatcher};
+use crate::command::{self, SharedChild, StartupWatcher};
 use crate::pidfile::{delete_pidfile, write_pidfile};
 use crate::process::shutdown::shutdown_child;
 
 /// Running process with handle to the child process.
 struct RunningProcess {
     handle: ProcessHandle,
-    child: Child,
+    child: SharedChild,
     context_size: Option<u64>,
 }
 
@@ -74,7 +73,9 @@ impl ProcessCore {
             command::spawn_with_exit_watch(Some(&self.llama_server_path), config, port, log_sink)?;
 
         let pid = child
-            .id()
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().and_then(|c| c.id()))
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;
 
         // Write PID file
@@ -120,8 +121,11 @@ impl ProcessCore {
         let pid = running.handle.pid.unwrap_or(0);
         debug!(model_id = %model_id, pid = %pid, "Stopping process");
 
-        // Use graceful shutdown with SIGTERM → SIGKILL
-        let _ = shutdown_child(running.child).await;
+        // Use graceful shutdown with SIGTERM → SIGKILL.
+        // The child may already be gone (fast-fail path), so handle the missing case.
+        if let Some(child) = running.child.lock().ok().and_then(|mut g| g.take()) {
+            let _ = shutdown_child(child).await;
+        }
 
         // Remove PID file
         if let Err(e) = delete_pidfile(model_id) {
@@ -198,11 +202,15 @@ impl ProcessCore {
         let mut dead = Vec::new();
 
         for (id, r) in self.processes.iter_mut() {
-            match r.child.try_wait() {
-                Ok(Some(_)) | Err(_) => {
-                    dead.push(*id);
-                }
-                Ok(None) => {}
+            let is_dead = match r.child.lock() {
+                Ok(mut guard) => match guard.as_mut() {
+                    Some(c) => matches!(c.try_wait(), Ok(Some(_)) | Err(_)),
+                    None => true, // child already taken
+                },
+                Err(_) => true, // poisoned mutex — treat as dead
+            };
+            if is_dead {
+                dead.push(*id);
             }
         }
 

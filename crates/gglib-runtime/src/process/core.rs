@@ -72,7 +72,9 @@ impl GuiProcessCore {
         let (child, watcher) =
             command::spawn_with_exit_watch(Some(llama_path), &config, port, log_sink)?;
         let pid = child
-            .id()
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().and_then(|c| c.id()))
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;
 
         // Write PID file
@@ -127,8 +129,11 @@ impl GuiProcessCore {
         let pid = running.info.pid;
         debug!(model_id = %model_id, pid = %pid, port = %running.info.port, "Stopping process");
 
-        // Use graceful shutdown with SIGTERM → SIGKILL
-        let _ = shutdown_child(running.child).await;
+        // Use graceful shutdown with SIGTERM → SIGKILL.
+        // The child may already be gone (fast-fail path), so handle the missing case.
+        if let Some(child) = running.child.lock().ok().and_then(|mut g| g.take()) {
+            let _ = shutdown_child(child).await;
+        }
 
         // Remove PID file
         if let Err(e) = delete_pidfile(model_id as i64) {
@@ -183,8 +188,10 @@ impl GuiProcessCore {
                 let pid = running.info.pid;
                 debug!(model_id = %model_id, pid = %pid, port = %running.info.port, "Stopping process");
 
-                // Use graceful shutdown with SIGTERM → SIGKILL
-                let _ = shutdown_child(running.child).await;
+                // Use graceful shutdown with SIGTERM → SIGKILL.
+                if let Some(child) = running.child.lock().ok().and_then(|mut g| g.take()) {
+                    let _ = shutdown_child(child).await;
+                }
 
                 // Remove PID file
                 if let Err(e) = delete_pidfile(model_id as i64) {
@@ -203,16 +210,25 @@ impl GuiProcessCore {
         let mut dead = Vec::new();
 
         for (id, running) in self.processes.iter_mut() {
-            match running.child.try_wait() {
-                Ok(Some(status)) => {
-                    debug!(id = %id, status = ?status, "Process exited");
-                    dead.push(*id);
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    warn!(id = %id, error = %e, "Error checking process");
-                    dead.push(*id);
-                }
+            let is_dead = match running.child.lock() {
+                Ok(mut guard) => match guard.as_mut() {
+                    Some(c) => match c.try_wait() {
+                        Ok(Some(status)) => {
+                            debug!(id = %id, status = ?status, "Process exited");
+                            true
+                        }
+                        Ok(None) => false,
+                        Err(e) => {
+                            warn!(id = %id, error = %e, "Error checking process");
+                            true
+                        }
+                    },
+                    None => true, // child already taken
+                },
+                Err(_) => true, // poisoned mutex
+            };
+            if is_dead {
+                dead.push(*id);
             }
         }
 

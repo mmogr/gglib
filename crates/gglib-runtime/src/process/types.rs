@@ -1,7 +1,7 @@
 //! Shared types for process management.
 
+use crate::command::SharedChild;
 use serde::Serialize;
-use tokio::process::Child;
 
 /// Information about a running model server
 #[derive(Debug, Clone, Serialize)]
@@ -58,11 +58,11 @@ impl ServerInfo {
 /// Running process with metadata
 pub struct RunningProcess {
     pub info: ServerInfo,
-    pub child: Child,
+    pub child: SharedChild,
 }
 
 impl RunningProcess {
-    pub fn new(info: ServerInfo, child: Child) -> Self {
+    pub fn new(info: ServerInfo, child: SharedChild) -> Self {
         Self { info, child }
     }
 }
