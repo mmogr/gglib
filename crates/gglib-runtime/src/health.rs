@@ -7,6 +7,7 @@
 use anyhow::Result;
 use reqwest::Client;
 use std::time::Duration;
+use tokio::sync::oneshot;
 use tokio::time::sleep;
 use tracing::{debug, info};
 
@@ -106,7 +107,117 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
     }
 }
 
-/// Check if a process is alive using its PID.
+/// Wait for HTTP health check to succeed, aborting early if the process exits.
+///
+/// This is the fast-failing variant of [`wait_for_http_health`]. It accepts a
+/// [`oneshot::Receiver`] that fires when llama-server's stderr pipe closes
+/// (produced by [`crate::command::spawn_with_exit_watch`]).  When the receiver
+/// fires, the loop aborts immediately and returns a descriptive error containing
+/// the last lines of stderr output, rather than waiting for `timeout_secs`.
+///
+/// # Arguments
+///
+/// * `port` — Port the server is expected to listen on
+/// * `timeout_secs` — Maximum seconds to wait before giving up
+/// * `exit_rx` — Fires with last N stderr lines when the process exits
+pub async fn wait_for_http_health_or_exit(
+    port: u16,
+    timeout_secs: u64,
+    exit_rx: oneshot::Receiver<Vec<String>>,
+) -> Result<()> {
+    let health_url = format!("http://127.0.0.1:{}/health", port);
+    info!("Waiting for llama-server to be ready at {}", health_url);
+
+    let max_attempts = timeout_secs;
+    let mut attempt = 0u64;
+    let client = Client::builder().timeout(Duration::from_secs(2)).build()?;
+
+    // Pin the exit receiver so we can use it in select! repeatedly.
+    let mut exit_rx = exit_rx;
+
+    loop {
+        attempt += 1;
+
+        // Wait 1 second, but abort early if the process exits.
+        tokio::select! {
+            biased;
+
+            // Process exited — fail fast with its stderr output.
+            stderr_lines = &mut exit_rx => {
+                let lines = stderr_lines.unwrap_or_default();
+                let context = if lines.is_empty() {
+                    String::from("(no stderr output captured)")
+                } else {
+                    lines.join("\n")
+                };
+                return Err(anyhow::anyhow!(
+                    "llama-server exited unexpectedly before becoming ready.\n\nStderr output:\n{}",
+                    context
+                ));
+            }
+
+            _ = sleep(Duration::from_secs(1)) => {}
+        }
+
+        match client.get(&health_url).send().await {
+            Ok(response) => {
+                let status = response.status();
+
+                if !status.is_success() {
+                    debug!(
+                        "Health check returned status {} (expected 200), retrying...",
+                        status
+                    );
+
+                    // Fail faster if clearly wrong service
+                    if (status.as_u16() == 403 || status.as_u16() == 404) && attempt > 3 {
+                        return Err(anyhow::anyhow!(
+                            "Port {} appears to be in use by another service (status {})",
+                            port,
+                            status
+                        ));
+                    }
+                } else {
+                    // Got 200 OK - verify it's actually llama-server
+                    match response.text().await {
+                        Ok(body) => {
+                            if body.contains("status")
+                                || body.contains("slots")
+                                || body.contains("error")
+                                || body.is_empty()
+                            {
+                                info!("llama-server is ready on port {}", port);
+                                return Ok(());
+                            } else {
+                                debug!("Health check returned unexpected response: {}", body);
+                                if attempt > 5 {
+                                    return Err(anyhow::anyhow!(
+                                        "Port {} is responding but doesn't appear to be llama-server",
+                                        port
+                                    ));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            debug!("Failed to read health response: {}", e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("Health check failed: {}, retrying...", e);
+            }
+        }
+
+        if attempt >= max_attempts {
+            return Err(anyhow::anyhow!(
+                "llama-server failed to start within {}s on port {}",
+                max_attempts,
+                port
+            ));
+        }
+    }
+}
 ///
 /// Uses a simple file-based check on Unix systems.
 #[cfg(unix)]

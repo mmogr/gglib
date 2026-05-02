@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 
-use crate::health::{check_http_health, wait_for_http_health};
+use crate::health::{check_http_health, wait_for_http_health_or_exit};
 use crate::process_core::ProcessCore;
 
 /// Default timeout for health checks when starting a server (seconds).
@@ -88,15 +88,15 @@ impl ProcessRunner for LlamaServerRunner {
         }
 
         // Spawn the process
-        let handle = {
+        let (handle, watcher) = {
             let mut core = self.core.write().await;
             core.spawn(&config)
                 .await
                 .map_err(|e| ProcessError::StartFailed(e.to_string()))?
         };
 
-        // Wait for HTTP health check
-        wait_for_http_health(handle.port, DEFAULT_STARTUP_TIMEOUT_SECS)
+        // Wait for HTTP health check, aborting early if the process exits.
+        wait_for_http_health_or_exit(handle.port, DEFAULT_STARTUP_TIMEOUT_SECS, watcher.exit_rx)
             .await
             .map_err(|e| {
                 // Try to kill the process if health check fails

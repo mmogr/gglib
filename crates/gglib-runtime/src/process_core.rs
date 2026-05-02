@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::process::Child;
 use tracing::debug;
 
-use crate::command;
+use crate::command::{self, StartupWatcher};
 use crate::pidfile::{delete_pidfile, write_pidfile};
 use crate::process::shutdown::shutdown_child;
 
@@ -44,7 +44,12 @@ impl ProcessCore {
     }
 
     /// Spawn a new llama-server process from configuration.
-    pub async fn spawn(&mut self, config: &ServerConfig) -> Result<ProcessHandle> {
+    ///
+    /// Returns a `(ProcessHandle, StartupWatcher)` pair.  The caller **must**
+    /// pass the `StartupWatcher` to `wait_for_http_health_or_exit` so that a
+    /// crash during startup is detected immediately instead of waiting for the
+    /// full health-check timeout.
+    pub async fn spawn(&mut self, config: &ServerConfig) -> Result<(ProcessHandle, StartupWatcher)> {
         if self.processes.contains_key(&config.model_id) {
             return Err(anyhow!("Model {} is already running", config.model_id));
         }
@@ -57,7 +62,17 @@ impl ProcessCore {
         }
 
         let port = self.resolve_port(config)?;
-        let mut child = command::build_and_spawn(Some(&self.llama_server_path), config, port)?;
+
+        // Use spawn_with_exit_watch so we get a StartupWatcher for fast-fail detection.
+        use crate::process::LogManagerSink;
+        let log_sink = Some(std::sync::Arc::new(LogManagerSink) as std::sync::Arc<dyn gglib_core::ports::ServerLogSinkPort>);
+        let (child, watcher) = command::spawn_with_exit_watch(
+            Some(&self.llama_server_path),
+            config,
+            port,
+            log_sink,
+        )?;
+
         let pid = child
             .id()
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;
@@ -67,10 +82,6 @@ impl ProcessCore {
             debug!("Failed to write PID file: {}", e);
             // Non-fatal - continue anyway
         }
-
-        // Wire log capture to the log manager for GUI streaming
-        use crate::process::LogManagerSink;
-        command::spawn_log_readers(&mut child, port, Some(std::sync::Arc::new(LogManagerSink)));
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -96,7 +107,7 @@ impl ProcessCore {
             },
         );
 
-        Ok(handle)
+        Ok((handle, watcher))
     }
 
     /// Kill a running process with graceful shutdown.
