@@ -9,7 +9,7 @@
 //! and dispatches progress events to callbacks or CLI display.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use gglib_core::utils::process::async_cmd;
 use thiserror::Error;
@@ -194,27 +194,38 @@ async fn run_download_process(
         buf
     });
 
-    // CLI progress if no callback provided
-    let mut cli_progress = if request.progress.is_none() {
-        Some(CliProgressPrinter::new())
-    } else {
-        None
-    };
+    // Scoped poller targets: per-file final paths (covers already-renamed
+    // shards) plus the .cache subdir (covers in-flight .incomplete temp files
+    // written by huggingface_hub during hf-xet transfers). Avoids counting
+    // unrelated files that happen to share the same destination directory.
+    let poller_targets: Vec<_> = request
+        .files
+        .iter()
+        .map(|f| request.destination.join(f))
+        .chain(std::iter::once(request.destination.join(".cache")))
+        .collect();
 
-    // Spawn the xet stat-fallback poller. It only emits synthetic progress
-    // events when the Python helper goes silent (typical of the hf-xet fast
-    // path); while real `tqdm` events are flowing it stays dormant.
-    //
-    // We hand the poller the destination *directory* (not the per-file
-    // final paths) because `huggingface_hub` streams bytes into a
-    // `<dest>/.cache/huggingface/download/<filename>.incomplete` temp file
-    // while the transfer is in flight and only renames to the final path on
-    // completion. The poller walks the directory recursively so the
-    // in-progress bytes are accounted for.
-    let xet_poller = request.progress.as_ref().map(|cb| {
-        let targets = vec![request.destination.to_path_buf()];
-        XetPoller::spawn(targets, request.expected_total, Arc::clone(cb))
-    });
+    // Always spawn the xet stat-fallback poller — it stays dormant while real
+    // tqdm events flow, then emits synthetic progress from on-disk byte counts
+    // once they go quiet. Covers both the callback path (worker queue) and the
+    // no-callback path (direct exec, e.g. `model upgrade`).
+    let (cli_progress, xet_poller) = if let Some(cb) = request.progress.as_ref() {
+        // Callback path: external sink handles both real and synthetic events.
+        let poller = XetPoller::spawn(poller_targets, request.expected_total, Arc::clone(cb));
+        (None, Some(poller))
+    } else {
+        // No-callback path: wrap the CLI printer so the XetPoller background
+        // task can call .update() without a mutable borrow of the local.
+        let printer = Arc::new(Mutex::new(CliProgressPrinter::new()));
+        let printer_clone = Arc::clone(&printer);
+        let cb: ProgressCallback = Arc::new(move |d, t| {
+            if let Ok(mut g) = printer_clone.try_lock() {
+                g.update(None, d, t);
+            }
+        });
+        let poller = XetPoller::spawn(poller_targets, request.expected_total, cb);
+        (Some(printer), Some(poller))
+    };
 
     let mut ctrl_c = Box::pin(signal::ctrl_c());
     let cancel_token = request.cancel_token.clone();
@@ -231,7 +242,7 @@ async fn run_download_process(
                 }
             } => {
                 let _ = child.kill().await;
-                finish_progress(&mut cli_progress);
+                finish_progress(cli_progress.as_ref());
                 if let Some(p) = xet_poller { p.shutdown(); }
                 return Err(PythonBridgeError::Cancelled);
             }
@@ -239,7 +250,7 @@ async fn run_download_process(
             // Ctrl+C from terminal
             _ = &mut ctrl_c => {
                 let _ = child.kill().await;
-                finish_progress(&mut cli_progress);
+                finish_progress(cli_progress.as_ref());
                 if let Some(p) = xet_poller { p.shutdown(); }
                 return Err(PythonBridgeError::Cancelled);
             }
@@ -254,18 +265,18 @@ async fn run_download_process(
                 }
 
                 if let Ok(event) = parse_line(&line) {
-                    match handle_event(event, request, &mut cli_progress, xet_poller.as_ref()) {
+                    match handle_event(event, request, cli_progress.as_ref(), xet_poller.as_ref()) {
                         Ok(()) => {}
                         Err(e) => {
                             let _ = child.kill().await;
-                            finish_progress(&mut cli_progress);
+                            finish_progress(cli_progress.as_ref());
                             if let Some(p) = xet_poller { p.shutdown(); }
                             return Err(e);
                         }
                     }
                 } else {
                     // Non-protocol line — print to console
-                    finish_progress(&mut cli_progress);
+                    finish_progress(cli_progress.as_ref());
                     println!("[fast-path] {line}");
                 }
             }
@@ -278,7 +289,7 @@ async fn run_download_process(
         .await
         .map_err(|e| PythonBridgeError::ProcessFailed(e.to_string()))?;
 
-    finish_progress(&mut cli_progress);
+    finish_progress(cli_progress.as_ref());
     if let Some(p) = xet_poller {
         p.shutdown();
     }
@@ -305,7 +316,7 @@ async fn run_download_process(
 fn handle_event(
     event: PythonEvent,
     request: &FastDownloadRequest<'_>,
-    cli_progress: &mut Option<CliProgressPrinter>,
+    cli_progress: Option<&Arc<Mutex<CliProgressPrinter>>>,
     xet_poller: Option<&XetPoller>,
 ) -> Result<(), PythonBridgeError> {
     match event {
@@ -320,8 +331,10 @@ fn handle_event(
             }
             if let Some(cb) = request.progress.as_ref() {
                 cb(downloaded, total);
-            } else if let Some(printer) = cli_progress.as_mut() {
-                printer.update(file.as_deref(), downloaded, total);
+            } else if let Some(printer) = cli_progress {
+                if let Ok(mut g) = printer.lock() {
+                    g.update(file.as_deref(), downloaded, total);
+                }
             }
             Ok(())
         }
@@ -334,8 +347,10 @@ fn handle_event(
     }
 }
 
-fn finish_progress(printer: &mut Option<CliProgressPrinter>) {
-    if let Some(p) = printer.as_mut() {
-        p.finish();
+fn finish_progress(printer: Option<&Arc<Mutex<CliProgressPrinter>>>) {
+    if let Some(p) = printer {
+        if let Ok(mut g) = p.lock() {
+            g.finish();
+        }
     }
 }
