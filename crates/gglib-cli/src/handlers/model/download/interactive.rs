@@ -152,7 +152,19 @@ async fn run_tty_monitor(
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<ReaderCmd>(1);
 
     // ── Spawn the keystroke reader on a dedicated blocking thread ──────────
-    let reader_handle = tokio::task::spawn_blocking(move || {
+    // Spawn as a plain OS thread rather than `tokio::task::spawn_blocking`.
+    //
+    // `spawn_blocking` registers the thread with Tokio's blocking pool.  When
+    // the pool shuts down (after the async main returns) it waits up to
+    // `blocking_shutdown_timeout` (default: 10 s) for all blocking tasks to
+    // finish.  Because `term.read_key()` blocks indefinitely on stdin, the
+    // thread never exits on its own — causing a 10-second hang every time the
+    // download completes without the user pressing a key.
+    //
+    // A plain `std::thread` is *not* tracked by Tokio's blocking pool, so
+    // dropping the handle here is truly fire-and-forget: Tokio shuts down
+    // immediately and the OS kills the thread when the process exits.
+    let reader_handle = std::thread::spawn(move || {
         let term = Term::stdout();
         loop {
             let key = match term.read_key() {
@@ -307,11 +319,10 @@ async fn run_tty_monitor(
     if let Some(bar) = hint_bar {
         bar.finish_and_clear();
     }
-    // Best-effort: wait briefly for the reader thread to exit so the
-    // terminal isn't left with a half-read pending. read_key() is blocking,
-    // so if we've already sent Stop the reader will exit on the next key —
-    // we don't actually wait for it (would block on stdin) and rely on
-    // the channel close + process exit to clean up.
+    // Detach the reader thread.  We already sent ReaderCmd::Stop so it will
+    // exit as soon as the user presses the next key (or when the process
+    // terminates and the OS kills it).  We must not join here — that would
+    // block the async task on stdin forever.
     drop(reader_handle);
     result
 }
