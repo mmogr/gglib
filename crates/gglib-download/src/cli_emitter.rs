@@ -212,6 +212,18 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 }
             }
 
+            DownloadEvent::DownloadStatusChanged { id, status } => {
+                // Surface non-terminal lifecycle transitions (Finalizing,
+                // Registering) on the existing bar so the user sees that
+                // work is still happening between "100% downloaded" and
+                // the final completion event.
+                if let Ok(bars) = self.bars.lock() {
+                    if let Some(bar) = bars.get(&id) {
+                        bar.set_message(format!("{id} — {}…", status.label()));
+                    }
+                }
+            }
+
             // Queue-level events don't need bar updates in the CLI emitter.
             DownloadEvent::QueueSnapshot { .. } | DownloadEvent::QueueRunComplete { .. } => {}
         }

@@ -86,11 +86,20 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ## Features
 
 - **Queued Downloads** — Multiple concurrent downloads with priority ordering
-- **Progress Tracking** — Real-time progress events for UI updates
+- **Progress Tracking** — Real-time progress events for UI updates, including
+  non-terminal `Finalizing` and `Registering` lifecycle transitions emitted
+  between the last byte hitting disk and the model row being written.
 - **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata
 - **Resume Support** — Partial download resumption on failure
 - **Shard Handling** — Automatic detection and download of sharded models
-- **Fast-Path Downloads** — Uses `hf_xet` Python helper for multi-gigabyte files
+- **Fast-Path Downloads** — Uses `hf_xet` Python helper for multi-gigabyte files.
+  When the `hf-xet` transport bypasses Python `tqdm`, a stat-based fallback
+  poller (`cli_exec/exec/xet_poller.rs`) emits synthetic progress events so
+  the bar keeps moving instead of freezing at `0 B / 0 B`.
+- **Bounded Drain on Cancel** — `cancel_all()` signals cancel tokens and
+  then waits up to 5 s for in-flight jobs to finalize before returning,
+  so callers (CLI, Tauri, Axum) don't exit while Python helper subprocesses
+  are still cleaning up.
 - **Retry Logic** — Automatic retry with exponential backoff
 
 ## Usage

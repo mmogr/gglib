@@ -50,6 +50,13 @@ pub struct DownloadJob {
     pub cancel: CancellationToken,
     /// Progress sender for this job.
     pub progress_tx: watch::Sender<ProgressUpdate>,
+    /// Expected total bytes from HF metadata, if known.
+    ///
+    /// Used by the stat-fallback poller (`xet_poller`) so synthetic progress
+    /// events carry a real total. Without it the CLI bar renders `0 B/0 B`
+    /// for the entire transfer because the hf-xet fast path never drives
+    /// tqdm to publish a `(0, total)` initial event.
+    pub expected_total: Option<u64>,
 }
 
 /// Progress update sent through the watch channel.
@@ -185,8 +192,8 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
     // Create progress callback that updates watch channel
     let progress_tx = job.progress_tx.clone();
     let seq_clone = Arc::clone(&seq);
-    let progress_callback: Box<dyn Fn(u64, u64) + Send + Sync> =
-        Box::new(move |downloaded: u64, total: u64| {
+    let progress_callback: crate::cli_exec::ProgressCallback =
+        Arc::new(move |downloaded: u64, total: u64| {
             let current_seq = seq_clone.fetch_add(1, Ordering::Relaxed);
             // send_modify avoids clone and is infallible
             progress_tx.send_modify(|state| {
@@ -205,7 +212,8 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         files: &job.destination.files,
         token: deps.config.hf_token.as_deref(),
         force: false,
-        progress: Some(&progress_callback),
+        progress: Some(Arc::clone(&progress_callback)),
+        expected_total: job.expected_total,
         cancel_token: Some(job.cancel.clone()),
     };
 

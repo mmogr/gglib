@@ -34,6 +34,10 @@ pub enum DownloadStatus {
     Queued,
     /// Currently being downloaded.
     Downloading,
+    /// Bytes are on disk; verifying / collecting metadata before registration.
+    Finalizing,
+    /// Registering the completed download in the model database.
+    Registering,
     /// Completed successfully.
     Completed,
     /// Failed with an error.
@@ -49,6 +53,8 @@ impl DownloadStatus {
         match self {
             Self::Queued => "queued",
             Self::Downloading => "downloading",
+            Self::Finalizing => "finalizing",
+            Self::Registering => "registering",
             Self::Completed => "completed",
             Self::Failed => "failed",
             Self::Cancelled => "cancelled",
@@ -60,11 +66,27 @@ impl DownloadStatus {
     pub fn parse(s: &str) -> Self {
         match s {
             "downloading" => Self::Downloading,
+            "finalizing" => Self::Finalizing,
+            "registering" => Self::Registering,
             "completed" => Self::Completed,
             "failed" => Self::Failed,
             "cancelled" => Self::Cancelled,
             // "queued" or unknown values default to Queued
             _ => Self::Queued,
+        }
+    }
+
+    /// Human-readable label for UI display.
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Queued => "Queued",
+            Self::Downloading => "Downloading",
+            Self::Finalizing => "Finalizing",
+            Self::Registering => "Registering",
+            Self::Completed => "Completed",
+            Self::Failed => "Failed",
+            Self::Cancelled => "Cancelled",
         }
     }
 }
@@ -169,6 +191,20 @@ pub enum DownloadEvent {
     DownloadCancelled {
         /// Canonical ID of the download.
         id: String,
+    },
+
+    /// Lifecycle status transition for a download (e.g.
+    /// `Downloading` → `Finalizing` → `Registering`).
+    ///
+    /// Emitted at the boundaries between phases so transports can render a
+    /// non-frozen state while the manager is verifying bytes and writing the
+    /// model row to the database. Terminal states (`Completed`, `Failed`,
+    /// `Cancelled`) keep their dedicated event variants.
+    DownloadStatusChanged {
+        /// Canonical ID of the download.
+        id: String,
+        /// New status of the download.
+        status: DownloadStatus,
     },
 
     /// Queue run completed (all downloads in the queue finished).
@@ -293,6 +329,14 @@ impl DownloadEvent {
         Self::DownloadCancelled { id: id.into() }
     }
 
+    /// Create a status-changed event for non-terminal lifecycle transitions.
+    pub fn status_changed(id: impl Into<String>, status: DownloadStatus) -> Self {
+        Self::DownloadStatusChanged {
+            id: id.into(),
+            status,
+        }
+    }
+
     /// Create a queue run complete event.
     pub const fn queue_run_complete(summary: QueueRunSummary) -> Self {
         Self::QueueRunComplete { summary }
@@ -308,7 +352,8 @@ impl DownloadEvent {
             | Self::ShardProgress { id, .. }
             | Self::DownloadCompleted { id, .. }
             | Self::DownloadFailed { id, .. }
-            | Self::DownloadCancelled { id } => Some(id),
+            | Self::DownloadCancelled { id }
+            | Self::DownloadStatusChanged { id, .. } => Some(id),
         }
     }
 
@@ -326,6 +371,7 @@ impl DownloadEvent {
             Self::DownloadCompleted { .. } => "download:completed",
             Self::DownloadFailed { .. } => "download:failed",
             Self::DownloadCancelled { .. } => "download:cancelled",
+            Self::DownloadStatusChanged { .. } => "download:status_changed",
             Self::QueueRunComplete { .. } => "download:queue_run_complete",
         }
     }

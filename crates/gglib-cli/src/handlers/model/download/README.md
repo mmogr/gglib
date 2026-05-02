@@ -33,8 +33,26 @@ This module handles all download-related commands that interact with HuggingFace
 1. User issues `gglib model download <repo>` command
 2. `exec.rs` queues it via `DownloadManagerPort::queue_smart` (same code path as the GUI)
 3. `interactive.rs` renders progress via `CliDownloadEventEmitter` (indicatif bars)
-4. In TTY mode: `[a]` prompts for another model to add to the queue; `[q]` cancels all
-5. Model registration on completion is handled by the download manager (via `ModelRegistrarPort`)
+4. In TTY mode: `[a]` prompts for another model to add to the queue.
+   `[q]` (or `Esc` / `Ctrl-C`) is **two-step**:
+   - First press → arms drain mode (hint becomes
+     `Draining... press q again to force quit`); active downloads
+     continue running until they finish naturally and the queue auto-
+     exits when it empties.
+   - Second press → calls `cancel_all()`, which signals cancel tokens
+     and waits up to 5 s for in-flight Python helpers to actually
+     finalize before returning.
+5. Lifecycle states surfaced on the bar:
+   `Downloading` → `Finalizing` (gathering HF metadata) →
+   `Registering` (writing model row) → terminal `Completed` /
+   `Failed` / `Cancelled`. The `Finalizing` / `Registering` labels
+   keep the UI from looking frozen at 100 %.
+6. When the Python helper uses the `hf-xet` transport (which bypasses
+   tqdm), a stat-based fallback poller emits synthetic progress events
+   so the bar still ticks. See
+   [`gglib-download/src/cli_exec/exec/xet_poller.rs`](../../../../../gglib-download/src/cli_exec/exec/xet_poller.rs).
+7. Model registration on completion is handled by the download manager
+   (via `ModelRegistrarPort`).
 
 ## Modules
 

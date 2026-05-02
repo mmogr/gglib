@@ -258,7 +258,7 @@ pub struct DownloadManagerImpl {
     _download_repo: Arc<dyn DownloadStateRepositoryPort>,
     /// Event emitter for download events.
     event_emitter: Arc<dyn DownloadEventEmitterPort>,
-    /// `HuggingFace` client for fetching model metadata.
+    /// `HuggingFace` client for fetching model metadata (e.g. tags at registration time).
     hf_client: Arc<dyn HfClientPort>,
     /// File resolver.
     resolver: HfQuantizationResolver,
@@ -439,6 +439,11 @@ impl DownloadManagerImpl {
                     revision: item.revision.clone(),
                     cancel: cancel.clone(),
                     progress_tx,
+                    // Plumb the per-shard file size from HF metadata so the
+                    // stat-fallback poller (`xet_poller`) can emit synthetic
+                    // progress events with a real total. Without this the
+                    // hf-xet fast path leaves the CLI bar stuck at `0 B/0 B`.
+                    expected_total: item.shard_info.as_ref().and_then(|s| s.file_size),
                 };
 
                 // Emit started event (include shard info if this is a sharded download)
@@ -610,7 +615,16 @@ impl DownloadManagerImpl {
 
     /// Finalize a job after it completes or fails.
     ///
-    /// Verifies the lease to prevent stale commits.
+    /// Verifies the lease first (to prevent double-finalization), then runs
+    /// `handle_job_result` (which includes model registration) while the item
+    /// is **still present** in the active map. Only after that completes is the
+    /// item removed from `active` and the snapshot emitted.
+    ///
+    /// This ordering is critical: the CLI interactive monitor exits as soon as
+    /// `active_count == 0`. Removing the item before registration completes
+    /// would allow the CLI to exit mid-insert, dropping the tokio runtime and
+    /// silently losing the DB row.
+    ///
     /// Lock order: active → queue.
     async fn finalize_job(
         &self,
@@ -618,27 +632,31 @@ impl DownloadManagerImpl {
         lease: LeaseId,
         result: Result<CompletedJob, DownloadError>,
     ) {
-        // Verify lease and remove from active
-        if !self.verify_and_remove_lease(&item.id, lease).await {
+        // Step 1 — verify lease (guards against stale/duplicate finalization)
+        // without yet removing the item from the active map.
+        if !self.verify_lease(&item.id, lease).await {
             tracing::debug!(id = %item.id, "Ignoring stale finalize (lease mismatch)");
             return;
         }
 
-        // Handle the result with shard coordination
+        // Step 2 — run registration while still in the active map so the
+        // CLI monitor cannot race past registration.
         self.handle_job_result(item, result).await;
 
-        // Emit updated snapshot
+        // Step 3 — now safe to remove from active map and notify watchers.
+        self.remove_from_active(&item.id).await;
         self.emit_queue_snapshot().await;
     }
 
-    /// Verify lease matches and remove from active map.
-    async fn verify_and_remove_lease(&self, id: &DownloadId, lease: LeaseId) -> bool {
-        let mut active = self.active.lock().await;
-        active
-            .get(id)
-            .is_some_and(|job| job.lease == lease)
-            .then(|| active.remove(id))
-            .is_some()
+    /// Check that the stored lease matches `lease` without removing the entry.
+    async fn verify_lease(&self, id: &DownloadId, lease: LeaseId) -> bool {
+        let active = self.active.lock().await;
+        active.get(id).is_some_and(|job| job.lease == lease)
+    }
+
+    /// Remove an entry from the active map unconditionally.
+    async fn remove_from_active(&self, id: &DownloadId) {
+        self.active.lock().await.remove(id);
     }
 
     /// Handle the result of a completed job.
@@ -810,14 +828,48 @@ impl DownloadManagerImpl {
             .first()
             .expect("GroupComplete should have at least one path");
 
-        // Fetch HF model info to get tags (soft fail if unavailable)
-        let hf_tags = self
-            .hf_client
-            .get_model_info(&complete.metadata.repo_id)
-            .await
-            .ok()
-            .map(|info| info.tags)
-            .unwrap_or_default();
+        // Canonical event ID matches the one used for progress / completion.
+        let event_id = format!(
+            "{}:{}",
+            complete.metadata.repo_id, complete.metadata.quantization
+        );
+
+        // Phase 1 of finalization: bytes are on disk, we are about to gather
+        // metadata (HF tags etc.). Emit a status transition so the UI shows
+        // "Finalizing" instead of looking frozen at 100%.
+        self.event_emitter
+            .emit(DownloadEvent::DownloadStatusChanged {
+                id: event_id.clone(),
+                status: gglib_core::download::DownloadStatus::Finalizing,
+            });
+
+        // Fetch HF model tags (nice-to-have metadata). Bounded by a strict
+        // 5-second timeout: a stalled/slow connection must never delay the
+        // DB insert. On timeout or error we log a warning and proceed with
+        // an empty tag list — a failed tag fetch is never a hard failure.
+        let hf_tags = match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            self.hf_client.get_model_info(&complete.metadata.repo_id),
+        )
+        .await
+        {
+            Ok(Ok(info)) => info.tags,
+            Ok(Err(e)) => {
+                tracing::warn!(
+                    error = %e,
+                    repo_id = %complete.metadata.repo_id,
+                    "Failed to fetch HF tags during finalization; registering without tags",
+                );
+                Vec::new()
+            }
+            Err(_elapsed) => {
+                tracing::warn!(
+                    repo_id = %complete.metadata.repo_id,
+                    "Timed out fetching HF tags (5 s); registering without tags",
+                );
+                Vec::new()
+            }
+        };
 
         let completed = CompletedDownload {
             primary_path: primary_path.clone(),
@@ -836,6 +888,13 @@ impl DownloadManagerImpl {
             hf_file_entries: complete.metadata.file_entries,
         };
 
+        // Phase 2 of finalization: writing the model row to the database.
+        self.event_emitter
+            .emit(DownloadEvent::DownloadStatusChanged {
+                id: event_id.clone(),
+                status: gglib_core::download::DownloadStatus::Registering,
+            });
+
         // Register model (soft-fail)
         match self.model_registrar.register_model(&completed).await {
             Ok(model) => {
@@ -848,10 +907,7 @@ impl DownloadManagerImpl {
 
                 // Emit completion event
                 self.event_emitter.emit(DownloadEvent::DownloadCompleted {
-                    id: format!(
-                        "{}:{}",
-                        complete.metadata.repo_id, complete.metadata.quantization
-                    ),
+                    id: event_id,
                     message: Some(format!(
                         "Downloaded {} to {}",
                         if completed.is_sharded {
@@ -869,6 +925,12 @@ impl DownloadManagerImpl {
                     path = %primary_path.display(),
                     "Failed to register model - files downloaded but won't appear in library"
                 );
+                // Surface the failure as a terminal event so the UI doesn't
+                // sit on "Registering" forever when registration soft-fails.
+                self.event_emitter.emit(DownloadEvent::DownloadFailed {
+                    id: event_id,
+                    error: format!("Registration failed: {e}"),
+                });
             }
         }
     }
@@ -1485,9 +1547,31 @@ impl DownloadManagerPort for DownloadManagerImpl {
             }
         }
 
-        // Clear queue
+        // Clear queue (drops everything still pending).
         self.queue.write().await.clear();
         self.emit_queue_snapshot().await;
+
+        // Bounded drain: wait up to 5s for active downloads to actually
+        // finalize so we don't return while the Python helper subprocesses
+        // are still cleaning up. Without this the CLI would exit with
+        // partially-written files and no DB row — exactly the symptom
+        // tracked in #466.
+        let drain_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut poll = tokio::time::interval(std::time::Duration::from_millis(50));
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            poll.tick().await;
+            if self.active.lock().await.is_empty() {
+                break;
+            }
+            if tokio::time::Instant::now() >= drain_deadline {
+                tracing::warn!(
+                    "cancel_all drain deadline exceeded; returning while jobs still draining"
+                );
+                break;
+            }
+        }
+
         tracing::info!("Cancelled all downloads");
         Ok(())
     }

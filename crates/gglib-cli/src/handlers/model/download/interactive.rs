@@ -152,7 +152,19 @@ async fn run_tty_monitor(
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<ReaderCmd>(1);
 
     // ── Spawn the keystroke reader on a dedicated blocking thread ──────────
-    let reader_handle = tokio::task::spawn_blocking(move || {
+    // Spawn as a plain OS thread rather than `tokio::task::spawn_blocking`.
+    //
+    // `spawn_blocking` registers the thread with Tokio's blocking pool.  When
+    // the pool shuts down (after the async main returns) it waits up to
+    // `blocking_shutdown_timeout` (default: 10 s) for all blocking tasks to
+    // finish.  Because `term.read_key()` blocks indefinitely on stdin, the
+    // thread never exits on its own — causing a 10-second hang every time the
+    // download completes without the user pressing a key.
+    //
+    // A plain `std::thread` is *not* tracked by Tokio's blocking pool, so
+    // dropping the handle here is truly fire-and-forget: Tokio shuts down
+    // immediately and the OS kills the thread when the process exits.
+    let reader_handle = std::thread::spawn(move || {
         let term = Term::stdout();
         loop {
             let key = match term.read_key() {
@@ -177,6 +189,10 @@ async fn run_tty_monitor(
     let mut hint_bar: Option<ProgressBar> = None;
     let mut seen_items = false;
     let mut last_item_count: u32 = 0;
+    // Two-step quit: first `q`/Ctrl-C arms `quitting=true` and lets active
+    // downloads drain naturally; the second press calls `cancel_all()`.
+    // Auto-exit fires when the queue empties on its own.
+    let mut quitting = false;
 
     let mut tick = tokio::time::interval(Duration::from_millis(250));
     // Skip the initial fire-immediately tick so we don't redraw before
@@ -198,9 +214,20 @@ async fn run_tty_monitor(
                         let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
                     Some(Key::Char('q')) | Some(Key::Escape) => {
-                        downloads.cancel_all().await.ok();
-                        let _ = cmd_tx.send(ReaderCmd::Stop).await;
-                        break Ok(());
+                        if quitting {
+                            // Second press → force quit.
+                            downloads.cancel_all().await.ok();
+                            let _ = cmd_tx.send(ReaderCmd::Stop).await;
+                            break Ok(());
+                        }
+                        // First press → arm drain mode and update the hint.
+                        quitting = true;
+                        if let Some(bar) = &hint_bar {
+                            bar.set_message(
+                                "Draining... press q again to force quit".to_string(),
+                            );
+                        }
+                        let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
                     Some(_) => {
                         // Ignore other keys; tell reader to keep going.
@@ -216,9 +243,17 @@ async fn run_tty_monitor(
 
             // ── Ctrl-C from terminal (signal, not a key) ──────────────────
             _ = tokio::signal::ctrl_c() => {
-                downloads.cancel_all().await.ok();
-                let _ = cmd_tx.send(ReaderCmd::Stop).await;
-                break Ok(());
+                if quitting {
+                    downloads.cancel_all().await.ok();
+                    let _ = cmd_tx.send(ReaderCmd::Stop).await;
+                    break Ok(());
+                }
+                quitting = true;
+                if let Some(bar) = &hint_bar {
+                    bar.set_message(
+                        "Draining... press q again to force quit".to_string(),
+                    );
+                }
             }
 
             // ── 250 ms render / completion tick ────────────────────────────
@@ -245,11 +280,19 @@ async fn run_tty_monitor(
                 }
 
                 // Update live counts in the hint message every tick.
+                // While quitting, keep the drain hint pinned so the user
+                // doesn't lose the "press q again" instruction.
                 if let Some(bar) = &hint_bar {
-                    bar.set_message(build_hint_message(
-                        snapshot.active_count,
-                        snapshot.pending_count,
-                    ));
+                    if quitting {
+                        bar.set_message(
+                            "Draining... press q again to force quit".to_string(),
+                        );
+                    } else {
+                        bar.set_message(build_hint_message(
+                            snapshot.active_count,
+                            snapshot.pending_count,
+                        ));
+                    }
                 }
 
                 // Re-anchor hint to the bottom whenever new items appear.
@@ -276,11 +319,10 @@ async fn run_tty_monitor(
     if let Some(bar) = hint_bar {
         bar.finish_and_clear();
     }
-    // Best-effort: wait briefly for the reader thread to exit so the
-    // terminal isn't left with a half-read pending. read_key() is blocking,
-    // so if we've already sent Stop the reader will exit on the next key —
-    // we don't actually wait for it (would block on stdin) and rely on
-    // the channel close + process exit to clean up.
+    // Detach the reader thread.  We already sent ReaderCmd::Stop so it will
+    // exit as soon as the user presses the next key (or when the process
+    // terminates and the OS kills it).  We must not join here — that would
+    // block the async task on stdin forever.
     drop(reader_handle);
     result
 }

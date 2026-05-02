@@ -119,6 +119,7 @@ export type DownloadEvent =
   | { type: 'download_completed'; id: DownloadId; message?: string | null }
   | { type: 'download_failed'; id: DownloadId; error: string }
   | { type: 'download_cancelled'; id: DownloadId }
+  | { type: 'download_status_changed'; id: DownloadId; status: import('./downloads').DownloadStatus }
   | { type: 'queue_run_complete'; summary: QueueRunSummary };
 
 // ============================================================================

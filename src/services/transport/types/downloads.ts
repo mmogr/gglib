@@ -8,7 +8,7 @@ import type { DownloadId, HfModelId } from './ids';
 /**
  * Download status.
  */
-export type DownloadStatus = 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled';
+export type DownloadStatus = 'queued' | 'downloading' | 'finalizing' | 'registering' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Shard information for multi-file downloads.
