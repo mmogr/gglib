@@ -285,6 +285,15 @@ All interfaces share the same database and model directory. Pick whichever fits 
 | **Web UI** | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) — default `0.0.0.0:9887` |
 | **OpenAI Proxy** | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) — works with OpenWebUI, any OpenAI SDK |
 
+### Deterministic Stop Behavior
+
+- Deterministic model-level stop defaults are extracted from GGUF tokenizer metadata at registration time when authoritative keys are present.
+- Stop resolution is consistent across CLI, Axum API, and Tauri/web UI:
+        1. request/command override (`--stop`, UI serve override, API `stop`)
+        2. per-model inference defaults
+        3. global inference defaults
+- The OpenAI proxy stays pass-through and accepts both valid OpenAI stop shapes (`"stop": "END"` and `"stop": ["END", "STOP"]`).
+
 **Shell completions** — enable tab completion for your shell:
 
 | Shell | Setup |
