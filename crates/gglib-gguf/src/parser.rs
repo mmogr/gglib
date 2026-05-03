@@ -15,7 +15,8 @@ use crate::format::{CONTEXT_LENGTH_KEYS, quantization};
 use crate::reader::GgufReader;
 
 const TOKENIZER_TOKENS_KEY: &str = "tokenizer.ggml.tokens";
-const STOP_TOKEN_ID_KEYS: [&str; 2] = ["tokenizer.ggml.eot_token_id", "tokenizer.ggml.eos_token_id"];
+const STOP_TOKEN_ID_KEYS: [&str; 2] =
+    ["tokenizer.ggml.eot_token_id", "tokenizer.ggml.eos_token_id"];
 
 /// GGUF file parser.
 ///
@@ -496,7 +497,10 @@ mod tests {
             TOKENIZER_TOKENS_KEY.to_string(),
             GgufValue::Array(vec![GgufValue::String("</s>".to_string())]),
         );
-        raw.insert("tokenizer.ggml.eos_token_id".to_string(), GgufValue::U32(99));
+        raw.insert(
+            "tokenizer.ggml.eos_token_id".to_string(),
+            GgufValue::U32(99),
+        );
 
         let stop = extract_stop_sequences(&raw);
 

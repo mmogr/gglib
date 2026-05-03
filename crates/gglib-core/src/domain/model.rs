@@ -347,10 +347,7 @@ mod tests {
             Utc::now(),
         );
 
-        model.apply_deterministic_stop_defaults(&[
-            "<|im_end|>".to_string(),
-            "</s>".to_string(),
-        ]);
+        model.apply_deterministic_stop_defaults(&["<|im_end|>".to_string(), "</s>".to_string()]);
 
         assert_eq!(
             model
