@@ -49,6 +49,8 @@ pub struct Cli {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::Commands;
+    use crate::model_commands::ModelCommand;
     use clap::CommandFactory;
 
     #[test]
@@ -70,5 +72,125 @@ mod tests {
         ]);
         assert!(cli.verbose);
         assert_eq!(cli.models_dir, Some("/tmp/models".to_string()));
+    }
+
+    #[test]
+    fn test_serve_parses_repeated_stop_flags() {
+        let cli = Cli::parse_from([
+            "gglib",
+            "serve",
+            "1",
+            "--stop",
+            "<|im_end|>",
+            "--stop",
+            "</s>",
+        ]);
+
+        match cli.command {
+            Some(Commands::Serve { sampling, .. }) => {
+                assert_eq!(sampling.stop, vec!["<|im_end|>", "</s>"]);
+            }
+            _ => panic!("expected serve command"),
+        }
+    }
+
+    #[test]
+    fn test_chat_parses_repeated_stop_flags() {
+        let cli = Cli::parse_from([
+            "gglib",
+            "chat",
+            "model-1",
+            "--stop",
+            "<|im_end|>",
+            "--stop",
+            "</s>",
+        ]);
+
+        match cli.command {
+            Some(Commands::Chat { sampling, .. }) => {
+                assert_eq!(sampling.stop, vec!["<|im_end|>", "</s>"]);
+            }
+            _ => panic!("expected chat command"),
+        }
+    }
+
+    #[test]
+    fn test_question_alias_parses_repeated_stop_flags() {
+        let cli = Cli::parse_from([
+            "gglib",
+            "q",
+            "What is Rust?",
+            "--stop",
+            "<|im_end|>",
+            "--stop",
+            "</s>",
+        ]);
+
+        match cli.command {
+            Some(Commands::Question { sampling, .. }) => {
+                assert_eq!(sampling.stop, vec!["<|im_end|>", "</s>"]);
+            }
+            _ => panic!("expected question command"),
+        }
+    }
+
+    #[test]
+    fn test_model_update_parses_repeated_stop_flags() {
+        let cli = Cli::parse_from([
+            "gglib",
+            "model",
+            "update",
+            "1",
+            "--stop",
+            "<|im_end|>",
+            "--stop",
+            "</s>",
+        ]);
+
+        match cli.command {
+            Some(Commands::Model { command }) => match command {
+                ModelCommand::Update {
+                    stop, clear_stop, ..
+                } => {
+                    assert_eq!(stop, vec!["<|im_end|>", "</s>"]);
+                    assert!(!clear_stop);
+                }
+                _ => panic!("expected model update command"),
+            },
+            _ => panic!("expected model command"),
+        }
+    }
+
+    #[test]
+    fn test_model_update_parses_clear_stop_flag() {
+        let cli = Cli::parse_from(["gglib", "model", "update", "1", "--clear-stop"]);
+
+        match cli.command {
+            Some(Commands::Model { command }) => match command {
+                ModelCommand::Update {
+                    stop, clear_stop, ..
+                } => {
+                    assert!(stop.is_empty());
+                    assert!(clear_stop);
+                }
+                _ => panic!("expected model update command"),
+            },
+            _ => panic!("expected model command"),
+        }
+    }
+
+    #[test]
+    fn test_model_update_rejects_stop_with_clear_stop() {
+        let result = Cli::try_parse_from([
+            "gglib",
+            "model",
+            "update",
+            "1",
+            "--stop",
+            "<|im_end|>",
+            "--clear-stop",
+        ]);
+
+        assert!(result.is_err());
     }
 }

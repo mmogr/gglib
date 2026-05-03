@@ -48,6 +48,8 @@ pub async fn execute(
     context: ContextArgs,
 ) -> Result<()> {
     let cwd = env::current_dir().map_err(|e| anyhow!("cannot determine CWD: {e}"))?;
+    let sampling_for_settings = sampling.clone();
+    let context_for_settings = context.clone();
 
     let params = AgentSessionParams {
         model_identifier: model_arg.clone().unwrap_or_default(),
@@ -162,8 +164,8 @@ pub async fn execute(
     if completed && let Some(ref history) = history {
         let system_prompt = format!("{}\n\nWorking directory: {}", SYSTEM_PROMPT, cwd.display());
         let settings = crate::shared_args::ConversationSettingsBuilder::new(
-            &SamplingArgs::default(),
-            &crate::shared_args::ContextArgs::default(),
+            &sampling_for_settings,
+            &context_for_settings,
         )
         .model_name(params.model_identifier.clone())
         .tools(tools.clone(), false)
