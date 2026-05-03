@@ -109,6 +109,16 @@ pub(crate) struct ChatRoutingEnvelope {
     pub num_ctx: Option<u64>,
 }
 
+/// OpenAI-compatible `stop` field representation.
+///
+/// The OpenAI API accepts either a single string or an array of strings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum StopSequences {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
 /// Full OpenAI-compatible chat completion request.
 ///
 /// This type is kept for response construction, testing, and documentation
@@ -143,9 +153,9 @@ pub struct ChatCompletionRequest {
     /// Number of completions to generate.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<u32>,
-    /// Stop sequences.
+    /// Stop sequences (`"END"` or `["END", "STOP"]`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub stop: Option<Vec<String>>,
+    pub stop: Option<StopSequences>,
     /// Context window size (Ollama-compatible parameter).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub num_ctx: Option<u64>,
@@ -661,10 +671,24 @@ mod tests {
         assert_eq!(req.top_p, Some(0.9));
         assert_eq!(req.max_tokens, Some(512));
         assert_eq!(req.n, Some(1));
-        assert_eq!(req.stop.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            req.stop,
+            Some(StopSequences::Multiple(vec!["END".to_string()]))
+        );
         assert_eq!(req.num_ctx, Some(8192));
         assert_eq!(req.tools.as_ref().unwrap().len(), 1);
         assert_eq!(req.tools.as_ref().unwrap()[0].function.name, "get_weather");
+    }
+
+    #[test]
+    fn chat_request_accepts_stop_as_bare_string() {
+        let json = r#"{
+            "model": "llama-3",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stop": "END"
+        }"#;
+        let req: ChatCompletionRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.stop, Some(StopSequences::Single("END".to_string())));
     }
 
     #[test]

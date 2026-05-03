@@ -127,9 +127,69 @@ fn test_chat_completion_request_deserialize_full() {
     assert_eq!(request.n, Some(1));
     assert_eq!(
         request.stop,
-        Some(vec!["END".to_string(), "STOP".to_string()])
+        Some(gglib_runtime::proxy::models::StopSequences::Multiple(vec![
+            "END".to_string(),
+            "STOP".to_string(),
+        ]))
     );
     assert_eq!(request.num_ctx, Some(8192));
+}
+
+#[test]
+fn test_chat_completion_request_deserialize_stop_as_string() {
+    let json_str = r#"{
+        "model": "mistral-7b",
+        "messages": [
+            {"role": "user", "content": "What is Rust?"}
+        ],
+        "stop": "END"
+    }"#;
+
+    let request: gglib_runtime::proxy::models::ChatCompletionRequest =
+        serde_json::from_str(json_str).unwrap();
+
+    assert_eq!(
+        request.stop,
+        Some(gglib_runtime::proxy::models::StopSequences::Single(
+            "END".to_string(),
+        ))
+    );
+}
+
+/// Regression lock: extracting routing fields must not normalize pass-through
+/// fields such as stop string/array shape.
+#[test]
+fn test_routing_envelope_keeps_stop_string_shape_in_raw_body() {
+    let json_str = r#"{
+        "model": "llama-3",
+        "messages": [{"role": "user", "content": "hi"}],
+        "stop": "END"
+    }"#;
+
+    let env: gglib_runtime::proxy::models::ChatRoutingEnvelope =
+        serde_json::from_str(json_str).unwrap();
+    assert_eq!(env.model, "llama-3");
+
+    let raw: serde_json::Value = serde_json::from_str(json_str).unwrap();
+    assert_eq!(raw["stop"], serde_json::Value::String("END".to_string()));
+}
+
+/// Regression lock: stop arrays keep their original structure through routing
+/// envelope extraction.
+#[test]
+fn test_routing_envelope_keeps_stop_array_shape_in_raw_body() {
+    let json_str = r#"{
+        "model": "llama-3",
+        "messages": [{"role": "user", "content": "hi"}],
+        "stop": ["END", "STOP"]
+    }"#;
+
+    let env: gglib_runtime::proxy::models::ChatRoutingEnvelope =
+        serde_json::from_str(json_str).unwrap();
+    assert_eq!(env.model, "llama-3");
+
+    let raw: serde_json::Value = serde_json::from_str(json_str).unwrap();
+    assert_eq!(raw["stop"], serde_json::json!(["END", "STOP"]));
 }
 
 #[test]

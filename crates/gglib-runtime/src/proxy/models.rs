@@ -93,6 +93,16 @@ pub struct ChatRoutingEnvelope {
     pub num_ctx: Option<u64>,
 }
 
+/// OpenAI-compatible `stop` field representation.
+///
+/// The OpenAI API accepts either a single string or an array of strings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum StopSequences {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
 /// Request to /v1/chat/completions endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatCompletionRequest {
@@ -115,9 +125,9 @@ pub struct ChatCompletionRequest {
     /// Number of completions to generate
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<u32>,
-    /// Stop sequences
+    /// Stop sequences (`"END"` or `["END", "STOP"]`)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub stop: Option<Vec<String>>,
+    pub stop: Option<StopSequences>,
     /// Context window size (Ollama-compatible parameter)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub num_ctx: Option<u64>,
