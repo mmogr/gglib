@@ -241,6 +241,19 @@ impl NewModel {
             inference_defaults: None,
         }
     }
+
+    /// Apply deterministic stop-sequence defaults to this model.
+    ///
+    /// If stop sequences are empty, leaves inference defaults unchanged.
+    pub fn apply_deterministic_stop_defaults(&mut self, stop_sequences: &[String]) {
+        if stop_sequences.is_empty() {
+            return;
+        }
+
+        let mut defaults = self.inference_defaults.clone().unwrap_or_default();
+        defaults.stop = Some(stop_sequences.to_vec());
+        self.inference_defaults = Some(defaults);
+    }
 }
 
 impl Model {
@@ -323,5 +336,42 @@ mod tests {
         assert_eq!(new_model.name, "Persisted Model");
         assert_eq!(new_model.architecture, Some("llama".to_string()));
         assert_eq!(new_model.tags, vec!["chat".to_string()]);
+    }
+
+    #[test]
+    fn test_apply_deterministic_stop_defaults_sets_stop() {
+        let mut model = NewModel::new(
+            "Stop Test".to_string(),
+            PathBuf::from("/path/to/model.gguf"),
+            7.0,
+            Utc::now(),
+        );
+
+        model.apply_deterministic_stop_defaults(&[
+            "<|im_end|>".to_string(),
+            "</s>".to_string(),
+        ]);
+
+        assert_eq!(
+            model
+                .inference_defaults
+                .as_ref()
+                .and_then(|d| d.stop.clone()),
+            Some(vec!["<|im_end|>".to_string(), "</s>".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_apply_deterministic_stop_defaults_noop_when_empty() {
+        let mut model = NewModel::new(
+            "Stop Test".to_string(),
+            PathBuf::from("/path/to/model.gguf"),
+            7.0,
+            Utc::now(),
+        );
+
+        model.apply_deterministic_stop_defaults(&[]);
+
+        assert!(model.inference_defaults.is_none());
     }
 }
