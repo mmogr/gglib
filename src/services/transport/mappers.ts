@@ -25,6 +25,7 @@ export interface StartServerRequest {
     topK?: number;
     maxTokens?: number;
     repeatPenalty?: number;
+    stop?: string[];
   };
 }
 
@@ -72,7 +73,8 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     config.topP !== undefined || 
     config.topK !== undefined || 
     config.maxTokens !== undefined || 
-    config.repeatPenalty !== undefined;
+    config.repeatPenalty !== undefined ||
+    config.stop !== undefined;
   
   const inferenceParams = hasInferenceParams ? {
     temperature: config.temperature,
@@ -80,6 +82,7 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     topK: config.topK,
     maxTokens: config.maxTokens,
     repeatPenalty: config.repeatPenalty,
+    stop: config.stop,
   } : undefined;
 
   return {
@@ -89,7 +92,7 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     jinja: config.jinja,
     // reasoning_format is auto-detected from model tags on backend when omitted
     reasoningFormat: undefined,
-    inferenceParams,
+    ...(inferenceParams !== undefined ? { inferenceParams } : {}),
   };
 }
 

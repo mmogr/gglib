@@ -183,6 +183,9 @@ pub struct ConversationSettings {
     /// Repetition penalty.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repeat_penalty: Option<f32>,
+    /// Stop sequences that terminate generation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<Vec<String>>,
     /// Context window size (numeric or "max").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ctx_size: Option<String>,
@@ -204,4 +207,32 @@ pub struct ConversationSettings {
     /// Whether tools were disabled entirely.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub no_tools: Option<bool>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ConversationSettings;
+
+    #[test]
+    fn conversation_settings_deserializes_without_stop() {
+        let json = r#"{"model_name":"qwen","temperature":0.7}"#;
+        let settings: ConversationSettings = serde_json::from_str(json).unwrap();
+
+        assert_eq!(settings.model_name.as_deref(), Some("qwen"));
+        assert!(settings.stop.is_none());
+    }
+
+    #[test]
+    fn conversation_settings_round_trips_with_stop() {
+        let settings = ConversationSettings {
+            model_name: Some("qwen".to_string()),
+            stop: Some(vec!["<|im_end|>".to_string(), "</s>".to_string()]),
+            ..Default::default()
+        };
+
+        let serialized = serde_json::to_string(&settings).unwrap();
+        let deserialized: ConversationSettings = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.stop, settings.stop);
+    }
 }

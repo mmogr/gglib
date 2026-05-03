@@ -20,6 +20,7 @@ export interface ConversationSettings {
   top_k?: number | null;
   max_tokens?: number | null;
   repeat_penalty?: number | null;
+  stop?: string[] | null;
   ctx_size?: number | null;
   mlock?: boolean | null;
   tools?: string[] | null;

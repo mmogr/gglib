@@ -50,6 +50,7 @@ impl SamplingArgs {
             top_k: self.top_k,
             max_tokens: self.max_tokens,
             repeat_penalty: self.repeat_penalty,
+            stop: None,
         }
     }
 }

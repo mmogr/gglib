@@ -79,6 +79,8 @@ pub struct ChatProxyRequest {
     pub top_k: Option<i32>,
     /// Optional repeat_penalty (inference parameter - will be resolved via hierarchy).
     pub repeat_penalty: Option<f32>,
+    /// Optional stop sequences (inference parameter - will be resolved via hierarchy).
+    pub stop: Option<Vec<String>>,
     /// Optional tools for function calling.
     #[serde(default)]
     pub tools: Option<Vec<serde_json::Value>>,
@@ -442,6 +444,7 @@ pub async fn proxy_chat(
         top_k: request.top_k,
         max_tokens: request.max_tokens,
         repeat_penalty: request.repeat_penalty,
+        stop: request.stop.clone(),
     };
 
     // Apply model defaults (if missing)
@@ -464,6 +467,7 @@ pub async fn proxy_chat(
         resolved_top_k = resolved.top_k,
         resolved_max_tokens = resolved.max_tokens,
         resolved_repeat_penalty = resolved.repeat_penalty,
+        resolved_stop = ?resolved.stop,
         "Resolved inference parameters via hierarchy"
     );
 
@@ -533,6 +537,7 @@ pub async fn proxy_chat(
         "top_p": resolved.top_p,
         "top_k": resolved.top_k,
         "repeat_penalty": resolved.repeat_penalty,
+        "stop": resolved.stop,
     });
 
     // Inject tools only when the model supports them.
