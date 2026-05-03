@@ -175,6 +175,7 @@ impl ServerOps {
         request: &StartServerRequest,
         base_port: u16,
         default_context_size: Option<u64>,
+        global_inference_defaults: Option<gglib_core::domain::InferenceConfig>,
     ) -> ServerConfig {
         let mut config = ServerConfig::new(
             model.id,
@@ -212,9 +213,12 @@ impl ServerOps {
             }
         }
 
-        if let Some(ref params) = request.inference_params {
-            config = config.with_inference_config(params.clone());
-        }
+        let resolved_inference = gglib_core::domain::InferenceConfig::resolve_with_hierarchy(
+            request.inference_params.as_ref(),
+            model.inference_defaults.as_ref(),
+            global_inference_defaults.as_ref(),
+        );
+        config = config.with_inference_config(resolved_inference);
 
         config
     }
@@ -259,7 +263,13 @@ impl ServerOps {
             "Resolved llama-server base port for model serving"
         );
 
-        let config = Self::build_config(&model, &request, base_port, settings.default_context_size);
+        let config = Self::build_config(
+            &model,
+            &request,
+            base_port,
+            settings.default_context_size,
+            settings.inference_defaults.clone(),
+        );
         let handle = self.deps.runner.start(config).await.map_err(|e| {
             // Emit error event before mapping the error
             let error_summary = ServerSummary {
@@ -596,6 +606,8 @@ impl ServerOps {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
     use tokio::time::{Duration, timeout};
 
     /// Helper to check if registry contains a server_id
@@ -604,6 +616,78 @@ mod tests {
         fn contains(&self, server_id: i64) -> bool {
             self.monitors.contains_key(&server_id)
         }
+    }
+
+    fn sample_model() -> Model {
+        Model {
+            id: 1,
+            name: "test-model".to_string(),
+            file_path: PathBuf::from("/tmp/test-model.gguf"),
+            param_count_b: 7.0,
+            architecture: None,
+            quantization: None,
+            context_length: Some(4096),
+            expert_count: None,
+            expert_used_count: None,
+            expert_shared_count: None,
+            metadata: HashMap::new(),
+            added_at: "2026-01-01T00:00:00Z".parse().unwrap(),
+            hf_repo_id: None,
+            hf_commit_sha: None,
+            hf_filename: None,
+            download_date: None,
+            last_update_check: None,
+            tags: vec![],
+            capabilities: gglib_core::domain::ModelCapabilities::default(),
+            inference_defaults: None,
+        }
+    }
+
+    #[test]
+    fn test_build_config_resolves_inference_precedence_with_stop() {
+        let mut model = sample_model();
+        model.inference_defaults = Some(gglib_core::domain::InferenceConfig {
+            temperature: Some(0.35),
+            stop: Some(vec!["<|model|>".to_string()]),
+            ..Default::default()
+        });
+
+        let request = StartServerRequest {
+            inference_params: Some(gglib_core::domain::InferenceConfig {
+                top_p: Some(0.71),
+                stop: Some(vec!["<|request|>".to_string()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let global_defaults = Some(gglib_core::domain::InferenceConfig {
+            top_p: Some(0.95),
+            top_k: Some(88),
+            stop: Some(vec!["<|global|>".to_string()]),
+            ..Default::default()
+        });
+
+        let config = ServerOps::build_config(&model, &request, 9000, Some(8192), global_defaults);
+        let resolved = config.inference_config.expect("resolved inference config");
+
+        assert_eq!(resolved.stop, Some(vec!["<|request|>".to_string()]));
+        assert_eq!(resolved.top_p, Some(0.71));
+        assert_eq!(resolved.temperature, Some(0.35));
+        assert_eq!(resolved.top_k, Some(88));
+        assert_eq!(resolved.max_tokens, Some(2048));
+    }
+
+    #[test]
+    fn test_build_config_keeps_stop_none_when_unspecified() {
+        let model = sample_model();
+        let request = StartServerRequest::default();
+
+        let config = ServerOps::build_config(&model, &request, 9000, None, None);
+        let resolved = config.inference_config.expect("resolved inference config");
+
+        assert!(resolved.stop.is_none());
+        assert_eq!(resolved.temperature, Some(0.7));
     }
 
     #[tokio::test]
