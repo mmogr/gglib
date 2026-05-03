@@ -275,4 +275,7 @@ fn print_sampling_lines(s: &InferenceConfig) {
     if let Some(v) = s.repeat_penalty {
         eprintln!("  Repeat penalty: {v}");
     }
+    if let Some(stop) = &s.stop {
+        eprintln!("  Stop: {}", stop.join(", "));
+    }
 }

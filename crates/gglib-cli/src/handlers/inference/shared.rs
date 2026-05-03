@@ -86,6 +86,9 @@ pub fn log_inference_info(config: &InferenceConfig) {
     if let Some(repeat_penalty) = config.repeat_penalty {
         eprintln!("    Repeat penalty: {}", repeat_penalty);
     }
+    if let Some(stop) = &config.stop {
+        eprintln!("    Stop: {}", stop.join(", "));
+    }
 }
 
 /// Log command execution at debug level.

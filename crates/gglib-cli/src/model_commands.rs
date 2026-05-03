@@ -73,6 +73,13 @@ pub enum ModelCommand {
         /// Set default repeat-penalty for this model
         #[arg(long = "repeat-penalty")]
         repeat_penalty: Option<f32>,
+        /// Set repeatable default stop sequences for this model
+        /// (e.g. --stop "<|im_end|>" --stop "</s>")
+        #[arg(long = "stop", action = clap::ArgAction::Append)]
+        stop: Vec<String>,
+        /// Clear only stop-sequence defaults for this model
+        #[arg(long = "clear-stop", conflicts_with = "stop")]
+        clear_stop: bool,
         /// Clear all inference parameter defaults (revert to inherit mode)
         #[arg(long)]
         clear_inference_defaults: bool,
