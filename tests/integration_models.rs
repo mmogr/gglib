@@ -143,6 +143,7 @@ fn test_gguf_metadata_structure() {
         param_count_b: Some(7.0),
         quantization: Some("Q4_0".to_string()),
         context_length: Some(4096),
+        stop_sequences: vec!["<|im_end|>".to_string()],
         metadata: metadata_map.clone(),
     };
 
@@ -152,6 +153,7 @@ fn test_gguf_metadata_structure() {
     assert_eq!(gguf_metadata.param_count_b.unwrap(), 7.0);
     assert_eq!(gguf_metadata.quantization.unwrap(), "Q4_0");
     assert_eq!(gguf_metadata.context_length.unwrap(), 4096);
+    assert_eq!(gguf_metadata.stop_sequences, vec!["<|im_end|>"]);
     assert_eq!(gguf_metadata.metadata.len(), 3);
 }
 
@@ -163,6 +165,7 @@ fn test_gguf_metadata_with_all_none_values() {
         param_count_b: None,
         quantization: None,
         context_length: None,
+        stop_sequences: vec![],
         metadata: HashMap::new(),
     };
 
@@ -172,6 +175,7 @@ fn test_gguf_metadata_with_all_none_values() {
     assert_eq!(gguf_metadata.param_count_b, None);
     assert_eq!(gguf_metadata.quantization, None);
     assert_eq!(gguf_metadata.context_length, None);
+    assert!(gguf_metadata.stop_sequences.is_empty());
     assert!(gguf_metadata.metadata.is_empty());
 }
 
@@ -307,10 +311,25 @@ fn test_model_cloning() {
         param_count_b: Some(7.0),
         quantization: Some("Q4_0".to_string()),
         context_length: Some(4096),
+        stop_sequences: vec!["</s>".to_string()],
         metadata: HashMap::new(),
     };
 
     let cloned_metadata = gguf_metadata.clone();
     assert_eq!(cloned_metadata.name, gguf_metadata.name);
     assert_eq!(cloned_metadata.architecture, gguf_metadata.architecture);
+    assert_eq!(cloned_metadata.stop_sequences, gguf_metadata.stop_sequences);
+}
+
+#[test]
+fn test_gguf_metadata_stop_sequences_preserved() {
+    let gguf_metadata = GgufMetadata {
+        stop_sequences: vec!["<|im_end|>".to_string(), "</s>".to_string()],
+        ..Default::default()
+    };
+
+    assert_eq!(
+        gguf_metadata.stop_sequences,
+        vec!["<|im_end|>".to_string(), "</s>".to_string()]
+    );
 }

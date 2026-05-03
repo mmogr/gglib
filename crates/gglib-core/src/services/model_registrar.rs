@@ -145,6 +145,10 @@ impl ModelRegistrarPort for ModelRegistrar {
         // Pass through file_paths for sharded models
         model.file_paths.clone_from(&download.file_paths);
 
+        if let Some(ref meta) = gguf_metadata {
+            model.apply_deterministic_stop_defaults(&meta.stop_sequences);
+        }
+
         // Auto-detect capabilities from metadata and merge with HF tags
         let gguf_tags = gguf_metadata.as_ref().map_or_else(Vec::new, |meta| {
             let capabilities = self.gguf_parser.detect_capabilities(meta);
@@ -220,10 +224,24 @@ impl ModelRegistrarPort for ModelRegistrar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::Model;
-    use crate::ports::NoopGgufParser;
+    use crate::domain::{GgufMetadata, Model};
+    use crate::ports::{GgufCapabilities, GgufParseError, GgufParserPort, NoopGgufParser};
     use std::path::PathBuf;
     use std::sync::Mutex;
+
+    struct StaticGgufParser {
+        metadata: GgufMetadata,
+    }
+
+    impl GgufParserPort for StaticGgufParser {
+        fn parse(&self, _file_path: &Path) -> Result<GgufMetadata, GgufParseError> {
+            Ok(self.metadata.clone())
+        }
+
+        fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
+            GgufCapabilities::empty()
+        }
+    }
 
     /// Mock model repository for testing.
     struct MockModelRepo {
@@ -332,6 +350,44 @@ mod tests {
         assert_eq!(model.hf_repo_id, Some("test/model".to_string()));
         assert_eq!(model.hf_commit_sha, Some("abc123".to_string()));
         assert_eq!(model.quantization, Some("Q4_K_M".to_string()));
+        assert!(model.inference_defaults.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_register_model_persists_stop_defaults_when_extracted() {
+        let repo = Arc::new(MockModelRepo::new());
+        let parser = Arc::new(StaticGgufParser {
+            metadata: GgufMetadata {
+                stop_sequences: vec!["<|im_end|>".to_string()],
+                ..Default::default()
+            },
+        });
+        let registrar = ModelRegistrar::new(repo.clone(), parser, None);
+
+        let download = CompletedDownload {
+            primary_path: PathBuf::from("/models/test-model-q4_k_m.gguf"),
+            all_paths: vec![PathBuf::from("/models/test-model-q4_k_m.gguf")],
+            quantization: Quantization::Q4KM,
+            repo_id: "test/model".to_string(),
+            commit_sha: "abc123".to_string(),
+            is_sharded: false,
+            total_bytes: 1024,
+            file_paths: None,
+            hf_tags: vec![],
+            hf_file_entries: vec![],
+        };
+
+        let result = registrar.register_model(&download).await;
+        assert!(result.is_ok());
+
+        let model = result.unwrap();
+        assert_eq!(
+            model
+                .inference_defaults
+                .as_ref()
+                .and_then(|d| d.stop.clone()),
+            Some(vec!["<|im_end|>".to_string()])
+        );
     }
 
     #[tokio::test]

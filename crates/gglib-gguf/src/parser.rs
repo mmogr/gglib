@@ -14,6 +14,9 @@ use crate::error::GgufResult;
 use crate::format::{CONTEXT_LENGTH_KEYS, quantization};
 use crate::reader::GgufReader;
 
+const TOKENIZER_TOKENS_KEY: &str = "tokenizer.ggml.tokens";
+const STOP_TOKEN_ID_KEYS: [&str; 2] = ["tokenizer.ggml.eot_token_id", "tokenizer.ggml.eos_token_id"];
+
 /// GGUF file parser.
 ///
 /// Implements `GgufParserPort` from `gglib-core`, providing full GGUF
@@ -107,6 +110,7 @@ fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
     // Extract MoE metadata
     let (expert_count, expert_used_count, expert_shared_count) =
         extract_moe_metadata(raw, architecture.as_ref());
+    let stop_sequences = extract_stop_sequences(raw);
 
     GgufMetadata {
         name,
@@ -117,8 +121,46 @@ fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
         expert_count,
         expert_used_count,
         expert_shared_count,
+        stop_sequences,
         metadata: processed,
     }
+}
+
+/// Deterministically extract stop sequences from tokenizer token IDs.
+///
+/// This intentionally uses ID→token mapping only, with no template heuristics.
+fn extract_stop_sequences(raw: &RawMetadata) -> Vec<String> {
+    let Some(GgufValue::Array(tokens)) = raw.get(TOKENIZER_TOKENS_KEY) else {
+        return Vec::new();
+    };
+
+    let mut stop_sequences = Vec::new();
+
+    for key in STOP_TOKEN_ID_KEYS {
+        let Some(id_value) = raw.get(key) else {
+            continue;
+        };
+
+        if let Some(sequence) = resolve_token_from_id(id_value, tokens)
+            && !stop_sequences.contains(&sequence)
+        {
+            stop_sequences.push(sequence);
+        }
+    }
+
+    stop_sequences
+}
+
+fn resolve_token_from_id(id_value: &GgufValue, tokens: &[GgufValue]) -> Option<String> {
+    let token_id = id_value.as_u64()?;
+    let token_index = usize::try_from(token_id).ok()?;
+    let token = tokens.get(token_index)?.as_str()?.trim();
+
+    if token.is_empty() {
+        return None;
+    }
+
+    Some(token.to_string())
 }
 
 /// Extract model name from metadata or filename.
@@ -426,5 +468,52 @@ mod tests {
         );
         assert_eq!(extract_quantization_from_filename("model-f16.gguf"), "F16");
         assert_eq!(extract_quantization_from_filename("model.gguf"), "Unknown");
+    }
+
+    #[test]
+    fn test_extract_stop_sequences_in_range_ids() {
+        let mut raw = HashMap::new();
+        raw.insert(
+            TOKENIZER_TOKENS_KEY.to_string(),
+            GgufValue::Array(vec![
+                GgufValue::String("<pad>".to_string()),
+                GgufValue::String("</s>".to_string()),
+                GgufValue::String("<|im_end|>".to_string()),
+            ]),
+        );
+        raw.insert("tokenizer.ggml.eot_token_id".to_string(), GgufValue::U32(2));
+        raw.insert("tokenizer.ggml.eos_token_id".to_string(), GgufValue::U32(1));
+
+        let stop = extract_stop_sequences(&raw);
+
+        assert_eq!(stop, vec!["<|im_end|>".to_string(), "</s>".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_stop_sequences_out_of_range_id_ignored() {
+        let mut raw = HashMap::new();
+        raw.insert(
+            TOKENIZER_TOKENS_KEY.to_string(),
+            GgufValue::Array(vec![GgufValue::String("</s>".to_string())]),
+        );
+        raw.insert("tokenizer.ggml.eos_token_id".to_string(), GgufValue::U32(99));
+
+        let stop = extract_stop_sequences(&raw);
+
+        assert!(stop.is_empty());
+    }
+
+    #[test]
+    fn test_extract_stop_sequences_non_string_token_array_ignored() {
+        let mut raw = HashMap::new();
+        raw.insert(
+            TOKENIZER_TOKENS_KEY.to_string(),
+            GgufValue::Array(vec![GgufValue::U32(1), GgufValue::U32(2)]),
+        );
+        raw.insert("tokenizer.ggml.eos_token_id".to_string(), GgufValue::U32(0));
+
+        let stop = extract_stop_sequences(&raw);
+
+        assert!(stop.is_empty());
     }
 }
