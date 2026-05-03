@@ -130,7 +130,7 @@ impl InferenceConfig {
             self.repeat_penalty = other.repeat_penalty;
         }
         if self.stop.is_none() {
-            self.stop = other.stop.clone();
+            self.stop.clone_from(&other.stop);
         }
     }
 
