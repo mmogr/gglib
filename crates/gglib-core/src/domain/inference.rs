@@ -1,7 +1,7 @@
 //! Inference configuration types.
 //!
 //! Defines shared types for configuring LLM inference parameters
-//! (temperature, `top_p`, `top_k`, `max_tokens`, `repeat_penalty`).
+//! (temperature, `top_p`, `top_k`, `max_tokens`, `repeat_penalty`, `stop`).
 //!
 //! This module provides the core `InferenceConfig` type that is reused across:
 //! - Per-model defaults (`Model.inference_defaults`)
@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 ///     top_k: Some(40),
 ///     max_tokens: Some(2048),
 ///     repeat_penalty: Some(1.1),
+///     stop: Some(vec!["<|im_end|>".to_string()]),
 /// };
 ///
 /// // Creative writing settings
@@ -79,6 +80,11 @@ pub struct InferenceConfig {
     /// - 1.1-1.3: Moderate penalty
     /// - > 1.3: Strong penalty (may hurt coherence)
     pub repeat_penalty: Option<f32>,
+
+    /// Stop sequences that terminate generation when encountered.
+    ///
+    /// If omitted, model/global/hardcoded fallback resolution applies.
+    pub stop: Option<Vec<String>>,
 }
 
 impl InferenceConfig {
@@ -107,7 +113,7 @@ impl InferenceConfig {
     /// assert_eq!(request.temperature, Some(0.8)); // Request value wins
     /// assert_eq!(request.top_p, Some(0.9));      // Fallback to model default
     /// ```
-    pub const fn merge_with(&mut self, other: &Self) {
+    pub fn merge_with(&mut self, other: &Self) {
         if self.temperature.is_none() {
             self.temperature = other.temperature;
         }
@@ -123,6 +129,9 @@ impl InferenceConfig {
         if self.repeat_penalty.is_none() {
             self.repeat_penalty = other.repeat_penalty;
         }
+        if self.stop.is_none() {
+            self.stop = other.stop.clone();
+        }
     }
 
     /// Create a new config with all fields set to sensible defaults.
@@ -137,6 +146,7 @@ impl InferenceConfig {
             top_k: Some(40),
             max_tokens: Some(2048),
             repeat_penalty: Some(1.0),
+            stop: None,
         }
     }
 
@@ -160,6 +170,7 @@ impl InferenceConfig {
     ///     top_k: None,
     ///     max_tokens: Some(1024),
     ///     repeat_penalty: None,
+    ///     stop: None,
     /// };
     ///
     /// let args = config.to_cli_args();
@@ -206,6 +217,7 @@ mod tests {
         assert!(config.top_k.is_none());
         assert!(config.max_tokens.is_none());
         assert!(config.repeat_penalty.is_none());
+        assert!(config.stop.is_none());
     }
 
     #[test]
@@ -213,6 +225,7 @@ mod tests {
         let mut request = InferenceConfig {
             temperature: Some(0.8),
             top_p: None,
+            stop: None,
             ..Default::default()
         };
 
@@ -220,6 +233,7 @@ mod tests {
             temperature: Some(0.5),
             top_p: Some(0.9),
             top_k: Some(50),
+            stop: Some(vec!["<|im_end|>".to_string()]),
             ..Default::default()
         };
 
@@ -228,7 +242,25 @@ mod tests {
         assert_eq!(request.temperature, Some(0.8)); // Request wins
         assert_eq!(request.top_p, Some(0.9)); // Fallback to model
         assert_eq!(request.top_k, Some(50)); // Fallback to model
+        assert_eq!(request.stop, Some(vec!["<|im_end|>".to_string()])); // Fallback to model
         assert!(request.max_tokens.is_none()); // Still None
+    }
+
+    #[test]
+    fn test_merge_with_preserves_request_stop() {
+        let mut request = InferenceConfig {
+            stop: Some(vec!["<|custom_stop|>".to_string()]),
+            ..Default::default()
+        };
+
+        let model_defaults = InferenceConfig {
+            stop: Some(vec!["<|im_end|>".to_string()]),
+            ..Default::default()
+        };
+
+        request.merge_with(&model_defaults);
+
+        assert_eq!(request.stop, Some(vec!["<|custom_stop|>".to_string()]));
     }
 
     #[test]
@@ -239,6 +271,7 @@ mod tests {
         assert_eq!(config.top_k, Some(40));
         assert_eq!(config.max_tokens, Some(2048));
         assert_eq!(config.repeat_penalty, Some(1.0));
+        assert!(config.stop.is_none());
     }
 
     #[test]
@@ -249,6 +282,7 @@ mod tests {
             top_k: None,
             max_tokens: Some(1024),
             repeat_penalty: None,
+            stop: Some(vec!["<|im_end|>".to_string()]),
         };
 
         let json = serde_json::to_string(&config).unwrap();

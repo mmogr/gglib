@@ -70,6 +70,12 @@ describe('Tauri serve_model IPC Contract', () => {
       port: 9090,
       mlock: true,
       jinja: false,
+      temperature: 0.8,
+      topP: 0.92,
+      topK: 64,
+      maxTokens: 1024,
+      repeatPenalty: 1.05,
+      stop: ['<|im_end|>', '</s>'],
     };
 
     const payload = {
@@ -83,6 +89,42 @@ describe('Tauri serve_model IPC Contract', () => {
       mlock: true,
       jinja: false,
       reasoningFormat: undefined,
+      inferenceParams: {
+        temperature: 0.8,
+        topP: 0.92,
+        topK: 64,
+        maxTokens: 1024,
+        repeatPenalty: 1.05,
+        stop: ['<|im_end|>', '</s>'],
+      },
+    });
+  });
+
+  it('should include stop-only inferenceParams when only stop is provided', () => {
+    const config: ServeConfig = {
+      id: 790,
+      stop: ['<|im_end|>'],
+    };
+
+    const payload = {
+      id: config.id,
+      request: toStartServerRequest(config),
+    };
+
+    expect(payload.request).toEqual({
+      contextLength: undefined,
+      port: undefined,
+      mlock: false,
+      jinja: undefined,
+      reasoningFormat: undefined,
+      inferenceParams: {
+        temperature: undefined,
+        topP: undefined,
+        topK: undefined,
+        maxTokens: undefined,
+        repeatPenalty: undefined,
+        stop: ['<|im_end|>'],
+      },
     });
   });
 

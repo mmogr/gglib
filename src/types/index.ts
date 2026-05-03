@@ -23,6 +23,8 @@ export interface InferenceConfig {
   maxTokens?: number;
   /** Repetition penalty (> 0.0, typically 1.0 - 1.3). */
   repeatPenalty?: number;
+  /** Stop sequences that terminate generation when encountered. */
+  stop?: string[];
 }
 
 // ============================================================================
@@ -67,6 +69,7 @@ export interface ServeConfig {
   topK?: number;
   maxTokens?: number;
   repeatPenalty?: number;
+  stop?: string[];
 }
 
 export interface ServerInfo {
