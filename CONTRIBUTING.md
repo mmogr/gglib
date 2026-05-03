@@ -93,6 +93,17 @@ When adding a new long-running operation:
 
 ---
 
+## Deterministic Stop Contract
+
+`stop` behavior is a cross-surface contract and must remain uniform.
+
+- Do not implement stop precedence separately in adapters. Use the shared inference resolution path in core/runtime.
+- Keep request-level overrides (`--stop`, API `stop`, UI serve overrides) higher priority than model and global defaults.
+- Proxy remains transport-only: parse only routing envelope fields and forward raw request bytes unchanged.
+- Any stop-shape/schema change requires synchronized updates across Rust + TypeScript transport types and regression tests.
+
+---
+
 ## Concurrency Model
 
 The codebase uses Tokio for the async runtime. Understanding the boundary between async Tokio tasks and OS threads is critical.
@@ -419,6 +430,7 @@ Every PR must pass the following gates in order. They are not advisory.
 | **Architecture** | `./scripts/check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh` | Tauri policy; no IPC in product routes; no frontend transport branching |
 | **Clippy** | `cargo clippy --all-targets --all-features -- -D warnings` | No warnings, ever |
 | **Rust tests** | `cargo test` (aggregate + per-crate) | Correctness |
+| **Stop-focused regressions** | `cargo test -p gglib-core stop`, `cargo test -p gglib-proxy stop`, `npm run test:run -- tests/ts/components/InferenceParametersForm.test.tsx tests/ts/contracts/tauri-serve-model.test.ts` | Deterministic stop parity across CLI, Axum/Tauri transport, and proxy |
 | **Doc tests** | `cargo test --doc --verbose` | Doc examples compile and run |
 | **Frontend tests** | `npm run test:run` | TypeScript correctness |
 | **Cross-OS check** | `cargo check` on Linux/macOS/Windows | No platform-specific breakage |
@@ -444,5 +456,6 @@ Before requesting review, confirm each item:
 - [ ] Environment variable merging uses read-then-append, not a bare `.env()` that overwrites.
 - [ ] Any feature gated behind `#[cfg(feature = "...")]` is declared correctly in all consuming `Cargo.toml` files.
 - [ ] If the change adds a new long-running operation, all three surfaces (CLI, Axum, Tauri) are wired up.
+- [ ] If the change touches stop behavior, stop-focused Rust and TypeScript regressions pass and surface parity remains intact.
 - [ ] `Cargo.lock` is up to date and committed.
 - [ ] No new dependency has been introduced from a higher layer to a lower layer.

@@ -178,6 +178,13 @@ gglib q "Summarize this" --stop "<|im_end|>" --stop "</s>"
 
 Inference commands accept repeatable `--stop` flags, matching runtime CLI forwarding:
 
+- `q`, `chat`, and `serve` all use the same shared inference resolver.
+- Effective stop precedence is:
+  1. explicit `--stop` on the current command
+  2. model defaults (including deterministic GGUF-derived defaults captured at registration)
+  3. global inference defaults from settings
+- Per-model defaults can be edited without touching other inference fields using `gglib model update --stop ...` and `gglib model update --clear-stop`.
+
 ```bash
 # Serve with explicit stop sequences
 gglib serve 1 --stop "<|im_end|>" --stop "</s>"
