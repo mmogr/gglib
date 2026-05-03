@@ -2,6 +2,7 @@ import { FC, useCallback } from 'react';
 import { X } from 'lucide-react';
 import type { InferenceConfig } from '../../types';
 import { Input } from '../ui/Input';
+import { Textarea } from '../ui/Textarea';
 import { Icon } from '../ui/Icon';
 import './InferenceParametersForm.css';
 
@@ -10,6 +11,13 @@ interface InferenceParametersFormProps {
   onChange: (newValue: InferenceConfig) => void;
   disabled?: boolean;
 }
+
+type NumericInferenceField =
+  | 'temperature'
+  | 'topP'
+  | 'topK'
+  | 'maxTokens'
+  | 'repeatPenalty';
 
 /**
  * Tristate inference parameters form.
@@ -29,8 +37,8 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
 }) => {
   const config = value || {};
 
-  const updateField = useCallback(<K extends keyof InferenceConfig>(
-    field: K,
+  const updateNumberField = useCallback((
+    field: NumericInferenceField,
     newValue: number | undefined
   ) => {
     const updated = { ...config, [field]: newValue };
@@ -41,27 +49,37 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
     onChange(updated);
   }, [config, onChange]);
 
+  const updateStopField = useCallback((newValue: string[] | undefined) => {
+    const updated = { ...config, stop: newValue };
+    if (newValue === undefined) {
+      delete updated.stop;
+    }
+    onChange(updated);
+  }, [config, onChange]);
+
   const renderNumberInput = (
-    field: keyof InferenceConfig,
+    field: NumericInferenceField,
     label: string,
     min: number,
     max: number,
     step: number,
     defaultHint: string
   ) => {
+    const inputId = `inference-${field}`;
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label className="text-[0.85rem] font-medium text-text">{label}</label>
+        <label htmlFor={inputId} className="text-[0.85rem] font-medium text-text">{label}</label>
         <div className="flex items-center gap-[0.5rem]">
           <Input
+            id={inputId}
             type="number"
             value={isSet ? currentValue : ''}
             onChange={(e) => {
               const val = e.target.value;
-              updateField(field, val === '' ? undefined : Number(val));
+              updateNumberField(field, val === '' ? undefined : Number(val));
             }}
             placeholder={defaultHint}
             min={min}
@@ -75,7 +93,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             <button
               type="button"
               className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-[4px] bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
-              onClick={() => updateField(field, undefined)}
+              onClick={() => updateNumberField(field, undefined)}
               title="Reset to default"
               aria-label={`Reset ${label} to default`}
             >
@@ -93,26 +111,28 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   };
 
   const renderSlider = (
-    field: keyof InferenceConfig,
+    field: NumericInferenceField,
     label: string,
     min: number,
     max: number,
     step: number,
     defaultHint: string
   ) => {
+    const inputId = `inference-${field}`;
     const currentValue = config[field];
     const isSet = currentValue !== undefined && currentValue !== null;
     const displayValue = isSet ? currentValue : parseFloat(defaultHint);
 
     return (
       <div className="flex flex-col gap-[0.4rem]">
-        <label className="text-[0.85rem] font-medium text-text">{label}</label>
+        <label htmlFor={inputId} className="text-[0.85rem] font-medium text-text">{label}</label>
         <div className="flex items-center gap-[0.75rem]">
           <input
+            id={inputId}
             type="range"
             value={displayValue}
             onChange={(e) => {
-              updateField(field, Number(e.target.value));
+              updateNumberField(field, Number(e.target.value));
             }}
             min={min}
             max={max}
@@ -127,7 +147,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             <button
               type="button"
               className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-[4px] bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
-              onClick={() => updateField(field, undefined)}
+              onClick={() => updateNumberField(field, undefined)}
               title="Reset to default"
               aria-label={`Reset ${label} to default`}
             >
@@ -135,6 +155,55 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
             </button>
           )}
         </div>
+      </div>
+    );
+  };
+
+  const renderStopInput = (defaultHint: string) => {
+    const inputId = 'inference-stop';
+    const currentValue = config.stop;
+    const isSet = currentValue !== undefined && currentValue !== null;
+
+    return (
+      <div className="flex flex-col gap-[0.4rem]">
+        <label htmlFor={inputId} className="text-[0.85rem] font-medium text-text">Stop Sequences</label>
+        <div className="flex items-start gap-[0.5rem]">
+          <Textarea
+            id={inputId}
+            value={isSet ? currentValue.join('\n') : ''}
+            onChange={(e) => {
+              const parsed = e.target.value
+                .split(/[\n,]/)
+                .map((token) => token.trim())
+                .filter((token) => token.length > 0);
+              updateStopField(parsed.length > 0 ? parsed : undefined);
+            }}
+            placeholder={defaultHint}
+            disabled={disabled}
+            size="sm"
+            className="flex-1 font-mono text-xs"
+          />
+          {isSet && !disabled && (
+            <button
+              type="button"
+              className="flex items-center justify-center w-[24px] h-[24px] p-0 border-0 rounded-[4px] bg-transparent text-text-muted cursor-pointer transition-all duration-150 hover:bg-background-hover hover:text-text active:scale-95"
+              onClick={() => updateStopField(undefined)}
+              title="Reset to default"
+              aria-label="Reset Stop Sequences to default"
+            >
+              <Icon icon={X} size={14} />
+            </button>
+          )}
+        </div>
+        {!isSet ? (
+          <span className="text-[0.75rem] text-text-muted italic">
+            Using default ({defaultHint})
+          </span>
+        ) : (
+          <span className="text-[0.75rem] text-text-muted">
+            One sequence per line (commas also supported).
+          </span>
+        )}
       </div>
     );
   };
@@ -152,6 +221,7 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
         {renderNumberInput('topK', 'Top K', 1, 200, 1, '40')}
         {renderNumberInput('maxTokens', 'Max Tokens', 1, 8192, 1, '2048')}
         {renderSlider('repeatPenalty', 'Repeat Penalty', 0, 2, 0.05, '1.0')}
+        {renderStopInput('<|im_end|>\n</s>')}
       </div>
     </div>
   );

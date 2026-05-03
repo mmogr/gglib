@@ -118,6 +118,16 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({ model }) => {
                 <span className="text-text text-sm text-right break-words">{model.inferenceDefaults.repeatPenalty}</span>
               </div>
             )}
+            {model.inferenceDefaults.stop != null && (
+              <div className="flex justify-between items-start gap-base">
+                <span className="text-text-muted text-sm shrink-0">Stop Sequences:</span>
+                <span className="text-text text-sm text-right break-words">
+                  {model.inferenceDefaults.stop.length > 0
+                    ? model.inferenceDefaults.stop.join(', ')
+                    : '(empty)'}
+                </span>
+              </div>
+            )}
           </div>
         </>
       )}
