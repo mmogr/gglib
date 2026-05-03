@@ -138,7 +138,7 @@ impl ModelService {
         );
 
         // 5. Construct fully-populated NewModel
-        let new_model = NewModel {
+        let mut new_model = NewModel {
             name: name.cloned().unwrap_or_else(|| {
                 file_path
                     .file_stem()
@@ -166,6 +166,8 @@ impl ModelService {
             capabilities: model_capabilities,
             inference_defaults: None,
         };
+
+        new_model.apply_deterministic_stop_defaults(&gguf_metadata.stop_sequences);
 
         // 6. Persist to repository
         self.repo.insert(&new_model).await.map_err(CoreError::from)
@@ -359,15 +361,33 @@ impl ModelService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::{ModelRepository, RepositoryError};
+    use crate::ports::{
+        GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, ModelRepository,
+        RepositoryError,
+    };
     use async_trait::async_trait;
     use chrono::Utc;
 
+    use std::fs::File;
     use std::path::PathBuf;
     use std::sync::Mutex;
 
     struct MockRepo {
         models: Mutex<Vec<Model>>,
+    }
+
+    struct StaticGgufParser {
+        metadata: GgufMetadata,
+    }
+
+    impl GgufParserPort for StaticGgufParser {
+        fn parse(&self, _file_path: &Path) -> Result<GgufMetadata, GgufParseError> {
+            Ok(self.metadata.clone())
+        }
+
+        fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
+            GgufCapabilities::empty()
+        }
     }
 
     impl MockRepo {
@@ -556,5 +576,54 @@ mod tests {
         let context_range = options.context_range.unwrap();
         assert!((context_range.min - 4096.0).abs() < 0.001);
         assert!((context_range.max - 8192.0).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_import_from_file_persists_stop_defaults_when_extracted() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let temp = tempfile::Builder::new().suffix(".gguf").tempfile().unwrap();
+        File::create(temp.path()).unwrap();
+
+        let parser = StaticGgufParser {
+            metadata: GgufMetadata {
+                stop_sequences: vec!["<|im_end|>".to_string(), "</s>".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let model = service
+            .import_from_file(temp.path(), &parser, None)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            model
+                .inference_defaults
+                .as_ref()
+                .and_then(|d| d.stop.clone()),
+            Some(vec!["<|im_end|>".to_string(), "</s>".to_string()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_import_from_file_keeps_inference_defaults_none_without_stop_extraction() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let temp = tempfile::Builder::new().suffix(".gguf").tempfile().unwrap();
+        File::create(temp.path()).unwrap();
+
+        let parser = StaticGgufParser {
+            metadata: GgufMetadata::default(),
+        };
+
+        let model = service
+            .import_from_file(temp.path(), &parser, None)
+            .await
+            .unwrap();
+
+        assert!(model.inference_defaults.is_none());
     }
 }

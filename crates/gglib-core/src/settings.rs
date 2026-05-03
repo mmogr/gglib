@@ -16,6 +16,12 @@ pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;
 /// Default context size for models when not specified by the user.
 pub const DEFAULT_CONTEXT_SIZE: u64 = 4096;
 
+/// Maximum number of configured stop sequences.
+pub const MAX_STOP_SEQUENCES: usize = 16;
+
+/// Maximum length of a single stop sequence.
+pub const MAX_STOP_SEQUENCE_LENGTH: usize = 256;
+
 /// Application settings structure.
 ///
 /// All fields are optional to support partial updates and graceful defaults.
@@ -278,6 +284,30 @@ pub fn validate_inference_config(config: &InferenceConfig) -> Result<(), String>
         ));
     }
 
+    if let Some(stop) = &config.stop {
+        if stop.is_empty() {
+            return Err("Stop sequences must not be empty when provided".to_string());
+        }
+        if stop.len() > MAX_STOP_SEQUENCES {
+            return Err(format!(
+                "Stop sequences must contain at most {MAX_STOP_SEQUENCES} entries, got {}",
+                stop.len()
+            ));
+        }
+
+        for sequence in stop {
+            if sequence.trim().is_empty() {
+                return Err("Stop sequences must not contain blank values".to_string());
+            }
+            if sequence.len() > MAX_STOP_SEQUENCE_LENGTH {
+                return Err(format!(
+                    "Stop sequence must be at most {MAX_STOP_SEQUENCE_LENGTH} characters, got {}",
+                    sequence.len()
+                ));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -358,8 +388,49 @@ mod tests {
             top_k: Some(40),
             max_tokens: Some(2048),
             repeat_penalty: Some(1.1),
+            stop: Some(vec!["<|im_end|>".to_string()]),
         };
         assert!(validate_inference_config(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_inference_config_stop_empty_list() {
+        let config = InferenceConfig {
+            stop: Some(vec![]),
+            ..Default::default()
+        };
+
+        assert!(validate_inference_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_inference_config_stop_blank_entry() {
+        let config = InferenceConfig {
+            stop: Some(vec!["   ".to_string()]),
+            ..Default::default()
+        };
+
+        assert!(validate_inference_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_inference_config_stop_too_many_entries() {
+        let config = InferenceConfig {
+            stop: Some(vec!["x".to_string(); MAX_STOP_SEQUENCES + 1]),
+            ..Default::default()
+        };
+
+        assert!(validate_inference_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_inference_config_stop_entry_too_long() {
+        let config = InferenceConfig {
+            stop: Some(vec!["x".repeat(MAX_STOP_SEQUENCE_LENGTH + 1)]),
+            ..Default::default()
+        };
+
+        assert!(validate_inference_config(&config).is_err());
     }
 
     #[test]

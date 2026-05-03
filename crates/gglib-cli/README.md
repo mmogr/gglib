@@ -169,6 +169,37 @@ gglib q --agent "How is error handling structured in this project?"
 
 # Agentic mode with piped context
 git diff | gglib q --agent "Review these changes for potential issues"
+
+# Repeatable stop sequences (works for q/chat/serve)
+gglib q "Summarize this" --stop "<|im_end|>" --stop "</s>"
+```
+
+### Stop Sequences
+
+Inference commands accept repeatable `--stop` flags, matching runtime CLI forwarding:
+
+- `q`, `chat`, and `serve` all use the same shared inference resolver.
+- Effective stop precedence is:
+  1. explicit `--stop` on the current command
+  2. model defaults (including deterministic GGUF-derived defaults captured at registration)
+  3. global inference defaults from settings
+- Per-model defaults can be edited without touching other inference fields using `gglib model update --stop ...` and `gglib model update --clear-stop`.
+
+```bash
+# Serve with explicit stop sequences
+gglib serve 1 --stop "<|im_end|>" --stop "</s>"
+
+# Chat with stop overrides
+gglib chat qwen2.5 --stop "<|im_end|>" --stop "</s>"
+
+# One-shot question with stop overrides
+gglib q "Explain this file" --file README.md --stop "<|im_end|>" --stop "</s>"
+
+# Set model-level default stops
+gglib model update 1 --stop "<|im_end|>" --stop "</s>"
+
+# Clear only model-level stop defaults (keep other inference defaults)
+gglib model update 1 --clear-stop
 ```
 
 ### Rendering Modes
@@ -298,6 +329,9 @@ gglib model list
 
 # Start a server
 gglib serve 1 --port 8080
+
+# Set per-model default stop sequences
+gglib model update 1 --stop "<|im_end|>" --stop "</s>"
 
 # Search HuggingFace
 gglib model search "llama 3 GGUF"

@@ -142,6 +142,11 @@ jobs:
           cargo test -p gglib-axum --verbose 2>&1 | tee rust-test-gglib-axum.txt
           cargo test -p gglib-tauri --verbose 2>&1 | tee rust-test-gglib-tauri.txt
 
+      - name: Run stop-focused Rust regressions
+        run: |
+          cargo test -p gglib-core stop --verbose 2>&1 | tee rust-test-stop-core.txt
+          cargo test -p gglib-proxy stop --verbose 2>&1 | tee rust-test-stop-proxy.txt
+
       - name: Run doctests
         run: cargo test --doc --verbose
 
@@ -166,6 +171,8 @@ jobs:
             rust-test-gglib-cli.txt
             rust-test-gglib-axum.txt
             rust-test-gglib-tauri.txt
+            rust-test-stop-core.txt
+            rust-test-stop-proxy.txt
           retention-days: 30
 
   test-frontend:
@@ -187,6 +194,9 @@ jobs:
       - name: Run TypeScript tests
         run: npm run test:run -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
 
+      - name: Run stop-focused TypeScript regressions
+        run: npm run test:run -- tests/ts/components/InferenceParametersForm.test.tsx tests/ts/contracts/tauri-serve-model.test.ts 2>&1 | tee ts-test-stop-output.txt
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -195,6 +205,7 @@ jobs:
           path: |
             ts-test-output.txt
             ts-test-results.json
+            ts-test-stop-output.txt
           retention-days: 30
 
   clippy:

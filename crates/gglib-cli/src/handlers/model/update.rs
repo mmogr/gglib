@@ -27,6 +27,8 @@ pub struct UpdateArgs {
     pub top_k: Option<i32>,
     pub max_tokens: Option<u32>,
     pub repeat_penalty: Option<f32>,
+    pub stop: Vec<String>,
+    pub clear_stop: bool,
     pub clear_inference_defaults: bool,
     pub dry_run: bool,
     pub force: bool,
@@ -189,7 +191,9 @@ pub fn create_updated_model(
             || args.top_p.is_some()
             || args.top_k.is_some()
             || args.max_tokens.is_some()
-            || args.repeat_penalty.is_some();
+            || args.repeat_penalty.is_some()
+            || !args.stop.is_empty()
+            || args.clear_stop;
 
         if has_inference_updates {
             // Start with existing inference defaults or create new
@@ -211,8 +215,18 @@ pub fn create_updated_model(
             if let Some(repeat_penalty) = args.repeat_penalty {
                 inference_config.repeat_penalty = Some(repeat_penalty);
             }
+            if args.clear_stop {
+                inference_config.stop = None;
+            }
+            if !args.stop.is_empty() {
+                inference_config.stop = Some(args.stop.clone());
+            }
 
-            updated.inference_defaults = Some(inference_config);
+            if inference_config == InferenceConfig::default() {
+                updated.inference_defaults = None;
+            } else {
+                updated.inference_defaults = Some(inference_config);
+            }
         }
     }
 
@@ -270,6 +284,7 @@ fn show_inference_defaults_changes(
                 || old.top_k != new.top_k
                 || old.max_tokens != new.max_tokens
                 || old.repeat_penalty != new.repeat_penalty
+                || old.stop != new.stop
         }
     };
 
@@ -299,6 +314,9 @@ fn show_inference_defaults_changes(
             }
             if let Some(repeat_penalty) = new.repeat_penalty {
                 println!("      Repeat penalty: {}", repeat_penalty);
+            }
+            if let Some(stop) = &new.stop {
+                println!("      Stop: {}", stop.join(", "));
             }
         }
         (Some(old), Some(new)) => {
@@ -335,6 +353,13 @@ fn show_inference_defaults_changes(
                     "    Repeat penalty: {} → {}",
                     format_option_f32(&old.repeat_penalty),
                     format_option_f32(&new.repeat_penalty)
+                );
+            }
+            if old.stop != new.stop {
+                println!(
+                    "    Stop: {} → {}",
+                    format_option_stop(&old.stop),
+                    format_option_stop(&new.stop)
                 );
             }
         }
@@ -403,6 +428,18 @@ fn format_option_i32(opt: &Option<i32>) -> String {
 
 fn format_option_u32(opt: &Option<u32>) -> String {
     opt.map(|v| v.to_string())
+        .unwrap_or_else(|| "unset".to_string())
+}
+
+fn format_option_stop(opt: &Option<Vec<String>>) -> String {
+    opt.as_ref()
+        .map(|v| {
+            if v.is_empty() {
+                "unset".to_string()
+            } else {
+                v.join(", ")
+            }
+        })
         .unwrap_or_else(|| "unset".to_string())
 }
 
@@ -507,6 +544,8 @@ mod tests {
             top_k: None,
             max_tokens: None,
             repeat_penalty: None,
+            stop: Vec::new(),
+            clear_stop: false,
             clear_inference_defaults: false,
         };
 
@@ -523,5 +562,85 @@ mod tests {
         assert_eq!(updated.context_length, Some(8192));
         assert!(updated.metadata.contains_key("new.key"));
         assert!(!updated.metadata.contains_key("test.key")); // Removed
+    }
+
+    #[test]
+    fn test_create_updated_model_sets_stop_defaults() {
+        let existing = create_test_model();
+        let args = UpdateArgs {
+            id: 1,
+            name: None,
+            param_count: None,
+            architecture: None,
+            quantization: None,
+            context_length: None,
+            metadata: vec![],
+            remove_metadata: None,
+            replace_metadata: false,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            max_tokens: None,
+            repeat_penalty: None,
+            stop: vec!["<|im_end|>".to_string(), "</s>".to_string()],
+            clear_stop: false,
+            clear_inference_defaults: false,
+            dry_run: false,
+            force: false,
+        };
+
+        let metadata_updates = parse_metadata_updates(&args.metadata).unwrap();
+        let metadata_removals = parse_metadata_removals(&args.remove_metadata).unwrap();
+
+        let updated =
+            create_updated_model(&existing, &args, &metadata_updates, &metadata_removals).unwrap();
+
+        let defaults = updated.inference_defaults.expect("inference defaults");
+        assert_eq!(
+            defaults.stop,
+            Some(vec!["<|im_end|>".to_string(), "</s>".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_create_updated_model_clears_stop_defaults_only() {
+        let mut existing = create_test_model();
+        existing.inference_defaults = Some(InferenceConfig {
+            temperature: Some(0.6),
+            stop: Some(vec!["<|im_end|>".to_string()]),
+            ..Default::default()
+        });
+
+        let args = UpdateArgs {
+            id: 1,
+            name: None,
+            param_count: None,
+            architecture: None,
+            quantization: None,
+            context_length: None,
+            metadata: vec![],
+            remove_metadata: None,
+            replace_metadata: false,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            max_tokens: None,
+            repeat_penalty: None,
+            stop: Vec::new(),
+            clear_stop: true,
+            clear_inference_defaults: false,
+            dry_run: false,
+            force: false,
+        };
+
+        let metadata_updates = parse_metadata_updates(&args.metadata).unwrap();
+        let metadata_removals = parse_metadata_removals(&args.remove_metadata).unwrap();
+
+        let updated =
+            create_updated_model(&existing, &args, &metadata_updates, &metadata_removals).unwrap();
+
+        let defaults = updated.inference_defaults.expect("inference defaults");
+        assert_eq!(defaults.temperature, Some(0.6));
+        assert_eq!(defaults.stop, None);
     }
 }

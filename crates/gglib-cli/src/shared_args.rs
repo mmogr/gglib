@@ -27,6 +27,10 @@ pub struct SamplingArgs {
     /// Repeat penalty (overrides model/global defaults)
     #[arg(long = "repeat-penalty")]
     pub repeat_penalty: Option<f32>,
+    /// Repeatable stop sequence override
+    /// (e.g. --stop "<|im_end|>" --stop "</s>")
+    #[arg(long = "stop", action = clap::ArgAction::Append)]
+    pub stop: Vec<String>,
 }
 
 /// Context-size and memory-lock flags common to all inference commands.
@@ -44,12 +48,19 @@ pub struct ContextArgs {
 impl SamplingArgs {
     /// Convert into an [`InferenceConfig`](gglib_core::domain::InferenceConfig).
     pub fn into_inference_config(self) -> gglib_core::domain::InferenceConfig {
+        let stop = if self.stop.is_empty() {
+            None
+        } else {
+            Some(self.stop)
+        };
+
         gglib_core::domain::InferenceConfig {
             temperature: self.temperature,
             top_p: self.top_p,
             top_k: self.top_k,
             max_tokens: self.max_tokens,
             repeat_penalty: self.repeat_penalty,
+            stop,
         }
     }
 }
@@ -72,6 +83,11 @@ impl ConversationSettingsBuilder {
                 top_k: sampling.top_k,
                 max_tokens: sampling.max_tokens,
                 repeat_penalty: sampling.repeat_penalty,
+                stop: if sampling.stop.is_empty() {
+                    None
+                } else {
+                    Some(sampling.stop.clone())
+                },
                 ctx_size: context.ctx_size.clone(),
                 mlock: if context.mlock { Some(true) } else { None },
                 ..Default::default()

@@ -9,11 +9,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bytes::Bytes;
-use futures_util::TryStreamExt;
 use reqwest::Client;
 use tracing::{debug, error};
 
 use crate::models::ErrorResponse;
+use crate::stream_filter::ReasoningContentStripStream;
 
 /// Headers that should NOT be forwarded (hop-by-hop headers).
 const HOP_BY_HOP_HEADERS: &[&str] = &[
@@ -112,12 +112,11 @@ async fn forward_streaming_response(response: reqwest::Response) -> Response {
     // Get the byte stream from the response
     let byte_stream = response.bytes_stream();
 
-    // Map the stream to produce Result<Bytes, std::io::Error>
-    // This is required for Body::from_stream
-    let mapped_stream = byte_stream.map_err(std::io::Error::other);
+    // Strip reasoning_content from streamed chunks for strict OpenAI clients.
+    let filtered_stream = ReasoningContentStripStream::new(byte_stream);
 
     // Create the body from the stream
-    let body = Body::from_stream(mapped_stream);
+    let body = Body::from_stream(filtered_stream);
 
     // Build SSE response with proper headers
     Response::builder()

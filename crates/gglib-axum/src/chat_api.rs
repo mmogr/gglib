@@ -79,6 +79,8 @@ pub struct ChatProxyRequest {
     pub top_k: Option<i32>,
     /// Optional repeat_penalty (inference parameter - will be resolved via hierarchy).
     pub repeat_penalty: Option<f32>,
+    /// Optional stop sequences (inference parameter - will be resolved via hierarchy).
+    pub stop: Option<Vec<String>>,
     /// Optional tools for function calling.
     #[serde(default)]
     pub tools: Option<Vec<serde_json::Value>>,
@@ -361,6 +363,46 @@ fn apply_tools_to_body(
     }
 }
 
+fn resolve_chat_inference_config(
+    request: &ChatProxyRequest,
+    model_defaults: Option<&gglib_core::domain::InferenceConfig>,
+    global_defaults: Option<&gglib_core::domain::InferenceConfig>,
+) -> gglib_core::domain::InferenceConfig {
+    let request_override = gglib_core::domain::InferenceConfig {
+        temperature: request.temperature,
+        top_p: request.top_p,
+        top_k: request.top_k,
+        max_tokens: request.max_tokens,
+        repeat_penalty: request.repeat_penalty,
+        stop: request.stop.clone(),
+    };
+
+    gglib_core::domain::InferenceConfig::resolve_with_hierarchy(
+        Some(&request_override),
+        model_defaults,
+        global_defaults,
+    )
+}
+
+fn build_forward_body(
+    model: &str,
+    messages: Vec<ChatMessage>,
+    stream: bool,
+    resolved: &gglib_core::domain::InferenceConfig,
+) -> serde_json::Value {
+    serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": stream,
+        "max_tokens": resolved.max_tokens,
+        "temperature": resolved.temperature,
+        "top_p": resolved.top_p,
+        "top_k": resolved.top_k,
+        "repeat_penalty": resolved.repeat_penalty,
+        "stop": resolved.stop,
+    })
+}
+
 /// Proxy chat completion requests to a running llama-server.
 ///
 /// POST /api/chat
@@ -434,28 +476,8 @@ pub async fn proxy_chat(
         .ok()
         .and_then(|s| s.inference_defaults);
 
-    // Resolve inference parameters using hierarchy:
-    // Request → Model → Global → Hardcoded defaults
-    let mut resolved = gglib_core::domain::InferenceConfig {
-        temperature: request.temperature,
-        top_p: request.top_p,
-        top_k: request.top_k,
-        max_tokens: request.max_tokens,
-        repeat_penalty: request.repeat_penalty,
-    };
-
-    // Apply model defaults (if missing)
-    if let Some(model_defaults) = model_defaults {
-        resolved.merge_with(&model_defaults);
-    }
-
-    // Apply global settings defaults (if missing)
-    if let Some(global_defaults) = global_defaults {
-        resolved.merge_with(&global_defaults);
-    }
-
-    // Apply hardcoded defaults for any still-missing values
-    resolved.merge_with(&gglib_core::domain::InferenceConfig::with_hardcoded_defaults());
+    let resolved =
+        resolve_chat_inference_config(&request, model_defaults.as_ref(), global_defaults.as_ref());
 
     tracing::debug!(
         port = request.port,
@@ -464,6 +486,7 @@ pub async fn proxy_chat(
         resolved_top_k = resolved.top_k,
         resolved_max_tokens = resolved.max_tokens,
         resolved_repeat_penalty = resolved.repeat_penalty,
+        resolved_stop = ?resolved.stop,
         "Resolved inference parameters via hierarchy"
     );
 
@@ -524,16 +547,8 @@ pub async fn proxy_chat(
     let server_url = format!("http://127.0.0.1:{}/v1/chat/completions", request.port);
 
     // Build the forwarded request body with resolved inference parameters
-    let mut forward_body = serde_json::json!({
-        "model": request.model,
-        "messages": final_messages,
-        "stream": request.stream,
-        "max_tokens": resolved.max_tokens,
-        "temperature": resolved.temperature,
-        "top_p": resolved.top_p,
-        "top_k": resolved.top_k,
-        "repeat_penalty": resolved.repeat_penalty,
-    });
+    let mut forward_body =
+        build_forward_body(&request.model, final_messages, request.stream, &resolved);
 
     // Inject tools only when the model supports them.
     // Note: request.messages was consumed above, so we pass fields individually.
@@ -624,6 +639,28 @@ mod tests {
     use super::*;
     use gglib_core::domain::ModelCapabilities;
 
+    fn sample_request() -> ChatProxyRequest {
+        ChatProxyRequest {
+            port: 8080,
+            model: "test-model".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some("hello".to_string()),
+                tool_call_id: None,
+                tool_calls: None,
+            }],
+            stream: false,
+            max_tokens: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            repeat_penalty: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+        }
+    }
+
     #[test]
     fn test_tools_stripped_when_not_supported() {
         let tools = Some(vec![
@@ -688,5 +725,62 @@ mod tests {
         assert!(body_no_cap.get("tool_choice").is_none());
         assert!(body_with_cap.get("tools").is_none());
         assert!(body_with_cap.get("tool_choice").is_none());
+    }
+
+    #[test]
+    fn test_resolve_chat_inference_config_precedence_for_stop() {
+        let mut request = sample_request();
+        request.top_p = Some(0.72);
+        request.stop = Some(vec!["<|request|>".to_string()]);
+
+        let model_defaults = gglib_core::domain::InferenceConfig {
+            temperature: Some(0.4),
+            stop: Some(vec!["<|model|>".to_string()]),
+            ..Default::default()
+        };
+        let global_defaults = gglib_core::domain::InferenceConfig {
+            top_p: Some(0.95),
+            top_k: Some(88),
+            stop: Some(vec!["<|global|>".to_string()]),
+            ..Default::default()
+        };
+
+        let resolved =
+            resolve_chat_inference_config(&request, Some(&model_defaults), Some(&global_defaults));
+
+        assert_eq!(resolved.stop, Some(vec!["<|request|>".to_string()]));
+        assert_eq!(resolved.top_p, Some(0.72));
+        assert_eq!(resolved.temperature, Some(0.4));
+        assert_eq!(resolved.top_k, Some(88));
+    }
+
+    #[test]
+    fn test_resolve_chat_inference_config_stop_none_when_unspecified() {
+        let request = sample_request();
+
+        let resolved = resolve_chat_inference_config(&request, None, None);
+
+        assert!(resolved.stop.is_none());
+    }
+
+    #[test]
+    fn test_build_forward_body_includes_resolved_stop() {
+        let messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: Some("hello".to_string()),
+            tool_call_id: None,
+            tool_calls: None,
+        }];
+
+        let resolved = gglib_core::domain::InferenceConfig {
+            stop: Some(vec!["<|im_end|>".to_string(), "</s>".to_string()]),
+            ..Default::default()
+        };
+
+        let body = build_forward_body("test-model", messages, false, &resolved);
+        assert_eq!(
+            body.get("stop"),
+            Some(&serde_json::json!(["<|im_end|>", "</s>"]))
+        );
     }
 }

@@ -239,6 +239,11 @@ pub struct GgufMetadata {
     pub expert_used_count: Option<u32>,
     /// Number of shared experts (for `MoE` models).
     pub expert_shared_count: Option<u32>,
+    /// Deterministically extracted stop sequences from tokenizer ID mapping.
+    ///
+    /// Populated only when tokenizer IDs can be mapped to concrete token strings.
+    #[allow(clippy::struct_field_names)]
+    pub stop_sequences: Vec<String>,
     /// Additional key-value metadata from the file (string representation).
     pub metadata: HashMap<String, String>,
 }

@@ -122,6 +122,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         topK: inferenceParams?.topK,
         maxTokens: inferenceParams?.maxTokens,
         repeatPenalty: inferenceParams?.repeatPenalty,
+        stop: inferenceParams?.stop,
       };
 
       const result = await serveModel(serveConfig);
@@ -158,7 +159,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsServing(false);
     }
-  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled]);
+  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled]);
 
   const handleToggleServer = useCallback(async () => {
     if (!model?.id) return;

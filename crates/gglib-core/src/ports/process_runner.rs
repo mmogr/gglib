@@ -103,7 +103,7 @@ impl ServerConfig {
 
     /// Set inference sampling parameters.
     #[must_use]
-    pub const fn with_inference_config(mut self, config: InferenceConfig) -> Self {
+    pub fn with_inference_config(mut self, config: InferenceConfig) -> Self {
         self.inference_config = Some(config);
         self
     }
