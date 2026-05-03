@@ -99,16 +99,48 @@ pub async fn compose(
     banner: &BannerInfo,
 ) -> Result<(Arc<dyn AgentLoopPort>, Option<ProcessHandle>)> {
     // 1. Resolve the LLM port — reuse or auto-start.
-    let (port, maybe_handle) = resolve_port(ctx, params, banner).await?;
+    let (port, maybe_handle, started_model) = resolve_port(ctx, params, banner).await?;
 
-    // 2. Initialise MCP servers (CLI bootstrap intentionally skips this).
+    // 2. Resolve sampling through the shared hierarchy:
+    // request override -> model defaults -> global defaults -> hardcoded fallback.
+    let settings = ctx
+        .app
+        .settings()
+        .get()
+        .await
+        .context("failed to load settings for inference resolution")?;
+
+    let mut model_defaults = started_model
+        .as_ref()
+        .and_then(|m| m.inference_defaults.clone());
+    if model_defaults.is_none() && !params.model_identifier.is_empty() {
+        match ctx.app.models().get(&params.model_identifier).await {
+            Ok(Some(model)) => {
+                model_defaults = model.inference_defaults;
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!(
+                model = %params.model_identifier,
+                error = %e,
+                "Failed to load model defaults for inference resolution"
+            ),
+        }
+    }
+
+    let resolved_sampling = Some(InferenceConfig::resolve_with_hierarchy(
+        sampling.as_ref(),
+        model_defaults.as_ref(),
+        settings.inference_defaults.as_ref(),
+    ));
+
+    // 3. Initialise MCP servers (CLI bootstrap intentionally skips this).
     //    A failure is logged as a warning rather than aborting the session:
     //    the agent can still run without tools.
     if let Err(e) = ctx.mcp.initialize().await {
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
 
-    // 3. Compose the agent loop.  When tools are specified the loop is
+    // 4. Compose the agent loop.  When tools are specified the loop is
     //    restricted to the named allowlist; otherwise all MCP tools are visible.
     let tool_filter = if params.tools.is_empty() {
         None
@@ -123,7 +155,7 @@ pub async fn compose(
         Arc::clone(&ctx.mcp),
         tool_filter,
         sandbox_root,
-        sampling,
+        resolved_sampling,
     );
 
     Ok((agent, maybe_handle))
@@ -143,10 +175,10 @@ async fn resolve_port(
     ctx: &CliContext,
     params: &AgentSessionParams,
     banner: &BannerInfo,
-) -> Result<(u16, Option<ProcessHandle>)> {
+) -> Result<(u16, Option<ProcessHandle>, Option<gglib_core::Model>)> {
     if let Some(port) = params.port {
         tracing::debug!("reusing user-supplied llama-server on port {port}");
-        return Ok((port, None));
+        return Ok((port, None, None));
     }
 
     // Auto-start: look up the model, then ask the process runner to start it.
@@ -223,7 +255,7 @@ async fn resolve_port(
         style::print_banner_close();
     }
 
-    Ok((handle.port, Some(handle)))
+    Ok((handle.port, Some(handle), Some(model)))
 }
 
 /// Print non-default sampling parameter lines in the info banner.

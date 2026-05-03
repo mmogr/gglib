@@ -267,4 +267,52 @@ mod tests {
             "build_and_spawn should succeed with valid bootstrap path"
         );
     }
+
+    /// Test that stop sequences are forwarded as repeated --stop flags.
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_build_and_spawn_forwards_stop_flags() {
+        let temp_dir = TempDir::new().unwrap();
+        let binary_path = temp_dir.path().join("llama-server");
+        let args_path = temp_dir.path().join("args.txt");
+
+        // Fake binary records argv to args_path and exits.
+        let script = format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{}\"\nexit 0\n",
+            args_path.display()
+        );
+        fs::write(&binary_path, script).unwrap();
+        fs::set_permissions(&binary_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let config = ServerConfig {
+            model_id: 1,
+            model_name: "test-model".to_string(),
+            model_path: PathBuf::from("/tmp/test.gguf"),
+            base_port: 9000,
+            port: Some(8080),
+            context_size: None,
+            gpu_layers: None,
+            jinja: false,
+            reasoning_format: None,
+            inference_config: Some(gglib_core::domain::InferenceConfig {
+                stop: Some(vec!["<|im_end|>".to_string(), "</s>".to_string()]),
+                ..Default::default()
+            }),
+            extra_args: vec![],
+        };
+
+        let mut child = build_and_spawn(Some(&binary_path), &config, 8080).unwrap();
+        let status = child.wait().await.unwrap();
+        assert!(status.success());
+
+        let args_text = fs::read_to_string(&args_path).unwrap();
+        let args: Vec<&str> = args_text.lines().collect();
+        let stop_values: Vec<&str> = args
+            .windows(2)
+            .filter(|w| w[0] == "--stop")
+            .map(|w| w[1])
+            .collect();
+
+        assert_eq!(stop_values, vec!["<|im_end|>", "</s>"]);
+    }
 }

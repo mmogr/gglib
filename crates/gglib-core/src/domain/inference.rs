@@ -134,6 +134,30 @@ impl InferenceConfig {
         }
     }
 
+    /// Resolve inference values through the standard precedence chain.
+    ///
+    /// Order: request override -> model defaults -> global defaults -> hardcoded fallback.
+    ///
+    /// Note: hardcoded fallback intentionally leaves `stop` as `None`.
+    #[must_use]
+    pub fn resolve_with_hierarchy(
+        request_override: Option<&Self>,
+        model_defaults: Option<&Self>,
+        global_defaults: Option<&Self>,
+    ) -> Self {
+        let mut resolved = request_override.cloned().unwrap_or_default();
+
+        if let Some(model_defaults) = model_defaults {
+            resolved.merge_with(model_defaults);
+        }
+        if let Some(global_defaults) = global_defaults {
+            resolved.merge_with(global_defaults);
+        }
+
+        resolved.merge_with(&Self::with_hardcoded_defaults());
+        resolved
+    }
+
     /// Create a new config with all fields set to sensible defaults.
     ///
     /// These are the hardcoded fallback values used when no other
@@ -199,6 +223,12 @@ impl InferenceConfig {
         if let Some(repeat_penalty) = self.repeat_penalty {
             args.push("--repeat-penalty".to_string());
             args.push(repeat_penalty.to_string());
+        }
+        if let Some(stop) = &self.stop {
+            for sequence in stop {
+                args.push("--stop".to_string());
+                args.push(sequence.clone());
+            }
         }
 
         args
@@ -272,6 +302,68 @@ mod tests {
         assert_eq!(config.max_tokens, Some(2048));
         assert_eq!(config.repeat_penalty, Some(1.0));
         assert!(config.stop.is_none());
+    }
+
+    #[test]
+    fn test_resolve_with_hierarchy_precedence_for_stop() {
+        let request = InferenceConfig {
+            top_p: Some(0.77),
+            stop: Some(vec!["<|request|>".to_string()]),
+            ..Default::default()
+        };
+        let model_defaults = InferenceConfig {
+            temperature: Some(0.42),
+            stop: Some(vec!["<|model|>".to_string()]),
+            ..Default::default()
+        };
+        let global_defaults = InferenceConfig {
+            top_p: Some(0.95),
+            top_k: Some(99),
+            stop: Some(vec!["<|global|>".to_string()]),
+            ..Default::default()
+        };
+
+        let resolved = InferenceConfig::resolve_with_hierarchy(
+            Some(&request),
+            Some(&model_defaults),
+            Some(&global_defaults),
+        );
+
+        assert_eq!(resolved.stop, Some(vec!["<|request|>".to_string()]));
+        assert_eq!(resolved.top_p, Some(0.77));
+        assert_eq!(resolved.temperature, Some(0.42));
+        assert_eq!(resolved.top_k, Some(99));
+    }
+
+    #[test]
+    fn test_resolve_with_hierarchy_keeps_stop_none_without_defaults() {
+        let resolved = InferenceConfig::resolve_with_hierarchy(None, None, None);
+
+        assert_eq!(resolved.temperature, Some(0.7));
+        assert_eq!(resolved.top_p, Some(0.95));
+        assert_eq!(resolved.top_k, Some(40));
+        assert_eq!(resolved.max_tokens, Some(2048));
+        assert_eq!(resolved.repeat_penalty, Some(1.0));
+        assert!(resolved.stop.is_none());
+    }
+
+    #[test]
+    fn test_to_cli_args_includes_repeated_stop_flags() {
+        let config = InferenceConfig {
+            stop: Some(vec!["<|im_end|>".to_string(), "</s>".to_string()]),
+            ..Default::default()
+        };
+
+        let args = config.to_cli_args();
+        assert_eq!(
+            args,
+            vec![
+                "--stop".to_string(),
+                "<|im_end|>".to_string(),
+                "--stop".to_string(),
+                "</s>".to_string()
+            ]
+        );
     }
 
     #[test]

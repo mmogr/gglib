@@ -218,6 +218,52 @@ fn tool_def_to_openai(def: &ToolDefinition) -> Value {
     })
 }
 
+fn apply_sampling_to_body(body: &mut Value, sampling: &InferenceConfig) {
+    if let Some(t) = sampling.temperature {
+        body["temperature"] = json!(t);
+    }
+    if let Some(p) = sampling.top_p {
+        body["top_p"] = json!(p);
+    }
+    if let Some(k) = sampling.top_k {
+        body["top_k"] = json!(k);
+    }
+    if let Some(m) = sampling.max_tokens {
+        body["max_tokens"] = json!(m);
+    }
+    if let Some(r) = sampling.repeat_penalty {
+        body["repeat_penalty"] = json!(r);
+    }
+    if let Some(stop) = &sampling.stop {
+        body["stop"] = json!(stop);
+    }
+}
+
+fn build_chat_request_body(
+    model: &str,
+    openai_messages: Vec<Value>,
+    openai_tools: Vec<Value>,
+    sampling: Option<&InferenceConfig>,
+) -> Value {
+    let mut body = json!({
+        "model": model,
+        "messages": openai_messages,
+        "stream": true,
+        "return_progress": true,
+    });
+
+    if !openai_tools.is_empty() {
+        body["tools"] = json!(openai_tools);
+        body["tool_choice"] = json!("auto");
+    }
+
+    if let Some(sampling) = sampling {
+        apply_sampling_to_body(&mut body, sampling);
+    }
+
+    body
+}
+
 // =============================================================================
 // LlmCompletionPort implementation
 // =============================================================================
@@ -231,34 +277,12 @@ impl LlmCompletionPort for LlmCompletionAdapter {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
         let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
         let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
-
-        let mut body = json!({
-            "model": self.model,
-            "messages": openai_messages,
-            "stream": true,
-            "return_progress": true,
-        });
-        if !openai_tools.is_empty() {
-            body["tools"] = json!(openai_tools);
-            body["tool_choice"] = json!("auto");
-        }
-        if let Some(ref s) = self.sampling {
-            if let Some(t) = s.temperature {
-                body["temperature"] = json!(t);
-            }
-            if let Some(p) = s.top_p {
-                body["top_p"] = json!(p);
-            }
-            if let Some(k) = s.top_k {
-                body["top_k"] = json!(k);
-            }
-            if let Some(m) = s.max_tokens {
-                body["max_tokens"] = json!(m);
-            }
-            if let Some(r) = s.repeat_penalty {
-                body["repeat_penalty"] = json!(r);
-            }
-        }
+        let body = build_chat_request_body(
+            &self.model,
+            openai_messages,
+            openai_tools,
+            self.sampling.as_ref(),
+        );
 
         // Gate the connect + first-byte phase with a hard timeout so a
         // stalled or unresponsive llama-server doesn't hang the agent task
@@ -314,5 +338,48 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         };
 
         Ok(Box::pin(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_chat_request_body_includes_stop_sampling() {
+        let sampling = InferenceConfig {
+            stop: Some(vec!["<|im_end|>".to_string(), "</s>".to_string()]),
+            ..Default::default()
+        };
+
+        let body = build_chat_request_body(
+            "test-model",
+            vec![json!({"role":"user","content":"hello"})],
+            Vec::new(),
+            Some(&sampling),
+        );
+
+        assert_eq!(
+            body.get("stop"),
+            Some(&json!(["<|im_end|>", "</s>"])),
+            "resolved stop sequences must be present in outbound LLM payload"
+        );
+    }
+
+    #[test]
+    fn test_build_chat_request_body_omits_stop_when_none() {
+        let sampling = InferenceConfig {
+            temperature: Some(0.8),
+            ..Default::default()
+        };
+
+        let body = build_chat_request_body(
+            "test-model",
+            vec![json!({"role":"user","content":"hello"})],
+            Vec::new(),
+            Some(&sampling),
+        );
+
+        assert!(body.get("stop").is_none());
     }
 }

@@ -318,4 +318,35 @@ mod tests {
             Some(ContextResolutionSource::ExplicitFlag)
         );
     }
+
+    #[test]
+    fn builder_adds_repeated_stop_flags_from_inference_config() {
+        let inference = InferenceConfig {
+            stop: Some(vec!["<|im_end|>".to_string(), "</s>".to_string()]),
+            ..Default::default()
+        };
+
+        let cmd = LlamaCommandBuilder::new("/usr/bin/llama-server", "/models/test.gguf")
+            .inference_config(inference)
+            .build();
+
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+
+        let stop_pairs: Vec<(String, String)> = args
+            .windows(2)
+            .filter(|w| w[0] == "--stop")
+            .map(|w| (w[0].clone(), w[1].clone()))
+            .collect();
+
+        assert_eq!(
+            stop_pairs,
+            vec![
+                ("--stop".to_string(), "<|im_end|>".to_string()),
+                ("--stop".to_string(), "</s>".to_string()),
+            ]
+        );
+    }
 }

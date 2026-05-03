@@ -17,24 +17,16 @@ use gglib_runtime::llama::{ContextResolution, ContextResolutionSource};
 /// defaults → hardcoded defaults. Each layer fills in only `None` fields.
 pub async fn resolve_inference_config(
     ctx: &CliContext,
-    mut config: InferenceConfig,
+    config: InferenceConfig,
     model: &gglib_core::Model,
 ) -> Result<InferenceConfig> {
-    // Apply model defaults
-    if let Some(ref model_defaults) = model.inference_defaults {
-        config.merge_with(model_defaults);
-    }
-
-    // Apply global defaults
     let settings = ctx.app.settings().get().await?;
-    if let Some(ref global_defaults) = settings.inference_defaults {
-        config.merge_with(global_defaults);
-    }
 
-    // Apply hardcoded defaults
-    config.merge_with(&InferenceConfig::with_hardcoded_defaults());
-
-    Ok(config)
+    Ok(InferenceConfig::resolve_with_hierarchy(
+        Some(&config),
+        model.inference_defaults.as_ref(),
+        settings.inference_defaults.as_ref(),
+    ))
 }
 
 /// Resolve the maximum agent iterations via a 3-level fallback chain.
