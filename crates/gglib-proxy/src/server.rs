@@ -144,7 +144,7 @@ async fn chat_completions(
     // all other fields are ignored by serde and the raw bytes are forwarded
     // unchanged. This makes the proxy immune to content-array messages,
     // stop as a bare string, and any future OpenAI request extensions.
-    let envelope: ChatRoutingEnvelope = match serde_json::from_slice(&body) {
+    let envelope: ChatRoutingEnvelope = match parse_routing_envelope(&body) {
         Ok(env) => env,
         Err(e) => {
             error!("Failed to parse request: {e}");
@@ -195,6 +195,10 @@ async fn chat_completions(
     forward_chat_completion(&state.client, &upstream_url, &headers, body, is_streaming).await
 }
 
+fn parse_routing_envelope(body: &[u8]) -> Result<ChatRoutingEnvelope, serde_json::Error> {
+    serde_json::from_slice(body)
+}
+
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.
 fn handle_runtime_error(err: ModelRuntimeError) -> Response {
     let (status, error_response) = match &err {
@@ -229,5 +233,31 @@ mod tests {
     async fn test_health_check() {
         let response = health_check().await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn parse_routing_envelope_accepts_stop_string_without_body_mutation() {
+        let payload = br#"{"model":"llama-3","messages":[],"stop":"END"}"#.to_vec();
+        let original = payload.clone();
+
+        let env = parse_routing_envelope(&payload).unwrap();
+        assert_eq!(env.model, "llama-3");
+        assert_eq!(payload, original);
+
+        let raw: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+        assert_eq!(raw["stop"], serde_json::Value::String("END".to_string()));
+    }
+
+    #[test]
+    fn parse_routing_envelope_accepts_stop_array_without_body_mutation() {
+        let payload = br#"{"model":"llama-3","messages":[],"stop":["END","STOP"]}"#.to_vec();
+        let original = payload.clone();
+
+        let env = parse_routing_envelope(&payload).unwrap();
+        assert_eq!(env.model, "llama-3");
+        assert_eq!(payload, original);
+
+        let raw: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+        assert_eq!(raw["stop"], serde_json::json!(["END", "STOP"]));
     }
 }
