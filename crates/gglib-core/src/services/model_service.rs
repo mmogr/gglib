@@ -385,6 +385,70 @@ impl ModelService {
 
         Ok(())
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Retag
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Re-derive auto-tags for a single model from its persisted GGUF metadata.
+    ///
+    /// `full = false` (default) is **additive**: any newly-detected tag that
+    /// isn't already present is appended; nothing is ever removed. This is
+    /// the safe path for backfilling `format:*` tags on models imported
+    /// before format-tag detection landed.
+    ///
+    /// `full = true` performs a full rebuild: every previously auto-generated
+    /// tag (the predefined capability tag namespace plus every existing
+    /// `format:*` tag) is dropped and the freshly-detected set is added in
+    /// its place. User-curated tags outside that namespace are preserved.
+    ///
+    /// Returns the tags that were added by this call (empty `Vec` when the
+    /// model is already up to date).
+    pub async fn retag_model(
+        &self,
+        model_id: i64,
+        gguf_parser: &dyn GgufParserPort,
+        full: bool,
+    ) -> Result<Vec<String>, CoreError> {
+        let mut model = self
+            .repo
+            .get_by_id(model_id)
+            .await
+            .map_err(CoreError::from)?;
+
+        // Re-derive capabilities from the persisted metadata blob; the file
+        // doesn't have to exist on disk.
+        let gguf_metadata = crate::domain::gguf::GgufMetadata {
+            metadata: model.metadata.clone(),
+            ..Default::default()
+        };
+        let new_tags = gguf_parser.detect_capabilities(&gguf_metadata).to_tags();
+
+        let before: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
+
+        if full {
+            // Drop every tag in the auto-generated namespace, then re-add.
+            const AUTO_TAG_NAMES: &[&str] = &["reasoning", "agent", "vision", "code", "moe"];
+            model.tags.retain(|t| {
+                !AUTO_TAG_NAMES.contains(&t.as_str()) && !crate::domain::is_system_tag(t)
+            });
+        }
+
+        for t in &new_tags {
+            if !model.tags.contains(t) {
+                model.tags.push(t.clone());
+            }
+        }
+        model.tags.sort();
+
+        let after: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
+        if after == before {
+            return Ok(Vec::new());
+        }
+
+        self.repo.update(&model).await.map_err(CoreError::from)?;
+        Ok(after.difference(&before).cloned().collect())
+    }
 }
 
 #[cfg(test)]
@@ -640,5 +704,109 @@ mod tests {
         service.remove_tag(created.id, "chat").await.unwrap();
         let tags = service.get_tags(created.id).await.unwrap();
         assert_eq!(tags, vec!["format:hermes".to_string()]);
+    }
+
+    /// Stub parser that emits a fixed capability set for retag tests.
+    struct StubCapsParser {
+        tags: Vec<String>,
+    }
+
+    impl crate::ports::GgufParserPort for StubCapsParser {
+        fn parse(
+            &self,
+            _file_path: &std::path::Path,
+        ) -> std::result::Result<crate::ports::GgufMetadata, crate::ports::GgufParseError> {
+            Ok(crate::ports::GgufMetadata::default())
+        }
+
+        fn detect_capabilities(
+            &self,
+            _metadata: &crate::ports::GgufMetadata,
+        ) -> crate::ports::GgufCapabilities {
+            let mut extensions = std::collections::BTreeSet::new();
+            for t in &self.tags {
+                extensions.insert(t.clone());
+            }
+            crate::ports::GgufCapabilities {
+                flags: crate::domain::gguf::CapabilityFlags::empty(),
+                extensions,
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_retag_additive_appends_missing_tags() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            7.0,
+            Utc::now(),
+        );
+        new_model.tags = vec!["chat".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        let parser = StubCapsParser {
+            tags: vec!["format:qwen-xml".to_string()],
+        };
+        let added = service.retag_model(created.id, &parser, false).await.unwrap();
+        assert_eq!(added, vec!["format:qwen-xml".to_string()]);
+
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(tags.contains(&"chat".to_string()));
+        assert!(tags.contains(&"format:qwen-xml".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_retag_additive_noop_when_already_present() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            7.0,
+            Utc::now(),
+        );
+        new_model.tags = vec!["format:qwen-xml".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        let parser = StubCapsParser {
+            tags: vec!["format:qwen-xml".to_string()],
+        };
+        let added = service.retag_model(created.id, &parser, false).await.unwrap();
+        assert!(added.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_retag_full_replaces_auto_tags_preserves_user() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model = NewModel::new(
+            "m".to_string(),
+            PathBuf::from("/p.gguf"),
+            7.0,
+            Utc::now(),
+        );
+        new_model.tags = vec![
+            "favorite".to_string(),       // user
+            "format:hermes".to_string(),  // stale auto
+            "reasoning".to_string(),      // stale auto capability
+        ];
+        let created = service.add(new_model).await.unwrap();
+
+        let parser = StubCapsParser {
+            tags: vec!["format:qwen-xml".to_string()],
+        };
+        service.retag_model(created.id, &parser, true).await.unwrap();
+
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(tags.contains(&"favorite".to_string()));
+        assert!(tags.contains(&"format:qwen-xml".to_string()));
+        assert!(!tags.contains(&"format:hermes".to_string()));
+        assert!(!tags.contains(&"reasoning".to_string()));
     }
 }
