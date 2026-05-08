@@ -238,8 +238,26 @@ impl ModelService {
 
     /// Remove a tag from a model.
     ///
-    /// If the tag doesn't exist on the model, this is a no-op.
+    /// If the tag doesn't exist on the model, this is a no-op. System tags
+    /// (see [`crate::domain::is_system_tag`]) are protected and cannot be
+    /// removed through this API — use [`Self::remove_tag_force`] for
+    /// admin/debug paths that intentionally need to drop them.
     pub async fn remove_tag(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
+        if crate::domain::is_system_tag(tag) {
+            return Err(CoreError::Validation(format!(
+                "tag '{tag}' is a system tag and cannot be removed via the standard API",
+            )));
+        }
+        self.remove_tag_force(model_id, tag).await
+    }
+
+    /// Force-remove a tag from a model, including system tags.
+    ///
+    /// Bypasses the system-tag protection enforced by [`Self::remove_tag`].
+    /// Intended for admin/debug paths (e.g. the `gglib model retag --full`
+    /// rebuild) where the caller intentionally needs to drop a `format:*`
+    /// tag before re-detecting capabilities.
+    pub async fn remove_tag_force(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
         let mut model = self
             .repo
             .get_by_id(model_id)
@@ -569,5 +587,58 @@ mod tests {
         let context_range = options.context_range.unwrap();
         assert!((context_range.min - 4096.0).abs() < 0.001);
         assert!((context_range.max - 8192.0).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_remove_tag_rejects_system_tag() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model = NewModel::new(
+            "qwen-test".to_string(),
+            PathBuf::from("/path/to/m.gguf"),
+            7.0,
+            Utc::now(),
+        );
+        new_model.tags = vec!["chat".to_string(), "format:qwen-xml".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        // Standard removal rejected.
+        let err = service
+            .remove_tag(created.id, "format:qwen-xml")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation(_)));
+
+        // Tag still present.
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(tags.contains(&"format:qwen-xml".to_string()));
+
+        // Force variant succeeds.
+        service
+            .remove_tag_force(created.id, "format:qwen-xml")
+            .await
+            .unwrap();
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(!tags.contains(&"format:qwen-xml".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_remove_tag_allows_user_tag() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model = NewModel::new(
+            "u".to_string(),
+            PathBuf::from("/p.gguf"),
+            7.0,
+            Utc::now(),
+        );
+        new_model.tags = vec!["chat".to_string(), "format:hermes".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        service.remove_tag(created.id, "chat").await.unwrap();
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert_eq!(tags, vec!["format:hermes".to_string()]);
     }
 }
