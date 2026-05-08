@@ -155,9 +155,7 @@ mod tests {
         let caps = detect_all(&metadata);
         assert!(!caps.has_tool_calling());
         assert!(
-            caps.to_tags()
-                .iter()
-                .all(|t| !t.starts_with("format:")),
+            caps.to_tags().iter().all(|t| !t.starts_with("format:")),
             "no format:* tag should be emitted when tool-calling is absent"
         );
     }

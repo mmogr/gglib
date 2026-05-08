@@ -692,12 +692,8 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model = NewModel::new(
-            "u".to_string(),
-            PathBuf::from("/p.gguf"),
-            7.0,
-            Utc::now(),
-        );
+        let mut new_model =
+            NewModel::new("u".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
         new_model.tags = vec!["chat".to_string(), "format:hermes".to_string()];
         let created = service.add(new_model).await.unwrap();
 
@@ -739,19 +735,18 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model = NewModel::new(
-            "m".to_string(),
-            PathBuf::from("/p.gguf"),
-            7.0,
-            Utc::now(),
-        );
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
         new_model.tags = vec!["chat".to_string()];
         let created = service.add(new_model).await.unwrap();
 
         let parser = StubCapsParser {
             tags: vec!["format:qwen-xml".to_string()],
         };
-        let added = service.retag_model(created.id, &parser, false).await.unwrap();
+        let added = service
+            .retag_model(created.id, &parser, false)
+            .await
+            .unwrap();
         assert_eq!(added, vec!["format:qwen-xml".to_string()]);
 
         let tags = service.get_tags(created.id).await.unwrap();
@@ -764,19 +759,18 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model = NewModel::new(
-            "m".to_string(),
-            PathBuf::from("/p.gguf"),
-            7.0,
-            Utc::now(),
-        );
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
         new_model.tags = vec!["format:qwen-xml".to_string()];
         let created = service.add(new_model).await.unwrap();
 
         let parser = StubCapsParser {
             tags: vec!["format:qwen-xml".to_string()],
         };
-        let added = service.retag_model(created.id, &parser, false).await.unwrap();
+        let added = service
+            .retag_model(created.id, &parser, false)
+            .await
+            .unwrap();
         assert!(added.is_empty());
     }
 
@@ -785,23 +779,22 @@ mod tests {
         let repo = Arc::new(MockRepo::new());
         let service = ModelService::new(repo);
 
-        let mut new_model = NewModel::new(
-            "m".to_string(),
-            PathBuf::from("/p.gguf"),
-            7.0,
-            Utc::now(),
-        );
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
         new_model.tags = vec![
-            "favorite".to_string(),       // user
-            "format:hermes".to_string(),  // stale auto
-            "reasoning".to_string(),      // stale auto capability
+            "favorite".to_string(),      // user
+            "format:hermes".to_string(), // stale auto
+            "reasoning".to_string(),     // stale auto capability
         ];
         let created = service.add(new_model).await.unwrap();
 
         let parser = StubCapsParser {
             tags: vec!["format:qwen-xml".to_string()],
         };
-        service.retag_model(created.id, &parser, true).await.unwrap();
+        service
+            .retag_model(created.id, &parser, true)
+            .await
+            .unwrap();
 
         let tags = service.get_tags(created.id).await.unwrap();
         assert!(tags.contains(&"favorite".to_string()));

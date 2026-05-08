@@ -130,9 +130,8 @@ pub fn compose_council_ports(
     mcp: Arc<McpService>,
     sandbox_root: Option<PathBuf>,
 ) -> CouncilPorts {
-    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
-        LlmCompletionAdapter::with_client(base_url, http_client, model).with_tags(tags),
-    );
+    let llm: Arc<dyn LlmCompletionPort> =
+        Arc::new(LlmCompletionAdapter::with_client(base_url, http_client, model).with_tags(tags));
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
         None => Arc::new(CombinedToolExecutor::new(mcp)),
