@@ -192,6 +192,24 @@ Cargo workspace with compile-time enforced boundaries. Adapters → infrastructu
 
 Only `gglib-runtime` spawns llama-server processes; only `gglib-download` talks to HuggingFace. Everything else goes through the infrastructure layer.
 
+### Universal Consistency Layer
+
+`gglib-proxy` exposes a **strict OpenAI-compatible** chat-completions endpoint regardless of which model dialect the upstream `llama-server` happens to emit (Qwen XML tool calls, bare `<think>` reasoning tags, etc.). External clients — OpenWebUI, the OpenAI SDKs, custom scripts — only ever see canonical `chat.completion.chunk` events.
+
+This is achieved by a three-stage pipeline that runs on every streaming request:
+
+```text
+upstream bytes ─► SseStreamDecoder ─► NormalizingStream ─► SseEncoder ─► wire bytes
+                  (gglib-core::sse)   (gglib-core::normalize)   (gglib-core::sse)
+                       parse              dialect rewrite             re-emit
+```
+
+1. **Parse** — `SseStreamDecoder` reassembles SSE frames across arbitrary TCP chunk boundaries and produces typed `LlmStreamEvent`s.
+2. **Normalize** — A per-request `ToolCallParser` is selected by model tags via `normalize::registry::get_parser`. Dialect parsers (`QwenXmlParser`, `ThinkTagParser`, …) rewrite model-specific markup into strict tool-call / reasoning events. Models without a dialect tag use the identity `StandardJsonParser`. Recoverable parser issues become `NormalizationError` events that are logged and suppressed from the wire; unrecoverable upstream errors surface as a structured `error` data frame followed by `data: [DONE]`.
+3. **Re-encode** — `SseEncoder` wraps every event in the canonical envelope (`id: "chatcmpl-…"`, `object: "chat.completion.chunk"`, stable `model` / `created`) so clients see identical framing on every request.
+
+End-to-end round-trip coverage lives in [`crates/gglib-proxy/tests/integration_proxy_pipeline.rs`](crates/gglib-proxy/tests/integration_proxy_pipeline.rs).
+
 ### Crate Metrics
 
 #### Core Layer
