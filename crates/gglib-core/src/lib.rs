@@ -5,6 +5,7 @@ pub mod contracts;
 pub mod domain;
 pub mod download;
 pub mod events;
+pub mod normalize;
 pub mod paths;
 pub mod ports;
 pub mod services;

@@ -34,6 +34,7 @@ use serde_json::{Value, json};
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
+    normalize::{NormalizingStream, get_parser},
     ports::LlmCompletionPort,
 };
 
@@ -75,6 +76,10 @@ pub struct LlmCompletionAdapter {
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     send_timeout_secs: u64,
+    /// Model `format:*` tags consulted by [`gglib_core::normalize::get_parser`]
+    /// when wrapping the SSE-derived stream in a [`NormalizingStream`].
+    /// Empty (the default) selects the identity-passthrough parser.
+    tags: Vec<String>,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -123,6 +128,7 @@ impl LlmCompletionAdapter {
             client,
             sampling: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
+            tags: Vec::new(),
         }
     }
 
@@ -138,6 +144,19 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_send_timeout(mut self, secs: u64) -> Self {
         self.send_timeout_secs = secs;
+        self
+    }
+
+    /// Set the model's `format:*` tags so the adapter can pick a
+    /// dialect-specific parser when wrapping the SSE-derived stream in a
+    /// [`NormalizingStream`].
+    ///
+    /// Pass an empty `Vec` (the default) to select the identity-passthrough
+    /// parser, which is the right choice for any model that already speaks
+    /// strict OpenAI tool-calling.
+    #[must_use]
+    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
+        self.tags = tags;
         self
     }
 }
@@ -313,6 +332,11 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             }
         };
 
-        Ok(Box::pin(stream))
+        // Wrap the raw SSE-derived stream in the universal normalization
+        // layer.  Empty `tags` selects the identity-passthrough parser so
+        // models that already emit strict OpenAI tool calls are unaffected.
+        let parser = get_parser(&self.tags);
+        let normalized = NormalizingStream::new(Box::pin(stream), parser);
+        Ok(Box::pin(normalized))
     }
 }

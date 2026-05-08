@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 use super::tool_types::{ToolCall, ToolResult};
+use crate::normalize::NormalizationErrorKind;
 
 // =============================================================================
 // Agent events (SSE stream units)
@@ -196,6 +197,21 @@ pub enum LlmStreamEvent {
         /// The OpenAI-compatible finish reason (e.g. `"stop"`, `"tool_calls"`,
         /// `"length"`).
         finish_reason: String,
+    },
+
+    /// A non-fatal normalization issue surfaced by the
+    /// [`crate::normalize`] layer.
+    ///
+    /// Emitted when a dialect-specific parser detects malformed markup
+    /// (e.g. a Qwen `<tool_call>` whose body is not valid JSON, or a tag
+    /// that the stream ended without closing).  The stream is **not**
+    /// aborted; the offending bytes are simply discarded or surfaced via
+    /// this event so consumers can log diagnostics.
+    NormalizationError {
+        /// Structured detail about what went wrong.
+        kind: NormalizationErrorKind,
+        /// Short, human-readable excerpt of the offending input.
+        raw: String,
     },
 }
 
