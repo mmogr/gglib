@@ -33,7 +33,7 @@ use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
     ModelSummary, RunningTarget,
 };
-use gglib_core::{NoopEmitter, McpRepositoryError, McpServer, McpServerRepository, NewMcpServer};
+use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
 
 mod fixtures;
@@ -152,10 +152,7 @@ impl McpServerRepository for EmptyMcpRepo {
 ///
 /// Each chunk is sent as a separate body frame so tests can deliberately
 /// split SSE frames across byte boundaries.
-async fn spawn_mock_upstream(
-    chunks: Vec<&'static [u8]>,
-    cancel: CancellationToken,
-) -> u16 {
+async fn spawn_mock_upstream(chunks: Vec<&'static [u8]>, cancel: CancellationToken) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let port = listener.local_addr().unwrap().port();
 
@@ -173,9 +170,11 @@ async fn spawn_mock_upstream(
                     .unwrap()
                     .take()
                     .unwrap_or_else(|| vec![b"data: [DONE]\n\n" as &[u8]]);
-                let stream = futures_util::stream::iter(chunks.into_iter().map(|c| {
-                    Ok::<Bytes, std::io::Error>(Bytes::from_static(c))
-                }));
+                let stream = futures_util::stream::iter(
+                    chunks
+                        .into_iter()
+                        .map(|c| Ok::<Bytes, std::io::Error>(Bytes::from_static(c))),
+                );
                 Response::builder()
                     .header("content-type", "text/event-stream")
                     .header("cache-control", "no-cache")
@@ -244,10 +243,8 @@ async fn round_trip(
     tags: Vec<String>,
 ) -> String {
     let upstream_cancel = CancellationToken::new();
-    let upstream_port =
-        spawn_mock_upstream(upstream_chunks, upstream_cancel.clone()).await;
-    let (proxy_url, proxy_cancel) =
-        spawn_proxy(upstream_port, model_name, tags).await;
+    let upstream_port = spawn_mock_upstream(upstream_chunks, upstream_cancel.clone()).await;
+    let (proxy_url, proxy_cancel) = spawn_proxy(upstream_port, model_name, tags).await;
 
     let client = Client::new();
     let resp = client
@@ -298,10 +295,9 @@ fn parse_frames(body: &str) -> (Vec<Value>, bool) {
             saw_done = true;
             continue;
         }
-        let v: Value =
-            serde_json::from_str(payload).unwrap_or_else(|e| {
-                panic!("proxy emitted non-JSON data frame: {e}\nframe: {payload}");
-            });
+        let v: Value = serde_json::from_str(payload).unwrap_or_else(|e| {
+            panic!("proxy emitted non-JSON data frame: {e}\nframe: {payload}");
+        });
         frames.push(v);
     }
     (frames, saw_done)
@@ -328,11 +324,13 @@ fn assert_canonical_envelope(frames: &[Value], expected_model: &str) -> (String,
         assert_eq!(f["object"], "chat.completion.chunk");
         assert_eq!(f["id"], json!(id), "id must be stable across frames");
         assert_eq!(
-            f["model"], json!(model),
+            f["model"],
+            json!(model),
             "model must be stable across frames"
         );
         assert_eq!(
-            f["created"], json!(created),
+            f["created"],
+            json!(created),
             "created must be stable across frames"
         );
     }
@@ -445,9 +443,7 @@ async fn qwen_xml_tool_call_is_normalized() {
     // The cumulative arguments JSON must reconstruct to the original args.
     let mut args = String::new();
     for f in &tc_frames {
-        if let Some(s) = f["choices"][0]["delta"]["tool_calls"][0]["function"]
-            ["arguments"]
-            .as_str()
+        if let Some(s) = f["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
         {
             args.push_str(s);
         }
@@ -472,12 +468,7 @@ async fn qwen_xml_tool_call_is_normalized() {
 /// the identity parser preserving id, type, name, and arguments.
 #[tokio::test]
 async fn standard_openai_tool_call_passthrough() {
-    let body = round_trip(
-        vec![STANDARD_OPENAI_TOOL_CALL],
-        "strict-openai",
-        vec![],
-    )
-    .await;
+    let body = round_trip(vec![STANDARD_OPENAI_TOOL_CALL], "strict-openai", vec![]).await;
     let (frames, saw_done) = parse_frames(&body);
     assert!(saw_done);
     assert_canonical_envelope(&frames, "strict-openai");
@@ -496,15 +487,12 @@ async fn standard_openai_tool_call_passthrough() {
 
     let mut args = String::new();
     for f in &tc_frames {
-        if let Some(s) = f["choices"][0]["delta"]["tool_calls"][0]["function"]
-            ["arguments"]
-            .as_str()
+        if let Some(s) = f["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str()
         {
             args.push_str(s);
         }
     }
-    let parsed_args: Value =
-        serde_json::from_str(&args).expect("arguments should be JSON");
+    let parsed_args: Value = serde_json::from_str(&args).expect("arguments should be JSON");
     assert_eq!(parsed_args, json!({"city": "Paris"}));
 }
 
@@ -513,8 +501,7 @@ async fn standard_openai_tool_call_passthrough() {
 /// whole.
 #[tokio::test]
 async fn split_frame_round_trip() {
-    let body =
-        round_trip(basic_text_split_chunks(), "split-model", vec![]).await;
+    let body = round_trip(basic_text_split_chunks(), "split-model", vec![]).await;
     let (frames, saw_done) = parse_frames(&body);
     assert!(saw_done, "missing [DONE] terminator after split chunks");
     assert_canonical_envelope(&frames, "split-model");
@@ -535,8 +522,7 @@ async fn split_frame_round_trip() {
 /// 3. Always finish with `data: [DONE]`.
 #[tokio::test]
 async fn malformed_json_terminates_cleanly() {
-    let body =
-        round_trip(vec![MALFORMED_JSON_RECOVERY], "noisy-model", vec![]).await;
+    let body = round_trip(vec![MALFORMED_JSON_RECOVERY], "noisy-model", vec![]).await;
     let (frames, saw_done) = parse_frames(&body);
     assert!(saw_done, "missing [DONE] after malformed-json frame");
 

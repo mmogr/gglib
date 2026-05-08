@@ -144,7 +144,8 @@ impl QwenXmlParser {
             // would have closed.
             let mut partial = state.body;
             partial.push_str(&state.pending);
-            out.errors.push(NormalizationError::unclosed_tool_call(partial));
+            out.errors
+                .push(NormalizationError::unclosed_tool_call(partial));
         } else {
             // Any held-back bytes turned out to be ordinary text — flush.
             forward(&mut out, channel, &state.pending);

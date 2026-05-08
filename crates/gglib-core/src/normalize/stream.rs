@@ -208,10 +208,7 @@ mod tests {
 
     impl Stream for VecStream {
         type Item = Result<LlmStreamEvent>;
-        fn poll_next(
-            mut self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-        ) -> Poll<Option<Self::Item>> {
+        fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
             Poll::Ready(self.items.pop_front())
         }
     }
@@ -295,8 +292,7 @@ mod tests {
     fn qwen_xml_in_reasoning_is_extracted_and_text_clean() {
         let events = vec![
             LlmStreamEvent::ReasoningDelta {
-                content: r#"think <tool_call>{"name":"foo","arguments":{}}</tool_call> end"#
-                    .into(),
+                content: r#"think <tool_call>{"name":"foo","arguments":{}}</tool_call> end"#.into(),
             },
             LlmStreamEvent::Done {
                 finish_reason: "tool_calls".into(),
@@ -354,9 +350,10 @@ mod tests {
         let out = drain(wrap(events, true));
         // Expect at least: NormalizationError, Done.
         assert!(matches!(out.last(), Some(LlmStreamEvent::Done { .. })));
-        assert!(out
-            .iter()
-            .any(|e| matches!(e, LlmStreamEvent::NormalizationError { .. })));
+        assert!(
+            out.iter()
+                .any(|e| matches!(e, LlmStreamEvent::NormalizationError { .. }))
+        );
     }
 
     #[test]

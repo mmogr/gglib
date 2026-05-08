@@ -20,8 +20,8 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use futures_util::StreamExt as _;
-use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use gglib_core::normalize::NormalizationErrorKind;
+use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use tokio::sync::mpsc;
 use tracing::warn;
 

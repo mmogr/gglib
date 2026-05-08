@@ -55,7 +55,10 @@ mod tests {
         let out = p.push_text(r#"<tool_call>{"name":"x","arguments":{}}</tool_call>"#);
         let f = p.finish();
         assert_eq!(out.tool_calls.len(), 1);
-        assert!(f.tool_calls.is_empty(), "tool calls flush in push, not finish");
+        assert!(
+            f.tool_calls.is_empty(),
+            "tool calls flush in push, not finish"
+        );
     }
 
     #[test]

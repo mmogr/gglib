@@ -70,7 +70,13 @@ mod tests {
     fn many_chunks_preserve_total_bytes() {
         let mut p = StandardJsonParser::new();
         let mut acc = String::new();
-        for c in ["foo", "<tool_call>", "{\"name\":\"x\"}", "</tool_call>", "bar"] {
+        for c in [
+            "foo",
+            "<tool_call>",
+            "{\"name\":\"x\"}",
+            "</tool_call>",
+            "bar",
+        ] {
             acc.push_str(&p.push_text(c).forward_text);
         }
         // StandardJsonParser is identity, so even XML-looking input is
