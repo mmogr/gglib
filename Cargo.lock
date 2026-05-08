@@ -2118,9 +2118,11 @@ name = "gglib-proxy"
 version = "0.7.3"
 dependencies = [
  "anyhow",
+ "async-stream",
  "async-trait",
  "axum",
  "bytes",
+ "futures-core",
  "futures-util",
  "gglib-core",
  "gglib-mcp",
