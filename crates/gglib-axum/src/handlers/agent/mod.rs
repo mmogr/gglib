@@ -97,10 +97,15 @@ pub async fn chat(
     validate_port(&state, req.port).await?;
 
     let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
+    let tags = match req.model.as_deref() {
+        Some(name) => state.core.models().tags_for(name).await,
+        None => Vec::new(),
+    };
     let agent_loop = compose_agent_loop(
         format!("http://127.0.0.1:{}", req.port),
         state.http_client.clone(),
         req.model.clone(),
+        tags,
         state.mcp.clone(),
         tool_filter,
     );

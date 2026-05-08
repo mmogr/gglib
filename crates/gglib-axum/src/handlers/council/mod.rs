@@ -32,10 +32,15 @@ pub async fn suggest(
 ) -> Result<Json<CouncilSuggestResponse>, HttpError> {
     validate_port(&state, req.port).await?;
 
+    let tags = match req.model.as_deref() {
+        Some(name) => state.core.models().tags_for(name).await,
+        None => Vec::new(),
+    };
     let ports = compose_council_ports(
         format!("http://127.0.0.1:{}", req.port),
         state.http_client.clone(),
         req.model.clone(),
+        tags,
         state.mcp.clone(),
         None,
     );
@@ -100,10 +105,15 @@ pub async fn run(
 
     validate_port(&state, req.port).await?;
 
+    let tags = match req.model.as_deref() {
+        Some(name) => state.core.models().tags_for(name).await,
+        None => Vec::new(),
+    };
     let ports = compose_council_ports(
         format!("http://127.0.0.1:{}", req.port),
         state.http_client.clone(),
         req.model.clone(),
+        tags,
         state.mcp.clone(),
         None,
     );

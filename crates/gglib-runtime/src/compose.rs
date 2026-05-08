@@ -32,6 +32,9 @@ use crate::LlmCompletionAdapter;
 /// * `base_url` — `http://127.0.0.1:{port}` pointing at the llama-server.
 /// * `http_client` — shared `reqwest::Client` (connection-pooled).
 /// * `model` — optional model-name override forwarded to llama-server.
+/// * `tags` — model tag list used to select a dialect-specific
+///   normalization parser at adapter construction time. Pass an empty
+///   `Vec` to use the identity passthrough parser.
 /// * `mcp` — handle to the running MCP service (for tool discovery/execution).
 /// * `tool_filter` — `Some(set)` restricts the visible tools to the named
 ///   allowlist; `None` exposes all tools from all connected MCP servers.
@@ -39,10 +42,20 @@ pub fn compose_agent_loop(
     base_url: String,
     http_client: Client,
     model: Option<String>,
+    tags: Vec<String>,
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
 ) -> Arc<dyn AgentLoopPort> {
-    compose_agent_loop_inner(base_url, http_client, model, mcp, tool_filter, None, None)
+    compose_agent_loop_inner(
+        base_url,
+        http_client,
+        model,
+        tags,
+        mcp,
+        tool_filter,
+        None,
+        None,
+    )
 }
 
 /// Like [`compose_agent_loop`] but with filesystem tools sandboxed to `sandbox_root`.
@@ -50,6 +63,7 @@ pub fn compose_agent_loop_sandboxed(
     base_url: String,
     http_client: Client,
     model: Option<String>,
+    tags: Vec<String>,
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
     sandbox_root: PathBuf,
@@ -58,6 +72,7 @@ pub fn compose_agent_loop_sandboxed(
         base_url,
         http_client,
         model,
+        tags,
         mcp,
         tool_filter,
         Some(sandbox_root),
@@ -66,10 +81,12 @@ pub fn compose_agent_loop_sandboxed(
 }
 
 /// Like [`compose_agent_loop`] with optional sampling overrides and sandbox.
+#[allow(clippy::too_many_arguments)]
 pub fn compose_agent_loop_with_sampling(
     base_url: String,
     http_client: Client,
     model: Option<String>,
+    tags: Vec<String>,
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
@@ -79,6 +96,7 @@ pub fn compose_agent_loop_with_sampling(
         base_url,
         http_client,
         model,
+        tags,
         mcp,
         tool_filter,
         sandbox_root,
@@ -108,14 +126,13 @@ pub fn compose_council_ports(
     base_url: String,
     http_client: Client,
     model: Option<String>,
+    tags: Vec<String>,
     mcp: Arc<McpService>,
     sandbox_root: Option<PathBuf>,
 ) -> CouncilPorts {
-    let llm: Arc<dyn LlmCompletionPort> = Arc::new(LlmCompletionAdapter::with_client(
-        base_url,
-        http_client,
-        model,
-    ));
+    let llm: Arc<dyn LlmCompletionPort> = Arc::new(
+        LlmCompletionAdapter::with_client(base_url, http_client, model).with_tags(tags),
+    );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
         None => Arc::new(CombinedToolExecutor::new(mcp)),
@@ -123,17 +140,21 @@ pub fn compose_council_ports(
     CouncilPorts { llm, tool_executor }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compose_agent_loop_inner(
     base_url: String,
     http_client: Client,
     model: Option<String>,
+    tags: Vec<String>,
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
 ) -> Arc<dyn AgentLoopPort> {
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
-        LlmCompletionAdapter::with_client(base_url, http_client, model).with_sampling(sampling),
+        LlmCompletionAdapter::with_client(base_url, http_client, model)
+            .with_sampling(sampling)
+            .with_tags(tags),
     );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
         Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),

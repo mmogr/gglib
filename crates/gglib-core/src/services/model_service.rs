@@ -69,6 +69,19 @@ impl ModelService {
             .ok_or_else(|| CoreError::Validation(format!("Model not found: {identifier}")))
     }
 
+    /// Resolve a model identifier to its tag list.
+    ///
+    /// Returns an empty `Vec` when the identifier is unknown or the lookup
+    /// fails — callers use this for read-only side-channel inputs (e.g.
+    /// dialect selection at compose time) where a missing model should
+    /// fall back to default behaviour rather than abort the request.
+    pub async fn tags_for(&self, identifier: &str) -> Vec<String> {
+        match self.get(identifier).await {
+            Ok(Some(m)) => m.tags,
+            _ => Vec::new(),
+        }
+    }
+
     /// Find a model by name. Returns error if not found.
     pub async fn find_by_name(&self, name: &str) -> Result<Model, CoreError> {
         self.get_by_name(name)

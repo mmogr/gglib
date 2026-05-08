@@ -139,10 +139,15 @@ async fn init_session(
 
     let cwd = std::env::current_dir().ok();
 
+    let tags = match model.as_deref() {
+        Some(name) => ctx.app.models().tags_for(name).await,
+        None => Vec::new(),
+    };
     let ports = compose_council_ports(
         format!("http://127.0.0.1:{resolved_port}"),
         ctx.http_client.clone(),
         model,
+        tags,
         Arc::clone(&ctx.mcp),
         cwd,
     );
