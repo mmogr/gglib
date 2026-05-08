@@ -20,7 +20,6 @@ pub mod gguf;
 pub mod inference;
 pub mod mcp;
 mod model;
-pub mod thinking;
 
 // Re-export model types at the domain level for convenience
 pub use model::{Model, ModelFile, ModelFilterOptions, NewModel, NewModelFile, RangeValues};
@@ -57,11 +56,4 @@ pub use agent::{
 // Re-export capability types at the domain level for convenience
 pub use capabilities::{
     ChatMessage, ModelCapabilities, infer_from_chat_template, transform_messages_for_capabilities,
-};
-
-// Re-export thinking types at the domain level for convenience
-pub use thinking::{
-    ParsedThinkingContent, ThinkingAccumulator, ThinkingEvent, embed_thinking_content,
-    format_thinking_duration, has_thinking_content, normalize_thinking_tags,
-    parse_thinking_content,
 };

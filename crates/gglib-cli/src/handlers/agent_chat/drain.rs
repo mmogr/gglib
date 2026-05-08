@@ -1,24 +1,23 @@
 //! Async event-stream consumer for the agentic chat loop.
 //!
 //! [`drain_event_stream`] pulls [`AgentEvent`]s from a
-//! [`tokio::sync::mpsc::Receiver`], classifies inline thinking tokens via
-//! [`ThinkingAccumulator`], and renders each event through the
+//! [`tokio::sync::mpsc::Receiver`] and renders each event through the
 //! [`super::renderer`] and [`super::thinking_dispatch`] modules.
 //!
-//! Extracted from `renderer.rs` to separate the stateful async orchestration
-//! (spinner lifecycle, thinking accumulator, Rich/Raw mode selection) from
-//! the stateless per-event formatting in [`super::renderer::render_event`].
+//! Inline `<think>` reclassification is handled upstream by
+//! [`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
+//! drain only consumes already-typed [`AgentEvent::ReasoningDelta`] /
+//! [`AgentEvent::TextDelta`] events.
 
 use std::io::{self, IsTerminal, Write as _};
 
 use gglib_core::domain::agent::AgentEvent;
-use gglib_core::domain::thinking::ThinkingAccumulator;
 use tokio::sync::mpsc;
 
 use super::markdown::render_markdown;
 use super::renderer::render_event;
 use super::thinking_dispatch::{
-    RenderContext, close_thinking, dispatch_thinking_event, suspend_or_run,
+    RenderContext, close_thinking, emit_content, emit_reasoning, suspend_or_run,
 };
 
 /// Drain `rx` until the channel closes or a [`AgentEvent::FinalAnswer`]
@@ -35,9 +34,9 @@ use super::thinking_dispatch::{
 /// [`indicatif`] spinner runs on stderr while buffering.  In all other
 /// cases tokens stream to stdout as they arrive (Raw mode).
 ///
-/// A [`ThinkingAccumulator`] intercepts `TextDelta` events so that inline
-/// `<think>` tags are reclassified: reasoning goes to stderr, content to
-/// stdout.
+/// Reasoning tokens (already classified upstream into
+/// [`AgentEvent::ReasoningDelta`]) are routed to stderr through a
+/// "Thinking" banner; content tokens go to stdout.
 ///
 /// The caller **must** gate any history update on the return value: history
 /// from a failed or incomplete turn must not replace the previous context.
@@ -48,7 +47,6 @@ pub async fn drain_event_stream(
 ) -> bool {
     let rich = !quiet && io::stdout().is_terminal();
     let stderr_tty = io::stderr().is_terminal();
-    let mut acc = ThinkingAccumulator::new();
     let mut ctx = RenderContext::new(rich, stderr_tty, quiet);
     let mut had_text = false;
 
@@ -57,30 +55,16 @@ pub async fn drain_event_stream(
             // ── Content tokens ───────────────────────────────────────
             AgentEvent::TextDelta { content } => {
                 had_text = true;
-                for te in acc.push(content) {
-                    dispatch_thinking_event(te, &mut ctx);
-                }
+                emit_content(&mut ctx, content);
             }
 
-            // ── Structured reasoning (already classified by the model) ─
+            // ── Structured reasoning (already classified upstream) ───
             AgentEvent::ReasoningDelta { content } => {
-                if !quiet {
-                    use gglib_core::domain::thinking::ThinkingEvent;
-                    dispatch_thinking_event(
-                        ThinkingEvent::ThinkingDelta(content.clone()),
-                        &mut ctx,
-                    );
-                }
+                emit_reasoning(&mut ctx, content);
             }
 
             // ── Turn complete ────────────────────────────────────────
             AgentEvent::FinalAnswer { content } => {
-                close_thinking(&mut ctx);
-
-                // Flush any pending thinking accumulator state.
-                for te in acc.flush() {
-                    dispatch_thinking_event(te, &mut ctx);
-                }
                 close_thinking(&mut ctx);
 
                 // Stop spinner before rendering.
