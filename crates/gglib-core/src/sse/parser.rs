@@ -1,28 +1,29 @@
 //! Parser for OpenAI-compatible SSE `data:` frames.
 //!
-//! Isolated from [`super::llm_completion`] so the frame-parsing logic and its
-//! tests are self-contained and do not require an HTTP client or async runtime.
+//! Isolated so the frame-parsing logic and its tests are self-contained and
+//! do not require an HTTP client or async runtime.
 //!
 //! # Frame ordering for reasoning models
 //!
 //! When a single SSE frame carries both `reasoning_content` (chain-of-thought)
 //! **and** `content` (answer text), the [`ReasoningDelta`] event is emitted
 //! first.  This matches the temporal semantics of reasoning models such as
-//! DeepSeek R1 and QwQ, where the chain-of-thought is always produced before
+//! `DeepSeek` R1 and `QwQ`, where the chain-of-thought is always produced before
 //! the answer — even if llama-server coalesces both into the same frame.
 //!
-//! [`ReasoningDelta`]: gglib_core::LlmStreamEvent::ReasoningDelta
+//! [`ReasoningDelta`]: crate::LlmStreamEvent::ReasoningDelta
 
 use anyhow::{Result, anyhow};
-use gglib_core::domain::agent::LlmStreamEvent;
+
+use crate::domain::agent::LlmStreamEvent;
 
 // =============================================================================
-// Public(crate) types
+// Public types
 // =============================================================================
 
 /// Result of parsing a single SSE `data:` payload.
 #[derive(Debug)]
-pub(crate) enum SseParseResult {
+pub enum SseParseResult {
     /// The value `[DONE]` — stream terminator, no events.
     Done,
     /// One or more events decoded from the JSON frame.
@@ -40,7 +41,11 @@ pub(crate) enum SseParseResult {
 /// - `Ok(SseParseResult::Events(…))` for a valid JSON frame (may be empty
 ///   when the frame carries no content or tool-call deltas)
 /// - `Err(…)` when the frame is not valid JSON
-pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
+///
+/// # Errors
+///
+/// Returns an error if the `data` payload is not valid JSON.
+pub fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     if data == "[DONE]" {
         return Ok(SseParseResult::Done);
     }
@@ -53,9 +58,9 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     // We check for them *before* the choices guard so they aren't silently
     // dropped as "no choices" frames.
     if let Some(pp) = parsed.get("prompt_progress") {
-        let processed = pp["processed"].as_u64().unwrap_or(0) as u32;
-        let total = pp["total"].as_u64().unwrap_or(0) as u32;
-        let cached = pp["cache"].as_u64().unwrap_or(0) as u32;
+        let processed = u32::try_from(pp["processed"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+        let total = u32::try_from(pp["total"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+        let cached = u32::try_from(pp["cache"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
         let time_ms = pp["time_ms"].as_u64().unwrap_or(0);
         return Ok(SseParseResult::Events(vec![
             LlmStreamEvent::PromptProgress {
@@ -72,7 +77,7 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
     // events are silently dropped, and a `finish_reason: "stop"` in such a
     // frame would mean the stream never emits `Done`.
     let choices = &parsed["choices"];
-    if choices.as_array().is_none_or(|a| a.is_empty()) {
+    if choices.as_array().is_none_or(Vec::is_empty) {
         tracing::debug!(data = %data, "SSE frame has no 'choices' entries — skipping");
         return Ok(SseParseResult::Events(vec![]));
     }
@@ -113,7 +118,7 @@ pub(crate) fn parse_sse_frame(data: &str) -> Result<SseParseResult> {
             // all calls onto slot 0.
             let index = tc["index"]
                 .as_u64()
-                .map(|i| i as usize)
+                .and_then(|i| usize::try_from(i).ok())
                 .unwrap_or(sequential);
             let id = tc["id"].as_str().map(str::to_owned);
             let name = tc["function"]["name"].as_str().map(str::to_owned);
@@ -283,10 +288,6 @@ mod tests {
 
     #[test]
     fn tool_call_delta_with_no_index_defaults_to_sequential_position() {
-        // A server that omits `index` on a single tool-call element should
-        // assign it position 0 (first element), not silently collapse onto 0
-        // from `unwrap_or(0)` which is the same value — but for TWO elements
-        // both collapsing to 0 would data-lose the second call.
         let events = match parse_sse_frame(&tool_frame_no_index("tc1", "search", r#"{"q":"rust"}"#))
         {
             Ok(SseParseResult::Events(e)) => e,
@@ -301,10 +302,6 @@ mod tests {
 
     #[test]
     fn two_tool_calls_with_no_index_get_distinct_sequential_slots() {
-        // This is the critical regression test for the silent slot-collision bug:
-        // two tool-call elements without `index` must be assigned slots 0 and 1,
-        // not both slot 0 (which would cause the second to overwrite the first
-        // in the stream collector's `partials` Vec).
         let events = match parse_sse_frame(&two_tool_frames_no_index()) {
             Ok(SseParseResult::Events(e)) => e,
             other => panic!("unexpected: {other:?}"),
@@ -378,9 +375,6 @@ mod tests {
 
     #[test]
     fn frame_with_reasoning_and_text_reasoning_emitted_first() {
-        // When a single frame carries both reasoning_content (CoT) and content
-        // (answer text), ReasoningDelta must appear before TextDelta because
-        // chain-of-thought semantically precedes the answer.
         let frame = serde_json::json!({
             "choices": [{ "delta": { "content": "ok", "reasoning_content": "think" }, "finish_reason": null }]
         })
@@ -429,8 +423,6 @@ mod tests {
 
     #[test]
     fn prompt_progress_frame_not_confused_with_choices() {
-        // A prompt_progress frame has no `choices` array.  The parser should
-        // recognise it as progress, not drop it as a no-choices keepalive.
         let frame = serde_json::json!({
             "prompt_progress": {
                 "processed": 100,

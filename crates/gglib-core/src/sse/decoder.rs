@@ -2,16 +2,16 @@
 //!
 //! [`SseStreamDecoder`] accumulates raw bytes from an HTTP response into a line
 //! buffer, drains complete `data:` lines, and delegates frame parsing to
-//! [`super::sse_parser`].  Its explicit state makes it straightforward to unit-
+//! [`super::parser`].  Its explicit state makes it straightforward to unit-
 //! test without standing up an actual HTTP server or wrapping everything in an
 //! `async_stream` macro block.
 
 use anyhow::Result;
 use tracing::debug;
 
-use gglib_core::LlmStreamEvent;
+use crate::LlmStreamEvent;
 
-use super::sse_parser::{SseParseResult, parse_sse_frame};
+use super::parser::{SseParseResult, parse_sse_frame};
 
 /// Stateful decoder that turns a sequence of raw SSE byte chunks into a
 /// sequence of [`LlmStreamEvent`] values.
@@ -28,7 +28,7 @@ use super::sse_parser::{SseParseResult, parse_sse_frame};
 /// if let Some(fallback) = decoder.finish() { … }
 /// ```
 #[derive(Default)]
-pub(crate) struct SseStreamDecoder {
+pub struct SseStreamDecoder {
     buf: String,
     /// Set to `true` once a [`LlmStreamEvent::Done`] has been yielded, so the
     /// `[DONE]` sentinel doesn't generate a duplicate.
@@ -45,7 +45,7 @@ impl SseStreamDecoder {
     /// - `should_stop` — `true` when the SSE stream has reached its natural end
     ///   (a `[DONE]` sentinel or an unrecoverable parse error).  The caller
     ///   must not feed any further chunks once this flag is `true`.
-    pub(crate) fn feed_bytes(&mut self, bytes: &[u8]) -> (Vec<Result<LlmStreamEvent>>, bool) {
+    pub fn feed_bytes(&mut self, bytes: &[u8]) -> (Vec<Result<LlmStreamEvent>>, bool) {
         let text = match std::str::from_utf8(bytes) {
             Ok(t) => t,
             Err(e) => {
@@ -106,14 +106,15 @@ impl SseStreamDecoder {
     ///
     /// Call this once after the upstream byte stream is fully exhausted.
     /// Returns `None` if a `Done` was already yielded by [`feed_bytes`].
-    pub(crate) fn finish(self) -> Option<LlmStreamEvent> {
-        if !self.done_sent {
+    #[must_use]
+    pub fn finish(self) -> Option<LlmStreamEvent> {
+        if self.done_sent {
+            None
+        } else {
             debug!("LLM byte-stream ended without [DONE] sentinel — emitting fallback Done");
             Some(LlmStreamEvent::Done {
                 finish_reason: "stop".to_owned(),
             })
-        } else {
-            None
         }
     }
 }
@@ -125,9 +126,9 @@ impl SseStreamDecoder {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use gglib_core::LlmStreamEvent;
 
     use super::SseStreamDecoder;
+    use crate::LlmStreamEvent;
 
     fn text_delta_frame(text: &str) -> String {
         let json = serde_json::json!({
@@ -186,7 +187,6 @@ mod tests {
                 .any(|e| matches!(e, LlmStreamEvent::Done { .. })),
             "fallback Done should be emitted when no prior finish_reason"
         );
-        // After a [DONE] sentinel, finish() must not emit a second Done.
         assert!(
             dec.finish().is_none(),
             "finish() must return None after a [DONE] sentinel — done_sent must be set"
@@ -209,7 +209,6 @@ mod tests {
     #[test]
     fn finish_emits_fallback_when_stream_ends_without_done() {
         let mut dec = SseStreamDecoder::default();
-        // Feed a text delta but no Done frame.
         let _ = collect_all(&mut dec, &text_delta_frame("partial"));
         let fallback = dec.finish();
         assert!(
@@ -222,7 +221,6 @@ mod tests {
     fn finish_returns_none_when_done_already_sent() {
         let mut dec = SseStreamDecoder::default();
         let _ = collect_all(&mut dec, &finish_reason_frame());
-        // done_sent is now true
         assert!(
             dec.finish().is_none(),
             "finish() must not emit a second Done"
@@ -234,7 +232,6 @@ mod tests {
         let mut dec = SseStreamDecoder::default();
         let full_frame = text_delta_frame("world");
 
-        // Split the frame across two feed calls.
         let mid = full_frame.len() / 2;
         let (first_events, stop1) = collect_all(&mut dec, &full_frame[..mid]);
         assert!(!stop1);

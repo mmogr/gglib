@@ -36,11 +36,8 @@ use gglib_core::{
     domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
     normalize::{NormalizingStream, get_parser},
     ports::LlmCompletionPort,
+    sse::SseStreamDecoder,
 };
-
-mod sse_decoder;
-mod sse_parser;
-use sse_decoder::SseStreamDecoder;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
