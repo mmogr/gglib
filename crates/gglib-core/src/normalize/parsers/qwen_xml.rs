@@ -189,34 +189,103 @@ fn forward(out: &mut ParserOutput, channel: Channel, bytes: &str) {
     }
 }
 
-/// Parse the accumulated JSON body and push the resulting [`ToolCall`] (or
-/// a [`NormalizationError`]) onto `out`.
+/// Parse the accumulated tool-call body and push the resulting [`ToolCall`]
+/// (or a [`NormalizationError`]) onto `out`.
+///
+/// Two body shapes are accepted, in order:
+/// 1. **JSON** — `{"name":"foo","arguments":{...}}` (Qwen2/2.5 native).
+/// 2. **Inner XML** — `<function=NAME><parameter=KEY>VAL</parameter>...</function>`
+///    (Qwen3 + `--jinja`, Hermes-style).
+///
+/// JSON is tried first because it is the historical Qwen format and is
+/// unambiguous; the XML form is the documented fallback for Qwen3 chat
+/// templates that emit nested function/parameter markup inside `<tool_call>`.
 fn finalize_tool_call(body: &str, out: &mut ParserOutput, mut mint_id: impl FnMut() -> String) {
     let trimmed = body.trim();
-    let Ok(parsed) = serde_json::from_str::<Value>(trimmed) else {
-        out.errors
-            .push(NormalizationError::malformed_tool_call(body.to_owned()));
+    if let Some(call) = parse_json_body(trimmed, &mut mint_id) {
+        out.tool_calls.push(call);
         return;
-    };
-    let Some(obj) = parsed.as_object() else {
-        out.errors
-            .push(NormalizationError::malformed_tool_call(body.to_owned()));
+    }
+    if let Some(call) = parse_function_xml_body(trimmed, &mut mint_id) {
+        out.tool_calls.push(call);
         return;
-    };
-    let Some(name) = obj.get("name").and_then(Value::as_str).map(str::to_owned) else {
-        out.errors
-            .push(NormalizationError::malformed_tool_call(body.to_owned()));
-        return;
-    };
+    }
+    out.errors
+        .push(NormalizationError::malformed_tool_call(body.to_owned()));
+}
+
+/// Try to interpret `body` as a Qwen JSON tool call.
+fn parse_json_body(body: &str, mint_id: &mut impl FnMut() -> String) -> Option<ToolCall> {
+    let parsed: Value = serde_json::from_str(body).ok()?;
+    let obj = parsed.as_object()?;
+    let name = obj.get("name").and_then(Value::as_str)?.to_owned();
     let arguments = obj
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
-    out.tool_calls.push(ToolCall {
+    Some(ToolCall {
         id: mint_id(),
         name,
         arguments,
-    });
+    })
+}
+
+/// Try to interpret `body` as the Hermes/Qwen3 inner-XML tool call:
+/// `<function=NAME><parameter=KEY>VALUE</parameter>...</function>`.
+///
+/// Whitespace between tags is tolerated.  Each parameter value is parsed as
+/// JSON when it looks like a JSON literal (`{`, `[`, quoted string, number,
+/// `true`/`false`/`null`); otherwise it is forwarded as a string after
+/// trimming surrounding whitespace.
+fn parse_function_xml_body(body: &str, mint_id: &mut impl FnMut() -> String) -> Option<ToolCall> {
+    let body = body.trim();
+    let after_open = body.strip_prefix("<function=")?;
+    let name_end = after_open.find('>')?;
+    let name = after_open[..name_end].trim();
+    if name.is_empty() {
+        return None;
+    }
+    let inner = &after_open[name_end + 1..];
+    let inner = inner.strip_suffix("</function>")?.trim();
+
+    let mut args = serde_json::Map::new();
+    let mut cursor = inner;
+    while !cursor.is_empty() {
+        cursor = cursor.trim_start();
+        if cursor.is_empty() {
+            break;
+        }
+        let after_param = cursor.strip_prefix("<parameter=")?;
+        let key_end = after_param.find('>')?;
+        let key = after_param[..key_end].trim().to_owned();
+        if key.is_empty() {
+            return None;
+        }
+        let rest = &after_param[key_end + 1..];
+        let close_at = rest.find("</parameter>")?;
+        let raw_value = rest[..close_at].trim();
+        let value = parse_param_value(raw_value);
+        args.insert(key, value);
+        cursor = &rest[close_at + "</parameter>".len()..];
+    }
+
+    Some(ToolCall {
+        id: mint_id(),
+        name: name.to_owned(),
+        arguments: Value::Object(args),
+    })
+}
+
+/// Best-effort coercion of a `<parameter>` body to a JSON value.  Falls
+/// back to a string literal when the body is not valid JSON.
+fn parse_param_value(raw: &str) -> Value {
+    if raw.is_empty() {
+        return Value::String(String::new());
+    }
+    if let Ok(v) = serde_json::from_str::<Value>(raw) {
+        return v;
+    }
+    Value::String(raw.to_owned())
 }
 
 /// Largest `n` in `[0, marker.len())` such that the last `n` bytes of `buf`
@@ -421,5 +490,81 @@ mod tests {
         assert_eq!(partial_suffix_len(b"<tool_call>", b"<tool_call>"), 0);
         // The longest proper prefix that the buffer ends with is "<".
         assert_eq!(partial_suffix_len(b"</tool_call><", b"<tool_call>"), 1);
+    }
+
+    // -------------------------------------------------------------------
+    // Inner-XML (`<function=…><parameter=…>…</parameter></function>`) —
+    // the Qwen3 + `--jinja` tool-call body shape.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn extracts_function_xml_body_with_string_param() {
+        let mut p = QwenXmlParser::new();
+        let body = "<tool_call>\n<function=grep>\n<parameter=regex>\ngglib\\s+q\n</parameter>\n</function>\n</tool_call>";
+        let out = collect(&mut p, &[body]);
+        assert!(out.errors.is_empty(), "errors: {:?}", out.errors);
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(out.tool_calls[0].name, "grep");
+        assert_eq!(
+            out.tool_calls[0].arguments,
+            json!({ "regex": "gglib\\s+q" })
+        );
+    }
+
+    #[test]
+    fn function_xml_body_with_multiple_params() {
+        let mut p = QwenXmlParser::new();
+        let body = concat!(
+            "<tool_call><function=read_file>",
+            "<parameter=path>src/main.rs</parameter>",
+            "<parameter=start_line>1</parameter>",
+            "<parameter=end_line>20</parameter>",
+            "</function></tool_call>",
+        );
+        let out = collect(&mut p, &[body]);
+        assert!(out.errors.is_empty());
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(out.tool_calls[0].name, "read_file");
+        assert_eq!(
+            out.tool_calls[0].arguments,
+            json!({ "path": "src/main.rs", "start_line": 1, "end_line": 20 })
+        );
+    }
+
+    #[test]
+    fn function_xml_body_with_json_object_param() {
+        let mut p = QwenXmlParser::new();
+        let body = r#"<tool_call><function=run><parameter=opts>{"a":1,"b":[2,3]}</parameter></function></tool_call>"#;
+        let out = collect(&mut p, &[body]);
+        assert!(out.errors.is_empty());
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(
+            out.tool_calls[0].arguments,
+            json!({ "opts": { "a": 1, "b": [2, 3] } })
+        );
+    }
+
+    #[test]
+    fn function_xml_body_streamed_byte_by_byte() {
+        let mut p = QwenXmlParser::new();
+        let s = "<tool_call><function=grep><parameter=regex>x</parameter></function></tool_call>";
+        let chunks: Vec<String> = s.chars().map(|c| c.to_string()).collect();
+        let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+        let out = collect(&mut p, &refs);
+        assert!(out.errors.is_empty());
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(out.tool_calls[0].name, "grep");
+        assert_eq!(out.tool_calls[0].arguments, json!({ "regex": "x" }));
+    }
+
+    #[test]
+    fn function_xml_body_without_parameters_yields_empty_args() {
+        let mut p = QwenXmlParser::new();
+        let body = "<tool_call><function=ping></function></tool_call>";
+        let out = collect(&mut p, &[body]);
+        assert!(out.errors.is_empty());
+        assert_eq!(out.tool_calls.len(), 1);
+        assert_eq!(out.tool_calls[0].name, "ping");
+        assert_eq!(out.tool_calls[0].arguments, json!({}));
     }
 }
