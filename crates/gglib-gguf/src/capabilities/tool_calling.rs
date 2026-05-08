@@ -99,6 +99,25 @@ pub fn detect_tool_support(metadata: &HashMap<String, String>) -> ToolCallingDet
         detection.detected_format = Some(detected_formats[0].to_string());
     }
 
+    // Qwen models reuse the `<tool_call>...</tool_call>` markup but emit it
+    // inline as XML inside the text channel rather than as the OpenAI-style
+    // `tool_calls` array.  When the chat template matches a `<tool_call>`
+    // pattern AND the model name identifies as Qwen, override the format
+    // hint so the normalization layer selects the Qwen XML parser.
+    if detection.supports_tool_calling
+        && let Some(name) = metadata.get("general.name")
+    {
+        let name_lower = name.to_lowercase();
+        if name_lower.contains("qwen")
+            && detection
+                .matched_patterns
+                .iter()
+                .any(|p| p.contains("tool_call"))
+        {
+            detection.detected_format = Some("qwen-xml".to_string());
+        }
+    }
+
     detection
 }
 
@@ -150,6 +169,7 @@ impl ToolSupportDetectorPort for ToolSupportDetector {
                 "llama3" => ToolFormat::Llama3,
                 "mistral" => ToolFormat::Mistral,
                 "openai" | "openai-tools" => ToolFormat::OpenAiTools,
+                "qwen-xml" => ToolFormat::QwenXml,
                 _ => ToolFormat::Generic,
             });
 
@@ -233,5 +253,36 @@ mod tests {
                 .iter()
                 .any(|p| p.contains("jinja"))
         );
+    }
+
+    #[test]
+    fn test_qwen_overrides_hermes_format() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "tokenizer.chat_template".to_string(),
+            "<tool_call>{{ tool | tojson }}</tool_call>".to_string(),
+        );
+        metadata.insert(
+            "general.name".to_string(),
+            "Qwen/Qwen2.5-7B-Instruct".to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert!(detection.supports_tool_calling);
+        assert_eq!(detection.detected_format, Some("qwen-xml".to_string()));
+    }
+
+    #[test]
+    fn test_qwen_name_alone_does_not_emit_qwen_xml() {
+        // No <tool_call> in template → no override applied (stays None or
+        // whatever name-based detection produced).
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "general.name".to_string(),
+            "Qwen/Qwen2.5-7B-Instruct".to_string(),
+        );
+
+        let detection = detect_tool_support(&metadata);
+        assert_ne!(detection.detected_format, Some("qwen-xml".to_string()));
     }
 }
