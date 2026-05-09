@@ -10,6 +10,8 @@
 //! coupling between the dispatch layer and each handler as narrow as possible.
 
 use anyhow::Result;
+use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
+use gglib_runtime::llama::{ContextInput, resolve_context_size};
 
 use crate::bootstrap::CliContext;
 use crate::commands::Commands;
@@ -200,13 +202,23 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             llama_port,
             default_context,
         } => {
+            let settings = ctx.app.settings().get().await?;
+            let context_resolution = resolve_context_size(ContextInput {
+                flag: default_context,
+                model_context_length: None,
+                settings_default: settings.default_context_size,
+            })?;
+            let effective_context = context_resolution
+                .value
+                .map(u64::from)
+                .unwrap_or(DEFAULT_CONTEXT_SIZE);
             gglib_runtime::proxy::start_proxy_standalone(
                 host,
                 port,
                 llama_port,
                 ctx.llama_server_path.clone(),
                 ctx.model_repo.clone(),
-                default_context,
+                effective_context,
                 ctx.mcp.clone(),
             )
             .await?;

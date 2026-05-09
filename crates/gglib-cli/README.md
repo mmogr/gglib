@@ -113,7 +113,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `question <text>` | Ask a question (with optional piped context) |
 | `question --agent <text>` | Agentic question with filesystem tools |
 | `chat history` | List past conversations with message counts |
-| `proxy` | Start the OpenAI-compatible proxy |
+| `proxy` | Start the OpenAI-compatible proxy (context defaults to settings `default_context_size`) |
 | `download <repo>` | Download a model from HuggingFace |
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
