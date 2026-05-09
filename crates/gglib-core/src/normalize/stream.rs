@@ -77,9 +77,19 @@ impl NormalizingStream {
     /// Translate one parser output batch into the queued event sequence.
     fn enqueue_parser_output(&mut self, mut out: ParserOutput) {
         if !out.forward_text.is_empty() {
-            self.queued.push_back(LlmStreamEvent::TextDelta {
-                content: std::mem::take(&mut out.forward_text),
-            });
+            // Strip stray `<think>` / `</think>` boundary tags from text
+            // content.  Reasoning models (e.g. Qwen3) send their chain-of-
+            // thought in `reasoning_content` SSE fields but leak the closing
+            // `</think>` marker into the regular `content` field when
+            // transitioning back to output mode.  These tags carry no
+            // semantic meaning for the client and produce visible artefacts
+            // (e.g. `</think>` appearing verbatim in Zed's chat pane).
+            let text = std::mem::take(&mut out.forward_text);
+            let text = text.replace("</think>", "").replace("<think>", "");
+            if !text.is_empty() {
+                self.queued
+                    .push_back(LlmStreamEvent::TextDelta { content: text });
+            }
         }
         if !out.forward_reasoning.is_empty() {
             self.queued.push_back(LlmStreamEvent::ReasoningDelta {
@@ -427,5 +437,63 @@ mod tests {
             }
             other => panic!("expected Done, got {other:?}"),
         }
+    }
+
+    /// Stray `</think>` closing tags emitted in text content by reasoning
+    /// models (e.g. Qwen3) must be stripped before reaching the client.
+    #[test]
+    fn stray_close_think_tag_stripped_from_text() {
+        let events = vec![
+            LlmStreamEvent::TextDelta {
+                content: "</think>\n\n".into(),
+            },
+            LlmStreamEvent::TextDelta {
+                content: "actual answer".into(),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
+        ];
+        let out = drain(wrap(events, false));
+        // First delta should be dropped entirely (only whitespace after stripping).
+        // Second delta passes through unchanged.
+        let texts: Vec<_> = out
+            .iter()
+            .filter_map(|e| {
+                if let LlmStreamEvent::TextDelta { content } = e {
+                    Some(content.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!texts.iter().any(|t| t.contains("</think>")), "found </think> in output: {texts:?}");
+        assert!(texts.iter().any(|t| t.contains("actual answer")));
+    }
+
+    /// `<think>` open tags should also be stripped from text content.
+    #[test]
+    fn stray_open_think_tag_stripped_from_text() {
+        let events = vec![
+            LlmStreamEvent::TextDelta {
+                content: "<think>spurious</think>real text".into(),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
+        ];
+        let out = drain(wrap(events, false));
+        let texts: Vec<_> = out
+            .iter()
+            .filter_map(|e| {
+                if let LlmStreamEvent::TextDelta { content } = e {
+                    Some(content.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(!texts.iter().any(|t| t.contains("<think>") || t.contains("</think>")));
+        assert!(texts.iter().any(|t| t.contains("real text")));
     }
 }
