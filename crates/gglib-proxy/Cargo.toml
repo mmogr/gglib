@@ -29,6 +29,8 @@ bytes = "1"
 
 # Async utilities
 futures-util = "0.3"
+futures-core = "0.3"
+async-stream = "0.3"
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # Error handling

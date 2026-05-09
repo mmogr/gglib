@@ -7,6 +7,7 @@ pub mod add;
 pub mod download;
 pub mod list;
 pub mod remove;
+pub mod retag;
 pub mod update;
 pub mod verification;
 
@@ -66,6 +67,13 @@ pub async fn dispatch(ctx: &CliContext, command: ModelCommand) -> Result<()> {
                 force,
             };
             update::execute(ctx, args).await?;
+        }
+        ModelCommand::Retag {
+            identifier,
+            all,
+            full,
+        } => {
+            retag::execute(ctx, identifier, all, full).await?;
         }
         ModelCommand::Verify { model_id, verbose } => {
             verification::execute_verify(ctx, model_id, verbose).await?;

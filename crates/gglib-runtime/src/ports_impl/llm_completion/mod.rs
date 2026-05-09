@@ -34,12 +34,10 @@ use serde_json::{Value, json};
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
+    normalize::{NormalizingStream, get_parser},
     ports::LlmCompletionPort,
+    sse::SseStreamDecoder,
 };
-
-mod sse_decoder;
-mod sse_parser;
-use sse_decoder::SseStreamDecoder;
 
 /// Default timeout (seconds) for the `.send()` phase of each LLM request.
 ///
@@ -75,6 +73,10 @@ pub struct LlmCompletionAdapter {
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     send_timeout_secs: u64,
+    /// Model `format:*` tags consulted by [`gglib_core::normalize::get_parser`]
+    /// when wrapping the SSE-derived stream in a [`NormalizingStream`].
+    /// Empty (the default) selects the identity-passthrough parser.
+    tags: Vec<String>,
 }
 
 /// Build the completions endpoint URL from a base URL.
@@ -123,6 +125,7 @@ impl LlmCompletionAdapter {
             client,
             sampling: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
+            tags: Vec::new(),
         }
     }
 
@@ -138,6 +141,19 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_send_timeout(mut self, secs: u64) -> Self {
         self.send_timeout_secs = secs;
+        self
+    }
+
+    /// Set the model's `format:*` tags so the adapter can pick a
+    /// dialect-specific parser when wrapping the SSE-derived stream in a
+    /// [`NormalizingStream`].
+    ///
+    /// Pass an empty `Vec` (the default) to select the identity-passthrough
+    /// parser, which is the right choice for any model that already speaks
+    /// strict OpenAI tool-calling.
+    #[must_use]
+    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
+        self.tags = tags;
         self
     }
 }
@@ -232,6 +248,13 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
         let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
 
+        // Scrub prior-turn reasoning artifacts before the model sees them.
+        // Shared with the proxy via gglib-core so the in-process agent loop
+        // (CLI / Tauri direct path) gets identical protection against the
+        // small-reasoning-model multi-turn `<think>` loop bug.
+        let mut openai_messages = openai_messages;
+        gglib_core::normalize::strip_thinking_debt(&mut openai_messages);
+
         let mut body = json!({
             "model": self.model,
             "messages": openai_messages,
@@ -313,6 +336,11 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             }
         };
 
-        Ok(Box::pin(stream))
+        // Wrap the raw SSE-derived stream in the universal normalization
+        // layer.  Empty `tags` selects the identity-passthrough parser so
+        // models that already emit strict OpenAI tool calls are unaffected.
+        let parser = get_parser(&self.tags);
+        let normalized = NormalizingStream::new(Box::pin(stream), parser);
+        Ok(Box::pin(normalized))
     }
 }

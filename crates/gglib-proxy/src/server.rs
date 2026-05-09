@@ -192,7 +192,16 @@ async fn chat_completions(
     );
 
     // Forward the request
-    forward_chat_completion(&state.client, &upstream_url, &headers, body, is_streaming).await
+    forward_chat_completion(
+        &state.client,
+        &upstream_url,
+        &headers,
+        body,
+        is_streaming,
+        &model_name,
+        state.catalog_port.clone(),
+    )
+    .await
 }
 
 /// Convert ModelRuntimeError to HTTP response with appropriate status code.

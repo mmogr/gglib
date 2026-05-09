@@ -223,12 +223,13 @@ ends.
 
 Thinking visuals are suppressed when `--quiet` is set or stderr is not a TTY.
 
-### Inline Thinking Fallback
+### Inline Thinking Reclassification
 
-When a reasoning model emits inline `<think>…</think>` tags (e.g. with
-`--reasoning-format none`), the CLI's `ThinkingAccumulator` intercepts them
-and redirects the reasoning content to stderr while only the answer text
-reaches stdout. This works regardless of rendering mode.
+Reasoning content is split from response text upstream by
+`gglib-core::normalize::NormalizingStream` (or by llama-server's
+`--reasoning-format auto`). The CLI consumes pre-classified
+`AgentEvent::ReasoningDelta` and routes reasoning to stderr while answer
+text reaches stdout. This works regardless of rendering mode.
 
 **Set a default model** to avoid using `--model` every time:
 

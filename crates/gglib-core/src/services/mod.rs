@@ -15,7 +15,7 @@ mod settings_service;
 pub use app_core::AppCore;
 pub use chat_history::ChatHistoryService;
 pub use model_registrar::{ModelFilesRepositoryPort, ModelRegistrar};
-pub use model_service::ModelService;
+pub use model_service::{ModelService, RetagDiff};
 pub use model_verification::{
     DownloadTriggerPort, ModelFilesReaderPort, ModelVerificationService, OverallHealth,
     ShardHealth, ShardHealthReport, ShardProgress, UpdateCheckResult, UpdateDetails,

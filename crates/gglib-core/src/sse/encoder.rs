@@ -1,0 +1,288 @@
+//! Encode typed [`LlmStreamEvent`] values into OpenAI-compatible SSE
+//! `chat.completion.chunk` `data:` frames.
+//!
+//! This is the inverse of [`super::parser::parse_sse_frame`] and is used by
+//! the proxy after the universal normalization layer has rewritten model-
+//! specific dialects (Qwen XML tool calls, bare `<think>` tags) into strict
+//! `OpenAI` events.  Re-emitting the canonical wire format ensures external
+//! clients (`OpenWebUI`, `OpenAI` SDKs, etc.) see only pristine `OpenAI` JSON
+//! regardless of which model is on the other end.
+//!
+//! # Frame envelope
+//!
+//! Every emitted chunk has this shape:
+//!
+//! ```json
+//! {
+//!   "id": "chatcmpl-…",
+//!   "object": "chat.completion.chunk",
+//!   "created": 1729000000,
+//!   "model": "qwen3-coder",
+//!   "choices": [{ "index": 0, "delta": { … }, "finish_reason": null }]
+//! }
+//! ```
+//!
+//! Stable values (`id`, `model`, `created`) are carried on [`SseEncoder`] so
+//! they are identical across every chunk of a single response.
+
+use serde_json::{Value, json};
+
+use crate::LlmStreamEvent;
+
+/// Stateful encoder that produces OpenAI-shape SSE frames for one response.
+///
+/// The `id`, `model`, and `created` fields are stable across all frames the
+/// encoder produces, matching the `OpenAI` streaming contract.
+#[derive(Debug, Clone)]
+pub struct SseEncoder {
+    /// Stable response id, e.g. `"chatcmpl-…"`.
+    pub id: String,
+    /// Model name as advertised to the client (NOT the upstream alias).
+    pub model: String,
+    /// Unix epoch seconds when the response was created.
+    pub created: u64,
+}
+
+impl SseEncoder {
+    /// Construct a new encoder with the stable response metadata.
+    #[must_use]
+    pub fn new(id: impl Into<String>, model: impl Into<String>, created: u64) -> Self {
+        Self {
+            id: id.into(),
+            model: model.into(),
+            created,
+        }
+    }
+
+    /// Encode a single [`LlmStreamEvent`] into one or more SSE frames.
+    ///
+    /// Returns `None` when the event is not meant to appear on the wire (e.g.
+    /// [`LlmStreamEvent::NormalizationError`], which the proxy logs but never
+    /// forwards to clients).
+    ///
+    /// For [`LlmStreamEvent::Done`], the returned `String` includes both the
+    /// terminating chunk (with `finish_reason` set) **and** the trailing
+    /// `data: [DONE]\n\n` sentinel, so the caller can write a single payload
+    /// and end the response.
+    #[must_use]
+    pub fn encode(&self, event: &LlmStreamEvent) -> Option<String> {
+        match event {
+            LlmStreamEvent::TextDelta { content } => Some(self.frame(&json!({
+                "index": 0,
+                "delta": { "content": content },
+                "finish_reason": Value::Null,
+            }))),
+            LlmStreamEvent::ReasoningDelta { content } => Some(self.frame(&json!({
+                "index": 0,
+                "delta": { "reasoning_content": content },
+                "finish_reason": Value::Null,
+            }))),
+            LlmStreamEvent::ToolCallDelta {
+                index,
+                id,
+                name,
+                arguments,
+            } => {
+                let mut tc = json!({ "index": index });
+                if let Some(id) = id {
+                    tc["id"] = json!(id);
+                    // OpenAI clients expect "type":"function" on the first
+                    // delta for a given index.
+                    tc["type"] = json!("function");
+                }
+                let mut function = json!({});
+                if let Some(name) = name {
+                    function["name"] = json!(name);
+                }
+                if let Some(arguments) = arguments {
+                    function["arguments"] = json!(arguments);
+                }
+                if function.as_object().is_some_and(|o| !o.is_empty()) {
+                    tc["function"] = function;
+                }
+                Some(self.frame(&json!({
+                    "index": 0,
+                    "delta": { "tool_calls": [tc] },
+                    "finish_reason": Value::Null,
+                })))
+            }
+            LlmStreamEvent::PromptProgress {
+                processed,
+                total,
+                cached,
+                time_ms,
+            } => {
+                // prompt_progress frames live at the top level (no `choices`).
+                let value = json!({
+                    "id": self.id,
+                    "object": "chat.completion.chunk",
+                    "created": self.created,
+                    "model": self.model,
+                    "prompt_progress": {
+                        "processed": processed,
+                        "total": total,
+                        "cache": cached,
+                        "time_ms": time_ms,
+                    },
+                });
+                Some(format!("data: {value}\n\n"))
+            }
+            LlmStreamEvent::Done { finish_reason } => {
+                let chunk = self.frame(&json!({
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": finish_reason,
+                }));
+                Some(format!("{chunk}data: [DONE]\n\n"))
+            }
+            LlmStreamEvent::NormalizationError { .. } => None,
+        }
+    }
+
+    /// Wrap a `choice` value in the standard chunk envelope and SSE framing.
+    fn frame(&self, choice: &Value) -> String {
+        let value = json!({
+            "id": self.id,
+            "object": "chat.completion.chunk",
+            "created": self.created,
+            "model": self.model,
+            "choices": [choice],
+        });
+        format!("data: {value}\n\n")
+    }
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::normalize::NormalizationErrorKind;
+
+    fn enc() -> SseEncoder {
+        SseEncoder::new("chatcmpl-1", "test-model", 1_729_000_000)
+    }
+
+    fn parse_data_frame(out: &str) -> serde_json::Value {
+        let line = out.lines().next().expect("non-empty output");
+        let payload = line.strip_prefix("data: ").expect("data: prefix");
+        serde_json::from_str(payload).expect("valid JSON")
+    }
+
+    #[test]
+    fn text_delta_encodes_to_content_chunk() {
+        let out = enc()
+            .encode(&LlmStreamEvent::TextDelta {
+                content: "hello".to_owned(),
+            })
+            .expect("frame");
+        assert!(out.starts_with("data: "));
+        assert!(out.ends_with("\n\n"));
+        let v = parse_data_frame(&out);
+        assert_eq!(v["object"], "chat.completion.chunk");
+        assert_eq!(v["id"], "chatcmpl-1");
+        assert_eq!(v["model"], "test-model");
+        assert_eq!(v["choices"][0]["delta"]["content"], "hello");
+        assert!(v["choices"][0]["finish_reason"].is_null());
+    }
+
+    #[test]
+    fn reasoning_delta_encodes_to_reasoning_content_chunk() {
+        let out = enc()
+            .encode(&LlmStreamEvent::ReasoningDelta {
+                content: "think".to_owned(),
+            })
+            .expect("frame");
+        let v = parse_data_frame(&out);
+        assert_eq!(v["choices"][0]["delta"]["reasoning_content"], "think");
+    }
+
+    #[test]
+    fn tool_call_delta_first_frame_includes_id_and_type() {
+        let out = enc()
+            .encode(&LlmStreamEvent::ToolCallDelta {
+                index: 0,
+                id: Some("tc1".to_owned()),
+                name: Some("search".to_owned()),
+                arguments: Some(r#"{"q":"r"}"#.to_owned()),
+            })
+            .expect("frame");
+        let v = parse_data_frame(&out);
+        let tc = &v["choices"][0]["delta"]["tool_calls"][0];
+        assert_eq!(tc["index"], 0);
+        assert_eq!(tc["id"], "tc1");
+        assert_eq!(tc["type"], "function");
+        assert_eq!(tc["function"]["name"], "search");
+        assert_eq!(tc["function"]["arguments"], r#"{"q":"r"}"#);
+    }
+
+    #[test]
+    fn tool_call_delta_continuation_omits_id_and_type() {
+        let out = enc()
+            .encode(&LlmStreamEvent::ToolCallDelta {
+                index: 0,
+                id: None,
+                name: None,
+                arguments: Some("more".to_owned()),
+            })
+            .expect("frame");
+        let v = parse_data_frame(&out);
+        let tc = &v["choices"][0]["delta"]["tool_calls"][0];
+        assert!(tc.get("id").is_none(), "id must be omitted on continuation");
+        assert!(
+            tc.get("type").is_none(),
+            "type must be omitted on continuation"
+        );
+        assert_eq!(tc["function"]["arguments"], "more");
+    }
+
+    #[test]
+    fn done_event_emits_finish_chunk_and_done_sentinel() {
+        let out = enc()
+            .encode(&LlmStreamEvent::Done {
+                finish_reason: "stop".to_owned(),
+            })
+            .expect("frame");
+        // Two SSE frames: the terminating chunk and the [DONE] sentinel.
+        let lines: Vec<&str> = out.lines().filter(|l| !l.is_empty()).collect();
+        assert_eq!(lines.len(), 2, "Done emits two data: lines");
+        let v: serde_json::Value =
+            serde_json::from_str(lines[0].strip_prefix("data: ").unwrap()).unwrap();
+        assert_eq!(v["choices"][0]["finish_reason"], "stop");
+        assert_eq!(lines[1], "data: [DONE]");
+    }
+
+    #[test]
+    fn prompt_progress_encodes_to_top_level_field() {
+        let out = enc()
+            .encode(&LlmStreamEvent::PromptProgress {
+                processed: 2,
+                total: 8,
+                cached: 1,
+                time_ms: 100,
+            })
+            .expect("frame");
+        let v = parse_data_frame(&out);
+        assert_eq!(v["prompt_progress"]["processed"], 2);
+        assert_eq!(v["prompt_progress"]["total"], 8);
+        assert_eq!(v["prompt_progress"]["cache"], 1);
+        assert_eq!(v["prompt_progress"]["time_ms"], 100);
+        assert!(v.get("choices").is_none());
+    }
+
+    #[test]
+    fn normalization_error_is_suppressed() {
+        let out = enc().encode(&LlmStreamEvent::NormalizationError {
+            kind: NormalizationErrorKind::MalformedToolCallJson {
+                raw: "<tool_call>oops".to_owned(),
+            },
+            raw: "<tool_call>oops".to_owned(),
+        });
+        assert!(
+            out.is_none(),
+            "NormalizationError must never reach the wire"
+        );
+    }
+}

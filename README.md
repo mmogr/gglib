@@ -192,6 +192,50 @@ Cargo workspace with compile-time enforced boundaries. Adapters → infrastructu
 
 Only `gglib-runtime` spawns llama-server processes; only `gglib-download` talks to HuggingFace. Everything else goes through the infrastructure layer.
 
+### Universal Consistency Layer
+
+`gglib` exposes a **strict OpenAI-compatible** chat-completions surface from every entry point — the `gglib-proxy` HTTP server, the `gglib-axum` web API, the `gglib-cli` agent loop, and the `gglib-tauri` desktop app (which routes through the same axum handlers) — regardless of which dialect the upstream `llama-server` happens to emit (Qwen XML tool calls, bare `<think>` reasoning tags, etc.). External clients — OpenWebUI, the OpenAI SDKs, custom scripts — only ever see canonical `chat.completion.chunk` events.
+
+This is achieved by a three-stage pipeline that runs on every streaming request, wired identically into every surface by `gglib-runtime::compose`:
+
+```text
+upstream bytes ─► SseStreamDecoder ─► NormalizingStream ─► SseEncoder ─► wire bytes
+                  (gglib-core::sse)   (gglib-core::normalize)   (gglib-core::sse)
+                       parse              dialect rewrite             re-emit
+```
+
+1. **Parse** — `SseStreamDecoder` reassembles SSE frames across arbitrary TCP chunk boundaries and produces typed `LlmStreamEvent`s.
+2. **Normalize** — A per-request `ToolCallParser` is selected by model tags via `normalize::registry::get_parser`. Dialect parsers (`QwenXmlParser`) rewrite model-specific markup into strict tool-call / reasoning events. Models without a dialect tag use the identity `StandardJsonParser`. Recoverable parser issues become `NormalizationError` events that are logged and suppressed from the wire; unrecoverable upstream errors surface as a structured `error` data frame followed by `data: [DONE]`.
+3. **Re-encode** — `SseEncoder` wraps every event in the canonical envelope (`id: "chatcmpl-…"`, `object: "chat.completion.chunk"`, stable `model` / `created`) so clients see identical framing on every request.
+
+#### `format:*` tag taxonomy
+
+Dialect selection is driven entirely by **system tags** in the `format:*` namespace, persisted on each model row:
+
+| Tag | Parser | When auto-applied |
+|-----|--------|-------------------|
+| `format:qwen-xml` | `QwenXmlParser` | Model name contains `qwen` and the chat template emits `<tool_call>` markup |
+| `format:hermes` | `StandardJsonParser` | Hermes/ChatML-style tool-calling templates |
+
+These tags are **auto-detected at import time** by `gglib-gguf::capabilities::detect_all` and persisted by `ModelService::import_from_file`. They are protected as system tags: `gglib model remove-tag` will reject any attempt to remove a `format:*` tag (use the `_force` service path for admin operations).
+
+#### Backfilling tags on existing catalogs
+
+Models imported before format-tag detection landed can be retagged in place from their persisted GGUF metadata — no re-download required:
+
+```bash
+# Additive: only append missing format:* tags, never remove anything
+gglib model retag --all
+
+# Full rebuild: drop and re-derive every auto-generated tag, preserving user tags
+gglib model retag --all --full
+
+# Single model
+gglib model retag qwen3-30b
+```
+
+End-to-end round-trip coverage lives in [`crates/gglib-proxy/tests/integration_proxy_pipeline.rs`](crates/gglib-proxy/tests/integration_proxy_pipeline.rs).
+
 ### Crate Metrics
 
 #### Core Layer

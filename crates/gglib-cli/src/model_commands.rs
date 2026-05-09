@@ -84,6 +84,30 @@ pub enum ModelCommand {
         force: bool,
     },
 
+    /// Re-derive auto-tags for installed models from their persisted GGUF metadata.
+    ///
+    /// Use this after upgrading gglib to backfill new auto-tags (e.g. the
+    /// `format:*` dialect tags introduced for the universal normalization
+    /// pipeline) on models that were imported under an older release.
+    ///
+    /// By default the operation is **additive**: new tags are appended,
+    /// nothing is ever removed, and user-curated tags are left alone.
+    /// Pass `--full` to drop and re-derive every tag in the auto-generated
+    /// namespace (capability flags + `format:*` tags) — user tags outside
+    /// that namespace are still preserved.
+    Retag {
+        /// Retag a single model by id, name, or HF identifier. Omit with
+        /// `--all` to retag every model in the catalog.
+        identifier: Option<String>,
+        /// Retag every model in the catalog.
+        #[arg(long)]
+        all: bool,
+        /// Drop and re-derive every auto-generated tag (capability flags +
+        /// `format:*`) instead of merely appending missing ones.
+        #[arg(long)]
+        full: bool,
+    },
+
     /// Verify model integrity by computing SHA256 hashes
     Verify {
         /// ID of the model to verify

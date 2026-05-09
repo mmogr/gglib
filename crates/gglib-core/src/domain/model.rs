@@ -12,6 +12,26 @@ use super::capabilities::ModelCapabilities;
 use super::inference::InferenceConfig;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// System tags
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Prefix marking a tag as runtime-load-bearing.
+///
+/// Tags with this prefix (e.g. `format:qwen-xml`) drive the universal
+/// normalization pipeline's parser selection at compose time. Removing
+/// one would silently break dialect handling for the affected model, so
+/// the standard tag-mutation API rejects deletions while admin/debug
+/// paths can opt in via the `_force` variants.
+pub const SYSTEM_TAG_PREFIX: &str = "format:";
+
+/// Returns `true` when `tag` is a system tag that callers must not
+/// remove through the standard tag-mutation API.
+#[must_use]
+pub fn is_system_tag(tag: &str) -> bool {
+    tag.starts_with(SYSTEM_TAG_PREFIX)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Filter/Aggregate Types
 // ─────────────────────────────────────────────────────────────────────────────
 

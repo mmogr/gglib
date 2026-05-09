@@ -16,7 +16,6 @@ Shared TypeScript helpers used across the React frontend.
 | `platform.ts` | Platform detection (Tauri vs web, OS) |
 | `sse.ts` | Server-Sent Events client with reconnect logic |
 | `modelSearchParser.ts` | Parse HuggingFace search queries and filters |
-| `stripThinkingBlocks.ts` | Remove thinking blocks for clean display / TTS |
 | `batchWithinWindow.ts` | Batch rapid events within a time window |
 | `messages/` | Chat message transformation helpers |
 

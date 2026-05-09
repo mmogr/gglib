@@ -5,6 +5,23 @@ use crate::ports::{CoreError, GgufParserPort, ModelRepository, RepositoryError};
 use std::path::Path;
 use std::sync::Arc;
 
+/// The diff produced by [`ModelService::retag_model`] when at least one tag
+/// changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetagDiff {
+    /// Tags that were newly added.
+    pub added: Vec<String>,
+    /// Tags that were removed (only non-empty on a `full = true` rebuild).
+    pub removed: Vec<String>,
+}
+
+impl RetagDiff {
+    /// Returns `true` if any tag was added or removed.
+    pub const fn is_changed(&self) -> bool {
+        !self.added.is_empty() || !self.removed.is_empty()
+    }
+}
+
 /// Service for model operations.
 ///
 /// This service provides high-level model management by delegating
@@ -67,6 +84,19 @@ impl ModelService {
         self.get(identifier)
             .await?
             .ok_or_else(|| CoreError::Validation(format!("Model not found: {identifier}")))
+    }
+
+    /// Resolve a model identifier to its tag list.
+    ///
+    /// Returns an empty `Vec` when the identifier is unknown or the lookup
+    /// fails — callers use this for read-only side-channel inputs (e.g.
+    /// dialect selection at compose time) where a missing model should
+    /// fall back to default behaviour rather than abort the request.
+    pub async fn tags_for(&self, identifier: &str) -> Vec<String> {
+        match self.get(identifier).await {
+            Ok(Some(m)) => m.tags,
+            _ => Vec::new(),
+        }
     }
 
     /// Find a model by name. Returns error if not found.
@@ -225,8 +255,26 @@ impl ModelService {
 
     /// Remove a tag from a model.
     ///
-    /// If the tag doesn't exist on the model, this is a no-op.
+    /// If the tag doesn't exist on the model, this is a no-op. System tags
+    /// (see [`crate::domain::is_system_tag`]) are protected and cannot be
+    /// removed through this API — use [`Self::remove_tag_force`] for
+    /// admin/debug paths that intentionally need to drop them.
     pub async fn remove_tag(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
+        if crate::domain::is_system_tag(tag) {
+            return Err(CoreError::Validation(format!(
+                "tag '{tag}' is a system tag and cannot be removed via the standard API",
+            )));
+        }
+        self.remove_tag_force(model_id, tag).await
+    }
+
+    /// Force-remove a tag from a model, including system tags.
+    ///
+    /// Bypasses the system-tag protection enforced by [`Self::remove_tag`].
+    /// Intended for admin/debug paths (e.g. the `gglib model retag --full`
+    /// rebuild) where the caller intentionally needs to drop a `format:*`
+    /// tag before re-detecting capabilities.
+    pub async fn remove_tag_force(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
         let mut model = self
             .repo
             .get_by_id(model_id)
@@ -353,6 +401,74 @@ impl ModelService {
         }
 
         Ok(())
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Retag
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Re-derive auto-tags for a single model from its persisted GGUF metadata.
+    ///
+    /// `full = false` (default) is **additive**: any newly-detected tag that
+    /// isn't already present is appended; nothing is ever removed. This is
+    /// the safe path for backfilling `format:*` tags on models imported
+    /// before format-tag detection landed.
+    ///
+    /// `full = true` performs a full rebuild: every previously auto-generated
+    /// tag (the predefined capability tag namespace plus every existing
+    /// `format:*` tag) is dropped and the freshly-detected set is added in
+    /// its place. User-curated tags outside that namespace are preserved.
+    ///
+    /// Returns `None` when the tag set is unchanged (no write occurred) and
+    /// `Some(diff)` when the model was updated, carrying the full added/removed
+    /// delta.
+    pub async fn retag_model(
+        &self,
+        model_id: i64,
+        gguf_parser: &dyn GgufParserPort,
+        full: bool,
+    ) -> Result<Option<RetagDiff>, CoreError> {
+        let mut model = self
+            .repo
+            .get_by_id(model_id)
+            .await
+            .map_err(CoreError::from)?;
+
+        // Re-derive capabilities from the persisted metadata blob; the file
+        // doesn't have to exist on disk.
+        let gguf_metadata = crate::domain::gguf::GgufMetadata {
+            metadata: model.metadata.clone(),
+            ..Default::default()
+        };
+        let new_tags = gguf_parser.detect_capabilities(&gguf_metadata).to_tags();
+
+        let before: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
+
+        if full {
+            // Drop every tag in the auto-generated namespace, then re-add.
+            const AUTO_TAG_NAMES: &[&str] = &["reasoning", "agent", "vision", "code", "moe"];
+            model.tags.retain(|t| {
+                !AUTO_TAG_NAMES.contains(&t.as_str()) && !crate::domain::is_system_tag(t)
+            });
+        }
+
+        for t in &new_tags {
+            if !model.tags.contains(t) {
+                model.tags.push(t.clone());
+            }
+        }
+        model.tags.sort();
+
+        let after: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
+        if after == before {
+            return Ok(None);
+        }
+
+        self.repo.update(&model).await.map_err(CoreError::from)?;
+        Ok(Some(RetagDiff {
+            added: after.difference(&before).cloned().collect(),
+            removed: before.difference(&after).cloned().collect(),
+        }))
     }
 }
 
@@ -556,5 +672,155 @@ mod tests {
         let context_range = options.context_range.unwrap();
         assert!((context_range.min - 4096.0).abs() < 0.001);
         assert!((context_range.max - 8192.0).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_remove_tag_rejects_system_tag() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model = NewModel::new(
+            "qwen-test".to_string(),
+            PathBuf::from("/path/to/m.gguf"),
+            7.0,
+            Utc::now(),
+        );
+        new_model.tags = vec!["chat".to_string(), "format:qwen-xml".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        // Standard removal rejected.
+        let err = service
+            .remove_tag(created.id, "format:qwen-xml")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation(_)));
+
+        // Tag still present.
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(tags.contains(&"format:qwen-xml".to_string()));
+
+        // Force variant succeeds.
+        service
+            .remove_tag_force(created.id, "format:qwen-xml")
+            .await
+            .unwrap();
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(!tags.contains(&"format:qwen-xml".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_remove_tag_allows_user_tag() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model =
+            NewModel::new("u".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        new_model.tags = vec!["chat".to_string(), "format:hermes".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        service.remove_tag(created.id, "chat").await.unwrap();
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert_eq!(tags, vec!["format:hermes".to_string()]);
+    }
+
+    /// Stub parser that emits a fixed capability set for retag tests.
+    struct StubCapsParser {
+        tags: Vec<String>,
+    }
+
+    impl crate::ports::GgufParserPort for StubCapsParser {
+        fn parse(
+            &self,
+            _file_path: &std::path::Path,
+        ) -> std::result::Result<crate::ports::GgufMetadata, crate::ports::GgufParseError> {
+            Ok(crate::ports::GgufMetadata::default())
+        }
+
+        fn detect_capabilities(
+            &self,
+            _metadata: &crate::ports::GgufMetadata,
+        ) -> crate::ports::GgufCapabilities {
+            let mut extensions = std::collections::BTreeSet::new();
+            for t in &self.tags {
+                extensions.insert(t.clone());
+            }
+            crate::ports::GgufCapabilities {
+                flags: crate::domain::gguf::CapabilityFlags::empty(),
+                extensions,
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_retag_additive_appends_missing_tags() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        new_model.tags = vec!["chat".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        let parser = StubCapsParser {
+            tags: vec!["format:qwen-xml".to_string()],
+        };
+        let diff = service
+            .retag_model(created.id, &parser, false)
+            .await
+            .unwrap();
+        assert_eq!(diff.unwrap().added, vec!["format:qwen-xml".to_string()]);
+
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(tags.contains(&"chat".to_string()));
+        assert!(tags.contains(&"format:qwen-xml".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_retag_additive_noop_when_already_present() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        new_model.tags = vec!["format:qwen-xml".to_string()];
+        let created = service.add(new_model).await.unwrap();
+
+        let parser = StubCapsParser {
+            tags: vec!["format:qwen-xml".to_string()],
+        };
+        let diff = service
+            .retag_model(created.id, &parser, false)
+            .await
+            .unwrap();
+        assert!(diff.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_retag_full_replaces_auto_tags_preserves_user() {
+        let repo = Arc::new(MockRepo::new());
+        let service = ModelService::new(repo);
+
+        let mut new_model =
+            NewModel::new("m".to_string(), PathBuf::from("/p.gguf"), 7.0, Utc::now());
+        new_model.tags = vec![
+            "favorite".to_string(),      // user
+            "format:hermes".to_string(), // stale auto
+            "reasoning".to_string(),     // stale auto capability
+        ];
+        let created = service.add(new_model).await.unwrap();
+
+        let parser = StubCapsParser {
+            tags: vec!["format:qwen-xml".to_string()],
+        };
+        service
+            .retag_model(created.id, &parser, true)
+            .await
+            .unwrap();
+
+        let tags = service.get_tags(created.id).await.unwrap();
+        assert!(tags.contains(&"favorite".to_string()));
+        assert!(tags.contains(&"format:qwen-xml".to_string()));
+        assert!(!tags.contains(&"format:hermes".to_string()));
+        assert!(!tags.contains(&"reasoning".to_string()));
     }
 }

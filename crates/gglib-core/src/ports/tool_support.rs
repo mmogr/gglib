@@ -39,6 +39,9 @@ pub enum ToolFormat {
     Mistral,
     /// `OpenAI` tools format.
     OpenAiTools,
+    /// Qwen XML-in-text dialect (`<tool_call>{json}</tool_call>` markup
+    /// embedded in the text channel rather than the `OpenAI` `tool_calls` array).
+    QwenXml,
     /// Generic/unknown format.
     Generic,
 }
@@ -52,6 +55,7 @@ impl ToolFormat {
             Self::Llama3 => "llama3",
             Self::Mistral => "mistral",
             Self::OpenAiTools => "openai-tools",
+            Self::QwenXml => "qwen-xml",
             Self::Generic => "generic",
         }
     }

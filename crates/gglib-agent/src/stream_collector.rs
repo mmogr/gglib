@@ -20,6 +20,7 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use futures_util::StreamExt as _;
+use gglib_core::normalize::NormalizationErrorKind;
 use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -224,6 +225,10 @@ pub async fn collect_stream(
                     finish_reason,
                 });
             }
+
+            LlmStreamEvent::NormalizationError { kind, raw } => {
+                handle_normalization_error(tx, &kind, &raw).await;
+            }
         }
     }
 
@@ -239,6 +244,29 @@ pub async fn collect_stream(
 // =============================================================================
 // Private helpers
 // =============================================================================
+
+/// Surface a non-fatal `NormalizationError` from the dialect parser.
+///
+/// The stream is **not** aborted — the parser already swallowed the
+/// offending bytes.  We log via `tracing` for operators and emit an
+/// `AgentEvent::SystemWarning` so UIs can render a non-blocking notice.
+async fn handle_normalization_error(
+    tx: &mpsc::Sender<AgentEvent>,
+    kind: &NormalizationErrorKind,
+    raw: &str,
+) {
+    warn!(
+        ?kind,
+        raw = %raw,
+        "normalization error from LLM stream parser"
+    );
+    let _ = tx
+        .send(AgentEvent::SystemWarning {
+            message: format!("LLM normalization issue: {kind:?}"),
+            suggested_action: None,
+        })
+        .await;
+}
 
 /// Assemble accumulated [`PartialToolCall`]s into domain [`ToolCall`] values.
 ///

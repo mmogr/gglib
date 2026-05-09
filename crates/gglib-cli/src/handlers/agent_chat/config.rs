@@ -116,10 +116,12 @@ pub async fn compose(
         Some(params.tools.iter().cloned().collect())
     };
     let base_url = format!("http://127.0.0.1:{port}");
+    let tags = ctx.app.models().tags_for(&params.model_identifier).await;
     let agent = compose_agent_loop_with_sampling(
         base_url,
         ctx.http_client.clone(),
         params.model_name.clone(),
+        tags,
         Arc::clone(&ctx.mcp),
         tool_filter,
         sandbox_root,

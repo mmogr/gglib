@@ -1,14 +1,11 @@
 //! Thinking-event dispatch and spinner coordination for [`super::renderer`].
 //!
-//! [`RenderContext`] bundles the mutable state shared across the drain loop,
-//! and [`dispatch_thinking_event`] maps each [`ThinkingEvent`] to the
-//! appropriate output action.  This eliminates the duplicated match block
-//! that previously appeared in both the `TextDelta` and `FinalAnswer` arms
-//! of `drain_event_stream`.
+//! [`RenderContext`] bundles the mutable state shared across the drain loop;
+//! [`emit_reasoning`] and [`emit_content`] handle reasoning-vs-content
+//! presentation (banner toggling, buffering, spinner suspension).
 
 use std::io::{self, Write as _};
 
-use gglib_core::domain::thinking::ThinkingEvent;
 use indicatif::ProgressBar;
 
 use crate::presentation::style;
@@ -51,38 +48,35 @@ impl RenderContext {
 }
 
 // =============================================================================
-// Thinking-event dispatch
+// Reasoning / content emission
 // =============================================================================
 
-/// Map a single [`ThinkingEvent`] to the appropriate output action.
-///
-/// Called from both the `TextDelta` and `FinalAnswer`-flush paths,
-/// eliminating what was previously a duplicated match block.
-pub(super) fn dispatch_thinking_event(te: ThinkingEvent, ctx: &mut RenderContext) {
-    match te {
-        ThinkingEvent::ThinkingDelta(t) if !ctx.quiet => {
-            open_thinking(ctx);
-            suspend_eprint(ctx.spinner.as_ref(), &t);
+/// Emit a reasoning chunk: open the "Thinking" banner if needed, then write
+/// the text to stderr (suspending the spinner so it doesn't collide with the
+/// progress line).
+pub(super) fn emit_reasoning(ctx: &mut RenderContext, text: &str) {
+    if ctx.quiet {
+        return;
+    }
+    open_thinking(ctx);
+    suspend_eprint(ctx.spinner.as_ref(), text);
+}
+
+/// Emit a content chunk: close any open "Thinking" banner, then either
+/// buffer the text (Rich mode) or write directly to stdout (Raw mode).
+pub(super) fn emit_content(ctx: &mut RenderContext, text: &str) {
+    close_thinking(ctx);
+    if ctx.rich {
+        ctx.buf.push_str(text);
+        if ctx.spinner.is_none() {
+            ctx.spinner = Some(style::make_spinner());
         }
-        ThinkingEvent::ThinkingEnd => {
-            close_thinking(ctx);
+        if let Some(sp) = &ctx.spinner {
+            sp.set_message(format!("Receiving\u{2026} ({} bytes)", ctx.buf.len()));
         }
-        ThinkingEvent::ContentDelta(c) => {
-            close_thinking(ctx);
-            if ctx.rich {
-                ctx.buf.push_str(&c);
-                if ctx.spinner.is_none() {
-                    ctx.spinner = Some(style::make_spinner());
-                }
-                if let Some(sp) = &ctx.spinner {
-                    sp.set_message(format!("Receiving\u{2026} ({} bytes)", ctx.buf.len()));
-                }
-            } else {
-                print!("{c}");
-                let _ = io::stdout().flush();
-            }
-        }
-        _ => {}
+    } else {
+        print!("{text}");
+        let _ = io::stdout().flush();
     }
 }
 
