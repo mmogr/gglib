@@ -391,9 +391,9 @@ mod tests {
         ));
     }
 
-    /// Qwen3.5 emits tool_calls in the stream but finishes with
+    /// Qwen3.5 emits `tool_calls` in the stream but finishes with
     /// `finish_reason: "stop"` instead of `"tool_calls"`.  The normalizer
-    /// must correct this so clients that gate tool dispatch on finish_reason
+    /// must correct this so clients that gate tool dispatch on `finish_reason`
     /// (e.g. Zed) do not hang.
     #[test]
     fn finish_reason_corrected_to_tool_calls_when_tool_calls_seen() {
@@ -467,7 +467,10 @@ mod tests {
                 }
             })
             .collect();
-        assert!(!texts.iter().any(|t| t.contains("</think>")), "found </think> in output: {texts:?}");
+        assert!(
+            !texts.iter().any(|t| t.contains("</think>")),
+            "found </think> in output: {texts:?}"
+        );
         assert!(texts.iter().any(|t| t.contains("actual answer")));
     }
 
@@ -493,7 +496,11 @@ mod tests {
                 }
             })
             .collect();
-        assert!(!texts.iter().any(|t| t.contains("<think>") || t.contains("</think>")));
+        assert!(
+            !texts
+                .iter()
+                .any(|t| t.contains("<think>") || t.contains("</think>"))
+        );
         assert!(texts.iter().any(|t| t.contains("real text")));
     }
 }

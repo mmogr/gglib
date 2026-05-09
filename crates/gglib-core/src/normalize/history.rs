@@ -50,15 +50,14 @@ pub fn strip_thinking_debt(messages: &mut [Value]) -> usize {
         }
 
         let removed_reasoning = obj.remove("reasoning_content").is_some();
-        let stripped_inline =
-            if let Some(Value::String(s)) = obj.get_mut("content") {
-                strip_think_blocks(s).is_some_and(|new_s| {
-                    *s = new_s;
-                    true
-                })
-            } else {
-                false
-            };
+        let stripped_inline = if let Some(Value::String(s)) = obj.get_mut("content") {
+            strip_think_blocks(s).is_some_and(|new_s| {
+                *s = new_s;
+                true
+            })
+        } else {
+            false
+        };
 
         if removed_reasoning || stripped_inline {
             touched += 1;
@@ -202,19 +201,19 @@ mod tests {
         let touched = strip_thinking_debt(&mut m);
         assert_eq!(touched, 1);
         assert!(m[0].get("reasoning_content").is_none());
-        assert_eq!(
-            m[0]["content"][0]["text"],
-            "<think>x</think>hi"
-        );
+        assert_eq!(m[0]["content"][0]["text"], "<think>x</think>hi");
     }
 
     #[test]
     fn strip_skips_non_object_messages() {
         // Defensive: a stray non-object entry should not panic.
-        let mut m = vec![Value::String("garbage".to_string()), json!({
-            "role": "assistant",
-            "reasoning_content": "drop me"
-        })];
+        let mut m = vec![
+            Value::String("garbage".to_string()),
+            json!({
+                "role": "assistant",
+                "reasoning_content": "drop me"
+            }),
+        ];
         let touched = strip_thinking_debt(&mut m);
         assert_eq!(touched, 1);
         assert!(m[1].get("reasoning_content").is_none());

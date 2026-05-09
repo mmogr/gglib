@@ -425,9 +425,7 @@ mod tests {
     fn strip_returns_original_bytes_when_no_changes_needed() {
         // Pointer/length identity: when nothing changes we must avoid
         // re-serializing.
-        let body = Bytes::from(
-            r#"{"model":"m","messages":[{"role":"user","content":"hi"}]}"#,
-        );
+        let body = Bytes::from(r#"{"model":"m","messages":[{"role":"user","content":"hi"}]}"#);
         let out = strip_prior_reasoning(body.clone());
         assert_eq!(out, body);
     }
