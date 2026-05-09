@@ -5,6 +5,23 @@ use crate::ports::{CoreError, GgufParserPort, ModelRepository, RepositoryError};
 use std::path::Path;
 use std::sync::Arc;
 
+/// The diff produced by [`ModelService::retag_model`] when at least one tag
+/// changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetagDiff {
+    /// Tags that were newly added.
+    pub added: Vec<String>,
+    /// Tags that were removed (only non-empty on a `full = true` rebuild).
+    pub removed: Vec<String>,
+}
+
+impl RetagDiff {
+    /// Returns `true` if any tag was added or removed.
+    pub const fn is_changed(&self) -> bool {
+        !self.added.is_empty() || !self.removed.is_empty()
+    }
+}
+
 /// Service for model operations.
 ///
 /// This service provides high-level model management by delegating
@@ -402,14 +419,15 @@ impl ModelService {
     /// `format:*` tag) is dropped and the freshly-detected set is added in
     /// its place. User-curated tags outside that namespace are preserved.
     ///
-    /// Returns the tags that were added by this call (empty `Vec` when the
-    /// model is already up to date).
+    /// Returns `None` when the tag set is unchanged (no write occurred) and
+    /// `Some(diff)` when the model was updated, carrying the full added/removed
+    /// delta.
     pub async fn retag_model(
         &self,
         model_id: i64,
         gguf_parser: &dyn GgufParserPort,
         full: bool,
-    ) -> Result<Vec<String>, CoreError> {
+    ) -> Result<Option<RetagDiff>, CoreError> {
         let mut model = self
             .repo
             .get_by_id(model_id)
@@ -443,11 +461,14 @@ impl ModelService {
 
         let after: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
         if after == before {
-            return Ok(Vec::new());
+            return Ok(None);
         }
 
         self.repo.update(&model).await.map_err(CoreError::from)?;
-        Ok(after.difference(&before).cloned().collect())
+        Ok(Some(RetagDiff {
+            added: after.difference(&before).cloned().collect(),
+            removed: before.difference(&after).cloned().collect(),
+        }))
     }
 }
 
@@ -743,11 +764,11 @@ mod tests {
         let parser = StubCapsParser {
             tags: vec!["format:qwen-xml".to_string()],
         };
-        let added = service
+        let diff = service
             .retag_model(created.id, &parser, false)
             .await
             .unwrap();
-        assert_eq!(added, vec!["format:qwen-xml".to_string()]);
+        assert_eq!(diff.unwrap().added, vec!["format:qwen-xml".to_string()]);
 
         let tags = service.get_tags(created.id).await.unwrap();
         assert!(tags.contains(&"chat".to_string()));
@@ -767,11 +788,11 @@ mod tests {
         let parser = StubCapsParser {
             tags: vec!["format:qwen-xml".to_string()],
         };
-        let added = service
+        let diff = service
             .retag_model(created.id, &parser, false)
             .await
             .unwrap();
-        assert!(added.is_empty());
+        assert!(diff.is_none());
     }
 
     #[tokio::test]

@@ -49,15 +49,20 @@ pub async fn execute(
     let mode = if full { "full rebuild" } else { "additive" };
     println!("Retagging {} model(s) ({mode}) ...", targets.len());
 
-    let mut total_added = 0usize;
+    let mut total_changed = 0usize;
     for (id, name) in targets {
         match models.retag_model(id, parser, full).await {
-            Ok(added) if added.is_empty() => {
+            Ok(None) => {
                 println!("  [{id}] {name} — already up to date");
             }
-            Ok(added) => {
-                total_added += added.len();
-                println!("  [{id}] {name} — added: {}", added.join(", "));
+            Ok(Some(diff)) => {
+                total_changed += 1;
+                if !diff.added.is_empty() {
+                    println!("  [{id}] {name} — added: {}", diff.added.join(", "));
+                }
+                if !diff.removed.is_empty() {
+                    println!("  [{id}] {name} — removed: {}", diff.removed.join(", "));
+                }
             }
             Err(e) => {
                 eprintln!("  [{id}] {name} — FAILED: {e}");
@@ -65,6 +70,6 @@ pub async fn execute(
         }
     }
 
-    println!("Done. {total_added} tag(s) added in total.");
+    println!("Done. {total_changed} model(s) updated.");
     Ok(())
 }
