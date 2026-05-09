@@ -282,7 +282,8 @@ async fn forward_streaming_response(
                     let payload = serde_json::json!({
                         "error": {
                             "message": e.to_string(),
-                            "type": "upstream_error",
+                            "type": "server_error",
+                            "code": "upstream_error",
                         }
                     });
                     let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
@@ -423,8 +424,8 @@ mod tests {
 
     #[test]
     fn strip_returns_original_bytes_when_no_changes_needed() {
-        // Pointer/length identity: when nothing changes we must avoid
-        // re-serializing.
+        // When no reasoning content is present the body should pass through
+        // byte-for-byte unchanged.
         let body = Bytes::from(r#"{"model":"m","messages":[{"role":"user","content":"hi"}]}"#);
         let out = strip_prior_reasoning(body.clone());
         assert_eq!(out, body);

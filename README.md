@@ -205,7 +205,7 @@ upstream bytes ─► SseStreamDecoder ─► NormalizingStream ─► SseEncode
 ```
 
 1. **Parse** — `SseStreamDecoder` reassembles SSE frames across arbitrary TCP chunk boundaries and produces typed `LlmStreamEvent`s.
-2. **Normalize** — A per-request `ToolCallParser` is selected by model tags via `normalize::registry::get_parser`. Dialect parsers (`QwenXmlParser`, `ThinkTagParser`, …) rewrite model-specific markup into strict tool-call / reasoning events. Models without a dialect tag use the identity `StandardJsonParser`. Recoverable parser issues become `NormalizationError` events that are logged and suppressed from the wire; unrecoverable upstream errors surface as a structured `error` data frame followed by `data: [DONE]`.
+2. **Normalize** — A per-request `ToolCallParser` is selected by model tags via `normalize::registry::get_parser`. Dialect parsers (`QwenXmlParser`) rewrite model-specific markup into strict tool-call / reasoning events. Models without a dialect tag use the identity `StandardJsonParser`. Recoverable parser issues become `NormalizationError` events that are logged and suppressed from the wire; unrecoverable upstream errors surface as a structured `error` data frame followed by `data: [DONE]`.
 3. **Re-encode** — `SseEncoder` wraps every event in the canonical envelope (`id: "chatcmpl-…"`, `object: "chat.completion.chunk"`, stable `model` / `created`) so clients see identical framing on every request.
 
 #### `format:*` tag taxonomy
@@ -216,7 +216,6 @@ Dialect selection is driven entirely by **system tags** in the `format:*` namesp
 |-----|--------|-------------------|
 | `format:qwen-xml` | `QwenXmlParser` | Model name contains `qwen` and the chat template emits `<tool_call>` markup |
 | `format:hermes` | `StandardJsonParser` | Hermes/ChatML-style tool-calling templates |
-| `format:think-tag` | `ThinkTagParser` | Chat template emits bare `<think>…</think>` reasoning |
 
 These tags are **auto-detected at import time** by `gglib-gguf::capabilities::detect_all` and persisted by `ModelService::import_from_file`. They are protected as system tags: `gglib model remove-tag` will reject any attempt to remove a `format:*` tag (use the `_force` service path for admin operations).
 
