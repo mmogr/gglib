@@ -142,6 +142,16 @@ impl NormalizingStream {
             LlmStreamEvent::Done { finish_reason } => {
                 let out = self.parser.finish();
                 self.enqueue_parser_output(out);
+                // Qwen3.5 (and some other models) emit tool_calls in the
+                // stream but finish with `finish_reason: "stop"` instead of
+                // the required `"tool_calls"`.  Clients such as Zed check
+                // finish_reason to decide whether to dispatch tool results;
+                // a wrong value causes the conversation to hang.
+                let finish_reason = if finish_reason == "stop" && self.next_index > 0 {
+                    "tool_calls".to_owned()
+                } else {
+                    finish_reason
+                };
                 self.queued
                     .push_back(LlmStreamEvent::Done { finish_reason });
                 self.terminated = true;
@@ -369,5 +379,53 @@ mod tests {
             &out[0],
             LlmStreamEvent::TextDelta { content } if content == "<tool"
         ));
+    }
+
+    /// Qwen3.5 emits tool_calls in the stream but finishes with
+    /// `finish_reason: "stop"` instead of `"tool_calls"`.  The normalizer
+    /// must correct this so clients that gate tool dispatch on finish_reason
+    /// (e.g. Zed) do not hang.
+    #[test]
+    fn finish_reason_corrected_to_tool_calls_when_tool_calls_seen() {
+        let events = vec![
+            LlmStreamEvent::ToolCallDelta {
+                index: 0,
+                id: Some("call_0".into()),
+                name: Some("read_file".into()),
+                arguments: Some(r#"{"path":"/tmp/x"}"#.into()),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(), // wrong — model bug
+            },
+        ];
+        let out = drain(wrap(events, false));
+        assert_eq!(out.len(), 2);
+        match &out[1] {
+            LlmStreamEvent::Done { finish_reason } => {
+                assert_eq!(finish_reason, "tool_calls");
+            }
+            other => panic!("expected Done, got {other:?}"),
+        }
+    }
+
+    /// When no tool calls were emitted, `finish_reason: "stop"` must be
+    /// left unchanged.
+    #[test]
+    fn finish_reason_stop_unchanged_when_no_tool_calls() {
+        let events = vec![
+            LlmStreamEvent::TextDelta {
+                content: "hello".into(),
+            },
+            LlmStreamEvent::Done {
+                finish_reason: "stop".into(),
+            },
+        ];
+        let out = drain(wrap(events, false));
+        match &out[1] {
+            LlmStreamEvent::Done { finish_reason } => {
+                assert_eq!(finish_reason, "stop");
+            }
+            other => panic!("expected Done, got {other:?}"),
+        }
     }
 }
