@@ -249,8 +249,10 @@ pub enum Commands {
         /// Starting port for llama-server instances (5500+ to avoid macOS AirPlay on 5000)
         #[arg(long, default_value = "5500")]
         llama_port: u16,
-        /// Default context size when not specified by client
-        #[arg(long, default_value = "4096")]
-        default_context: u64,
+        /// Default context size when not specified by client.
+        /// Falls back to the app settings `default_context_size`, then to the
+        /// compiled default (4096) if unset. Accepts a positive number or `max`.
+        #[arg(long)]
+        default_context: Option<String>,
     },
 }
