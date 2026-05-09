@@ -93,22 +93,15 @@ pub async fn resolve_tags(catalog: &dyn ModelCatalogPort, model_name: &str) -> V
 
 /// Strip prior reasoning artifacts from assistant messages in the request body.
 ///
-/// Mirrors OpenAI's reference behavior: `reasoning_content` and inline
-/// `<think>...</think>` blocks from previous turns are dropped before the
-/// request reaches the upstream model. This prevents small reasoning models
-/// from pattern-matching their own past `<think>` traces in the chat history
-/// and looping endlessly inside an unclosed thought block on subsequent
-/// turns.
+/// Thin adapter over [`gglib_core::normalize::history::strip_thinking_debt`]
+/// — that module is the single source of truth for the scrub rules.  This
+/// function exists only to handle the bytes ⇄ JSON conversion at the proxy
+/// boundary:
 ///
-/// The transform is unconditional and defensive:
-///
-/// * Any parse failure returns the original bytes unchanged (zero blast
-///   radius for non-JSON or unexpected request shapes).
-/// * Only `messages[*]` entries with `role == "assistant"` are touched.
-/// * `reasoning_content` is removed outright when present.
-/// * String `content` has every `<think>...</think>` block (including the
-///   delimiters) excised; non-string content is left alone.
-/// * User, system, tool, and developer messages pass through untouched.
+/// * On parse failure, the original `Bytes` are returned unchanged (zero
+///   blast radius for non-JSON or unexpected request shapes).
+/// * When the shared scrubber reports zero changes, the original `Bytes`
+///   are returned to avoid a needless re-serialization.
 fn strip_prior_reasoning(body: Bytes) -> Bytes {
     let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&body) else {
         return body;
@@ -118,37 +111,7 @@ fn strip_prior_reasoning(body: Bytes) -> Bytes {
         return body;
     };
 
-    let mut touched = 0usize;
-    for msg in messages.iter_mut() {
-        let Some(obj) = msg.as_object_mut() else {
-            continue;
-        };
-        let is_assistant = obj
-            .get("role")
-            .and_then(|r| r.as_str())
-            .map(|r| r == "assistant")
-            .unwrap_or(false);
-        if !is_assistant {
-            continue;
-        }
-
-        let mut changed = false;
-        if obj.remove("reasoning_content").is_some() {
-            changed = true;
-        }
-
-        if let Some(serde_json::Value::String(s)) = obj.get_mut("content")
-            && let Some(stripped) = strip_think_blocks(s)
-        {
-            *s = stripped;
-            changed = true;
-        }
-
-        if changed {
-            touched += 1;
-        }
-    }
-
+    let touched = gglib_core::normalize::strip_thinking_debt(messages);
     if touched == 0 {
         return body;
     }
@@ -163,41 +126,6 @@ fn strip_prior_reasoning(body: Bytes) -> Bytes {
             body
         }
     }
-}
-
-/// Remove every `<think>...</think>` block from `s`.
-///
-/// Returns `Some(new_string)` when at least one block was removed, otherwise
-/// `None` so the caller can avoid a needless allocation. Matching is
-/// case-sensitive and non-greedy: each `<think>` is paired with the next
-/// `</think>` that follows it. An unclosed `<think>` is left intact (the
-/// upstream model is responsible for closing it).
-fn strip_think_blocks(s: &str) -> Option<String> {
-    const OPEN: &str = "<think>";
-    const CLOSE: &str = "</think>";
-
-    if !s.contains(OPEN) {
-        return None;
-    }
-
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    let mut changed = false;
-    while let Some(open_idx) = rest.find(OPEN) {
-        let after_open = &rest[open_idx + OPEN.len()..];
-        let Some(close_off) = after_open.find(CLOSE) else {
-            // Unclosed <think>: keep verbatim, stop scanning.
-            break;
-        };
-        out.push_str(&rest[..open_idx]);
-        rest = &after_open[close_off + CLOSE.len()..];
-        changed = true;
-    }
-    if !changed {
-        return None;
-    }
-    out.push_str(rest);
-    Some(out.trim().to_string())
 }
 
 /// Forward a chat completion request to the upstream llama-server.
@@ -463,118 +391,44 @@ mod tests {
         serde_json::from_slice(b).expect("valid json")
     }
 
+    // The full scrub-rule matrix lives in `gglib_core::normalize::history`
+    // tests.  These tests cover only the bytes ⇄ JSON adapter behaviour
+    // that is unique to the proxy boundary.
+
     #[test]
-    fn strip_removes_reasoning_content_from_assistant_message() {
+    fn strip_delegates_and_reserializes_when_changes_made() {
         let body = Bytes::from(
             r#"{"model":"m","messages":[
-                {"role":"user","content":"hi"},
                 {"role":"assistant","content":"hello","reasoning_content":"long ramble..."}
             ]}"#,
         );
         let out = parse(&strip_prior_reasoning(body));
-        let msgs = out["messages"].as_array().unwrap();
-        assert_eq!(msgs[1]["content"], "hello");
-        assert!(msgs[1].get("reasoning_content").is_none());
-        // User untouched.
-        assert_eq!(msgs[0]["content"], "hi");
+        assert!(out["messages"][0].get("reasoning_content").is_none());
+        assert_eq!(out["messages"][0]["content"], "hello");
     }
 
     #[test]
-    fn strip_removes_inline_think_blocks_from_assistant_content() {
-        let body = Bytes::from(
-            r#"{"model":"m","messages":[
-                {"role":"assistant","content":"<think>secret\nplan</think>The answer is 42."}
-            ]}"#,
-        );
-        let out = parse(&strip_prior_reasoning(body));
-        assert_eq!(out["messages"][0]["content"], "The answer is 42.");
-    }
-
-    #[test]
-    fn strip_handles_multiple_think_blocks() {
-        let body = Bytes::from(
-            r#"{"model":"m","messages":[
-                {"role":"assistant","content":"<think>a</think>between<think>b</think>after"}
-            ]}"#,
-        );
-        let out = parse(&strip_prior_reasoning(body));
-        assert_eq!(out["messages"][0]["content"], "betweenafter");
-    }
-
-    #[test]
-    fn strip_leaves_unclosed_think_intact() {
-        let body = Bytes::from(
-            r#"{"model":"m","messages":[
-                {"role":"assistant","content":"<think>still going..."}
-            ]}"#,
-        );
-        let out = parse(&strip_prior_reasoning(body));
-        assert_eq!(
-            out["messages"][0]["content"],
-            "<think>still going..."
-        );
-    }
-
-    #[test]
-    fn strip_does_not_touch_user_or_system_or_tool_messages() {
-        let body = Bytes::from(
-            r#"{"model":"m","messages":[
-                {"role":"system","content":"<think>policy</think>be helpful","reasoning_content":"x"},
-                {"role":"user","content":"<think>ignore</think>question","reasoning_content":"y"},
-                {"role":"tool","content":"<think>tool</think>result","tool_call_id":"c1","reasoning_content":"z"}
-            ]}"#,
-        );
-        let original_value = parse(&body);
-        let out = parse(&strip_prior_reasoning(body));
-        assert_eq!(out, original_value);
-    }
-
-    #[test]
-    fn strip_returns_original_on_invalid_json() {
+    fn strip_returns_original_bytes_on_invalid_json() {
         let body = Bytes::from_static(b"not json");
         let out = strip_prior_reasoning(body.clone());
         assert_eq!(out, body);
     }
 
     #[test]
-    fn strip_returns_original_when_messages_missing() {
+    fn strip_returns_original_bytes_when_messages_missing() {
         let body = Bytes::from(r#"{"model":"m"}"#);
         let out = strip_prior_reasoning(body.clone());
         assert_eq!(out, body);
     }
 
     #[test]
-    fn strip_handles_empty_messages_array() {
-        let body = Bytes::from(r#"{"model":"m","messages":[]}"#);
-        let out = strip_prior_reasoning(body.clone());
-        assert_eq!(out, body);
-    }
-
-    #[test]
-    fn strip_skips_when_nothing_to_remove() {
-        // Should return the original Bytes (no re-serialization).
+    fn strip_returns_original_bytes_when_no_changes_needed() {
+        // Pointer/length identity: when nothing changes we must avoid
+        // re-serializing.
         let body = Bytes::from(
-            r#"{"model":"m","messages":[{"role":"assistant","content":"plain answer"}]}"#,
+            r#"{"model":"m","messages":[{"role":"user","content":"hi"}]}"#,
         );
         let out = strip_prior_reasoning(body.clone());
         assert_eq!(out, body);
-    }
-
-    #[test]
-    fn strip_preserves_non_string_content() {
-        // Array-form content (OpenAI multi-part) is left alone; only
-        // reasoning_content gets removed.
-        let body = Bytes::from(
-            r#"{"model":"m","messages":[
-                {"role":"assistant","content":[{"type":"text","text":"<think>x</think>hi"}],"reasoning_content":"r"}
-            ]}"#,
-        );
-        let out = parse(&strip_prior_reasoning(body));
-        assert!(out["messages"][0].get("reasoning_content").is_none());
-        // content array untouched
-        assert_eq!(
-            out["messages"][0]["content"][0]["text"],
-            "<think>x</think>hi"
-        );
     }
 }

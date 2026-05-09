@@ -248,6 +248,13 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
         let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
 
+        // Scrub prior-turn reasoning artifacts before the model sees them.
+        // Shared with the proxy via gglib-core so the in-process agent loop
+        // (CLI / Tauri direct path) gets identical protection against the
+        // small-reasoning-model multi-turn `<think>` loop bug.
+        let mut openai_messages = openai_messages;
+        gglib_core::normalize::strip_thinking_debt(&mut openai_messages);
+
         let mut body = json!({
             "model": self.model,
             "messages": openai_messages,
