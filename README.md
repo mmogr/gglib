@@ -4,7 +4,7 @@
 [![Coverage](https://github.com/mmogr/gglib/actions/workflows/coverage.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/coverage.yml)
 [![Release](https://github.com/mmogr/gglib/actions/workflows/release.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/release.yml)
 ![Version](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/version.json)
-[![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 <!-- crate-docs:start -->
 
@@ -506,3 +506,12 @@ Auto-generated from source and updated with every release.
 ### Integrations
 ![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Hub-yellow?style=flat-square)
 ![Llama.cpp](https://img.shields.io/badge/Llama.cpp-Inference-lightgrey?style=flat-square)
+
+## License
+
+GGLib is open source under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+- **Personal and open source use** is free.
+- **Commercial use** — building a product, running a SaaS, or embedding GGLib in paid software — requires a commercial license.
+
+For commercial licensing enquiries, contact [@mmogr](https://github.com/mmogr) on GitHub.

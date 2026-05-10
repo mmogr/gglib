@@ -24,7 +24,7 @@ members = [
 [workspace.package]
 version = "0.7.4"
 edition = "2024"
-license = "GPLv3"
+license = "AGPL-3.0"
 repository = "https://github.com/mmogr/gglib"
 authors = ["mmogr"]
 
