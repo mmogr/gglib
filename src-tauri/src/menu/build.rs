@@ -19,7 +19,7 @@ pub fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Er
         .version(Some(gglib_build_info::SEMVER))
         .short_version(Some(gglib_build_info::ABOUT_SHORT_VERSION))
         .authors(Some(vec!["mmogr".to_string()]))
-        .license(Some("GPLv3"))
+        .license(Some("AGPL-3.0"))
         .website(Some("https://github.com/mmogr/gglib"))
         .website_label(Some("GitHub"))
         .build();
