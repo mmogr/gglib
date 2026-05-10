@@ -3,7 +3,7 @@ name = "gglib-axum"
 version.workspace = true
 edition.workspace = true
 description = "Axum web server adapter for gglib"
-license = "GPLv3"
+license.workspace = true
 publish = false
 
 [lib]
