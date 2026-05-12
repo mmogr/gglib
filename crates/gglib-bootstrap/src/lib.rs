@@ -45,6 +45,14 @@
 // tokio is a required runtime dependency (async fn build uses it transitively)
 use tokio as _;
 
+// Suppress unused_crate_dependencies for dev-only crates used in tests/
+#[cfg(test)]
+use async_trait as _;
+#[cfg(test)]
+use chrono as _;
+#[cfg(test)]
+use tempfile as _;
+
 mod builder;
 mod built;
 mod config;
