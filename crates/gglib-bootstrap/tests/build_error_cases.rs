@@ -5,7 +5,7 @@ use tempfile::TempDir;
 
 use common::{minimal_config, noop_emitter};
 
-/// A db_path that points into a directory that does not exist cannot be opened.
+/// A `db_path` that points into a directory that does not exist cannot be opened.
 #[tokio::test]
 async fn build_fails_when_db_directory_does_not_exist() {
     let dir = TempDir::new().unwrap();
@@ -18,7 +18,7 @@ async fn build_fails_when_db_directory_does_not_exist() {
     );
 }
 
-/// A db_path that is itself a directory (not a file) cannot be used as a database.
+/// A `db_path` that is itself a directory (not a file) cannot be used as a database.
 #[tokio::test]
 async fn build_fails_when_db_path_is_a_directory() {
     let dir = TempDir::new().unwrap();

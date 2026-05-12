@@ -2,7 +2,7 @@
 //!
 //! All helpers are designed to keep individual test functions to 3–5 lines.
 //! The `TempDir` returned by `minimal_config` must be kept alive for the
-//! duration of the test — SQLite holds the file open.
+//! duration of the test — `SQLite` holds the file open.
 
 use std::fs;
 use std::path::PathBuf;
@@ -37,6 +37,7 @@ pub fn noop_emitter() -> Arc<dyn AppEventEmitter> {
 /// Run [`CoreBootstrap::build`] with `minimal_config` and panic on failure.
 ///
 /// This is the one-liner used by every happy-path and functional test.
+#[allow(dead_code)]
 pub async fn build_core(dir: &TempDir) -> BuiltCore {
     CoreBootstrap::build(minimal_config(dir), noop_emitter())
         .await

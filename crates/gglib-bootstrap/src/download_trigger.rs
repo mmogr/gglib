@@ -83,7 +83,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .as_ref()
-                .map(|r| r.quantization.clone())
+                .map(|r| r.quantization)
         }
     }
 
@@ -183,7 +183,7 @@ mod tests {
 
     // ── Tests ─────────────────────────────────────────────────────────────────
 
-    /// When no quantization is provided the adapter must fall back to Q4_K_M.
+    /// When no quantization is provided the adapter must fall back to `Q4_K_M`.
     #[tokio::test]
     async fn none_quantization_defaults_to_q4km() {
         let mgr = MockDownloadManager::new();
@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(mgr.captured_quantization(), Some(Quantization::Q8_0));
     }
 
-    /// An unrecognised quantization string must fall back to Q4_K_M.
+    /// An unrecognised quantization string must fall back to `Q4_K_M`.
     #[tokio::test]
     async fn unknown_quantization_string_falls_back_to_q4km() {
         let mgr = MockDownloadManager::new();

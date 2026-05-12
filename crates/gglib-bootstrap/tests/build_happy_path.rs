@@ -48,7 +48,7 @@ async fn hf_token_config_accepted() {
     );
 }
 
-/// Setting max_concurrent to a value greater than 1 must not cause a build failure.
+/// Setting `max_concurrent` to a value greater than 1 must not cause a build failure.
 #[tokio::test]
 async fn max_concurrent_config_accepted() {
     let dir = TempDir::new().unwrap();
@@ -75,7 +75,7 @@ async fn nonexistent_llama_server_path_is_accepted() {
     );
 }
 
-/// build() result includes a populated BuiltCore — spot-check the runner Arc.
+/// `build()` result includes a populated `BuiltCore` — spot-check the runner Arc.
 #[tokio::test]
 async fn built_core_runner_is_present() {
     let dir = TempDir::new().unwrap();
