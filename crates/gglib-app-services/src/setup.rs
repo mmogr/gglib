@@ -232,3 +232,24 @@ fn is_python_venv_ready() -> bool {
         venv_dir.join("bin").join("python3").exists()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::test_support::{MockSystemProbePort, test_core};
+
+    #[tokio::test]
+    async fn get_status_returns_ok_without_panicking() {
+        let core = test_core().await;
+        let ops = SetupOps::new(SetupDeps {
+            core,
+            system_probe: Arc::new(MockSystemProbePort::default()),
+        });
+        // get_status calls gglib_runtime directly; we only verify it returns Ok
+        // (no panic, no internal unwrap) in a test environment.
+        let result = ops.get_status().await;
+        assert!(result.is_ok(), "get_status should not fail, got {result:?}");
+    }
+}
