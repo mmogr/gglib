@@ -14,8 +14,8 @@
 use std::path::{Path, PathBuf};
 
 use super::super::tools::{command_stdout, command_succeeds};
-use super::types::VulkanStatus;
 use super::types::MissingPackage;
+use super::types::VulkanStatus;
 
 // ============================================================================
 // Probe helpers (unit-testable, dependency-injection friendly)
