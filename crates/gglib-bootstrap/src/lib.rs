@@ -38,6 +38,26 @@
 //! let core = CoreBootstrap::build(config, emitter).await?;
 //! // core.app, core.runner, core.downloads, core.hf_client, … all ready
 //! ```
+//!
+//! # Testing
+//!
+//! The test suite uses three layers:
+//!
+//! - **Unit** (`src/download_trigger.rs`): inline `#[cfg(test)]` block with a
+//!   `MockDownloadManager` to verify quantization mapping and error propagation
+//!   without touching the database.
+//! - **Happy path / config** (`tests/build_happy_path.rs`): full
+//!   `CoreBootstrap::build()` calls that confirm wiring succeeds and the
+//!   returned [`BuiltCore`] is live.
+//! - **Error cases** (`tests/build_error_cases.rs`): failure paths such as a
+//!   missing database directory.
+//! - **Functional round-trips** (`tests/functional.rs`): data round-trips
+//!   through the wired repositories (model insert/list, settings save/reload,
+//!   empty-state assertions for downloads, chat history, and MCP servers).
+//!
+//! Shared helpers in `tests/common/mod.rs` provide a `TempDir`-backed
+//! `BootstrapConfig` and a [`gglib_core::ports::NoopEmitter`] so individual
+//! test bodies stay to ≤ 5 lines.
 
 #![deny(unsafe_code)]
 #![deny(unused_crate_dependencies)]
