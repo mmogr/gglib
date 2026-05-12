@@ -55,7 +55,14 @@ async fn download_queue_starts_empty() {
 async fn chat_history_starts_empty() {
     let dir = TempDir::new().unwrap();
     let core = build_core(&dir).await;
-    assert_eq!(core.repos.chat_history.get_conversation_count().await.unwrap(), 0);
+    assert_eq!(
+        core.repos
+            .chat_history
+            .get_conversation_count()
+            .await
+            .unwrap(),
+        0
+    );
 }
 
 /// Immediately after bootstrapping there are no MCP servers registered.
