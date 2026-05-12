@@ -52,6 +52,7 @@ fn pkg_config_includedir(pkg: &str) -> Option<PathBuf> {
 ///
 /// Wrapping the env read in a function makes it trivial to swap with a
 /// stub in tests so that a developer's local SDK never leaks into CI.
+#[cfg(target_os = "windows")]
 fn vulkan_sdk_dir() -> Option<PathBuf> {
     std::env::var_os("VULKAN_SDK").map(PathBuf::from)
 }
