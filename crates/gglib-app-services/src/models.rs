@@ -269,7 +269,13 @@ mod tests {
         let ops = make_ops(core);
         let result = ops.get(999).await;
         assert!(
-            matches!(result, Err(GuiError::NotFound { entity: "model", .. })),
+            matches!(
+                result,
+                Err(GuiError::NotFound {
+                    entity: "model",
+                    ..
+                })
+            ),
             "expected NotFound, got {result:?}"
         );
     }
@@ -316,7 +322,13 @@ mod tests {
         let ops = make_ops(core);
         let result = ops.remove(999, RemoveModelRequest::default()).await;
         assert!(
-            matches!(result, Err(GuiError::NotFound { entity: "model", .. })),
+            matches!(
+                result,
+                Err(GuiError::NotFound {
+                    entity: "model",
+                    ..
+                })
+            ),
             "expected NotFound, got {result:?}"
         );
     }

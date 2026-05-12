@@ -847,6 +847,9 @@ mod tests {
         let core = test_core().await;
         let ops = make_server_ops(core);
         let result = ops.stop(9999).await;
-        assert!(result.is_err(), "expected error stopping non-existent model");
+        assert!(
+            result.is_err(),
+            "expected error stopping non-existent model"
+        );
     }
 }

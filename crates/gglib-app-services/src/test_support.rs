@@ -28,7 +28,9 @@ pub(crate) struct MockProcessRunner;
 #[async_trait]
 impl ProcessRunner for MockProcessRunner {
     async fn start(&self, _config: ServerConfig) -> Result<ProcessHandle, ProcessError> {
-        Err(ProcessError::StartFailed("mock: start not supported".to_string()))
+        Err(ProcessError::StartFailed(
+            "mock: start not supported".to_string(),
+        ))
     }
 
     async fn stop(&self, _handle: &ProcessHandle) -> Result<(), ProcessError> {
@@ -191,10 +193,7 @@ impl HfClientPort for MockHfClient {
         })
     }
 
-    async fn list_quantizations(
-        &self,
-        _model_id: &str,
-    ) -> Result<Vec<HfQuantInfo>, HfPortError> {
+    async fn list_quantizations(&self, _model_id: &str) -> Result<Vec<HfQuantInfo>, HfPortError> {
         Ok(vec![HfQuantInfo {
             name: "Q4_K_M".to_string(),
             shard_count: 1,
@@ -306,5 +305,8 @@ impl SystemProbePort for MockSystemProbePort {
 /// Uses the `test-utils` feature gate from `gglib-db`.
 pub(crate) async fn test_core() -> Arc<AppCore> {
     let pool = setup_test_database().await.expect("in-memory DB");
-    Arc::new(CoreFactory::build_app_core(pool, Arc::new(MockProcessRunner)))
+    Arc::new(CoreFactory::build_app_core(
+        pool,
+        Arc::new(MockProcessRunner),
+    ))
 }

@@ -347,7 +347,9 @@ mod tests {
     async fn remove_server_deletes_it() {
         let ops = make_ops().await;
         let info = ops.add(stdio_req("to-delete")).await.unwrap();
-        ops.remove(info.server.id).await.expect("remove should succeed");
+        ops.remove(info.server.id)
+            .await
+            .expect("remove should succeed");
         let servers = ops.list().await.unwrap();
         assert!(servers.is_empty());
     }

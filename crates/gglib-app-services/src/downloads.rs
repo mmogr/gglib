@@ -330,7 +330,13 @@ mod tests {
         let ops = make_ops(MockDownloadManager::failing_cancel());
         let result = ops.cancel_download("some/model").await;
         assert!(
-            matches!(result, Err(GuiError::NotFound { entity: "download", .. })),
+            matches!(
+                result,
+                Err(GuiError::NotFound {
+                    entity: "download",
+                    ..
+                })
+            ),
             "expected GuiError::NotFound, got {result:?}"
         );
     }
