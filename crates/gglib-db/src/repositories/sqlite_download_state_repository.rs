@@ -336,4 +336,23 @@ mod tests {
         let queue = repo.load_queue().await.unwrap();
         assert!(queue.is_empty());
     }
+
+    #[tokio::test]
+    async fn prune_completed_removes_completed_entries() {
+        let pool = setup_test_db().await;
+        let repo = SqliteDownloadStateRepository::new(pool.clone());
+
+        let download = QueuedDownload::new("prune-test", "org/model", "Model", 1, 1234567890);
+        repo.enqueue(&download).await.unwrap();
+        // mark_failed sets completed_at = datetime('now'); backdate so prune_completed(0) matches.
+        let id = DownloadId::from_model("prune-test");
+        repo.mark_failed(&id, "err").await.unwrap();
+        sqlx::query("UPDATE download_queue SET completed_at = '1990-01-01 00:00:00' WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        assert_eq!(repo.prune_completed(0).await.unwrap(), 1);
+    }
 }
