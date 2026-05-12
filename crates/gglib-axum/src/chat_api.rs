@@ -153,11 +153,9 @@ pub struct ChatUsage {
 ///
 /// # Note
 ///
-/// This router does NOT include CORS middleware. Add it at the call site:
+/// This router does NOT include CORS middleware. Apply it at the call site
+/// before merging into the main router.
 ///
-/// ```ignore
-/// let router = chat_routes(state).layer(cors_layer);
-/// ```
 /// Build chat routes without `/api` prefix for nesting under /api.
 ///
 /// Returns a router typed as `Router<AppState>` (state inferred from handlers)
