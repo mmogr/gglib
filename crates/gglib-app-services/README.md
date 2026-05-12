@@ -135,3 +135,19 @@ let server_ops = ServerOps::new(ServerDeps {
 // server_ops.start(model_id, request).await?;
 # }
 ```
+
+## Testing
+
+Each ops module has an inline `#[cfg(test)] mod tests` block.  Tests run against an
+in-memory SQLite database provisioned by `gglib_db::setup_test_database()` and
+`CoreFactory::build_app_core()`.  All external dependencies are replaced by
+handwritten mock structs in `src/test_support.rs` (no external mocking framework).
+
+| Module | Tests |
+|--------|-------|
+| `downloads.rs` | 7 — queue snapshot, cancel, remove, reorder, clear, cancel-all |
+| `models.rs` | 6 — list empty, get not-found, add+list, missing file, remove not-found, tags |
+| `settings.rs` | 4 — get defaults, directory info, memory threshold (Some/None) |
+| `mcp.rs` | 4 — list empty, add+list, invalid type, remove |
+| `setup.rs` | 1 — smoke test (get_status returns Ok) |
+| `servers.rs` | 8 — 6 registry unit tests + list empty + stop non-existent |
