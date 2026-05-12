@@ -37,6 +37,7 @@ pub fn command_succeeds(program: &str, args: &[&str]) -> bool {
 ///
 /// Returns `None` if the command cannot be found, exits with a non-zero
 /// status, or produces non-UTF-8 output.
+#[cfg(any(target_os = "linux", target_os = "windows", feature = "cli", test))]
 pub fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
     let output = cmd(program).args(args).output().ok()?;
     if !output.status.success() {
