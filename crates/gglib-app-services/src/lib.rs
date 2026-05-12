@@ -10,8 +10,6 @@ use tokio as _;
 #[cfg(test)]
 use tokio_test as _;
 #[cfg(test)]
-use gglib_db as _;
-#[cfg(test)]
 use tempfile as _;
 #[cfg(test)]
 mod test_support;

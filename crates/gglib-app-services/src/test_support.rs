@@ -13,7 +13,9 @@ use gglib_core::ports::{
     ServerConfig, ServerHealth, SystemProbePort, ToolSupportDetection, ToolSupportDetectionInput,
     ToolSupportDetectorPort,
 };
+use gglib_core::services::AppCore;
 use gglib_core::utils::system::{Dependency, GpuInfo, SystemMemoryInfo};
+use gglib_db::{CoreFactory, setup_test_database};
 
 // ---------------------------------------------------------------------------
 // MockProcessRunner
@@ -293,4 +295,16 @@ impl SystemProbePort for MockSystemProbePort {
             has_nvidia_gpu: false,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// AppCore test helper
+// ---------------------------------------------------------------------------
+
+/// Build an `AppCore` backed by an in-memory SQLite database.
+///
+/// Uses the `test-utils` feature gate from `gglib-db`.
+pub(crate) async fn test_core() -> Arc<AppCore> {
+    let pool = setup_test_database().await.expect("in-memory DB");
+    Arc::new(CoreFactory::build_app_core(pool, Arc::new(MockProcessRunner)))
 }
