@@ -293,3 +293,77 @@ impl DownloadOps {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::error::GuiError;
+    use crate::test_support::{MockDownloadManager, MockHfClient, MockToolSupportDetector};
+
+    fn make_ops(mgr: MockDownloadManager) -> DownloadOps {
+        DownloadOps::new(DownloadDeps {
+            downloads: Arc::new(mgr),
+            hf: Arc::new(MockHfClient),
+            tool_detector: Arc::new(MockToolSupportDetector),
+        })
+    }
+
+    #[tokio::test]
+    async fn get_queue_snapshot_returns_empty_snapshot() {
+        let ops = make_ops(MockDownloadManager::new());
+        let snapshot = ops.get_queue_snapshot().await;
+        assert!(snapshot.items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn cancel_download_succeeds_with_model_id_string() {
+        // Ensure the parse-then-fallback path works when given a plain model ID
+        let ops = make_ops(MockDownloadManager::new());
+        let result = ops.cancel_download("some/model").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn cancel_download_not_found_maps_to_gui_error() {
+        let ops = make_ops(MockDownloadManager::failing_cancel());
+        let result = ops.cancel_download("some/model").await;
+        assert!(
+            matches!(result, Err(GuiError::NotFound { entity: "download", .. })),
+            "expected GuiError::NotFound, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_from_queue_delegates_ok() {
+        let ops = make_ops(MockDownloadManager::new());
+        let result = ops.remove_from_queue("some/model").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn reorder_queue_returns_new_position() {
+        let mgr = MockDownloadManager {
+            reorder_position: 3,
+            ..MockDownloadManager::default()
+        };
+        let ops = make_ops(mgr);
+        let result = ops.reorder_queue("some/model", 3).await;
+        assert_eq!(result.unwrap(), 3);
+    }
+
+    #[tokio::test]
+    async fn clear_failed_completes_without_error() {
+        let ops = make_ops(MockDownloadManager::new());
+        // clear_failed is fire-and-forget (returns ())
+        ops.clear_failed().await;
+    }
+
+    #[tokio::test]
+    async fn cancel_all_completes_without_error() {
+        let ops = make_ops(MockDownloadManager::new());
+        // cancel_all is fire-and-forget (returns ())
+        ops.cancel_all().await;
+    }
+}
