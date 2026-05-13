@@ -353,7 +353,10 @@ mod tests {
     #[tokio::test]
     async fn get_conversation_by_id() {
         let repo = repo().await;
-        let id = repo.create_conversation(make_conv("Explore")).await.unwrap();
+        let id = repo
+            .create_conversation(make_conv("Explore"))
+            .await
+            .unwrap();
         let conv = repo.get_conversation(id).await.unwrap();
         assert_eq!(conv.unwrap().title, "Explore");
     }
@@ -370,9 +373,15 @@ mod tests {
     async fn update_conversation_title() {
         let repo = repo().await;
         let id = repo.create_conversation(make_conv("Old")).await.unwrap();
-        let update = ConversationUpdate { title: Some("New".to_string()), ..Default::default() };
+        let update = ConversationUpdate {
+            title: Some("New".to_string()),
+            ..Default::default()
+        };
         repo.update_conversation(id, update).await.unwrap();
-        assert_eq!(repo.get_conversation(id).await.unwrap().unwrap().title, "New");
+        assert_eq!(
+            repo.get_conversation(id).await.unwrap().unwrap().title,
+            "New"
+        );
     }
 
     #[tokio::test]
@@ -397,7 +406,9 @@ mod tests {
         let repo = repo().await;
         let cid = repo.create_conversation(make_conv("Count")).await.unwrap();
         for i in 0..3 {
-            repo.save_message(make_msg(cid, &format!("m{i}"))).await.unwrap();
+            repo.save_message(make_msg(cid, &format!("m{i}")))
+                .await
+                .unwrap();
         }
         assert_eq!(repo.get_message_count(cid).await.unwrap(), 3);
     }
@@ -407,7 +418,9 @@ mod tests {
         let repo = repo().await;
         let cid = repo.create_conversation(make_conv("Edit")).await.unwrap();
         let mid = repo.save_message(make_msg(cid, "original")).await.unwrap();
-        repo.update_message(mid, "updated".to_string(), None).await.unwrap();
+        repo.update_message(mid, "updated".to_string(), None)
+            .await
+            .unwrap();
         assert_eq!(repo.get_messages(cid).await.unwrap()[0].content, "updated");
     }
 
