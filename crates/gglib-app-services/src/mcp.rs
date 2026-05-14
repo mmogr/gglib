@@ -280,3 +280,77 @@ impl McpOps {
             .map_err(|e| GuiError::Internal(e.to_string()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use gglib_core::ports::NoopEmitter;
+    use gglib_db::CoreFactory;
+
+    use super::*;
+    use gglib_db::setup_test_database;
+
+    async fn make_ops() -> McpOps {
+        let pool = setup_test_database().await.expect("in-memory DB");
+        let repo = CoreFactory::mcp_repository(pool);
+        let mcp = Arc::new(McpService::new(repo, Arc::new(NoopEmitter::new())));
+        McpOps::new(McpDeps { mcp })
+    }
+
+    fn stdio_req(name: &str) -> CreateMcpServerRequest {
+        CreateMcpServerRequest {
+            name: name.to_string(),
+            server_type: "stdio".to_string(),
+            command: Some("echo".to_string()),
+            args: vec![],
+            working_dir: None,
+            path_extra: None,
+            url: None,
+            env: vec![],
+            auto_start: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn list_returns_empty_on_fresh_db() {
+        let ops = make_ops().await;
+        let servers = ops.list().await.expect("list should succeed");
+        assert!(servers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_server_appears_in_list() {
+        let ops = make_ops().await;
+        ops.add(stdio_req("test-server"))
+            .await
+            .expect("add should succeed");
+
+        let servers = ops.list().await.unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].server.name, "test-server");
+    }
+
+    #[tokio::test]
+    async fn invalid_server_type_returns_validation_error() {
+        let ops = make_ops().await;
+        let mut req = stdio_req("bad");
+        req.server_type = "grpc".to_string(); // unsupported
+        let result = ops.add(req).await;
+        assert!(
+            matches!(result, Err(GuiError::ValidationFailed(_))),
+            "expected ValidationFailed, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_server_deletes_it() {
+        let ops = make_ops().await;
+        let info = ops.add(stdio_req("to-delete")).await.unwrap();
+        ops.remove(info.server.id)
+            .await
+            .expect("remove should succeed");
+        let servers = ops.list().await.unwrap();
+        assert!(servers.is_empty());
+    }
+}

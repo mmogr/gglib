@@ -185,3 +185,59 @@ impl SettingsOps {
         Ok(Some(mem_info))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::test_support::{MockDownloadManager, MockSystemProbePort, test_core};
+
+    fn make_ops(core: Arc<AppCore>, probe: MockSystemProbePort) -> SettingsOps {
+        SettingsOps::new(SettingsDeps {
+            core,
+            system_probe: Arc::new(probe),
+            downloads: Arc::new(MockDownloadManager::new()),
+        })
+    }
+
+    #[tokio::test]
+    async fn get_returns_default_settings() {
+        let core = test_core().await;
+        let ops = make_ops(core, MockSystemProbePort::default());
+        let settings = ops.get().await.expect("get should succeed");
+        // Fresh DB: no custom settings – all optional fields are None
+        assert!(settings.default_download_path.is_none());
+    }
+
+    #[tokio::test]
+    async fn get_models_directory_info_returns_valid_info() {
+        let core = test_core().await;
+        let ops = make_ops(core, MockSystemProbePort::default());
+        // This calls resolve_models_dir which is pure – should not panic
+        let result = ops.get_models_directory_info();
+        assert!(result.is_ok(), "expected Ok, got {result:?}");
+    }
+
+    #[tokio::test]
+    async fn get_system_memory_returns_some_when_probe_reports_enough_ram() {
+        let core = test_core().await;
+        let probe = MockSystemProbePort {
+            total_ram_bytes: 8 * 1024 * 1024 * 1024, // 8 GiB
+        };
+        let ops = make_ops(core, probe);
+        let result = ops.get_system_memory().expect("should not error");
+        assert!(result.is_some(), "expected Some for 8 GiB");
+    }
+
+    #[tokio::test]
+    async fn get_system_memory_returns_none_when_probe_reports_tiny_ram() {
+        let core = test_core().await;
+        let probe = MockSystemProbePort {
+            total_ram_bytes: 1024, // 1 KiB – suspiciously small
+        };
+        let ops = make_ops(core, probe);
+        let result = ops.get_system_memory().expect("should not error");
+        assert!(result.is_none(), "expected None for suspiciously small RAM");
+    }
+}

@@ -814,4 +814,42 @@ mod tests {
         assert_eq!(calls[2], "stopped:TestModel");
         assert_eq!(calls[3], "error:TestModel:test error");
     }
+
+    // =========================================================================
+    // DB-backed ServerOps tests
+    // =========================================================================
+
+    use gglib_core::events::NoopServerEvents;
+    use gglib_core::ports::NoopEmitter;
+
+    use crate::test_support::{MockProcessRunner, MockToolSupportDetector, test_core};
+
+    fn make_server_ops(core: Arc<AppCore>) -> ServerOps {
+        ServerOps::new(ServerDeps {
+            core,
+            runner: Arc::new(MockProcessRunner),
+            emitter: Arc::new(NoopEmitter::new()),
+            server_events: Arc::new(NoopServerEvents),
+            tool_detector: Arc::new(MockToolSupportDetector),
+        })
+    }
+
+    #[tokio::test]
+    async fn list_servers_empty_on_fresh_db() {
+        let core = test_core().await;
+        let ops = make_server_ops(core);
+        let servers = ops.list_servers().await;
+        assert!(servers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn stop_nonexistent_model_returns_error() {
+        let core = test_core().await;
+        let ops = make_server_ops(core);
+        let result = ops.stop(9999).await;
+        assert!(
+            result.is_err(),
+            "expected error stopping non-existent model"
+        );
+    }
 }

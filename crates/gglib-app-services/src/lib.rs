@@ -5,10 +5,14 @@
 // Silence unused dependency warnings - these are used transitively
 use async_trait as _;
 use gglib_hf as _;
+#[cfg(test)]
+use tempfile as _;
 use thiserror as _;
 use tokio as _;
 #[cfg(test)]
 use tokio_test as _;
+#[cfg(test)]
+mod test_support;
 
 mod error;
 

@@ -234,3 +234,110 @@ impl ModelOps {
             .map_err(|e| GuiError::Internal(format!("Failed to get filter options: {e}")))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tempfile::tempdir;
+    use tokio::fs;
+
+    use super::*;
+    use crate::error::GuiError;
+    use crate::test_support::{MockProcessRunner, test_core};
+    use gglib_core::ports::NoopGgufParser;
+
+    fn make_ops(core: Arc<AppCore>) -> ModelOps {
+        ModelOps::new(ModelDeps {
+            core,
+            runner: Arc::new(MockProcessRunner),
+            gguf_parser: Arc::new(NoopGgufParser),
+        })
+    }
+
+    #[tokio::test]
+    async fn list_returns_empty_on_fresh_db() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+        let models = ops.list().await.expect("list should succeed");
+        assert!(models.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_unknown_id_returns_not_found() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+        let result = ops.get(999).await;
+        assert!(
+            matches!(
+                result,
+                Err(GuiError::NotFound {
+                    entity: "model",
+                    ..
+                })
+            ),
+            "expected NotFound, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn add_and_list_model() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+
+        let dir = tempdir().unwrap();
+        let gguf_path = dir.path().join("model.gguf");
+        fs::write(&gguf_path, b"placeholder").await.unwrap();
+
+        let req = AddModelRequest {
+            file_path: gguf_path.to_str().unwrap().to_string(),
+        };
+
+        let added = ops.add(req).await.expect("add should succeed");
+        assert_eq!(added.file_path, gguf_path.to_str().unwrap());
+
+        let models = ops.list().await.unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, added.id);
+    }
+
+    #[tokio::test]
+    async fn add_nonexistent_file_returns_validation_error() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+
+        let req = AddModelRequest {
+            file_path: "/no/such/file.gguf".to_string(),
+        };
+        let result = ops.add(req).await;
+        assert!(
+            matches!(result, Err(GuiError::ValidationFailed(_))),
+            "expected ValidationFailed, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_unknown_id_returns_not_found() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+        let result = ops.remove(999, RemoveModelRequest::default()).await;
+        assert!(
+            matches!(
+                result,
+                Err(GuiError::NotFound {
+                    entity: "model",
+                    ..
+                })
+            ),
+            "expected NotFound, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_tags_empty_on_fresh_db() {
+        let core = test_core().await;
+        let ops = make_ops(core);
+        let tags = ops.list_tags().await.expect("list_tags should succeed");
+        assert!(tags.is_empty());
+    }
+}
