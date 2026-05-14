@@ -265,8 +265,11 @@ pub fn create_router(ctx: AxumContext, cors_config: &CorsConfig) -> Router {
 /// * `cors_config` - CORS configuration
 ///
 /// # Example
-/// ```ignore
-/// let router = create_spa_router(ctx, "./dist", &CorsConfig::AllowAll);
+/// ```no_run
+/// # use gglib_axum::{CorsConfig, bootstrap::AxumContext};
+/// # async fn example(ctx: AxumContext) {
+/// let router = gglib_axum::routes::create_spa_router(ctx, "./dist", &CorsConfig::AllowAll);
+/// # }
 /// ```
 pub fn create_spa_router<P: AsRef<Path>>(
     ctx: AxumContext,

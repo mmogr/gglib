@@ -1946,12 +1946,14 @@ version = "0.7.5"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "gglib-core",
  "gglib-db",
  "gglib-download",
  "gglib-gguf",
  "gglib-hf",
  "gglib-runtime",
+ "tempfile",
  "tokio",
  "tracing",
 ]

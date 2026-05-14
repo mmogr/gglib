@@ -30,5 +30,11 @@ anyhow = { workspace = true }
 # Logging
 tracing = { workspace = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+
 [lints]
 workspace = true

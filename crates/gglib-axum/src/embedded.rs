@@ -13,9 +13,10 @@
 //!
 //! # Usage
 //!
-//! ```ignore
-//! use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
-//!
+//! ```no_run
+//! # use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
+//! # use gglib_axum::bootstrap::AxumContext;
+//! # async fn example(ctx: AxumContext) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //! let config = EmbeddedServerConfig {
 //!     cors_origins: vec![
 //!         "tauri://localhost".to_string(),
@@ -23,9 +24,11 @@
 //!     ],
 //! };
 //!
-//! let (info, handle) = start_embedded_server(ctx, config).await?;
+//! let (info, _handle) = start_embedded_server(ctx, config).await?;
 //! println!("API available at http://127.0.0.1:{}", info.port);
 //! println!("Token: {}", info.token);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Manual Verification (for development)
@@ -126,10 +129,13 @@ pub struct EmbeddedServerConfig {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// use gglib_axum::embedded::{EmbeddedServerConfig, default_embedded_cors_origins};
 /// let config = EmbeddedServerConfig {
-///     cors_origins: gglib_axum::embedded::default_embedded_cors_origins(),
+///     cors_origins: default_embedded_cors_origins(),
 /// };
+/// assert!(!config.cors_origins.is_empty());
+/// assert!(config.cors_origins.contains(&"tauri://localhost".to_string()));
 /// ```
 pub fn default_embedded_cors_origins() -> Vec<String> {
     vec![
@@ -155,11 +161,16 @@ pub fn default_embedded_cors_origins() -> Vec<String> {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
+/// # use gglib_axum::embedded::{EmbeddedServerConfig, start_embedded_server};
+/// # use gglib_axum::bootstrap::AxumContext;
+/// # async fn example(ctx: AxumContext) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// let config = EmbeddedServerConfig {
 ///     cors_origins: vec!["tauri://localhost".to_string()],
 /// };
 /// let (info, _handle) = start_embedded_server(ctx, config).await?;
+/// # Ok(())
+/// # }
 /// ```
 pub async fn start_embedded_server(
     ctx: AxumContext,

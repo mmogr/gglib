@@ -78,6 +78,26 @@ Depends **only** on infrastructure crates:
 
 Does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`, `gglib-tauri`, `gglib-cli`).
 
+## Testing
+
+The test suite is split into three layers:
+
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| Unit | `src/download_trigger.rs` `#[cfg(test)]` | Inline tests for `DownloadTriggerAdapter` using a `MockDownloadManager`. Validates quantization mapping and error propagation without touching the database. |
+| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. Also validates config variants (HF token, `max_concurrent`, non-existent binary path). |
+| Error cases | `tests/build_error_cases.rs` | Exercises the failure paths of `build()` — missing DB directory and DB path pointing at a directory. |
+| Functional round-trips | `tests/functional.rs` | End-to-end data round-trips through the wired repositories: model insert/list, settings save/reload, empty-state assertions for downloads, chat history, and MCP servers. |
+
+Shared test helpers (`TempDir`-backed config, `NoopEmitter`, `build_core`) live in
+`tests/common/mod.rs` to keep individual test bodies to ≤ 5 lines.
+
+Run all bootstrap tests:
+
+```bash
+cargo test -p gglib-bootstrap
+```
+
 ## Design Principles
 
 1. **No Adapter Dependencies** — Must not depend on tauri, axum, tower, or CLI crates

@@ -22,7 +22,7 @@
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
-#[cfg(feature = "cli")]
+#[cfg(any(target_os = "linux", feature = "cli"))]
 use anyhow::Result;
 #[cfg(target_os = "linux")]
 use tracing::warn;
