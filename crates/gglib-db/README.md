@@ -102,3 +102,40 @@ async fn example() {
 1. **Port Pattern** — Repositories implement traits from `gglib-core`, not local traits
 2. **No Domain Logic** — Pure data access; business logic stays in `gglib-core::services`
 3. **Pooled Connections** — All adapters share a connection pool for efficiency
+
+## Testing
+
+All tests are inline `#[cfg(test)]` blocks living alongside their respective implementations.
+
+### Test harness
+
+Use `setup_test_database()` (feature-gated under `test-utils`) rather than `TestDb::new()`.
+`setup_test_database()` creates an in-memory `SQLite` database and runs the full production schema
+via `create_schema()`, so every test exercises the real schema including all columns and CHECK
+constraints.
+
+```rust,no_run
+#[cfg(test)]
+mod tests {
+    use crate::setup::setup_test_database;
+    use super::*;
+
+    #[tokio::test]
+    async fn example() {
+        let pool = setup_test_database().await.unwrap();
+        let repo = SqliteModelRepository::new(pool);
+        // ...
+    }
+}
+```
+
+### Coverage at a glance
+
+| Repository | Tests |
+|---|---|
+| `SqliteModelRepository` | insert/list, get_by_id, get_by_name, update, delete, not-found errors, upsert dedup |
+| `SqliteChatHistoryRepository` | create/list conversations, get by id, count, update title, delete, messages round-trip, update/delete messages |
+| `SqliteDownloadStateRepository` | enqueue, update status, mark failed, remove, prune completed |
+| `SqliteMcpRepository` | insert/get/list/update/delete servers, SSE server, duplicate name conflict |
+| `SqliteSettingsRepository` | load empty, save and load, clear individual fields |
+

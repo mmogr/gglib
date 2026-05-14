@@ -238,3 +238,105 @@ impl ModelRepository for SqliteModelRepository {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use chrono::Utc;
+    use gglib_core::{NewModel, RepositoryError};
+
+    use crate::setup::setup_test_database;
+
+    use super::*;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// Return a minimal valid [`NewModel`] with a unique-by-`name` path so each
+    /// test has an independent model key.
+    fn make_model(name: &str) -> NewModel {
+        NewModel::new(
+            name.to_string(),
+            PathBuf::from(format!("/models/{name}.gguf")),
+            7.0,
+            Utc::now(),
+        )
+    }
+
+    async fn repo() -> SqliteModelRepository {
+        let pool = setup_test_database().await.expect("setup_test_database");
+        SqliteModelRepository::new(pool)
+    }
+
+    // ── Tests ─────────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn insert_and_list() {
+        let repo = repo().await;
+        repo.insert(&make_model("Alpha")).await.unwrap();
+        assert_eq!(repo.list().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_by_id_returns_inserted_model() {
+        let repo = repo().await;
+        let inserted = repo.insert(&make_model("Beta")).await.unwrap();
+        let fetched = repo.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(fetched.name, "Beta");
+    }
+
+    #[tokio::test]
+    async fn get_by_id_not_found_returns_error() {
+        let repo = repo().await;
+        let err = repo.get_by_id(999).await.unwrap_err();
+        assert!(matches!(err, RepositoryError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn get_by_name_returns_inserted_model() {
+        let repo = repo().await;
+        repo.insert(&make_model("Gamma")).await.unwrap();
+        let fetched = repo.get_by_name("Gamma").await.unwrap();
+        assert_eq!(fetched.name, "Gamma");
+    }
+
+    #[tokio::test]
+    async fn get_by_name_not_found_returns_error() {
+        let repo = repo().await;
+        let err = repo.get_by_name("ghost").await.unwrap_err();
+        assert!(matches!(err, RepositoryError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn update_changes_model_fields() {
+        let repo = repo().await;
+        let mut model = repo.insert(&make_model("Delta")).await.unwrap();
+        model.name = "Delta-v2".to_string();
+        repo.update(&model).await.unwrap();
+        assert_eq!(repo.get_by_id(model.id).await.unwrap().name, "Delta-v2");
+    }
+
+    #[tokio::test]
+    async fn delete_removes_model_from_list() {
+        let repo = repo().await;
+        let model = repo.insert(&make_model("Epsilon")).await.unwrap();
+        repo.delete(model.id).await.unwrap();
+        assert!(repo.list().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_not_found_returns_error() {
+        let repo = repo().await;
+        let err = repo.delete(999).await.unwrap_err();
+        assert!(matches!(err, RepositoryError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn upsert_deduplicates_same_model_key() {
+        let repo = repo().await;
+        // Two inserts of the same path → same local model_key → UPSERT updates in place.
+        repo.insert(&make_model("Zeta")).await.unwrap();
+        repo.insert(&make_model("Zeta")).await.unwrap();
+        assert_eq!(repo.list().await.unwrap().len(), 1);
+    }
+}
