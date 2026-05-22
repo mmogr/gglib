@@ -30,7 +30,10 @@ use gglib_agent::orchestrator::{OrchestratorConfig, execute};
 use gglib_core::domain::orchestrator::events::{
     ORCHESTRATOR_EVENT_CHANNEL_CAPACITY, OrchestratorEvent,
 };
+use gglib_core::domain::orchestrator::task_graph::HitlMode;
+use gglib_core::ports::{OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort};
 use gglib_runtime::compose_council_ports;
+use std::sync::Arc;
 
 use crate::error::HttpError;
 use crate::handlers::port_utils::validate_port;
@@ -58,6 +61,11 @@ pub struct RunRequest {
     /// Defaults to `3` when omitted.
     #[serde(default = "default_max_worker_concurrency")]
     pub max_worker_concurrency: usize,
+    /// Human-in-the-loop mode.
+    ///
+    /// Defaults to [`HitlMode::None`] (auto-approve) when omitted.
+    #[serde(default)]
+    pub hitl_mode: HitlMode,
 }
 
 fn default_max_replans() -> u32 {
@@ -106,6 +114,13 @@ pub async fn run_sse(
     let config = OrchestratorConfig {
         max_replans: req.max_replans,
         max_worker_concurrency: req.max_worker_concurrency,
+        hitl_mode: req.hitl_mode.clone(),
+        approval_registry: Some(
+            Arc::clone(&state.approval_registry) as Arc<dyn OrchestratorApprovalRegistryPort>
+        ),
+        repository: Some(
+            Arc::clone(&state.orchestrator_repo) as Arc<dyn OrchestratorRepositoryPort>
+        ),
         ..OrchestratorConfig::default()
     };
 

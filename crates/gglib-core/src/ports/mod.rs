@@ -27,6 +27,8 @@ pub mod model_catalog;
 pub mod model_registrar;
 pub mod model_repository;
 pub mod model_runtime;
+pub mod orchestrator_approvals;
+pub mod orchestrator_repository;
 pub mod process_runner;
 pub mod server_health;
 pub mod server_log_sink;
@@ -68,6 +70,8 @@ pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSu
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
+pub use orchestrator_approvals::{ApprovalDecision, OrchestratorApprovalRegistryPort};
+pub use orchestrator_repository::OrchestratorRepositoryPort;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;

@@ -114,6 +114,23 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/orchestrator/run",
             post(handlers::orchestrator::run::run_sse),
         )
+        // Orchestrator Phase D: HITL approvals + run records + resume
+        .route(
+            "/orchestrator/approve/:approval_id",
+            post(handlers::orchestrator::approve::approve),
+        )
+        .route(
+            "/orchestrator/runs",
+            get(handlers::orchestrator::runs::list_runs),
+        )
+        .route(
+            "/orchestrator/runs/:run_id",
+            get(handlers::orchestrator::runs::get_run),
+        )
+        .route(
+            "/orchestrator/runs/:run_id/resume",
+            post(handlers::orchestrator::resume::resume_run),
+        )
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }

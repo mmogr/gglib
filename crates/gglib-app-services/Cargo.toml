@@ -32,6 +32,9 @@ async-trait = "0.1"
 tokio-util = "0.7"
 futures-util = "0.3"
 
+# Approval registry
+dashmap = "6"
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 gglib-db = { path = "../gglib-db", features = ["test-utils"] }

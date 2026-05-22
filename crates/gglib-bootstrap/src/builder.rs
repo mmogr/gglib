@@ -92,7 +92,7 @@ impl CoreBootstrap {
         let hf_client: Arc<dyn HfClientPort> = hf_client_concrete.clone();
 
         // 8. Download state repository
-        let download_repo = CoreFactory::download_state_repository(pool);
+        let download_repo = CoreFactory::download_state_repository(pool.clone());
 
         // 9. Download manager — `DownloadManagerDeps<R,..>` requires R: Sized,
         //    so we pass the concrete registrar. The emitter is bridged from the
@@ -141,6 +141,7 @@ impl CoreBootstrap {
             gguf_parser,
             repos,
             model_registrar,
+            pool,
         })
     }
 }

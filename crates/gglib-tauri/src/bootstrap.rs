@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
-    ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
+    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, OrchestratorApprovalRegistry,
+    ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
@@ -21,6 +21,7 @@ use gglib_core::ports::{
     ProcessRunner, Repos,
 };
 use gglib_core::services::AppCore;
+use gglib_db::repositories::SqliteOrchestratorRepository;
 use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_mcp::McpService;
 use gglib_runtime::proxy::ProxySupervisor;
@@ -89,6 +90,10 @@ pub struct TauriContext {
     pub mcp_ops: Arc<McpOps>,
     pub proxy: Arc<ProxyOps>,
     pub setup: Arc<SetupOps>,
+    /// Orchestrator approval registry (for HITL gates via the embedded Axum server).
+    pub approval_registry: Arc<OrchestratorApprovalRegistry>,
+    /// Orchestrator run repository (for HITL persistence via the embedded Axum server).
+    pub orchestrator_repo: Arc<SqliteOrchestratorRepository>,
 }
 
 impl TauriContext {
@@ -157,7 +162,11 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         gguf_parser,
         repos,
         model_registrar: _,
+        pool,
     } = CoreBootstrap::build(bootstrap_config, Arc::clone(&tauri_emitter)).await?;
+
+    // Orchestrator persistence (Phase D).
+    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool));
 
     // 3. MCP service — NoopEmitter until the Tauri MCP event bridge is wired.
     let mcp = Arc::new(McpService::new(
@@ -230,6 +239,8 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         mcp_ops,
         proxy,
         setup,
+        approval_registry: Arc::new(OrchestratorApprovalRegistry::new()),
+        orchestrator_repo,
     })
 }
 
@@ -314,6 +325,8 @@ pub fn bootstrap_with(
         mcp_ops,
         proxy: proxy_ops,
         setup: setup_ops,
+        approval_registry: Arc::new(OrchestratorApprovalRegistry::new()),
+        orchestrator_repo: Arc::new(SqliteOrchestratorRepository::new_in_memory_blocking()),
     }
 }
 
@@ -360,7 +373,9 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         gguf_parser,
         repos,
         model_registrar: _,
+        pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
+    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool));
 
     // 2. MCP service.
     let mcp = Arc::new(McpService::new(
@@ -433,6 +448,8 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         mcp_ops,
         proxy,
         setup,
+        approval_registry: Arc::new(OrchestratorApprovalRegistry::new()),
+        orchestrator_repo,
     })
 }
 // `bootstrap_with` is the only place where the verification service is

@@ -132,7 +132,7 @@ pub enum NodeStatus {
 ///
 /// Variants are ordered from least to most restrictive; each variant implies
 /// all approvals required by lower variants.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum HitlMode {
     /// Execute the graph without any human-in-the-loop gates.

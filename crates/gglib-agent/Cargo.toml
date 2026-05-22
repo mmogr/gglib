@@ -24,10 +24,15 @@ anyhow       = { workspace = true }
 tracing      = { workspace = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
+uuid         = { version = "1.10", features = ["v4"] }
+chrono       = { workspace = true }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-gglib-runtime = { path = "../gglib-runtime" }
-reqwest       = { workspace = true }
+gglib-runtime       = { path = "../gglib-runtime" }
+gglib-app-services  = { path = "../gglib-app-services" }
+gglib-db            = { path = "../gglib-db", features = ["test-utils"] }
+reqwest             = { workspace = true }
+tokio               = { workspace = true, features = ["rt-multi-thread", "macros"] }

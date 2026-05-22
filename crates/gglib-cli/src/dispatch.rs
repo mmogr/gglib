@@ -200,15 +200,19 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             model,
             port,
             max_replans,
+            hitl,
+            resume,
             context,
         } => {
             handlers::orchestrate::execute_command(
                 ctx,
-                &goal,
+                goal.as_deref(),
                 port,
                 model,
                 context.ctx_size,
                 max_replans,
+                hitl.as_deref(),
+                resume.as_deref(),
             )
             .await?;
         }

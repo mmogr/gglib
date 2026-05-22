@@ -46,6 +46,7 @@ export type OrchestratorEvent =
   | PlanApprovedEvent
   | PlanRejectedEvent
   | ReplanAttemptEvent
+  | AwaitingApprovalEvent
   | NodeStartedEvent
   | NodeTextDeltaEvent
   | NodeReasoningDeltaEvent
@@ -188,5 +189,50 @@ export interface OrchestratorCompleteEvent {
 export interface OrchestratorErrorEvent {
   type: 'orchestrator_error';
   message: string;
+}
+
+// ─── HITL / approval types ───────────────────────────────────────────────────
+
+export type ApprovalKind =
+  | { kind: 'plan' }
+  | { kind: 'node'; node_id: string }
+  | { kind: 'tool'; node_id: string; tool_name: string };
+
+export interface AwaitingApprovalEvent {
+  type: 'awaiting_approval';
+  approval_id: string;
+  kind: ApprovalKind;
+}
+
+export type ApprovalDecisionPayload =
+  | { decision: 'approve' }
+  | { decision: 'approve_with_edits'; edited_graph: TaskGraph }
+  | { decision: 'reject'; reason?: string };
+
+// ─── Run persistence types ───────────────────────────────────────────────────
+
+export type OrchestratorRunStatus =
+  | 'running'
+  | 'awaiting_approval'
+  | 'interrupted'
+  | 'completed'
+  | 'failed';
+
+export interface OrchestratorRun {
+  id: string;
+  goal: string;
+  graph_json?: string | null;
+  status: OrchestratorRunStatus;
+  hitl_mode: HitlMode;
+  conversation_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrchestratorRunEvent {
+  run_id: string;
+  seq: number;
+  event_json: string;
+  created_at: string;
 }
 

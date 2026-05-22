@@ -13,7 +13,11 @@ use tokio::sync::mpsc;
 
 use gglib_agent::orchestrator::{OrchestratorConfig, execute};
 use gglib_core::domain::orchestrator::events::{
-    ORCHESTRATOR_EVENT_CHANNEL_CAPACITY, OrchestratorEvent,
+    ApprovalKind, ORCHESTRATOR_EVENT_CHANNEL_CAPACITY, OrchestratorEvent,
+};
+use gglib_core::domain::orchestrator::task_graph::{HitlMode, NodeStatus};
+use gglib_core::ports::{
+    ApprovalDecision, OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort,
 };
 use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_runtime::CouncilPorts;
@@ -31,23 +35,41 @@ use crate::presentation::style;
 ///
 /// Resolves the LLM port, calls [`execute`] which handles planning +
 /// worker execution + synthesis, and renders events to the terminal.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_command(
     ctx: &CliContext,
-    goal: &str,
+    goal: Option<&str>,
     port: Option<u16>,
     model: Option<String>,
     ctx_size: Option<String>,
     max_replans: u32,
+    hitl: Option<&str>,
+    resume: Option<&str>,
 ) -> Result<()> {
+    let hitl_mode = parse_hitl_mode(hitl)?;
+
+    // ── Resume path ───────────────────────────────────────────────────────
+    if let Some(run_id) = resume {
+        return resume_run(ctx, run_id, port, model, ctx_size, max_replans, hitl_mode).await;
+    }
+
+    let goal = goal.ok_or_else(|| anyhow!("A goal is required when not using --resume"))?;
+
     let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
 
     let config = OrchestratorConfig {
         max_replans,
+        hitl_mode,
+        approval_registry: Some(
+            Arc::clone(&ctx.approval_registry) as Arc<dyn OrchestratorApprovalRegistryPort>
+        ),
+        repository: Some(Arc::clone(&ctx.orchestrator_repo) as Arc<dyn OrchestratorRepositoryPort>),
         ..OrchestratorConfig::default()
     };
 
     let (tx, mut rx) = mpsc::channel::<OrchestratorEvent>(ORCHESTRATOR_EVENT_CHANNEL_CAPACITY);
 
+    let approval_registry = Arc::clone(&ctx.approval_registry);
     let run_handle = {
         let llm = ports.llm;
         let tool_executor = ports.tool_executor;
@@ -57,127 +79,7 @@ pub async fn execute_command(
 
     // ── Render events to terminal ─────────────────────────────────────────
     while let Some(event) = rx.recv().await {
-        match event {
-            OrchestratorEvent::PlanProposed { graph } => {
-                style::print_info_banner("Orchestrate", "\u{1f5fa}\u{fe0f}");
-                eprintln!(
-                    "  {}Plan accepted:{} {} node(s) for goal: {}",
-                    style::BOLD,
-                    style::RESET,
-                    graph.nodes.len(),
-                    graph.goal
-                );
-                style::print_banner_close();
-            }
-            OrchestratorEvent::ReplanAttempt { attempt, reason } => {
-                eprintln!(
-                    "{}  ↻ Replanning (attempt {attempt}): {reason}{}",
-                    style::DIM,
-                    style::RESET
-                );
-            }
-            OrchestratorEvent::PlanApproved => {
-                eprintln!(
-                    "{}  ✓ Plan approved — starting execution{}",
-                    style::DIM,
-                    style::RESET
-                );
-            }
-            OrchestratorEvent::NodeStarted {
-                node_id,
-                goal: node_goal,
-            } => {
-                eprintln!(
-                    "\n{}[{}]{} {}",
-                    style::INFO,
-                    node_id,
-                    style::RESET,
-                    node_goal
-                );
-            }
-            OrchestratorEvent::NodeTextDelta { delta, .. } => {
-                eprint!("{delta}");
-            }
-            OrchestratorEvent::NodeReasoningDelta { node_id, delta } => {
-                eprint!("{}[{node_id}]<think> {delta}{}", style::DIM, style::RESET);
-            }
-            OrchestratorEvent::NodeToolCallStart {
-                node_id,
-                display_name,
-                args_summary,
-                ..
-            } => {
-                eprintln!(
-                    "\n{}[{node_id}] ⚙ {}  {}{}",
-                    style::DIM,
-                    display_name,
-                    args_summary.as_deref().unwrap_or(""),
-                    style::RESET
-                );
-            }
-            OrchestratorEvent::NodeToolCallComplete {
-                node_id,
-                display_name,
-                duration_display,
-                ..
-            } => {
-                eprintln!(
-                    "{}[{node_id}] ✓ {}  {}{}",
-                    style::DIM,
-                    display_name,
-                    duration_display,
-                    style::RESET
-                );
-            }
-            OrchestratorEvent::NodeSystemWarning {
-                node_id, message, ..
-            } => {
-                eprintln!(
-                    "{}[{node_id}] ⚠ {}{}",
-                    style::WARNING,
-                    message,
-                    style::RESET
-                );
-            }
-            OrchestratorEvent::NodeCompacting { node_id } => {
-                eprintln!(
-                    "\n{}[{node_id}] compacting output…{}",
-                    style::DIM,
-                    style::RESET
-                );
-            }
-            OrchestratorEvent::NodeComplete { node_id, .. } => {
-                eprintln!("{}[{node_id}] ✓ complete{}", style::SUCCESS, style::RESET);
-            }
-            OrchestratorEvent::NodeFailed { node_id, error } => {
-                eprintln!(
-                    "{}[{node_id}] ✗ failed: {error}{}",
-                    style::DANGER,
-                    style::RESET
-                );
-            }
-            OrchestratorEvent::SynthesisStart => {
-                eprintln!("\n{}─── Synthesis ───{}", style::BOLD, style::RESET);
-            }
-            OrchestratorEvent::SynthesisTextDelta { delta } => {
-                eprint!("{delta}");
-            }
-            OrchestratorEvent::SynthesisComplete { .. } => {
-                eprintln!();
-            }
-            OrchestratorEvent::OrchestratorComplete { answer } => {
-                eprintln!("\n{}─── Final Answer ───{}", style::BOLD, style::RESET);
-                println!("{answer}");
-            }
-            OrchestratorEvent::OrchestratorError { message } => {
-                eprintln!("{}Error: {message}{}", style::DANGER, style::RESET);
-            }
-            // Phase D events (HITL) — not used yet.
-            OrchestratorEvent::AwaitingApproval { .. }
-            | OrchestratorEvent::PlanRejected { .. }
-            | OrchestratorEvent::NodeProgress { .. }
-            | OrchestratorEvent::SynthesisProgress { .. } => {}
-        }
+        render_event(&event, &approval_registry).await;
     }
 
     stop_server(ctx, &handle).await;
@@ -191,6 +93,282 @@ pub async fn execute_command(
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+fn parse_hitl_mode(hitl: Option<&str>) -> Result<HitlMode> {
+    match hitl.unwrap_or("none") {
+        "none" => Ok(HitlMode::None),
+        "approve_plan" | "plan" => Ok(HitlMode::ApprovePlan),
+        "approve_each_node" | "node" => Ok(HitlMode::ApproveEachNode),
+        "approve_tools" | "tools" => Ok(HitlMode::ApproveTools),
+        other => Err(anyhow!(
+            "unknown HITL mode: '{other}'. Valid values: none, plan, node, tools"
+        )),
+    }
+}
+
+/// Resume an interrupted or awaiting-approval run from the DB.
+async fn resume_run(
+    ctx: &CliContext,
+    run_id: &str,
+    port: Option<u16>,
+    model: Option<String>,
+    ctx_size: Option<String>,
+    max_replans: u32,
+    hitl_mode: HitlMode,
+) -> Result<()> {
+    let run = ctx
+        .orchestrator_repo
+        .get_run(run_id)
+        .await
+        .context("failed to load run from database")?
+        .ok_or_else(|| anyhow!("run '{run_id}' not found"))?;
+
+    let graph_json = run
+        .graph_json
+        .as_deref()
+        .ok_or_else(|| anyhow!("run '{run_id}' has no saved graph — cannot resume"))?;
+
+    let mut graph: gglib_core::domain::orchestrator::task_graph::TaskGraph =
+        serde_json::from_str(graph_json).context("failed to deserialize saved graph")?;
+
+    // Reset non-Done nodes so the executor re-runs them.
+    for node in graph.nodes.values_mut() {
+        if node.status != NodeStatus::Done {
+            node.status = NodeStatus::Pending;
+        }
+    }
+
+    let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
+
+    let config = OrchestratorConfig {
+        max_replans,
+        hitl_mode,
+        approval_registry: Some(
+            Arc::clone(&ctx.approval_registry) as Arc<dyn OrchestratorApprovalRegistryPort>
+        ),
+        repository: Some(Arc::clone(&ctx.orchestrator_repo) as Arc<dyn OrchestratorRepositoryPort>),
+        run_id: Some(run_id.to_owned()),
+        graph_override: Some(graph),
+        ..OrchestratorConfig::default()
+    };
+
+    eprintln!("{}  Resuming run {}{}", style::INFO, run_id, style::RESET);
+
+    let (tx, mut rx) = mpsc::channel::<OrchestratorEvent>(ORCHESTRATOR_EVENT_CHANNEL_CAPACITY);
+    let approval_registry = Arc::clone(&ctx.approval_registry);
+    let run_handle = {
+        let llm = ports.llm;
+        let tool_executor = ports.tool_executor;
+        let goal_owned = run.goal.clone();
+        tokio::spawn(async move { execute(&goal_owned, &[], llm, tool_executor, config, tx).await })
+    };
+
+    while let Some(event) = rx.recv().await {
+        render_event(&event, &approval_registry).await;
+    }
+
+    stop_server(ctx, &handle).await;
+
+    match run_handle.await {
+        Err(e) => Err(anyhow!("orchestrator task panicked: {e}")),
+        Ok(Err(e)) => Err(anyhow!("{e}")),
+        Ok(Ok(())) => Ok(()),
+    }
+}
+
+/// Render a single [`OrchestratorEvent`] to the terminal.
+///
+/// For `AwaitingApproval` events, prompts the user interactively and
+/// resolves the approval via the registry.
+async fn render_event(
+    event: &OrchestratorEvent,
+    approval_registry: &Arc<gglib_app_services::OrchestratorApprovalRegistry>,
+) {
+    match event {
+        OrchestratorEvent::PlanProposed { graph } => {
+            style::print_info_banner("Orchestrate", "\u{1f5fa}\u{fe0f}");
+            eprintln!(
+                "  {}Plan proposed:{} {} node(s) for goal: {}",
+                style::BOLD,
+                style::RESET,
+                graph.nodes.len(),
+                graph.goal
+            );
+            style::print_banner_close();
+        }
+        OrchestratorEvent::ReplanAttempt { attempt, reason } => {
+            eprintln!(
+                "{}  ↻ Replanning (attempt {attempt}): {reason}{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        OrchestratorEvent::PlanApproved => {
+            eprintln!(
+                "{}  ✓ Plan approved — starting execution{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        OrchestratorEvent::PlanRejected { reason } => {
+            eprintln!(
+                "{}  ✗ Plan rejected{}{}",
+                style::DANGER,
+                reason
+                    .as_deref()
+                    .map(|r| format!(": {r}"))
+                    .unwrap_or_default(),
+                style::RESET
+            );
+        }
+        OrchestratorEvent::AwaitingApproval { approval_id, kind } => {
+            prompt_and_resolve(approval_id, kind, approval_registry).await;
+        }
+        OrchestratorEvent::NodeStarted {
+            node_id,
+            goal: node_goal,
+        } => {
+            eprintln!(
+                "\n{}[{}]{} {}",
+                style::INFO,
+                node_id,
+                style::RESET,
+                node_goal
+            );
+        }
+        OrchestratorEvent::NodeTextDelta { delta, .. } => {
+            eprint!("{delta}");
+        }
+        OrchestratorEvent::NodeReasoningDelta { node_id, delta } => {
+            eprint!("{}[{node_id}]<think> {delta}{}", style::DIM, style::RESET);
+        }
+        OrchestratorEvent::NodeToolCallStart {
+            node_id,
+            display_name,
+            args_summary,
+            ..
+        } => {
+            eprintln!(
+                "\n{}[{node_id}] ⚙ {}  {}{}",
+                style::DIM,
+                display_name,
+                args_summary.as_deref().unwrap_or(""),
+                style::RESET
+            );
+        }
+        OrchestratorEvent::NodeToolCallComplete {
+            node_id,
+            display_name,
+            duration_display,
+            ..
+        } => {
+            eprintln!(
+                "{}[{node_id}] ✓ {}  {}{}",
+                style::DIM,
+                display_name,
+                duration_display,
+                style::RESET
+            );
+        }
+        OrchestratorEvent::NodeSystemWarning {
+            node_id, message, ..
+        } => {
+            eprintln!(
+                "{}[{node_id}] ⚠ {}{}",
+                style::WARNING,
+                message,
+                style::RESET
+            );
+        }
+        OrchestratorEvent::NodeCompacting { node_id } => {
+            eprintln!(
+                "\n{}[{node_id}] compacting output…{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        OrchestratorEvent::NodeComplete { node_id, .. } => {
+            eprintln!("{}[{node_id}] ✓ complete{}", style::SUCCESS, style::RESET);
+        }
+        OrchestratorEvent::NodeFailed { node_id, error } => {
+            eprintln!(
+                "{}[{node_id}] ✗ failed: {error}{}",
+                style::DANGER,
+                style::RESET
+            );
+        }
+        OrchestratorEvent::SynthesisStart => {
+            eprintln!("\n{}─── Synthesis ───{}", style::BOLD, style::RESET);
+        }
+        OrchestratorEvent::SynthesisTextDelta { delta } => {
+            eprint!("{delta}");
+        }
+        OrchestratorEvent::SynthesisComplete { .. } => {
+            eprintln!();
+        }
+        OrchestratorEvent::OrchestratorComplete { answer } => {
+            eprintln!("\n{}─── Final Answer ───{}", style::BOLD, style::RESET);
+            println!("{answer}");
+        }
+        OrchestratorEvent::OrchestratorError { message } => {
+            eprintln!("{}Error: {message}{}", style::DANGER, style::RESET);
+        }
+        OrchestratorEvent::NodeProgress { .. } | OrchestratorEvent::SynthesisProgress { .. } => {}
+    }
+}
+
+/// Prompt the user for an approval decision and resolve it in the registry.
+async fn prompt_and_resolve(
+    approval_id: &str,
+    kind: &ApprovalKind,
+    registry: &Arc<gglib_app_services::OrchestratorApprovalRegistry>,
+) {
+    let description = match kind {
+        ApprovalKind::Plan => "the proposed plan".to_owned(),
+        ApprovalKind::Node { node_id } => format!("node '{node_id}'"),
+        ApprovalKind::Tool { node_id, tool_name } => {
+            format!("tool call '{tool_name}' in node '{node_id}'")
+        }
+    };
+
+    eprintln!(
+        "\n{}  ⏸  Awaiting approval for {description}{}",
+        style::WARNING,
+        style::RESET
+    );
+    eprintln!("  [y] approve  [n] reject  (Enter = approve)");
+    eprint!("  Decision: ");
+
+    let input = tokio::task::spawn_blocking(|| {
+        let mut buf = String::new();
+        let _ = std::io::stdin().read_line(&mut buf);
+        buf.trim().to_lowercase()
+    })
+    .await
+    .unwrap_or_default();
+
+    let decision = match input.as_str() {
+        "n" | "no" | "reject" => {
+            eprint!("  Rejection reason (optional): ");
+            let reason = tokio::task::spawn_blocking(|| {
+                let mut buf = String::new();
+                let _ = std::io::stdin().read_line(&mut buf);
+                buf.trim().to_owned()
+            })
+            .await
+            .unwrap_or_default();
+            let reason = if reason.is_empty() {
+                None
+            } else {
+                Some(reason)
+            };
+            ApprovalDecision::Reject(reason.unwrap_or_else(|| "rejected by user".to_owned()))
+        }
+        _ => ApprovalDecision::Approve,
+    };
+
+    registry.resolve(approval_id, decision);
+}
 
 async fn init_session(
     ctx: &CliContext,

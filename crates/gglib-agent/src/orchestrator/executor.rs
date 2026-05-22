@@ -42,9 +42,15 @@ use std::sync::Arc;
 use tokio::sync::{Semaphore, mpsc};
 use tokio::task::JoinSet;
 
-use gglib_core::domain::orchestrator::events::OrchestratorEvent;
+use gglib_core::domain::orchestrator::events::{ApprovalKind, OrchestratorEvent};
+use gglib_core::domain::orchestrator::run::{
+    OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus,
+};
 use gglib_core::domain::orchestrator::task_graph::{HitlMode, NodeId, TaskGraph};
-use gglib_core::ports::{AgentLoopPort, LlmCompletionPort, ToolExecutorPort};
+use gglib_core::ports::{
+    AgentLoopPort, ApprovalDecision, LlmCompletionPort, OrchestratorApprovalRegistryPort,
+    OrchestratorRepositoryPort, ToolExecutorPort,
+};
 use gglib_core::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, ToolDefinition,
 };
@@ -60,7 +66,6 @@ use super::synthesis::run_synthesis;
 // =============================================================================
 
 /// Tuning parameters for a single orchestrator execution run.
-#[derive(Debug, Clone)]
 pub struct OrchestratorConfig {
     /// Maximum number of director replan attempts after the first.
     ///
@@ -74,11 +79,30 @@ pub struct OrchestratorConfig {
     pub max_worker_concurrency: usize,
 
     /// Human-in-the-loop gate policy.
-    ///
-    /// Phase C always uses [`HitlMode::None`] (auto-approve).  The field
-    /// exists so Phase D can pass `ApprovePlan` or `ApproveEachNode` without
-    /// changing the function signature.
     pub hitl_mode: HitlMode,
+
+    // ── Phase D additions ─────────────────────────────────────────────────
+    /// Process-local approval registry for parking HITL gates.
+    ///
+    /// If `None`, all gates are auto-approved (backward-compatible).
+    pub approval_registry: Option<Arc<dyn OrchestratorApprovalRegistryPort>>,
+
+    /// Repository for persisting run records and events.
+    ///
+    /// If `None`, persistence is skipped (backward-compatible).
+    pub repository: Option<Arc<dyn OrchestratorRepositoryPort>>,
+
+    /// Explicit run id.  When set, no new run record is created; the caller
+    /// is responsible for having created the run in the repository already.
+    ///
+    /// Used by the resume path.
+    pub run_id: Option<String>,
+
+    /// Pre-existing graph to use instead of calling the director.
+    ///
+    /// When set, planning is skipped and execution resumes from the remaining
+    /// `Pending` nodes.
+    pub graph_override: Option<TaskGraph>,
 }
 
 impl Default for OrchestratorConfig {
@@ -87,6 +111,10 @@ impl Default for OrchestratorConfig {
             max_replans: 2,
             max_worker_concurrency: 3,
             hitl_mode: HitlMode::None,
+            approval_registry: None,
+            repository: None,
+            run_id: None,
+            graph_override: None,
         }
     }
 }
@@ -117,6 +145,22 @@ pub enum ExecuteError {
         /// The failing node id.
         node_id: String,
         /// Error description.
+        reason: String,
+    },
+
+    /// The plan was rejected by a human reviewer.
+    #[error("plan rejected: {reason}")]
+    PlanRejected {
+        /// Optional user-provided reason.
+        reason: String,
+    },
+
+    /// A specific node was rejected by a human reviewer.
+    #[error("node '{node_id}' rejected: {reason}")]
+    NodeRejected {
+        /// The rejected node.
+        node_id: String,
+        /// Optional user-provided reason.
         reason: String,
     },
 }
@@ -158,6 +202,7 @@ impl From<CompactionError> for ExecuteError {
 /// * `tool_executor` — Tool executor shared across all workers.
 /// * `config` — Execution tuning parameters.
 /// * `tx` — Channel to send orchestrator events on.
+#[allow(clippy::too_many_lines, clippy::let_and_return)]
 pub async fn execute(
     goal: &str,
     tools: &[ToolDefinition],
@@ -166,43 +211,218 @@ pub async fn execute(
     config: OrchestratorConfig,
     tx: mpsc::Sender<OrchestratorEvent>,
 ) -> Result<(), ExecuteError> {
-    // ── 1. Planning ──────────────────────────────────────────────────────────
-    let graph = plan(
-        goal,
-        tools,
-        Arc::clone(&llm),
-        config.hitl_mode.clone(),
-        config.max_replans,
-        Some(tx.clone()),
-    )
-    .await
-    .map_err(ExecuteError::Plan)?;
+    // ── Run ID + persistence bootstrap ───────────────────────────────────────
+    let run_id = config
+        .run_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-    let _ = tx
-        .send(OrchestratorEvent::PlanProposed {
-            graph: graph.clone(),
-        })
-        .await;
-    let _ = tx.send(OrchestratorEvent::PlanApproved).await;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    if config.repository.is_some() && config.run_id.is_none() {
+        // Only create a new record if the caller didn't supply an existing run_id.
+        let run = OrchestratorRun {
+            id: run_id.clone(),
+            goal: goal.to_string(),
+            graph_json: None,
+            status: OrchestratorRunStatus::Running,
+            hitl_mode: config.hitl_mode.clone(),
+            conversation_id: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        if let Some(repo) = &config.repository {
+            if let Err(e) = repo.create_run(run).await {
+                tracing::warn!("orchestrator: failed to create run record: {e}");
+            }
+        }
+    }
+
+    // Helper to persist a run event (best-effort — never aborts execution).
+    let mut event_seq: i64 = 0;
+    let persist_event = |repo: &Option<Arc<dyn OrchestratorRepositoryPort>>,
+                         run_id: &str,
+                         seq: &mut i64,
+                         event: &OrchestratorEvent| {
+        let event_json = serde_json::to_string(event).unwrap_or_default();
+        let ev = OrchestratorRunEvent {
+            run_id: run_id.to_string(),
+            seq: *seq,
+            event_json,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        };
+        *seq += 1;
+        (repo.clone(), ev)
+    };
+
+    // ── 1. Planning (or graph override for resume) ────────────────────────────
+    let graph = if let Some(override_graph) = config.graph_override.clone() {
+        // Resume path: skip the director entirely.
+        let _ = tx
+            .send(OrchestratorEvent::PlanProposed {
+                graph: override_graph.clone(),
+            })
+            .await;
+        let _ = tx.send(OrchestratorEvent::PlanApproved).await;
+        override_graph
+    } else {
+        let g = plan(
+            goal,
+            tools,
+            Arc::clone(&llm),
+            config.hitl_mode.clone(),
+            config.max_replans,
+            Some(tx.clone()),
+        )
+        .await
+        .map_err(ExecuteError::Plan)?;
+
+        let _ = tx
+            .send(OrchestratorEvent::PlanProposed { graph: g.clone() })
+            .await;
+
+        // ── 1a. Plan HITL gate ────────────────────────────────────────────────
+        let approved_graph = if config.hitl_mode >= HitlMode::ApprovePlan {
+            if let Some(registry) = &config.approval_registry {
+                let approval_id = uuid::Uuid::new_v4().to_string();
+                let (tx_approval, rx_approval) =
+                    tokio::sync::oneshot::channel::<ApprovalDecision>();
+                registry.register(approval_id.clone(), tx_approval);
+
+                let event = OrchestratorEvent::AwaitingApproval {
+                    approval_id: approval_id.clone(),
+                    kind: ApprovalKind::Plan,
+                };
+                let _ = tx.send(event.clone()).await;
+                let (repo_clone, ev) =
+                    persist_event(&config.repository, &run_id, &mut event_seq, &event);
+                if let Some(repo) = &repo_clone {
+                    if let Err(e) = repo.append_event(ev).await {
+                        tracing::warn!("orchestrator: failed to persist event: {e}");
+                    }
+                    if let Err(e) = repo
+                        .update_run_status(&run_id, OrchestratorRunStatus::AwaitingApproval)
+                        .await
+                    {
+                        tracing::warn!("orchestrator: failed to update run status: {e}");
+                    }
+                }
+
+                match rx_approval.await {
+                    Ok(ApprovalDecision::Approve) => {
+                        let _ = tx.send(OrchestratorEvent::PlanApproved).await;
+                        if let Some(repo) = &config.repository {
+                            let _ = repo
+                                .update_run_status(&run_id, OrchestratorRunStatus::Running)
+                                .await;
+                        }
+                        g.clone()
+                    }
+                    Ok(ApprovalDecision::ApproveWithEdits(edited)) => {
+                        let _ = tx.send(OrchestratorEvent::PlanApproved).await;
+                        if let Some(repo) = &config.repository {
+                            if let Ok(json) = serde_json::to_string(&*edited) {
+                                let _ = repo.update_graph(&run_id, &json).await;
+                            }
+                            let _ = repo
+                                .update_run_status(&run_id, OrchestratorRunStatus::Running)
+                                .await;
+                        }
+                        *edited
+                    }
+                    Ok(ApprovalDecision::Reject(reason)) => {
+                        let reject_event = OrchestratorEvent::PlanRejected {
+                            reason: Some(reason.clone()),
+                        };
+                        let _ = tx.send(reject_event).await;
+                        if let Some(repo) = &config.repository {
+                            let _ = repo
+                                .update_run_status(&run_id, OrchestratorRunStatus::Failed)
+                                .await;
+                        }
+                        let _ = tx
+                            .send(OrchestratorEvent::OrchestratorError {
+                                message: format!("plan rejected: {reason}"),
+                            })
+                            .await;
+                        return Err(ExecuteError::PlanRejected { reason });
+                    }
+                    Err(_) => {
+                        // Registry dropped — treat as rejection (process restart).
+                        if let Some(repo) = &config.repository {
+                            let _ = repo
+                                .update_run_status(&run_id, OrchestratorRunStatus::Interrupted)
+                                .await;
+                        }
+                        return Err(ExecuteError::PlanRejected {
+                            reason: "approval channel closed".into(),
+                        });
+                    }
+                }
+            } else {
+                // No registry — auto-approve.
+                let _ = tx.send(OrchestratorEvent::PlanApproved).await;
+                g.clone()
+            }
+        } else {
+            let _ = tx.send(OrchestratorEvent::PlanApproved).await;
+            g.clone()
+        };
+
+        approved_graph
+    };
+
+    // Persist the graph after plan approval.
+    if let Some(repo) = &config.repository {
+        if let Ok(json) = serde_json::to_string(&graph) {
+            if let Err(e) = repo.update_graph(&run_id, &json).await {
+                tracing::warn!("orchestrator: failed to persist graph: {e}");
+            }
+        }
+    }
 
     // ── 2. Topological wave execution ────────────────────────────────────────
+    // For resume: pre-populate `completed` with Done nodes.
+    let pre_completed: HashSet<NodeId> = graph
+        .nodes
+        .iter()
+        .filter(|(_, n)| n.status == gglib_core::domain::orchestrator::task_graph::NodeStatus::Done)
+        .map(|(id, _)| id.clone())
+        .collect();
+
     let result = run_wave_loop(
         goal,
         &graph,
+        pre_completed,
         Arc::clone(&llm),
         Arc::clone(&tool_executor),
         &config,
+        &run_id,
+        &mut event_seq,
         &tx,
     )
     .await;
 
     match result {
         Ok(compacted) => {
+            if let Some(repo) = &config.repository {
+                if let Ok(json) = serde_json::to_string(&graph) {
+                    let _ = repo.update_graph(&run_id, &json).await;
+                }
+                let _ = repo
+                    .update_run_status(&run_id, OrchestratorRunStatus::Completed)
+                    .await;
+            }
             // ── 3. Synthesis ─────────────────────────────────────────────────
             run_synthesis(&graph, &compacted, &llm, &tool_executor, &tx).await;
             Ok(())
         }
         Err(e) => {
+            if let Some(repo) = &config.repository {
+                let _ = repo
+                    .update_run_status(&run_id, OrchestratorRunStatus::Failed)
+                    .await;
+            }
             let _ = tx
                 .send(OrchestratorEvent::OrchestratorError {
                     message: e.to_string(),
@@ -221,22 +441,94 @@ pub async fn execute(
 ///
 /// Returns a map of `NodeId → compacted_output` for every successfully
 /// completed node, or an [`ExecuteError`] on the first failure.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn run_wave_loop(
     _goal: &str,
     graph: &TaskGraph,
+    mut completed: HashSet<NodeId>,
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
     config: &OrchestratorConfig,
+    run_id: &str,
+    event_seq: &mut i64,
     tx: &mpsc::Sender<OrchestratorEvent>,
 ) -> Result<HashMap<NodeId, String>, ExecuteError> {
     let sem = Arc::new(Semaphore::new(config.max_worker_concurrency));
-    let mut completed: HashSet<NodeId> = HashSet::new();
     let mut compacted: HashMap<NodeId, String> = HashMap::new();
 
     loop {
         let ready = graph.ready_nodes(&completed);
         if ready.is_empty() {
             break;
+        }
+
+        // ── Node HITL gates (serial, before spawning the wave) ────────────────
+        if config.hitl_mode >= HitlMode::ApproveEachNode {
+            if let Some(registry) = &config.approval_registry {
+                for node_id in &ready {
+                    let approval_id = uuid::Uuid::new_v4().to_string();
+                    let (tx_approval, rx_approval) =
+                        tokio::sync::oneshot::channel::<ApprovalDecision>();
+                    registry.register(approval_id.clone(), tx_approval);
+
+                    let node_goal = graph.nodes[node_id].goal.clone();
+                    let event = OrchestratorEvent::AwaitingApproval {
+                        approval_id: approval_id.clone(),
+                        kind: ApprovalKind::Node {
+                            node_id: node_id.0.clone(),
+                        },
+                    };
+                    let _ = tx.send(event.clone()).await;
+                    if let Some(repo) = &config.repository {
+                        let ev = OrchestratorRunEvent {
+                            run_id: run_id.to_string(),
+                            seq: *event_seq,
+                            event_json: serde_json::to_string(&event).unwrap_or_default(),
+                            created_at: chrono::Utc::now().to_rfc3339(),
+                        };
+                        *event_seq += 1;
+                        if let Err(e) = repo.append_event(ev).await {
+                            tracing::warn!("orchestrator: persist event error: {e}");
+                        }
+                        if let Err(e) = repo
+                            .update_run_status(run_id, OrchestratorRunStatus::AwaitingApproval)
+                            .await
+                        {
+                            tracing::warn!("orchestrator: status update error: {e}");
+                        }
+                    }
+
+                    match rx_approval.await {
+                        Ok(ApprovalDecision::Approve | ApprovalDecision::ApproveWithEdits(_)) => {
+                            if let Some(repo) = &config.repository {
+                                let _ = repo
+                                    .update_run_status(run_id, OrchestratorRunStatus::Running)
+                                    .await;
+                            }
+                        }
+                        Ok(ApprovalDecision::Reject(reason)) => {
+                            let id_str = node_id.0.clone();
+                            let _ = tx
+                                .send(OrchestratorEvent::NodeFailed {
+                                    node_id: id_str.clone(),
+                                    error: format!("rejected: {reason}"),
+                                })
+                                .await;
+                            return Err(ExecuteError::NodeRejected {
+                                node_id: id_str,
+                                reason,
+                            });
+                        }
+                        Err(_) => {
+                            return Err(ExecuteError::NodeRejected {
+                                node_id: node_id.0.clone(),
+                                reason: "approval channel closed".into(),
+                            });
+                        }
+                    }
+                    drop(node_goal); // used only for future context attach
+                }
+            }
         }
 
         // Spawn all ready nodes concurrently, bounded by the semaphore.

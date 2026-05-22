@@ -12,7 +12,13 @@
  */
 
 import { getAuthenticatedFetchConfig } from '../transport/api/client';
-import type { OrchestratorEvent } from '../../types/orchestrator';
+import type {
+  ApprovalDecisionPayload,
+  OrchestratorEvent,
+  OrchestratorRun,
+  OrchestratorRunEvent,
+  OrchestratorRunStatus,
+} from '../../types/orchestrator';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -29,6 +35,7 @@ export interface RunOrchestratorParams {
   model?: string;
   max_replans?: number;
   max_worker_concurrency?: number;
+  hitl_mode?: string;
 }
 
 // ─── Client ──────────────────────────────────────────────────────────────────
@@ -143,6 +150,138 @@ export async function runOrchestrator(
     const parts = buffer.split('\n\n');
     buffer = parts.pop() ?? '';
 
+    for (const part of parts) {
+      for (const line of part.split('\n')) {
+        if (line.startsWith('data:')) {
+          const json = line.slice(5).trim();
+          if (json) {
+            try {
+              onEvent(JSON.parse(json) as OrchestratorEvent);
+            } catch {
+              // skip malformed events
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// ─── Phase D: HITL + Runs ────────────────────────────────────────────────────
+
+/**
+ * POST /api/orchestrator/approve/{approvalId}
+ *
+ * Resolve a pending HITL approval gate.
+ */
+export async function approveOrchestrator(
+  approvalId: string,
+  payload: ApprovalDecisionPayload,
+): Promise<void> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(
+    `${baseUrl}/api/orchestrator/approve/${encodeURIComponent(approvalId)}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers as Record<string, string>),
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ?? `Approve request failed: ${response.status}`,
+    );
+  }
+}
+
+/**
+ * GET /api/orchestrator/runs[?status=<status>]
+ *
+ * List orchestrator runs, optionally filtered by status.
+ */
+export async function listOrchestratorRuns(
+  status?: OrchestratorRunStatus,
+): Promise<OrchestratorRun[]> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const url = status
+    ? `${baseUrl}/api/orchestrator/runs?status=${encodeURIComponent(status)}`
+    : `${baseUrl}/api/orchestrator/runs`;
+  const response = await fetch(url, { headers: headers as Record<string, string> });
+  if (!response.ok) {
+    throw new Error(`List runs failed: ${response.status}`);
+  }
+  const data = (await response.json()) as { runs: OrchestratorRun[] };
+  return data.runs;
+}
+
+/**
+ * GET /api/orchestrator/runs/{id}
+ *
+ * Get a single run with its events.
+ */
+export async function getOrchestratorRun(
+  id: string,
+): Promise<{ run: OrchestratorRun; events: OrchestratorRunEvent[] }> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(
+    `${baseUrl}/api/orchestrator/runs/${encodeURIComponent(id)}`,
+    { headers: headers as Record<string, string> },
+  );
+  if (!response.ok) {
+    throw new Error(`Get run failed: ${response.status}`);
+  }
+  return response.json() as Promise<{ run: OrchestratorRun; events: OrchestratorRunEvent[] }>;
+}
+
+/**
+ * POST /api/orchestrator/runs/{id}/resume
+ *
+ * Resume a previously interrupted or awaiting-approval run as an SSE stream.
+ */
+export async function resumeOrchestratorRun(
+  id: string,
+  port: number,
+  model?: string,
+  onEvent?: (event: OrchestratorEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(
+    `${baseUrl}/api/orchestrator/runs/${encodeURIComponent(id)}/resume`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers as Record<string, string>),
+      },
+      body: JSON.stringify({ port, model }),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ?? `Resume failed: ${response.status}`,
+    );
+  }
+  if (!onEvent) return;
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body for resume SSE stream');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() ?? '';
     for (const part of parts) {
       for (const line of part.split('\n')) {
         if (line.startsWith('data:')) {
