@@ -12,12 +12,15 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, ProxyDeps, ProxyOps,
-    ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
+    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, OrchestratorApprovalRegistry,
+    ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
-use gglib_core::ports::{AppEventEmitter, HfClientPort, ModelRepository, ProcessRunner};
+use gglib_core::ports::{
+    AppEventEmitter, HfClientPort, ModelRepository, OrchestratorRepositoryPort, ProcessRunner,
+};
 use gglib_core::services::AppCore;
+use gglib_db::SqliteOrchestratorRepository;
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 use reqwest::Client;
@@ -131,6 +134,10 @@ pub struct AxumContext {
     /// them — preventing resource exhaustion from parallel loops that each
     /// consume LLM inference time and tool I/O.
     pub agent_semaphore: Arc<tokio::sync::Semaphore>,
+    /// Process-local registry for HITL approval gates.
+    pub approval_registry: Arc<OrchestratorApprovalRegistry>,
+    /// Repository for persisting orchestrator run records and events.
+    pub orchestrator_repo: Arc<SqliteOrchestratorRepository>,
 }
 
 /// Bootstrap the Axum server with all services.
@@ -173,6 +180,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         gguf_parser,
         repos,
         model_registrar: _,
+        pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
     // 3. Bootstrap capabilities for existing models (idempotent; fine to run
@@ -266,6 +274,13 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         }
     });
 
+    // Startup hook: mark any runs that were in-flight when the process last
+    // died as Interrupted, so they appear correctly in the runs list.
+    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool.clone()));
+    if let Err(e) = orchestrator_repo.mark_interrupted_runs().await {
+        tracing::warn!("orchestrator: failed to mark interrupted runs on startup: {e}");
+    }
+
     Ok(AxumContext {
         models,
         servers,
@@ -283,6 +298,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         agent_semaphore: Arc::new(tokio::sync::Semaphore::new(
             config.max_concurrent_agent_loops,
         )),
+        approval_registry: Arc::new(OrchestratorApprovalRegistry::new()),
+        orchestrator_repo,
     })
 }
 

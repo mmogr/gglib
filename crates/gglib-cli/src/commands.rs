@@ -212,7 +212,7 @@ pub enum Commands {
     #[command(display_order = 14)]
     Orchestrate {
         /// High-level goal to plan and execute
-        goal: String,
+        goal: Option<String>,
         /// Model name or ID (uses default model when omitted)
         #[arg(short, long)]
         model: Option<String>,
@@ -222,6 +222,18 @@ pub enum Commands {
         /// Maximum replan attempts after the first
         #[arg(long, default_value = "2")]
         max_replans: u32,
+        /// Enable human-in-the-loop approval gates for plan and node execution.
+        ///
+        /// When set, the CLI will pause at plan and/or node boundaries and
+        /// prompt `[y]es / [n]o / [e]dit` before proceeding.
+        #[arg(long, value_name = "MODE", default_value = "none")]
+        hitl: Option<String>,
+        /// Resume an interrupted or awaiting-approval run by its ID.
+        ///
+        /// When provided, `goal` is ignored and the run is loaded from the
+        /// database and re-executed from the last checkpoint.
+        #[arg(long, value_name = "RUN_ID")]
+        resume: Option<String>,
         #[command(flatten)]
         context: ContextArgs,
     },

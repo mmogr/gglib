@@ -116,6 +116,8 @@ fn main() {
                 sse: Arc::new(gglib_axum::sse::SseBroadcaster::with_defaults()),
                 http_client: reqwest::Client::new(),
                 agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
+                approval_registry: ctx.approval_registry.clone(),
+                orchestrator_repo: ctx.orchestrator_repo.clone(),
             };
 
             // Start embedded API server with auth and ephemeral port

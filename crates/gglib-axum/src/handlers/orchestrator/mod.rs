@@ -17,7 +17,10 @@
 //! On failure the stream emits [`OrchestratorEvent::OrchestratorError`] then
 //! closes.
 
+pub mod approve;
+pub mod resume;
 pub mod run;
+pub mod runs;
 
 use std::convert::Infallible;
 

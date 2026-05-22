@@ -15,6 +15,7 @@ gglib-agent = { path = "../gglib-agent" }
 gglib-app-services = { path = "../gglib-app-services" }
 gglib-bootstrap = { path = "../gglib-bootstrap" }
 gglib-core = { path = "../gglib-core" }
+gglib-db = { path = "../gglib-db" }
 gglib-gguf = { path = "../gglib-gguf" }  # GGUF_BOOTSTRAP_EXCEPTION: ToolSupportDetector
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-runtime = { path = "../gglib-runtime", features = ["cli"] }

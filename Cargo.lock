@@ -1849,9 +1849,12 @@ version = "0.7.5"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "futures-core",
  "futures-util",
+ "gglib-app-services",
  "gglib-core",
+ "gglib-db",
  "gglib-runtime",
  "reqwest 0.13.3",
  "serde",
@@ -1859,6 +1862,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1894,6 +1898,7 @@ name = "gglib-app-services"
 version = "0.7.5"
 dependencies = [
  "async-trait",
+ "dashmap",
  "dirs",
  "futures-util",
  "gglib-core",
@@ -1925,6 +1930,7 @@ dependencies = [
  "gglib-app-services",
  "gglib-bootstrap",
  "gglib-core",
+ "gglib-db",
  "gglib-gguf",
  "gglib-mcp",
  "gglib-runtime",
@@ -1958,6 +1964,7 @@ dependencies = [
  "gglib-gguf",
  "gglib-hf",
  "gglib-runtime",
+ "sqlx",
  "tempfile",
  "tokio",
  "tracing",
@@ -1982,10 +1989,12 @@ dependencies = [
  "crossterm",
  "dotenvy",
  "gglib-agent",
+ "gglib-app-services",
  "gglib-axum",
  "gglib-bootstrap",
  "gglib-build-info",
  "gglib-core",
+ "gglib-db",
  "gglib-download",
  "gglib-hf",
  "gglib-mcp",
@@ -2184,6 +2193,7 @@ dependencies = [
  "gglib-app-services",
  "gglib-bootstrap",
  "gglib-core",
+ "gglib-db",
  "gglib-gguf",
  "gglib-mcp",
  "gglib-runtime",

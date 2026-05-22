@@ -6,6 +6,7 @@ use gglib_core::ports::{
     DownloadManagerPort, GgufParserPort, HfClientPort, ModelRegistrarPort, ProcessRunner, Repos,
 };
 use gglib_core::services::AppCore;
+use sqlx::SqlitePool;
 
 /// Fully wired infrastructure produced by [`crate::CoreBootstrap::build`].
 ///
@@ -30,4 +31,10 @@ pub struct BuiltCore {
     /// Model registrar shared between the download manager and direct
     /// registration code paths (e.g., CLI `model add` command).
     pub model_registrar: Arc<dyn ModelRegistrarPort>,
+    /// Raw `SQLite` connection pool.
+    ///
+    /// Adapters that need to construct additional repositories (e.g., the
+    /// orchestrator repository in the Axum adapter) can use this pool
+    /// directly rather than re-opening the database.
+    pub pool: SqlitePool,
 }

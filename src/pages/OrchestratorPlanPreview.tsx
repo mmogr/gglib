@@ -10,8 +10,9 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
-import { planOrchestrator, runOrchestrator } from '../services/clients/orchestrator';
+import { approveOrchestrator, planOrchestrator, runOrchestrator } from '../services/clients/orchestrator';
 import type {
+  AwaitingApprovalEvent,
   NodeCompleteEvent,
   NodeCompactingEvent,
   NodeFailedEvent,
@@ -52,12 +53,20 @@ interface Props {
   onBack?: () => void;
 }
 
+interface PendingApproval {
+  approvalId: string;
+  description: string;
+  submitting: boolean;
+}
+
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OrchestratorPlanPreview({ onBack }: Props) {
   const [goal, setGoal] = useState('');
   const [port, setPort] = useState('9000');
   const [model, setModel] = useState('');
+  const [hitlMode, setHitlMode] = useState<string>('none');
 
   // Plan phase
   const [planning, setPlanning] = useState(false);
@@ -72,6 +81,7 @@ export default function OrchestratorPlanPreview({ onBack }: Props) {
   const [synthesisText, setSynthesisText] = useState('');
   const [synthesisComplete, setSynthesisComplete] = useState(false);
   const [finalAnswer, setFinalAnswer] = useState<string | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -148,9 +158,27 @@ export default function OrchestratorPlanPreview({ onBack }: Props) {
           goal: goal.trim(),
           port: parseInt(port, 10) || 9000,
           model: model.trim() || undefined,
+          hitl_mode: hitlMode !== 'none' ? hitlMode : undefined,
         },
         (event: OrchestratorEvent) => {
           switch (event.type) {
+            case 'awaiting_approval': {
+              const e = event as AwaitingApprovalEvent;
+              const kindDesc =
+                e.kind.kind === 'plan'
+                  ? 'the proposed plan'
+                  : e.kind.kind === 'node'
+                    ? `node '${e.kind.node_id}'`
+                    : `tool '${e.kind.tool_name}' in node '${e.kind.node_id}'`;
+              setPendingApproval({ approvalId: e.approval_id, description: kindDesc, submitting: false });
+              break;
+            }
+            case 'plan_approved':
+              setPendingApproval(null);
+              break;
+            case 'plan_rejected':
+              setPendingApproval(null);
+              break;
             case 'node_started': {
               const e = event as NodeStartedEvent;
               setNodeStates((prev) => ({
@@ -264,13 +292,38 @@ export default function OrchestratorPlanPreview({ onBack }: Props) {
     } finally {
       setExecuting(false);
     }
-  }, [goal, port, model, graph]);
+  }, [goal, port, model, graph, hitlMode]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
     setPlanning(false);
     setExecuting(false);
+    setPendingApproval(null);
   }, []);
+
+  const handleApprove = useCallback(async () => {
+    if (!pendingApproval) return;
+    setPendingApproval((p) => p && { ...p, submitting: true });
+    try {
+      await approveOrchestrator(pendingApproval.approvalId, { decision: 'approve' });
+      setPendingApproval(null);
+    } catch (err: unknown) {
+      setPendingApproval((p) => p && { ...p, submitting: false });
+      setExecError(err instanceof Error ? err.message : 'Approval failed');
+    }
+  }, [pendingApproval]);
+
+  const handleReject = useCallback(async () => {
+    if (!pendingApproval) return;
+    setPendingApproval((p) => p && { ...p, submitting: true });
+    try {
+      await approveOrchestrator(pendingApproval.approvalId, { decision: 'reject', reason: 'rejected by user' });
+      setPendingApproval(null);
+    } catch (err: unknown) {
+      setPendingApproval((p) => p && { ...p, submitting: false });
+      setExecError(err instanceof Error ? err.message : 'Rejection failed');
+    }
+  }, [pendingApproval]);
 
   const isRunning = planning || executing;
 
@@ -328,6 +381,20 @@ export default function OrchestratorPlanPreview({ onBack }: Props) {
               disabled={isRunning}
             />
           </label>
+          <label className="flex flex-col gap-xs text-sm text-text-secondary">
+            HITL mode
+            <select
+              value={hitlMode}
+              onChange={(e) => setHitlMode(e.target.value)}
+              className="px-sm py-[6px] rounded border border-border bg-background-input text-text text-sm w-[160px] disabled:opacity-60"
+              disabled={isRunning}
+            >
+              <option value="none">None (auto)</option>
+              <option value="approve_plan">Approve plan</option>
+              <option value="approve_each_node">Approve each node</option>
+              <option value="approve_tools">Approve tools</option>
+            </select>
+          </label>
         </div>
         <div className="flex gap-sm items-center">
           <button
@@ -358,6 +425,34 @@ export default function OrchestratorPlanPreview({ onBack }: Props) {
           )}
         </div>
       </form>
+
+      {/* HITL approval banner */}
+      {pendingApproval && (
+        <div className="flex items-start gap-base bg-warning-subtle border border-warning-border rounded px-base py-md mb-base text-sm text-warning">
+          <div className="flex-1">
+            <strong>Awaiting approval</strong>
+            <p className="mt-xs text-text">{pendingApproval.description}</p>
+          </div>
+          <div className="flex gap-sm">
+            <button
+              type="button"
+              onClick={handleApprove}
+              disabled={pendingApproval.submitting}
+              className="px-base py-xs rounded border-none bg-success text-white font-semibold cursor-pointer text-sm hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {pendingApproval.submitting ? 'Submitting…' : 'Approve'}
+            </button>
+            <button
+              type="button"
+              onClick={handleReject}
+              disabled={pendingApproval.submitting}
+              className="px-base py-xs rounded border-none bg-danger text-white font-semibold cursor-pointer text-sm hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Replan feedback */}
       {replans.length > 0 && (
