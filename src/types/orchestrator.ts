@@ -43,13 +43,40 @@ export interface TaskGraph {
  */
 export type OrchestratorEvent =
   | PlanProposedEvent
+  | PlanApprovedEvent
+  | PlanRejectedEvent
   | ReplanAttemptEvent
+  | NodeStartedEvent
+  | NodeTextDeltaEvent
+  | NodeReasoningDeltaEvent
+  | NodeProgressEvent
+  | NodeToolCallStartEvent
+  | NodeToolCallCompleteEvent
+  | NodeSystemWarningEvent
+  | NodeCompactingEvent
+  | NodeCompleteEvent
+  | NodeFailedEvent
+  | SynthesisStartEvent
+  | SynthesisProgressEvent
+  | SynthesisTextDeltaEvent
+  | SynthesisCompleteEvent
   | OrchestratorCompleteEvent
   | OrchestratorErrorEvent;
+
+// ─── Planning events ─────────────────────────────────────────────────────────
 
 export interface PlanProposedEvent {
   type: 'plan_proposed';
   graph: TaskGraph;
+}
+
+export interface PlanApprovedEvent {
+  type: 'plan_approved';
+}
+
+export interface PlanRejectedEvent {
+  type: 'plan_rejected';
+  reason?: string | null;
 }
 
 export interface ReplanAttemptEvent {
@@ -57,6 +84,101 @@ export interface ReplanAttemptEvent {
   attempt: number;
   reason: string;
 }
+
+// ─── Node lifecycle events ───────────────────────────────────────────────────
+
+export interface NodeStartedEvent {
+  type: 'node_started';
+  node_id: string;
+  goal: string;
+}
+
+export interface NodeTextDeltaEvent {
+  type: 'node_text_delta';
+  node_id: string;
+  delta: string;
+}
+
+export interface NodeReasoningDeltaEvent {
+  type: 'node_reasoning_delta';
+  node_id: string;
+  delta: string;
+}
+
+export interface NodeProgressEvent {
+  type: 'node_progress';
+  node_id: string;
+  processed: number;
+  total: number;
+  cached: number;
+  time_ms: number;
+}
+
+export interface NodeToolCallStartEvent {
+  type: 'node_tool_call_start';
+  node_id: string;
+  display_name: string;
+  args_summary: string;
+}
+
+export interface NodeToolCallCompleteEvent {
+  type: 'node_tool_call_complete';
+  node_id: string;
+  tool_name: string;
+  display_name: string;
+  duration_display: string;
+  result: unknown;
+}
+
+export interface NodeSystemWarningEvent {
+  type: 'node_system_warning';
+  node_id: string;
+  message: string;
+  suggested_action?: string | null;
+}
+
+export interface NodeCompactingEvent {
+  type: 'node_compacting';
+  node_id: string;
+}
+
+export interface NodeCompleteEvent {
+  type: 'node_complete';
+  node_id: string;
+  output_preview: string;
+}
+
+export interface NodeFailedEvent {
+  type: 'node_failed';
+  node_id: string;
+  error: string;
+}
+
+// ─── Synthesis events ─────────────────────────────────────────────────────────
+
+export interface SynthesisStartEvent {
+  type: 'synthesis_start';
+}
+
+export interface SynthesisProgressEvent {
+  type: 'synthesis_progress';
+  processed: number;
+  total: number;
+  cached: number;
+  time_ms: number;
+}
+
+export interface SynthesisTextDeltaEvent {
+  type: 'synthesis_text_delta';
+  delta: string;
+}
+
+export interface SynthesisCompleteEvent {
+  type: 'synthesis_complete';
+  content: string;
+}
+
+// ─── Terminal events ──────────────────────────────────────────────────────────
 
 export interface OrchestratorCompleteEvent {
   type: 'orchestrator_complete';
@@ -67,3 +189,4 @@ export interface OrchestratorErrorEvent {
   type: 'orchestrator_error';
   message: string;
 }
+
