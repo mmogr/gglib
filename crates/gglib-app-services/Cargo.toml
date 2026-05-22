@@ -17,9 +17,11 @@ gglib-core = { path = "../gglib-core" }
 gglib-download = { path = "../gglib-download" }
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-hf = { path = "../gglib-hf" }
+gglib-proxy = { path = "../gglib-proxy" }
 gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
 
 # Shared deps
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -24,7 +24,8 @@ use gglib_mcp::McpService;
 use crate::forward::forward_chat_completion;
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
-use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelsResponse};
+use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
+use crate::orchestrator_proxy::{OrchestratorDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]
@@ -41,6 +42,8 @@ pub(crate) struct AppState {
     pub(crate) sessions: SessionManager,
     /// Default context size when not specified in request.
     default_ctx: u64,
+    /// Orchestrator services for virtual model routing.
+    orchestrator: OrchestratorDeps,
 }
 
 /// Start the proxy server with a pre-bound listener.
@@ -54,6 +57,7 @@ pub(crate) struct AppState {
 /// * `runtime_port` - Port for managing model runtime
 /// * `catalog_port` - Port for listing and resolving models
 /// * `mcp` - MCP service for tool gateway
+/// * `orchestrator` - Orchestrator services for virtual model routing
 /// * `cancel` - Cancellation token for graceful shutdown
 ///
 /// # Returns
@@ -65,6 +69,7 @@ pub async fn serve(
     runtime_port: Arc<dyn ModelRuntimePort>,
     catalog_port: Arc<dyn ModelCatalogPort>,
     mcp: Arc<McpService>,
+    orchestrator: OrchestratorDeps,
     cancel: CancellationToken,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
@@ -80,6 +85,7 @@ pub async fn serve(
         mcp,
         sessions: SessionManager::new(),
         default_ctx,
+        orchestrator,
     };
 
     let app = Router::new()
@@ -109,12 +115,30 @@ async fn health_check() -> impl IntoResponse {
 }
 
 /// List all models from the catalog in OpenAI format.
+///
+/// Appends the three virtual orchestrator model entries after the catalog models.
 async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
     match state.catalog_port.list_models().await {
         Ok(models) => {
-            let response = ModelsResponse::from_summaries(models);
+            let mut response = ModelsResponse::from_summaries(models);
+            // Append virtual orchestrator models.
+            let virtuals: Vec<ModelInfo> = vec![
+                virtual_model_info(
+                    "gglib-orchestrator",
+                    "Auto mode — runs the full Director/Worker pipeline with no approval gates.",
+                ),
+                virtual_model_info(
+                    "gglib-orchestrator:interactive",
+                    "Interactive mode — pauses at the plan gate; resume by replying 'yes'.",
+                ),
+                virtual_model_info(
+                    "gglib-orchestrator:native",
+                    "Native mode — use POST /api/orchestrator/run for the full API.",
+                ),
+            ];
+            response.data.extend(virtuals);
             Json(response).into_response()
         }
         Err(e) => {
@@ -169,6 +193,11 @@ async fn chat_completions(
         num_ctx = ?num_ctx,
         "Processing chat completion request"
     );
+
+    // Intercept virtual orchestrator model names before forwarding.
+    if VIRTUAL_MODELS.contains(&model_name.as_str()) {
+        return handle_virtual_model(&state.orchestrator, &model_name, &body).await;
+    }
 
     // Ensure the model is running with specified context or default
     let target = match state
