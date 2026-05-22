@@ -249,10 +249,10 @@ async fn collect_sse_data(resp: reqwest::Response) -> Vec<String> {
         while let Some(pos) = buf.find("\n\n") {
             let frame = buf[..pos].trim().to_string();
             buf = buf[pos + 2..].to_string();
-            if let Some(data) = frame.strip_prefix("data: ") {
-                if data != "[DONE]" {
-                    frames.push(data.to_string());
-                }
+            if let Some(data) = frame.strip_prefix("data: ")
+                && data != "[DONE]"
+            {
+                frames.push(data.to_string());
             }
         }
     }
@@ -430,14 +430,11 @@ async fn test_auto_mode_streams_events_as_markdown() {
     );
 
     // The last data frame with a finish_reason must be "stop".
-    let stop_frame = frames
-        .iter()
-        .rev()
-        .find_map(|f| {
-            let v: Value = serde_json::from_str(f).ok()?;
-            let reason = v["choices"][0]["finish_reason"].as_str()?.to_string();
-            Some(reason)
-        });
+    let stop_frame = frames.iter().rev().find_map(|f| {
+        let v: Value = serde_json::from_str(f).ok()?;
+        let reason = v["choices"][0]["finish_reason"].as_str()?.to_string();
+        Some(reason)
+    });
     assert_eq!(
         stop_frame.as_deref(),
         Some("stop"),
