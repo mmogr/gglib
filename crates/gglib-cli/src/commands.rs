@@ -190,6 +190,24 @@ pub enum Commands {
         max_parallel: Option<usize>,
     },
 
+    /// Decompose a goal into a validated task graph (planning only, no execution)
+    #[command(display_order = 13)]
+    Plan {
+        /// High-level goal to decompose into a task graph
+        goal: String,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum replan attempts after the first
+        #[arg(long, default_value = "2")]
+        max_replans: u32,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+
     // ── Interfaces ──────────────────────────────────────────────────────
     /// Launch the Tauri desktop GUI
     #[command(display_order = 20)]

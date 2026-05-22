@@ -185,6 +185,16 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         }
 
         // ── GUI / web interfaces ────────────────────────────────────────────
+        Commands::Plan {
+            goal,
+            model,
+            port,
+            max_replans,
+            context,
+        } => {
+            handlers::plan::execute(ctx, &goal, port, model, context.ctx_size, max_replans).await?;
+        }
+
         Commands::Gui { dev } => {
             handlers::gui::execute(dev)?;
         }

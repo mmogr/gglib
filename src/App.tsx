@@ -16,6 +16,7 @@ import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
+import OrchestratorPlanPreview from "./pages/OrchestratorPlanPreview";
 
 /**
  * Inner app component that consumes ToastContext.
@@ -24,6 +25,15 @@ import { syncBuiltinTools } from "./services/tools";
 function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
+  const [showPlanPage, setShowPlanPage] = useState(
+    () => window.location.hash === '#plan'
+  );
+
+  useEffect(() => {
+    const onHashChange = () => setShowPlanPage(window.location.hash === '#plan');
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
   // Sidebar visibility (for menu toggle, currently not visually implemented)
   const [, setIsSidebarVisible] = useState(true);
   const { servers, loadServers, stopServer } = useServers();
@@ -166,12 +176,21 @@ function AppContent() {
           onRefreshServers={loadServers}
         />
         <div className="flex-1 min-h-0 overflow-hidden flex">
-          <ModelControlCenterPage
-            servers={servers}
-            loadServers={loadServers}
-            stopServer={stopServer}
-            onRegisterMenuActions={registerMenuActions}
-          />
+          {showPlanPage ? (
+            <OrchestratorPlanPreview
+              onBack={() => {
+                window.location.hash = '';
+                setShowPlanPage(false);
+              }}
+            />
+          ) : (
+            <ModelControlCenterPage
+              servers={servers}
+              loadServers={loadServers}
+              stopServer={stopServer}
+              onRegisterMenuActions={registerMenuActions}
+            />
+          )}
         </div>
         {isSettingsOpen && (
           <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
