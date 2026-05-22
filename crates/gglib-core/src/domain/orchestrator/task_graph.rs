@@ -383,7 +383,7 @@ impl TaskGraph {
         let mut map: HashMap<NodeId, TaskNode> = HashMap::with_capacity(nodes.len());
         for node in nodes {
             if map.contains_key(&node.id) {
-                return Err(TaskGraphError::DuplicateNodeId(node.id.0.clone()));
+                return Err(TaskGraphError::DuplicateNodeId(node.id.0));
             }
             map.insert(node.id.clone(), node);
         }
@@ -637,7 +637,7 @@ mod tests {
         TaskNode {
             id: NodeId(id.into()),
             goal: id.into(),
-            depends_on: deps.iter().map(|d| NodeId(d.to_string())).collect(),
+            depends_on: deps.iter().map(|d| NodeId((*d).to_string())).collect(),
             tool_allowlist: vec![],
             status: NodeStatus::Pending,
             output: None,

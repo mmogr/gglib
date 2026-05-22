@@ -131,7 +131,7 @@ pub enum OrchestratorEvent {
     },
 
     /// Incremental reasoning / chain-of-thought token from a worker node
-    /// (for models that expose CoT).
+    /// (for models that expose `CoT`).
     NodeReasoningDelta {
         /// Source node id.
         node_id: String,

@@ -108,6 +108,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
         // Council (multi-agent deliberation)
         .route("/council/suggest", post(handlers::council::suggest))
         .route("/council/run", post(handlers::council::run))
+        // Orchestrator (director planning)
+        .route("/orchestrator/plan", post(handlers::orchestrator::plan_sse))
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }

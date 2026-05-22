@@ -159,7 +159,7 @@ struct AssistantRaw(String);
 
 impl From<AssistantRaw> for gglib_core::AssistantContent {
     fn from(raw: AssistantRaw) -> Self {
-        gglib_core::AssistantContent {
+        Self {
             text: Some(raw.0),
             tool_calls: vec![],
         }
