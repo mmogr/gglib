@@ -45,8 +45,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
 use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use futures_util::StreamExt as _;
 use serde::Deserialize;
@@ -63,9 +63,7 @@ use gglib_core::domain::orchestrator::run::OrchestratorRunStatus;
 use gglib_core::domain::orchestrator::task_graph::{HitlMode, NodeStatus, TaskGraph};
 use gglib_core::ports::{OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort};
 
-use crate::models::{
-    ChatChunkChoice, ChatCompletionChunk, ChatDelta, ErrorResponse, ModelInfo,
-};
+use crate::models::{ChatChunkChoice, ChatCompletionChunk, ChatDelta, ErrorResponse, ModelInfo};
 
 // =============================================================================
 // Virtual model constants
@@ -192,32 +190,28 @@ pub(crate) async fn handle_virtual_model(
 ) -> Response {
     match model_name {
         VIRTUAL_MODEL_NATIVE => handle_native_mode(),
-        VIRTUAL_MODEL_AUTO => {
-            match serde_json::from_slice::<OrchestratorRequest>(body) {
-                Ok(req) => handle_auto_mode(deps, req).await,
-                Err(e) => (
-                    StatusCode::BAD_REQUEST,
-                    axum::Json(ErrorResponse::new(
-                        format!("Invalid request body: {e}"),
-                        "invalid_request",
-                    )),
-                )
-                    .into_response(),
-            }
-        }
-        VIRTUAL_MODEL_INTERACTIVE => {
-            match serde_json::from_slice::<OrchestratorRequest>(body) {
-                Ok(req) => handle_interactive_mode(deps, req).await,
-                Err(e) => (
-                    StatusCode::BAD_REQUEST,
-                    axum::Json(ErrorResponse::new(
-                        format!("Invalid request body: {e}"),
-                        "invalid_request",
-                    )),
-                )
-                    .into_response(),
-            }
-        }
+        VIRTUAL_MODEL_AUTO => match serde_json::from_slice::<OrchestratorRequest>(body) {
+            Ok(req) => handle_auto_mode(deps, req).await,
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                axum::Json(ErrorResponse::new(
+                    format!("Invalid request body: {e}"),
+                    "invalid_request",
+                )),
+            )
+                .into_response(),
+        },
+        VIRTUAL_MODEL_INTERACTIVE => match serde_json::from_slice::<OrchestratorRequest>(body) {
+            Ok(req) => handle_interactive_mode(deps, req).await,
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                axum::Json(ErrorResponse::new(
+                    format!("Invalid request body: {e}"),
+                    "invalid_request",
+                )),
+            )
+                .into_response(),
+        },
         _ => (
             StatusCode::NOT_FOUND,
             axum::Json(ErrorResponse::new(
@@ -447,10 +441,7 @@ async fn resume_interactive_run(
             let runner = Arc::clone(&deps.runner);
             let goal_for_log = run_id.clone();
             tokio::spawn(async move {
-                if let Err(e) = runner
-                    .run(&goal_for_log, params, tx, cancel_for_task)
-                    .await
-                {
+                if let Err(e) = runner.run(&goal_for_log, params, tx, cancel_for_task).await {
                     error!(run_id = %goal_for_log, error = %e, "orchestrator proxy: resume run failed");
                 }
             });
@@ -519,7 +510,9 @@ fn build_sse_stream(
         yield done_event();
     };
 
-    Sse::new(sse_stream).keep_alive(KeepAlive::default()).into_response()
+    Sse::new(sse_stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 /// Build a static single-chunk SSE stream (for rejection messages, etc.).
@@ -535,7 +528,9 @@ fn build_static_sse(content: &str, model: &str) -> Response {
         yield done_event();
     };
 
-    Sse::new(sse_stream).keep_alive(KeepAlive::default()).into_response()
+    Sse::new(sse_stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 // =============================================================================
@@ -567,9 +562,9 @@ pub(crate) fn orchestrator_event_to_content(event: &OrchestratorEvent) -> Option
             Some(buf)
         }
 
-        OrchestratorEvent::NodeStarted { goal, node_id } => {
-            Some(format!("\n\n## 🔧 Working on: {goal}\n\n<!-- node:{node_id} -->\n"))
-        }
+        OrchestratorEvent::NodeStarted { goal, node_id } => Some(format!(
+            "\n\n## 🔧 Working on: {goal}\n\n<!-- node:{node_id} -->\n"
+        )),
 
         OrchestratorEvent::NodeTextDelta { delta, .. } => Some(delta.clone()),
 
@@ -602,9 +597,7 @@ pub(crate) fn orchestrator_event_to_content(event: &OrchestratorEvent) -> Option
             Some(format!("\n\n**❌ Node `{node_id}` failed:** {error}\n\n"))
         }
 
-        OrchestratorEvent::SynthesisStart => {
-            Some("\n\n## 📝 Synthesizing\n\n".to_string())
-        }
+        OrchestratorEvent::SynthesisStart => Some("\n\n## 📝 Synthesizing\n\n".to_string()),
 
         OrchestratorEvent::SynthesisTextDelta { delta } => Some(delta.clone()),
 

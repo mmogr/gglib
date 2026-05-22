@@ -250,8 +250,10 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         model_repo,
         mcp: mcp.clone(),
         core: Arc::clone(&core),
-        approval_registry: Arc::clone(&approval_registry) as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::clone(&orchestrator_repo) as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
+        approval_registry: Arc::clone(&approval_registry)
+            as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
+        orchestrator_repo: Arc::clone(&orchestrator_repo)
+            as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
     }));
 
     let setup = Arc::new(SetupOps::new(SetupDeps {

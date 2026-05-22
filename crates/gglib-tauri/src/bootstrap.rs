@@ -218,8 +218,10 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         model_repo: model_repo.clone(),
         mcp: mcp.clone(),
         core: Arc::clone(&app),
-        approval_registry: Arc::clone(&approval_registry) as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::clone(&orchestrator_repo) as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
+        approval_registry: Arc::clone(&approval_registry)
+            as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
+        orchestrator_repo: Arc::clone(&orchestrator_repo)
+            as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
     }));
     let setup = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
@@ -308,8 +310,10 @@ pub fn bootstrap_with(
         model_repo: model_repo.clone(),
         mcp: mcp.clone(),
         core: Arc::clone(&app),
-        approval_registry: Arc::clone(&approval_registry_w) as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::clone(&orch_repo_w) as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
+        approval_registry: Arc::clone(&approval_registry_w)
+            as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
+        orchestrator_repo: Arc::clone(&orch_repo_w)
+            as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
     }));
     let setup_ops = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
@@ -434,8 +438,10 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         model_repo: model_repo.clone(),
         mcp: mcp.clone(),
         core: Arc::clone(&app),
-        approval_registry: Arc::clone(&approval_registry_e) as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::clone(&orchestrator_repo) as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
+        approval_registry: Arc::clone(&approval_registry_e)
+            as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
+        orchestrator_repo: Arc::clone(&orchestrator_repo)
+            as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
     }));
     let setup = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
