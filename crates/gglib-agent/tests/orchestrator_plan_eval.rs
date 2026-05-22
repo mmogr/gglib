@@ -143,7 +143,10 @@ fn summarise(results: &[EvalResult]) {
         "  Coherent: {coherent}/{total} ({:.0}%)",
         100.0 * coherent as f64 / total as f64,
     );
-    println!("  Avg replans: {:.2}", f64::from(total_replans) / total as f64,);
+    println!(
+        "  Avg replans: {:.2}",
+        f64::from(total_replans) / total as f64,
+    );
     println!("────────────────────────────────────────────────────────────");
 }
 
