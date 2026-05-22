@@ -9,6 +9,7 @@ pub(crate) mod fnv1a;
 pub(crate) mod loop_detection;
 pub(crate) mod stagnation;
 pub(crate) mod stream_collector;
+pub mod structured_output;
 pub(crate) mod tool_execution;
 pub(crate) mod util;
 

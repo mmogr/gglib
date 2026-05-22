@@ -124,7 +124,7 @@ impl AgentLoop {
         tools: &[ToolDefinition],
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<CollectedResponse, AgentError> {
-        let stream = match self.llm.chat_stream(messages, tools).await {
+        let stream = match self.llm.chat_stream(messages, tools, None).await {
             Ok(s) => s,
             Err(e) => return fail_loop(tx, format!("LLM stream error: {e}")).await,
         };

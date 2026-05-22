@@ -20,6 +20,7 @@ pub mod gguf;
 pub mod inference;
 pub mod mcp;
 mod model;
+pub mod orchestrator;
 
 // Re-export model types at the domain level for convenience
 pub use model::{
@@ -59,4 +60,10 @@ pub use agent::{
 // Re-export capability types at the domain level for convenience
 pub use capabilities::{
     ChatMessage, ModelCapabilities, infer_from_chat_template, transform_messages_for_capabilities,
+};
+
+// Re-export orchestrator types at the domain level for convenience
+pub use orchestrator::{
+    ApprovalKind, HitlMode, MAX_DEPTH, MAX_NODES, NodeId, NodeStatus, OrchestratorEvent, TaskGraph,
+    TaskGraphError, TaskNode,
 };

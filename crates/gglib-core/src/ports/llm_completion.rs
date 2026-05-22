@@ -17,6 +17,8 @@
 //! 2. Translating `&[ToolDefinition]` into the vendor's `tools` array.
 //! 3. Parsing the streaming SSE response into a sequence of [`LlmStreamEvent`]
 //!    values, accumulating incremental tool-call deltas where necessary.
+//! 4. When `response_format` is `Some`, injecting the appropriate
+//!    `response_format` / `grammar` field into the vendor request body.
 //!
 //! The agent loop never sees HTTP, never sees `reqwest`, and never contains a
 //! single OpenAI-specific field name.
@@ -28,6 +30,49 @@ use async_trait::async_trait;
 use futures_core::Stream;
 
 use crate::domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition};
+
+// =============================================================================
+// ResponseFormat — output constraint hint
+// =============================================================================
+
+/// Constrains the output format of a [`LlmCompletionPort::chat_stream`] call.
+///
+/// Pass `Some(&format)` when the caller requires structured output (e.g. for
+/// plan generation in the orchestrator).  Adapters that target llama-server
+/// translate these variants as follows:
+///
+/// | Variant | Wire field |
+/// |---------|------------|
+/// | `JsonSchema` | `response_format: { type: "json_schema", json_schema: { schema, strict } }` |
+/// | `Grammar` | `grammar: "<gbnf string>"` (llama.cpp extension) |
+///
+/// Normal agent-loop calls pass `None`, which leaves the model free-form.
+#[derive(Debug, Clone)]
+pub enum ResponseFormat {
+    /// Constrain the output to a JSON object matching the given JSON Schema.
+    ///
+    /// `strict: true` instructs the model to refuse outputs that do not
+    /// conform to the schema.  Use `strict: false` for best-effort guidance
+    /// when strict validation would be overly rigid.
+    JsonSchema {
+        /// A valid JSON Schema object (Draft-07 or later).
+        schema: serde_json::Value,
+        /// Whether the model should refuse outputs that violate the schema.
+        strict: bool,
+    },
+    /// Constrain output using a GBNF grammar string (llama.cpp extension).
+    ///
+    /// GBNF grammars are more expressive than JSON Schema for some use cases
+    /// (e.g. constraining enum-only outputs without a schema round-trip).
+    Grammar {
+        /// A valid GBNF grammar string understood by llama-server.
+        gbnf: String,
+    },
+}
+
+// =============================================================================
+// LlmCompletionPort
+// =============================================================================
 
 /// Port that the agent loop uses to drive a streaming LLM.
 ///
@@ -49,6 +94,8 @@ pub trait LlmCompletionPort: Send + Sync {
     ///
     /// - `messages` — conversation history in domain form.
     /// - `tools` — tool schemas to advertise to the model.
+    /// - `response_format` — optional output constraint.  Pass `None` for
+    ///   free-form generation (the default for all existing callers).
     ///
     /// # Returns
     ///
@@ -59,5 +106,6 @@ pub trait LlmCompletionPort: Send + Sync {
         &self,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
+        response_format: Option<&ResponseFormat>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>>;
 }
