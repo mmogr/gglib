@@ -35,7 +35,7 @@ use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolCall, ToolDefinition},
     normalize::{NormalizingStream, get_parser},
-    ports::LlmCompletionPort,
+    ports::{LlmCompletionPort, ResponseFormat},
     sse::SseStreamDecoder,
 };
 
@@ -244,6 +244,7 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         &self,
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
+        response_format: Option<&ResponseFormat>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
         let openai_messages: Vec<Value> = messages.iter().map(message_to_openai).collect();
         let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
@@ -280,6 +281,21 @@ impl LlmCompletionPort for LlmCompletionAdapter {
             }
             if let Some(r) = s.repeat_penalty {
                 body["repeat_penalty"] = json!(r);
+            }
+        }
+
+        // Inject structured-output constraints when requested.
+        if let Some(fmt) = response_format {
+            match fmt {
+                ResponseFormat::JsonSchema { schema, strict } => {
+                    body["response_format"] = json!({
+                        "type": "json_schema",
+                        "json_schema": { "schema": schema, "strict": strict }
+                    });
+                }
+                ResponseFormat::Grammar { gbnf } => {
+                    body["grammar"] = json!(gbnf);
+                }
             }
         }
 

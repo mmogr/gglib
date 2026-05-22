@@ -16,14 +16,15 @@ pub mod utils;
 // Re-export commonly used types for convenience
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
-    AssistantContent, ChatMessage, Conversation, ConversationUpdate, DEFAULT_MAX_ITERATIONS,
-    DEFAULT_MAX_PARALLEL_TOOLS, DEFAULT_MAX_STAGNATION_STEPS, LlmStreamEvent,
-    MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING,
-    MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry, McpServer, McpServerConfig,
-    McpServerStatus, McpServerType, McpTool, McpToolResult, Message, MessageRole, Model,
-    ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer, NewMessage, NewModel,
-    RangeValues, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer, infer_from_chat_template,
-    transform_messages_for_capabilities,
+    ApprovalKind, AssistantContent, ChatMessage, Conversation, ConversationUpdate,
+    DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS, DEFAULT_MAX_STAGNATION_STEPS, HitlMode,
+    LlmStreamEvent, MAX_DEPTH, MAX_ITERATIONS_CEILING, MAX_NODES, MAX_PARALLEL_TOOLS_CEILING,
+    MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry,
+    McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult, Message,
+    MessageRole, Model, ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer,
+    NewMessage, NewModel, NodeId, NodeStatus, OrchestratorEvent, RangeValues, TaskGraph,
+    TaskGraphError, TaskNode, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer,
+    infer_from_chat_template, transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,
@@ -40,8 +41,9 @@ pub use ports::{
     HfSearchOptions, HfSearchResult, LlmCompletionPort, McpErrorCategory, McpErrorInfo,
     McpRepositoryError, McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository,
     NoopDownloadEmitter, NoopEmitter, NoopGgufParser, ProcessError, ProcessHandle, ProcessRunner,
-    QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig,
-    ServerHealth, SettingsRepository, TOOL_NOT_AVAILABLE_MSG, ToolExecutorPort,
+    QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile, ResponseFormat,
+    ServerConfig, ServerHealth, SettingsRepository, StructuredOutputError, TOOL_NOT_AVAILABLE_MSG,
+    ToolExecutorPort,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{
