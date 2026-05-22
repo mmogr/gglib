@@ -35,6 +35,42 @@ use gglib_core::ports::{
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
+use gglib_proxy::{OrchestratorDeps, OrchestratorRunnerPort, OrchestratorRunParams};
+use gglib_core::domain::orchestrator::{OrchestratorEvent, OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus};
+use gglib_core::ports::{ApprovalDecision, OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort, RepositoryError};
+use tokio::sync::{mpsc, oneshot};
+
+#[derive(Debug)]
+struct NoopRunner;
+#[async_trait]
+impl OrchestratorRunnerPort for NoopRunner {
+    async fn run(&self, _: &str, _: OrchestratorRunParams, _: mpsc::Sender<OrchestratorEvent>, _: CancellationToken) -> anyhow::Result<()> { Ok(()) }
+}
+struct NoopApprovalRegistry;
+impl OrchestratorApprovalRegistryPort for NoopApprovalRegistry {
+    fn register(&self, _: String, _: oneshot::Sender<ApprovalDecision>) {}
+    fn resolve(&self, _: &str, _: ApprovalDecision) -> bool { false }
+    fn is_pending(&self, _: &str) -> bool { false }
+}
+struct NoopOrchestratorRepo;
+#[async_trait]
+impl OrchestratorRepositoryPort for NoopOrchestratorRepo {
+    async fn create_run(&self, _: OrchestratorRun) -> Result<(), RepositoryError> { Ok(()) }
+    async fn update_run_status(&self, _: &str, _: OrchestratorRunStatus) -> Result<(), RepositoryError> { Ok(()) }
+    async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> { Ok(()) }
+    async fn append_event(&self, _: OrchestratorRunEvent) -> Result<(), RepositoryError> { Ok(()) }
+    async fn get_run(&self, _: &str) -> Result<Option<OrchestratorRun>, RepositoryError> { Ok(None) }
+    async fn list_runs(&self, _: Option<OrchestratorRunStatus>) -> Result<Vec<OrchestratorRun>, RepositoryError> { Ok(vec![]) }
+    async fn list_events(&self, _: &str) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> { Ok(vec![]) }
+    async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> { Ok(0) }
+}
+fn make_orchestrator_deps() -> OrchestratorDeps {
+    OrchestratorDeps {
+        runner: Arc::new(NoopRunner),
+        approval_registry: Arc::new(NoopApprovalRegistry),
+        orchestrator_repo: Arc::new(NoopOrchestratorRepo),
+    }
+}
 
 mod fixtures;
 use fixtures::sse::{
@@ -224,7 +260,7 @@ async fn spawn_proxy(
     let cancel = CancellationToken::new();
     let cancel_clone = cancel.clone();
     tokio::spawn(async move {
-        gglib_proxy::serve(listener, 4096, runtime, catalog, mcp, cancel_clone)
+        gglib_proxy::serve(listener, 4096, runtime, catalog, mcp, make_orchestrator_deps(), cancel_clone)
             .await
             .ok();
     });

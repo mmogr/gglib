@@ -25,6 +25,7 @@ use tracing::{debug, error, info, warn};
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
 use gglib_core::settings::{DEFAULT_CONTEXT_SIZE, DEFAULT_PROXY_PORT};
 use gglib_mcp::McpService;
+use gglib_proxy::OrchestratorDeps;
 
 /// Handle to a running proxy server.
 struct ProxyHandle {
@@ -159,6 +160,7 @@ impl ProxySupervisor {
     /// * `runtime_port` - Port for managing model runtime
     /// * `catalog_port` - Port for listing and resolving models
     /// * `mcp` - MCP service for tool gateway
+    /// * `orchestrator` - Orchestrator services for virtual model routing
     ///
     /// # Errors
     ///
@@ -169,6 +171,7 @@ impl ProxySupervisor {
         runtime_port: Arc<dyn ModelRuntimePort>,
         catalog_port: Arc<dyn ModelCatalogPort>,
         mcp: Arc<McpService>,
+        orchestrator: OrchestratorDeps,
     ) -> Result<SocketAddr, SupervisorError> {
         let mut guard = self.handle.lock().await;
 
@@ -226,6 +229,7 @@ impl ProxySupervisor {
                 runtime_port,
                 catalog_port,
                 mcp,
+                orchestrator,
                 cancel_clone,
             )
             .await;
@@ -365,6 +369,59 @@ mod tests {
         CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
     };
     use gglib_core::ports::{McpRepositoryError, McpServerRepository};
+    use gglib_proxy::{OrchestratorDeps, OrchestratorRunnerPort, OrchestratorRunParams};
+    use gglib_core::domain::orchestrator::{OrchestratorEvent, OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus};
+    use gglib_core::ports::{
+        ApprovalDecision, OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort,
+        RepositoryError,
+    };
+    use tokio::sync::{mpsc, oneshot};
+    use tokio_util::sync::CancellationToken;
+
+    /// No-op runner for tests — never actually executes.
+    #[derive(Debug)]
+    struct NoopRunner;
+
+    #[async_trait]
+    impl OrchestratorRunnerPort for NoopRunner {
+        async fn run(
+            &self,
+            _goal: &str,
+            _params: OrchestratorRunParams,
+            _tx: mpsc::Sender<OrchestratorEvent>,
+            _cancel: CancellationToken,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct NoopApprovalRegistry;
+    impl OrchestratorApprovalRegistryPort for NoopApprovalRegistry {
+        fn register(&self, _id: String, _tx: oneshot::Sender<ApprovalDecision>) {}
+        fn resolve(&self, _id: &str, _decision: ApprovalDecision) -> bool { false }
+        fn is_pending(&self, _id: &str) -> bool { false }
+    }
+
+    struct NoopOrchestratorRepo;
+    #[async_trait]
+    impl OrchestratorRepositoryPort for NoopOrchestratorRepo {
+        async fn create_run(&self, _: OrchestratorRun) -> Result<(), RepositoryError> { Ok(()) }
+        async fn update_run_status(&self, _: &str, _: OrchestratorRunStatus) -> Result<(), RepositoryError> { Ok(()) }
+        async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> { Ok(()) }
+        async fn append_event(&self, _: OrchestratorRunEvent) -> Result<(), RepositoryError> { Ok(()) }
+        async fn get_run(&self, _: &str) -> Result<Option<OrchestratorRun>, RepositoryError> { Ok(None) }
+        async fn list_runs(&self, _: Option<OrchestratorRunStatus>) -> Result<Vec<OrchestratorRun>, RepositoryError> { Ok(vec![]) }
+        async fn list_events(&self, _: &str) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> { Ok(vec![]) }
+        async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> { Ok(0) }
+    }
+
+    fn make_orchestrator() -> OrchestratorDeps {
+        OrchestratorDeps {
+            runner: Arc::new(NoopRunner),
+            approval_registry: Arc::new(NoopApprovalRegistry),
+            orchestrator_repo: Arc::new(NoopOrchestratorRepo),
+        }
+    }
 
     /// Empty MCP repository for testing — all reads return empty/not-found.
     #[derive(Debug)]
@@ -473,7 +530,7 @@ mod tests {
         let (runtime, catalog) = make_ports();
         let mcp = make_mcp();
         let addr = supervisor
-            .start(config.clone(), runtime.clone(), catalog.clone(), mcp)
+            .start(config.clone(), runtime.clone(), catalog.clone(), mcp, make_orchestrator())
             .await
             .unwrap();
         assert_ne!(addr.port(), 0);
@@ -488,7 +545,7 @@ mod tests {
         let (runtime2, catalog2) = make_ports();
         assert!(matches!(
             supervisor
-                .start(config, runtime2, catalog2, make_mcp())
+                .start(config, runtime2, catalog2, make_mcp(), make_orchestrator())
                 .await,
             Err(SupervisorError::AlreadyRunning(_))
         ));
@@ -519,7 +576,7 @@ mod tests {
         // Start
         let (runtime, catalog) = make_ports();
         let addr1 = supervisor
-            .start(config.clone(), runtime, catalog, make_mcp())
+            .start(config.clone(), runtime, catalog, make_mcp(), make_orchestrator())
             .await
             .unwrap();
 
@@ -529,7 +586,7 @@ mod tests {
         // Start again (should work)
         let (runtime2, catalog2) = make_ports();
         let addr2 = supervisor
-            .start(config, runtime2, catalog2, make_mcp())
+            .start(config, runtime2, catalog2, make_mcp(), make_orchestrator())
             .await
             .unwrap();
 

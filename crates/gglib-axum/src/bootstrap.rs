@@ -237,11 +237,21 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
 
     let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
 
+    // Create orchestrator repos early so we can share them between ProxyOps
+    // (virtual model routing) and AxumContext (REST API handlers).
+    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool.clone()));
+    if let Err(e) = orchestrator_repo.mark_interrupted_runs().await {
+        tracing::warn!("orchestrator: failed to mark interrupted runs on startup: {e}");
+    }
+    let approval_registry = Arc::new(OrchestratorApprovalRegistry::new());
+
     let proxy = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor,
         model_repo,
         mcp: mcp.clone(),
         core: Arc::clone(&core),
+        approval_registry: Arc::clone(&approval_registry) as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
+        orchestrator_repo: Arc::clone(&orchestrator_repo) as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
     }));
 
     let setup = Arc::new(SetupOps::new(SetupDeps {
@@ -274,13 +284,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         }
     });
 
-    // Startup hook: mark any runs that were in-flight when the process last
-    // died as Interrupted, so they appear correctly in the runs list.
-    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool.clone()));
-    if let Err(e) = orchestrator_repo.mark_interrupted_runs().await {
-        tracing::warn!("orchestrator: failed to mark interrupted runs on startup: {e}");
-    }
-
     Ok(AxumContext {
         models,
         servers,
@@ -298,7 +301,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         agent_semaphore: Arc::new(tokio::sync::Semaphore::new(
             config.max_concurrent_agent_loops,
         )),
-        approval_registry: Arc::new(OrchestratorApprovalRegistry::new()),
+        approval_registry,
         orchestrator_repo,
     })
 }

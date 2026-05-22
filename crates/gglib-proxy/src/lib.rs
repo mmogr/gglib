@@ -4,6 +4,8 @@
 pub mod forward;
 pub mod mcp;
 pub mod models;
+pub mod orchestrator_proxy;
 pub mod server;
 
+pub use orchestrator_proxy::{OrchestratorDeps, OrchestratorRunnerPort, OrchestratorRunParams};
 pub use server::serve;

@@ -7,6 +7,7 @@ pub mod compose;
 mod health;
 pub mod health_monitor;
 pub mod llama;
+pub mod orchestrator_runner;
 pub mod pidfile;
 pub mod ports_impl;
 pub mod process;
@@ -45,3 +46,6 @@ pub use compose::{
 
 // Re-export system probe implementation
 pub use system::DefaultSystemProbe;
+
+// Re-export orchestrator runner adapter for proxy injection
+pub use orchestrator_runner::OrchestratorRunnerAdapter;
