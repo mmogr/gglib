@@ -364,7 +364,7 @@ async fn resume_interactive_run(
             {
                 warn!(run_id = %run_id, error = %e, "failed to mark run as rejected");
             }
-            return build_static_sse("❌ Plan rejected.", &req.model);
+            build_static_sse("❌ Plan rejected.", &req.model)
         }
         ApprovalIntent::Approve(edit) => {
             // Load the saved graph from the DB.
@@ -455,7 +455,7 @@ async fn resume_interactive_run(
                 }
             });
 
-            return build_sse_stream(rx, cancel, req.model, false, None);
+            build_sse_stream(rx, cancel, req.model, false, None)
         }
     }
 }

@@ -165,7 +165,7 @@ impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
             .filter(|r| {
                 status_filter
                     .as_ref()
-                    .map_or(true, |s| &r.status == s)
+                    .is_none_or(|s| &r.status == s)
             })
             .cloned()
             .collect();
