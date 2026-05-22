@@ -25,7 +25,9 @@ use crate::forward::forward_chat_completion;
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
-use crate::orchestrator_proxy::{OrchestratorDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
+use crate::orchestrator_proxy::{
+    OrchestratorDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info,
+};
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]

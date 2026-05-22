@@ -81,16 +81,12 @@ impl OrchestratorRunnerPort for OrchestratorRunnerAdapter {
         cancel: CancellationToken,
     ) -> anyhow::Result<()> {
         // Find the currently loaded model.
-        let target = self
-            .runtime_port
-            .current_model()
-            .await
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No model is currently loaded. \
+        let target = self.runtime_port.current_model().await.ok_or_else(|| {
+            anyhow::anyhow!(
+                "No model is currently loaded. \
                      Start a model with `gglib model run <name>` or select one in the UI."
-                )
-            })?;
+            )
+        })?;
 
         debug!(
             model = %target.model_name,

@@ -365,16 +365,18 @@ mod tests {
     use async_trait::async_trait;
     use gglib_core::NoopEmitter;
     use gglib_core::domain::mcp::{McpServer, NewMcpServer};
-    use gglib_core::ports::{
-        CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
+    use gglib_core::domain::orchestrator::{
+        OrchestratorEvent, OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus,
     };
-    use gglib_core::ports::{McpRepositoryError, McpServerRepository};
-    use gglib_proxy::{OrchestratorDeps, OrchestratorRunnerPort, OrchestratorRunParams};
-    use gglib_core::domain::orchestrator::{OrchestratorEvent, OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus};
     use gglib_core::ports::{
         ApprovalDecision, OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort,
         RepositoryError,
     };
+    use gglib_core::ports::{
+        CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
+    };
+    use gglib_core::ports::{McpRepositoryError, McpServerRepository};
+    use gglib_proxy::{OrchestratorDeps, OrchestratorRunParams, OrchestratorRunnerPort};
     use tokio::sync::{mpsc, oneshot};
     use tokio_util::sync::CancellationToken;
 
@@ -398,21 +400,48 @@ mod tests {
     struct NoopApprovalRegistry;
     impl OrchestratorApprovalRegistryPort for NoopApprovalRegistry {
         fn register(&self, _id: String, _tx: oneshot::Sender<ApprovalDecision>) {}
-        fn resolve(&self, _id: &str, _decision: ApprovalDecision) -> bool { false }
-        fn is_pending(&self, _id: &str) -> bool { false }
+        fn resolve(&self, _id: &str, _decision: ApprovalDecision) -> bool {
+            false
+        }
+        fn is_pending(&self, _id: &str) -> bool {
+            false
+        }
     }
 
     struct NoopOrchestratorRepo;
     #[async_trait]
     impl OrchestratorRepositoryPort for NoopOrchestratorRepo {
-        async fn create_run(&self, _: OrchestratorRun) -> Result<(), RepositoryError> { Ok(()) }
-        async fn update_run_status(&self, _: &str, _: OrchestratorRunStatus) -> Result<(), RepositoryError> { Ok(()) }
-        async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> { Ok(()) }
-        async fn append_event(&self, _: OrchestratorRunEvent) -> Result<(), RepositoryError> { Ok(()) }
-        async fn get_run(&self, _: &str) -> Result<Option<OrchestratorRun>, RepositoryError> { Ok(None) }
-        async fn list_runs(&self, _: Option<OrchestratorRunStatus>) -> Result<Vec<OrchestratorRun>, RepositoryError> { Ok(vec![]) }
-        async fn list_events(&self, _: &str) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> { Ok(vec![]) }
-        async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> { Ok(0) }
+        async fn create_run(&self, _: OrchestratorRun) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+        async fn update_run_status(
+            &self,
+            _: &str,
+            _: OrchestratorRunStatus,
+        ) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+        async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+        async fn append_event(&self, _: OrchestratorRunEvent) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+        async fn get_run(&self, _: &str) -> Result<Option<OrchestratorRun>, RepositoryError> {
+            Ok(None)
+        }
+        async fn list_runs(
+            &self,
+            _: Option<OrchestratorRunStatus>,
+        ) -> Result<Vec<OrchestratorRun>, RepositoryError> {
+            Ok(vec![])
+        }
+        async fn list_events(&self, _: &str) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> {
+            Ok(vec![])
+        }
+        async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> {
+            Ok(0)
+        }
     }
 
     fn make_orchestrator() -> OrchestratorDeps {
@@ -530,7 +559,13 @@ mod tests {
         let (runtime, catalog) = make_ports();
         let mcp = make_mcp();
         let addr = supervisor
-            .start(config.clone(), runtime.clone(), catalog.clone(), mcp, make_orchestrator())
+            .start(
+                config.clone(),
+                runtime.clone(),
+                catalog.clone(),
+                mcp,
+                make_orchestrator(),
+            )
             .await
             .unwrap();
         assert_ne!(addr.port(), 0);
@@ -576,7 +611,13 @@ mod tests {
         // Start
         let (runtime, catalog) = make_ports();
         let addr1 = supervisor
-            .start(config.clone(), runtime, catalog, make_mcp(), make_orchestrator())
+            .start(
+                config.clone(),
+                runtime,
+                catalog,
+                make_mcp(),
+                make_orchestrator(),
+            )
             .await
             .unwrap();
 

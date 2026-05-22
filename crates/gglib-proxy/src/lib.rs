@@ -7,5 +7,5 @@ pub mod models;
 pub mod orchestrator_proxy;
 pub mod server;
 
-pub use orchestrator_proxy::{OrchestratorDeps, OrchestratorRunnerPort, OrchestratorRunParams};
+pub use orchestrator_proxy::{OrchestratorDeps, OrchestratorRunParams, OrchestratorRunnerPort};
 pub use server::serve;

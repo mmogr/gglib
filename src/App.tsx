@@ -17,6 +17,8 @@ import { startProxy, stopProxy } from "./services/clients/servers";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
 import OrchestratorPlanPreview from "./pages/OrchestratorPlanPreview";
+import OrchestratorPage from "./pages/Orchestrator";
+import { OrchestratorProvider } from "./contexts/OrchestratorContext";
 
 /**
  * Inner app component that consumes ToastContext.
@@ -28,9 +30,15 @@ function AppContent() {
   const [showPlanPage, setShowPlanPage] = useState(
     () => window.location.hash === '#plan'
   );
+  const [showOrchestratorPage, setShowOrchestratorPage] = useState(
+    () => window.location.hash === '#orchestrator'
+  );
 
   useEffect(() => {
-    const onHashChange = () => setShowPlanPage(window.location.hash === '#plan');
+    const onHashChange = () => {
+      setShowPlanPage(window.location.hash === '#plan');
+      setShowOrchestratorPage(window.location.hash === '#orchestrator');
+    };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
@@ -176,7 +184,16 @@ function AppContent() {
           onRefreshServers={loadServers}
         />
         <div className="flex-1 min-h-0 overflow-hidden flex">
-          {showPlanPage ? (
+          {showOrchestratorPage ? (
+            <OrchestratorProvider>
+              <OrchestratorPage
+                onBack={() => {
+                  window.location.hash = '';
+                  setShowOrchestratorPage(false);
+                }}
+              />
+            </OrchestratorProvider>
+          ) : showPlanPage ? (
             <OrchestratorPlanPreview
               onBack={() => {
                 window.location.hash = '';

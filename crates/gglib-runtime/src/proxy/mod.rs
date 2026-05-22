@@ -162,11 +162,7 @@ impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
         let guard = self.runs.lock().unwrap_or_else(|p| p.into_inner());
         let runs: Vec<OrchestratorRun> = guard
             .values()
-            .filter(|r| {
-                status_filter
-                    .as_ref()
-                    .is_none_or(|s| &r.status == s)
-            })
+            .filter(|r| status_filter.as_ref().is_none_or(|s| &r.status == s))
             .cloned()
             .collect();
         Ok(runs)
@@ -322,4 +318,3 @@ pub async fn start_proxy_standalone(
 
     Ok(())
 }
-
