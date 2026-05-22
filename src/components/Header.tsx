@@ -1,5 +1,5 @@
 import { FC, useState, useRef } from "react";
-import { Library, Menu, Monitor, Settings, X } from "lucide-react";
+import { GitBranch, Library, Menu, Monitor, Settings, X } from "lucide-react";
 import { ServerInfo } from "../types";
 import { RunsPopover } from "./RunsPopover";
 import { useClickOutside } from "../hooks/useClickOutside";
@@ -7,6 +7,7 @@ import { cn } from "../utils/cn";
 
 interface HeaderProps {
   onOpenSettings: () => void;
+  onOpenOrchestrator: () => void;
   servers: ServerInfo[];
   onStopServer: (modelId: number) => Promise<void>;
   onSelectModel: (modelId: number, view?: 'chat' | 'console') => void;
@@ -15,6 +16,7 @@ interface HeaderProps {
 
 const Header: FC<HeaderProps> = ({
   onOpenSettings,
+  onOpenOrchestrator,
   servers,
   onStopServer,
   onSelectModel,
@@ -54,6 +56,20 @@ const Header: FC<HeaderProps> = ({
         <div className="relative flex items-center gap-base" ref={menuRef}>
           {/* Desktop navigation */}
           <div className="hidden md:flex items-center gap-base">
+            {/* Orchestrator button */}
+            <button
+              type="button"
+              className={cn(
+                'flex items-center justify-center gap-sm px-[calc(var(--spacing-lg)+var(--spacing-xs))] h-[var(--button-height-base)] rounded-full border border-border bg-background-elevated text-inherit font-medium text-sm leading-none cursor-pointer transition-all',
+                'hover:not-disabled:border-border-hover hover:not-disabled:bg-background-hover',
+                'w-[var(--button-height-base)] p-0 relative',
+              )}
+              onClick={onOpenOrchestrator}
+              aria-label="Open Orchestrator"
+              title="Orchestrator"
+            >
+              <GitBranch className="w-[18px] h-[18px]" aria-hidden />
+            </button>
             {/* Server status button with popover */}
             <div className="relative">
               <button
@@ -131,6 +147,14 @@ const Header: FC<HeaderProps> = ({
             >
               <Monitor className="w-[18px] h-[18px]" aria-hidden />
               {hasRunningServers ? `${serverCount} Running` : 'No Servers'}
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-sm w-full px-base py-sm border-none rounded-sm bg-transparent text-inherit text-sm font-medium text-left cursor-pointer transition-all hover:bg-background-hover"
+              onClick={() => handleMobileMenuAction(onOpenOrchestrator)}
+            >
+              <GitBranch className="w-[18px] h-[18px]" aria-hidden />
+              Orchestrator
             </button>
             <button
               type="button"

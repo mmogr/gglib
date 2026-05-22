@@ -178,6 +178,10 @@ function AppContent() {
       <div className="flex flex-col h-screen overflow-hidden">
         <Header
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenOrchestrator={() => {
+            window.location.hash = '#orchestrator';
+            setShowOrchestratorPage(true);
+          }}
           servers={servers}
           onStopServer={stopServer}
           onSelectModel={handleSelectModelFromHeader}
@@ -187,6 +191,7 @@ function AppContent() {
           {showOrchestratorPage ? (
             <OrchestratorProvider>
               <OrchestratorPage
+                hasRunningServers={servers.length > 0}
                 onBack={() => {
                   window.location.hash = '';
                   setShowOrchestratorPage(false);

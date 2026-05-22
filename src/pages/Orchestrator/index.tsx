@@ -14,7 +14,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Play, Square, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Play, Square, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
@@ -36,9 +36,10 @@ const HITL_MODE_OPTIONS = [
 
 interface OrchestratorPageProps {
   onBack?: () => void;
+  hasRunningServers?: boolean;
 }
 
-export default function OrchestratorPage({ onBack }: OrchestratorPageProps) {
+export default function OrchestratorPage({ onBack, hasRunningServers = false }: OrchestratorPageProps) {
   const { settings } = useSettingsContext();
   const serverPort = settings?.llamaBasePort ?? 9000;
 
@@ -191,6 +192,16 @@ export default function OrchestratorPage({ onBack }: OrchestratorPageProps) {
               </Select>
             </div>
           </form>
+
+          {/* No model warning */}
+          {!hasRunningServers && session.phase === 'idle' && (
+            <div className="rounded-base border border-warning/40 bg-warning/8 px-md py-sm flex items-start gap-sm">
+              <Icon icon={AlertTriangle} size={15} className="text-warning shrink-0 mt-[1px]" />
+              <p className="text-sm text-text-secondary">
+                No model is running. Start a model from the main page first, then return here to run the orchestrator.
+              </p>
+            </div>
+          )}
 
           {/* Error banner */}
           {session.error && (
