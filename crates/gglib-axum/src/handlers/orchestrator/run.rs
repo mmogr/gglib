@@ -1,23 +1,20 @@
-//! Orchestrator endpoints: decompose a goal into a task-graph plan via SSE, and
-//! execute the full Director/Worker pipeline.
+//! `POST /api/orchestrator/run` — execute a full Director/Worker task graph.
 //!
-//! # Route
-//!
-//! `POST /api/orchestrator/plan` — accepts a [`PlanRequest`] JSON body and
-//! streams [`OrchestratorEvent`]s as newline-delimited JSON SSE frames.
+//! Accepts a [`RunRequest`] JSON body, runs the complete orchestrator pipeline
+//! (planning → worker execution → compaction → synthesis), and streams
+//! [`OrchestratorEvent`]s as newline-delimited JSON SSE frames.
 //!
 //! # Event sequence
 //!
-//! 1. Zero or more [`OrchestratorEvent::ReplanAttempt`] events if the
-//!    director retries validation.
-//! 2. [`OrchestratorEvent::PlanProposed`] containing the validated
-//!    [`TaskGraph`].
-//! 3. [`OrchestratorEvent::OrchestratorComplete`] with a brief summary.
+//! 1. Zero or more [`OrchestratorEvent::ReplanAttempt`] events.
+//! 2. [`OrchestratorEvent::PlanProposed`] containing the validated graph.
+//! 3. [`OrchestratorEvent::PlanApproved`] (auto-approved in Phase C).
+//! 4. Per-node: `NodeStarted → NodeTextDelta* → NodeToolCall* → NodeCompacting → NodeComplete`.
+//! 5. `SynthesisStart → SynthesisTextDelta* → SynthesisComplete`.
+//! 6. [`OrchestratorEvent::OrchestratorComplete`] with the final answer.
 //!
-//! On failure the stream emits [`OrchestratorEvent::OrchestratorError`] then
-//! closes.
-
-pub mod run;
+//! On failure: [`OrchestratorEvent::NodeFailed`] for the failed node, then
+//! [`OrchestratorEvent::OrchestratorError`] and the stream closes.
 
 use std::convert::Infallible;
 
@@ -29,11 +26,10 @@ use futures_util::StreamExt as _;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-use gglib_agent::orchestrator::plan;
+use gglib_agent::orchestrator::{OrchestratorConfig, execute};
 use gglib_core::domain::orchestrator::events::{
     ORCHESTRATOR_EVENT_CHANNEL_CAPACITY, OrchestratorEvent,
 };
-use gglib_core::domain::orchestrator::task_graph::HitlMode;
 use gglib_runtime::compose_council_ports;
 
 use crate::error::HttpError;
@@ -42,38 +38,47 @@ use crate::state::AppState;
 
 // ─── DTO ─────────────────────────────────────────────────────────────────────
 
-/// Request body for `POST /api/orchestrator/plan`.
+/// Request body for `POST /api/orchestrator/run`.
 #[derive(Debug, serde::Deserialize)]
-pub struct PlanRequest {
-    /// High-level goal to decompose into a task graph.
+pub struct RunRequest {
+    /// High-level goal to decompose and execute.
     pub goal: String,
-    /// Port of the llama-server to use for the director LLM call.
+    /// Port of the llama-server to use.
     pub port: u16,
     /// Optional model name override.
     #[serde(default)]
     pub model: Option<String>,
-    /// Maximum number of replan attempts after the first.
+    /// Maximum number of director replan attempts after the first.
     ///
     /// Defaults to `2` when omitted.
     #[serde(default = "default_max_replans")]
     pub max_replans: u32,
+    /// Maximum number of worker nodes to run concurrently.
+    ///
+    /// Defaults to `3` when omitted.
+    #[serde(default = "default_max_worker_concurrency")]
+    pub max_worker_concurrency: usize,
 }
 
 fn default_max_replans() -> u32 {
     2
 }
 
-// ─── POST /api/orchestrator/plan ─────────────────────────────────────────────
+fn default_max_worker_concurrency() -> usize {
+    3
+}
 
-/// Stream a director planning pass as [`OrchestratorEvent`] SSE frames.
+// ─── POST /api/orchestrator/run ──────────────────────────────────────────────
+
+/// Stream a full orchestrator run as [`OrchestratorEvent`] SSE frames.
 ///
 /// # Errors
 ///
-/// Returns an HTTP error when the port is invalid, there is no running
-/// server on that port, or the agent semaphore is full.
-pub async fn plan_sse(
+/// Returns an HTTP error when the port is invalid, the server on that port
+/// is unreachable, or the agent semaphore is already at capacity.
+pub async fn run_sse(
     State(state): State<AppState>,
-    Json(req): Json<PlanRequest>,
+    Json(req): Json<RunRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
     let permit = state
         .agent_semaphore
@@ -98,37 +103,31 @@ pub async fn plan_sse(
         None,
     );
 
+    let config = OrchestratorConfig {
+        max_replans: req.max_replans,
+        max_worker_concurrency: req.max_worker_concurrency,
+        ..OrchestratorConfig::default()
+    };
+
     let (tx, rx) = mpsc::channel::<OrchestratorEvent>(ORCHESTRATOR_EVENT_CHANNEL_CAPACITY);
     let goal = req.goal.clone();
-    let max_replans = req.max_replans;
 
     tokio::spawn(async move {
         let _permit = permit;
 
-        match plan(
+        if let Err(e) = execute(
             &goal,
             &[],
             ports.llm,
-            HitlMode::None,
-            max_replans,
-            Some(tx.clone()),
+            ports.tool_executor,
+            config,
+            tx.clone(),
         )
         .await
         {
-            Ok(graph) => {
-                let summary = format!("Plan accepted: {} node(s)", graph.nodes.len());
-                let _ = tx.send(OrchestratorEvent::PlanProposed { graph }).await;
-                let _ = tx
-                    .send(OrchestratorEvent::OrchestratorComplete { answer: summary })
-                    .await;
-            }
-            Err(e) => {
-                let _ = tx
-                    .send(OrchestratorEvent::OrchestratorError {
-                        message: e.to_string(),
-                    })
-                    .await;
-            }
+            // execute() already sent OrchestratorError on the channel before
+            // returning Err, so we only log here for server-side observability.
+            tracing::error!(error = %e, goal, "orchestrator: run failed");
         }
     });
 

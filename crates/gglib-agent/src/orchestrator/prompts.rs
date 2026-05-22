@@ -214,3 +214,56 @@ pub fn director_plan_schema() -> serde_json::Value {
         "additionalProperties": false
     })
 }
+
+// =============================================================================
+// Worker compaction prompt
+// =============================================================================
+
+/// System prompt for the post-worker compaction pass.
+///
+/// Placeholders: `{goal}`, `{output}`.
+///
+/// The compaction agent receives the full worker output and produces a
+/// compact summary (≤ 250 words) preserving facts, results, and conclusions
+/// that downstream nodes may need as context.
+pub const WORKER_COMPACTION_PROMPT: &str = "\
+You are a precise summarizer. A worker agent was given the following goal:
+
+GOAL: {goal}
+
+The worker produced the following output:
+
+---
+{output}
+---
+
+Produce a concise summary (at most 250 words) that:
+- Preserves all key facts, results, conclusions, and any actionable data.
+- Is written in third-person past tense (e.g. \"The agent found...\").
+- Omits conversational filler, tool call traces, and internal reasoning.
+- Retains specific values (numbers, names, paths, URLs) that downstream agents need.
+
+Output ONLY the summary text. No preamble, no title, no markdown fences.";
+
+// =============================================================================
+// Orchestrator synthesis prompt
+// =============================================================================
+
+/// System prompt for the final orchestrator synthesis pass.
+///
+/// Placeholders: `{goal}`, `{results}`.
+///
+/// The synthesiser receives compacted outputs from every leaf node and
+/// produces a single unified answer addressing the original goal.
+pub const ORCHESTRATOR_SYNTHESIS_PROMPT: &str = "\
+You are synthesizing the output of a multi-agent task graph.
+
+ORIGINAL GOAL: {goal}
+
+The following are the results from the completed worker agents:
+
+{results}
+
+Produce a clear, direct, and complete answer to the original goal that integrates \
+all agent outputs. Be concise and actionable. Do not repeat the goal or introduce \
+each section with agent names — write a unified response as if you produced it yourself.";

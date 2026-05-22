@@ -17,7 +17,11 @@
 //! [`TaskGraph`] is ready for display (CLI tree, SSE stream, Tauri page) and
 //! for Phase C+ execution.
 
+pub(crate) mod compaction;
 pub mod director;
+pub mod executor;
 pub mod prompts;
+pub(crate) mod synthesis;
 
 pub use director::{DirectorNode, DirectorPlan, PlanError, plan};
+pub use executor::{ExecuteError, OrchestratorConfig, execute};

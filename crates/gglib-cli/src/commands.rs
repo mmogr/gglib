@@ -208,6 +208,24 @@ pub enum Commands {
         context: ContextArgs,
     },
 
+    /// Plan and execute a Director/Worker task graph end-to-end
+    #[command(display_order = 14)]
+    Orchestrate {
+        /// High-level goal to plan and execute
+        goal: String,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum replan attempts after the first
+        #[arg(long, default_value = "2")]
+        max_replans: u32,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+
     // ── Interfaces ──────────────────────────────────────────────────────
     /// Launch the Tauri desktop GUI
     #[command(display_order = 20)]
