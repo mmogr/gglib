@@ -2,7 +2,7 @@
 //!
 //! The director prompt instructs the model to decompose a high-level goal into
 //! a flat list of [`TaskNode`]-shaped objects.  A simpler intermediate format
-//! (array of nodes) is used instead of a HashMap so the schema and few-shot
+//! (array of nodes) is used instead of a `HashMap` so the schema and few-shot
 //! examples stay unambiguous for small models.
 //!
 //! # Format contract

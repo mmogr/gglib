@@ -54,8 +54,7 @@ fn check_coherence(
         return false;
     }
     for node in graph.nodes.values() {
-        let words: Vec<&str> = node.goal.split_whitespace().collect();
-        if words.len() < 5 {
+        if node.goal.split_whitespace().count() < 5 {
             return false;
         }
         // Node goal must differ from the top-level goal.
@@ -129,6 +128,7 @@ fn print_result(r: &EvalResult) {
     );
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn summarise(results: &[EvalResult]) {
     let total = results.len();
     let valid = results.iter().filter(|r| r.valid).count();
@@ -143,7 +143,7 @@ fn summarise(results: &[EvalResult]) {
         "  Coherent: {coherent}/{total} ({:.0}%)",
         100.0 * coherent as f64 / total as f64,
     );
-    println!("  Avg replans: {:.2}", total_replans as f64 / total as f64,);
+    println!("  Avg replans: {:.2}", f64::from(total_replans) / total as f64,);
     println!("────────────────────────────────────────────────────────────");
 }
 
@@ -153,7 +153,8 @@ fn summarise(results: &[EvalResult]) {
 ///
 /// Execute with `cargo test -p gglib-agent --test orchestrator_plan_eval -- --ignored --nocapture`.
 #[tokio::test]
-#[ignore]
+#[ignore = "requires a running LLM at GGLIB_EVAL_LLM_URL"]
+#[allow(clippy::cast_precision_loss)]
 async fn eval_full_corpus() {
     const GOALS: &[&str] = &[
         // Research + writing tasks
@@ -213,7 +214,7 @@ async fn eval_full_corpus() {
 ///
 /// Verifies that `plan()` returns a valid, non-trivial graph.
 #[tokio::test]
-#[ignore]
+#[ignore = "requires a running LLM at GGLIB_EVAL_LLM_URL"]
 async fn eval_canonical_acceptance_prompt() {
     let r = run_eval("Research the history of llama.cpp and write a summary", 2).await;
     print_result(&r);

@@ -59,7 +59,7 @@ pub enum PlanError {
 
 impl From<TaskGraphError> for PlanError {
     fn from(e: TaskGraphError) -> Self {
-        PlanError::ValidationFailed {
+        Self::ValidationFailed {
             max_replans: 0,
             last_error: e.to_string(),
         }
@@ -73,7 +73,7 @@ impl From<TaskGraphError> for PlanError {
 /// Intermediate representation returned by the LLM before conversion to
 /// [`TaskGraph`].
 ///
-/// Uses a flat list of nodes instead of a HashMap so the JSON schema and
+/// Uses a flat list of nodes instead of a `HashMap` so the JSON schema and
 /// prompt examples stay simple and unambiguous for small models.
 ///
 /// # Example (doc-test: schema round-trip, no LLM required)
@@ -189,6 +189,7 @@ pub async fn plan(
     tx: Option<mpsc::Sender<OrchestratorEvent>>,
 ) -> Result<TaskGraph, PlanError> {
     let tool_catalog = render_tool_catalog(tools);
+    #[allow(clippy::literal_string_with_formatting_args)]
     let system = DIRECTOR_SYSTEM_PROMPT.replace("{tool_catalog}", &tool_catalog);
 
     let mut messages: Vec<AgentMessage> = vec![
@@ -255,7 +256,7 @@ pub async fn plan(
             Ok(g) => g,
             Err(e) => {
                 let err = e.to_string();
-                last_error = err.clone();
+                last_error.clone_from(&err);
                 push_error_feedback(&mut messages, &director_plan, &err);
                 continue;
             }
@@ -265,7 +266,7 @@ pub async fn plan(
         if !tools.is_empty() {
             if let Err(e) = graph.validate_tool_allowlist(tools) {
                 let err = e.to_string();
-                last_error = err.clone();
+                last_error.clone_from(&err);
                 push_error_feedback(&mut messages, &director_plan, &err);
                 continue;
             }
@@ -273,7 +274,7 @@ pub async fn plan(
 
         // In-degree cap.
         if let Some(err) = check_in_degree(&graph) {
-            last_error = err.clone();
+            last_error.clone_from(&err);
             push_error_feedback(&mut messages, &director_plan, &err);
             continue;
         }
