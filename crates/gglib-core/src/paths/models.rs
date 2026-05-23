@@ -127,6 +127,4 @@ mod tests {
         assert_eq!(resolved.source, ModelsDirSource::EnvVar);
         assert!(resolved.path.ends_with("from-env"));
     }
-
-
 }
