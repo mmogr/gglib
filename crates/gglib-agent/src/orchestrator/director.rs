@@ -26,12 +26,15 @@ use tokio::sync::mpsc;
 
 use gglib_core::domain::agent::{AgentMessage, AssistantContent, ToolDefinition};
 use gglib_core::domain::orchestrator::events::OrchestratorEvent;
-use gglib_core::domain::orchestrator::task_graph::
-    {HitlMode, NodeId, NodeStatus, TaskGraph, TaskGraphError, TaskNode, TaskNodeKind};
+use gglib_core::domain::orchestrator::role_catalog::{RoleCatalog, RoleId};
+use gglib_core::domain::orchestrator::task_graph::{
+    HitlMode, NodeId, NodeStatus, TaskGraph, TaskGraphError, TaskNode, TaskNodeKind,
+};
 use gglib_core::ports::LlmCompletionPort;
 
 use gglib_core::ports::StructuredOutputError;
 
+use crate::orchestrator::chief_of_staff::{DepartmentBrief, render_role_catalog};
 use crate::orchestrator::prompts::{DIRECTOR_SYSTEM_PROMPT, director_plan_schema};
 use crate::structured_output::get_structured;
 
@@ -144,7 +147,12 @@ const MAX_IN_DEGREE: usize = 4;
 ///
 /// # Parameters
 ///
-/// - `goal` — High-level goal to decompose.
+/// - `goal` — High-level goal to decompose (or the original goal when called
+///   from the hierarchical planner — each department's `mission` is prepended).
+/// - `department` — Optional department brief from the Chief of Staff.  When
+///   `Some`, the user message is prefixed with the department name and mission,
+///   and `suggested_roles` are round-robin-assigned to leaf nodes.
+/// - `catalog` — Role catalog used to validate and render role information.
 /// - `tools` — Available tool catalog.  Pass `&[]` to skip allowlist
 ///   validation (useful when no executor is running).
 /// - `llm` — LLM completion port.
@@ -179,8 +187,11 @@ const MAX_IN_DEGREE: usize = 4;
 /// };
 /// assert_eq!(plan.nodes.len(), 1);
 /// ```
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub async fn plan(
     goal: &str,
+    department: Option<&DepartmentBrief>,
+    catalog: &RoleCatalog,
     tools: &[ToolDefinition],
     llm: Arc<dyn LlmCompletionPort>,
     hitl_mode: HitlMode,
@@ -188,14 +199,26 @@ pub async fn plan(
     tx: Option<mpsc::Sender<OrchestratorEvent>>,
 ) -> Result<TaskGraph, PlanError> {
     let tool_catalog = render_tool_catalog(tools);
+    let role_catalog_text = render_role_catalog(catalog);
     #[allow(clippy::literal_string_with_formatting_args)]
-    let system = DIRECTOR_SYSTEM_PROMPT.replace("{tool_catalog}", &tool_catalog);
+    let system = DIRECTOR_SYSTEM_PROMPT
+        .replace("{tool_catalog}", &tool_catalog)
+        .replace("{role_catalog}", &role_catalog_text);
+
+    // Build the user goal: if we have a department brief, prefix with its mission.
+    let user_goal = department.map_or_else(
+        || goal.to_owned(),
+        |dept| {
+            format!(
+                "Department: {}\nMission: {}\n\nGoal: {}",
+                dept.name, dept.mission, goal
+            )
+        },
+    );
 
     let mut messages: Vec<AgentMessage> = vec![
         AgentMessage::System { content: system },
-        AgentMessage::User {
-            content: goal.to_owned(),
-        },
+        AgentMessage::User { content: user_goal },
     ];
 
     let schema = director_plan_schema();
@@ -234,20 +257,31 @@ pub async fn plan(
         };
 
         // Convert flat nodes to TaskNode vec.
+        // If a department brief supplies roles, round-robin-assign them to nodes.
+        let suggested_roles: &[RoleId] = department.map_or(&[], |d| d.suggested_roles.as_slice());
+
         let task_nodes: Vec<TaskNode> = director_plan
             .nodes
             .iter()
-            .map(|n| TaskNode {
-                id: NodeId(n.id.clone()),
-                goal: n.goal.clone(),
-                depends_on: n.depends_on.iter().map(|d| NodeId(d.clone())).collect(),
-                tool_allowlist: n.tool_allowlist.clone(),
-                kind: TaskNodeKind::Leaf,
-                role: None,
-                status: NodeStatus::Pending,
-                output: None,
-                compacted_output: None,
-                error: None,
+            .enumerate()
+            .map(|(i, n)| {
+                let role = if suggested_roles.is_empty() {
+                    None
+                } else {
+                    Some(suggested_roles[i % suggested_roles.len()].clone())
+                };
+                TaskNode {
+                    id: NodeId(n.id.clone()),
+                    goal: n.goal.clone(),
+                    depends_on: n.depends_on.iter().map(|d| NodeId(d.clone())).collect(),
+                    tool_allowlist: n.tool_allowlist.clone(),
+                    kind: TaskNodeKind::Leaf,
+                    role,
+                    status: NodeStatus::Pending,
+                    output: None,
+                    compacted_output: None,
+                    error: None,
+                }
             })
             .collect();
 

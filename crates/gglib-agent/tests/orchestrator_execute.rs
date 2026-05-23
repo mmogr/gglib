@@ -136,6 +136,22 @@ fn one_node_plan_json() -> String {
     .to_string()
 }
 
+/// Chief-of-Staff response for a single department (used to prepend to each
+/// executor test so the new hierarchical planner gets its first LLM call
+/// satisfied before the Director call).
+fn cos_single_dept_json() -> String {
+    serde_json::json!({
+        "departments": [
+            {
+                "name": "main",
+                "mission": "Complete the task.",
+                "suggested_roles": []
+            }
+        ]
+    })
+    .to_string()
+}
+
 // =============================================================================
 // Helper: channel collector
 // =============================================================================
@@ -162,9 +178,14 @@ async fn single_node_happy_path_ends_with_complete() {
     // 3. Compaction (answer)          → "The worker answered: 42."
     // 4. Synthesis                    → "42."
     let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
         StubLlm::text_then_done(&one_node_plan_json()),
         StubLlm::text_then_done("The answer is 42."),
         StubLlm::text_then_done("The worker answered: 42."),
+        // synthesizer leaf worker + compaction at top-level
+        StubLlm::text_then_done("Synthesizer output."),
+        StubLlm::text_then_done("Synthesizer compacted."),
+        // final synthesis
         StubLlm::text_then_done("42."),
     ]);
 
@@ -214,11 +235,16 @@ async fn two_node_topological_order() {
     // 5. Compaction: write
     // 6. Synthesis
     let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
         StubLlm::text_then_done(&two_node_plan_json()),
         StubLlm::text_then_done("Research findings: lots of info."),
         StubLlm::text_then_done("Research found lots of info."),
         StubLlm::text_then_done("Report based on research."),
         StubLlm::text_then_done("Report complete."),
+        // synthesizer leaf worker + compaction at top-level
+        StubLlm::text_then_done("Synthesizer output."),
+        StubLlm::text_then_done("Synthesizer compacted."),
+        // final synthesis
         StubLlm::text_then_done("Final synthesised answer."),
     ]);
 
@@ -278,6 +304,7 @@ async fn worker_error_triggers_fail_fast() {
     // AgentLoop surfaces as AgentError::Internal, which our worker converts
     // to ExecuteError::WorkerFailed.
     let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
         StubLlm::text_then_done(&one_node_plan_json()),
         // No more entries — next call will return Err.
     ]);
@@ -314,9 +341,13 @@ async fn worker_error_triggers_fail_fast() {
 #[tokio::test]
 async fn plan_approved_event_emitted() {
     let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
         StubLlm::text_then_done(&one_node_plan_json()),
         StubLlm::text_then_done("Answer."),
         StubLlm::text_then_done("Worker answered."),
+        // synthesizer leaf worker + compaction
+        StubLlm::text_then_done("Synthesizer output."),
+        StubLlm::text_then_done("Synthesizer compacted."),
         StubLlm::text_then_done("42."),
     ]);
 
@@ -354,9 +385,13 @@ async fn plan_approved_event_emitted() {
 #[tokio::test]
 async fn synthesis_events_emitted() {
     let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
         StubLlm::text_then_done(&one_node_plan_json()),
         StubLlm::text_then_done("Answer."),
         StubLlm::text_then_done("Worker answered."),
+        // synthesizer leaf worker + compaction
+        StubLlm::text_then_done("Synthesizer output."),
+        StubLlm::text_then_done("Synthesizer compacted."),
         StubLlm::text_then_done("Synthesised answer."),
     ]);
 
