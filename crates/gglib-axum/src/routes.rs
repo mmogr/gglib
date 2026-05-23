@@ -131,6 +131,15 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/orchestrator/runs/{run_id}/resume",
             post(handlers::orchestrator::resume::resume_run),
         )
+        // Orchestrator Phase K: conversational steering
+        .route(
+            "/orchestrator/steer",
+            post(handlers::orchestrator::steer::steer),
+        )
+        .route(
+            "/orchestrator/runs/{run_id}/note",
+            post(handlers::orchestrator::note::post_note),
+        )
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }

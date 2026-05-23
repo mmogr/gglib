@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::agent::{ToolCall, ToolResult};
 use crate::domain::orchestrator::role_catalog::RoleId;
 
-use super::task_graph::TaskGraph;
+use super::task_graph::{GraphDiff, TaskGraph};
 
 /// Channel capacity for the orchestrator event sender.
 ///
@@ -319,5 +319,17 @@ pub enum OrchestratorEvent {
         parent_node_id: String,
         /// One-line summary of the child graph that was planned.
         child_graph_summary: String,
+    },
+
+    // ── steering (Phase K) ───────────────────────────────────────────────
+    /// A [`GraphDiff`] was applied to the task graph at a wave boundary.
+    ///
+    /// Emitted after [`super::task_graph::TaskGraph::apply_diff`] succeeds.
+    /// Informational only — execution continues with the updated graph.
+    SteeringApplied {
+        /// The diff that was applied.
+        diff: GraphDiff,
+        /// Zero-based wave index at which the diff was applied.
+        applied_at_wave: u32,
     },
 }

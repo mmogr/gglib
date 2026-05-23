@@ -118,6 +118,7 @@ fn main() {
                 agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
                 approval_registry: ctx.approval_registry.clone(),
                 orchestrator_repo: ctx.orchestrator_repo.clone(),
+                steering_note_queues: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
             };
 
             // Start embedded API server with auth and ephemeral port

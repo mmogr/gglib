@@ -440,3 +440,72 @@ pub fn chief_of_staff_schema() -> serde_json::Value {
         "additionalProperties": false
     })
 }
+
+// =============================================================================
+// Steering prompt + schema (Phase K)
+// =============================================================================
+
+/// System prompt for the steering LLM call.
+///
+/// The placeholder `<GRAPH_JSON>` is replaced with the current task graph
+/// serialised as pretty-printed JSON before the call is made.
+pub const STEERING_SYSTEM_PROMPT: &str = "\
+You are a task-graph planner assistant.
+The user will describe one change to make to the current execution plan.
+Respond with exactly one JSON object that conforms to the GraphDiff schema.
+
+Current task graph (JSON):
+<GRAPH_JSON>
+
+Available operations (use exactly one):
+  add_node      — add a new node.
+                  Fields: op, node (object with id, goal, depends_on, tool_allowlist, kind, status)
+  remove_node   — remove an existing node and its edges.
+                  Fields: op, id
+  split_node    — replace one node with multiple nodes.
+                  Fields: op, id, into (array of node objects)
+  reroute_edge  — change one dependency edge.
+                  Fields: op, node_id, old_dep, new_dep
+  set_role      — set or clear a node's specialist role.
+                  Fields: op, id, role (string or null)
+  set_tools     — replace a node's tool allowlist.
+                  Fields: op, id, tool_allowlist (array of strings)
+  wrap_in_team  — wrap several nodes into a new Team node.
+                  Fields: op, ids (array), team_id, team_goal
+
+Rules:
+- All node ids must be short, unique, lowercase identifiers (e.g. \"research\", \"review\").
+- The op field must be exactly one of the names listed above.
+- Return only the JSON object, no prose.
+";
+
+/// JSON Schema for a single [`gglib_core::domain::orchestrator::task_graph::GraphDiff`].
+///
+/// Deliberately flat (no `oneOf` / discriminated union) so that small models
+/// can satisfy the constraint reliably.  The `op` field acts as a discriminant.
+pub fn graph_diff_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "op": {
+                "type": "string",
+                "enum": [
+                    "add_node", "remove_node", "split_node",
+                    "reroute_edge", "set_role", "set_tools", "wrap_in_team"
+                ]
+            },
+            "node":           { "type": "object" },
+            "id":             { "type": "string" },
+            "into":           { "type": "array", "items": { "type": "object" } },
+            "node_id":        { "type": "string" },
+            "old_dep":        { "type": "string" },
+            "new_dep":        { "type": "string" },
+            "role":           {},
+            "tool_allowlist": { "type": "array", "items": { "type": "string" } },
+            "ids":            { "type": "array", "items": { "type": "string" } },
+            "team_id":        { "type": "string" },
+            "team_goal":      { "type": "string" }
+        },
+        "required": ["op"]
+    })
+}
