@@ -74,6 +74,7 @@ export type OrchestratorEvent =
   | ReplanAttemptEvent
   | RunCostEstimateEvent
   | SteeringAppliedEvent
+  | WaveCompletedEvent
   | AwaitingApprovalEvent
   | NodeStartedEvent
   | NodeTextDeltaEvent
@@ -281,6 +282,19 @@ export interface SteeringAppliedEvent {
   applied_at_wave: number;
 }
 
+// ─── Wave lifecycle (Phase M) ─────────────────────────────────────────────────
+
+/**
+ * Emitted once after all nodes in a topological wave complete.
+ *
+ * Used by WaveScrubber to render rewind waypoints.
+ */
+export interface WaveCompletedEvent {
+  type: 'wave_completed';
+  wave_index: number;
+  node_count: number;
+}
+
 // ─── HITL / approval types ───────────────────────────────────────────────────
 
 export type ApprovalKind =
@@ -325,5 +339,6 @@ export interface OrchestratorRunEvent {
   seq: number;
   event_json: string;
   created_at: string;
+  wave_index: number;
 }
 

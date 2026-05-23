@@ -20,6 +20,7 @@
 pub mod approve;
 pub mod note;
 pub mod resume;
+pub mod rewind;
 pub mod run;
 pub mod runs;
 pub mod steer;

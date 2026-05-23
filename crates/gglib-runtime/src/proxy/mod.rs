@@ -175,6 +175,15 @@ impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
         Ok(Vec::new())
     }
 
+    async fn truncate_events_after_wave(
+        &self,
+        _run_id: &str,
+        _wave_index: u32,
+    ) -> Result<(), RepositoryError> {
+        // In-memory repository: no-op.
+        Ok(())
+    }
+
     async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> {
         let mut count = 0u64;
         for run in self

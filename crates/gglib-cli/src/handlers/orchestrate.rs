@@ -326,7 +326,8 @@ async fn render_event(
         OrchestratorEvent::NodeProgress { .. }
         | OrchestratorEvent::SynthesisProgress { .. }
         | OrchestratorEvent::RunCostEstimate { .. }
-        | OrchestratorEvent::SubteamSpawned { .. } => {}
+        | OrchestratorEvent::SubteamSpawned { .. }
+        | OrchestratorEvent::WaveCompleted { .. } => {}
         OrchestratorEvent::SteeringApplied {
             applied_at_wave,
             diff,

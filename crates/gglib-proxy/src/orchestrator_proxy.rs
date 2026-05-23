@@ -621,7 +621,8 @@ pub(crate) fn orchestrator_event_to_content(event: &OrchestratorEvent) -> Option
         | OrchestratorEvent::OrchestratorComplete { .. }
         | OrchestratorEvent::TeamStarted { .. }
         | OrchestratorEvent::TeamSynthesized { .. }
-        | OrchestratorEvent::SubteamSpawned { .. } => None,
+        | OrchestratorEvent::SubteamSpawned { .. }
+        | OrchestratorEvent::WaveCompleted { .. } => None,
     }
 }
 

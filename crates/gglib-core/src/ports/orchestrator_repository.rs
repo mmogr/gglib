@@ -73,4 +73,16 @@ pub trait OrchestratorRepositoryPort: Send + Sync + 'static {
     /// Called once on application boot to handle the case where a process
     /// was killed mid-execution.
     async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError>;
+
+    /// Delete all events for a run whose `wave_index` is **strictly greater
+    /// than** `wave_index`.
+    ///
+    /// Used by the Phase M rewind endpoint to truncate the event log back to
+    /// the state it was in at the end of the specified wave so the run can be
+    /// re-executed from that point.
+    async fn truncate_events_after_wave(
+        &self,
+        run_id: &str,
+        wave_index: u32,
+    ) -> Result<(), RepositoryError>;
 }

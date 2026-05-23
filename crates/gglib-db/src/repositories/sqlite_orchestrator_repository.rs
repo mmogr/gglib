@@ -126,14 +126,31 @@ impl OrchestratorRepositoryPort for SqliteOrchestratorRepository {
     async fn append_event(&self, event: OrchestratorRunEvent) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
-            INSERT OR IGNORE INTO orchestrator_events (run_id, seq, event_json, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT OR IGNORE INTO orchestrator_events (run_id, seq, event_json, created_at, wave_index)
+            VALUES (?, ?, ?, ?, ?)
             "#,
         )
         .bind(&event.run_id)
         .bind(event.seq)
         .bind(&event.event_json)
         .bind(&event.created_at)
+        .bind(event.wave_index as i64)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn truncate_events_after_wave(
+        &self,
+        run_id: &str,
+        wave_index: u32,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "DELETE FROM orchestrator_events WHERE run_id = ? AND wave_index > ?",
+        )
+        .bind(run_id)
+        .bind(wave_index as i64)
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -228,7 +245,7 @@ impl OrchestratorRepositoryPort for SqliteOrchestratorRepository {
     ) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> {
         let rows = sqlx::query(
             r#"
-            SELECT run_id, seq, event_json, created_at
+            SELECT run_id, seq, event_json, created_at, wave_index
             FROM orchestrator_events
             WHERE run_id = ?
             ORDER BY seq ASC
@@ -241,11 +258,15 @@ impl OrchestratorRepositoryPort for SqliteOrchestratorRepository {
 
         let events = rows
             .iter()
-            .map(|r| OrchestratorRunEvent {
-                run_id: r.get("run_id"),
-                seq: r.get("seq"),
-                event_json: r.get("event_json"),
-                created_at: r.get("created_at"),
+            .map(|r| {
+                let wave_raw: i64 = r.get("wave_index");
+                OrchestratorRunEvent {
+                    run_id: r.get("run_id"),
+                    seq: r.get("seq"),
+                    event_json: r.get("event_json"),
+                    created_at: r.get("created_at"),
+                    wave_index: wave_raw as u32,
+                }
             })
             .collect();
 
@@ -324,6 +345,7 @@ mod tests {
                 seq: i,
                 event_json: format!(r#"{{"type":"node_started","seq":{i}}}"#),
                 created_at: "2026-01-01T00:00:00Z".to_string(),
+                wave_index: i as u32,
             })
             .await
             .unwrap();
@@ -351,6 +373,57 @@ mod tests {
         assert!(matches!(r4.status, OrchestratorRunStatus::Interrupted));
         let r5 = repo.get_run("run-5").await.unwrap().unwrap();
         assert!(matches!(r5.status, OrchestratorRunStatus::Completed));
+    }
+
+    #[tokio::test]
+    async fn truncate_events_after_wave() {
+        let repo = make_repo().await;
+        repo.create_run(make_run("run-trunc")).await.unwrap();
+        // wave 0: seq 0, 1
+        for seq in 0..2i64 {
+            repo.append_event(OrchestratorRunEvent {
+                run_id: "run-trunc".to_string(),
+                seq,
+                event_json: r#"{"type":"node_started"}"#.to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                wave_index: 0,
+            })
+            .await
+            .unwrap();
+        }
+        // wave 1: seq 2, 3
+        for seq in 2..4i64 {
+            repo.append_event(OrchestratorRunEvent {
+                run_id: "run-trunc".to_string(),
+                seq,
+                event_json: r#"{"type":"node_started"}"#.to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                wave_index: 1,
+            })
+            .await
+            .unwrap();
+        }
+        // wave 2: seq 4
+        repo.append_event(OrchestratorRunEvent {
+            run_id: "run-trunc".to_string(),
+            seq: 4,
+            event_json: r#"{"type":"node_started"}"#.to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            wave_index: 2,
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(repo.list_events("run-trunc").await.unwrap().len(), 5);
+
+        // Truncate after wave 0 — should remove waves 1 and 2.
+        repo.truncate_events_after_wave("run-trunc", 0)
+            .await
+            .unwrap();
+
+        let surviving = repo.list_events("run-trunc").await.unwrap();
+        assert_eq!(surviving.len(), 2);
+        assert!(surviving.iter().all(|ev| ev.wave_index == 0));
     }
 
     #[tokio::test]

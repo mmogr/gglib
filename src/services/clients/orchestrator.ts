@@ -298,3 +298,74 @@ export async function resumeOrchestratorRun(
     }
   }
 }
+
+// ─── Phase M: Rewind ─────────────────────────────────────────────────────────
+
+export interface RewindOrchestratorParams {
+  port: number;
+  model?: string;
+  wave_index: number;
+  steering_note?: string;
+}
+
+/**
+ * POST /api/orchestrator/runs/{id}/rewind
+ *
+ * Rewind a run to a previous wave and re-execute from there.
+ * Streams new events via SSE.
+ */
+export async function rewindOrchestratorRun(
+  id: string,
+  params: RewindOrchestratorParams,
+  onEvent?: (event: OrchestratorEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(
+    `${baseUrl}/api/orchestrator/runs/${encodeURIComponent(id)}/rewind`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers as Record<string, string>),
+      },
+      body: JSON.stringify(params),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ?? `Rewind failed: ${response.status}`,
+    );
+  }
+  if (!onEvent) return;
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body for rewind SSE stream');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() ?? '';
+    for (const part of parts) {
+      for (const line of part.split('\n')) {
+        if (line.startsWith('data:')) {
+          const json = line.slice(5).trim();
+          if (json) {
+            try {
+              onEvent(JSON.parse(json) as OrchestratorEvent);
+            } catch {
+              // skip malformed events
+            }
+          }
+        }
+      }
+    }
+  }
+}

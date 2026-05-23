@@ -131,6 +131,10 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/orchestrator/runs/{run_id}/resume",
             post(handlers::orchestrator::resume::resume_run),
         )
+        .route(
+            "/orchestrator/runs/{run_id}/rewind",
+            post(handlers::orchestrator::rewind::rewind_run),
+        )
         // Orchestrator Phase K: conversational steering
         .route(
             "/orchestrator/steer",
