@@ -46,7 +46,7 @@ use gglib_core::domain::orchestrator::events::{ApprovalKind, OrchestratorEvent};
 use gglib_core::domain::orchestrator::run::{
     OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus,
 };
-use gglib_core::domain::orchestrator::task_graph::{HitlMode, NodeId, TaskGraph};
+use gglib_core::domain::orchestrator::task_graph::{HitlMode, NodeId, TaskGraph, TaskNodeKind};
 use gglib_core::ports::{
     AgentLoopPort, ApprovalDecision, LlmCompletionPort, OrchestratorApprovalRegistryPort,
     OrchestratorRepositoryPort, ToolExecutorPort,
@@ -58,7 +58,8 @@ use gglib_core::{
 use crate::AgentLoop;
 
 use super::compaction::{CompactionError, compact_worker_output};
-use super::director::{PlanError, plan};
+use super::director::PlanError;
+use super::planner::plan;
 use super::synthesis::run_synthesis;
 
 // =============================================================================
@@ -66,6 +67,7 @@ use super::synthesis::run_synthesis;
 // =============================================================================
 
 /// Tuning parameters for a single orchestrator execution run.
+#[derive(Clone)]
 pub struct OrchestratorConfig {
     /// Maximum number of director replan attempts after the first.
     ///
@@ -536,7 +538,53 @@ async fn run_wave_loop(
         let mut join_set: JoinSet<(NodeId, Result<(String, String), ExecuteError>)> =
             JoinSet::new();
 
-        for node_id in ready {
+        // ── Handle Team nodes inline (not spawned) ───────────────────────────
+        // Team nodes must be run before we spawn the rest of the wave because
+        // they are not `Send` (they borrow `event_seq`).  In practice this
+        // means team nodes in the same wave run serially before leaf nodes.
+        let mut team_nodes_in_wave: Vec<&NodeId> = Vec::new();
+        let mut leaf_nodes_in_wave: Vec<&NodeId> = Vec::new();
+        for node_id in &ready {
+            if matches!(&graph.nodes[node_id].kind, TaskNodeKind::Team { .. }) {
+                team_nodes_in_wave.push(node_id);
+            } else {
+                leaf_nodes_in_wave.push(node_id);
+            }
+        }
+
+        for team_id in team_nodes_in_wave {
+            let node = &graph.nodes[team_id];
+            if let TaskNodeKind::Team { subgraph } = &node.kind {
+                let sub_result = Box::pin(run_wave_loop(
+                    &node.goal,
+                    subgraph,
+                    HashSet::new(),
+                    Arc::clone(&llm),
+                    Arc::clone(&tool_executor),
+                    config,
+                    run_id,
+                    event_seq,
+                    tx,
+                ))
+                .await;
+
+                match sub_result {
+                    Ok(sub_compacted) => {
+                        let summary = sub_compacted
+                            .values()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        compacted.insert(team_id.clone(), summary);
+                        completed.insert(team_id.clone());
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+
+        // Spawn all ready *leaf* nodes concurrently, bounded by the semaphore.
+        for node_id in leaf_nodes_in_wave {
             let node = &graph.nodes[node_id];
             let node_id_clone = node_id.clone();
             let node_goal = node.goal.clone();

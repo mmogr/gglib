@@ -21,6 +21,9 @@
 //!
 //! The director function ([`super::director::plan`]) validates and converts
 //! this into a fully-checked [`gglib_core::domain::orchestrator::task_graph::TaskGraph`].
+//!
+//! The Chief of Staff prompt instructs the model to decompose a goal into
+//! 1–5 departments, each with a mission statement and suggested specialist roles.
 
 // =============================================================================
 // Director system prompt
@@ -28,16 +31,22 @@
 
 /// System prompt injected for the director planning pass.
 ///
-/// Placeholders: `{tool_catalog}`.
+/// Placeholders: `{tool_catalog}`, `{role_catalog}`.
 ///
-/// The tool catalog is rendered as `"- name: description"` lines so the model
+/// `{tool_catalog}` is rendered as `"- name: description"` lines so the model
 /// knows which tool names it may use in `tool_allowlist` entries.
+/// `{role_catalog}` is rendered as `"- id: display_name — fragment"` lines
+/// summarising the available specialist roles; inject `"(none)"` when absent.
 pub const DIRECTOR_SYSTEM_PROMPT: &str = "\
-You are the Director Agent. Given a high-level goal, decompose it into a \
-directed acyclic task graph (DAG) of worker nodes that together achieve the goal.
+You are the Director Agent. Given a high-level goal (and optionally a department \
+mission), decompose it into a directed acyclic task graph (DAG) of worker nodes \
+that together achieve the goal.
 
 TOOL CATALOG (only these tool names may appear in tool_allowlist):
 {tool_catalog}
+
+SPECIALIST ROLES (optionally assign one role per node using the role field):
+{role_catalog}
 
 OUTPUT FORMAT:
 Respond with ONLY the JSON object below — no explanation, no markdown fences, \
@@ -267,3 +276,167 @@ The following are the results from the completed worker agents:
 Produce a clear, direct, and complete answer to the original goal that integrates \
 all agent outputs. Be concise and actionable. Do not repeat the goal or introduce \
 each section with agent names — write a unified response as if you produced it yourself.";
+
+// =============================================================================
+// Chief of Staff system prompt
+// =============================================================================
+
+/// System prompt for the Chief of Staff structured-output call.
+///
+/// Placeholders: `{role_catalog}`.
+///
+/// The Chief of Staff receives the user goal and returns 1–5 `DepartmentBrief`
+/// objects (name, mission, `suggested_roles`).  The planner fans out one
+/// [`super::director::plan`] call per department in parallel.
+///
+/// # Expected output shape
+///
+/// ```json
+/// {
+///   "departments": [
+///     {
+///       "name": "research",
+///       "mission": "Gather all factual evidence about llama.cpp's history.",
+///       "suggested_roles": ["researcher", "fact-checker"]
+///     },
+///     {
+///       "name": "writing",
+///       "mission": "Produce and polish the final written summary.",
+///       "suggested_roles": ["writer", "editor"]
+///     }
+///   ]
+/// }
+/// ```
+pub const CHIEF_OF_STAFF_SYSTEM_PROMPT: &str = "\
+You are the Chief of Staff. Your job is to decompose a complex goal into 1–5 \
+focused departments. Each department will be handed to a specialist Director \
+who will further decompose it into individual worker tasks.
+
+AVAILABLE SPECIALIST ROLES:
+{role_catalog}
+
+OUTPUT FORMAT:
+Respond with ONLY the JSON object below — no explanation, no markdown fences, \
+no surrounding text:
+{ \"departments\": [...] }
+
+Each department must have:
+- name: short, unique kebab-case identifier (e.g. \"research\", \"risk-review\")
+- mission: one or two sentences describing what this department must accomplish
+- suggested_roles: array of role ids from AVAILABLE SPECIALIST ROLES (may be empty [])
+
+CONSTRAINTS:
+- 1 to 5 departments maximum
+- Department names must be unique (after trimming and lower-casing)
+- Each department mission must be distinct from the others
+- Do not create a department whose entire scope is covered by another department
+- suggested_roles entries must be ids from AVAILABLE SPECIALIST ROLES (or empty [])
+
+DECOMPOSITION RULES:
+- Decompose by area of expertise, not by execution order
+- Departments run in parallel; do not create explicit dependencies between them
+- A single-discipline goal (e.g. \"summarise this article\") should produce exactly
+  one department — do not over-engineer
+
+EXAMPLES:
+
+# Example 1 — Single department (simple goal)
+Goal: \"Summarise this article about climate change\"
+Response:
+{
+  \"departments\": [
+    {
+      \"name\": \"summarisation\",
+      \"mission\": \"Read the article and produce a concise, accurate summary of its key claims and evidence.\",
+      \"suggested_roles\": [\"researcher\", \"writer\"]
+    }
+  ]
+}
+
+# Example 2 — Multi-department (launch plan)
+Goal: \"Write a product launch plan with marketing, engineering, and risk review\"
+Response:
+{
+  \"departments\": [
+    {
+      \"name\": \"marketing\",
+      \"mission\": \"Develop the go-to-market strategy, messaging, and channel plan for the product launch.\",
+      \"suggested_roles\": [\"writer\", \"critic\"]
+    },
+    {
+      \"name\": \"engineering\",
+      \"mission\": \"Define the technical readiness checklist, release sequencing, and rollback plan.\",
+      \"suggested_roles\": [\"researcher\", \"fact-checker\"]
+    },
+    {
+      \"name\": \"risk-review\",
+      \"mission\": \"Identify launch risks across marketing, engineering, and operations, and propose mitigations.\",
+      \"suggested_roles\": [\"red-team\", \"critic\"]
+    }
+  ]
+}";
+
+// =============================================================================
+// JSON Schema for ChiefOfStaffPlan
+// =============================================================================
+
+/// Build the JSON Schema for [`super::chief_of_staff::ChiefOfStaffPlan`].
+///
+/// Passed to [`crate::structured_output::get_structured`] as the
+/// `ResponseFormat::JsonSchema` constraint.
+///
+/// # Schema shape
+///
+/// ```json
+/// {
+///   "type": "object",
+///   "properties": {
+///     "departments": {
+///       "type": "array",
+///       "items": {
+///         "type": "object",
+///         "properties": {
+///           "name": { "type": "string" },
+///           "mission": { "type": "string" },
+///           "suggested_roles": { "type": "array", "items": { "type": "string" } }
+///         },
+///         "required": ["name", "mission", "suggested_roles"]
+///       }
+///     }
+///   },
+///   "required": ["departments"]
+/// }
+/// ```
+pub fn chief_of_staff_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "departments": {
+                "type": "array",
+                "description": "List of 1–5 departments the goal is decomposed into.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Short, unique kebab-case department identifier."
+                        },
+                        "mission": {
+                            "type": "string",
+                            "description": "One or two sentences describing the department's scope."
+                        },
+                        "suggested_roles": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Specialist role ids suggested for this department's nodes."
+                        }
+                    },
+                    "required": ["name", "mission", "suggested_roles"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": ["departments"],
+        "additionalProperties": false
+    })
+}

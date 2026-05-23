@@ -8,20 +8,25 @@
 //!
 //! | Module | Contents |
 //! |--------|----------|
-//! | [`director`] | [`director::plan`] — director planning function, [`director::PlanError`] |
-//! | [`prompts`]  | System prompt template, few-shot examples, JSON Schema |
+//! | [`chief_of_staff`] | [`chief_of_staff::brief`] — decompose goal into department briefs |
+//! | [`director`] | [`director::plan`] — flat director planning, [`director::PlanError`] |
+//! | [`planner`] | [`planner::plan`] — hierarchical two-tier planning entry point |
+//! | [`prompts`]  | System prompt templates, few-shot examples, JSON Schemas |
 //!
-//! # Phase B scope
+//! # Phase H scope
 //!
-//! Phase B implements **planning only** — no worker execution.  The returned
-//! [`TaskGraph`] is ready for display (CLI tree, SSE stream, Tauri page) and
-//! for Phase C+ execution.
+//! Phase H replaces the flat single-shot director with a two-tier hierarchical
+//! planner.  The executor's external call signature is unchanged — it calls
+//! [`planner::plan`] which internally runs Chief of Staff → N × Director.
 
+pub(crate) mod chief_of_staff;
 pub(crate) mod compaction;
 pub mod director;
 pub mod executor;
+pub mod planner;
 pub mod prompts;
 pub(crate) mod synthesis;
 
-pub use director::{DirectorNode, DirectorPlan, PlanError, plan};
+pub use director::{DirectorNode, DirectorPlan, PlanError};
 pub use executor::{ExecuteError, OrchestratorConfig, execute};
+pub use planner::plan;
