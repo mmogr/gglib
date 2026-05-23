@@ -18,9 +18,11 @@
 //! closes.
 
 pub mod approve;
+pub mod note;
 pub mod resume;
 pub mod run;
 pub mod runs;
+pub mod steer;
 
 use std::convert::Infallible;
 

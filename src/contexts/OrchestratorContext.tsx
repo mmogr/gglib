@@ -13,6 +13,7 @@ import type {
   TaskGraph,
   OrchestratorRun,
   ApprovalKind,
+  GraphDiff,
 } from '../types/orchestrator';
 
 // ─── Cost estimate ───────────────────────────────────────────────────────────────────
@@ -67,6 +68,8 @@ export interface OrchestratorSession {
   pendingApproval: PendingApproval | null;
   costEstimate: RunCostEstimate | null;
   error: string | null;
+  /** Most recent steering diff received from a steering_applied event. */
+  pendingDiff: GraphDiff | null;
   /** Runs loaded from GET /api/orchestrator/runs */
   runs: OrchestratorRun[];
   runsLoading: boolean;
@@ -82,6 +85,7 @@ function createEmptySession(): OrchestratorSession {
     pendingApproval: null,
     costEstimate: null,
     error: null,
+    pendingDiff: null,
     runs: [],
     runsLoading: false,
   };
@@ -121,7 +125,9 @@ export type OrchestratorAction =
   // Runs list
   | { type: 'RUNS_LOADING' }
   | { type: 'RUNS_LOADED'; runs: OrchestratorRun[] }
-  | { type: 'RUNS_ERROR' };
+  | { type: 'RUNS_ERROR' }
+  // Steering (Phase K)
+  | { type: 'SET_PENDING_DIFF'; diff: GraphDiff | null };
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
@@ -299,6 +305,9 @@ export function orchestratorReducer(
 
     case 'RUNS_ERROR':
       return { ...state, runsLoading: false };
+
+    case 'SET_PENDING_DIFF':
+      return { ...state, pendingDiff: action.diff };
 
     default:
       return state;

@@ -327,6 +327,17 @@ async fn render_event(
         | OrchestratorEvent::SynthesisProgress { .. }
         | OrchestratorEvent::RunCostEstimate { .. }
         | OrchestratorEvent::SubteamSpawned { .. } => {}
+        OrchestratorEvent::SteeringApplied {
+            applied_at_wave,
+            diff,
+        } => {
+            eprintln!(
+                "{}[wave {applied_at_wave}] ↩ steering applied: {:?}{}",
+                style::DIM,
+                diff,
+                style::RESET,
+            );
+        }
     }
 }
 

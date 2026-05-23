@@ -64,6 +64,7 @@ use super::director::PlanError;
 use super::estimator::estimate_run_cost;
 use super::planner::plan;
 use super::spawn::{SpawnCapturingExecutor, SpawnRequest, SpawnSink};
+use super::steering::NoteQueue;
 use super::synthesis::run_synthesis;
 
 // =============================================================================
@@ -123,6 +124,17 @@ pub struct OrchestratorConfig {
     /// executor emits a [`tracing::warn!`] but **never** returns an error.
     /// Defaults to [`NodeBudget::TaskForce`] (25 nodes).
     pub node_budget: NodeBudget,
+
+    /// Optional per-run steering note queue.
+    ///
+    /// When set, the executor drains this queue at each wave boundary
+    /// (depth 0 only).  For each queued instruction it calls the steering LLM,
+    /// applies the returned [`GraphDiff`], and emits a
+    /// [`OrchestratorEvent::SteeringApplied`] event.  Instructions are
+    /// silently discarded on parse or validation failure (a warning is logged).
+    ///
+    /// `None` disables steering (backward-compatible).
+    pub note_queue: Option<NoteQueue>,
 }
 
 impl Default for OrchestratorConfig {
@@ -137,6 +149,7 @@ impl Default for OrchestratorConfig {
             graph_override: None,
             max_team_depth: 9,
             node_budget: NodeBudget::default(),
+            note_queue: None,
         }
     }
 }
@@ -282,7 +295,7 @@ pub async fn execute(
     };
 
     // ── 1. Planning (or graph override for resume) ────────────────────────────
-    let graph = if let Some(override_graph) = config.graph_override.clone() {
+    let mut graph = if let Some(override_graph) = config.graph_override.clone() {
         // Resume path: skip the director entirely.
         let _ = tx
             .send(OrchestratorEvent::PlanProposed {
@@ -452,7 +465,7 @@ pub async fn execute(
 
     let result = run_wave_loop(
         goal,
-        &graph,
+        &mut graph,
         pre_completed,
         Arc::clone(&llm),
         Arc::clone(&tool_executor),
@@ -506,7 +519,7 @@ pub async fn execute(
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn run_wave_loop(
     _goal: &str,
-    graph: &TaskGraph,
+    graph: &mut TaskGraph,
     mut completed: HashSet<NodeId>,
     llm: Arc<dyn LlmCompletionPort>,
     tool_executor: Arc<dyn ToolExecutorPort>,
@@ -526,9 +539,46 @@ async fn run_wave_loop(
         return Err(ExecuteError::MaxDepthExceeded);
     }
     let mut compacted: HashMap<NodeId, String> = HashMap::new();
+    let mut wave_number: u32 = 0;
 
     loop {
-        let ready = graph.ready_nodes(&completed);
+        // ── Steering note drain (depth 0 only, before each wave) ─────────────
+        if depth == 0 {
+            if let Some(queue) = &config.note_queue {
+                let notes: Vec<String> = {
+                    let mut q = queue.lock().await;
+                    std::mem::take(&mut *q)
+                };
+                for note in notes {
+                    match super::steering::steering_call(graph, &note, &llm).await {
+                        Ok(diff) => match graph.apply_diff(&diff) {
+                            Ok(()) => {
+                                let _ = tx
+                                    .send(OrchestratorEvent::SteeringApplied {
+                                        diff,
+                                        applied_at_wave: wave_number,
+                                    })
+                                    .await;
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "orchestrator: steering diff invalid, skipping: {e}"
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            tracing::warn!("orchestrator: steering call failed, skipping: {e}");
+                        }
+                    }
+                }
+            }
+        }
+
+        let ready: Vec<NodeId> = graph
+            .ready_nodes(&completed)
+            .into_iter()
+            .cloned()
+            .collect();
         if ready.is_empty() {
             break;
         }
@@ -614,66 +664,74 @@ async fn run_wave_loop(
         // Team nodes must be run before we spawn the rest of the wave because
         // they are not `Send` (they borrow `event_seq`).  In practice this
         // means team nodes in the same wave run serially before leaf nodes.
-        let mut team_nodes_in_wave: Vec<&NodeId> = Vec::new();
-        let mut leaf_nodes_in_wave: Vec<&NodeId> = Vec::new();
+        let mut team_nodes_in_wave: Vec<NodeId> = Vec::new();
+        let mut leaf_nodes_in_wave: Vec<NodeId> = Vec::new();
         for node_id in &ready {
             if matches!(&graph.nodes[node_id].kind, TaskNodeKind::Team { .. }) {
-                team_nodes_in_wave.push(node_id);
+                team_nodes_in_wave.push(node_id.clone());
             } else {
-                leaf_nodes_in_wave.push(node_id);
+                leaf_nodes_in_wave.push(node_id.clone());
             }
         }
 
-        for team_id in team_nodes_in_wave {
-            let node = &graph.nodes[team_id];
-            if let TaskNodeKind::Team { subgraph } = &node.kind {
-                // Emit TeamStarted before recursing.
-                let _ = tx
-                    .send(OrchestratorEvent::TeamStarted {
-                        team_id: team_id.0.clone(),
-                        role: node.role.clone(),
-                    })
-                    .await;
+        for team_id in &team_nodes_in_wave {
+            // Clone the node data to release the immutable borrow before the
+            // recursive mutable call.
+            let (team_goal, team_role, mut sub_graph) = {
+                let node = &graph.nodes[team_id];
+                let sub = match &node.kind {
+                    TaskNodeKind::Team { subgraph } => (**subgraph).clone(),
+                    TaskNodeKind::Leaf => unreachable!("expected Team node"),
+                };
+                (node.goal.clone(), node.role.clone(), sub)
+            };
 
-                let sub_result = Box::pin(run_wave_loop(
-                    &node.goal,
-                    subgraph,
-                    HashSet::new(),
-                    Arc::clone(&llm),
-                    Arc::clone(&tool_executor),
-                    config,
-                    run_id,
-                    event_seq,
-                    tx,
-                    Arc::clone(&sem),
-                    depth + 1,
-                ))
+            // Emit TeamStarted before recursing.
+            let _ = tx
+                .send(OrchestratorEvent::TeamStarted {
+                    team_id: team_id.0.clone(),
+                    role: team_role,
+                })
                 .await;
 
-                match sub_result {
-                    Ok(sub_compacted) => {
-                        let summary = sub_compacted
-                            .values()
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        // Emit TeamSynthesized with the compacted summary.
-                        let _ = tx
-                            .send(OrchestratorEvent::TeamSynthesized {
-                                team_id: team_id.0.clone(),
-                                compacted_output: summary.clone(),
-                            })
-                            .await;
-                        compacted.insert(team_id.clone(), summary);
-                        completed.insert(team_id.clone());
-                    }
-                    Err(e) => return Err(e),
+            let sub_result = Box::pin(run_wave_loop(
+                &team_goal,
+                &mut sub_graph,
+                HashSet::new(),
+                Arc::clone(&llm),
+                Arc::clone(&tool_executor),
+                config,
+                run_id,
+                event_seq,
+                tx,
+                Arc::clone(&sem),
+                depth + 1,
+            ))
+            .await;
+
+            match sub_result {
+                Ok(sub_compacted) => {
+                    let summary = sub_compacted
+                        .values()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    // Emit TeamSynthesized with the compacted summary.
+                    let _ = tx
+                        .send(OrchestratorEvent::TeamSynthesized {
+                            team_id: team_id.0.clone(),
+                            compacted_output: summary.clone(),
+                        })
+                        .await;
+                    compacted.insert(team_id.clone(), summary);
+                    completed.insert(team_id.clone());
                 }
+                Err(e) => return Err(e),
             }
         }
 
         // Spawn all ready *leaf* nodes concurrently, bounded by the semaphore.
-        for node_id in leaf_nodes_in_wave {
+        for node_id in &leaf_nodes_in_wave {
             let node = &graph.nodes[node_id];
             let node_id_clone = node_id.clone();
             let node_goal = node.goal.clone();
@@ -832,9 +890,10 @@ async fn run_wave_loop(
                 .await;
 
             // Run the child subgraph recursively.
+            let mut child_graph_mut = child_graph;
             let child_result = Box::pin(run_wave_loop(
                 &spawn_req.goal,
-                &child_graph,
+                &mut child_graph_mut,
                 HashSet::new(),
                 Arc::clone(&llm),
                 Arc::clone(&tool_executor),
@@ -866,6 +925,8 @@ async fn run_wave_loop(
                 Err(e) => return Err(e),
             }
         }
+
+        wave_number += 1;
     } // end loop
 
     Ok(compacted)

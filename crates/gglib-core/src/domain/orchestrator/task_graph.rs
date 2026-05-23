@@ -376,6 +376,102 @@ pub enum TaskGraphError {
         /// The tool name that was not found in the catalog.
         tool: String,
     },
+
+    /// A referenced node id was not found in the graph.
+    #[error("node not found: {0}")]
+    NodeNotFound(String),
+
+    /// The diff is structurally invalid (e.g. would leave an empty graph).
+    #[error("invalid diff: {0}")]
+    DiffInvalid(String),
+}
+
+// =============================================================================
+// GraphDiff
+// =============================================================================
+
+/// A single mutation to apply to a [`TaskGraph`] at runtime.
+///
+/// Produced by the steering LLM (`gglib_agent::orchestrator::steering`) and
+/// applied via [`TaskGraph::apply_diff`].  Each variant mutates the graph and
+/// then triggers re-validation to ensure the graph stays well-formed.
+///
+/// The `#[non_exhaustive]` attribute allows new variants to be added in future
+/// minor versions without breaking match arms in external crates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum GraphDiff {
+    /// Add a new node.
+    ///
+    /// The node's `depends_on` carries all its incoming edges.
+    AddNode {
+        /// Node to insert.
+        node: TaskNode,
+    },
+
+    /// Remove a node and strip all edges that pointed to it.
+    ///
+    /// Any node whose `depends_on` contains `id` will have that entry removed.
+    RemoveNode {
+        /// Id of the node to remove.
+        id: NodeId,
+    },
+
+    /// Replace one node with multiple nodes.
+    ///
+    /// The original is removed; each entry in `into` is inserted.  Any node
+    /// that depended on the original will be updated to depend on all
+    /// replacements.
+    SplitNode {
+        /// Id of the node to replace.
+        id: NodeId,
+        /// Replacement nodes (at least one entry required).
+        into: Vec<TaskNode>,
+    },
+
+    /// Redirect one dependency edge.
+    ///
+    /// In `node_id`'s `depends_on` list, replaces `old_dep` with `new_dep`.
+    RerouteEdge {
+        /// Node whose dependency is being changed.
+        node_id: NodeId,
+        /// Dependency to remove.
+        old_dep: NodeId,
+        /// Dependency to add in its place.
+        new_dep: NodeId,
+    },
+
+    /// Set or clear a node's specialist role.
+    SetRole {
+        /// Target node id.
+        id: NodeId,
+        /// New role (`None` clears the current role).
+        role: Option<RoleId>,
+    },
+
+    /// Replace a node's entire tool allowlist.
+    SetTools {
+        /// Target node id.
+        id: NodeId,
+        /// New tool allowlist (replaces the current list entirely).
+        tool_allowlist: Vec<String>,
+    },
+
+    /// Wrap a set of nodes into a new [`TaskNodeKind::Team`] node.
+    ///
+    /// The wrapped nodes become the team's subgraph.  The `team_id` node
+    /// inherits all external in-edges (from nodes NOT in `ids`) and any
+    /// node outside `ids` that depended on a wrapped node will be updated
+    /// to depend on `team_id` instead.
+    WrapInTeam {
+        /// Ids of the nodes to wrap (all must exist in the graph).
+        ids: Vec<NodeId>,
+        /// Unique id for the new `Team` wrapper node.
+        team_id: NodeId,
+        /// High-level goal text for the new `Team` node.
+        team_goal: String,
+    },
 }
 
 // =============================================================================
@@ -794,6 +890,256 @@ impl TaskGraph {
                 TaskNodeKind::Team { subgraph } => 1 + subgraph.total_node_count(),
             })
             .sum()
+    }
+
+    /// Apply a [`GraphDiff`] mutation in-place, then re-validate.
+    ///
+    /// If either the mutation itself or the subsequent [`validate_acyclic`]
+    /// call fails, the graph is restored to its pre-call state (clone-and-swap
+    /// rollback) and the error is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`TaskGraphError`] encountered (pre-condition checks
+    /// or post-mutation validation).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::orchestrator::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
+    ///     GraphDiff,
+    /// };
+    ///
+    /// let nodes = vec![TaskNode {
+    ///     id: NodeId("a".into()), goal: "a".into(), depends_on: vec![],
+    ///     tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///     status: NodeStatus::Pending, output: None,
+    ///     compacted_output: None, error: None,
+    /// }];
+    /// let mut g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
+    ///
+    /// let new_node = TaskNode {
+    ///     id: NodeId("b".into()), goal: "b".into(),
+    ///     depends_on: vec![NodeId("a".into())],
+    ///     tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///     status: NodeStatus::Pending, output: None,
+    ///     compacted_output: None, error: None,
+    /// };
+    /// g.apply_diff(&GraphDiff::AddNode { node: new_node }).unwrap();
+    /// assert_eq!(g.nodes.len(), 2);
+    /// ```
+    pub fn apply_diff(&mut self, diff: &GraphDiff) -> Result<(), TaskGraphError> {
+        let saved = self.clone();
+        match self.apply_diff_inner(diff) {
+            Ok(()) => match self.validate_acyclic() {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    *self = saved;
+                    Err(e)
+                }
+            },
+            Err(e) => {
+                *self = saved;
+                Err(e)
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn apply_diff_inner(&mut self, diff: &GraphDiff) -> Result<(), TaskGraphError> {
+        match diff {
+            GraphDiff::AddNode { node } => {
+                if self.nodes.contains_key(&node.id) {
+                    return Err(TaskGraphError::DuplicateNodeId(node.id.0.clone()));
+                }
+                if self.nodes.len() >= MAX_NODES {
+                    return Err(TaskGraphError::TooManyNodes {
+                        count: self.nodes.len() + 1,
+                        max: MAX_NODES,
+                    });
+                }
+                self.nodes.insert(node.id.clone(), node.clone());
+            }
+
+            GraphDiff::RemoveNode { id } => {
+                if !self.nodes.contains_key(id) {
+                    return Err(TaskGraphError::NodeNotFound(id.0.clone()));
+                }
+                if self.nodes.len() == 1 {
+                    return Err(TaskGraphError::DiffInvalid(
+                        "cannot remove the only node in a graph".into(),
+                    ));
+                }
+                self.nodes.remove(id);
+                for node in self.nodes.values_mut() {
+                    node.depends_on.retain(|dep| dep != id);
+                }
+            }
+
+            GraphDiff::SplitNode { id, into } => {
+                if !self.nodes.contains_key(id) {
+                    return Err(TaskGraphError::NodeNotFound(id.0.clone()));
+                }
+                if into.is_empty() {
+                    return Err(TaskGraphError::DiffInvalid(
+                        "split_node: replacement list must not be empty".into(),
+                    ));
+                }
+                // Check for id conflicts among replacements (excluding the original id).
+                for n in into {
+                    if &n.id != id && self.nodes.contains_key(&n.id) {
+                        return Err(TaskGraphError::DuplicateNodeId(n.id.0.clone()));
+                    }
+                }
+                let new_count = self.nodes.len() - 1 + into.len();
+                if new_count > MAX_NODES {
+                    return Err(TaskGraphError::TooManyNodes {
+                        count: new_count,
+                        max: MAX_NODES,
+                    });
+                }
+                let replacement_ids: Vec<NodeId> = into.iter().map(|n| n.id.clone()).collect();
+                self.nodes.remove(id);
+                for n in into {
+                    self.nodes.insert(n.id.clone(), n.clone());
+                }
+                // Repoint any node that depended on the split node.
+                for node in self.nodes.values_mut() {
+                    if node.depends_on.contains(id) {
+                        node.depends_on.retain(|dep| dep != id);
+                        for rid in &replacement_ids {
+                            if !node.depends_on.contains(rid) {
+                                node.depends_on.push(rid.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            GraphDiff::RerouteEdge {
+                node_id,
+                old_dep,
+                new_dep,
+            } => {
+                if !self.nodes.contains_key(node_id) {
+                    return Err(TaskGraphError::NodeNotFound(node_id.0.clone()));
+                }
+                if !self.nodes.contains_key(new_dep) {
+                    return Err(TaskGraphError::NodeNotFound(new_dep.0.clone()));
+                }
+                let node = self.nodes.get_mut(node_id).expect("checked above");
+                let pos = node
+                    .depends_on
+                    .iter()
+                    .position(|d| d == old_dep)
+                    .ok_or_else(|| {
+                        TaskGraphError::DiffInvalid(format!(
+                            "node '{}' does not depend on '{}'",
+                            node_id.0, old_dep.0
+                        ))
+                    })?;
+                node.depends_on[pos] = new_dep.clone();
+            }
+
+            GraphDiff::SetRole { id, role } => {
+                let node = self
+                    .nodes
+                    .get_mut(id)
+                    .ok_or_else(|| TaskGraphError::NodeNotFound(id.0.clone()))?;
+                node.role.clone_from(role);
+            }
+
+            GraphDiff::SetTools { id, tool_allowlist } => {
+                let node = self
+                    .nodes
+                    .get_mut(id)
+                    .ok_or_else(|| TaskGraphError::NodeNotFound(id.0.clone()))?;
+                node.tool_allowlist.clone_from(tool_allowlist);
+            }
+
+            GraphDiff::WrapInTeam {
+                ids,
+                team_id,
+                team_goal,
+            } => {
+                if ids.is_empty() {
+                    return Err(TaskGraphError::DiffInvalid(
+                        "wrap_in_team: ids list must not be empty".into(),
+                    ));
+                }
+                if self.nodes.contains_key(team_id) {
+                    return Err(TaskGraphError::DuplicateNodeId(team_id.0.clone()));
+                }
+                for id in ids {
+                    if !self.nodes.contains_key(id) {
+                        return Err(TaskGraphError::NodeNotFound(id.0.clone()));
+                    }
+                }
+
+                let wrapped_set: HashSet<NodeId> = ids.iter().cloned().collect();
+
+                // Team node inherits all external deps of the wrapped nodes.
+                let mut team_deps: Vec<NodeId> = Vec::new();
+                for id in ids {
+                    for dep in &self.nodes[id].depends_on {
+                        if !wrapped_set.contains(dep) && !team_deps.contains(dep) {
+                            team_deps.push(dep.clone());
+                        }
+                    }
+                }
+
+                // Extract wrapped nodes into the subgraph (stripping external deps).
+                let mut sub_nodes: HashMap<NodeId, TaskNode> = HashMap::new();
+                for id in ids {
+                    let mut node = self.nodes.remove(id).expect("checked above");
+                    node.depends_on.retain(|dep| wrapped_set.contains(dep));
+                    sub_nodes.insert(id.clone(), node);
+                }
+
+                // Repoint external nodes that depended on any wrapped node.
+                for node in self.nodes.values_mut() {
+                    let had_dep = node.depends_on.iter().any(|d| wrapped_set.contains(d));
+                    if had_dep {
+                        node.depends_on.retain(|d| !wrapped_set.contains(d));
+                        if !node.depends_on.contains(team_id) {
+                            node.depends_on.push(team_id.clone());
+                        }
+                    }
+                }
+
+                // Size guard for the parent graph (after removals, before insertion).
+                if self.nodes.len() >= MAX_NODES {
+                    return Err(TaskGraphError::TooManyNodes {
+                        count: self.nodes.len() + 1,
+                        max: MAX_NODES,
+                    });
+                }
+
+                let subgraph = Self {
+                    goal: team_goal.clone(),
+                    hitl_mode: self.hitl_mode.clone(),
+                    nodes: sub_nodes,
+                };
+
+                let team_node = TaskNode {
+                    id: team_id.clone(),
+                    goal: team_goal.clone(),
+                    depends_on: team_deps,
+                    tool_allowlist: vec![],
+                    kind: TaskNodeKind::Team {
+                        subgraph: Box::new(subgraph),
+                    },
+                    role: None,
+                    status: NodeStatus::Pending,
+                    output: None,
+                    compacted_output: None,
+                    error: None,
+                };
+                self.nodes.insert(team_id.clone(), team_node);
+            }
+        }
+        Ok(())
     }
 }
 

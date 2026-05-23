@@ -99,6 +99,8 @@ function eventToAction(event: OrchestratorEvent): OrchestratorAction | null {
     case 'team_synthesized':
     case 'subteam_spawned':
       return null;
+    case 'steering_applied':
+      return { type: 'SET_PENDING_DIFF', diff: event.diff };
     default:
       return null;
   }

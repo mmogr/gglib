@@ -22,6 +22,7 @@ import type {
   TaskGraph,
 } from '../../../types/orchestrator';
 import type { RunCostEstimate } from '../../../contexts/OrchestratorContext';
+import SteeringPanel from './SteeringPanel';
 
 interface HitlApprovalModalProps {
   open: boolean;
@@ -31,6 +32,10 @@ interface HitlApprovalModalProps {
   costEstimate: RunCostEstimate | null;
   /** Advisory upper bound for the active NodeBudget (default 25). */
   budgetUpper?: number;
+  /** Port for the steering LLM (required for plan edits via SteeringPanel). */
+  port?: number;
+  /** Optional model name for the steering LLM. */
+  model?: string;
   onApprove: (payload: ApprovalDecisionPayload) => void;
   onReject: (reason?: string) => void;
 }
@@ -42,24 +47,20 @@ const HitlApprovalModal: FC<HitlApprovalModalProps> = ({
   submitting,
   costEstimate,
   budgetUpper = 25,
+  port,
+  model,
   onApprove,
   onReject,
 }) => {
   const [rejectReason, setRejectReason] = useState('');
   const [showReject, setShowReject] = useState(false);
-  const [graphEditJson, setGraphEditJson] = useState('');
-  const [graphEditError, setGraphEditError] = useState<string | null>(null);
   const [showEdit, setShowEdit] = useState(false);
+  // Tracks the current working graph (possibly modified via SteeringPanel).
+  const [editedGraph, setEditedGraph] = useState<TaskGraph | null>(null);
 
   function handleApprove() {
-    if (showEdit && graphEditJson.trim()) {
-      try {
-        const editedGraph = JSON.parse(graphEditJson) as TaskGraph;
-        onApprove({ decision: 'approve_with_edits', edited_graph: editedGraph });
-      } catch {
-        setGraphEditError('Invalid JSON — please fix before approving with edits.');
-        return;
-      }
+    if (showEdit && editedGraph) {
+      onApprove({ decision: 'approve_with_edits', edited_graph: editedGraph });
     } else {
       onApprove({ decision: 'approve' });
     }
@@ -73,8 +74,7 @@ const HitlApprovalModal: FC<HitlApprovalModalProps> = ({
 
   function handleStartEdit() {
     setShowEdit(true);
-    setGraphEditJson(JSON.stringify(graph, null, 2));
-    setGraphEditError(null);
+    setEditedGraph(graph);
   }
 
   const showCostBanner =
@@ -177,18 +177,17 @@ const HitlApprovalModal: FC<HitlApprovalModalProps> = ({
 
             {showEdit ? (
               <>
-                <Textarea
-                  value={graphEditJson}
-                  onChange={(e) => {
-                    setGraphEditJson(e.target.value);
-                    setGraphEditError(null);
-                  }}
-                  rows={16}
-                  className="font-mono text-xs"
-                  aria-label="Edited graph JSON"
-                />
-                {graphEditError && (
-                  <p className="text-xs text-danger">{graphEditError}</p>
+                {port != null && (editedGraph ?? graph) ? (
+                  <SteeringPanel
+                    graph={(editedGraph ?? graph)!}
+                    port={port}
+                    model={model}
+                    onGraphChange={(g) => setEditedGraph(g)}
+                  />
+                ) : (
+                  <p className="text-xs text-text-muted">
+                    No server port available for steering edits.
+                  </p>
                 )}
               </>
             ) : (

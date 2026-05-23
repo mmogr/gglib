@@ -124,8 +124,27 @@ pub async fn run_sse(
         ..OrchestratorConfig::default()
     };
 
+    // Pre-generate run_id and register a steering note queue for this run.
+    let run_id = uuid::Uuid::new_v4().to_string();
+    let note_queue: Arc<tokio::sync::Mutex<Vec<String>>> =
+        Arc::new(tokio::sync::Mutex::new(Vec::new()));
+    {
+        state
+            .steering_note_queues
+            .lock()
+            .await
+            .insert(run_id.clone(), Arc::clone(&note_queue));
+    }
+
+    let config = OrchestratorConfig {
+        run_id: Some(run_id.clone()),
+        note_queue: Some(Arc::clone(&note_queue)),
+        ..config
+    };
+
     let (tx, rx) = mpsc::channel::<OrchestratorEvent>(ORCHESTRATOR_EVENT_CHANNEL_CAPACITY);
     let goal = req.goal.clone();
+    let steering_queues = Arc::clone(&state.steering_note_queues);
 
     tokio::spawn(async move {
         let _permit = permit;
@@ -144,6 +163,9 @@ pub async fn run_sse(
             // returning Err, so we only log here for server-side observability.
             tracing::error!(error = %e, goal, "orchestrator: run failed");
         }
+
+        // Clean up the steering note queue for this run.
+        steering_queues.lock().await.remove(&run_id);
     });
 
     let sse_stream = ReceiverStream::new(rx).filter_map(|event| {

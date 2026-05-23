@@ -60,6 +60,7 @@ export type OrchestratorEvent =
   | PlanRejectedEvent
   | ReplanAttemptEvent
   | RunCostEstimateEvent
+  | SteeringAppliedEvent
   | AwaitingApprovalEvent
   | NodeStartedEvent
   | NodeTextDeltaEvent
@@ -243,6 +244,28 @@ export interface SubteamSpawnedEvent {
   type: 'subteam_spawned';
   parent_node_id: string;
   child_graph_summary: string;
+}
+
+// ─── GraphDiff (Phase K) ─────────────────────────────────────────────────────
+
+/**
+ * Mirrors `task_graph::GraphDiff` (Rust).
+ *
+ * Produced by `#[serde(tag = "op", rename_all = "snake_case")]`.
+ */
+export type GraphDiff =
+  | { op: 'add_node'; node: TaskNode }
+  | { op: 'remove_node'; id: string }
+  | { op: 'split_node'; id: string; into: TaskNode[] }
+  | { op: 'reroute_edge'; node_id: string; old_dep: string; new_dep: string }
+  | { op: 'set_role'; id: string; role: string | null }
+  | { op: 'set_tools'; id: string; tool_allowlist: string[] }
+  | { op: 'wrap_in_team'; ids: string[]; team_id: string; team_goal: string };
+
+export interface SteeringAppliedEvent {
+  type: 'steering_applied';
+  diff: GraphDiff;
+  applied_at_wave: number;
 }
 
 // ─── HITL / approval types ───────────────────────────────────────────────────

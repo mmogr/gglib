@@ -7,6 +7,7 @@
 //! `AppEventEmitter` for the shared bootstrap), the MCP service with SSE
 //! emission, the seven domain ops, and the proxy crash watcher.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -138,6 +139,13 @@ pub struct AxumContext {
     pub approval_registry: Arc<OrchestratorApprovalRegistry>,
     /// Repository for persisting orchestrator run records and events.
     pub orchestrator_repo: Arc<SqliteOrchestratorRepository>,
+    /// Per-run queues for conversational steering notes (keyed by run_id).
+    #[allow(clippy::type_complexity)]
+    pub steering_note_queues: Arc<
+        tokio::sync::Mutex<
+            HashMap<String, Arc<tokio::sync::Mutex<Vec<String>>>>,
+        >,
+    >,
 }
 
 /// Bootstrap the Axum server with all services.
@@ -305,6 +313,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         )),
         approval_registry,
         orchestrator_repo,
+        steering_note_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
     })
 }
 
