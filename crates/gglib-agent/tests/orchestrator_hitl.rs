@@ -115,6 +115,21 @@ fn one_node_plan_json() -> String {
     .to_string()
 }
 
+/// Chief-of-Staff response for a single department — consumed by the
+/// hierarchical planner before the Director call.
+fn cos_single_dept_json() -> String {
+    serde_json::json!({
+        "departments": [
+            {
+                "name": "main",
+                "mission": "Complete the task.",
+                "suggested_roles": []
+            }
+        ]
+    })
+    .to_string()
+}
+
 async fn collect_events(mut rx: mpsc::Receiver<OrchestratorEvent>) -> Vec<OrchestratorEvent> {
     let mut events = Vec::new();
     while let Some(e) = rx.recv().await {
@@ -135,11 +150,15 @@ async fn make_repo() -> Arc<SqliteOrchestratorRepository> {
 /// Gate: `ApprovePlan` — approve → run completes with `OrchestratorComplete`.
 #[tokio::test]
 async fn hitl_approve_plan_continues_execution() {
-    // LLM sequence: director → worker → compaction → synthesis
+    // LLM sequence: CoS → director → [gate] → worker → compaction →
+    //   synthesizer worker → synthesizer compaction → final synthesis
     let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
         StubLlm::text_then_done(&one_node_plan_json()),
         StubLlm::text_then_done("The answer is 42."),
         StubLlm::text_then_done("Worker answered 42."),
+        StubLlm::text_then_done("Synthesizer output."),
+        StubLlm::text_then_done("Synthesizer compacted."),
         StubLlm::text_then_done("42."),
     ]);
 
@@ -215,9 +234,10 @@ async fn hitl_approve_plan_continues_execution() {
 /// Gate: `ApprovePlan` — reject → `execute()` returns `PlanRejected` error.
 #[tokio::test]
 async fn hitl_reject_plan_aborts_run() {
+    // LLM sequence: CoS → director → [gate: reject] — no execution calls needed.
     let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
         StubLlm::text_then_done(&one_node_plan_json()),
-        // No further LLM calls needed; executor aborts after rejection.
     ]);
 
     let registry = Arc::new(OrchestratorApprovalRegistry::new());
@@ -331,10 +351,15 @@ async fn interrupted_runs_marked_on_startup() {
 /// `HitlMode::None` auto-approves the plan without blocking.
 #[tokio::test]
 async fn hitl_none_mode_auto_approves() {
+    // LLM sequence: CoS → director → worker → compaction →
+    //   synthesizer worker → synthesizer compaction → final synthesis
     let llm = StubLlm::new(vec![
+        StubLlm::text_then_done(&cos_single_dept_json()),
         StubLlm::text_then_done(&one_node_plan_json()),
         StubLlm::text_then_done("The answer is 42."),
         StubLlm::text_then_done("Worker answered 42."),
+        StubLlm::text_then_done("Synthesizer output."),
+        StubLlm::text_then_done("Synthesizer compacted."),
         StubLlm::text_then_done("42."),
     ]);
 
