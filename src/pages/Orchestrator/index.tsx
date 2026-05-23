@@ -21,12 +21,14 @@ import { Select } from '../../components/ui/Select';
 import { Icon } from '../../components/ui/Icon';
 import { useOrchestrator } from '../../hooks/useOrchestrator';
 import { useSettingsContext } from '../../contexts/SettingsContext';
-import type { OrchestratorRun } from '../../types/orchestrator';
+import type { OrchestratorRun, OrchestratorRunEvent } from '../../types/orchestrator';
+import { getOrchestratorRun } from '../../services/clients/orchestrator';
 import DagView from './components/DagView';
 import NodePanel from './components/NodePanel';
 import CastingSheet from './components/CastingSheet';
 import HitlApprovalModal from './components/HitlApprovalModal';
 import RunsList from './components/RunsList';
+import WaveScrubber from './components/WaveScrubber';
 
 const HITL_MODE_OPTIONS = [
   { value: 'none', label: 'No approval' },
@@ -44,7 +46,7 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
   const { settings } = useSettingsContext();
   const serverPort = settings?.llamaBasePort ?? 9000;
 
-  const { session, run, resume, cancel, reset, approve, loadRuns, isStreaming } = useOrchestrator({
+  const { session, run, resume, rewind, cancel, reset, approve, loadRuns, isStreaming } = useOrchestrator({
     serverPort,
   });
 
@@ -54,6 +56,11 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
   const [showRuns, setShowRuns] = useState(false);
   const [showNodes, setShowNodes] = useState(true);
   const [activeView, setActiveView] = useState<'canvas' | 'casting'>('canvas');
+  /** Run ID of the run currently displayed (for rewind). */
+  const [rewindRunId, setRewindRunId] = useState<string | null>(null);
+  /** Events of the run loaded for rewinding. */
+  const [rewindEvents, setRewindEvents] = useState<OrchestratorRunEvent[]>([]);
+  const [rewindInFlight, setRewindInFlight] = useState(false);
 
   const isActive = session.phase === 'running' || session.phase === 'awaiting_approval' || session.phase === 'synthesizing';
 
@@ -75,6 +82,14 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
     async (r: OrchestratorRun) => {
       setGoal(r.goal);
       setShowRuns(false);
+      setRewindRunId(r.id);
+      // Load events for the WaveScrubber.
+      try {
+        const { events } = await getOrchestratorRun(r.id);
+        setRewindEvents(events);
+      } catch {
+        setRewindEvents([]);
+      }
       await resume(r.id);
     },
     [resume],
@@ -242,6 +257,29 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
                   ? 'Waiting for your approval…'
                   : 'Running…'}
             </div>
+          )}
+
+          {/* Wave scrubber — shown when a resumable run with events is loaded */}
+          {!isActive && rewindRunId && rewindEvents.length > 0 && (
+            <WaveScrubber
+              events={rewindEvents}
+              disabled={rewindInFlight}
+              onRewind={async (waveIndex) => {
+                setRewindInFlight(true);
+                try {
+                  await rewind(rewindRunId, waveIndex);
+                } finally {
+                  setRewindInFlight(false);
+                  // Reload events after rewind so the scrubber reflects new state.
+                  try {
+                    const { events } = await getOrchestratorRun(rewindRunId);
+                    setRewindEvents(events);
+                  } catch {
+                    // non-fatal
+                  }
+                }
+              }}
+            />
           )}
 
           {/* DAG visualization */}

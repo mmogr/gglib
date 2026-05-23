@@ -332,4 +332,17 @@ pub enum OrchestratorEvent {
         /// Zero-based wave index at which the diff was applied.
         applied_at_wave: u32,
     },
+
+    // ── rewind (Phase M) ─────────────────────────────────────────────────
+    /// All nodes in a topological wave have completed.
+    ///
+    /// Emitted once at the end of each wave (depth 0 only).  The frontend
+    /// uses these events as scrubber waypoints so the user can rewind to any
+    /// completed wave.
+    WaveCompleted {
+        /// Zero-based index of the wave that just finished.
+        wave_index: u32,
+        /// Number of nodes that completed in this wave.
+        node_count: usize,
+    },
 }

@@ -33,3 +33,4 @@ pub(crate) mod synthesis;
 pub use director::{DirectorNode, DirectorPlan, PlanError};
 pub use executor::{ExecuteError, OrchestratorConfig, execute};
 pub use planner::plan;
+pub use steering::NoteQueue;

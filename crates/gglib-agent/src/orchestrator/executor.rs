@@ -135,6 +135,17 @@ pub struct OrchestratorConfig {
     ///
     /// `None` disables steering (backward-compatible).
     pub note_queue: Option<NoteQueue>,
+
+    /// Phase M: if set, execution resumes **from** this wave index.
+    ///
+    /// The caller is responsible for having already truncated events after
+    /// this wave via [`OrchestratorRepositoryPort::truncate_events_after_wave`]
+    /// and for having reset the graph nodes in those later waves back to
+    /// `Pending`.  The executor will start `wave_number` at `rewind_to_wave`
+    /// so that newly-emitted events carry correct wave indices.
+    ///
+    /// `None` disables rewind behaviour (backward-compatible).
+    pub rewind_to_wave: Option<u32>,
 }
 
 impl Default for OrchestratorConfig {
@@ -150,6 +161,7 @@ impl Default for OrchestratorConfig {
             max_team_depth: 9,
             node_budget: NodeBudget::default(),
             note_queue: None,
+            rewind_to_wave: None,
         }
     }
 }
@@ -289,6 +301,7 @@ pub async fn execute(
             seq: *seq,
             event_json,
             created_at: chrono::Utc::now().to_rfc3339(),
+            wave_index: 0, // pre-execution events always belong to wave 0
         };
         *seq += 1;
         (repo.clone(), ev)
@@ -539,7 +552,13 @@ async fn run_wave_loop(
         return Err(ExecuteError::MaxDepthExceeded);
     }
     let mut compacted: HashMap<NodeId, String> = HashMap::new();
-    let mut wave_number: u32 = 0;
+    // Phase M: start from the rewind wave index at depth 0 so events carry
+    // the correct wave number when re-executing after a rewind.
+    let mut wave_number: u32 = if depth == 0 {
+        config.rewind_to_wave.map_or(0, |w| w + 1)
+    } else {
+        0
+    };
 
     loop {
         // ── Steering note drain (depth 0 only, before each wave) ─────────────
@@ -606,6 +625,7 @@ async fn run_wave_loop(
                             seq: *event_seq,
                             event_json: serde_json::to_string(&event).unwrap_or_default(),
                             created_at: chrono::Utc::now().to_rfc3339(),
+                            wave_index: wave_number,
                         };
                         *event_seq += 1;
                         if let Err(e) = repo.append_event(ev).await {
@@ -923,6 +943,28 @@ async fn run_wave_loop(
                     }
                 }
                 Err(e) => return Err(e),
+            }
+        }
+
+        // Emit WaveCompleted at depth 0 so the frontend scrubber has waypoints.
+        if depth == 0 {
+            let wave_completed = OrchestratorEvent::WaveCompleted {
+                wave_index: wave_number,
+                node_count: ready.len(),
+            };
+            let _ = tx.send(wave_completed.clone()).await;
+            if let Some(repo) = &config.repository {
+                let ev = OrchestratorRunEvent {
+                    run_id: run_id.to_string(),
+                    seq: *event_seq,
+                    event_json: serde_json::to_string(&wave_completed).unwrap_or_default(),
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                    wave_index: wave_number,
+                };
+                *event_seq += 1;
+                if let Err(e) = repo.append_event(ev).await {
+                    tracing::warn!("orchestrator: persist wave_completed error: {e}");
+                }
             }
         }
 

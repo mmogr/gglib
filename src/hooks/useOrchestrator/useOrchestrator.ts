@@ -15,6 +15,7 @@ import {
   approveOrchestrator,
   listOrchestratorRuns,
   resumeOrchestratorRun,
+  rewindOrchestratorRun,
 } from '../../services/clients/orchestrator';
 import type { OrchestratorEvent, ApprovalDecisionPayload, OrchestratorRunStatus } from '../../types/orchestrator';
 import { appLogger } from '../../services/platform';
@@ -28,6 +29,7 @@ export interface UseOrchestratorReturn {
   session: ReturnType<typeof useOrchestratorContext>['session'];
   run: (goal: string, hitlMode?: string, maxWorkerConcurrency?: number) => Promise<void>;
   resume: (runId: string) => Promise<void>;
+  rewind: (runId: string, waveIndex: number, steeringNote?: string) => Promise<void>;
   cancel: () => void;
   reset: () => void;
   approve: (payload: ApprovalDecisionPayload) => Promise<void>;
@@ -98,6 +100,7 @@ function eventToAction(event: OrchestratorEvent): OrchestratorAction | null {
     case 'team_started':
     case 'team_synthesized':
     case 'subteam_spawned':
+    case 'wave_completed':
       return null;
     case 'steering_applied':
       return { type: 'SET_PENDING_DIFF', diff: event.diff };
@@ -223,10 +226,42 @@ export function useOrchestrator({ serverPort, model }: UseOrchestratorOptions): 
     [dispatch],
   );
 
+  const rewind = useCallback(
+    async (runId: string, waveIndex: number, steeringNote?: string) => {
+      cancel();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      streamingRef.current = true;
+
+      dispatch({ type: 'START_RUN', goal: '' });
+
+      try {
+        await rewindOrchestratorRun(
+          runId,
+          { port: serverPort, model: model ?? undefined, wave_index: waveIndex, steering_note: steeringNote },
+          (event: OrchestratorEvent) => {
+            const action = eventToAction(event);
+            if (action) dispatch(action);
+          },
+          ctrl.signal,
+        );
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name !== 'AbortError') {
+          dispatch({ type: 'ORCHESTRATOR_ERROR', message: err.message });
+          appLogger.error('hook', 'Orchestrator rewind failed', { error: err.message });
+        }
+      } finally {
+        streamingRef.current = false;
+      }
+    },
+    [cancel, dispatch, serverPort, model],
+  );
+
   return {
     session,
     run,
     resume,
+    rewind,
     cancel,
     reset,
     approve,

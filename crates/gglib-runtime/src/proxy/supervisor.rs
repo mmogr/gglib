@@ -439,6 +439,13 @@ mod tests {
         async fn list_events(&self, _: &str) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> {
             Ok(vec![])
         }
+        async fn truncate_events_after_wave(
+            &self,
+            _: &str,
+            _: u32,
+        ) -> Result<(), RepositoryError> {
+            Ok(())
+        }
         async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> {
             Ok(0)
         }

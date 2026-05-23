@@ -345,6 +345,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             seq INTEGER NOT NULL,
             event_json TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            wave_index INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (run_id) REFERENCES orchestrator_runs(id) ON DELETE CASCADE,
             UNIQUE (run_id, seq)
         )
@@ -359,6 +360,21 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // Index to allow efficient rewind lookups per run + wave.
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_orchestrator_events_wave ON orchestrator_events(run_id, wave_index)",
+    )
+    .execute(pool)
+    .await?;
+
+    // Phase M migration: add wave_index column to existing databases that
+    // were created before this column existed.  This is a no-op on fresh DBs.
+    let _ = sqlx::query(
+        "ALTER TABLE orchestrator_events ADD COLUMN wave_index INTEGER NOT NULL DEFAULT 0",
+    )
+    .execute(pool)
+    .await; // intentionally ignore the error (column already exists)
 
     Ok(())
 }

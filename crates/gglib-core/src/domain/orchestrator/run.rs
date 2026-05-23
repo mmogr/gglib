@@ -120,4 +120,9 @@ pub struct OrchestratorRunEvent {
     pub event_json: String,
     /// ISO-8601 creation timestamp.
     pub created_at: String,
+    /// 0-based wave index at which this event was emitted.
+    ///
+    /// Used by the Phase M rewind feature to truncate events after a given
+    /// wave and re-execute from that point.  Defaults to `0`.
+    pub wave_index: u32,
 }
