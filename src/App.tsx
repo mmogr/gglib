@@ -16,7 +16,6 @@ import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
-import OrchestratorPlanPreview from "./pages/OrchestratorPlanPreview";
 import OrchestratorPage from "./pages/Orchestrator";
 import { OrchestratorProvider } from "./contexts/OrchestratorContext";
 
@@ -27,16 +26,12 @@ import { OrchestratorProvider } from "./contexts/OrchestratorContext";
 function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
-  const [showPlanPage, setShowPlanPage] = useState(
-    () => window.location.hash === '#plan'
-  );
   const [showOrchestratorPage, setShowOrchestratorPage] = useState(
     () => window.location.hash === '#orchestrator'
   );
 
   useEffect(() => {
     const onHashChange = () => {
-      setShowPlanPage(window.location.hash === '#plan');
       setShowOrchestratorPage(window.location.hash === '#orchestrator');
     };
     window.addEventListener('hashchange', onHashChange);
@@ -198,13 +193,6 @@ function AppContent() {
                 }}
               />
             </OrchestratorProvider>
-          ) : showPlanPage ? (
-            <OrchestratorPlanPreview
-              onBack={() => {
-                window.location.hash = '';
-                setShowPlanPage(false);
-              }}
-            />
           ) : (
             <ModelControlCenterPage
               servers={servers}

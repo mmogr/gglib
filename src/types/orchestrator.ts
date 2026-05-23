@@ -28,12 +28,25 @@ export type NodeBudget =
   | { kind: 'department' }
   | { kind: 'custom'; value: number };
 
+/**
+ * Mirrors `task_graph::TaskNodeKind` (Rust).
+ *
+ * - `"leaf"` — a standard single-worker node (default for v1 plans).
+ * - `{ team: { subgraph } }` — a compound node that encapsulates a nested
+ *   TaskGraph executed as a sub-team.
+ */
+export type TaskNodeKind = 'leaf' | { team: { subgraph: TaskGraph } };
+
 export interface TaskNode {
   id: string;
   goal: string;
   depends_on: string[];
   tool_allowlist: string[];
   status: string;
+  /** Node kind — absent/`"leaf"` for all Phase A–F plans. */
+  kind?: TaskNodeKind | null;
+  /** Specialist role id, e.g. `"researcher"` or `"critic"`. */
+  role?: string | null;
   output?: string | null;
   error?: string | null;
 }
