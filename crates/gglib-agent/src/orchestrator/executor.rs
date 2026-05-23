@@ -875,7 +875,7 @@ mod tests {
     #[allow(unused_imports)]
     use super::build_predecessor_context;
     use gglib_core::domain::orchestrator::task_graph::{
-        HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode,
+        HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
     };
 
     fn make_node(id: &str, deps: &[&str]) -> TaskNode {
@@ -884,6 +884,8 @@ mod tests {
             goal: id.into(),
             depends_on: deps.iter().map(|d| NodeId((*d).to_string())).collect(),
             tool_allowlist: vec![],
+            kind: TaskNodeKind::Leaf,
+            role: None,
             status: NodeStatus::Pending,
             output: None,
             compacted_output: None,

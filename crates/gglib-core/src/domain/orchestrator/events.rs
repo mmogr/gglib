@@ -23,6 +23,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::agent::{ToolCall, ToolResult};
+use crate::domain::orchestrator::role_catalog::RoleId;
 
 use super::task_graph::TaskGraph;
 
@@ -257,4 +258,30 @@ pub enum OrchestratorEvent {
 
     /// The orchestrator run failed with an unrecoverable error.
     OrchestratorError { message: String },
+
+    // ── team (v2) ────────────────────────────────────────────────────────
+    /// A [`TaskNodeKind::Team`] node has started executing its nested subgraph.
+    ///
+    /// Emitted by the executor before it begins scheduling the first wave of
+    /// the team's subgraph.  Paired with [`OrchestratorEvent::TeamSynthesized`]
+    /// when the subgraph completes.
+    TeamStarted {
+        /// The id of the `Team` node in the parent graph.
+        team_id: String,
+        /// The optional specialist role assigned to this team.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        role: Option<RoleId>,
+    },
+
+    /// A [`TaskNodeKind::Team`] node's subgraph has completed and its output
+    /// has been compacted for passing to downstream nodes in the parent graph.
+    ///
+    /// The `compacted_output` is what downstream nodes receive as context from
+    /// this team node — identical in shape to a leaf node's `compacted_output`.
+    TeamSynthesized {
+        /// The id of the `Team` node in the parent graph.
+        team_id: String,
+        /// Compacted summary of the team's synthesised output.
+        compacted_output: String,
+    },
 }
