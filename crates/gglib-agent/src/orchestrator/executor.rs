@@ -46,7 +46,9 @@ use gglib_core::domain::orchestrator::events::{ApprovalKind, OrchestratorEvent};
 use gglib_core::domain::orchestrator::run::{
     OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus,
 };
-use gglib_core::domain::orchestrator::task_graph::{HitlMode, NodeId, TaskGraph, TaskNodeKind};
+use gglib_core::domain::orchestrator::task_graph::{
+    HitlMode, NodeBudget, NodeId, TaskGraph, TaskNodeKind,
+};
 use gglib_core::ports::{
     AgentLoopPort, ApprovalDecision, LlmCompletionPort, OrchestratorApprovalRegistryPort,
     OrchestratorRepositoryPort, ToolExecutorPort,
@@ -59,6 +61,7 @@ use crate::AgentLoop;
 
 use super::compaction::{CompactionError, compact_worker_output};
 use super::director::PlanError;
+use super::estimator::estimate_run_cost;
 use super::planner::plan;
 use super::spawn::{SpawnCapturingExecutor, SpawnRequest, SpawnSink};
 use super::synthesis::run_synthesis;
@@ -113,6 +116,13 @@ pub struct OrchestratorConfig {
     /// intentionally generous (default: 9 = 3 levels × 3 max teams each) to
     /// catch infinite-recursion bugs without restricting real use cases.
     pub max_team_depth: u32,
+
+    /// Advisory node-count budget used by the Phase J cost estimator.
+    ///
+    /// When the aggregate node count exceeds `node_budget.upper_bound()`, the
+    /// executor emits a [`tracing::warn!`] but **never** returns an error.
+    /// Defaults to [`NodeBudget::TaskForce`] (25 nodes).
+    pub node_budget: NodeBudget,
 }
 
 impl Default for OrchestratorConfig {
@@ -126,6 +136,7 @@ impl Default for OrchestratorConfig {
             run_id: None,
             graph_override: None,
             max_team_depth: 9,
+            node_budget: NodeBudget::default(),
         }
     }
 }
@@ -278,6 +289,21 @@ pub async fn execute(
                 graph: override_graph.clone(),
             })
             .await;
+        let cost = estimate_run_cost(&override_graph);
+        let _ = tx
+            .send(OrchestratorEvent::RunCostEstimate {
+                node_count: cost.node_count,
+                est_tokens: cost.est_tokens,
+                est_wall_seconds: cost.est_wall_seconds,
+            })
+            .await;
+        if override_graph.total_node_count() > config.node_budget.upper_bound() {
+            tracing::warn!(
+                node_count = override_graph.total_node_count(),
+                budget_upper = config.node_budget.upper_bound(),
+                "orchestrator: aggregate node count exceeds advisory node budget",
+            );
+        }
         let _ = tx.send(OrchestratorEvent::PlanApproved).await;
         override_graph
     } else {
@@ -295,6 +321,21 @@ pub async fn execute(
         let _ = tx
             .send(OrchestratorEvent::PlanProposed { graph: g.clone() })
             .await;
+        let cost = estimate_run_cost(&g);
+        let _ = tx
+            .send(OrchestratorEvent::RunCostEstimate {
+                node_count: cost.node_count,
+                est_tokens: cost.est_tokens,
+                est_wall_seconds: cost.est_wall_seconds,
+            })
+            .await;
+        if g.total_node_count() > config.node_budget.upper_bound() {
+            tracing::warn!(
+                node_count = g.total_node_count(),
+                budget_upper = config.node_budget.upper_bound(),
+                "orchestrator: aggregate node count exceeds advisory node budget",
+            );
+        }
 
         // ── 1a. Plan HITL gate ────────────────────────────────────────────────
         let approved_graph = if config.hitl_mode >= HitlMode::ApprovePlan {

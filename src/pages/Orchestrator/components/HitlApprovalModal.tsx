@@ -11,20 +11,26 @@
  */
 
 import { FC, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
 import { Textarea } from '../../../components/ui/Textarea';
+import { Icon } from '../../../components/ui/Icon';
 import type {
   ApprovalKind,
   ApprovalDecisionPayload,
   TaskGraph,
 } from '../../../types/orchestrator';
+import type { RunCostEstimate } from '../../../contexts/OrchestratorContext';
 
 interface HitlApprovalModalProps {
   open: boolean;
   kind: ApprovalKind;
   graph: TaskGraph | null;
   submitting: boolean;
+  costEstimate: RunCostEstimate | null;
+  /** Advisory upper bound for the active NodeBudget (default 25). */
+  budgetUpper?: number;
   onApprove: (payload: ApprovalDecisionPayload) => void;
   onReject: (reason?: string) => void;
 }
@@ -34,6 +40,8 @@ const HitlApprovalModal: FC<HitlApprovalModalProps> = ({
   kind,
   graph,
   submitting,
+  costEstimate,
+  budgetUpper = 25,
   onApprove,
   onReject,
 }) => {
@@ -68,6 +76,10 @@ const HitlApprovalModal: FC<HitlApprovalModalProps> = ({
     setGraphEditJson(JSON.stringify(graph, null, 2));
     setGraphEditError(null);
   }
+
+  const showCostBanner =
+    costEstimate !== null &&
+    (costEstimate.estWallSeconds > 60 || costEstimate.nodeCount > budgetUpper * 0.8);
 
   const title =
     kind.kind === 'plan'
@@ -123,6 +135,23 @@ const HitlApprovalModal: FC<HitlApprovalModalProps> = ({
       }
     >
       <div className="flex flex-col gap-md">
+        {showCostBanner && costEstimate && (
+          <div
+            role="alert"
+            data-testid="cost-warning-banner"
+            className="rounded-base border border-warning/40 bg-warning/8 px-md py-sm flex items-start gap-sm"
+          >
+            <Icon icon={AlertTriangle} size={15} className="text-warning shrink-0 mt-[1px]" />
+            <p className="text-sm text-text-secondary">
+              This plan has <strong>{costEstimate.nodeCount}</strong> node
+              {costEstimate.nodeCount !== 1 ? 's' : ''} and is estimated to take
+              approximately <strong>{costEstimate.estWallSeconds}s</strong>{' '}
+              (~{Math.round(costEstimate.estTokens / 1000)}k tokens).{' '}
+              You can still run it — this is advisory only.
+            </p>
+          </div>
+        )}
+
         {showReject && (
           <div className="flex flex-col gap-sm">
             <label className="text-sm font-medium text-text">Rejection reason (optional)</label>

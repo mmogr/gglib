@@ -15,6 +15,14 @@ import type {
   ApprovalKind,
 } from '../types/orchestrator';
 
+// ─── Cost estimate ───────────────────────────────────────────────────────────────────
+
+export interface RunCostEstimate {
+  nodeCount: number;
+  estTokens: number;
+  estWallSeconds: number;
+}
+
 // ─── Session state ────────────────────────────────────────────────────────────
 
 export type OrchestratorPhase =
@@ -57,6 +65,7 @@ export interface OrchestratorSession {
   synthesisText: string;
   finalAnswer: string | null;
   pendingApproval: PendingApproval | null;
+  costEstimate: RunCostEstimate | null;
   error: string | null;
   /** Runs loaded from GET /api/orchestrator/runs */
   runs: OrchestratorRun[];
@@ -71,6 +80,7 @@ function createEmptySession(): OrchestratorSession {
     synthesisText: '',
     finalAnswer: null,
     pendingApproval: null,
+    costEstimate: null,
     error: null,
     runs: [],
     runsLoading: false,
@@ -88,6 +98,7 @@ export type OrchestratorAction =
   | { type: 'PLAN_APPROVED' }
   | { type: 'PLAN_REJECTED'; reason?: string | null }
   | { type: 'REPLAN_ATTEMPT'; attempt: number; reason: string }
+  | { type: 'SET_COST_ESTIMATE'; nodeCount: number; estTokens: number; estWallSeconds: number }
   // Node lifecycle
   | { type: 'NODE_STARTED'; nodeId: string; goal: string }
   | { type: 'NODE_TEXT_DELTA'; nodeId: string; delta: string }
@@ -136,6 +147,16 @@ export function orchestratorReducer(
 
     case 'PLAN_PROPOSED':
       return { ...state, graph: action.graph };
+
+    case 'SET_COST_ESTIMATE':
+      return {
+        ...state,
+        costEstimate: {
+          nodeCount: action.nodeCount,
+          estTokens: action.estTokens,
+          estWallSeconds: action.estWallSeconds,
+        },
+      };
 
     case 'PLAN_APPROVED':
       return { ...state, pendingApproval: null };

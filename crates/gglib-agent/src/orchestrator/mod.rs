@@ -22,6 +22,7 @@
 pub(crate) mod chief_of_staff;
 pub(crate) mod compaction;
 pub mod director;
+pub mod estimator;
 pub mod executor;
 pub mod planner;
 pub mod prompts;

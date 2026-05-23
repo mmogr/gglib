@@ -203,6 +203,26 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
             </div>
           )}
 
+          {/* Cost estimate warning banner */}
+          {session.costEstimate &&
+            (session.costEstimate.estWallSeconds > 60 ||
+              session.costEstimate.nodeCount > 25 * 0.8) && (
+              <div
+                role="alert"
+                data-testid="cost-warning-banner"
+                className="rounded-base border border-warning/40 bg-warning/8 px-md py-sm flex items-start gap-sm"
+              >
+                <Icon icon={AlertTriangle} size={15} className="text-warning shrink-0 mt-[1px]" />
+                <p className="text-sm text-text-secondary">
+                  This plan has <strong>{session.costEstimate.nodeCount}</strong> node
+                  {session.costEstimate.nodeCount !== 1 ? 's' : ''} and is estimated to take
+                  approximately <strong>{session.costEstimate.estWallSeconds}s</strong>{' '}
+                  (~{Math.round(session.costEstimate.estTokens / 1000)}k tokens).{' '}
+                  You can still run it — this is advisory only.
+                </p>
+              </div>
+            )}
+
           {/* Error banner */}
           {session.error && (
             <div className="rounded-base border border-danger/30 bg-danger/10 px-md py-sm">
@@ -324,6 +344,7 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
           kind={session.pendingApproval.kind}
           graph={session.graph}
           submitting={session.pendingApproval.submitting}
+          costEstimate={session.costEstimate}
           onApprove={handleApproveWithPayload}
           onReject={handleReject}
         />

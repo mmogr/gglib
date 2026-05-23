@@ -40,6 +40,13 @@ function eventToAction(event: OrchestratorEvent): OrchestratorAction | null {
   switch (event.type) {
     case 'plan_proposed':
       return { type: 'PLAN_PROPOSED', graph: event.graph };
+    case 'run_cost_estimate':
+      return {
+        type: 'SET_COST_ESTIMATE',
+        nodeCount: event.node_count,
+        estTokens: event.est_tokens,
+        estWallSeconds: event.est_wall_seconds,
+      };
     case 'plan_approved':
       return { type: 'PLAN_APPROVED' };
     case 'plan_rejected':
@@ -88,6 +95,9 @@ function eventToAction(event: OrchestratorEvent): OrchestratorAction | null {
     case 'node_progress':
     case 'node_system_warning':
     case 'synthesis_progress':
+    case 'team_started':
+    case 'team_synthesized':
+    case 'subteam_spawned':
       return null;
     default:
       return null;
