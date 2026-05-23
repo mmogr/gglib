@@ -30,6 +30,7 @@ use gglib_agent::orchestrator::{OrchestratorConfig, execute};
 use gglib_core::domain::orchestrator::events::{
     ORCHESTRATOR_EVENT_CHANNEL_CAPACITY, OrchestratorEvent,
 };
+use gglib_core::domain::orchestrator::run::{OrchestratorRun, OrchestratorRunStatus};
 use gglib_core::domain::orchestrator::task_graph::HitlMode;
 use gglib_core::ports::{OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort};
 use gglib_runtime::compose_council_ports;
@@ -141,6 +142,28 @@ pub async fn run_sse(
         note_queue: Some(Arc::clone(&note_queue)),
         ..config
     };
+
+    // Create the run record now so that append_event calls inside execute()
+    // can satisfy the orchestrator_events FK constraint.  The executor skips
+    // create_run when run_id is pre-set (it assumes the caller already did
+    // this), which is the correct resume-path behaviour — but for a fresh run
+    // we must do it here.
+    {
+        let now = chrono::Utc::now().to_rfc3339();
+        let run = OrchestratorRun {
+            id: run_id.clone(),
+            goal: req.goal.clone(),
+            graph_json: None,
+            status: OrchestratorRunStatus::Running,
+            hitl_mode: req.hitl_mode.clone(),
+            conversation_id: None,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        if let Err(e) = state.orchestrator_repo.create_run(run).await {
+            tracing::warn!(run_id, error = %e, "orchestrator: failed to pre-create run record");
+        }
+    }
 
     let (tx, rx) = mpsc::channel::<OrchestratorEvent>(ORCHESTRATOR_EVENT_CHANNEL_CAPACITY);
     let goal = req.goal.clone();
