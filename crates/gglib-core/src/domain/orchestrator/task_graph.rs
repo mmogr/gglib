@@ -1148,15 +1148,17 @@ mod tests {
             hitl_mode: HitlMode::None,
             nodes: top_nodes,
         };
-        assert!(matches!(g.validate_acyclic(), Err(TaskGraphError::Cycle(_))));
+        assert!(matches!(
+            g.validate_acyclic(),
+            Err(TaskGraphError::Cycle(_))
+        ));
     }
 
     #[test]
     fn team_subgraph_per_subgraph_node_cap_is_independent() {
         // A top-level graph with 8 nodes is valid even if a Team node's
         // subgraph also has 8 nodes (per-subgraph caps, not global).
-        let sub_nodes: Vec<TaskNode> =
-            (0..MAX_NODES).map(|i| leaf(&format!("sub_{i}"))).collect();
+        let sub_nodes: Vec<TaskNode> = (0..MAX_NODES).map(|i| leaf(&format!("sub_{i}"))).collect();
         let subgraph = TaskGraph::new("sub".into(), HitlMode::None, sub_nodes).unwrap();
         // Top-level has just 1 Team node — well under MAX_NODES.
         let team_node = TaskNode {
@@ -1223,4 +1225,3 @@ mod tests {
         assert!(node.role.is_none());
     }
 }
-

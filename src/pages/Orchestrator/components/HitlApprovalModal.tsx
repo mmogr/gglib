@@ -74,14 +74,18 @@ const HitlApprovalModal: FC<HitlApprovalModalProps> = ({
       ? 'Approve proposed plan?'
       : kind.kind === 'node'
         ? `Approve node: ${kind.node_id}`
-        : `Approve tool call: ${kind.tool_name}`;
+        : kind.kind === 'tool'
+          ? `Approve tool call: ${kind.tool_name}`
+          : `Approve spawn subteam for node: ${kind.node_id}`;
 
   const description =
     kind.kind === 'plan'
       ? 'Review the task graph and approve or reject the plan before execution begins.'
       : kind.kind === 'node'
         ? `The orchestrator wants to execute node "${kind.node_id}". Approve to allow it to run.`
-        : `The orchestrator wants to call "${kind.tool_name}" inside node "${kind.node_id}".`;
+        : kind.kind === 'tool'
+          ? `The orchestrator wants to call "${kind.tool_name}" inside node "${kind.node_id}".`
+          : `The orchestrator wants to spawn a sub-team for node "${kind.node_id}" with roles: ${kind.suggested_roles.join(', ')}.`;
 
   return (
     <Modal

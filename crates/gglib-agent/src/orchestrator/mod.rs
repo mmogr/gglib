@@ -25,6 +25,7 @@ pub mod director;
 pub mod executor;
 pub mod planner;
 pub mod prompts;
+pub mod spawn;
 pub(crate) mod synthesis;
 
 pub use director::{DirectorNode, DirectorPlan, PlanError};

@@ -60,6 +60,7 @@ use crate::AgentLoop;
 use super::compaction::{CompactionError, compact_worker_output};
 use super::director::PlanError;
 use super::planner::plan;
+use super::spawn::{SpawnCapturingExecutor, SpawnRequest, SpawnSink};
 use super::synthesis::run_synthesis;
 
 // =============================================================================
@@ -105,6 +106,13 @@ pub struct OrchestratorConfig {
     /// When set, planning is skipped and execution resumes from the remaining
     /// `Pending` nodes.
     pub graph_override: Option<TaskGraph>,
+
+    /// Maximum recursion depth for nested Team and spawn sub-team graphs.
+    ///
+    /// A `debug_assert` fires at this limit during development.  The value is
+    /// intentionally generous (default: 9 = 3 levels × 3 max teams each) to
+    /// catch infinite-recursion bugs without restricting real use cases.
+    pub max_team_depth: u32,
 }
 
 impl Default for OrchestratorConfig {
@@ -117,6 +125,7 @@ impl Default for OrchestratorConfig {
             repository: None,
             run_id: None,
             graph_override: None,
+            max_team_depth: 9,
         }
     }
 }
@@ -165,6 +174,10 @@ pub enum ExecuteError {
         /// Optional user-provided reason.
         reason: String,
     },
+
+    /// The executor hit the maximum recursive team depth.
+    #[error("maximum team recursion depth exceeded")]
+    MaxDepthExceeded,
 }
 
 impl From<CompactionError> for ExecuteError {
@@ -392,6 +405,10 @@ pub async fn execute(
         .map(|(id, _)| id.clone())
         .collect();
 
+    // Create the concurrency semaphore here so it is shared across all
+    // recursive Team and spawn sub-team wave loops.
+    let sem = Arc::new(Semaphore::new(config.max_worker_concurrency));
+
     let result = run_wave_loop(
         goal,
         &graph,
@@ -402,6 +419,8 @@ pub async fn execute(
         &run_id,
         &mut event_seq,
         &tx,
+        Arc::clone(&sem),
+        0,
     )
     .await;
 
@@ -454,8 +473,17 @@ async fn run_wave_loop(
     run_id: &str,
     event_seq: &mut i64,
     tx: &mpsc::Sender<OrchestratorEvent>,
+    sem: Arc<Semaphore>,
+    depth: u32,
 ) -> Result<HashMap<NodeId, String>, ExecuteError> {
-    let sem = Arc::new(Semaphore::new(config.max_worker_concurrency));
+    debug_assert!(
+        depth < config.max_team_depth,
+        "orchestrator: team recursion depth {depth} reached limit {}",
+        config.max_team_depth
+    );
+    if depth >= config.max_team_depth {
+        return Err(ExecuteError::MaxDepthExceeded);
+    }
     let mut compacted: HashMap<NodeId, String> = HashMap::new();
 
     loop {
@@ -535,8 +563,11 @@ async fn run_wave_loop(
 
         // Spawn all ready nodes concurrently, bounded by the semaphore.
         #[allow(clippy::type_complexity)]
-        let mut join_set: JoinSet<(NodeId, Result<(String, String), ExecuteError>)> =
-            JoinSet::new();
+        let mut join_set: JoinSet<(
+            NodeId,
+            Result<(String, String), ExecuteError>,
+            SpawnSink,
+        )> = JoinSet::new();
 
         // ── Handle Team nodes inline (not spawned) ───────────────────────────
         // Team nodes must be run before we spawn the rest of the wave because
@@ -555,6 +586,14 @@ async fn run_wave_loop(
         for team_id in team_nodes_in_wave {
             let node = &graph.nodes[team_id];
             if let TaskNodeKind::Team { subgraph } = &node.kind {
+                // Emit TeamStarted before recursing.
+                let _ = tx
+                    .send(OrchestratorEvent::TeamStarted {
+                        team_id: team_id.0.clone(),
+                        role: node.role.clone(),
+                    })
+                    .await;
+
                 let sub_result = Box::pin(run_wave_loop(
                     &node.goal,
                     subgraph,
@@ -565,6 +604,8 @@ async fn run_wave_loop(
                     run_id,
                     event_seq,
                     tx,
+                    Arc::clone(&sem),
+                    depth + 1,
                 ))
                 .await;
 
@@ -575,6 +616,13 @@ async fn run_wave_loop(
                             .cloned()
                             .collect::<Vec<_>>()
                             .join("\n");
+                        // Emit TeamSynthesized with the compacted summary.
+                        let _ = tx
+                            .send(OrchestratorEvent::TeamSynthesized {
+                                team_id: team_id.0.clone(),
+                                compacted_output: summary.clone(),
+                            })
+                            .await;
                         compacted.insert(team_id.clone(), summary);
                         completed.insert(team_id.clone());
                     }
@@ -602,11 +650,20 @@ async fn run_wave_loop(
             let tool_executor_clone = Arc::clone(&tool_executor);
             let tx_clone = tx.clone();
 
+            // Each leaf gets its own SpawnSink so a worker can request a sub-team.
+            let spawn_sink: SpawnSink = Arc::new(tokio::sync::Mutex::new(None));
+            let spawn_sink_for_spawn = Arc::clone(&spawn_sink);
+
             join_set.spawn(async move {
                 let _permit = sem_clone
                     .acquire_owned()
                     .await
                     .expect("semaphore not closed");
+
+                // Wrap the executor to intercept spawn_subteam calls.
+                let capturing_executor: Arc<dyn ToolExecutorPort> = Arc::new(
+                    SpawnCapturingExecutor::new(tool_executor_clone, spawn_sink_for_spawn),
+                );
 
                 let result = run_worker(
                     &node_id_clone,
@@ -614,21 +671,30 @@ async fn run_wave_loop(
                     predecessor_context,
                     allowlist,
                     llm_clone,
-                    tool_executor_clone,
+                    capturing_executor,
                     &tx_clone,
                 )
                 .await;
 
-                (node_id_clone, result)
+                (node_id_clone, result, spawn_sink)
             });
         }
 
         // Collect results; fail fast on first error.
+        // Defer spawn processing until after the full wave completes so that
+        // parallel workers don't interleave with spawn approval/planning.
+        let mut pending_spawns: Vec<(NodeId, String, SpawnRequest)> = Vec::new();
+
         while let Some(join_result) = join_set.join_next().await {
-            let (node_id, worker_result) = join_result.expect("join_set task panicked");
+            let (node_id, worker_result, sink) = join_result.expect("join_set task panicked");
 
             match worker_result {
-                Ok((_full_output, compacted_output)) => {
+                Ok((full_output, compacted_output)) => {
+                    // Check whether the worker requested a spawn.
+                    let maybe_spawn = sink.lock().await.take();
+                    if let Some(req) = maybe_spawn {
+                        pending_spawns.push((node_id.clone(), full_output, req));
+                    }
                     compacted.insert(node_id.clone(), compacted_output);
                     completed.insert(node_id);
                 }
@@ -641,7 +707,125 @@ async fn run_wave_loop(
                 }
             }
         }
-    }
+
+        // ── Process spawn requests (serially after wave) ─────────────────────
+        for (parent_node_id, _parent_output, spawn_req) in pending_spawns {
+            // Determine whether a human needs to approve the spawn.
+            let approved = if config.hitl_mode >= HitlMode::ApproveEachNode {
+                if let Some(registry) = &config.approval_registry {
+                    let approval_id = uuid::Uuid::new_v4().to_string();
+                    let (tx_approval, rx_approval) =
+                        tokio::sync::oneshot::channel::<ApprovalDecision>();
+                    registry.register(approval_id.clone(), tx_approval);
+
+                    let event = OrchestratorEvent::AwaitingApproval {
+                        approval_id: approval_id.clone(),
+                        kind:
+                            gglib_core::domain::orchestrator::events::ApprovalKind::SpawnSubteam {
+                                node_id: parent_node_id.0.clone(),
+                                suggested_roles: spawn_req.suggested_roles.clone(),
+                            },
+                    };
+                    let _ = tx.send(event).await;
+
+                    match rx_approval.await {
+                        Ok(ApprovalDecision::Approve | ApprovalDecision::ApproveWithEdits(_)) => {
+                            true
+                        }
+                        Ok(ApprovalDecision::Reject(reason)) => {
+                            // Rejected spawn — log a warning and skip.
+                            tracing::warn!(
+                                "orchestrator: spawn_subteam rejected for node '{}': {reason}",
+                                parent_node_id.0
+                            );
+                            false
+                        }
+                        Err(_) => false,
+                    }
+                } else {
+                    // Registry absent → auto-approve.
+                    true
+                }
+            } else {
+                // HitlMode::None → auto-approve.
+                true
+            };
+
+            if !approved {
+                continue;
+            }
+
+            // Plan the child subgraph.
+            let child_graph = match plan(
+                &spawn_req.goal,
+                &[], // no tool list — director planning only
+                Arc::clone(&llm),
+                config.hitl_mode.clone(),
+                config.max_replans,
+                None, // no event forwarding for child planning
+            )
+            .await
+            {
+                Ok(g) => g,
+                Err(e) => {
+                    tracing::warn!(
+                        "orchestrator: spawn_subteam planning failed for node '{}': {e}",
+                        parent_node_id.0
+                    );
+                    continue;
+                }
+            };
+
+            let child_summary_line = format!(
+                "{} nodes for goal: {}",
+                child_graph.nodes.len(),
+                &spawn_req.goal
+            );
+
+            // Emit SubteamSpawned event.
+            let _ = tx
+                .send(OrchestratorEvent::SubteamSpawned {
+                    parent_node_id: parent_node_id.0.clone(),
+                    child_graph_summary: child_summary_line,
+                })
+                .await;
+
+            // Run the child subgraph recursively.
+            let child_result = Box::pin(run_wave_loop(
+                &spawn_req.goal,
+                &child_graph,
+                HashSet::new(),
+                Arc::clone(&llm),
+                Arc::clone(&tool_executor),
+                config,
+                run_id,
+                event_seq,
+                tx,
+                Arc::clone(&sem),
+                depth + 1,
+            ))
+            .await;
+
+            match child_result {
+                Ok(child_compacted) => {
+                    // Merge child compacted outputs into the parent's map,
+                    // prefixing with the spawn context so downstream nodes
+                    // see the enriched context.
+                    let child_summary = child_compacted
+                        .values()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    // Append to the parent node's existing compacted output.
+                    if let Some(existing) = compacted.get_mut(&parent_node_id) {
+                        existing.push_str("\n\n[Spawned sub-team output]\n");
+                        existing.push_str(&child_summary);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    } // end loop
 
     Ok(compacted)
 }
