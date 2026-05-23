@@ -57,6 +57,13 @@ pub enum ApprovalKind {
         /// The tool name being called.
         tool_name: String,
     },
+    /// Approval before dynamically spawning a sub-team from within a worker node.
+    SpawnSubteam {
+        /// The worker node that requested the spawn.
+        node_id: String,
+        /// Roles suggested by the requesting worker for the new team.
+        suggested_roles: Vec<String>,
+    },
 }
 
 // =============================================================================
@@ -283,5 +290,18 @@ pub enum OrchestratorEvent {
         team_id: String,
         /// Compacted summary of the team's synthesised output.
         compacted_output: String,
+    },
+
+    // ── spawn (Phase I) ──────────────────────────────────────────────────
+    /// A worker node requested dynamic team spawning and the executor approved
+    /// it; the child sub-team subgraph has been planned and is about to run.
+    ///
+    /// `parent_node_id` is the leaf node that triggered the spawn.  The child
+    /// graph runs as a nested [`run_wave_loop`] inside the parent's wave.
+    SubteamSpawned {
+        /// The leaf node that triggered the spawn.
+        parent_node_id: String,
+        /// One-line summary of the child graph that was planned.
+        child_graph_summary: String,
     },
 }

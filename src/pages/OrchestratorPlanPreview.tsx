@@ -169,7 +169,9 @@ export default function OrchestratorPlanPreview({ onBack }: Props) {
                   ? 'the proposed plan'
                   : e.kind.kind === 'node'
                     ? `node '${e.kind.node_id}'`
-                    : `tool '${e.kind.tool_name}' in node '${e.kind.node_id}'`;
+                    : e.kind.kind === 'tool'
+                      ? `tool '${e.kind.tool_name}' in node '${e.kind.node_id}'`
+                      : `spawn sub-team for node '${e.kind.node_id}'`;
               setPendingApproval({ approvalId: e.approval_id, description: kindDesc, submitting: false });
               break;
             }

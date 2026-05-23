@@ -317,7 +317,11 @@ async fn render_event(
             eprintln!("{}[{team_id}] ▶ team started{}", style::DIM, style::RESET);
         }
         OrchestratorEvent::TeamSynthesized { team_id, .. } => {
-            eprintln!("{}[{team_id}] ✓ team synthesized{}", style::DIM, style::RESET);
+            eprintln!(
+                "{}[{team_id}] ✓ team synthesized{}",
+                style::DIM,
+                style::RESET
+            );
         }
         OrchestratorEvent::NodeProgress { .. } | OrchestratorEvent::SynthesisProgress { .. } => {}
     }

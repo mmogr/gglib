@@ -62,7 +62,10 @@ export type OrchestratorEvent =
   | SynthesisTextDeltaEvent
   | SynthesisCompleteEvent
   | OrchestratorCompleteEvent
-  | OrchestratorErrorEvent;
+  | OrchestratorErrorEvent
+  | TeamStartedEvent
+  | TeamSynthesizedEvent
+  | SubteamSpawnedEvent;
 
 // ─── Planning events ─────────────────────────────────────────────────────────
 
@@ -191,12 +194,33 @@ export interface OrchestratorErrorEvent {
   message: string;
 }
 
+// ─── Team events (Phase G / Phase I) ─────────────────────────────────────────
+
+export interface TeamStartedEvent {
+  type: 'team_started';
+  team_id: string;
+  role?: string | null;
+}
+
+export interface TeamSynthesizedEvent {
+  type: 'team_synthesized';
+  team_id: string;
+  compacted_output: string;
+}
+
+export interface SubteamSpawnedEvent {
+  type: 'subteam_spawned';
+  parent_node_id: string;
+  child_graph_summary: string;
+}
+
 // ─── HITL / approval types ───────────────────────────────────────────────────
 
 export type ApprovalKind =
   | { kind: 'plan' }
   | { kind: 'node'; node_id: string }
-  | { kind: 'tool'; node_id: string; tool_name: string };
+  | { kind: 'tool'; node_id: string; tool_name: string }
+  | { kind: 'spawn_subteam'; node_id: string; suggested_roles: string[] };
 
 export interface AwaitingApprovalEvent {
   type: 'awaiting_approval';
