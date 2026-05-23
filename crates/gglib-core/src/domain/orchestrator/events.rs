@@ -95,6 +95,22 @@ pub enum OrchestratorEvent {
         reason: String,
     },
 
+    /// Warn-only cost estimate emitted immediately after
+    /// [`OrchestratorEvent::PlanProposed`].
+    ///
+    /// Never suppressed, never fatal — the run always proceeds.  The
+    /// frontend may display a yellow warning banner when
+    /// `est_wall_seconds > 60` or `node_count` exceeds 80 % of the active
+    /// [`NodeBudget`] upper bound.
+    RunCostEstimate {
+        /// Total aggregate node count across all subgraphs.
+        node_count: usize,
+        /// Rough token estimate (input + output) for the entire run.
+        est_tokens: u64,
+        /// Estimated wall-clock seconds at 50 tokens / second.
+        est_wall_seconds: u64,
+    },
+
     /// The plan was approved (by the user or automatically when
     /// `hitl_mode == None`).
     PlanApproved,

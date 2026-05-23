@@ -610,6 +610,7 @@ pub(crate) fn orchestrator_event_to_content(event: &OrchestratorEvent) -> Option
         | OrchestratorEvent::PlanRejected { .. }
         | OrchestratorEvent::ReplanAttempt { .. }
         | OrchestratorEvent::AwaitingApproval { .. }
+        | OrchestratorEvent::RunCostEstimate { .. }
         | OrchestratorEvent::NodeReasoningDelta { .. }
         | OrchestratorEvent::NodeProgress { .. }
         | OrchestratorEvent::NodeSystemWarning { .. }

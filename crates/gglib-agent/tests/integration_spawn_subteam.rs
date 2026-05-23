@@ -13,7 +13,7 @@
 //!
 //! Main worker: 2 calls (initial + continuation after spawn tool reply)
 //! Main worker compaction: 1 call
-//! Spawn planning — CoS: 1 call
+//! Spawn planning — `CoS`: 1 call
 //! Spawn planning — Director (1 dept, 2 leaves): 1 call
 //! Spawned leaf workers (2): 2 calls
 //! Spawned leaf compactions (2): 2 calls
@@ -61,11 +61,9 @@ impl OrchestratorApprovalRegistryPort for TestApprovalRegistry {
 
     fn resolve(&self, approval_id: &str, decision: ApprovalDecision) -> bool {
         let mut guard = self.senders.try_lock().unwrap();
-        if let Some(tx) = guard.remove(approval_id) {
-            tx.send(decision).is_ok()
-        } else {
-            false
-        }
+        guard
+            .remove(approval_id)
+            .is_some_and(|tx| tx.send(decision).is_ok())
     }
 
     fn is_pending(&self, approval_id: &str) -> bool {
@@ -103,8 +101,8 @@ fn single_leaf_graph() -> TaskGraph {
 // Tests
 // =============================================================================
 
-/// Happy path: worker calls spawn_subteam → auto-approved (HitlMode::None) →
-/// child subgraph runs → SubteamSpawned event emitted → run completes.
+/// Happy path: worker calls `spawn_subteam` → auto-approved (`HitlMode::None`) →
+/// child subgraph runs → `SubteamSpawned` event emitted → run completes.
 #[tokio::test]
 async fn spawn_subteam_auto_approve() {
     // LLM call budget:
@@ -233,9 +231,10 @@ async fn spawn_subteam_auto_approve() {
     );
 }
 
-/// HITL path: with ApproveEachNode, spawn requires explicit approval.
+/// HITL path: with `ApproveEachNode`, spawn requires explicit approval.
 /// The test auto-approves via the registry to keep it non-blocking.
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn spawn_subteam_hitl_requires_approval() {
     let child_cos = serde_json::json!({
         "departments": [{

@@ -174,6 +174,64 @@ pub enum HitlMode {
 }
 
 // =============================================================================
+// NodeBudget
+// =============================================================================
+
+/// Advisory upper bound on the aggregate node count across all subgraphs.
+///
+/// The Phase J cost estimator checks the total node count against
+/// `upper_bound()` and emits a [`tracing::warn!`] when exceeded, but never
+/// returns an error — the executor always proceeds.
+///
+/// # Default
+///
+/// [`NodeBudget::TaskForce`] (up to 25 nodes).
+///
+/// # Example
+///
+/// ```rust
+/// use gglib_core::domain::orchestrator::task_graph::NodeBudget;
+///
+/// let budget = NodeBudget::TaskForce;
+/// assert_eq!(budget.upper_bound(), 25);
+///
+/// let custom = NodeBudget::Custom { value: 100 };
+/// assert_eq!(custom.upper_bound(), 100);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NodeBudget {
+    /// Up to 3 nodes — single-agent equivalent.
+    Solo,
+    /// Up to 8 nodes — small coordination team.
+    SmallTeam,
+    /// Up to 25 nodes — cross-functional task force. **Default**.
+    #[default]
+    TaskForce,
+    /// Up to 60 nodes — full department-scale run.
+    Department,
+    /// Caller-specified upper bound.
+    Custom {
+        /// The maximum number of aggregate nodes allowed before a warning is
+        /// emitted.
+        value: usize,
+    },
+}
+
+impl NodeBudget {
+    /// Returns the advisory upper bound for this budget variant.
+    pub const fn upper_bound(&self) -> usize {
+        match self {
+            Self::Solo => 3,
+            Self::SmallTeam => 8,
+            Self::TaskForce => 25,
+            Self::Department => 60,
+            Self::Custom { value } => *value,
+        }
+    }
+}
+
+// =============================================================================
 // TaskNodeKind
 // =============================================================================
 

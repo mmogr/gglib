@@ -323,7 +323,10 @@ async fn render_event(
                 style::RESET
             );
         }
-        OrchestratorEvent::NodeProgress { .. } | OrchestratorEvent::SynthesisProgress { .. } => {}
+        OrchestratorEvent::NodeProgress { .. }
+        | OrchestratorEvent::SynthesisProgress { .. }
+        | OrchestratorEvent::RunCostEstimate { .. }
+        | OrchestratorEvent::SubteamSpawned { .. } => {}
     }
 }
 
@@ -338,6 +341,9 @@ async fn prompt_and_resolve(
         ApprovalKind::Node { node_id } => format!("node '{node_id}'"),
         ApprovalKind::Tool { node_id, tool_name } => {
             format!("tool call '{tool_name}' in node '{node_id}'")
+        }
+        ApprovalKind::SpawnSubteam { node_id, .. } => {
+            format!("spawn subteam requested by node '{node_id}'")
         }
     };
 

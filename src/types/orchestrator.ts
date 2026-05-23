@@ -15,6 +15,19 @@
 
 export type HitlMode = 'none' | 'approve_plan' | 'approve_each_node' | 'approve_tools';
 
+/**
+ * Advisory node-count budget.  Mirrors `task_graph::NodeBudget` (Rust).
+ *
+ * The `kind` field is produced by `#[serde(tag = "kind", rename_all =
+ * "snake_case")]`.
+ */
+export type NodeBudget =
+  | { kind: 'solo' }
+  | { kind: 'small_team' }
+  | { kind: 'task_force' }
+  | { kind: 'department' }
+  | { kind: 'custom'; value: number };
+
 export interface TaskNode {
   id: string;
   goal: string;
@@ -46,6 +59,7 @@ export type OrchestratorEvent =
   | PlanApprovedEvent
   | PlanRejectedEvent
   | ReplanAttemptEvent
+  | RunCostEstimateEvent
   | AwaitingApprovalEvent
   | NodeStartedEvent
   | NodeTextDeltaEvent
@@ -87,6 +101,23 @@ export interface ReplanAttemptEvent {
   type: 'replan_attempt';
   attempt: number;
   reason: string;
+}
+
+// ─── Cost estimate event ─────────────────────────────────────────────────────
+
+/**
+ * Warn-only cost estimate emitted immediately after `plan_proposed`.
+ *
+ * Mirrors `orchestrator::events::OrchestratorEvent::RunCostEstimate`.
+ */
+export interface RunCostEstimateEvent {
+  type: 'run_cost_estimate';
+  /** Total aggregate node count across all subgraphs. */
+  node_count: number;
+  /** Rough token estimate (input + output) for the entire run. */
+  est_tokens: number;
+  /** Estimated wall-clock seconds at 50 tokens/second. */
+  est_wall_seconds: number;
 }
 
 // ─── Node lifecycle events ───────────────────────────────────────────────────

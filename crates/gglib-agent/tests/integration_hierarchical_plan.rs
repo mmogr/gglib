@@ -51,7 +51,7 @@ fn cos_json() -> String {
     .to_string()
 }
 
-/// Returns a scripted DirectorPlan JSON response for a department
+/// Returns a scripted `DirectorPlan` JSON response for a department
 /// with exactly 4 leaf nodes (2 parallel roots + 1 middle + 1 synthesizer).
 fn director_json(prefix: &str) -> String {
     serde_json::json!({
@@ -91,7 +91,7 @@ fn director_json(prefix: &str) -> String {
 // =============================================================================
 
 /// Core structure test: 3 departments × 4 leaves each → 4 top-level nodes
-/// (3 Team + 1 synthesizer), total_node_count = 16.
+/// (3 Team + 1 synthesizer), `total_node_count` = 16.
 #[tokio::test]
 async fn hierarchical_plan_three_departments_twelve_leaves() {
     // Queue: CoS response first, then 3 director responses (one per dept).
@@ -151,7 +151,10 @@ async fn hierarchical_plan_three_departments_twelve_leaves() {
     );
     // Synthesizer should have the synthesizer role.
     assert_eq!(
-        synth.role.as_ref().map(|r| r.as_str()),
+        synth
+            .role
+            .as_ref()
+            .map(gglib_core::domain::orchestrator::RoleId::as_str),
         Some("synthesizer"),
         "synthesizer node must have role=synthesizer"
     );
@@ -229,7 +232,7 @@ async fn hierarchical_plan_single_department() {
     assert_eq!(graph.total_node_count(), 6);
 }
 
-/// CoS returning an empty list triggers fallback → 1 team + 1 synthesizer.
+/// `CoS` returning an empty list triggers fallback → 1 team + 1 synthesizer.
 #[tokio::test]
 async fn hierarchical_plan_empty_cos_falls_back() {
     let llm = Arc::new(

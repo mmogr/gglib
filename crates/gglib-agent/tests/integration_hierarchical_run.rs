@@ -7,7 +7,7 @@
 //!
 //! # LLM call budget
 //!
-//! Planning:   1 CoS + 3 Director              =  4 calls
+//! Planning:   1 `CoS` + 3 Director              =  4 calls
 //! Execution: 12 leaf workers + 12 compactions  = 24 calls
 //! Synthesis:  1 final synthesis call           =  1 call
 //! Total                                        = 29 calls

@@ -32,6 +32,7 @@ use futures_util::StreamExt as _;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+use gglib_agent::orchestrator::estimator::estimate_run_cost;
 use gglib_agent::orchestrator::plan;
 use gglib_core::domain::orchestrator::events::{
     ORCHESTRATOR_EVENT_CHANNEL_CAPACITY, OrchestratorEvent,
@@ -120,7 +121,15 @@ pub async fn plan_sse(
         {
             Ok(graph) => {
                 let summary = format!("Plan accepted: {} node(s)", graph.nodes.len());
+                let cost = estimate_run_cost(&graph);
                 let _ = tx.send(OrchestratorEvent::PlanProposed { graph }).await;
+                let _ = tx
+                    .send(OrchestratorEvent::RunCostEstimate {
+                        node_count: cost.node_count,
+                        est_tokens: cost.est_tokens,
+                        est_wall_seconds: cost.est_wall_seconds,
+                    })
+                    .await;
                 let _ = tx
                     .send(OrchestratorEvent::OrchestratorComplete { answer: summary })
                     .await;
