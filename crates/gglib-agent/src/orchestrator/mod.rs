@@ -19,7 +19,7 @@
 //! planner.  The executor's external call signature is unchanged — it calls
 //! [`planner::plan`] which internally runs Chief of Staff → N × Director.
 
-pub(crate) mod chief_of_staff;
+pub mod chief_of_staff;
 pub(crate) mod compaction;
 pub mod director;
 pub mod estimator;
