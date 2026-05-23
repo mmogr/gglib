@@ -128,7 +128,5 @@ mod tests {
         assert!(resolved.path.ends_with("from-env"));
     }
 
-    fn restore_env(_key: &str, _previous: Option<String>) {
-        // kept for compilation; no longer called
-    }
+
 }
