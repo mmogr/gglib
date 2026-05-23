@@ -14,7 +14,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { AlertTriangle, ArrowLeft, Play, Square, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Play, Square, RotateCcw, ChevronDown, ChevronRight, LayoutGrid, Network } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
@@ -24,6 +24,7 @@ import { useSettingsContext } from '../../contexts/SettingsContext';
 import type { OrchestratorRun } from '../../types/orchestrator';
 import DagView from './components/DagView';
 import NodePanel from './components/NodePanel';
+import CastingSheet from './components/CastingSheet';
 import HitlApprovalModal from './components/HitlApprovalModal';
 import RunsList from './components/RunsList';
 
@@ -52,6 +53,7 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showRuns, setShowRuns] = useState(false);
   const [showNodes, setShowNodes] = useState(true);
+  const [activeView, setActiveView] = useState<'canvas' | 'casting'>('canvas');
 
   const isActive = session.phase === 'running' || session.phase === 'awaiting_approval' || session.phase === 'synthesizing';
 
@@ -258,30 +260,74 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
 
               {showNodes && (
                 <>
-                  <DagView
-                    graph={session.graph}
-                    nodeStates={session.nodeStates}
-                    selectedNodeId={selectedNodeId}
-                    onSelectNode={(id) => setSelectedNodeId((prev) => (prev === id ? null : id))}
-                  />
+                  {/* View toggle */}
+                  <div className="flex gap-xs" role="group" aria-label="Graph view">
+                    <button
+                      type="button"
+                      onClick={() => setActiveView('canvas')}
+                      aria-pressed={activeView === 'canvas'}
+                      className={`flex items-center gap-xs text-xs px-sm py-xs rounded-sm border transition-colors ${
+                        activeView === 'canvas'
+                          ? 'border-primary/40 bg-primary/10 text-primary'
+                          : 'border-border bg-surface-elevated text-text-secondary hover:border-border-hover'
+                      }`}
+                    >
+                      <Network size={12} aria-hidden="true" />
+                      Team Canvas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveView('casting')}
+                      aria-pressed={activeView === 'casting'}
+                      className={`flex items-center gap-xs text-xs px-sm py-xs rounded-sm border transition-colors ${
+                        activeView === 'casting'
+                          ? 'border-primary/40 bg-primary/10 text-primary'
+                          : 'border-border bg-surface-elevated text-text-secondary hover:border-border-hover'
+                      }`}
+                    >
+                      <LayoutGrid size={12} aria-hidden="true" />
+                      Casting Sheet
+                    </button>
+                  </div>
 
-                  {/* Node panels */}
-                  {nodeIds.length > 0 && (
-                    <div className="flex flex-col gap-xs mt-xs">
-                      {nodeIds.map((id) => (
-                        <NodePanel
-                          key={id}
-                          nodeId={id}
-                          node={session.graph!.nodes[id]}
-                          nodeState={session.nodeStates[id]}
-                          defaultOpen={
-                            id === selectedNodeId ||
-                            session.nodeStates[id]?.phase === 'running' ||
-                            session.nodeStates[id]?.phase === 'failed'
-                          }
-                        />
-                      ))}
-                    </div>
+                  {activeView === 'casting' ? (
+                    <CastingSheet
+                      graph={session.graph!}
+                      nodeStates={session.nodeStates}
+                      selectedNodeId={selectedNodeId}
+                      onSelectNode={(id) => setSelectedNodeId((prev) => (prev === id ? null : id))}
+                    />
+                  ) : (
+                    <>
+                      <DagView
+                        graph={session.graph!}
+                        nodeStates={session.nodeStates}
+                        selectedNodeId={selectedNodeId}
+                        onSelectNode={(id) => setSelectedNodeId((prev) => (prev === id ? null : id))}
+                      />
+
+                      {/* Node panels */}
+                      {nodeIds.length > 0 && (
+                        <div className="flex flex-col gap-xs mt-xs">
+                          {nodeIds.map((id) => (
+                            <NodePanel
+                              key={id}
+                              nodeId={id}
+                              node={session.graph!.nodes[id]}
+                              nodeState={session.nodeStates[id]}
+                              defaultOpen={
+                                id === selectedNodeId ||
+                                session.nodeStates[id]?.phase === 'running' ||
+                                session.nodeStates[id]?.phase === 'failed'
+                              }
+                              graph={session.graph ?? undefined}
+                              port={serverPort}
+                              isActive={isActive}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
