@@ -141,11 +141,8 @@ pub struct AxumContext {
     pub orchestrator_repo: Arc<SqliteOrchestratorRepository>,
     /// Per-run queues for conversational steering notes (keyed by run_id).
     #[allow(clippy::type_complexity)]
-    pub steering_note_queues: Arc<
-        tokio::sync::Mutex<
-            HashMap<String, Arc<tokio::sync::Mutex<Vec<String>>>>,
-        >,
-    >,
+    pub steering_note_queues:
+        Arc<tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<Vec<String>>>>>>,
 }
 
 /// Bootstrap the Axum server with all services.

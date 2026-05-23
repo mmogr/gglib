@@ -593,11 +593,7 @@ async fn run_wave_loop(
             }
         }
 
-        let ready: Vec<NodeId> = graph
-            .ready_nodes(&completed)
-            .into_iter()
-            .cloned()
-            .collect();
+        let ready: Vec<NodeId> = graph.ready_nodes(&completed).into_iter().cloned().collect();
         if ready.is_empty() {
             break;
         }

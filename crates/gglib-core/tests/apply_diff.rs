@@ -37,7 +37,8 @@ fn simple_graph() -> TaskGraph {
 fn add_node_appends_node() {
     let mut g = simple_graph();
     let new_node = leaf("c", &["b"]);
-    g.apply_diff(&GraphDiff::AddNode { node: new_node }).unwrap();
+    g.apply_diff(&GraphDiff::AddNode { node: new_node })
+        .unwrap();
     assert!(g.nodes.contains_key(&NodeId("c".into())));
 }
 
@@ -149,9 +150,7 @@ fn add_node_duplicate_id_returns_error_and_leaves_graph_unchanged() {
     let mut g = simple_graph();
     let original_len = g.nodes.len();
     let dup = leaf("a", &[]);
-    let err = g
-        .apply_diff(&GraphDiff::AddNode { node: dup })
-        .unwrap_err();
+    let err = g.apply_diff(&GraphDiff::AddNode { node: dup }).unwrap_err();
     assert!(matches!(err, TaskGraphError::DuplicateNodeId(_)));
     // Graph must be rolled back.
     assert_eq!(g.nodes.len(), original_len);

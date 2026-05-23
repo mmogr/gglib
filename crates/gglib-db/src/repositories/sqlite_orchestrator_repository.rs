@@ -146,14 +146,12 @@ impl OrchestratorRepositoryPort for SqliteOrchestratorRepository {
         run_id: &str,
         wave_index: u32,
     ) -> Result<(), RepositoryError> {
-        sqlx::query(
-            "DELETE FROM orchestrator_events WHERE run_id = ? AND wave_index > ?",
-        )
-        .bind(run_id)
-        .bind(wave_index as i64)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+        sqlx::query("DELETE FROM orchestrator_events WHERE run_id = ? AND wave_index > ?")
+            .bind(run_id)
+            .bind(wave_index as i64)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
         Ok(())
     }
 
