@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import WaveScrubber from './WaveScrubber';
-import type { OrchestratorRunEvent } from '../../../types/orchestrator';
+import '@testing-library/jest-dom';
+import WaveScrubber from '../../../src/pages/Orchestrator/components/WaveScrubber';
+import type { OrchestratorRunEvent } from '../../../src/types/orchestrator';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,6 @@ describe('WaveScrubber', () => {
 
   it('renders a badge for each completed wave', () => {
     render(<WaveScrubber events={makeWaveEvents(3)} onRewind={vi.fn()} />);
-    // Each wave badge shows "W0", "W1", "W2"
     expect(screen.getByText(/W0/)).toBeInTheDocument();
     expect(screen.getByText(/W1/)).toBeInTheDocument();
     expect(screen.getByText(/W2/)).toBeInTheDocument();
