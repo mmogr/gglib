@@ -26,9 +26,8 @@ use tokio::sync::mpsc;
 
 use gglib_core::domain::agent::{AgentMessage, AssistantContent, ToolDefinition};
 use gglib_core::domain::orchestrator::events::OrchestratorEvent;
-use gglib_core::domain::orchestrator::task_graph::{
-    HitlMode, NodeId, NodeStatus, TaskGraph, TaskGraphError, TaskNode,
-};
+use gglib_core::domain::orchestrator::task_graph::
+    {HitlMode, NodeId, NodeStatus, TaskGraph, TaskGraphError, TaskNode, TaskNodeKind};
 use gglib_core::ports::LlmCompletionPort;
 
 use gglib_core::ports::StructuredOutputError;
@@ -243,6 +242,8 @@ pub async fn plan(
                 goal: n.goal.clone(),
                 depends_on: n.depends_on.iter().map(|d| NodeId(d.clone())).collect(),
                 tool_allowlist: n.tool_allowlist.clone(),
+                kind: TaskNodeKind::Leaf,
+                role: None,
                 status: NodeStatus::Pending,
                 output: None,
                 compacted_output: None,

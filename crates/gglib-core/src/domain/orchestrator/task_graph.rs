@@ -21,7 +21,7 @@
 //! ```rust
 //! use std::collections::HashSet;
 //! use gglib_core::domain::orchestrator::task_graph::{
-//!     TaskGraph, TaskNode, NodeId, NodeStatus, HitlMode,
+//!     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
 //! };
 //!
 //! let nodes = vec![
@@ -30,6 +30,8 @@
 //!         goal: "Research the topic".into(),
 //!         depends_on: vec![],
 //!         tool_allowlist: vec!["web_search".into()],
+//!         kind: TaskNodeKind::Leaf,
+//!         role: None,
 //!         status: NodeStatus::Pending,
 //!         output: None,
 //!         compacted_output: None,
@@ -40,6 +42,8 @@
 //!         goal: "Write the first draft".into(),
 //!         depends_on: vec![NodeId("research".into())],
 //!         tool_allowlist: vec![],
+//!         kind: TaskNodeKind::Leaf,
+//!         role: None,
 //!         status: NodeStatus::Pending,
 //!         output: None,
 //!         compacted_output: None,
@@ -58,21 +62,36 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::agent::ToolDefinition;
+use crate::domain::orchestrator::role_catalog::RoleId;
 
 // =============================================================================
 // Size limits
 // =============================================================================
 
-/// Maximum number of nodes a [`TaskGraph`] may contain.
+/// Maximum number of nodes a [`TaskGraph`] may contain **per subgraph**.
 ///
-/// Prevents unbounded context growth: each node's output is injected into
-/// downstream nodes' context windows, so large graphs compound quickly.
+/// This limit applies independently to each nested subgraph (including the
+/// top-level graph and every [`TaskNodeKind::Team`] subgraph).  It does **not**
+/// constrain the aggregate node count across all subgraphs; see
+/// [`MAX_TOTAL_NODES`] for the soft aggregate budget (Phase J).
+///
+/// Keeping each subgraph small ensures that no single LLM planning call ever
+/// needs to reason about more than ~8 sibling nodes.
 pub const MAX_NODES: usize = 8;
 
-/// Maximum depth (longest root-to-leaf path) a [`TaskGraph`] may have.
+/// Maximum depth (longest root-to-leaf path) a [`TaskGraph`] may have **per subgraph**.
 ///
-/// Keeps total latency bounded even when nodes are forced to run serially.
+/// Applied independently inside each subgraph.  Keeps total latency bounded
+/// even when nodes are forced to run serially within a department.
 pub const MAX_DEPTH: usize = 3;
+
+/// Soft upper bound on the **total** node count across all subgraphs combined.
+///
+/// This constant is not enforced during validation in Phase G.  Starting from
+/// Phase J the executor consults `OrchestratorConfig::max_total_nodes` (which
+/// defaults to this value) and emits a warn-only cost-estimate event when the
+/// aggregate budget is exceeded.
+pub const MAX_TOTAL_NODES: usize = 32;
 
 // =============================================================================
 // NodeId
@@ -155,13 +174,52 @@ pub enum HitlMode {
 }
 
 // =============================================================================
+// TaskNodeKind
+// =============================================================================
+
+/// Determines whether a [`TaskNode`] is an isolated leaf worker or a
+/// sub-team that executes its own nested [`TaskGraph`].
+///
+/// Existing (Phase A–F) nodes all default to `Leaf` when deserialized from
+/// JSON that does not carry a `kind` field.
+///
+/// # Example
+///
+/// ```rust
+/// use gglib_core::domain::orchestrator::task_graph::TaskNodeKind;
+///
+/// // Missing `kind` in old JSON → defaults to `Leaf`.
+/// let kind: TaskNodeKind = serde_json::from_str("\"leaf\"").unwrap();
+/// assert!(matches!(kind, TaskNodeKind::Leaf));
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskNodeKind {
+    /// A standard single-worker node.  This is the default for all v1 nodes
+    /// and for any node deserialized from JSON that omits the `kind` field.
+    #[default]
+    Leaf,
+    /// A compound node that encapsulates a nested [`TaskGraph`] (a sub-team).
+    ///
+    /// The executor recurses into `subgraph` and runs it to completion before
+    /// marking this node done and passing its synthesised output downstream.
+    Team {
+        /// The nested task graph executed when this node runs.
+        subgraph: Box<TaskGraph>,
+    },
+}
+
+// =============================================================================
 // TaskNode
 // =============================================================================
 
 /// A single work unit in a [`TaskGraph`].
 ///
-/// Each node is executed as an isolated `AgentLoop` worker whose context is
-/// assembled from:
+/// Each node is either a [`TaskNodeKind::Leaf`] (executed as an isolated
+/// `AgentLoop` worker) or a [`TaskNodeKind::Team`] (a sub-team with its own
+/// nested [`TaskGraph`] that the executor recurses into).
+///
+/// Leaf node context is assembled from:
 ///
 /// 1. Its own `goal` as the system instruction.
 /// 2. Compacted outputs from each `depends_on` predecessor as additional
@@ -182,6 +240,19 @@ pub struct TaskNode {
     /// An empty list means no tools are available to this worker.  Names must
     /// match entries in the runtime tool catalog.
     pub tool_allowlist: Vec<String>,
+    /// Whether this node is a leaf worker or a sub-team.
+    ///
+    /// Defaults to [`TaskNodeKind::Leaf`] when absent in serialised JSON so
+    /// that all Phase A–F plans deserialise without modification.
+    #[serde(default)]
+    pub kind: TaskNodeKind,
+    /// Optional specialist role assigned to this node.
+    ///
+    /// When `Some`, the executor will inject the role's
+    /// `system_prompt_fragment` before the node's `goal`.  `None` means the
+    /// node runs as a generic worker.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub role: Option<RoleId>,
     /// Current lifecycle state (mutated by the executor as the node runs).
     pub status: NodeStatus,
     /// The worker's full output text (set after reaching [`NodeStatus::Done`]).
@@ -317,13 +388,15 @@ fn compute_depth(
 /// # Example
 ///
 /// ```rust
-/// use gglib_core::domain::orchestrator::task_graph::{TaskGraph, TaskNode, NodeId, NodeStatus, HitlMode};
+/// use gglib_core::domain::orchestrator::task_graph::{TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode};
 ///
 /// let nodes = vec![TaskNode {
 ///     id: NodeId("only".into()),
 ///     goal: "Do the thing".into(),
 ///     depends_on: vec![],
 ///     tool_allowlist: vec![],
+///     kind: TaskNodeKind::Leaf,
+///     role: None,
 ///     status: NodeStatus::Pending,
 ///     output: None,
 ///     compacted_output: None,
@@ -352,7 +425,7 @@ impl TaskGraph {
     ///
     /// ```rust
     /// use gglib_core::domain::orchestrator::task_graph::{
-    ///     TaskGraph, TaskNode, NodeId, NodeStatus, HitlMode,
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
     /// };
     ///
     /// let nodes = vec![TaskNode {
@@ -360,6 +433,8 @@ impl TaskGraph {
     ///     goal: "Do the thing".into(),
     ///     depends_on: vec![],
     ///     tool_allowlist: vec![],
+    ///     kind: TaskNodeKind::Leaf,
+    ///     role: None,
     ///     status: NodeStatus::Pending,
     ///     output: None,
     ///     compacted_output: None,
@@ -411,7 +486,7 @@ impl TaskGraph {
     /// ```rust
     /// use std::collections::HashMap;
     /// use gglib_core::domain::orchestrator::task_graph::{
-    ///     TaskGraph, TaskNode, NodeId, NodeStatus, HitlMode, TaskGraphError,
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode, TaskGraphError,
     /// };
     ///
     /// let mut nodes = HashMap::new();
@@ -421,6 +496,8 @@ impl TaskGraph {
     ///         goal: id.into(),
     ///         depends_on: vec![NodeId(dep.into())],
     ///         tool_allowlist: vec![],
+    ///         kind: TaskNodeKind::Leaf,
+    ///         role: None,
     ///         status: NodeStatus::Pending,
     ///         output: None, compacted_output: None, error: None,
     ///     });
@@ -461,6 +538,16 @@ impl TaskGraph {
             }
         }
 
+        // Recurse into Team subgraphs.  Per-subgraph caps (MAX_NODES, MAX_DEPTH)
+        // are enforced independently inside each subgraph by the recursive call.
+        // Cycles spanning a team boundary surface here as errors from the
+        // nested validate_acyclic call with the offending node id reported.
+        for node in self.nodes.values() {
+            if let TaskNodeKind::Team { subgraph } = &node.kind {
+                subgraph.validate_acyclic()?;
+            }
+        }
+
         Ok(())
     }
 
@@ -474,7 +561,7 @@ impl TaskGraph {
     ///
     /// ```rust
     /// use gglib_core::domain::orchestrator::task_graph::{
-    ///     TaskGraph, TaskNode, NodeId, NodeStatus, HitlMode, TaskGraphError,
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode, TaskGraphError,
     /// };
     /// use gglib_core::ToolDefinition;
     ///
@@ -489,6 +576,8 @@ impl TaskGraph {
     ///     goal: "research".into(),
     ///     depends_on: vec![],
     ///     tool_allowlist: vec!["nonexistent".into()],
+    ///     kind: TaskNodeKind::Leaf,
+    ///     role: None,
     ///     status: NodeStatus::Pending,
     ///     output: None, compacted_output: None, error: None,
     /// }];
@@ -522,16 +611,18 @@ impl TaskGraph {
     ///
     /// ```rust
     /// use gglib_core::domain::orchestrator::task_graph::{
-    ///     TaskGraph, TaskNode, NodeId, NodeStatus, HitlMode,
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
     /// };
     ///
     /// let nodes = vec![
     ///     TaskNode { id: NodeId("root".into()), goal: "g".into(), depends_on: vec![],
-    ///                tool_allowlist: vec![], status: NodeStatus::Pending,
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
     ///                output: None, compacted_output: None, error: None },
     ///     TaskNode { id: NodeId("child".into()), goal: "g".into(),
     ///                depends_on: vec![NodeId("root".into())],
-    ///                tool_allowlist: vec![], status: NodeStatus::Pending,
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
     ///                output: None, compacted_output: None, error: None },
     /// ];
     /// let g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
@@ -563,16 +654,18 @@ impl TaskGraph {
     /// ```rust
     /// use std::collections::HashSet;
     /// use gglib_core::domain::orchestrator::task_graph::{
-    ///     TaskGraph, TaskNode, NodeId, NodeStatus, HitlMode,
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
     /// };
     ///
     /// let nodes = vec![
     ///     TaskNode { id: NodeId("a".into()), goal: "g".into(), depends_on: vec![],
-    ///                tool_allowlist: vec![], status: NodeStatus::Pending,
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
     ///                output: None, compacted_output: None, error: None },
     ///     TaskNode { id: NodeId("b".into()), goal: "g".into(),
     ///                depends_on: vec![NodeId("a".into())],
-    ///                tool_allowlist: vec![], status: NodeStatus::Pending,
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
     ///                output: None, compacted_output: None, error: None },
     /// ];
     /// let g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
@@ -604,6 +697,46 @@ impl TaskGraph {
         ready.sort_by(|a, b| a.0.cmp(&b.0));
         ready
     }
+
+    /// Return the total number of nodes across all subgraphs combined.
+    ///
+    /// Each [`TaskNodeKind::Leaf`] contributes 1.  Each [`TaskNodeKind::Team`]
+    /// contributes 1 (for itself) plus the recursive count of its subgraph.
+    ///
+    /// This is the aggregate tally consulted by the warn-only token-cost
+    /// estimator introduced in Phase J.  Validation never fails on this value
+    /// in Phase G; see [`MAX_TOTAL_NODES`] for the soft budget.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::orchestrator::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
+    /// };
+    ///
+    /// let nodes = vec![
+    ///     TaskNode { id: NodeId("a".into()), goal: "g".into(), depends_on: vec![],
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
+    ///                output: None, compacted_output: None, error: None },
+    ///     TaskNode { id: NodeId("b".into()), goal: "g".into(),
+    ///                depends_on: vec![NodeId("a".into())],
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
+    ///                output: None, compacted_output: None, error: None },
+    /// ];
+    /// let g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
+    /// assert_eq!(g.total_node_count(), 2);
+    /// ```
+    pub fn total_node_count(&self) -> usize {
+        self.nodes
+            .values()
+            .map(|n| match &n.kind {
+                TaskNodeKind::Leaf => 1,
+                TaskNodeKind::Team { subgraph } => 1 + subgraph.total_node_count(),
+            })
+            .sum()
+    }
 }
 
 // =============================================================================
@@ -626,6 +759,8 @@ mod tests {
             goal: id.into(),
             depends_on: vec![],
             tool_allowlist: vec![],
+            kind: TaskNodeKind::Leaf,
+            role: None,
             status: NodeStatus::Pending,
             output: None,
             compacted_output: None,
@@ -639,6 +774,8 @@ mod tests {
             goal: id.into(),
             depends_on: deps.iter().map(|d| NodeId((*d).to_string())).collect(),
             tool_allowlist: vec![],
+            kind: TaskNodeKind::Leaf,
+            role: None,
             status: NodeStatus::Pending,
             output: None,
             compacted_output: None,
@@ -903,4 +1040,187 @@ mod tests {
             Err(TaskGraphError::UnknownTool { .. })
         ));
     }
+
+    // ------------------------------------------------------------------
+    // total_node_count
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn total_node_count_flat_graph() {
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![leaf("a"), leaf("b"), node("c", &["a", "b"])],
+        )
+        .unwrap();
+        assert_eq!(g.total_node_count(), 3);
+    }
+
+    #[test]
+    fn total_node_count_with_team_subgraph() {
+        // Build subgraph: researcher → writer (2 nodes).
+        let subgraph = TaskGraph::new(
+            "department".into(),
+            HitlMode::None,
+            vec![leaf("researcher"), node("writer", &["researcher"])],
+        )
+        .unwrap();
+
+        // Top-level: team_node + synthesizer (2 nodes at top level).
+        // total = 2 (top) + 2 (subgraph) = 4.
+        let team_node = TaskNode {
+            id: NodeId("dept".into()),
+            goal: "Run department".into(),
+            depends_on: vec![],
+            tool_allowlist: vec![],
+            kind: TaskNodeKind::Team {
+                subgraph: Box::new(subgraph),
+            },
+            role: None,
+            status: NodeStatus::Pending,
+            output: None,
+            compacted_output: None,
+            error: None,
+        };
+        let synth = leaf("synthesize");
+        // Build with raw map to bypass node-count limits at this level.
+        let mut nodes = HashMap::new();
+        nodes.insert(team_node.id.clone(), team_node);
+        nodes.insert(synth.id.clone(), synth);
+        let g = TaskGraph {
+            goal: "top".into(),
+            hitl_mode: HitlMode::None,
+            nodes,
+        };
+        assert_eq!(g.total_node_count(), 4);
+    }
+
+    // ------------------------------------------------------------------
+    // Team subgraph validation
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn team_subgraph_cycle_is_detected() {
+        // Build a subgraph with a cycle: x → y → x.
+        let mut sub_nodes = HashMap::new();
+        for (id, dep) in [("x", "y"), ("y", "x")] {
+            sub_nodes.insert(
+                NodeId(id.into()),
+                TaskNode {
+                    id: NodeId(id.into()),
+                    goal: id.into(),
+                    depends_on: vec![NodeId(dep.into())],
+                    tool_allowlist: vec![],
+                    kind: TaskNodeKind::Leaf,
+                    role: None,
+                    status: NodeStatus::Pending,
+                    output: None,
+                    compacted_output: None,
+                    error: None,
+                },
+            );
+        }
+        let cyclic_subgraph = TaskGraph {
+            goal: "sub".into(),
+            hitl_mode: HitlMode::None,
+            nodes: sub_nodes,
+        };
+
+        // Wrap in a team node at the top level.
+        let team_node = TaskNode {
+            id: NodeId("team".into()),
+            goal: "team".into(),
+            depends_on: vec![],
+            tool_allowlist: vec![],
+            kind: TaskNodeKind::Team {
+                subgraph: Box::new(cyclic_subgraph),
+            },
+            role: None,
+            status: NodeStatus::Pending,
+            output: None,
+            compacted_output: None,
+            error: None,
+        };
+        let mut top_nodes = HashMap::new();
+        top_nodes.insert(team_node.id.clone(), team_node);
+        let g = TaskGraph {
+            goal: "top".into(),
+            hitl_mode: HitlMode::None,
+            nodes: top_nodes,
+        };
+        assert!(matches!(g.validate_acyclic(), Err(TaskGraphError::Cycle(_))));
+    }
+
+    #[test]
+    fn team_subgraph_per_subgraph_node_cap_is_independent() {
+        // A top-level graph with 8 nodes is valid even if a Team node's
+        // subgraph also has 8 nodes (per-subgraph caps, not global).
+        let sub_nodes: Vec<TaskNode> =
+            (0..MAX_NODES).map(|i| leaf(&format!("sub_{i}"))).collect();
+        let subgraph = TaskGraph::new("sub".into(), HitlMode::None, sub_nodes).unwrap();
+        // Top-level has just 1 Team node — well under MAX_NODES.
+        let team_node = TaskNode {
+            id: NodeId("team".into()),
+            goal: "run dept".into(),
+            depends_on: vec![],
+            tool_allowlist: vec![],
+            kind: TaskNodeKind::Team {
+                subgraph: Box::new(subgraph),
+            },
+            role: None,
+            status: NodeStatus::Pending,
+            output: None,
+            compacted_output: None,
+            error: None,
+        };
+        let result = TaskGraph::new("top".into(), HitlMode::None, vec![team_node]);
+        assert!(result.is_ok(), "per-subgraph cap must not be global");
+    }
+
+    // ------------------------------------------------------------------
+    // Phase F regression fixture
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn phase_f_fixture_deserializes_and_validates() {
+        let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/orchestrator/phase_f_baseline.json");
+        let json = std::fs::read_to_string(&fixture_path)
+            .unwrap_or_else(|e| panic!("could not read fixture {}: {e}", fixture_path.display()));
+        let graph: TaskGraph =
+            serde_json::from_str(&json).expect("fixture must deserialize without error");
+        graph
+            .validate_acyclic()
+            .expect("fixture must pass validate_acyclic");
+        // Flat Phase F plan — all nodes are leaves.
+        assert!(
+            graph
+                .nodes
+                .values()
+                .all(|n| matches!(n.kind, TaskNodeKind::Leaf)),
+            "Phase F fixture must contain only Leaf nodes"
+        );
+        // Aggregate count equals top-level count (no subgraphs).
+        assert_eq!(graph.total_node_count(), graph.nodes.len());
+    }
+
+    // ------------------------------------------------------------------
+    // TaskNodeKind serde round-trip
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn task_node_kind_leaf_is_default_when_absent() {
+        // Old-format JSON node without a `kind` field must deserialise as Leaf.
+        let json = r#"{
+            "id": "x",
+            "goal": "do something",
+            "depends_on": [],
+            "tool_allowlist": [],
+            "status": "pending"
+        }"#;
+        let node: TaskNode = serde_json::from_str(json).unwrap();
+        assert!(matches!(node.kind, TaskNodeKind::Leaf));
+        assert!(node.role.is_none());
+    }
 }
+

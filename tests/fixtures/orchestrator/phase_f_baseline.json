@@ -1,0 +1,34 @@
+{
+  "goal": "Research the history of llama.cpp and write a summary",
+  "hitl_mode": "none",
+  "nodes": {
+    "research_origins": {
+      "id": "research_origins",
+      "goal": "Research the origins of llama.cpp: who created it, when it was first released, and what problem it was designed to solve",
+      "depends_on": [],
+      "tool_allowlist": ["web_search"],
+      "status": "pending"
+    },
+    "research_milestones": {
+      "id": "research_milestones",
+      "goal": "Research the key technical milestones and version history of llama.cpp, including major performance improvements and model format changes",
+      "depends_on": [],
+      "tool_allowlist": ["web_search"],
+      "status": "pending"
+    },
+    "research_ecosystem": {
+      "id": "research_ecosystem",
+      "goal": "Research the llama.cpp community and ecosystem: key contributors, related projects, and its influence on the local AI movement",
+      "depends_on": [],
+      "tool_allowlist": ["web_search"],
+      "status": "pending"
+    },
+    "synthesize": {
+      "id": "synthesize",
+      "goal": "Write a comprehensive, well-structured summary of the history of llama.cpp, integrating the origins, milestones, and ecosystem research",
+      "depends_on": ["research_origins", "research_milestones", "research_ecosystem"],
+      "tool_allowlist": [],
+      "status": "pending"
+    }
+  }
+}

@@ -28,7 +28,7 @@ use gglib_core::domain::orchestrator::run::{
     OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus,
 };
 use gglib_core::domain::orchestrator::task_graph::{
-    HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode,
+    HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
 };
 use gglib_core::ports::{
     ApprovalDecision, CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
@@ -269,6 +269,8 @@ fn test_graph() -> TaskGraph {
             goal: "step one".to_string(),
             depends_on: vec![],
             tool_allowlist: vec![],
+            kind: TaskNodeKind::Leaf,
+            role: None,
             status: NodeStatus::Pending,
             output: None,
             compacted_output: None,

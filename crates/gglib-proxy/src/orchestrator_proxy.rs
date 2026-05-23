@@ -616,7 +616,9 @@ pub(crate) fn orchestrator_event_to_content(event: &OrchestratorEvent) -> Option
         | OrchestratorEvent::NodeCompacting { .. }
         | OrchestratorEvent::SynthesisProgress { .. }
         | OrchestratorEvent::SynthesisComplete { .. }
-        | OrchestratorEvent::OrchestratorComplete { .. } => None,
+        | OrchestratorEvent::OrchestratorComplete { .. }
+        | OrchestratorEvent::TeamStarted { .. }
+        | OrchestratorEvent::TeamSynthesized { .. } => None,
     }
 }
 

@@ -313,6 +313,12 @@ async fn render_event(
         OrchestratorEvent::OrchestratorError { message } => {
             eprintln!("{}Error: {message}{}", style::DANGER, style::RESET);
         }
+        OrchestratorEvent::TeamStarted { team_id, .. } => {
+            eprintln!("{}[{team_id}] ▶ team started{}", style::DIM, style::RESET);
+        }
+        OrchestratorEvent::TeamSynthesized { team_id, .. } => {
+            eprintln!("{}[{team_id}] ✓ team synthesized{}", style::DIM, style::RESET);
+        }
         OrchestratorEvent::NodeProgress { .. } | OrchestratorEvent::SynthesisProgress { .. } => {}
     }
 }
