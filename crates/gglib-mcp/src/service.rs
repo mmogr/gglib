@@ -674,12 +674,18 @@ impl McpService {
         arguments: HashMap<String, serde_json::Value>,
     ) -> Result<McpToolResult, McpServiceError> {
         // Ensure the server is running, honouring its lifecycle policy.
-        if let Err(e) = self.ensure_started_for_call(server_id).await {
-            return Ok(McpToolResult {
-                success: false,
-                data: None,
-                error: Some(e.to_string()),
-            });
+        // Manual servers return a soft tool-level error; all other failures
+        // (repo lookup, start failure) propagate as Err so callers see them.
+        match self.ensure_started_for_call(server_id).await {
+            Ok(()) => {}
+            Err(McpServiceError::NotRunning(msg)) => {
+                return Ok(McpToolResult {
+                    success: false,
+                    data: None,
+                    error: Some(msg),
+                });
+            }
+            Err(e) => return Err(e),
         }
 
         self.manager
