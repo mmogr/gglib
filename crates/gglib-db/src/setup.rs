@@ -261,22 +261,6 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Migration: mcp_servers.auto_start INTEGER → lifecycle TEXT enum.
-    // Step 1: add the lifecycle column (no-op if it already exists).
-    let _ = sqlx::query(
-        "ALTER TABLE mcp_servers ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'lazy'",
-    )
-    .execute(pool)
-    .await;
-
-    // Step 2: back-fill 'eager' for rows that had auto_start = 1.
-    // Ignores the error silently if auto_start no longer exists on a fully-migrated DB.
-    let _ = sqlx::query(
-        "UPDATE mcp_servers SET lifecycle = 'eager' WHERE auto_start = 1 AND lifecycle = 'lazy'",
-    )
-    .execute(pool)
-    .await;
-
     // Create MCP server environment variables table
     sqlx::query(
         r#"
