@@ -107,6 +107,8 @@ pub async fn compose(
     if let Err(e) = ctx.mcp.initialize().await {
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
+    // Pre-warm lazy servers so they are ready before the first agent iteration.
+    ctx.mcp.prewarm_lazy().await;
 
     // 3. Compose the agent loop.  When tools are specified the loop is
     //    restricted to the named allowlist; otherwise all MCP tools are visible.
