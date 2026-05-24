@@ -3,6 +3,7 @@
 //! These types are cross-adapter (used by both Tauri and Axum).
 //! They map between domain types and frontend-friendly representations.
 
+use gglib_core::domain::mcp::McpLifecycle;
 use gglib_core::domain::Model;
 use gglib_core::ports::ProcessHandle;
 use serde::{Deserialize, Serialize};
@@ -326,7 +327,7 @@ pub struct McpServerDto {
     pub server_type: String,
     pub config: McpServerConfigDto,
     pub enabled: bool,
-    pub auto_start: bool,
+    pub lifecycle: McpLifecycle,
     pub env: Vec<McpEnvEntryDto>,
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -400,7 +401,7 @@ pub struct CreateMcpServerRequest {
     #[serde(default)]
     pub env: Vec<McpEnvEntryDto>,
     #[serde(default)]
-    pub auto_start: bool,
+    pub lifecycle: McpLifecycle,
 }
 
 /// Request to update an MCP server.
@@ -414,7 +415,7 @@ pub struct UpdateMcpServerRequest {
     pub url: Option<String>,
     pub env: Option<Vec<McpEnvEntryDto>>,
     pub enabled: Option<bool>,
-    pub auto_start: Option<bool>,
+    pub lifecycle: Option<McpLifecycle>,
 }
 
 /// MCP tool information for GUI display.

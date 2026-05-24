@@ -13,8 +13,8 @@ pub mod tool_executor;
 
 // Re-export domain types from core for convenience
 pub use gglib_core::{
-    McpEnvEntry, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
-    McpToolResult, NewMcpServer,
+    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType,
+    McpTool, McpToolResult, NewMcpServer,
 };
 // Re-export DTOs from core ports
 pub use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
