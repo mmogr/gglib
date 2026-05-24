@@ -19,9 +19,10 @@ pub use domain::{
     AssistantContent, ChatMessage, Conversation, ConversationUpdate, DEFAULT_MAX_ITERATIONS,
     DEFAULT_MAX_PARALLEL_TOOLS, DEFAULT_MAX_STAGNATION_STEPS, LlmStreamEvent,
     MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING,
-    MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry, McpServer, McpServerConfig,
-    McpServerStatus, McpServerType, McpTool, McpToolResult, Message, MessageRole, Model,
-    ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer, NewMessage, NewModel,
+    MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry, McpLifecycle, McpServer,
+    McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult, Message, MessageRole,
+    Model, ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer, NewMessage,
+    NewModel,
     RangeValues, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer, infer_from_chat_template,
     transform_messages_for_capabilities,
 };
