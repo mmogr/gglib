@@ -22,9 +22,8 @@ pub use domain::{
     MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry, McpLifecycle, McpServer,
     McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult, Message, MessageRole,
     Model, ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer, NewMessage,
-    NewModel,
-    RangeValues, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer, infer_from_chat_template,
-    transform_messages_for_capabilities,
+    NewModel, RangeValues, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer,
+    infer_from_chat_template, transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,

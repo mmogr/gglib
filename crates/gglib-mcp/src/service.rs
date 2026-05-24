@@ -68,9 +68,7 @@ impl McpService {
                         "Failed to start eager MCP server"
                     );
                 }
-            } else if server.lifecycle == McpLifecycle::Eager
-                && server.enabled
-                && !server.is_valid
+            } else if server.lifecycle == McpLifecycle::Eager && server.enabled && !server.is_valid
             {
                 tracing::info!(
                     server_name = %server.name,

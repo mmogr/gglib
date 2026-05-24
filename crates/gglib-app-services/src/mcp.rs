@@ -285,8 +285,8 @@ impl McpOps {
 mod tests {
     use std::sync::Arc;
 
-    use gglib_core::ports::NoopEmitter;
     use gglib_core::McpLifecycle;
+    use gglib_core::ports::NoopEmitter;
     use gglib_db::CoreFactory;
 
     use super::*;

@@ -3,8 +3,8 @@
 //! These types are cross-adapter (used by both Tauri and Axum).
 //! They map between domain types and frontend-friendly representations.
 
-use gglib_core::domain::mcp::McpLifecycle;
 use gglib_core::domain::Model;
+use gglib_core::domain::mcp::McpLifecycle;
 use gglib_core::ports::ProcessHandle;
 use serde::{Deserialize, Serialize};
 

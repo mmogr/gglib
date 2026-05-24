@@ -18,6 +18,6 @@
 mod types;
 
 pub use types::{
-    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType,
-    McpTool, McpToolResult, NewMcpServer, UpdateMcpServer,
+    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
+    McpToolResult, NewMcpServer, UpdateMcpServer,
 };
