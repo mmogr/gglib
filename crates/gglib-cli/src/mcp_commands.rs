@@ -44,9 +44,10 @@ pub enum McpCommand {
         #[arg(long, value_name = "KEY=VALUE")]
         env: Vec<String>,
 
-        /// Auto-start this server when gglib launches
-        #[arg(long)]
-        auto_start: bool,
+        /// Lifecycle policy: how gglib manages this server's process.
+        /// eager = start at host init; lazy = start on first tool use; manual = never auto-spawn.
+        #[arg(long, value_name = "LIFECYCLE", default_value = "lazy", value_parser = ["eager", "lazy", "manual"])]
+        lifecycle: String,
 
         /// Disable this server (tools not included in chat)
         #[arg(long)]
