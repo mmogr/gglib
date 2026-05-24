@@ -51,7 +51,7 @@ const mockServerInfo: McpServerInfo = {
       args: ['-y', 'test-server'],
     },
     enabled: true,
-    auto_start: false,
+    lifecycle: 'lazy' as const,
     env: [],
     created_at: '2024-01-01T00:00:00Z',
   },
@@ -69,7 +69,7 @@ const mockRunningServer: McpServerInfo = {
       args: ['-y', 'running-server'],
     },
     enabled: true,
-    auto_start: false,
+    lifecycle: 'lazy' as const,
     env: [],
     created_at: '2024-01-01T00:00:00Z',
   },
@@ -180,7 +180,7 @@ describe('useMcpServers', () => {
         server_type: 'stdio' as const,
         config: { command: 'test' },
         enabled: true,
-        auto_start: false,
+        lifecycle: 'lazy' as const,
         env: [],
       };
       const savedServer = { ...newServer, id: 2, created_at: '2024-01-01T00:00:00Z' };
@@ -217,7 +217,7 @@ describe('useMcpServers', () => {
             server_type: 'stdio',
             config: {},
             enabled: true,
-            auto_start: false,
+            lifecycle: 'lazy' as const,
             env: [],
           });
         })
@@ -372,7 +372,7 @@ describe('useMcpServers', () => {
   describe('error handling', () => {
     it('throws on first failure and succeeds on second call', async () => {
       vi.mocked(addMcpServer).mockRejectedValueOnce(new Error('First error'));
-      vi.mocked(addMcpServer).mockResolvedValueOnce({ id: 2, name: 'New', type: 'stdio', enabled: true, auto_start: false, env: [] });
+      vi.mocked(addMcpServer).mockResolvedValueOnce({ id: 2, name: 'New', type: 'stdio', enabled: true, lifecycle: 'lazy' as const, env: [] });
 
       const { result } = renderHook(() => useMcpServers());
 
@@ -383,13 +383,13 @@ describe('useMcpServers', () => {
       // First call throws
       await expect(
         act(async () => {
-          await result.current.addServer({ name: 'New', type: 'stdio', enabled: true, auto_start: false, env: [] });
+          await result.current.addServer({ name: 'New', type: 'stdio', enabled: true, lifecycle: 'lazy' as const, env: [] });
         })
       ).rejects.toThrow('First error');
 
       // Second call succeeds
       await act(async () => {
-        const server = await result.current.addServer({ name: 'New', type: 'stdio', enabled: true, auto_start: false, env: [] });
+        const server = await result.current.addServer({ name: 'New', type: 'stdio', enabled: true, lifecycle: 'lazy' as const, env: [] });
         expect(server.id).toBe(2);
       });
     });

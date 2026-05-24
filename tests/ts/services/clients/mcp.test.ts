@@ -45,7 +45,7 @@ describe('mcp client', () => {
     it('listMcpServers delegates to transport', async () => {
       const mockServers: McpServerInfo[] = [
         {
-          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, lifecycle: lazy as const, env: [], created_at: '2024-01-01' },
           status: 'stopped',
           tools: [],
         },
@@ -65,7 +65,7 @@ describe('mcp client', () => {
         server_type: 'stdio',
         config: { command: 'test' },
         enabled: true,
-        auto_start: false,
+        lifecycle: lazy as const,
         env: [],
       };
       const mockResult = { ...newServer, id: 1, created_at: '2024-01-01' };
@@ -79,7 +79,7 @@ describe('mcp client', () => {
 
     it('updateMcpServer delegates to transport', async () => {
       const updates = { name: 'Updated Name' };
-      const mockResult = { id: 1, name: 'Updated Name', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' };
+      const mockResult = { id: 1, name: 'Updated Name', server_type: 'stdio', config: {}, enabled: true, lifecycle: lazy as const, env: [], created_at: '2024-01-01' };
       mockTransport.updateMcpServer.mockResolvedValue(mockResult);
 
       const result = await updateMcpServer(1, updates);
@@ -138,7 +138,7 @@ describe('mcp client', () => {
             args: ['-y', 'pkg'],
           },
           enabled: true,
-          auto_start: false,
+          lifecycle: lazy as const,
           env: [],
         });
       });
@@ -161,7 +161,7 @@ describe('mcp client', () => {
             url: 'http://localhost:3000',
           },
           enabled: true,
-          auto_start: false,
+          lifecycle: lazy as const,
           env: [],
         });
       });
@@ -170,7 +170,7 @@ describe('mcp client', () => {
     describe('isServerRunning', () => {
       it('returns true when status is running', () => {
         const info: McpServerInfo = {
-          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, lifecycle: lazy as const, env: [], created_at: '2024-01-01' },
           status: 'running',
           tools: [],
         };
@@ -180,7 +180,7 @@ describe('mcp client', () => {
 
       it('returns false when status is stopped', () => {
         const info: McpServerInfo = {
-          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, lifecycle: lazy as const, env: [], created_at: '2024-01-01' },
           status: 'stopped',
           tools: [],
         };
@@ -192,7 +192,7 @@ describe('mcp client', () => {
     describe('hasServerError', () => {
       it('returns true when status is an error object', () => {
         const info: McpServerInfo = {
-          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, lifecycle: lazy as const, env: [], created_at: '2024-01-01' },
           status: { error: 'Connection failed' },
           tools: [],
         };
@@ -202,7 +202,7 @@ describe('mcp client', () => {
 
       it('returns false when status is a string', () => {
         const info: McpServerInfo = {
-          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, lifecycle: lazy as const, env: [], created_at: '2024-01-01' },
           status: 'running',
           tools: [],
         };
@@ -214,7 +214,7 @@ describe('mcp client', () => {
     describe('getServerErrorMessage', () => {
       it('returns error message when server has error', () => {
         const info: McpServerInfo = {
-          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, lifecycle: lazy as const, env: [], created_at: '2024-01-01' },
           status: { error: 'Connection failed' },
           tools: [],
         };
@@ -224,7 +224,7 @@ describe('mcp client', () => {
 
       it('returns null when server has no error', () => {
         const info: McpServerInfo = {
-          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, auto_start: false, env: [], created_at: '2024-01-01' },
+          server: { id: 1, name: 'Test', server_type: 'stdio', config: {}, enabled: true, lifecycle: lazy as const, env: [], created_at: '2024-01-01' },
           status: 'running',
           tools: [],
         };

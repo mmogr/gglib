@@ -466,7 +466,7 @@ mod tests {
             None,
         )
         .with_env("API_KEY", "secret123")
-        .with_auto_start(true);
+        .with_lifecycle(McpLifecycle::Eager);
 
         assert_eq!(server.name, "Test Server");
         assert_eq!(server.server_type, McpServerType::Stdio);
@@ -474,7 +474,7 @@ mod tests {
         assert_eq!(server.env.len(), 1);
         assert_eq!(server.env[0].key, "API_KEY");
         assert_eq!(server.env[0].value, "secret123");
-        assert!(server.auto_start);
+        assert_eq!(server.lifecycle, McpLifecycle::Eager);
     }
 
     #[test]
