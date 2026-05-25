@@ -10,6 +10,7 @@
 //! - `McpServerConfig` - Execution configuration (`exe_path`, args, URL, `path_extra`)
 //! - `McpServerType` - Connection type (stdio or SSE)
 //! - `McpServerStatus` - Runtime status (stopped, starting, running, error)
+//! - `McpLifecycle` - Startup lifecycle policy (eager, lazy, manual)
 //! - `McpEnvEntry` - Environment variable entry
 //! - `McpTool` - Tool exposed by an MCP server
 //! - `McpToolResult` - Result of a tool invocation
@@ -17,6 +18,6 @@
 mod types;
 
 pub use types::{
-    McpEnvEntry, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
+    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
     McpToolResult, NewMcpServer, UpdateMcpServer,
 };

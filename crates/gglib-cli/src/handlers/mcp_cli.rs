@@ -4,7 +4,7 @@
 //! lives here, only CLI input parsing and output formatting.
 
 use anyhow::{Result, anyhow, bail};
-use gglib_core::domain::mcp::{McpServerStatus, McpServerType, NewMcpServer};
+use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus, McpServerType, NewMcpServer};
 
 use crate::bootstrap::CliContext;
 use crate::mcp_commands::McpCommand;
@@ -24,7 +24,7 @@ pub async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
             working_dir,
             path_extra,
             env,
-            auto_start,
+            lifecycle,
             disabled,
         } => {
             add(
@@ -37,7 +37,7 @@ pub async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
                 working_dir.as_deref(),
                 path_extra,
                 &env,
-                auto_start,
+                lifecycle,
                 disabled,
             )
             .await
@@ -66,7 +66,7 @@ async fn list(ctx: &CliContext) -> Result<()> {
     println!("Found {} MCP server(s):\n", servers.len());
     println!(
         "{:<4} {:<25} {:<6} {:<9} {:<11} {:<10} {:<6}",
-        "ID", "Name", "Type", "Enabled", "Auto-start", "Status", "Tools"
+        "ID", "Name", "Type", "Enabled", "Lifecycle", "Status", "Tools"
     );
     print_separator(75);
 
@@ -83,7 +83,7 @@ async fn list(ctx: &CliContext) -> Result<()> {
             McpServerStatus::Error(e) => format!("error: {}", truncate_string(e, 20)),
         };
         let enabled_str = if s.enabled { "yes" } else { "no" };
-        let auto_str = if s.auto_start { "yes" } else { "no" };
+        let lifecycle_str = s.lifecycle.to_string();
 
         println!(
             "{:<4} {:<25} {:<6} {:<9} {:<11} {:<10} {:<6}",
@@ -91,7 +91,7 @@ async fn list(ctx: &CliContext) -> Result<()> {
             truncate_string(&s.name, 24),
             type_str,
             enabled_str,
-            auto_str,
+            lifecycle_str,
             truncate_string(&status_str, 9),
             info.tools.len()
         );
@@ -111,7 +111,7 @@ async fn add(
     working_dir: Option<&str>,
     path_extra: Option<String>,
     env_pairs: &[String],
-    auto_start: bool,
+    lifecycle: String,
     disabled: bool,
 ) -> Result<()> {
     let mut new_server = match server_type {
@@ -130,7 +130,10 @@ async fn add(
     if let Some(dir) = working_dir {
         new_server = new_server.with_working_dir(dir);
     }
-    new_server = new_server.with_auto_start(auto_start);
+    let parsed_lifecycle = lifecycle
+        .parse::<McpLifecycle>()
+        .map_err(|e| anyhow!("Invalid --lifecycle value: {e}"))?;
+    new_server = new_server.with_lifecycle(parsed_lifecycle);
     if disabled {
         new_server = new_server.with_enabled(false);
     }
@@ -239,7 +242,7 @@ async fn test(ctx: &CliContext, identifier: &str) -> Result<()> {
         server_type: server.server_type,
         config: server.config.clone(),
         enabled: server.enabled,
-        auto_start: server.auto_start,
+        lifecycle: server.lifecycle,
         env: server.env.clone(),
     };
 

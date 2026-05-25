@@ -178,7 +178,7 @@ Path validation and environment utilities:
 use std::sync::Arc;
 use gglib_mcp::McpService;
 use gglib_core::ports::{McpServerRepository, AppEventEmitter, NoopEmitter};
-use gglib_core::domain::mcp::{NewMcpServer, McpServerType, McpServerConfig};
+use gglib_core::domain::mcp::{NewMcpServer, McpLifecycle, McpServerType, McpServerConfig};
 
 async fn example(repo: impl McpServerRepository + 'static) {
     // Create service with injected dependencies
@@ -195,7 +195,7 @@ async fn example(repo: impl McpServerRepository + 'static) {
             None,
         ),
         enabled: true,
-        auto_start: false,
+        lifecycle: McpLifecycle::Lazy,
         env: vec![],
     }).await.unwrap();
 

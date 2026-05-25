@@ -11,7 +11,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use sqlx::SqlitePool;
 
 use gglib_core::domain::mcp::{
-    McpEnvEntry, McpServer, McpServerConfig, McpServerType, NewMcpServer,
+    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerType, NewMcpServer,
 };
 use gglib_core::ports::{McpRepositoryError, McpServerRepository};
 
@@ -38,7 +38,7 @@ struct McpServerRow {
     #[sqlx(rename = "type")]
     server_type: String,
     enabled: bool,
-    auto_start: bool,
+    lifecycle: String,
     command: Option<String>,
     resolved_path_cache: Option<String>,
     args: Option<String>,
@@ -93,7 +93,7 @@ fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
         server_type,
         config,
         enabled: row.enabled,
-        auto_start: row.auto_start,
+        lifecycle: row.lifecycle.parse::<McpLifecycle>().unwrap_or_default(),
         env,
         created_at: parse_datetime(&row.created_at),
         last_connected_at: row.last_connected_at.as_ref().map(|s| parse_datetime(s)),
@@ -148,14 +148,14 @@ impl McpServerRepository for SqliteMcpRepository {
         // Insert the server
         let result = sqlx::query(
             r#"
-            INSERT INTO mcp_servers (name, type, enabled, auto_start, command, resolved_path_cache, args, cwd, path_extra, url, is_valid, last_error)
+            INSERT INTO mcp_servers (name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, is_valid, last_error)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&server.name)
         .bind(server_type)
         .bind(server.enabled)
-        .bind(server.auto_start)
+        .bind(server.lifecycle.to_string())
         .bind(&server.config.command)
         .bind(&server.config.resolved_path_cache)
         .bind(&args_json)
@@ -190,7 +190,7 @@ impl McpServerRepository for SqliteMcpRepository {
     async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
         let row = sqlx::query_as::<_, McpServerRow>(
             r#"
-            SELECT id, name, type, enabled, auto_start, command, resolved_path_cache, args, cwd, path_extra, url, 
+            SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
                    created_at, last_connected_at, is_valid, last_error
             FROM mcp_servers WHERE id = ?
             "#,
@@ -210,7 +210,7 @@ impl McpServerRepository for SqliteMcpRepository {
     async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
         let row = sqlx::query_as::<_, McpServerRow>(
             r#"
-            SELECT id, name, type, enabled, auto_start, command, resolved_path_cache, args, cwd, path_extra, url, 
+            SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
                    created_at, last_connected_at, is_valid, last_error
             FROM mcp_servers WHERE name = ?
             "#,
@@ -230,7 +230,7 @@ impl McpServerRepository for SqliteMcpRepository {
     async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
         let rows = sqlx::query_as::<_, McpServerRow>(
             r#"
-            SELECT id, name, type, enabled, auto_start, command, resolved_path_cache, args, cwd, path_extra, url, 
+            SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
                    created_at, last_connected_at, is_valid, last_error
             FROM mcp_servers ORDER BY name
             "#,
@@ -267,14 +267,14 @@ impl McpServerRepository for SqliteMcpRepository {
         sqlx::query(
             r#"
             UPDATE mcp_servers 
-            SET name = ?, type = ?, enabled = ?, auto_start = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, url = ?, is_valid = ?, last_error = ?
+            SET name = ?, type = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, url = ?, is_valid = ?, last_error = ?
             WHERE id = ?
             "#,
         )
         .bind(&server.name)
         .bind(server_type)
         .bind(server.enabled)
-        .bind(server.auto_start)
+        .bind(server.lifecycle.to_string())
         .bind(&server.config.command)
         .bind(&server.config.resolved_path_cache)
         .bind(&args_json)
@@ -380,7 +380,7 @@ mod tests {
                 name TEXT NOT NULL UNIQUE,
                 type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
                 enabled INTEGER NOT NULL DEFAULT 1,
-                auto_start INTEGER NOT NULL DEFAULT 0,
+                lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
                 command TEXT,
                 resolved_path_cache TEXT,
                 args TEXT,

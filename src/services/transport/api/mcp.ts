@@ -36,7 +36,7 @@ export async function addMcpServer(server: NewMcpServer): Promise<McpServer> {
     path_extra: server.config.path_extra || undefined,
     url: server.config.url || undefined,
     env: server.env.map(e => [e.key, e.value] as [string, string]),
-    auto_start: server.auto_start,
+    lifecycle: server.lifecycle,
   };
   return post<McpServer>('/api/mcp/servers', request);
 }
@@ -60,7 +60,7 @@ export async function updateMcpServer(
     request.env = updates.env.map(e => [e.key, e.value] as [string, string]);
   }
   if (updates.enabled !== undefined) request.enabled = updates.enabled;
-  if (updates.auto_start !== undefined) request.auto_start = updates.auto_start;
+  if (updates.lifecycle !== undefined) request.lifecycle = updates.lifecycle;
   
   return put<McpServer>(`/api/mcp/servers/${id}`, request);
 }

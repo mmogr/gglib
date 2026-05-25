@@ -41,6 +41,8 @@ export interface McpServerConfig {
   url?: string;
 }
 
+export type McpLifecycle = 'eager' | 'lazy' | 'manual';
+
 /**
  * MCP server entity.
  */
@@ -50,7 +52,7 @@ export interface McpServer {
   server_type: McpServerType;
   config: McpServerConfig;
   enabled: boolean;
-  auto_start: boolean;
+  lifecycle: McpLifecycle;
   env: McpEnvEntry[];
   created_at: string;
   last_connected_at?: string;
@@ -68,7 +70,7 @@ export interface NewMcpServer {
   server_type: McpServerType;
   config: McpServerConfig;
   enabled: boolean;
-  auto_start: boolean;
+  lifecycle: McpLifecycle;
   env: McpEnvEntry[];
 }
 
@@ -81,7 +83,7 @@ export interface UpdateMcpServer {
   server_type?: McpServerType;
   config?: McpServerConfig;
   enabled?: boolean;
-  auto_start?: boolean;
+  lifecycle?: McpLifecycle;
   env?: McpEnvEntry[];
 }
 

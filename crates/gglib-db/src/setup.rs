@@ -244,7 +244,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
             enabled INTEGER NOT NULL DEFAULT 1,
-            auto_start INTEGER NOT NULL DEFAULT 0,
+            lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
             command TEXT,
             resolved_path_cache TEXT,
             args TEXT NOT NULL DEFAULT '[]',

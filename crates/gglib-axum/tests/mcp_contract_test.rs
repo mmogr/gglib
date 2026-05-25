@@ -90,8 +90,8 @@ async fn test_list_mcp_servers_json_structure() {
             "server.enabled should exist"
         );
         assert!(
-            server_obj.get("auto_start").is_some(),
-            "server.auto_start should exist"
+            server_obj.get("lifecycle").is_some(),
+            "server.lifecycle should exist"
         );
 
         // Verify status is string or object
@@ -124,7 +124,7 @@ async fn test_add_mcp_server_returns_nested_structure() {
         "command": "node",
         "args": ["server.js"],
         "env": [],
-        "auto_start": false
+        "lifecycle": "lazy"
     });
 
     let response = app

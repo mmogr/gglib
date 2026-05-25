@@ -136,6 +136,8 @@ async fn init_session(
     if let Err(e) = ctx.mcp.initialize().await {
         tracing::warn!("MCP initialisation failed: {e}");
     }
+    // Pre-warm lazy servers so they are ready before the council run.
+    ctx.mcp.prewarm_lazy().await;
 
     let cwd = std::env::current_dir().ok();
 

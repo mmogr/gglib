@@ -118,7 +118,7 @@ export function createStdioConfig(
       path_extra,
     },
     enabled: true,
-    auto_start: false,
+    lifecycle: 'lazy' as const,
     env,
   };
 }
@@ -138,7 +138,7 @@ export function createSseConfig(
       url,
     },
     enabled: true,
-    auto_start: false,
+    lifecycle: 'lazy' as const,
     env,
   };
 }
