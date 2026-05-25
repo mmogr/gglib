@@ -67,6 +67,37 @@ pub enum ApprovalKind {
 }
 
 // =============================================================================
+// AgentStance
+// =============================================================================
+
+/// How a debating agent's position changed over the course of a debate.
+///
+/// Carried inside [`CouncilEvent::DebateStanceMap`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StanceOutcome {
+    /// The agent maintained its original position throughout all rounds.
+    Held,
+    /// The agent moved toward a different position by the final round.
+    Shifted,
+    /// The agent explicitly conceded to another agent's argument.
+    Conceded,
+}
+
+/// The final stance outcome for a single debating agent.
+///
+/// Carried inside [`CouncilEvent::DebateStanceMap`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentStance {
+    /// Short id of the agent (matches [`DebateAgent::id`]).
+    ///
+    /// [`DebateAgent::id`]: super::task_graph::DebateAgent::id
+    pub agent_id: String,
+    /// Whether the agent held, shifted, or conceded.
+    pub outcome: StanceOutcome,
+}
+
+// =============================================================================
 // CouncilEvent
 // =============================================================================
 
@@ -331,6 +362,185 @@ pub enum CouncilEvent {
         diff: GraphDiff,
         /// Zero-based wave index at which the diff was applied.
         applied_at_wave: u32,
+    },
+
+    // ── debate (Phase N) ─────────────────────────────────────────────────
+    /// A new debate round has started inside a [`TaskNodeKind::Debate`] node.
+    ///
+    /// Emitted once per round, before any agent turn events for that round.
+    ///
+    /// [`TaskNodeKind::Debate`]: super::task_graph::TaskNodeKind::Debate
+    DebateRoundStarted {
+        /// The id of the `Debate` node in the parent graph.
+        node_id: String,
+        /// 1-based round number.
+        round: u32,
+    },
+
+    /// An agent's turn within a debate round has started.
+    ///
+    /// Immediately followed by zero or more [`CouncilEvent::DebateAgentTextDelta`]
+    /// events for this agent and then [`CouncilEvent::DebateAgentTurnComplete`].
+    DebateAgentTurnStarted {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// Short id of the agent (matches [`DebateAgent::id`]).
+        ///
+        /// [`DebateAgent::id`]: super::task_graph::DebateAgent::id
+        agent_id: String,
+        /// Display name of the agent.
+        agent_name: String,
+        /// Hex colour code (`#rrggbb`) for this agent's text in the UI.
+        color: String,
+        /// 1-based round number.
+        round: u32,
+        /// Temperature the LLM was called with (mapped from `contentiousness`).
+        contentiousness: f32,
+    },
+
+    /// Incremental text token from a debating agent.
+    DebateAgentTextDelta {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// Short id of the agent.
+        agent_id: String,
+        /// The new text fragment.
+        delta: String,
+    },
+
+    /// Incremental reasoning / chain-of-thought token from a debating agent.
+    DebateAgentReasoningDelta {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// Short id of the agent.
+        agent_id: String,
+        /// The reasoning fragment.
+        delta: String,
+    },
+
+    /// A debating agent has initiated a tool call.
+    DebateAgentToolCallStart {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// Short id of the agent.
+        agent_id: String,
+        /// The tool call details.
+        tool_call: ToolCall,
+        /// Human-readable display name for the tool.
+        display_name: String,
+        /// Optional one-line summary of the arguments for UI rendering.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        args_summary: Option<String>,
+    },
+
+    /// A tool call by a debating agent has completed.
+    DebateAgentToolCallComplete {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// Short id of the agent.
+        agent_id: String,
+        /// The tool's result payload.
+        result: ToolResult,
+        /// Human-readable display name.
+        display_name: String,
+        /// Human-readable elapsed time (e.g. `"1.2s"`).
+        duration_display: String,
+    },
+
+    /// An agent's turn within a debate round has finished.
+    DebateAgentTurnComplete {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// Short id of the agent.
+        agent_id: String,
+        /// 1-based round number.
+        round: u32,
+        /// The agent's complete response for this turn.
+        final_text: String,
+    },
+
+    /// The judge LLM call for a debate round has started.
+    ///
+    /// Only emitted when a [`DebateJudgeConfig`] is present.
+    ///
+    /// [`DebateJudgeConfig`]: super::task_graph::DebateJudgeConfig
+    DebateJudgeStarted {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// 1-based round number being judged.
+        round: u32,
+    },
+
+    /// Incremental text token from the debate judge.
+    DebateJudgeTextDelta {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// The new text fragment.
+        delta: String,
+    },
+
+    /// The judge has finished assessing a debate round.
+    DebateJudgeSummary {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// 1-based round number that was judged.
+        round: u32,
+        /// Whether the judge determined that consensus has been reached.
+        consensus_reached: bool,
+        /// Whether the judge recommends stopping early (only acted on if
+        /// `round >= judge.min_rounds_before_stop`).
+        early_stop_recommended: bool,
+        /// The judge's full written assessment.
+        assessment_text: String,
+    },
+
+    /// A debate round's transcript has been compacted to reduce context pressure.
+    ///
+    /// Only emitted when the running context window would otherwise overflow.
+    DebateRoundCompacted {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// 1-based round number that was compacted.
+        round: u32,
+        /// Compressed summary replacing the full round transcript.
+        summary: String,
+    },
+
+    /// Final stance outcomes for all agents after all rounds complete.
+    ///
+    /// Emitted once after the last debate round, before synthesis starts.
+    DebateStanceMap {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// Per-agent stance outcomes.
+        stances: Vec<AgentStance>,
+    },
+
+    /// The debate synthesis phase has started.
+    ///
+    /// The synthesiser assembles the full round history into a verdict.
+    DebateSynthesisStarted {
+        /// The id of the `Debate` node.
+        node_id: String,
+    },
+
+    /// Incremental text token from the debate synthesiser.
+    DebateSynthesisTextDelta {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// The new text fragment.
+        delta: String,
+    },
+
+    /// The debate synthesis has finished.
+    ///
+    /// `final_text` becomes the node's `output` and is passed to the
+    /// compaction step before downstream nodes receive it as context.
+    DebateSynthesisComplete {
+        /// The id of the `Debate` node.
+        node_id: String,
+        /// The synthesiser's complete verdict text.
+        final_text: String,
     },
 
     // ── rewind (Phase M) ─────────────────────────────────────────────────

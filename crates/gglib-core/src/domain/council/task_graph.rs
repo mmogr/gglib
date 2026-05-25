@@ -232,11 +232,85 @@ impl NodeBudget {
 }
 
 // =============================================================================
+// DebateConfig (Phase N)
+// =============================================================================
+
+/// An individual participant in a [`TaskNodeKind::Debate`] node.
+///
+/// Each agent runs in every debate round as an independent LLM call with its
+/// own `persona` and `perspective` injected into the system prompt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebateAgent {
+    /// Short unique id within this debate config (e.g. `"optimist"`).
+    pub id: String,
+    /// Display name shown in the frontend stream and logs.
+    pub name: String,
+    /// Hex colour code (`#rrggbb`) used for this agent's text in the UI.
+    pub color: String,
+    /// System-prompt fragment that establishes the agent's character.
+    pub persona: String,
+    /// The specific position or viewpoint the agent is instructed to argue.
+    pub perspective: String,
+    /// Float in `[0.0, 1.0]`.  Mapped to LLM temperature: `0.0` = highly
+    /// focused / convergent, `1.0` = exploratory / contentious.
+    pub contentiousness: f32,
+    /// Optional tool-call filter expression.  If `None`, inherits the parent
+    /// node's `tool_allowlist`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub tool_filter: Option<String>,
+}
+
+/// Configuration for the optional judge that assesses each debate round.
+///
+/// The judge is a separate LLM call that reads the full round transcript and
+/// decides whether consensus has been reached or whether the debate should
+/// continue for more rounds.  When no judge is configured all [`DebateConfig::rounds`]
+/// are always executed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebateJudgeConfig {
+    /// The judge will not attempt early stopping before this round index
+    /// (1-based).  `1` means the judge may recommend a stop after the very
+    /// first round.  Defaults to `1`.
+    #[serde(default = "default_min_rounds_before_stop")]
+    pub min_rounds_before_stop: u32,
+}
+
+fn default_min_rounds_before_stop() -> u32 {
+    1
+}
+
+/// Complete configuration for a [`TaskNodeKind::Debate`] node.
+///
+/// Embedded directly in the node, analogous to [`TaskNodeKind::Team`]'s
+/// `subgraph` field.  The Director populates this when it chooses the
+/// `debate` kind; the user may edit it in the [`PlanEditor`] before approval.
+///
+/// [`PlanEditor`]: https://github.com/mmogr/gglib/tree/epic/orchestrator/src/components/Council/PlanEditor
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebateConfig {
+    /// The agents that participate in each round.  The Director caps this at
+    /// 4; the frontend plan editor enforces ≤ 4 via UI constraints.
+    pub agents: Vec<DebateAgent>,
+    /// Number of rounds to run (minimum 1).  The Director caps this at 3;
+    /// the frontend plan editor allows up to 5.
+    pub rounds: u32,
+    /// Optional judge configuration.  When `None` no early-stop check is
+    /// performed and all `rounds` are always executed.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub judge: Option<DebateJudgeConfig>,
+    /// Optional additional instruction passed to the synthesis LLM after all
+    /// rounds complete.  Useful for domain-specific framing of the verdict.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub synthesis_guidance: Option<String>,
+}
+
+// =============================================================================
 // TaskNodeKind
 // =============================================================================
 
-/// Determines whether a [`TaskNode`] is an isolated leaf worker or a
-/// sub-team that executes its own nested [`TaskGraph`].
+/// Determines whether a [`TaskNode`] is an isolated leaf worker, a sub-team
+/// that executes its own nested [`TaskGraph`], or a debate node where multiple
+/// agents argue a contested goal across structured rounds.
 ///
 /// Existing (Phase A–F) nodes all default to `Leaf` when deserialized from
 /// JSON that does not carry a `kind` field.
@@ -264,6 +338,16 @@ pub enum TaskNodeKind {
     Team {
         /// The nested task graph executed when this node runs.
         subgraph: Box<TaskGraph>,
+    },
+    /// A debate node where multiple agents argue a contested goal across
+    /// multiple rounds, with an optional judge and final synthesis.
+    ///
+    /// The executor runs the debate engine to completion before marking this
+    /// node done.  The synthesis output becomes the node's `output` and is
+    /// compacted for downstream predecessors exactly like a leaf output.
+    Debate {
+        /// Full debate configuration (participants, rounds, judge).
+        config: DebateConfig,
     },
 }
 
@@ -886,7 +970,7 @@ impl TaskGraph {
         self.nodes
             .values()
             .map(|n| match &n.kind {
-                TaskNodeKind::Leaf => 1,
+                TaskNodeKind::Leaf | TaskNodeKind::Debate { .. } => 1,
                 TaskNodeKind::Team { subgraph } => 1 + subgraph.total_node_count(),
             })
             .sum()

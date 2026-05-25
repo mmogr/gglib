@@ -622,7 +622,24 @@ pub(crate) fn orchestrator_event_to_content(event: &CouncilEvent) -> Option<Stri
         | CouncilEvent::TeamStarted { .. }
         | CouncilEvent::TeamSynthesized { .. }
         | CouncilEvent::SubteamSpawned { .. }
-        | CouncilEvent::WaveCompleted { .. } => None,
+        | CouncilEvent::WaveCompleted { .. }
+        // ── debate events — forwarded as visible content in Phase N;
+        //    suppressed here until DebateNodeBody renders them on the frontend.
+        | CouncilEvent::DebateRoundStarted { .. }
+        | CouncilEvent::DebateAgentTurnStarted { .. }
+        | CouncilEvent::DebateAgentTextDelta { .. }
+        | CouncilEvent::DebateAgentReasoningDelta { .. }
+        | CouncilEvent::DebateAgentToolCallStart { .. }
+        | CouncilEvent::DebateAgentToolCallComplete { .. }
+        | CouncilEvent::DebateAgentTurnComplete { .. }
+        | CouncilEvent::DebateJudgeStarted { .. }
+        | CouncilEvent::DebateJudgeTextDelta { .. }
+        | CouncilEvent::DebateJudgeSummary { .. }
+        | CouncilEvent::DebateRoundCompacted { .. }
+        | CouncilEvent::DebateStanceMap { .. }
+        | CouncilEvent::DebateSynthesisStarted { .. }
+        | CouncilEvent::DebateSynthesisTextDelta { .. }
+        | CouncilEvent::DebateSynthesisComplete { .. } => None,
     }
 }
 

@@ -28,7 +28,8 @@ use gglib_core::domain::agent::{AgentMessage, AssistantContent, ToolDefinition};
 use gglib_core::domain::council::events::CouncilEvent;
 use gglib_core::domain::council::role_catalog::{RoleCatalog, RoleId};
 use gglib_core::domain::council::task_graph::{
-    HitlMode, NodeId, NodeStatus, TaskGraph, TaskGraphError, TaskNode, TaskNodeKind,
+    DebateAgent, DebateConfig, DebateJudgeConfig, HitlMode, NodeId, NodeStatus, TaskGraph,
+    TaskGraphError, TaskNode, TaskNodeKind,
 };
 use gglib_core::ports::LlmCompletionPort;
 
@@ -116,6 +117,107 @@ pub struct DirectorNode {
     pub depends_on: Vec<String>,
     /// Tool names the worker is permitted to use.
     pub tool_allowlist: Vec<String>,
+    /// Node execution kind: `"leaf"` (default) or `"debate"`.
+    #[serde(default = "default_node_kind")]
+    pub kind: String,
+    /// Debate configuration — required when `kind == "debate"`, absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub debate_config: Option<DebateConfigWire>,
+}
+
+fn default_node_kind() -> String {
+    "leaf".to_owned()
+}
+
+// ── Debate wire types ────────────────────────────────────────────────────────
+
+/// LLM-facing representation of a single debate participant.
+///
+/// Converted to [`DebateAgent`] during plan validation; auto-assigns `id` and
+/// defaults `persona` to `name`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebateAgentWire {
+    /// Display name (e.g. `"Alex"`, `"Jordan"`).
+    pub name: String,
+    /// The specific viewpoint the agent is instructed to argue
+    /// (e.g. `"efficiency-first"`).
+    pub perspective: String,
+    /// Contentiousness in `[0.0, 1.0]`; defaults to `0.5`.
+    #[serde(default = "default_contentiousness")]
+    pub contentiousness: f32,
+    /// Hex colour code (`#rrggbb`).  Auto-assigned from a palette when absent.
+    #[serde(default)]
+    pub color: String,
+}
+
+fn default_contentiousness() -> f32 {
+    0.5
+}
+
+/// LLM-facing debate configuration for a debate node.
+///
+/// Converted to [`DebateConfig`] during plan validation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DebateConfigWire {
+    /// 2–4 agents with distinct perspectives.
+    pub agents: Vec<DebateAgentWire>,
+    /// Number of debate rounds (1–3).
+    #[serde(default = "default_debate_rounds")]
+    pub rounds: u32,
+    /// When `true`, enable a post-round judge for early stopping.
+    #[serde(default)]
+    pub judge: bool,
+}
+
+fn default_debate_rounds() -> u32 {
+    2
+}
+
+/// Fixed colour palette for auto-assigning agent colours.
+const AGENT_COLORS: [&str; 4] = ["#4CAF50", "#2196F3", "#FF9800", "#9C27B0"];
+
+/// Convert a [`DebateConfigWire`] received from the LLM into a validated
+/// [`DebateConfig`] suitable for embedding in the task graph.
+///
+/// - Assigns a new UUID `id` to every agent.
+/// - Defaults `persona` to `name` when blank.
+/// - Auto-assigns colours from [`AGENT_COLORS`] when the LLM omits them.
+/// - Clamps `contentiousness` to `[0.0, 1.0]` and `rounds` to `[1, 3]`.
+fn wire_to_debate_config(wire: DebateConfigWire) -> DebateConfig {
+    let agents = wire
+        .agents
+        .into_iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let color = if a.color.is_empty() {
+                AGENT_COLORS[i % AGENT_COLORS.len()].to_owned()
+            } else {
+                a.color
+            };
+            DebateAgent {
+                id: uuid::Uuid::new_v4().to_string(),
+                name: a.name.clone(),
+                color,
+                persona: a.name,
+                perspective: a.perspective,
+                contentiousness: a.contentiousness.clamp(0.0_f32, 1.0_f32),
+                tool_filter: None,
+            }
+        })
+        .collect();
+
+    DebateConfig {
+        agents,
+        rounds: wire.rounds.clamp(1, 3),
+        judge: if wire.judge {
+            Some(DebateJudgeConfig {
+                min_rounds_before_stop: 1,
+            })
+        } else {
+            None
+        },
+        synthesis_guidance: None,
+    }
 }
 
 // =============================================================================
@@ -178,6 +280,8 @@ const MAX_IN_DEGREE: usize = 4;
 ///     goal: "Research the topic".into(),
 ///     depends_on: vec![],
 ///     tool_allowlist: vec![],
+///     kind: "leaf".into(),
+///     debate_config: None,
 /// };
 /// assert_eq!(node.id, "research");
 ///
@@ -270,12 +374,31 @@ pub async fn plan(
                 } else {
                     Some(suggested_roles[i % suggested_roles.len()].clone())
                 };
+                // Resolve node kind; fall back to Leaf on any debate
+                // misconfiguration so a bad LLM response never hard-panics.
+                let kind = if n.kind == "debate" {
+                    match n.debate_config.clone() {
+                        Some(wire_cfg) => TaskNodeKind::Debate {
+                            config: wire_to_debate_config(wire_cfg),
+                        },
+                        None => {
+                            tracing::warn!(
+                                node_id = %n.id,
+                                "director: kind='debate' but no debate_config supplied; \
+                                 falling back to Leaf"
+                            );
+                            TaskNodeKind::Leaf
+                        }
+                    }
+                } else {
+                    TaskNodeKind::Leaf
+                };
                 TaskNode {
                     id: NodeId(n.id.clone()),
                     goal: n.goal.clone(),
                     depends_on: n.depends_on.iter().map(|d| NodeId(d.clone())).collect(),
                     tool_allowlist: n.tool_allowlist.clone(),
-                    kind: TaskNodeKind::Leaf,
+                    kind,
                     role,
                     status: NodeStatus::Pending,
                     output: None,

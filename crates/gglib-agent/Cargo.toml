@@ -17,6 +17,7 @@ path = "src/lib.rs"
 gglib-core   = { path = "../gglib-core" }
 thiserror    = { workspace = true }
 tokio        = { workspace = true }
+tokio-util   = { version = "0.7", features = ["rt"] }
 futures-util = { workspace = true }
 futures-core = { workspace = true }
 async-trait  = { workspace = true }

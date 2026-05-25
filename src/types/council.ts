@@ -28,14 +28,53 @@ export type NodeBudget =
   | { kind: 'department' }
   | { kind: 'custom'; value: number };
 
+// ─── Debate config domain types ──────────────────────────────────────────────
+
+/** Mirrors `task_graph::DebateAgent` (Rust). */
+export interface DebateAgent {
+  id: string;
+  name: string;
+  /** Hex colour code, e.g. `"#4CAF50"`. */
+  color: string;
+  /** Concise descriptor of this agent's persona/style. */
+  persona: string;
+  /** Statement of the position this agent will argue. */
+  perspective: string;
+  /** 0.0–1.0 scale mapping to LLM temperature. */
+  contentiousness: number;
+  /** If set, restricts the agent to a single tool by name. */
+  tool_filter?: string | null;
+}
+
+/** Mirrors `task_graph::DebateJudgeConfig` (Rust). */
+export interface DebateJudgeConfig {
+  /** Minimum rounds before the judge may stop early. Defaults to 1. */
+  min_rounds_before_stop: number;
+}
+
+/** Mirrors `task_graph::DebateConfig` (Rust). */
+export interface DebateConfig {
+  agents: DebateAgent[];
+  /** Total number of debate rounds. 1–3, defaults to 2. */
+  rounds: number;
+  /** When set, a judge LLM evaluates each round and may stop early. */
+  judge?: DebateJudgeConfig | null;
+  /** Optional free-text guidance to the synthesis step. */
+  synthesis_guidance?: string | null;
+}
+
 /**
  * Mirrors `task_graph::TaskNodeKind` (Rust).
  *
  * - `"leaf"` — a standard single-worker node (default for v1 plans).
  * - `{ team: { subgraph } }` — a compound node that encapsulates a nested
  *   TaskGraph executed as a sub-team.
+ * - `{ debate: { config } }` — a multi-agent debate node.
  */
-export type TaskNodeKind = 'leaf' | { team: { subgraph: TaskGraph } };
+export type TaskNodeKind =
+  | 'leaf'
+  | { team: { subgraph: TaskGraph } }
+  | { debate: { config: DebateConfig } };
 
 export interface TaskNode {
   id: string;
@@ -94,7 +133,23 @@ export type CouncilEvent =
   | CouncilErrorEvent
   | TeamStartedEvent
   | TeamSynthesizedEvent
-  | SubteamSpawnedEvent;
+  | SubteamSpawnedEvent
+  // Debate events (Phase N)
+  | DebateRoundStartedEvent
+  | DebateAgentTurnStartedEvent
+  | DebateAgentTextDeltaEvent
+  | DebateAgentReasoningDeltaEvent
+  | DebateAgentToolCallStartEvent
+  | DebateAgentToolCallCompleteEvent
+  | DebateAgentTurnCompleteEvent
+  | DebateJudgeStartedEvent
+  | DebateJudgeTextDeltaEvent
+  | DebateJudgeSummaryEvent
+  | DebateRoundCompactedEvent
+  | DebateStanceMapEvent
+  | DebateSynthesisStartedEvent
+  | DebateSynthesisTextDeltaEvent
+  | DebateSynthesisCompleteEvent;
 
 // ─── Planning events ─────────────────────────────────────────────────────────
 
@@ -258,6 +313,122 @@ export interface SubteamSpawnedEvent {
   type: 'subteam_spawned';
   parent_node_id: string;
   child_graph_summary: string;
+}
+
+// ─── Debate events (Phase N) ──────────────────────────────────────────────────
+
+/** Stance outcome for a single agent at the end of all debate rounds. */
+export type StanceOutcome = 'held' | 'shifted' | 'conceded';
+
+export interface AgentStance {
+  agent_id: string;
+  outcome: StanceOutcome;
+}
+
+export interface DebateRoundStartedEvent {
+  type: 'debate_round_started';
+  node_id: string;
+  /** 1-based round number. */
+  round: number;
+}
+
+export interface DebateAgentTurnStartedEvent {
+  type: 'debate_agent_turn_started';
+  node_id: string;
+  agent_id: string;
+  agent_name: string;
+  color: string;
+  round: number;
+  contentiousness: number;
+}
+
+export interface DebateAgentTextDeltaEvent {
+  type: 'debate_agent_text_delta';
+  node_id: string;
+  agent_id: string;
+  delta: string;
+}
+
+export interface DebateAgentReasoningDeltaEvent {
+  type: 'debate_agent_reasoning_delta';
+  node_id: string;
+  agent_id: string;
+  delta: string;
+}
+
+export interface DebateAgentToolCallStartEvent {
+  type: 'debate_agent_tool_call_start';
+  node_id: string;
+  agent_id: string;
+  display_name: string;
+  args_summary?: string | null;
+}
+
+export interface DebateAgentToolCallCompleteEvent {
+  type: 'debate_agent_tool_call_complete';
+  node_id: string;
+  agent_id: string;
+  display_name: string;
+  duration_display: string;
+}
+
+export interface DebateAgentTurnCompleteEvent {
+  type: 'debate_agent_turn_complete';
+  node_id: string;
+  agent_id: string;
+  round: number;
+  final_text: string;
+}
+
+export interface DebateJudgeStartedEvent {
+  type: 'debate_judge_started';
+  node_id: string;
+  round: number;
+}
+
+export interface DebateJudgeTextDeltaEvent {
+  type: 'debate_judge_text_delta';
+  node_id: string;
+  delta: string;
+}
+
+export interface DebateJudgeSummaryEvent {
+  type: 'debate_judge_summary';
+  node_id: string;
+  round: number;
+  consensus_reached: boolean;
+  early_stop_recommended: boolean;
+  assessment_text: string;
+}
+
+export interface DebateRoundCompactedEvent {
+  type: 'debate_round_compacted';
+  node_id: string;
+  round: number;
+  summary: string;
+}
+
+export interface DebateStanceMapEvent {
+  type: 'debate_stance_map';
+  node_id: string;
+  stances: AgentStance[];
+}
+
+export interface DebateSynthesisStartedEvent {
+  type: 'debate_synthesis_started';
+  node_id: string;
+}
+
+export interface DebateSynthesisTextDeltaEvent {
+  type: 'debate_synthesis_text_delta';
+  node_id: string;
+  delta: string;
+}
+
+export interface DebateSynthesisCompleteEvent {
+  type: 'debate_synthesis_complete';
+  node_id: string;
+  final_text: string;
 }
 
 // ─── GraphDiff (Phase K) ─────────────────────────────────────────────────────

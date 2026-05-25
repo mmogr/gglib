@@ -339,6 +339,104 @@ async fn render_event(
                 style::RESET,
             );
         }
+        CouncilEvent::DebateRoundStarted { node_id, round } => {
+            eprintln!(
+                "{}[{node_id}] ◆ debate round {round}{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentTurnStarted {
+            node_id,
+            agent_name,
+            round,
+            ..
+        } => {
+            eprintln!(
+                "\n{}[{node_id}][{agent_name}] round {round}{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentTextDelta { delta, .. } => {
+            eprint!("{delta}");
+        }
+        CouncilEvent::DebateAgentReasoningDelta { node_id, delta, .. } => {
+            eprint!("{}[{node_id}]<think> {delta}{}", style::DIM, style::RESET);
+        }
+        CouncilEvent::DebateAgentToolCallStart {
+            node_id,
+            display_name,
+            args_summary,
+            ..
+        } => {
+            eprintln!(
+                "\n{}[{node_id}] ⚙ {}  {}{}",
+                style::DIM,
+                display_name,
+                args_summary.as_deref().unwrap_or(""),
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentToolCallComplete {
+            node_id,
+            display_name,
+            duration_display,
+            ..
+        } => {
+            eprintln!(
+                "{}[{node_id}] ✓ {}  {}{}",
+                style::DIM,
+                display_name,
+                duration_display,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentTurnComplete { .. } => {}
+        CouncilEvent::DebateJudgeStarted { node_id, round } => {
+            eprint!(
+                "\n{}[{node_id}] ⚖ judging round {round}…{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateJudgeTextDelta { delta, .. } => {
+            eprint!("{delta}");
+        }
+        CouncilEvent::DebateJudgeSummary {
+            node_id,
+            round,
+            consensus_reached,
+            ..
+        } => {
+            let verdict = if *consensus_reached {
+                "consensus reached"
+            } else {
+                "continuing"
+            };
+            eprintln!(
+                "\n{}[{node_id}] ⚖ round {round}: {verdict}{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateRoundCompacted { .. } => {}
+        CouncilEvent::DebateStanceMap { node_id, .. } => {
+            eprintln!("{}[{node_id}] stances recorded{}", style::DIM, style::RESET);
+        }
+        CouncilEvent::DebateSynthesisStarted { node_id } => {
+            eprintln!(
+                "\n{}[{node_id}] ─── Debate Synthesis ───{}",
+                style::BOLD,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateSynthesisTextDelta { delta, .. } => {
+            eprint!("{delta}");
+        }
+        CouncilEvent::DebateSynthesisComplete { .. } => {
+            eprintln!();
+        }
     }
 }
 

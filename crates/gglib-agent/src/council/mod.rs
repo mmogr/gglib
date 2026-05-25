@@ -21,6 +21,7 @@
 
 pub mod chief_of_staff;
 pub(crate) mod compaction;
+pub mod debate;
 pub mod director;
 pub mod estimator;
 pub mod executor;

@@ -36,12 +36,13 @@ import {
 } from 'lucide-react';
 
 import { cn } from '../../../utils/cn';
-import type { ApprovalDecisionPayload, TaskGraph, TaskNode } from '../../../types/council';
+import type { ApprovalDecisionPayload, TaskGraph, TaskNode, DebateConfig } from '../../../types/council';
 import type { RunCostEstimate } from '../../../contexts/CouncilContext';
 import type { NodeState } from '../../../contexts/CouncilContext';
 import DagView from '../../../pages/Council/components/DagView';
 import { usePlanEditor } from './usePlanEditor';
 import { newDiffId } from '../../../types/graph-diff';
+import DebateRosterEditor from './DebateRosterEditor';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -489,6 +490,10 @@ const PlanEditor: FC<PlanEditorProps> = ({
     (id: string, depends_on: string[]) => applyOp({ op: 'set_deps', id, depends_on }),
     [applyOp],
   );
+  const handleApplyDebateConfig = useCallback(
+    (id: string, config: DebateConfig) => applyOp({ op: 'set_debate_config', id, config }),
+    [applyOp],
+  );
   const handleRemove = useCallback(
     (id: string) => {
       applyOp({ op: 'remove_node', id });
@@ -683,6 +688,13 @@ const PlanEditor: FC<PlanEditorProps> = ({
               allNodeIds={nodeIds}
               onAdd={handleAddNode}
               onCancel={() => setAddingNode(false)}
+            />
+          ) : selectedNode && selectedNode.kind != null && typeof selectedNode.kind === 'object' && 'debate' in selectedNode.kind ? (
+            <DebateRosterEditor
+              key={selectedNode.id}
+              nodeId={selectedNode.id}
+              config={selectedNode.kind.debate.config}
+              onApplyConfig={handleApplyDebateConfig}
             />
           ) : selectedNode ? (
             // Key on node ID so state resets when a different node is selected.

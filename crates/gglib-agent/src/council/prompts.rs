@@ -58,6 +58,7 @@ Each node must have:
 - goal: one sentence the worker agent should achieve
 - depends_on: array of node ids whose output this node needs (empty [] for root nodes)
 - tool_allowlist: array of tool names from the TOOL CATALOG the worker may use
+- kind: \"leaf\" (default) or \"debate\" — see NODE KINDS below
 
 CONSTRAINTS:
 - At most 8 nodes total
@@ -68,15 +69,40 @@ CONSTRAINTS:
 - Node ids must be unique within the plan
 - Do NOT include execution state fields (status, output, error)
 
+NODE KINDS:
+
+\"leaf\" (DEFAULT — use for almost every node):
+  A single worker agent runs the goal using its tool_allowlist.
+  Use leaf for analysis, research, coding, writing, summarization, review,
+  data processing, and any task a single expert can handle well.
+  When in doubt, use leaf.
+
+\"debate\" (rare — genuine strategic tradeoffs only):
+  Multiple agents argue competing positions over several rounds, followed
+  by a synthesis pass. Use debate only when the task requires choosing
+  between fundamentally different strategic directions where reasonable
+  experts with different values would genuinely disagree — and where
+  surfacing those competing perspectives improves the final answer.
+  Execution, factual, and analytical tasks are always leaf.
+
+  When kind is \"debate\", you MUST supply a \"debate_config\" object:
+    agents: array of 2–4 agents, each with:
+      - name: short display name (e.g. \"Alex\", \"Jordan\")
+      - perspective: specific viewpoint to argue (e.g. \"user-experience-first\")
+      - contentiousness: float 0.0–1.0 (0.4–0.6 is typical)
+    rounds: integer 1–3 (2 is typical)
+    judge: true to enable an early-stop judge (recommended when rounds > 1)
+
 DECOMPOSITION RULES:
 - Prefer parallel subtasks at the same depth when they are independent
 - Each node goal must be specific and achievable in a single agent turn
 - Root nodes (depends_on: []) run first, concurrently; later nodes consume their outputs
 - Synthesis or review nodes should depend on the nodes they integrate
+- Default to leaf for all nodes unless debate is explicitly warranted
 
 EXAMPLES:
 
-# Example 1 — Research and write
+# Example 1 — Research and write (all leaf nodes)
 Goal: \"Research the history of llama.cpp and write a summary\"
 Response:
 {
@@ -86,18 +112,20 @@ Response:
       \"id\": \"research\",
       \"goal\": \"Research the history and development of llama.cpp, covering its origins, key milestones, and community growth.\",
       \"depends_on\": [],
-      \"tool_allowlist\": [\"web_search\"]
+      \"tool_allowlist\": [\"web_search\"],
+      \"kind\": \"leaf\"
     },
     {
       \"id\": \"write-summary\",
       \"goal\": \"Write a clear, comprehensive summary of llama.cpp's history based on the research findings.\",
       \"depends_on\": [\"research\"],
-      \"tool_allowlist\": []
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     }
   ]
 }
 
-# Example 2 — Writing pipeline
+# Example 2 — Writing pipeline (all leaf nodes)
 Goal: \"Write a blog post about the benefits of open-source AI models\"
 Response:
 {
@@ -105,26 +133,29 @@ Response:
   \"nodes\": [
     {
       \"id\": \"outline\",
-      \"goal\": \"Create a detailed outline for a blog post about open-source AI model benefits, covering key arguments and supporting evidence.\",
+      \"goal\": \"Create a detailed outline for a blog post about open-source AI model benefits.\",
       \"depends_on\": [],
-      \"tool_allowlist\": []
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     },
     {
       \"id\": \"draft\",
-      \"goal\": \"Write a full blog post draft based on the outline, covering accessibility, innovation, transparency, and community benefits.\",
+      \"goal\": \"Write a full blog post draft based on the outline.\",
       \"depends_on\": [\"outline\"],
-      \"tool_allowlist\": []
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     },
     {
       \"id\": \"polish\",
       \"goal\": \"Review and polish the draft: fix grammar, improve flow, strengthen the introduction and conclusion.\",
       \"depends_on\": [\"draft\"],
-      \"tool_allowlist\": []
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     }
   ]
 }
 
-# Example 3 — Parallel security review
+# Example 3 — Parallel security review (all leaf nodes)
 Goal: \"Review a Python file for security vulnerabilities and suggest fixes\"
 Response:
 {
@@ -134,19 +165,54 @@ Response:
       \"id\": \"scan-input\",
       \"goal\": \"Analyse input validation in the codebase: check for SQL injection, command injection, and untrusted data handling.\",
       \"depends_on\": [],
-      \"tool_allowlist\": [\"read_file\", \"grep_search\"]
+      \"tool_allowlist\": [\"read_file\", \"grep_search\"],
+      \"kind\": \"leaf\"
     },
     {
       \"id\": \"scan-auth\",
       \"goal\": \"Review authentication and authorisation patterns: check for hardcoded secrets, weak hashing, and privilege escalation risks.\",
       \"depends_on\": [],
-      \"tool_allowlist\": [\"read_file\", \"grep_search\"]
+      \"tool_allowlist\": [\"read_file\", \"grep_search\"],
+      \"kind\": \"leaf\"
     },
     {
       \"id\": \"report\",
       \"goal\": \"Combine the security scan results into a prioritised vulnerability report with specific fix recommendations.\",
       \"depends_on\": [\"scan-input\", \"scan-auth\"],
-      \"tool_allowlist\": []
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
+    }
+  ]
+}
+
+# Example 4 — Architecture decision with genuine tradeoff (debate node)
+Goal: \"Decide whether to use a monolithic or microservices architecture for a \
+new internal tool used by 10 engineers\"
+Response:
+{
+  \"goal\": \"Decide whether to use a monolithic or microservices architecture for a new internal tool used by 10 engineers\",
+  \"nodes\": [
+    {
+      \"id\": \"gather-constraints\",
+      \"goal\": \"Gather the team's deployment environment, operational maturity, scaling expectations, and time-to-first-value constraints.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"architecture-debate\",
+      \"goal\": \"Debate the monolith vs microservices tradeoff given the gathered constraints and produce a recommended architecture decision with rationale.\",
+      \"depends_on\": [\"gather-constraints\"],
+      \"tool_allowlist\": [],
+      \"kind\": \"debate\",
+      \"debate_config\": {
+        \"agents\": [
+          { \"name\": \"Alex\", \"perspective\": \"monolith-first: simplicity and speed of delivery\", \"contentiousness\": 0.5 },
+          { \"name\": \"Jordan\", \"perspective\": \"microservices: scalability and team autonomy\", \"contentiousness\": 0.5 }
+        ],
+        \"rounds\": 2,
+        \"judge\": true
+      }
     }
   ]
 }";
@@ -212,6 +278,56 @@ pub fn director_plan_schema() -> serde_json::Value {
                             "type": "array",
                             "items": { "type": "string" },
                             "description": "Tool names the worker may call (empty = no tools)."
+                        },
+                        "kind": {
+                            "type": "string",
+                            "enum": ["leaf", "debate"],
+                            "description": "Node execution kind. Omit or use 'leaf' for the vast majority of nodes. Only use 'debate' for genuine strategic tradeoff decisions."
+                        },
+                        "debate_config": {
+                            "type": "object",
+                            "description": "Required when kind is 'debate'. Omit entirely for leaf nodes.",
+                            "properties": {
+                                "agents": {
+                                    "type": "array",
+                                    "description": "2–4 debate agents with distinct perspectives.",
+                                    "minItems": 2,
+                                    "maxItems": 4,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "description": "Short display name (e.g. 'Alex')."
+                                            },
+                                            "perspective": {
+                                                "type": "string",
+                                                "description": "Specific viewpoint the agent argues."
+                                            },
+                                            "contentiousness": {
+                                                "type": "number",
+                                                "minimum": 0.0,
+                                                "maximum": 1.0,
+                                                "description": "Debate intensity 0.0–1.0 (0.4–0.6 typical)."
+                                            }
+                                        },
+                                        "required": ["name", "perspective"],
+                                        "additionalProperties": false
+                                    }
+                                },
+                                "rounds": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 3,
+                                    "description": "Number of debate rounds (2 is typical)."
+                                },
+                                "judge": {
+                                    "type": "boolean",
+                                    "description": "Enable post-round judge for early stopping. Recommended when rounds > 1."
+                                }
+                            },
+                            "required": ["agents", "rounds"],
+                            "additionalProperties": false
                         }
                     },
                     "required": ["id", "goal", "depends_on", "tool_allowlist"],

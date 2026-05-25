@@ -22,6 +22,7 @@ import { cn } from '../../../utils/cn';
 import type { NodeState, NodePhase } from '../../../contexts/CouncilContext';
 import type { TaskGraph, TaskNode } from '../../../types/council';
 import type { GraphDiff } from '../../../types/council';
+import DebateNodeBody from './DebateNodeBody';
 
 // ─── Quick-action definitions ─────────────────────────────────────────────────
 
@@ -205,7 +206,14 @@ const NodePanel: FC<NodePanelProps> = ({
             <p className="text-sm text-text leading-relaxed">{node.goal}</p>
           </div>
 
-          {/* Tool allowlist */}
+          {/* Debate live stream — replaces the standard tool/text sections for debate nodes */}
+          {nodeState?.debateState && (
+            <DebateNodeBody nodeId={nodeId} debateState={nodeState.debateState} />
+          )}
+
+          {/* Standard sections — only shown for non-debate nodes or when no debateState yet */}
+          {!nodeState?.debateState && (
+            <>
           {node.tool_allowlist.length > 0 && (
             <div>
               <p className="text-xs text-text-muted mb-xs font-medium uppercase tracking-wide">Allowed tools</p>
@@ -266,6 +274,8 @@ const NodePanel: FC<NodePanelProps> = ({
             <div className="rounded-sm bg-danger/10 border border-danger/20 p-sm">
               <p className="text-xs text-danger font-medium">{nodeState.error}</p>
             </div>
+          )}
+            </>
           )}
 
           {/* ── Quick actions ── */}

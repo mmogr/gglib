@@ -14,7 +14,7 @@
  * @module types/graph-diff
  */
 
-import type { TaskGraph, TaskNode } from './council';
+import type { TaskGraph, TaskNode, DebateConfig } from './council';
 
 // Re-export the backend-aligned union for convenience.
 export type { GraphDiff } from './council';
@@ -76,11 +76,18 @@ export interface SetGoalOp {
   goal: string;
 }
 
-/** Replace the full `depends_on` list for a node. */
+/** Replace a full `depends_on` list for a node. */
 export interface SetDepsOp {
   op: 'set_deps';
   id: string;
   depends_on: string[];
+}
+
+/** Replace the debate configuration for a `debate`-kind node. */
+export interface SetDebateConfigOp {
+  op: 'set_debate_config';
+  id: string;
+  config: DebateConfig;
 }
 
 // ─── PlanEditorOp (superset of GraphDiff) ────────────────────────────────────
@@ -99,7 +106,8 @@ export type PlanEditorOp =
   | SetToolsOp
   | WrapInTeamOp
   | SetGoalOp
-  | SetDepsOp;
+  | SetDepsOp
+  | SetDebateConfigOp;
 
 // ─── Diff validation ──────────────────────────────────────────────────────────
 
@@ -264,6 +272,20 @@ export function applyPlanEditorOp(graph: TaskGraph, op: PlanEditorOp): TaskGraph
         nodes: { ...graph.nodes, [op.id]: { ...node, depends_on: op.depends_on } },
       };
     }
+
+    case 'set_debate_config': {
+      const node = graph.nodes[op.id];
+      if (!node) {
+        throw { op: op.op, message: `Node "${op.id}" not found`, nodeId: op.id } satisfies DiffValidationError;
+      }
+      return {
+        ...graph,
+        nodes: {
+          ...graph.nodes,
+          [op.id]: { ...node, kind: { debate: { config: op.config } } },
+        },
+      };
+    }
   }
 }
 
@@ -293,6 +315,8 @@ export function describePlanEditorOp(op: PlanEditorOp, graph: TaskGraph): string
       return `Update goal of "${label(op.id)}"`;
     case 'set_deps':
       return `Update deps of "${label(op.id)}"`;
+    case 'set_debate_config':
+      return `Update debate config of "${label(op.id)}" (${op.config.agents.length} agents, ${op.config.rounds} rounds)`;
   }
 }
 

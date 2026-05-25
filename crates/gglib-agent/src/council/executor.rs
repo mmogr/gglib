@@ -57,9 +57,12 @@ use gglib_core::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, ToolDefinition,
 };
 
+use tokio_util::sync::CancellationToken;
+
 use crate::AgentLoop;
 
 use super::compaction::{CompactionError, compact_worker_output};
+use super::debate;
 use super::director::PlanError;
 use super::estimator::estimate_run_cost;
 use super::planner::plan;
@@ -677,16 +680,17 @@ async fn run_wave_loop(
         )> = JoinSet::new();
 
         // ── Handle Team nodes inline (not spawned) ───────────────────────────
-        // Team nodes must be run before we spawn the rest of the wave because
-        // they are not `Send` (they borrow `event_seq`).  In practice this
-        // means team nodes in the same wave run serially before leaf nodes.
+        // Team and Debate nodes must be run before we spawn the rest of the wave
+        // because they are not `Send` (they borrow `event_seq`).  In practice this
+        // means team/debate nodes in the same wave run serially before leaf nodes.
         let mut team_nodes_in_wave: Vec<NodeId> = Vec::new();
+        let mut debate_nodes_in_wave: Vec<NodeId> = Vec::new();
         let mut leaf_nodes_in_wave: Vec<NodeId> = Vec::new();
         for node_id in &ready {
-            if matches!(&graph.nodes[node_id].kind, TaskNodeKind::Team { .. }) {
-                team_nodes_in_wave.push(node_id.clone());
-            } else {
-                leaf_nodes_in_wave.push(node_id.clone());
+            match &graph.nodes[node_id].kind {
+                TaskNodeKind::Team { .. } => team_nodes_in_wave.push(node_id.clone()),
+                TaskNodeKind::Debate { .. } => debate_nodes_in_wave.push(node_id.clone()),
+                TaskNodeKind::Leaf => leaf_nodes_in_wave.push(node_id.clone()),
             }
         }
 
@@ -697,7 +701,9 @@ async fn run_wave_loop(
                 let node = &graph.nodes[team_id];
                 let sub = match &node.kind {
                     TaskNodeKind::Team { subgraph } => (**subgraph).clone(),
-                    TaskNodeKind::Leaf => unreachable!("expected Team node"),
+                    TaskNodeKind::Leaf | TaskNodeKind::Debate { .. } => {
+                        unreachable!("expected Team node")
+                    }
                 };
                 (node.goal.clone(), node.role.clone(), sub)
             };
@@ -744,6 +750,54 @@ async fn run_wave_loop(
                 }
                 Err(e) => return Err(e),
             }
+        }
+
+        // ── Debate nodes (Phase 3 — full dispatch via debate::run_debate_node) ─
+        // Debate nodes are spawned into the same JoinSet as leaf nodes so their
+        // LLM calls can overlap with leaf tool-I/O stages.  Each debate node
+        // gets its own fresh CancellationToken; external cancellation (Phase K+)
+        // will wire into this later.
+        for debate_id in &debate_nodes_in_wave {
+            let node = &graph.nodes[debate_id];
+            let node_id_clone = debate_id.clone();
+            let node_goal = node.goal.clone();
+
+            // Extract the DebateConfig from the node kind.
+            let debate_cfg = match &node.kind {
+                TaskNodeKind::Debate { config } => config.clone(),
+                _ => unreachable!("expected Debate node"),
+            };
+
+            let predecessor_context =
+                build_predecessor_context(debate_id, graph, &compacted);
+
+            let sem_clone = Arc::clone(&sem);
+            let llm_clone = Arc::clone(&llm);
+            let tool_executor_clone = Arc::clone(&tool_executor);
+            let tx_clone = tx.clone();
+
+            // Debate nodes don't use SpawnSink — create an inert one.
+            let spawn_sink: SpawnSink = Arc::new(tokio::sync::Mutex::new(None));
+
+            join_set.spawn(async move {
+                let _permit = sem_clone
+                    .acquire_owned()
+                    .await
+                    .expect("semaphore not closed");
+
+                let result = run_debate_worker(
+                    &node_id_clone,
+                    &node_goal,
+                    predecessor_context,
+                    debate_cfg,
+                    llm_clone,
+                    tool_executor_clone,
+                    &tx_clone,
+                )
+                .await;
+
+                (node_id_clone, result, spawn_sink)
+            });
         }
 
         // Spawn all ready *leaf* nodes concurrently, bounded by the semaphore.
@@ -1199,6 +1253,119 @@ async fn run_worker(
         .await;
 
     Ok((full_output, compacted))
+}
+
+// =============================================================================
+// Debate worker execution
+// =============================================================================
+
+/// Run a single debate node to completion and return
+/// `(synthesis_text, compacted_output)` on success.
+///
+/// Emits [`CouncilEvent::NodeStarted`] immediately, then delegates the full
+/// multi-round debate to [`debate::run_debate_node`], which emits all
+/// `Debate*` events directly on `tx`.  After the debate concludes the
+/// synthesis text is compacted via [`compact_worker_output`] so the DAG
+/// successor nodes receive a dense predecessor context.
+///
+/// A fresh [`CancellationToken`] is created per debate node.  External
+/// cancellation (Phase K+) will wire into this path later.
+#[allow(clippy::too_many_arguments)]
+async fn run_debate_worker(
+    node_id: &NodeId,
+    node_goal: &str,
+    predecessor_context: String,
+    config: gglib_core::domain::council::task_graph::DebateConfig,
+    llm: Arc<dyn LlmCompletionPort>,
+    tool_executor: Arc<dyn ToolExecutorPort>,
+    tx: &mpsc::Sender<CouncilEvent>,
+) -> Result<(String, String), ExecuteError> {
+    let id_str = node_id.0.clone();
+
+    let _ = tx
+        .send(CouncilEvent::NodeStarted {
+            node_id: id_str.clone(),
+            goal: node_goal.to_owned(),
+        })
+        .await;
+
+    // Fresh cancellation token — debate internal checks use this between turns.
+    let cancel = CancellationToken::new();
+    let agent_config = AgentConfig::default();
+
+    let synthesis_text = match debate::run_debate_node(
+        &id_str,
+        node_goal,
+        &predecessor_context,
+        &config,
+        Arc::clone(&llm),
+        Arc::clone(&tool_executor),
+        &agent_config,
+        tx,
+        cancel,
+    )
+    .await
+    {
+        Ok(text) => text,
+        Err(e) => {
+            let reason = match e {
+                debate::DebateError::Cancelled => "debate cancelled".to_owned(),
+                debate::DebateError::AgentFailed => "debate agent failed".to_owned(),
+            };
+            let _ = tx
+                .send(CouncilEvent::NodeFailed {
+                    node_id: id_str.clone(),
+                    error: reason.clone(),
+                })
+                .await;
+            return Err(ExecuteError::WorkerFailed {
+                node_id: id_str,
+                reason,
+            });
+        }
+    };
+
+    // Compact the synthesis text so successors get a dense predecessor block.
+    let _ = tx
+        .send(CouncilEvent::NodeCompacting {
+            node_id: id_str.clone(),
+        })
+        .await;
+
+    let compacted = match compact_worker_output(
+        &id_str,
+        node_goal,
+        &synthesis_text,
+        &llm,
+        &tool_executor,
+    )
+    .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = e.to_string();
+            let _ = tx
+                .send(CouncilEvent::NodeFailed {
+                    node_id: id_str.clone(),
+                    error: msg.clone(),
+                })
+                .await;
+            return Err(ExecuteError::CompactionFailed {
+                node_id: id_str,
+                reason: msg,
+            });
+        }
+    };
+
+    let preview: String = synthesis_text.chars().take(200).collect();
+    let _ = tx
+        .send(CouncilEvent::NodeComplete {
+            node_id: id_str,
+            output_preview: preview,
+        })
+        .await;
+
+    Ok((synthesis_text, compacted))
 }
 
 // =============================================================================

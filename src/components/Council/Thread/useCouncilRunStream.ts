@@ -94,6 +94,60 @@ function eventToAction(event: CouncilEvent): OrchestratorAction | null {
       return { type: 'ORCHESTRATOR_ERROR', message: event.message };
     case 'steering_applied':
       return { type: 'SET_PENDING_DIFF', diff: event.diff };
+    // Debate events (Phase N)
+    case 'debate_round_started':
+      return { type: 'DEBATE_ROUND_STARTED', nodeId: event.node_id, round: event.round };
+    case 'debate_agent_turn_started':
+      return {
+        type: 'DEBATE_AGENT_TURN_STARTED',
+        nodeId: event.node_id, agentId: event.agent_id,
+        agentName: event.agent_name, color: event.color,
+        round: event.round, contentiousness: event.contentiousness,
+      };
+    case 'debate_agent_text_delta':
+      return { type: 'DEBATE_AGENT_TEXT_DELTA', nodeId: event.node_id, agentId: event.agent_id, delta: event.delta };
+    case 'debate_agent_reasoning_delta':
+      return null;
+    case 'debate_agent_tool_call_start':
+      return {
+        type: 'DEBATE_AGENT_TOOL_CALL_START',
+        nodeId: event.node_id, agentId: event.agent_id,
+        displayName: event.display_name, argsSummary: event.args_summary,
+      };
+    case 'debate_agent_tool_call_complete':
+      return {
+        type: 'DEBATE_AGENT_TOOL_CALL_COMPLETE',
+        nodeId: event.node_id, agentId: event.agent_id,
+        displayName: event.display_name, durationDisplay: event.duration_display,
+      };
+    case 'debate_agent_turn_complete':
+      return {
+        type: 'DEBATE_AGENT_TURN_COMPLETE',
+        nodeId: event.node_id, agentId: event.agent_id,
+        round: event.round, finalText: event.final_text,
+      };
+    case 'debate_judge_started':
+      return { type: 'DEBATE_JUDGE_STARTED', nodeId: event.node_id, round: event.round };
+    case 'debate_judge_text_delta':
+      return { type: 'DEBATE_JUDGE_TEXT_DELTA', nodeId: event.node_id, delta: event.delta };
+    case 'debate_judge_summary':
+      return {
+        type: 'DEBATE_JUDGE_SUMMARY',
+        nodeId: event.node_id, round: event.round,
+        consensusReached: event.consensus_reached,
+        earlyStopRecommended: event.early_stop_recommended,
+        assessmentText: event.assessment_text,
+      };
+    case 'debate_round_compacted':
+      return { type: 'DEBATE_ROUND_COMPACTED', nodeId: event.node_id, round: event.round, summary: event.summary };
+    case 'debate_stance_map':
+      return { type: 'DEBATE_STANCE_MAP', nodeId: event.node_id, stances: event.stances };
+    case 'debate_synthesis_started':
+      return { type: 'DEBATE_SYNTHESIS_STARTED', nodeId: event.node_id };
+    case 'debate_synthesis_text_delta':
+      return { type: 'DEBATE_SYNTHESIS_TEXT_DELTA', nodeId: event.node_id, delta: event.delta };
+    case 'debate_synthesis_complete':
+      return { type: 'DEBATE_SYNTHESIS_COMPLETE', nodeId: event.node_id, finalText: event.final_text };
     // Informational — no reducer action
     case 'node_reasoning_delta':
     case 'node_progress':
