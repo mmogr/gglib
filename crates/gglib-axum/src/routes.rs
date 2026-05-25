@@ -105,9 +105,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/agent/chat",
             post(handlers::agent::chat).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
         )
-        // Council (multi-agent deliberation)
-        .route("/council/suggest", post(handlers::council::suggest))
-        .route("/council/run", post(handlers::council::run))
         // Orchestrator (director planning + full execution)
         .route("/orchestrator/plan", post(handlers::orchestrator::plan_sse))
         .route(

@@ -17,8 +17,7 @@ import { useChatPersistence } from '../hooks/useChatPersistence';
 import { useSettings } from '../hooks/useSettings';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
-import { CouncilProvider } from '../contexts/CouncilContext';
-import type { SerializableCouncilSession } from '../types/council';
+
 import { mkUserMessage, mkAssistantMessage } from '../types/messages';
 import { useServerState } from '../services/serverEvents';
 import { getServerToolSupport } from '../services/clients/servers';
@@ -106,8 +105,8 @@ export default function ChatPage({
   }, [modelId]);
 
 
-  // Council mode: ref filled by ChatMessagesPanel with the suggest() callback
-  const councilSubmitRef = useRef<((text: string) => void) | null>(null);
+  // Orchestrator mode: ref filled by ChatMessagesPanel with the submit callback
+  const orchestratorSubmitRef = useRef<((text: string) => void) | null>(null);
 
   // Runtime - now with external message state
   const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
@@ -116,37 +115,15 @@ export default function ChatPage({
     onError: (error) => setChatError(error.message),
     maxToolIterations,
     supportsToolCalls,
-    onCouncilSubmit: (text) => councilSubmitRef.current?.(text),
+    onOrchestratorSubmit: (text) => orchestratorSubmitRef.current?.(text),
   });
-
-  // When council completes, inject the topic + synthesis into the message thread.
-  // The persistence hook auto-saves them since timingFinalized is set.
-  const handleCouncilComplete = useCallback(
-    (topic: string, synthesisText: string, councilSession: SerializableCouncilSession) => {
-      const userMsg = mkUserMessage(
-        [{ type: 'text' as const, text: topic }],
-        { isCouncilMode: true },
-      );
-      const assistantMsg = mkAssistantMessage({
-        timingFinalized: true,
-        councilSession,
-      });
-      // Set synthesis as the assistant message content
-      (assistantMsg.content as Array<{ type: string; text: string }>).push(
-        { type: 'text', text: synthesisText },
-      );
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    },
-    [setMessages],
-  );
 
   const handleOrchestratorRunComplete = useCallback(
     (runId: string, goal: string, finalAnswer: string | null) => {
       const userMsg = mkUserMessage(
         [{ type: 'text' as const, text: goal }],
-        // Reuse isCouncilMode flag so the message is not re-routed as a normal
-        // chat submission when the conversation is reloaded.
-        { isCouncilMode: true },
+        // isOrchestratorMode prevents re-routing on reload
+        { isOrchestratorMode: true },
       );
       const assistantMsg = mkAssistantMessage({
         timingFinalized: true,
@@ -398,7 +375,6 @@ export default function ChatPage({
         {/* Tool UI Components - render tool calls in chat messages */}
         <GenericToolUI />
         
-        <CouncilProvider>
         <TwoPanelLayout
           ref={activeTab === 'chat' ? layoutRef : undefined}
           isHidden={activeTab !== 'chat'}
@@ -445,14 +421,12 @@ export default function ChatPage({
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
-              councilSubmitRef={councilSubmitRef}
+              orchestratorSubmitRef={orchestratorSubmitRef}
               setNextMessageMeta={setNextMessageMeta}
-              onCouncilComplete={handleCouncilComplete}
               onOrchestratorRunComplete={handleOrchestratorRunComplete}
             />
           }
         />
-        </CouncilProvider>
 
       </AssistantRuntimeProvider>
 

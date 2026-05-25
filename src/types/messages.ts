@@ -6,7 +6,6 @@
  */
 
 import type { ThreadMessageLike } from '@assistant-ui/react';
-import type { SerializableCouncilSession } from './council';
 
 /**
  * Gglib message type - directly uses ThreadMessageLike
@@ -69,13 +68,14 @@ export type GglibMessageCustom = {
   timingFinalized?: boolean;
   /** Thinking duration in seconds (restored from metadata on load). */
   thinkingDurationSeconds?: number | null;
-  /** Whether this message should trigger council mode instead of normal chat. */
-  isCouncilMode?: boolean;
-  /** Persisted council session data (set on the assistant message that holds the synthesis). */
-  councilSession?: SerializableCouncilSession;
+  /**
+   * When `true`, the submit is intercepted and routed to the embedded
+   * `OrchestratorThread` instead of the normal chat flow.
+   */
+  isOrchestratorMode?: boolean;
   /**
    * The orchestrator run ID associated with this assistant message.
-   * Set on completion of a v2 engine run; triggers `HistoricalOrchestratorThread`
+   * Set on completion of an orchestrator run; triggers `HistoricalOrchestratorThread`
    * rendering when the message is loaded from persistence.
    */
   orchestratorRunId?: string;

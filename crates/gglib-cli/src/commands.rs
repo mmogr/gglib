@@ -8,7 +8,6 @@
 use clap::Subcommand;
 use clap_complete::Shell;
 
-use std::path::PathBuf;
 
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
@@ -25,34 +24,6 @@ pub enum ChatCommand {
         limit: usize,
     },
 
-    /// Run a council of agents that deliberate on a topic
-    ///
-    /// Use --suggest to have the LLM design a council for your topic,
-    /// or --config to run a deliberation with a pre-built council config.
-    Council {
-        /// Topic for the council to deliberate on
-        topic: String,
-        /// Generate a council config instead of running one
-        #[arg(long)]
-        suggest: bool,
-        /// Open the interactive editor before running
-        #[arg(long)]
-        edit: bool,
-        /// Path to a council config JSON file (required unless --suggest)
-        #[arg(long)]
-        config: Option<PathBuf>,
-        /// Number of agents to suggest (only with --suggest)
-        #[arg(long, default_value = "4")]
-        agent_count: u32,
-        /// Model name or ID (uses default model when omitted)
-        #[arg(short, long)]
-        model: Option<String>,
-        /// Reuse an already-running llama-server on this port (skips auto-start)
-        #[arg(long)]
-        port: Option<u16>,
-        #[command(flatten)]
-        context: ContextArgs,
-    },
 }
 
 /// Top-level commands for the GGUF library management tool.

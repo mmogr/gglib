@@ -84,13 +84,6 @@ export interface ModelsDirectoryInfo {
   writable: boolean;
 }
 
-/**
- * Which engine backs the Council-of-Agents / Orchestrator feature.
- * - `'legacy'` — the original multi-agent council flow (default).
- * - `'v2'`     — the new DAG-based orchestrator engine (Phase 3+).
- */
-export type CouncilEngine = 'legacy' | 'v2';
-
 export interface AppSettings {
   defaultDownloadPath?: string | null;
   defaultContextSize?: number | null;
@@ -107,8 +100,6 @@ export interface AppSettings {
   inferenceDefaults?: InferenceConfig | null;
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null;
-  /** Which engine to use for the Council / Orchestrator feature (default: 'legacy'). */
-  council_engine?: CouncilEngine | null;
 }
 
 export interface UpdateSettingsRequest {
@@ -127,8 +118,6 @@ export interface UpdateSettingsRequest {
   inferenceDefaults?: InferenceConfig | null | undefined;
   /** Whether the setup wizard has been completed */
   setupCompleted?: boolean | null | undefined;
-  /** Which engine to use for the Council / Orchestrator feature. */
-  council_engine?: CouncilEngine | null | undefined;
 }
 
 // ============================================================================

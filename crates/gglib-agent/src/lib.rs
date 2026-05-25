@@ -7,7 +7,6 @@
 
 pub(crate) mod agent_loop;
 pub(crate) mod context_pruning;
-pub mod council;
 pub(crate) mod fnv1a;
 pub(crate) mod loop_detection;
 pub mod orchestrator;
