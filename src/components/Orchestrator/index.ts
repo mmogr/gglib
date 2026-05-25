@@ -19,3 +19,6 @@ export type { OrchestratorThreadProps } from './Thread/OrchestratorThread';
 
 export { default as HistoricalOrchestratorThread } from './Thread/HistoricalOrchestratorThread';
 export type { HistoricalOrchestratorThreadProps } from './Thread/HistoricalOrchestratorThread';
+
+export { PlanEditor, usePlanEditor } from './PlanEditor';
+export type { PlanEditorProps, UsePlanEditorReturn } from './PlanEditor';
