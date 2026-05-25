@@ -26,8 +26,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { NodeState } from '../../contexts/CouncilContext';
-import type { TaskGraph } from '../../types/orchestrator';
-import DagView from '../Council/components/DagView';
+import type { TaskGraph } from '../../types/council';
+import DagView from '../../pages/Council/components/DagView';
 
 // ─── Node count derivation ────────────────────────────────────────────────────
 

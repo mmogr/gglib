@@ -13,7 +13,7 @@ import { RotateCcw, ChevronRight } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import { Button } from '../../../components/ui/Button';
 import { Icon } from '../../../components/ui/Icon';
-import type { OrchestratorRunEvent, WaveCompletedEvent } from '../../../types/orchestrator';
+import type { OrchestratorRunEvent, WaveCompletedEvent } from '../../../types/council';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

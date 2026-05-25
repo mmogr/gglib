@@ -59,9 +59,9 @@ import {
   useCouncilRun,
   useCouncilRegistry,
 } from '../../../contexts/CouncilRegistry';
-import type { ApprovalDecisionPayload } from '../../../types/orchestrator';
-import HitlApprovalModal from '../Council/components/HitlApprovalModal';
-import NodePanel from '../Council/components/NodePanel';
+import type { ApprovalDecisionPayload } from '../../../types/council';
+import HitlApprovalModal from '../../../pages/Council/components/HitlApprovalModal';
+import NodePanel from '../../../pages/Council/components/NodePanel';
 import CompactRunCard from '../CompactRunCard';
 import CollapsibleCastingSheet from '../CollapsibleCastingSheet';
 import CollapsibleDagView from '../CollapsibleDagView';

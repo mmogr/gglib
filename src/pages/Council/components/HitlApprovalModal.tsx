@@ -20,7 +20,7 @@ import type {
   ApprovalKind,
   ApprovalDecisionPayload,
   TaskGraph,
-} from '../../../types/orchestrator';
+} from '../../../types/council';
 import type { RunCostEstimate } from '../../../contexts/CouncilContext';
 import SteeringPanel from './SteeringPanel';
 

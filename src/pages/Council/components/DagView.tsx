@@ -7,13 +7,13 @@
  * Expanded state is persisted to `sessionStorage` under a key derived from
  * `runId` (when provided) so the view survives hot-reloads in development.
  *
- * @module pages/Orchestrator/components/DagView
+ * @module pages/Council/components/DagView
  */
 
 import { FC, useState, useCallback, useEffect } from 'react';
 import { CheckCircle, Circle, Loader, AlertCircle, Clock, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { cn } from '../../../utils/cn';
-import type { TaskGraph, TaskNodeKind } from '../../../types/orchestrator';
+import type { TaskGraph, TaskNodeKind } from '../../../types/council';
 import type { NodeState, NodePhase } from '../../../contexts/CouncilContext';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

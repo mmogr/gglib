@@ -18,7 +18,7 @@ import type { GglibMessageCustom } from '../../../types/messages';
 import { extractReasoningText } from '../../../utils/messages';
 
 import { cn } from '../../../utils/cn';
-import { HistoricalCouncilThread } from '../Council/Thread/HistoricalCouncilThread';
+import HistoricalCouncilThread from '../../Council/Thread/HistoricalCouncilThread';
 
 /** Shared styling for small action buttons in message bubble footers. */
 const ACTION_BTN =

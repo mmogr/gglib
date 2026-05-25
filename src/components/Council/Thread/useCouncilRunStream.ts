@@ -26,7 +26,7 @@ import {
   approveOrchestrator,
 } from '../../../services/clients/council';
 import type { OrchestratorAction, CouncilSession } from '../../../contexts/CouncilContext';
-import type { CouncilEvent, ApprovalDecisionPayload } from '../../../types/orchestrator';
+import type { CouncilEvent, ApprovalDecisionPayload } from '../../../types/council';
 import { appLogger } from '../../../services/platform';
 
 // ─── Event → Action translation ───────────────────────────────────────────────

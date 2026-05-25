@@ -6,13 +6,13 @@
  * visual encoding (green = add, red = remove, amber = reroute/modify), and
  * provides an "Apply diff" button that calls `onGraphChange`.
  *
- * @module pages/Orchestrator/components/SteeringPanel
+ * @module pages/Council/components/SteeringPanel
  */
 
 import { FC, useState } from 'react';
 import { Button } from '../../../components/ui/Button';
 import { Textarea } from '../../../components/ui/Textarea';
-import type { TaskGraph, GraphDiff, TaskNode } from '../../../types/orchestrator';
+import type { TaskGraph, GraphDiff, TaskNode } from '../../../types/council';
 
 // ─── Pure helper: apply a GraphDiff to a TaskGraph ───────────────────────────
 

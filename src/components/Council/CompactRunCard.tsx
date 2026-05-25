@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { NodeState, CouncilPhase } from '../../contexts/CouncilContext';
-import type { TaskGraph } from '../../types/orchestrator';
+import type { TaskGraph } from '../../types/council';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

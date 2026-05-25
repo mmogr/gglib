@@ -10,7 +10,7 @@ import { RefreshCw } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import { Button } from '../../../components/ui/Button';
 import { Icon } from '../../../components/ui/Icon';
-import type { CouncilRun, OrchestratorRunStatus } from '../../../types/orchestrator';
+import type { CouncilRun, OrchestratorRunStatus } from '../../../types/council';
 
 interface RunsListProps {
   runs: CouncilRun[];

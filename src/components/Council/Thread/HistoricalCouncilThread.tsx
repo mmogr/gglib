@@ -40,8 +40,8 @@ import {
 import {
   getCouncilRun,
 } from '../../../services/clients/council';
-import type { CouncilEvent } from '../../../types/orchestrator';
-import NodePanel from '../Council/components/NodePanel';
+import type { CouncilEvent } from '../../../types/council';
+import NodePanel from '../../../pages/Council/components/NodePanel';
 import CompactRunCard from '../CompactRunCard';
 import CollapsibleCastingSheet from '../CollapsibleCastingSheet';
 import CollapsibleDagView from '../CollapsibleDagView';

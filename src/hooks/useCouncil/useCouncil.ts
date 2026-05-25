@@ -17,7 +17,7 @@ import {
   resumeCouncilRun,
   rewindCouncilRun,
 } from '../../services/clients/council';
-import type { CouncilEvent, ApprovalDecisionPayload, OrchestratorRunStatus } from '../../types/orchestrator';
+import type { CouncilEvent, ApprovalDecisionPayload, OrchestratorRunStatus } from '../../types/council';
 import { appLogger } from '../../services/platform';
 
 export interface UseOrchestratorOptions {

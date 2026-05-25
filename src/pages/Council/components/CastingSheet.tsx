@@ -10,7 +10,7 @@
  *
  * Clicking a card selects the node (calls `onSelectNode`).
  *
- * @module pages/Orchestrator/components/CastingSheet
+ * @module pages/Council/components/CastingSheet
  */
 
 import { type FC } from 'react';
@@ -29,7 +29,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../../utils/cn';
-import type { TaskGraph, TaskNode, TaskNodeKind } from '../../../types/orchestrator';
+import type { TaskGraph, TaskNode, TaskNodeKind } from '../../../types/council';
 import type { NodeState, NodePhase } from '../../../contexts/CouncilContext';
 
 // ─── Role icon map ────────────────────────────────────────────────────────────

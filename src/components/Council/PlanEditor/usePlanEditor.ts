@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import type { TaskGraph } from '../../../types/orchestrator';
+import type { TaskGraph } from '../../../types/council';
 import type {
   PlanEditorDraft,
   PlanEditorOp,

@@ -28,10 +28,10 @@ import {
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import type { NodeState } from '../../contexts/CouncilContext';
-import type { TaskGraph } from '../../types/orchestrator';
+import type { TaskGraph } from '../../types/council';
 import CastingSheet, {
   collectLeafNodes,
-} from '../Council/components/CastingSheet';
+} from '../../pages/Council/components/CastingSheet';
 
 // ─── Role icon map (mirrors the one inside CastingSheet) ──────────────────────
 

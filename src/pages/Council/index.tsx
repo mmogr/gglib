@@ -21,7 +21,7 @@ import { Select } from '../../components/ui/Select';
 import { Icon } from '../../components/ui/Icon';
 import { useCouncil } from '../../hooks/useCouncil';
 import { useSettingsContext } from '../../contexts/SettingsContext';
-import type { CouncilRun, OrchestratorRunEvent } from '../../types/orchestrator';
+import type { CouncilRun, OrchestratorRunEvent } from '../../types/council';
 import { getCouncilRun } from '../../services/clients/council';
 import DagView from './components/DagView';
 import NodePanel from './components/NodePanel';
@@ -29,7 +29,7 @@ import CastingSheet from './components/CastingSheet';
 import HitlApprovalModal from './components/HitlApprovalModal';
 import RunsList from './components/RunsList';
 import WaveScrubber from './components/WaveScrubber';
-import CouncilThread from '../Council/Thread/CouncilThread';
+import CouncilThread from '../../components/Council/Thread/CouncilThread';
 
 const HITL_MODE_OPTIONS = [
   { value: 'none', label: 'No approval' },

@@ -16,7 +16,7 @@ import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
-import OrchestratorPage from "./pages/Orchestrator";
+import CouncilPage from "./pages/Council";
 import { CouncilProvider } from "./contexts/CouncilContext";
 import { CouncilRegistryProvider } from "./contexts/CouncilRegistry";
 
@@ -27,13 +27,13 @@ import { CouncilRegistryProvider } from "./contexts/CouncilRegistry";
 function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
-  const [showOrchestratorPage, setShowOrchestratorPage] = useState(
-    () => window.location.hash === '#orchestrator'
+  const [showCouncilPage, setShowCouncilPage] = useState(
+    () => window.location.hash === '#council'
   );
 
   useEffect(() => {
     const onHashChange = () => {
-      setShowOrchestratorPage(window.location.hash === '#orchestrator');
+      setShowCouncilPage(window.location.hash === '#council');
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
@@ -175,8 +175,8 @@ function AppContent() {
         <Header
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenOrchestrator={() => {
-            window.location.hash = '#orchestrator';
-            setShowOrchestratorPage(true);
+            window.location.hash = '#council';
+            setShowCouncilPage(true);
           }}
           servers={servers}
           onStopServer={stopServer}
@@ -184,13 +184,13 @@ function AppContent() {
           onRefreshServers={loadServers}
         />
         <div className="flex-1 min-h-0 overflow-hidden flex">
-          {showOrchestratorPage ? (
+          {showCouncilPage ? (
             <CouncilProvider>
-              <OrchestratorPage
+              <CouncilPage
                 hasRunningServers={servers.length > 0}
                 onBack={() => {
                   window.location.hash = '';
-                  setShowOrchestratorPage(false);
+                  setShowCouncilPage(false);
                 }}
               />
             </CouncilProvider>

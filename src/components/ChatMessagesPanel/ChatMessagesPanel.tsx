@@ -35,11 +35,7 @@ import { cn } from '../../utils/cn';
 import { DEFAULT_SYSTEM_PROMPT } from '../../hooks/useGglibRuntime';
 import { ToolSupportIndicator } from '../ToolSupportIndicator';
 import { getToolRegistry } from '../../services/tools';
-import { CouncilThread } from '../Council/Messages/CouncilThread';
-import { useCouncil } from '../../hooks/useCouncil';
 import type { GglibMessageCustom } from '../../types/messages';
-import type { SerializableCouncilSession } from '../../types/council';
-import { toSerializableSession } from '../../types/council';
 import { CouncilToggle } from '../CouncilToggle';
 import CouncilThread from '../Council/Thread/CouncilThread';
 

@@ -36,10 +36,10 @@ import {
 } from 'lucide-react';
 
 import { cn } from '../../../utils/cn';
-import type { ApprovalDecisionPayload, TaskGraph, TaskNode } from '../../../types/orchestrator';
+import type { ApprovalDecisionPayload, TaskGraph, TaskNode } from '../../../types/council';
 import type { RunCostEstimate } from '../../../contexts/CouncilContext';
 import type { NodeState } from '../../../contexts/CouncilContext';
-import DagView from '../Council/components/DagView';
+import DagView from '../../../pages/Council/components/DagView';
 import { usePlanEditor } from './usePlanEditor';
 import { newDiffId } from '../../../types/graph-diff';
 

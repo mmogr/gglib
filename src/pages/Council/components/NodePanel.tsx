@@ -20,8 +20,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import type { NodeState, NodePhase } from '../../../contexts/CouncilContext';
-import type { TaskGraph, TaskNode } from '../../../types/orchestrator';
-import type { GraphDiff } from '../../../types/orchestrator';
+import type { TaskGraph, TaskNode } from '../../../types/council';
+import type { GraphDiff } from '../../../types/council';
 
 // ─── Quick-action definitions ─────────────────────────────────────────────────
 

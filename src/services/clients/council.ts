@@ -18,7 +18,7 @@ import type {
   CouncilRun,
   OrchestratorRunEvent,
   OrchestratorRunStatus,
-} from '../../types/orchestrator';
+} from '../../types/council';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
