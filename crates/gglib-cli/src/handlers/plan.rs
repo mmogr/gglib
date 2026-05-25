@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result, anyhow};
 
-use gglib_agent::orchestrator::plan;
-use gglib_core::domain::orchestrator::task_graph::{HitlMode, NodeId, TaskGraph};
+use gglib_agent::council::plan;
+use gglib_core::domain::council::task_graph::{HitlMode, NodeId, TaskGraph};
 use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;

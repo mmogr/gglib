@@ -28,12 +28,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
-use gglib_agent::orchestrator::{OrchestratorConfig, execute};
-use gglib_core::domain::orchestrator::events::{ApprovalKind, OrchestratorEvent};
-use gglib_core::domain::orchestrator::task_graph::{
+use gglib_agent::council::{CouncilConfig, execute};
+use gglib_core::domain::council::events::{ApprovalKind, CouncilEvent};
+use gglib_core::domain::council::task_graph::{
     HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
 };
-use gglib_core::ports::{ApprovalDecision, EmptyToolExecutor, OrchestratorApprovalRegistryPort};
+use gglib_core::ports::{ApprovalDecision, EmptyToolExecutor, CouncilApprovalRegistryPort};
 use tokio::sync::{mpsc, oneshot};
 
 // =============================================================================
@@ -53,7 +53,7 @@ impl TestApprovalRegistry {
     }
 }
 
-impl OrchestratorApprovalRegistryPort for TestApprovalRegistry {
+impl CouncilApprovalRegistryPort for TestApprovalRegistry {
     fn register(&self, approval_id: String, sender: oneshot::Sender<ApprovalDecision>) {
         let mut guard = self.senders.try_lock().unwrap();
         guard.insert(approval_id, sender);
@@ -167,9 +167,9 @@ async fn spawn_subteam_auto_approve() {
 
     let tool_executor = Arc::new(EmptyToolExecutor);
 
-    let (tx, mut rx) = mpsc::channel::<OrchestratorEvent>(4096);
+    let (tx, mut rx) = mpsc::channel::<CouncilEvent>(4096);
 
-    let config = OrchestratorConfig {
+    let config = CouncilConfig {
         hitl_mode: HitlMode::None,
         max_replans: 0,
         graph_override: Some(single_leaf_graph()),
@@ -188,7 +188,7 @@ async fn spawn_subteam_auto_approve() {
         .await
     });
 
-    let mut events: Vec<OrchestratorEvent> = Vec::new();
+    let mut events: Vec<CouncilEvent> = Vec::new();
     while let Some(ev) = rx.recv().await {
         events.push(ev);
     }
@@ -198,7 +198,7 @@ async fn spawn_subteam_auto_approve() {
 
     // ── Verify SubteamSpawned was emitted ─────────────────────────────────────
     let subteam_spawned = events.iter().any(|e| {
-        matches!(e, OrchestratorEvent::SubteamSpawned { parent_node_id, .. }
+        matches!(e, CouncilEvent::SubteamSpawned { parent_node_id, .. }
             if parent_node_id == "worker-1")
     });
     assert!(
@@ -210,7 +210,7 @@ async fn spawn_subteam_auto_approve() {
     let spawn_approval = events.iter().any(|e| {
         matches!(
             e,
-            OrchestratorEvent::AwaitingApproval {
+            CouncilEvent::AwaitingApproval {
                 kind: ApprovalKind::SpawnSubteam { .. },
                 ..
             }
@@ -225,9 +225,9 @@ async fn spawn_subteam_auto_approve() {
     assert!(
         matches!(
             events.last(),
-            Some(OrchestratorEvent::OrchestratorComplete { .. })
+            Some(CouncilEvent::CouncilComplete { .. })
         ),
-        "last event should be OrchestratorComplete"
+        "last event should be CouncilComplete"
     );
 }
 
@@ -285,9 +285,9 @@ async fn spawn_subteam_hitl_requires_approval() {
     let registry = TestApprovalRegistry::new();
     let registry_for_resolver = Arc::clone(&registry);
 
-    let (tx, mut rx) = mpsc::channel::<OrchestratorEvent>(4096);
+    let (tx, mut rx) = mpsc::channel::<CouncilEvent>(4096);
 
-    let config = OrchestratorConfig {
+    let config = CouncilConfig {
         hitl_mode: HitlMode::ApproveEachNode,
         max_replans: 0,
         graph_override: Some(single_leaf_graph()),
@@ -309,9 +309,9 @@ async fn spawn_subteam_hitl_requires_approval() {
     });
 
     // Consume events; whenever we see AwaitingApproval, approve it immediately.
-    let mut events: Vec<OrchestratorEvent> = Vec::new();
+    let mut events: Vec<CouncilEvent> = Vec::new();
     while let Some(ev) = rx.recv().await {
-        if let OrchestratorEvent::AwaitingApproval { approval_id, .. } = &ev {
+        if let CouncilEvent::AwaitingApproval { approval_id, .. } = &ev {
             let id = approval_id.clone();
             let reg = Arc::clone(&registry_for_resolver);
             tokio::spawn(async move {
@@ -331,7 +331,7 @@ async fn spawn_subteam_hitl_requires_approval() {
     let spawn_approval_event = events.iter().find(|e| {
         matches!(
             e,
-            OrchestratorEvent::AwaitingApproval {
+            CouncilEvent::AwaitingApproval {
                 kind: ApprovalKind::SpawnSubteam { node_id, .. },
                 ..
             } if node_id == "worker-1"
@@ -344,7 +344,7 @@ async fn spawn_subteam_hitl_requires_approval() {
 
     // ── Verify SubteamSpawned was emitted ─────────────────────────────────────
     let subteam_spawned = events.iter().any(|e| {
-        matches!(e, OrchestratorEvent::SubteamSpawned { parent_node_id, .. }
+        matches!(e, CouncilEvent::SubteamSpawned { parent_node_id, .. }
             if parent_node_id == "worker-1")
     });
     assert!(
@@ -356,8 +356,8 @@ async fn spawn_subteam_hitl_requires_approval() {
     assert!(
         matches!(
             events.last(),
-            Some(OrchestratorEvent::OrchestratorComplete { .. })
+            Some(CouncilEvent::CouncilComplete { .. })
         ),
-        "last event should be OrchestratorComplete"
+        "last event should be CouncilComplete"
     );
 }

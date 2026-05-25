@@ -9,7 +9,7 @@ pub(crate) mod agent_loop;
 pub(crate) mod context_pruning;
 pub(crate) mod fnv1a;
 pub(crate) mod loop_detection;
-pub mod orchestrator;
+pub mod council;
 pub(crate) mod stagnation;
 pub(crate) mod stream_collector;
 pub mod structured_output;

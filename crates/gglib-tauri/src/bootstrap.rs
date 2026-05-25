@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, OrchestratorApprovalRegistry,
+    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, CouncilApprovalRegistry,
     ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
@@ -21,7 +21,7 @@ use gglib_core::ports::{
     ProcessRunner, Repos,
 };
 use gglib_core::services::AppCore;
-use gglib_db::repositories::SqliteOrchestratorRepository;
+use gglib_db::repositories::SqliteCouncilRepository;
 use gglib_gguf::{GgufParser, ToolSupportDetector};
 use gglib_mcp::McpService;
 use gglib_runtime::proxy::ProxySupervisor;
@@ -91,9 +91,9 @@ pub struct TauriContext {
     pub proxy: Arc<ProxyOps>,
     pub setup: Arc<SetupOps>,
     /// Orchestrator approval registry (for HITL gates via the embedded Axum server).
-    pub approval_registry: Arc<OrchestratorApprovalRegistry>,
+    pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Orchestrator run repository (for HITL persistence via the embedded Axum server).
-    pub orchestrator_repo: Arc<SqliteOrchestratorRepository>,
+    pub council_repo: Arc<SqliteCouncilRepository>,
 }
 
 impl TauriContext {
@@ -166,7 +166,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
     } = CoreBootstrap::build(bootstrap_config, Arc::clone(&tauri_emitter)).await?;
 
     // Orchestrator persistence (Phase D).
-    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool));
+    let council_repo = Arc::new(SqliteCouncilRepository::new(pool));
 
     // 3. MCP service — NoopEmitter until the Tauri MCP event bridge is wired.
     let mcp = Arc::new(McpService::new(
@@ -212,16 +212,16 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         downloads: downloads.clone(),
     }));
     let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
-    let approval_registry = Arc::new(OrchestratorApprovalRegistry::new());
+    let approval_registry = Arc::new(CouncilApprovalRegistry::new());
     let proxy = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor.clone(),
         model_repo: model_repo.clone(),
         mcp: mcp.clone(),
         core: Arc::clone(&app),
         approval_registry: Arc::clone(&approval_registry)
-            as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::clone(&orchestrator_repo)
-            as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
+            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
+        council_repo: Arc::clone(&council_repo)
+            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
     }));
     let setup = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
@@ -245,7 +245,7 @@ pub async fn bootstrap(config: TauriConfig, app_handle: AppHandle) -> Result<Tau
         proxy,
         setup,
         approval_registry,
-        orchestrator_repo,
+        council_repo,
     })
 }
 
@@ -303,17 +303,17 @@ pub fn bootstrap_with(
         downloads: downloads.clone(),
     }));
     let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
-    let approval_registry_w = Arc::new(OrchestratorApprovalRegistry::new());
-    let orch_repo_w = Arc::new(SqliteOrchestratorRepository::new_in_memory_blocking());
+    let approval_registry_w = Arc::new(CouncilApprovalRegistry::new());
+    let orch_repo_w = Arc::new(SqliteCouncilRepository::new_in_memory_blocking());
     let proxy_ops = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor.clone(),
         model_repo: model_repo.clone(),
         mcp: mcp.clone(),
         core: Arc::clone(&app),
         approval_registry: Arc::clone(&approval_registry_w)
-            as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::clone(&orch_repo_w)
-            as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
+            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
+        council_repo: Arc::clone(&orch_repo_w)
+            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
     }));
     let setup_ops = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
@@ -337,7 +337,7 @@ pub fn bootstrap_with(
         proxy: proxy_ops,
         setup: setup_ops,
         approval_registry: approval_registry_w,
-        orchestrator_repo: orch_repo_w,
+        council_repo: orch_repo_w,
     }
 }
 
@@ -386,7 +386,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         model_registrar: _,
         pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
-    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool));
+    let council_repo = Arc::new(SqliteCouncilRepository::new(pool));
 
     // 2. MCP service.
     let mcp = Arc::new(McpService::new(
@@ -432,16 +432,16 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         downloads: downloads.clone(),
     }));
     let mcp_ops = Arc::new(McpOps::new(McpDeps { mcp: mcp.clone() }));
-    let approval_registry_e = Arc::new(OrchestratorApprovalRegistry::new());
+    let approval_registry_e = Arc::new(CouncilApprovalRegistry::new());
     let proxy = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor.clone(),
         model_repo: model_repo.clone(),
         mcp: mcp.clone(),
         core: Arc::clone(&app),
         approval_registry: Arc::clone(&approval_registry_e)
-            as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::clone(&orchestrator_repo)
-            as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
+            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
+        council_repo: Arc::clone(&council_repo)
+            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
     }));
     let setup = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),
@@ -465,7 +465,7 @@ pub async fn bootstrap_early(config: TauriConfig) -> Result<TauriContext> {
         proxy,
         setup,
         approval_registry: approval_registry_e,
-        orchestrator_repo,
+        council_repo,
     })
 }
 // `bootstrap_with` is the only place where the verification service is

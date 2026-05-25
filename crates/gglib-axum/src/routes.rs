@@ -106,40 +106,40 @@ pub(crate) fn api_routes() -> Router<AppState> {
             post(handlers::agent::chat).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
         )
         // Orchestrator (director planning + full execution)
-        .route("/orchestrator/plan", post(handlers::orchestrator::plan_sse))
+        .route("/council/plan", post(handlers::council::plan_sse))
         .route(
-            "/orchestrator/run",
-            post(handlers::orchestrator::run::run_sse),
+            "/council/run",
+            post(handlers::council::run::run_sse),
         )
         // Orchestrator Phase D: HITL approvals + run records + resume
         .route(
-            "/orchestrator/approve/{approval_id}",
-            post(handlers::orchestrator::approve::approve),
+            "/council/approve/{approval_id}",
+            post(handlers::council::approve::approve),
         )
         .route(
-            "/orchestrator/runs",
-            get(handlers::orchestrator::runs::list_runs),
+            "/council/runs",
+            get(handlers::council::runs::list_runs),
         )
         .route(
-            "/orchestrator/runs/{run_id}",
-            get(handlers::orchestrator::runs::get_run),
+            "/council/runs/{run_id}",
+            get(handlers::council::runs::get_run),
         )
         .route(
-            "/orchestrator/runs/{run_id}/resume",
-            post(handlers::orchestrator::resume::resume_run),
+            "/council/runs/{run_id}/resume",
+            post(handlers::council::resume::resume_run),
         )
         .route(
-            "/orchestrator/runs/{run_id}/rewind",
-            post(handlers::orchestrator::rewind::rewind_run),
+            "/council/runs/{run_id}/rewind",
+            post(handlers::council::rewind::rewind_run),
         )
         // Orchestrator Phase K: conversational steering
         .route(
-            "/orchestrator/steer",
-            post(handlers::orchestrator::steer::steer),
+            "/council/steer",
+            post(handlers::council::steer::steer),
         )
         .route(
-            "/orchestrator/runs/{run_id}/note",
-            post(handlers::orchestrator::note::post_note),
+            "/council/runs/{run_id}/note",
+            post(handlers::council::note::post_note),
         )
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())

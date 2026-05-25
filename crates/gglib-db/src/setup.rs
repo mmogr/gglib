@@ -304,10 +304,11 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Create orchestrator_runs table for persistent orchestrator execution records.
+    // Create orchestrator_runs table for persistent council run records.
+    // Table name: orchestrator_runs — historical name, kept for schema compatibility.
     sqlx::query(
         r#"
-        CREATE TABLE IF NOT EXISTS orchestrator_runs (
+        CREATE TABLE IF NOT EXISTS orchestrator_runs ( -- historical name
             id TEXT PRIMARY KEY NOT NULL,
             goal TEXT NOT NULL,
             graph_json TEXT,
@@ -336,10 +337,11 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // Create orchestrator_events table for the append-only event log.
+    // Create orchestrator_events table for the append-only council event log.
+    // Table name: orchestrator_events — historical name, kept for schema compatibility.
     sqlx::query(
         r#"
-        CREATE TABLE IF NOT EXISTS orchestrator_events (
+        CREATE TABLE IF NOT EXISTS orchestrator_events ( -- historical name
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id TEXT NOT NULL,
             seq INTEGER NOT NULL,

@@ -22,7 +22,7 @@ pub use domain::{
     MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry,
     McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult, Message,
     MessageRole, Model, ModelCapabilities, ModelFilterOptions, NewConversation, NewMcpServer,
-    NewMessage, NewModel, NodeId, NodeStatus, OrchestratorEvent, RangeValues, TaskGraph,
+    NewMessage, NewModel, NodeId, NodeStatus, CouncilEvent, RangeValues, TaskGraph,
     TaskGraphError, TaskNode, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer,
     infer_from_chat_template, transform_messages_for_capabilities,
 };

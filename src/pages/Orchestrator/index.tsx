@@ -9,7 +9,7 @@
  *   - HITL approval modals (plan / node / tool)
  *   - Resumable runs sidebar via RunsList
  *
- * Uses the OrchestratorContext + useOrchestrator hook.
+ * Uses the CouncilContext + useCouncil hook.
  * HTTP transport only — no tauri::command, no isTauriApp branching.
  */
 
@@ -19,17 +19,17 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Icon } from '../../components/ui/Icon';
-import { useOrchestrator } from '../../hooks/useOrchestrator';
+import { useCouncil } from '../../hooks/useCouncil';
 import { useSettingsContext } from '../../contexts/SettingsContext';
-import type { OrchestratorRun, OrchestratorRunEvent } from '../../types/orchestrator';
-import { getOrchestratorRun } from '../../services/clients/orchestrator';
+import type { CouncilRun, OrchestratorRunEvent } from '../../types/orchestrator';
+import { getCouncilRun } from '../../services/clients/council';
 import DagView from './components/DagView';
 import NodePanel from './components/NodePanel';
 import CastingSheet from './components/CastingSheet';
 import HitlApprovalModal from './components/HitlApprovalModal';
 import RunsList from './components/RunsList';
 import WaveScrubber from './components/WaveScrubber';
-import OrchestratorThread from '../../components/Orchestrator/Thread/OrchestratorThread';
+import CouncilThread from '../Council/Thread/CouncilThread';
 
 const HITL_MODE_OPTIONS = [
   { value: 'none', label: 'No approval' },
@@ -47,7 +47,7 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
   const { settings } = useSettingsContext();
   const serverPort = settings?.llamaBasePort ?? 9000;
 
-  const { session, run, resume, rewind, cancel, reset, approve, loadRuns, isStreaming } = useOrchestrator({
+  const { session, run, resume, rewind, cancel, reset, approve, loadRuns, isStreaming } = useCouncil({
     serverPort,
   });
 
@@ -80,13 +80,13 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
   );
 
   const handleResume = useCallback(
-    async (r: OrchestratorRun) => {
+    async (r: CouncilRun) => {
       setGoal(r.goal);
       setShowRuns(false);
       setRewindRunId(r.id);
       // Load events for the WaveScrubber.
       try {
-        const { events } = await getOrchestratorRun(r.id);
+        const { events } = await getCouncilRun(r.id);
         setRewindEvents(events);
       } catch {
         setRewindEvents([]);
@@ -119,7 +119,7 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
 
   // ── Thread preview mode (?thread=1) ──────────────────────────────────────
   // Read once on mount — not reactive. Add ?thread=1 to the orchestrator URL
-  // to preview the new OrchestratorThread component in isolation.
+  // to preview the new CouncilThread component in isolation.
   const [threadPreview] = useState(
     () => new URLSearchParams(window.location.search).get('thread') === '1',
   );
@@ -140,7 +140,7 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
             </span>
           </div>
           <div className="flex-1 overflow-y-auto p-md scrollbar-thin">
-            <OrchestratorThread serverPort={serverPort} />
+            <CouncilThread serverPort={serverPort} />
           </div>
         </main>
       </div>
@@ -303,7 +303,7 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
                   setRewindInFlight(false);
                   // Reload events after rewind so the scrubber reflects new state.
                   try {
-                    const { events } = await getOrchestratorRun(rewindRunId);
+                    const { events } = await getCouncilRun(rewindRunId);
                     setRewindEvents(events);
                   } catch {
                     // non-fatal

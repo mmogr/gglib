@@ -1,7 +1,7 @@
 //! Unit tests for [`TaskGraph::apply_diff`] covering all seven [`GraphDiff`]
 //! variants (happy-path) and two invalid-diff error cases.
 
-use gglib_core::domain::orchestrator::task_graph::{
+use gglib_core::domain::council::task_graph::{
     GraphDiff, HitlMode, NodeId, NodeStatus, TaskGraph, TaskGraphError, TaskNode, TaskNodeKind,
 };
 
@@ -101,7 +101,7 @@ fn reroute_edge_updates_depends_on() {
 
 #[test]
 fn set_role_updates_node_role() {
-    use gglib_core::domain::orchestrator::role_catalog::RoleId;
+    use gglib_core::domain::council::role_catalog::RoleId;
     let mut g = simple_graph();
     let role = RoleId("analyst".into());
     g.apply_diff(&GraphDiff::SetRole {

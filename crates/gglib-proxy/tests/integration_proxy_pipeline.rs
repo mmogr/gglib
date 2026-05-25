@@ -29,11 +29,11 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::domain::orchestrator::{
-    OrchestratorEvent, OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus,
+use gglib_core::domain::council::{
+    CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus,
 };
 use gglib_core::ports::{
-    ApprovalDecision, OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort, RepositoryError,
+    ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
 };
 use gglib_core::ports::{
     CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort,
@@ -41,25 +41,25 @@ use gglib_core::ports::{
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
-use gglib_proxy::{OrchestratorDeps, OrchestratorRunParams, OrchestratorRunnerPort};
+use gglib_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug)]
 struct NoopRunner;
 #[async_trait]
-impl OrchestratorRunnerPort for NoopRunner {
+impl CouncilRunnerPort for NoopRunner {
     async fn run(
         &self,
         _: &str,
-        _: OrchestratorRunParams,
-        _: mpsc::Sender<OrchestratorEvent>,
+        _: CouncilRunParams,
+        _: mpsc::Sender<CouncilEvent>,
         _: CancellationToken,
     ) -> anyhow::Result<()> {
         Ok(())
     }
 }
 struct NoopApprovalRegistry;
-impl OrchestratorApprovalRegistryPort for NoopApprovalRegistry {
+impl CouncilApprovalRegistryPort for NoopApprovalRegistry {
     fn register(&self, _: String, _: oneshot::Sender<ApprovalDecision>) {}
     fn resolve(&self, _: &str, _: ApprovalDecision) -> bool {
         false
@@ -70,33 +70,33 @@ impl OrchestratorApprovalRegistryPort for NoopApprovalRegistry {
 }
 struct NoopOrchestratorRepo;
 #[async_trait]
-impl OrchestratorRepositoryPort for NoopOrchestratorRepo {
-    async fn create_run(&self, _: OrchestratorRun) -> Result<(), RepositoryError> {
+impl CouncilRepositoryPort for NoopOrchestratorRepo {
+    async fn create_run(&self, _: CouncilRun) -> Result<(), RepositoryError> {
         Ok(())
     }
     async fn update_run_status(
         &self,
         _: &str,
-        _: OrchestratorRunStatus,
+        _: CouncilRunStatus,
     ) -> Result<(), RepositoryError> {
         Ok(())
     }
     async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {
         Ok(())
     }
-    async fn append_event(&self, _: OrchestratorRunEvent) -> Result<(), RepositoryError> {
+    async fn append_event(&self, _: CouncilRunEvent) -> Result<(), RepositoryError> {
         Ok(())
     }
-    async fn get_run(&self, _: &str) -> Result<Option<OrchestratorRun>, RepositoryError> {
+    async fn get_run(&self, _: &str) -> Result<Option<CouncilRun>, RepositoryError> {
         Ok(None)
     }
     async fn list_runs(
         &self,
-        _: Option<OrchestratorRunStatus>,
-    ) -> Result<Vec<OrchestratorRun>, RepositoryError> {
+        _: Option<CouncilRunStatus>,
+    ) -> Result<Vec<CouncilRun>, RepositoryError> {
         Ok(vec![])
     }
-    async fn list_events(&self, _: &str) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> {
+    async fn list_events(&self, _: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
         Ok(vec![])
     }
     async fn truncate_events_after_wave(&self, _: &str, _: u32) -> Result<(), RepositoryError> {
@@ -106,11 +106,11 @@ impl OrchestratorRepositoryPort for NoopOrchestratorRepo {
         Ok(0)
     }
 }
-fn make_orchestrator_deps() -> OrchestratorDeps {
-    OrchestratorDeps {
+fn make_orchestrator_deps() -> CouncilDeps {
+    CouncilDeps {
         runner: Arc::new(NoopRunner),
         approval_registry: Arc::new(NoopApprovalRegistry),
-        orchestrator_repo: Arc::new(NoopOrchestratorRepo),
+        council_repo: Arc::new(NoopOrchestratorRepo),
     }
 }
 

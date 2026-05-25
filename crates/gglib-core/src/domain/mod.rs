@@ -20,7 +20,7 @@ pub mod gguf;
 pub mod inference;
 pub mod mcp;
 mod model;
-pub mod orchestrator;
+pub mod council;
 
 // Re-export model types at the domain level for convenience
 pub use model::{
@@ -63,7 +63,7 @@ pub use capabilities::{
 };
 
 // Re-export orchestrator types at the domain level for convenience
-pub use orchestrator::{
-    ApprovalKind, HitlMode, MAX_DEPTH, MAX_NODES, NodeId, NodeStatus, OrchestratorEvent, TaskGraph,
+pub use council::{
+    ApprovalKind, HitlMode, MAX_DEPTH, MAX_NODES, NodeId, NodeStatus, CouncilEvent, TaskGraph,
     TaskGraphError, TaskNode,
 };

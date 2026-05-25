@@ -18,7 +18,7 @@ import type { GglibMessageCustom } from '../../../types/messages';
 import { extractReasoningText } from '../../../utils/messages';
 
 import { cn } from '../../../utils/cn';
-import { HistoricalOrchestratorThread } from '../../Orchestrator/Thread/HistoricalOrchestratorThread';
+import { HistoricalCouncilThread } from '../Council/Thread/HistoricalCouncilThread';
 
 /** Shared styling for small action buttons in message bubble footers. */
 const ACTION_BTN =
@@ -39,16 +39,16 @@ export const AssistantMessageBubble: React.FC = () => {
   // Extract custom metadata once — used by all detection paths below.
   const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;
 
-  // Detect persisted orchestrator run — render HistoricalOrchestratorThread.
-  const orchestratorRunId = custom?.orchestratorRunId;
-  if (orchestratorRunId) {
+  // Detect persisted orchestrator run — render HistoricalCouncilThread.
+  const councilRunId = custom?.councilRunId;
+  if (councilRunId) {
     return (
       <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
         <div className="flex items-center gap-sm mb-sm">
           <div className="font-medium text-sm">Orchestrator</div>
           <div className="text-xs text-text-muted">{timestamp}</div>
         </div>
-        <HistoricalOrchestratorThread runId={orchestratorRunId} />
+        <HistoricalCouncilThread runId={councilRunId} />
         <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <ActionBarPrimitive.Copy />
         </ActionBarPrimitive.Root>

@@ -10,14 +10,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use gglib_app_services::OrchestratorApprovalRegistry;
+use gglib_app_services::CouncilApprovalRegistry;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, GgufParserPort, ModelRegistrarPort, ModelRepository,
     NoopEmitter, ProcessRunner, Repos,
 };
 use gglib_core::services::AppCore;
-use gglib_db::SqliteOrchestratorRepository;
+use gglib_db::SqliteCouncilRepository;
 use gglib_download::CliDownloadEventEmitter;
 use gglib_mcp::McpService;
 
@@ -81,9 +81,9 @@ pub struct CliContext {
     /// the connection-pooling behaviour of the Axum handler.
     pub http_client: reqwest::Client,
     /// Orchestrator run repository for persistence and resume support.
-    pub orchestrator_repo: Arc<SqliteOrchestratorRepository>,
+    pub council_repo: Arc<SqliteCouncilRepository>,
     /// Orchestrator approval registry for HITL gates.
-    pub approval_registry: Arc<OrchestratorApprovalRegistry>,
+    pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Terminal progress emitter used by the interactive download monitor.
     ///
     /// Shared with the download manager so bar updates flow from manager events,
@@ -129,8 +129,8 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
-    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool));
-    let approval_registry = Arc::new(OrchestratorApprovalRegistry::new());
+    let council_repo = Arc::new(SqliteCouncilRepository::new(pool));
+    let approval_registry = Arc::new(CouncilApprovalRegistry::new());
 
     // CLI uses NoopEmitter for the MCP service since there's no frontend
     // to broadcast lifecycle events to.
@@ -150,7 +150,7 @@ pub async fn bootstrap(config: CliConfig) -> Result<CliContext> {
         llama_server_path: config.llama_server_path,
         base_port: config.base_port,
         http_client: reqwest::Client::new(),
-        orchestrator_repo,
+        council_repo,
         approval_registry,
         download_emitter,
     })
@@ -185,8 +185,8 @@ pub fn bootstrap_with(
         llama_server_path,
         base_port: 9000,
         http_client: reqwest::Client::new(),
-        orchestrator_repo: Arc::new(SqliteOrchestratorRepository::new_in_memory_blocking()),
-        approval_registry: Arc::new(OrchestratorApprovalRegistry::new()),
+        council_repo: Arc::new(SqliteCouncilRepository::new_in_memory_blocking()),
+        approval_registry: Arc::new(CouncilApprovalRegistry::new()),
         download_emitter: Arc::new(CliDownloadEventEmitter::new()),
     }
 }

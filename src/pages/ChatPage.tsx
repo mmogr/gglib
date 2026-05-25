@@ -106,7 +106,7 @@ export default function ChatPage({
 
 
   // Orchestrator mode: ref filled by ChatMessagesPanel with the submit callback
-  const orchestratorSubmitRef = useRef<((text: string) => void) | null>(null);
+  const councilSubmitRef = useRef<((text: string) => void) | null>(null);
 
   // Runtime - now with external message state
   const { runtime, messages, setMessages, timingTracker, currentStreamingAssistantMessageId, setNextMessageMeta } = useGglibRuntime({
@@ -115,19 +115,19 @@ export default function ChatPage({
     onError: (error) => setChatError(error.message),
     maxToolIterations,
     supportsToolCalls,
-    onOrchestratorSubmit: (text) => orchestratorSubmitRef.current?.(text),
+    onCouncilSubmit: (text) => councilSubmitRef.current?.(text),
   });
 
-  const handleOrchestratorRunComplete = useCallback(
+  const handleCouncilRunComplete = useCallback(
     (runId: string, goal: string, finalAnswer: string | null) => {
       const userMsg = mkUserMessage(
         [{ type: 'text' as const, text: goal }],
-        // isOrchestratorMode prevents re-routing on reload
-        { isOrchestratorMode: true },
+        // isCouncilMode prevents re-routing on reload
+        { isCouncilMode: true },
       );
       const assistantMsg = mkAssistantMessage({
         timingFinalized: true,
-        orchestratorRunId: runId,
+        councilRunId: runId,
       });
       if (finalAnswer) {
         (assistantMsg.content as Array<{ type: string; text: string }>).push(
@@ -421,9 +421,9 @@ export default function ChatPage({
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
               supportsToolCalls={supportsToolCalls}
               toolFormat={toolFormat}
-              orchestratorSubmitRef={orchestratorSubmitRef}
+              councilSubmitRef={councilSubmitRef}
               setNextMessageMeta={setNextMessageMeta}
-              onOrchestratorRunComplete={handleOrchestratorRunComplete}
+              onCouncilRunComplete={handleCouncilRunComplete}
             />
           }
         />

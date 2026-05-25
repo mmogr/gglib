@@ -17,8 +17,8 @@ import { startProxy, stopProxy } from "./services/clients/servers";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
 import OrchestratorPage from "./pages/Orchestrator";
-import { OrchestratorProvider } from "./contexts/OrchestratorContext";
-import { OrchestratorRegistryProvider } from "./contexts/OrchestratorRegistry";
+import { CouncilProvider } from "./contexts/CouncilContext";
+import { CouncilRegistryProvider } from "./contexts/CouncilRegistry";
 
 /**
  * Inner app component that consumes ToastContext.
@@ -185,7 +185,7 @@ function AppContent() {
         />
         <div className="flex-1 min-h-0 overflow-hidden flex">
           {showOrchestratorPage ? (
-            <OrchestratorProvider>
+            <CouncilProvider>
               <OrchestratorPage
                 hasRunningServers={servers.length > 0}
                 onBack={() => {
@@ -193,7 +193,7 @@ function AppContent() {
                   setShowOrchestratorPage(false);
                 }}
               />
-            </OrchestratorProvider>
+            </CouncilProvider>
           ) : (
             <ModelControlCenterPage
               servers={servers}
@@ -260,9 +260,9 @@ function App() {
   return (
     <ToastProvider>
       <ConfirmProvider>
-        <OrchestratorRegistryProvider>
+        <CouncilRegistryProvider>
           <AppContent />
-        </OrchestratorRegistryProvider>
+        </CouncilRegistryProvider>
       </ConfirmProvider>
     </ToastProvider>
   );

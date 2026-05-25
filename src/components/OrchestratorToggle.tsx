@@ -3,13 +3,13 @@ import { Network } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { Icon } from './ui/Icon';
 
-export interface OrchestratorToggleProps {
+export interface CouncilToggleProps {
   active: boolean;
   onToggle: () => void;
   disabled?: boolean;
 }
 
-export const OrchestratorToggle: FC<OrchestratorToggleProps> = ({ active, onToggle, disabled }) => (
+export const CouncilToggle: FC<CouncilToggleProps> = ({ active, onToggle, disabled }) => (
   <button
     type="button"
     onClick={onToggle}

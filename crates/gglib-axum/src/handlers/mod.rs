@@ -11,7 +11,7 @@ pub mod config;
 pub mod events;
 pub mod mcp;
 pub mod model;
-pub mod orchestrator;
+pub mod council;
 pub mod port_utils;
 pub mod proxy;
 pub mod servers;

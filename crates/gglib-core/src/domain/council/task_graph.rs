@@ -1,0 +1,1631 @@
+//! Task graph types for the Director/Worker orchestrator.
+//!
+//! A [`TaskGraph`] is a directed acyclic graph (DAG) of [`TaskNode`]s that the
+//! orchestrator executor drives to completion in topological order.  Nodes with
+//! no unsatisfied dependencies run concurrently; each node executes as an
+//! isolated `AgentLoop` worker with its own tool allowlist and context window.
+//!
+//! # Validation
+//!
+//! Call [`TaskGraph::new`] (preferred) or [`TaskGraph::validate_acyclic`]
+//! (on a manually-constructed graph) before handing a graph to the executor.
+//! Both methods check:
+//!
+//! - All `depends_on` ids resolve to existing nodes.
+//! - The dependency edges form a true DAG (no cycles, no self-loops).
+//! - Node count ≤ [`MAX_NODES`].
+//! - Longest path depth ≤ [`MAX_DEPTH`].
+//!
+//! # Example
+//!
+//! ```rust
+//! use std::collections::HashSet;
+//! use gglib_core::domain::council::task_graph::{
+//!     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
+//! };
+//!
+//! let nodes = vec![
+//!     TaskNode {
+//!         id: NodeId("research".into()),
+//!         goal: "Research the topic".into(),
+//!         depends_on: vec![],
+//!         tool_allowlist: vec!["web_search".into()],
+//!         kind: TaskNodeKind::Leaf,
+//!         role: None,
+//!         status: NodeStatus::Pending,
+//!         output: None,
+//!         compacted_output: None,
+//!         error: None,
+//!     },
+//!     TaskNode {
+//!         id: NodeId("draft".into()),
+//!         goal: "Write the first draft".into(),
+//!         depends_on: vec![NodeId("research".into())],
+//!         tool_allowlist: vec![],
+//!         kind: TaskNodeKind::Leaf,
+//!         role: None,
+//!         status: NodeStatus::Pending,
+//!         output: None,
+//!         compacted_output: None,
+//!         error: None,
+//!     },
+//! ];
+//! let graph = TaskGraph::new("Write a research doc".into(), HitlMode::None, nodes).unwrap();
+//! let ready = graph.ready_nodes(&HashSet::new());
+//! assert_eq!(ready.len(), 1);
+//! assert_eq!(ready[0], &NodeId("research".into()));
+//! ```
+
+use std::collections::{HashMap, HashSet};
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::domain::agent::ToolDefinition;
+use crate::domain::council::role_catalog::RoleId;
+
+// =============================================================================
+// Size limits
+// =============================================================================
+
+/// Maximum number of nodes a [`TaskGraph`] may contain **per subgraph**.
+///
+/// This limit applies independently to each nested subgraph (including the
+/// top-level graph and every [`TaskNodeKind::Team`] subgraph).  It does **not**
+/// constrain the aggregate node count across all subgraphs; see
+/// [`MAX_TOTAL_NODES`] for the soft aggregate budget (Phase J).
+///
+/// Keeping each subgraph small ensures that no single LLM planning call ever
+/// needs to reason about more than ~8 sibling nodes.
+pub const MAX_NODES: usize = 8;
+
+/// Maximum depth (longest root-to-leaf path) a [`TaskGraph`] may have **per subgraph**.
+///
+/// Applied independently inside each subgraph.  Keeps total latency bounded
+/// even when nodes are forced to run serially within a department.
+pub const MAX_DEPTH: usize = 3;
+
+/// Soft upper bound on the **total** node count across all subgraphs combined.
+///
+/// This constant is not enforced during validation in Phase G.  Starting from
+/// Phase J the executor consults `CouncilConfig::max_total_nodes` (which
+/// defaults to this value) and emits a warn-only cost-estimate event when the
+/// aggregate budget is exceeded.
+pub const MAX_TOTAL_NODES: usize = 32;
+
+// =============================================================================
+// NodeId
+// =============================================================================
+
+/// Opaque node identifier within a [`TaskGraph`].
+///
+/// Short, human-readable strings are recommended (e.g. `"research"`, `"draft"`,
+/// `"review"`).  Uniqueness within a graph is enforced by [`TaskGraph::new`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NodeId(pub String);
+
+impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+// =============================================================================
+// NodeStatus
+// =============================================================================
+
+/// Lifecycle state of a single [`TaskNode`].
+///
+/// State transitions:
+/// ```text
+/// Pending → AwaitingApproval → Running → Compacting → Done
+///                                      ↘ Failed
+/// Pending → Skipped   (upstream failure)
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeStatus {
+    /// Not yet eligible to run (one or more predecessors are incomplete).
+    Pending,
+    /// All predecessors are done but human approval is required before
+    /// execution begins ([`HitlMode::ApproveEachNode`] or higher).
+    AwaitingApproval,
+    /// Currently executing (the worker `AgentLoop` is running).
+    Running,
+    /// Execution finished; the output is being compacted for downstream use.
+    Compacting,
+    /// Execution and compaction finished successfully.
+    Done,
+    /// Execution failed with an unrecoverable error.
+    Failed,
+    /// Skipped because an upstream node failed and no path to this node is
+    /// viable.
+    Skipped,
+}
+
+// =============================================================================
+// HitlMode
+// =============================================================================
+
+/// Controls when the orchestrator executor pauses to request human approval.
+///
+/// Variants are ordered from least to most restrictive; each variant implies
+/// all approvals required by lower variants.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum HitlMode {
+    /// Execute the graph without any human-in-the-loop gates.
+    #[default]
+    None,
+    /// Pause once after the plan is produced so the user can review (and
+    /// optionally edit) the full [`TaskGraph`] before execution begins.
+    ApprovePlan,
+    /// Pause before each node executes (implies `ApprovePlan`).
+    ///
+    /// Use this when the goal is sensitive and each step must be vetted
+    /// individually.
+    ApproveEachNode,
+    /// Pause before each individual tool call a worker makes
+    /// (implies `ApproveEachNode`).
+    ///
+    /// This is the most restrictive mode; it is primarily useful for
+    /// debugging or for high-stakes automation contexts.
+    ApproveTools,
+}
+
+// =============================================================================
+// NodeBudget
+// =============================================================================
+
+/// Advisory upper bound on the aggregate node count across all subgraphs.
+///
+/// The Phase J cost estimator checks the total node count against
+/// `upper_bound()` and emits a [`tracing::warn!`] when exceeded, but never
+/// returns an error — the executor always proceeds.
+///
+/// # Default
+///
+/// [`NodeBudget::TaskForce`] (up to 25 nodes).
+///
+/// # Example
+///
+/// ```rust
+/// use gglib_core::domain::council::task_graph::NodeBudget;
+///
+/// let budget = NodeBudget::TaskForce;
+/// assert_eq!(budget.upper_bound(), 25);
+///
+/// let custom = NodeBudget::Custom { value: 100 };
+/// assert_eq!(custom.upper_bound(), 100);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NodeBudget {
+    /// Up to 3 nodes — single-agent equivalent.
+    Solo,
+    /// Up to 8 nodes — small coordination team.
+    SmallTeam,
+    /// Up to 25 nodes — cross-functional task force. **Default**.
+    #[default]
+    TaskForce,
+    /// Up to 60 nodes — full department-scale run.
+    Department,
+    /// Caller-specified upper bound.
+    Custom {
+        /// The maximum number of aggregate nodes allowed before a warning is
+        /// emitted.
+        value: usize,
+    },
+}
+
+impl NodeBudget {
+    /// Returns the advisory upper bound for this budget variant.
+    pub const fn upper_bound(&self) -> usize {
+        match self {
+            Self::Solo => 3,
+            Self::SmallTeam => 8,
+            Self::TaskForce => 25,
+            Self::Department => 60,
+            Self::Custom { value } => *value,
+        }
+    }
+}
+
+// =============================================================================
+// TaskNodeKind
+// =============================================================================
+
+/// Determines whether a [`TaskNode`] is an isolated leaf worker or a
+/// sub-team that executes its own nested [`TaskGraph`].
+///
+/// Existing (Phase A–F) nodes all default to `Leaf` when deserialized from
+/// JSON that does not carry a `kind` field.
+///
+/// # Example
+///
+/// ```rust
+/// use gglib_core::domain::council::task_graph::TaskNodeKind;
+///
+/// // Missing `kind` in old JSON → defaults to `Leaf`.
+/// let kind: TaskNodeKind = serde_json::from_str("\"leaf\"").unwrap();
+/// assert!(matches!(kind, TaskNodeKind::Leaf));
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskNodeKind {
+    /// A standard single-worker node.  This is the default for all v1 nodes
+    /// and for any node deserialized from JSON that omits the `kind` field.
+    #[default]
+    Leaf,
+    /// A compound node that encapsulates a nested [`TaskGraph`] (a sub-team).
+    ///
+    /// The executor recurses into `subgraph` and runs it to completion before
+    /// marking this node done and passing its synthesised output downstream.
+    Team {
+        /// The nested task graph executed when this node runs.
+        subgraph: Box<TaskGraph>,
+    },
+}
+
+// =============================================================================
+// TaskNode
+// =============================================================================
+
+/// A single work unit in a [`TaskGraph`].
+///
+/// Each node is either a [`TaskNodeKind::Leaf`] (executed as an isolated
+/// `AgentLoop` worker) or a [`TaskNodeKind::Team`] (a sub-team with its own
+/// nested [`TaskGraph`] that the executor recurses into).
+///
+/// Leaf node context is assembled from:
+///
+/// 1. Its own `goal` as the system instruction.
+/// 2. Compacted outputs from each `depends_on` predecessor as additional
+///    context messages.
+/// 3. No orchestrator planning history (strict isolation between nodes).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskNode {
+    /// Short, unique identifier for this node within its graph.
+    pub id: NodeId,
+    /// One-sentence goal that the worker agent is asked to achieve.
+    pub goal: String,
+    /// Nodes whose outputs this node depends on.
+    ///
+    /// Must form a DAG when combined with all other nodes' `depends_on` lists.
+    pub depends_on: Vec<NodeId>,
+    /// Tool names the worker is permitted to call.
+    ///
+    /// An empty list means no tools are available to this worker.  Names must
+    /// match entries in the runtime tool catalog.
+    pub tool_allowlist: Vec<String>,
+    /// Whether this node is a leaf worker or a sub-team.
+    ///
+    /// Defaults to [`TaskNodeKind::Leaf`] when absent in serialised JSON so
+    /// that all Phase A–F plans deserialise without modification.
+    #[serde(default)]
+    pub kind: TaskNodeKind,
+    /// Optional specialist role assigned to this node.
+    ///
+    /// When `Some`, the executor will inject the role's
+    /// `system_prompt_fragment` before the node's `goal`.  `None` means the
+    /// node runs as a generic worker.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub role: Option<RoleId>,
+    /// Current lifecycle state (mutated by the executor as the node runs).
+    pub status: NodeStatus,
+    /// The worker's full output text (set after reaching [`NodeStatus::Done`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    /// Compressed summary of `output` passed to downstream nodes as context.
+    ///
+    /// Set by the compaction step immediately after execution finishes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compacted_output: Option<String>,
+    /// Error message if the node reached [`NodeStatus::Failed`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+// =============================================================================
+// TaskGraphError
+// =============================================================================
+
+/// Error variants produced during [`TaskGraph`] construction or validation.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum TaskGraphError {
+    /// Two nodes share the same [`NodeId`].
+    #[error("duplicate node id: {0}")]
+    DuplicateNodeId(String),
+
+    /// A `depends_on` entry references a [`NodeId`] not present in the graph.
+    #[error("node '{node}' depends on unknown id '{dep}'")]
+    UnknownDependency {
+        /// The node that declared the bad dependency.
+        node: String,
+        /// The referenced id that does not exist.
+        dep: String,
+    },
+
+    /// The dependency edges contain at least one cycle.
+    #[error("cycle detected involving node '{0}'")]
+    Cycle(String),
+
+    /// The graph exceeds [`MAX_NODES`].
+    #[error("graph has {count} nodes; maximum is {max}")]
+    TooManyNodes {
+        /// Actual node count.
+        count: usize,
+        /// The limit ([`MAX_NODES`]).
+        max: usize,
+    },
+
+    /// The longest root-to-leaf path exceeds [`MAX_DEPTH`].
+    #[error("graph depth {depth} exceeds maximum {max}")]
+    DepthExceeded {
+        /// Computed depth.
+        depth: usize,
+        /// The limit ([`MAX_DEPTH`]).
+        max: usize,
+    },
+
+    /// A node lists a tool not present in the provided catalog.
+    #[error("node '{node}' requires unknown tool '{tool}'")]
+    UnknownTool {
+        /// The node with the invalid allowlist entry.
+        node: String,
+        /// The tool name that was not found in the catalog.
+        tool: String,
+    },
+
+    /// A referenced node id was not found in the graph.
+    #[error("node not found: {0}")]
+    NodeNotFound(String),
+
+    /// The diff is structurally invalid (e.g. would leave an empty graph).
+    #[error("invalid diff: {0}")]
+    DiffInvalid(String),
+}
+
+// =============================================================================
+// GraphDiff
+// =============================================================================
+
+/// A single mutation to apply to a [`TaskGraph`] at runtime.
+///
+/// Produced by the steering LLM (`gglib_agent::council::steering`) and
+/// applied via [`TaskGraph::apply_diff`].  Each variant mutates the graph and
+/// then triggers re-validation to ensure the graph stays well-formed.
+///
+/// The `#[non_exhaustive]` attribute allows new variants to be added in future
+/// minor versions without breaking match arms in external crates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum GraphDiff {
+    /// Add a new node.
+    ///
+    /// The node's `depends_on` carries all its incoming edges.
+    AddNode {
+        /// Node to insert.
+        node: TaskNode,
+    },
+
+    /// Remove a node and strip all edges that pointed to it.
+    ///
+    /// Any node whose `depends_on` contains `id` will have that entry removed.
+    RemoveNode {
+        /// Id of the node to remove.
+        id: NodeId,
+    },
+
+    /// Replace one node with multiple nodes.
+    ///
+    /// The original is removed; each entry in `into` is inserted.  Any node
+    /// that depended on the original will be updated to depend on all
+    /// replacements.
+    SplitNode {
+        /// Id of the node to replace.
+        id: NodeId,
+        /// Replacement nodes (at least one entry required).
+        into: Vec<TaskNode>,
+    },
+
+    /// Redirect one dependency edge.
+    ///
+    /// In `node_id`'s `depends_on` list, replaces `old_dep` with `new_dep`.
+    RerouteEdge {
+        /// Node whose dependency is being changed.
+        node_id: NodeId,
+        /// Dependency to remove.
+        old_dep: NodeId,
+        /// Dependency to add in its place.
+        new_dep: NodeId,
+    },
+
+    /// Set or clear a node's specialist role.
+    SetRole {
+        /// Target node id.
+        id: NodeId,
+        /// New role (`None` clears the current role).
+        role: Option<RoleId>,
+    },
+
+    /// Replace a node's entire tool allowlist.
+    SetTools {
+        /// Target node id.
+        id: NodeId,
+        /// New tool allowlist (replaces the current list entirely).
+        tool_allowlist: Vec<String>,
+    },
+
+    /// Wrap a set of nodes into a new [`TaskNodeKind::Team`] node.
+    ///
+    /// The wrapped nodes become the team's subgraph.  The `team_id` node
+    /// inherits all external in-edges (from nodes NOT in `ids`) and any
+    /// node outside `ids` that depended on a wrapped node will be updated
+    /// to depend on `team_id` instead.
+    WrapInTeam {
+        /// Ids of the nodes to wrap (all must exist in the graph).
+        ids: Vec<NodeId>,
+        /// Unique id for the new `Team` wrapper node.
+        team_id: NodeId,
+        /// High-level goal text for the new `Team` node.
+        team_goal: String,
+    },
+}
+
+// =============================================================================
+// Internal DFS helpers
+// =============================================================================
+
+const WHITE: u8 = 0; // not yet visited
+const GRAY: u8 = 1; // currently on the DFS stack
+const BLACK: u8 = 2; // fully processed
+
+fn dfs_check_cycle<'a>(
+    id: &'a NodeId,
+    nodes: &'a HashMap<NodeId, TaskNode>,
+    color: &mut HashMap<&'a NodeId, u8>,
+) -> Result<(), TaskGraphError> {
+    color.insert(id, GRAY);
+    let node = &nodes[id];
+    for dep in &node.depends_on {
+        let dep_color = color.get(dep).copied().unwrap_or(WHITE);
+        match dep_color {
+            GRAY => return Err(TaskGraphError::Cycle(dep.0.clone())),
+            BLACK => {} // already fully explored
+            _ => dfs_check_cycle(dep, nodes, color)?,
+        }
+    }
+    color.insert(id, BLACK);
+    Ok(())
+}
+
+fn compute_depth(
+    id: &NodeId,
+    nodes: &HashMap<NodeId, TaskNode>,
+    memo: &mut HashMap<NodeId, usize>,
+) -> usize {
+    if let Some(&d) = memo.get(id) {
+        return d;
+    }
+    let depth = nodes[id]
+        .depends_on
+        .iter()
+        .map(|dep| compute_depth(dep, nodes, memo) + 1)
+        .max()
+        .unwrap_or(0);
+    memo.insert(id.clone(), depth);
+    depth
+}
+
+// =============================================================================
+// TaskGraph
+// =============================================================================
+
+/// A validated directed acyclic graph of [`TaskNode`]s.
+///
+/// Produced by the director agent via [`crate::domain::council::events::CouncilEvent::PlanProposed`]
+/// and executed by the orchestrator runner in topological order.
+///
+/// # Construction
+///
+/// Prefer [`TaskGraph::new`] over direct struct construction to get automatic
+/// validation.  Deserializing from a director's JSON response should be
+/// followed by [`TaskGraph::validate_acyclic`] to re-check invariants.
+///
+/// # Concurrency model
+///
+/// The executor calls [`TaskGraph::ready_nodes`] after each node completes to
+/// discover newly-eligible nodes, which it launches concurrently.
+///
+/// # Example
+///
+/// ```rust
+/// use gglib_core::domain::council::task_graph::{TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode};
+///
+/// let nodes = vec![TaskNode {
+///     id: NodeId("only".into()),
+///     goal: "Do the thing".into(),
+///     depends_on: vec![],
+///     tool_allowlist: vec![],
+///     kind: TaskNodeKind::Leaf,
+///     role: None,
+///     status: NodeStatus::Pending,
+///     output: None,
+///     compacted_output: None,
+///     error: None,
+/// }];
+/// let g = TaskGraph::new("My goal".into(), HitlMode::None, nodes).unwrap();
+/// assert_eq!(g.roots().len(), 1);
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskGraph {
+    /// The high-level goal the director is trying to achieve.
+    pub goal: String,
+    /// Human-in-the-loop approval policy for this execution run.
+    pub hitl_mode: HitlMode,
+    /// All work units, keyed by their unique [`NodeId`].
+    pub nodes: HashMap<NodeId, TaskNode>,
+}
+
+impl TaskGraph {
+    /// Construct and validate a [`TaskGraph`] from a flat list of nodes.
+    ///
+    /// Returns an error if the node list violates any structural invariant
+    /// (duplicate ids, unknown dependencies, cycles, size/depth limits).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::council::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
+    /// };
+    ///
+    /// let nodes = vec![TaskNode {
+    ///     id: NodeId("only".into()),
+    ///     goal: "Do the thing".into(),
+    ///     depends_on: vec![],
+    ///     tool_allowlist: vec![],
+    ///     kind: TaskNodeKind::Leaf,
+    ///     role: None,
+    ///     status: NodeStatus::Pending,
+    ///     output: None,
+    ///     compacted_output: None,
+    ///     error: None,
+    /// }];
+    /// let g = TaskGraph::new("Top goal".into(), HitlMode::None, nodes);
+    /// assert!(g.is_ok());
+    /// ```
+    pub fn new(
+        goal: String,
+        hitl_mode: HitlMode,
+        nodes: Vec<TaskNode>,
+    ) -> Result<Self, TaskGraphError> {
+        if nodes.len() > MAX_NODES {
+            return Err(TaskGraphError::TooManyNodes {
+                count: nodes.len(),
+                max: MAX_NODES,
+            });
+        }
+
+        let mut map: HashMap<NodeId, TaskNode> = HashMap::with_capacity(nodes.len());
+        for node in nodes {
+            if map.contains_key(&node.id) {
+                return Err(TaskGraphError::DuplicateNodeId(node.id.0));
+            }
+            map.insert(node.id.clone(), node);
+        }
+
+        let graph = Self {
+            goal,
+            hitl_mode,
+            nodes: map,
+        };
+        graph.validate_acyclic()?;
+        Ok(graph)
+    }
+
+    /// Validate that the dependency graph contains no cycles.
+    ///
+    /// Uses DFS colouring (white → gray → black).  Also validates that all
+    /// `depends_on` ids resolve to existing nodes and that depth ≤ [`MAX_DEPTH`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the first structural violation found.
+    ///
+    /// # Example — detecting a cycle
+    ///
+    /// ```rust
+    /// use std::collections::HashMap;
+    /// use gglib_core::domain::council::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode, TaskGraphError,
+    /// };
+    ///
+    /// let mut nodes = HashMap::new();
+    /// for (id, dep) in [("a", "b"), ("b", "a")] {
+    ///     nodes.insert(NodeId(id.into()), TaskNode {
+    ///         id: NodeId(id.into()),
+    ///         goal: id.into(),
+    ///         depends_on: vec![NodeId(dep.into())],
+    ///         tool_allowlist: vec![],
+    ///         kind: TaskNodeKind::Leaf,
+    ///         role: None,
+    ///         status: NodeStatus::Pending,
+    ///         output: None, compacted_output: None, error: None,
+    ///     });
+    /// }
+    /// let g = TaskGraph { goal: "cyclic".into(), hitl_mode: HitlMode::None, nodes };
+    /// assert!(matches!(g.validate_acyclic(), Err(TaskGraphError::Cycle(_))));
+    /// ```
+    pub fn validate_acyclic(&self) -> Result<(), TaskGraphError> {
+        // Check all depends_on ids resolve.
+        for (id, node) in &self.nodes {
+            for dep in &node.depends_on {
+                if !self.nodes.contains_key(dep) {
+                    return Err(TaskGraphError::UnknownDependency {
+                        node: id.0.clone(),
+                        dep: dep.0.clone(),
+                    });
+                }
+            }
+        }
+
+        // DFS cycle detection.
+        let mut color: HashMap<&NodeId, u8> = HashMap::new();
+        for id in self.nodes.keys() {
+            if color.get(id).copied().unwrap_or(WHITE) == WHITE {
+                dfs_check_cycle(id, &self.nodes, &mut color)?;
+            }
+        }
+
+        // Depth check.
+        let mut memo: HashMap<NodeId, usize> = HashMap::new();
+        for id in self.nodes.keys() {
+            let depth = compute_depth(id, &self.nodes, &mut memo);
+            if depth > MAX_DEPTH {
+                return Err(TaskGraphError::DepthExceeded {
+                    depth,
+                    max: MAX_DEPTH,
+                });
+            }
+        }
+
+        // Recurse into Team subgraphs.  Per-subgraph caps (MAX_NODES, MAX_DEPTH)
+        // are enforced independently inside each subgraph by the recursive call.
+        // Cycles spanning a team boundary surface here as errors from the
+        // nested validate_acyclic call with the offending node id reported.
+        for node in self.nodes.values() {
+            if let TaskNodeKind::Team { subgraph } = &node.kind {
+                subgraph.validate_acyclic()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate that every tool name in every node's `tool_allowlist` exists
+    /// in `catalog`.
+    ///
+    /// Call this after [`TaskGraph::validate_acyclic`] when the runtime tool
+    /// catalog is available.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::council::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode, TaskGraphError,
+    /// };
+    /// use gglib_core::ToolDefinition;
+    ///
+    /// let catalog = vec![ToolDefinition {
+    ///     name: "web_search".into(),
+    ///     description: None,
+    ///     input_schema: None,
+    ///     title: None,
+    /// }];
+    /// let nodes = vec![TaskNode {
+    ///     id: NodeId("r".into()),
+    ///     goal: "research".into(),
+    ///     depends_on: vec![],
+    ///     tool_allowlist: vec!["nonexistent".into()],
+    ///     kind: TaskNodeKind::Leaf,
+    ///     role: None,
+    ///     status: NodeStatus::Pending,
+    ///     output: None, compacted_output: None, error: None,
+    /// }];
+    /// let g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
+    /// assert!(matches!(
+    ///     g.validate_tool_allowlist(&catalog),
+    ///     Err(TaskGraphError::UnknownTool { .. })
+    /// ));
+    /// ```
+    pub fn validate_tool_allowlist(
+        &self,
+        catalog: &[ToolDefinition],
+    ) -> Result<(), TaskGraphError> {
+        let known: HashSet<&str> = catalog.iter().map(|t| t.name.as_str()).collect();
+        for (id, node) in &self.nodes {
+            for tool in &node.tool_allowlist {
+                if !known.contains(tool.as_str()) {
+                    return Err(TaskGraphError::UnknownTool {
+                        node: id.0.clone(),
+                        tool: tool.clone(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Return the ids of root nodes — those with an empty `depends_on` list.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::council::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
+    /// };
+    ///
+    /// let nodes = vec![
+    ///     TaskNode { id: NodeId("root".into()), goal: "g".into(), depends_on: vec![],
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
+    ///                output: None, compacted_output: None, error: None },
+    ///     TaskNode { id: NodeId("child".into()), goal: "g".into(),
+    ///                depends_on: vec![NodeId("root".into())],
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
+    ///                output: None, compacted_output: None, error: None },
+    /// ];
+    /// let g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
+    /// assert_eq!(g.roots().len(), 1);
+    /// assert_eq!(g.roots()[0], &NodeId("root".into()));
+    /// ```
+    pub fn roots(&self) -> Vec<&NodeId> {
+        let mut roots: Vec<&NodeId> = self
+            .nodes
+            .keys()
+            .filter(|id| self.nodes[*id].depends_on.is_empty())
+            .collect();
+        // Sort for deterministic ordering.
+        roots.sort_by(|a, b| a.0.cmp(&b.0));
+        roots
+    }
+
+    /// Return the ids of nodes eligible to run given the set of
+    /// already-completed nodes.
+    ///
+    /// A node is eligible when:
+    /// - It is **not** in `completed`.
+    /// - All of its `depends_on` predecessors **are** in `completed`.
+    ///
+    /// The returned slice is sorted by node id for deterministic ordering.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use std::collections::HashSet;
+    /// use gglib_core::domain::council::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
+    /// };
+    ///
+    /// let nodes = vec![
+    ///     TaskNode { id: NodeId("a".into()), goal: "g".into(), depends_on: vec![],
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
+    ///                output: None, compacted_output: None, error: None },
+    ///     TaskNode { id: NodeId("b".into()), goal: "g".into(),
+    ///                depends_on: vec![NodeId("a".into())],
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
+    ///                output: None, compacted_output: None, error: None },
+    /// ];
+    /// let g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
+    ///
+    /// // Nothing completed — only the root is ready.
+    /// let ready = g.ready_nodes(&HashSet::new());
+    /// assert_eq!(ready.len(), 1);
+    /// assert_eq!(ready[0], &NodeId("a".into()));
+    ///
+    /// // "a" completed — "b" is now ready.
+    /// let done: HashSet<NodeId> = [NodeId("a".into())].into();
+    /// let ready = g.ready_nodes(&done);
+    /// assert_eq!(ready.len(), 1);
+    /// assert_eq!(ready[0], &NodeId("b".into()));
+    /// ```
+    pub fn ready_nodes(&self, completed: &HashSet<NodeId>) -> Vec<&NodeId> {
+        let mut ready: Vec<&NodeId> = self
+            .nodes
+            .keys()
+            .filter(|id| {
+                !completed.contains(*id)
+                    && self.nodes[*id]
+                        .depends_on
+                        .iter()
+                        .all(|dep| completed.contains(dep))
+            })
+            .collect();
+        // Sort for deterministic ordering.
+        ready.sort_by(|a, b| a.0.cmp(&b.0));
+        ready
+    }
+
+    /// Return the total number of nodes across all subgraphs combined.
+    ///
+    /// Each [`TaskNodeKind::Leaf`] contributes 1.  Each [`TaskNodeKind::Team`]
+    /// contributes 1 (for itself) plus the recursive count of its subgraph.
+    ///
+    /// This is the aggregate tally consulted by the warn-only token-cost
+    /// estimator introduced in Phase J.  Validation never fails on this value
+    /// in Phase G; see [`MAX_TOTAL_NODES`] for the soft budget.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::council::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
+    /// };
+    ///
+    /// let nodes = vec![
+    ///     TaskNode { id: NodeId("a".into()), goal: "g".into(), depends_on: vec![],
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
+    ///                output: None, compacted_output: None, error: None },
+    ///     TaskNode { id: NodeId("b".into()), goal: "g".into(),
+    ///                depends_on: vec![NodeId("a".into())],
+    ///                tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///                status: NodeStatus::Pending,
+    ///                output: None, compacted_output: None, error: None },
+    /// ];
+    /// let g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
+    /// assert_eq!(g.total_node_count(), 2);
+    /// ```
+    pub fn total_node_count(&self) -> usize {
+        self.nodes
+            .values()
+            .map(|n| match &n.kind {
+                TaskNodeKind::Leaf => 1,
+                TaskNodeKind::Team { subgraph } => 1 + subgraph.total_node_count(),
+            })
+            .sum()
+    }
+
+    /// Apply a [`GraphDiff`] mutation in-place, then re-validate.
+    ///
+    /// If either the mutation itself or the subsequent [`validate_acyclic`]
+    /// call fails, the graph is restored to its pre-call state (clone-and-swap
+    /// rollback) and the error is returned.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`TaskGraphError`] encountered (pre-condition checks
+    /// or post-mutation validation).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gglib_core::domain::council::task_graph::{
+    ///     TaskGraph, TaskNode, TaskNodeKind, NodeId, NodeStatus, HitlMode,
+    ///     GraphDiff,
+    /// };
+    ///
+    /// let nodes = vec![TaskNode {
+    ///     id: NodeId("a".into()), goal: "a".into(), depends_on: vec![],
+    ///     tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///     status: NodeStatus::Pending, output: None,
+    ///     compacted_output: None, error: None,
+    /// }];
+    /// let mut g = TaskGraph::new("goal".into(), HitlMode::None, nodes).unwrap();
+    ///
+    /// let new_node = TaskNode {
+    ///     id: NodeId("b".into()), goal: "b".into(),
+    ///     depends_on: vec![NodeId("a".into())],
+    ///     tool_allowlist: vec![], kind: TaskNodeKind::Leaf, role: None,
+    ///     status: NodeStatus::Pending, output: None,
+    ///     compacted_output: None, error: None,
+    /// };
+    /// g.apply_diff(&GraphDiff::AddNode { node: new_node }).unwrap();
+    /// assert_eq!(g.nodes.len(), 2);
+    /// ```
+    pub fn apply_diff(&mut self, diff: &GraphDiff) -> Result<(), TaskGraphError> {
+        let saved = self.clone();
+        match self.apply_diff_inner(diff) {
+            Ok(()) => match self.validate_acyclic() {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    *self = saved;
+                    Err(e)
+                }
+            },
+            Err(e) => {
+                *self = saved;
+                Err(e)
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn apply_diff_inner(&mut self, diff: &GraphDiff) -> Result<(), TaskGraphError> {
+        match diff {
+            GraphDiff::AddNode { node } => {
+                if self.nodes.contains_key(&node.id) {
+                    return Err(TaskGraphError::DuplicateNodeId(node.id.0.clone()));
+                }
+                if self.nodes.len() >= MAX_NODES {
+                    return Err(TaskGraphError::TooManyNodes {
+                        count: self.nodes.len() + 1,
+                        max: MAX_NODES,
+                    });
+                }
+                self.nodes.insert(node.id.clone(), node.clone());
+            }
+
+            GraphDiff::RemoveNode { id } => {
+                if !self.nodes.contains_key(id) {
+                    return Err(TaskGraphError::NodeNotFound(id.0.clone()));
+                }
+                if self.nodes.len() == 1 {
+                    return Err(TaskGraphError::DiffInvalid(
+                        "cannot remove the only node in a graph".into(),
+                    ));
+                }
+                self.nodes.remove(id);
+                for node in self.nodes.values_mut() {
+                    node.depends_on.retain(|dep| dep != id);
+                }
+            }
+
+            GraphDiff::SplitNode { id, into } => {
+                if !self.nodes.contains_key(id) {
+                    return Err(TaskGraphError::NodeNotFound(id.0.clone()));
+                }
+                if into.is_empty() {
+                    return Err(TaskGraphError::DiffInvalid(
+                        "split_node: replacement list must not be empty".into(),
+                    ));
+                }
+                // Check for id conflicts among replacements (excluding the original id).
+                for n in into {
+                    if &n.id != id && self.nodes.contains_key(&n.id) {
+                        return Err(TaskGraphError::DuplicateNodeId(n.id.0.clone()));
+                    }
+                }
+                let new_count = self.nodes.len() - 1 + into.len();
+                if new_count > MAX_NODES {
+                    return Err(TaskGraphError::TooManyNodes {
+                        count: new_count,
+                        max: MAX_NODES,
+                    });
+                }
+                let replacement_ids: Vec<NodeId> = into.iter().map(|n| n.id.clone()).collect();
+                self.nodes.remove(id);
+                for n in into {
+                    self.nodes.insert(n.id.clone(), n.clone());
+                }
+                // Repoint any node that depended on the split node.
+                for node in self.nodes.values_mut() {
+                    if node.depends_on.contains(id) {
+                        node.depends_on.retain(|dep| dep != id);
+                        for rid in &replacement_ids {
+                            if !node.depends_on.contains(rid) {
+                                node.depends_on.push(rid.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            GraphDiff::RerouteEdge {
+                node_id,
+                old_dep,
+                new_dep,
+            } => {
+                if !self.nodes.contains_key(node_id) {
+                    return Err(TaskGraphError::NodeNotFound(node_id.0.clone()));
+                }
+                if !self.nodes.contains_key(new_dep) {
+                    return Err(TaskGraphError::NodeNotFound(new_dep.0.clone()));
+                }
+                let node = self.nodes.get_mut(node_id).expect("checked above");
+                let pos = node
+                    .depends_on
+                    .iter()
+                    .position(|d| d == old_dep)
+                    .ok_or_else(|| {
+                        TaskGraphError::DiffInvalid(format!(
+                            "node '{}' does not depend on '{}'",
+                            node_id.0, old_dep.0
+                        ))
+                    })?;
+                node.depends_on[pos] = new_dep.clone();
+            }
+
+            GraphDiff::SetRole { id, role } => {
+                let node = self
+                    .nodes
+                    .get_mut(id)
+                    .ok_or_else(|| TaskGraphError::NodeNotFound(id.0.clone()))?;
+                node.role.clone_from(role);
+            }
+
+            GraphDiff::SetTools { id, tool_allowlist } => {
+                let node = self
+                    .nodes
+                    .get_mut(id)
+                    .ok_or_else(|| TaskGraphError::NodeNotFound(id.0.clone()))?;
+                node.tool_allowlist.clone_from(tool_allowlist);
+            }
+
+            GraphDiff::WrapInTeam {
+                ids,
+                team_id,
+                team_goal,
+            } => {
+                if ids.is_empty() {
+                    return Err(TaskGraphError::DiffInvalid(
+                        "wrap_in_team: ids list must not be empty".into(),
+                    ));
+                }
+                if self.nodes.contains_key(team_id) {
+                    return Err(TaskGraphError::DuplicateNodeId(team_id.0.clone()));
+                }
+                for id in ids {
+                    if !self.nodes.contains_key(id) {
+                        return Err(TaskGraphError::NodeNotFound(id.0.clone()));
+                    }
+                }
+
+                let wrapped_set: HashSet<NodeId> = ids.iter().cloned().collect();
+
+                // Team node inherits all external deps of the wrapped nodes.
+                let mut team_deps: Vec<NodeId> = Vec::new();
+                for id in ids {
+                    for dep in &self.nodes[id].depends_on {
+                        if !wrapped_set.contains(dep) && !team_deps.contains(dep) {
+                            team_deps.push(dep.clone());
+                        }
+                    }
+                }
+
+                // Extract wrapped nodes into the subgraph (stripping external deps).
+                let mut sub_nodes: HashMap<NodeId, TaskNode> = HashMap::new();
+                for id in ids {
+                    let mut node = self.nodes.remove(id).expect("checked above");
+                    node.depends_on.retain(|dep| wrapped_set.contains(dep));
+                    sub_nodes.insert(id.clone(), node);
+                }
+
+                // Repoint external nodes that depended on any wrapped node.
+                for node in self.nodes.values_mut() {
+                    let had_dep = node.depends_on.iter().any(|d| wrapped_set.contains(d));
+                    if had_dep {
+                        node.depends_on.retain(|d| !wrapped_set.contains(d));
+                        if !node.depends_on.contains(team_id) {
+                            node.depends_on.push(team_id.clone());
+                        }
+                    }
+                }
+
+                // Size guard for the parent graph (after removals, before insertion).
+                if self.nodes.len() >= MAX_NODES {
+                    return Err(TaskGraphError::TooManyNodes {
+                        count: self.nodes.len() + 1,
+                        max: MAX_NODES,
+                    });
+                }
+
+                let subgraph = Self {
+                    goal: team_goal.clone(),
+                    hitl_mode: self.hitl_mode.clone(),
+                    nodes: sub_nodes,
+                };
+
+                let team_node = TaskNode {
+                    id: team_id.clone(),
+                    goal: team_goal.clone(),
+                    depends_on: team_deps,
+                    tool_allowlist: vec![],
+                    kind: TaskNodeKind::Team {
+                        subgraph: Box::new(subgraph),
+                    },
+                    role: None,
+                    status: NodeStatus::Pending,
+                    output: None,
+                    compacted_output: None,
+                    error: None,
+                };
+                self.nodes.insert(team_id.clone(), team_node);
+            }
+        }
+        Ok(())
+    }
+}
+
+// =============================================================================
+// Unit tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::*;
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+
+    fn leaf(id: &str) -> TaskNode {
+        TaskNode {
+            id: NodeId(id.into()),
+            goal: id.into(),
+            depends_on: vec![],
+            tool_allowlist: vec![],
+            kind: TaskNodeKind::Leaf,
+            role: None,
+            status: NodeStatus::Pending,
+            output: None,
+            compacted_output: None,
+            error: None,
+        }
+    }
+
+    fn node(id: &str, deps: &[&str]) -> TaskNode {
+        TaskNode {
+            id: NodeId(id.into()),
+            goal: id.into(),
+            depends_on: deps.iter().map(|d| NodeId((*d).to_string())).collect(),
+            tool_allowlist: vec![],
+            kind: TaskNodeKind::Leaf,
+            role: None,
+            status: NodeStatus::Pending,
+            output: None,
+            compacted_output: None,
+            error: None,
+        }
+    }
+
+    fn ids(v: Vec<&NodeId>) -> Vec<&str> {
+        v.into_iter().map(|id| id.0.as_str()).collect()
+    }
+
+    // ------------------------------------------------------------------
+    // validate_acyclic — valid graphs
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn empty_graph_is_valid() {
+        let g = TaskGraph {
+            goal: "g".into(),
+            hitl_mode: HitlMode::None,
+            nodes: HashMap::new(),
+        };
+        assert!(g.validate_acyclic().is_ok());
+    }
+
+    #[test]
+    fn single_node_is_valid() {
+        let g = TaskGraph::new("g".into(), HitlMode::None, vec![leaf("a")]).unwrap();
+        assert!(g.validate_acyclic().is_ok());
+    }
+
+    #[test]
+    fn linear_chain_is_valid() {
+        // a → b → c
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![leaf("a"), node("b", &["a"]), node("c", &["b"])],
+        )
+        .unwrap();
+        assert!(g.validate_acyclic().is_ok());
+    }
+
+    #[test]
+    fn diamond_shape_is_valid() {
+        // root → (left, right) → merge
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![
+                leaf("root"),
+                node("left", &["root"]),
+                node("right", &["root"]),
+                node("merge", &["left", "right"]),
+            ],
+        )
+        .unwrap();
+        assert!(g.validate_acyclic().is_ok());
+    }
+
+    // ------------------------------------------------------------------
+    // validate_acyclic — invalid graphs
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn simple_cycle_is_rejected() {
+        // a → b → a
+        let nodes = vec![node("a", &["b"]), node("b", &["a"])];
+        let g = TaskGraph {
+            goal: "g".into(),
+            hitl_mode: HitlMode::None,
+            nodes: nodes.into_iter().map(|n| (n.id.clone(), n)).collect(),
+        };
+        assert!(matches!(
+            g.validate_acyclic(),
+            Err(TaskGraphError::Cycle(_))
+        ));
+    }
+
+    #[test]
+    fn self_loop_is_rejected() {
+        let nodes = vec![node("a", &["a"])];
+        let g = TaskGraph {
+            goal: "g".into(),
+            hitl_mode: HitlMode::None,
+            nodes: nodes.into_iter().map(|n| (n.id.clone(), n)).collect(),
+        };
+        assert!(matches!(
+            g.validate_acyclic(),
+            Err(TaskGraphError::Cycle(_))
+        ));
+    }
+
+    #[test]
+    fn unknown_dependency_is_rejected() {
+        let nodes = vec![node("a", &["nonexistent"])];
+        let g = TaskGraph {
+            goal: "g".into(),
+            hitl_mode: HitlMode::None,
+            nodes: nodes.into_iter().map(|n| (n.id.clone(), n)).collect(),
+        };
+        assert!(matches!(
+            g.validate_acyclic(),
+            Err(TaskGraphError::UnknownDependency { .. })
+        ));
+    }
+
+    #[test]
+    fn too_many_nodes_is_rejected() {
+        let nodes: Vec<TaskNode> = (0..=MAX_NODES).map(|i| leaf(&i.to_string())).collect();
+        assert!(matches!(
+            TaskGraph::new("g".into(), HitlMode::None, nodes),
+            Err(TaskGraphError::TooManyNodes { .. })
+        ));
+    }
+
+    #[test]
+    fn duplicate_node_id_is_rejected() {
+        let nodes = vec![leaf("a"), leaf("a")];
+        assert!(matches!(
+            TaskGraph::new("g".into(), HitlMode::None, nodes),
+            Err(TaskGraphError::DuplicateNodeId(_))
+        ));
+    }
+
+    #[test]
+    fn depth_exceeded_is_rejected() {
+        // Chain of MAX_DEPTH + 2 nodes creates a path of depth MAX_DEPTH + 1.
+        let mut nodes = vec![leaf("0")];
+        for i in 1..=(MAX_DEPTH + 1) {
+            nodes.push(node(&i.to_string(), &[&(i - 1).to_string()]));
+        }
+        assert!(matches!(
+            TaskGraph::new("g".into(), HitlMode::None, nodes),
+            Err(TaskGraphError::DepthExceeded { .. })
+        ));
+    }
+
+    // ------------------------------------------------------------------
+    // roots
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn roots_returns_nodes_with_no_deps() {
+        // Diamond: root → (left, right) → merge.  Only root has no deps.
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![
+                leaf("root"),
+                node("left", &["root"]),
+                node("right", &["root"]),
+                node("merge", &["left", "right"]),
+            ],
+        )
+        .unwrap();
+        assert_eq!(ids(g.roots()), vec!["root"]);
+    }
+
+    #[test]
+    fn roots_returns_all_when_no_deps() {
+        let g = TaskGraph::new("g".into(), HitlMode::None, vec![leaf("a"), leaf("b")]).unwrap();
+        // Two independent nodes — both are roots (sorted).
+        assert_eq!(ids(g.roots()), vec!["a", "b"]);
+    }
+
+    // ------------------------------------------------------------------
+    // ready_nodes
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn ready_nodes_returns_roots_when_nothing_completed() {
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![leaf("a"), node("b", &["a"])],
+        )
+        .unwrap();
+        let ready = ids(g.ready_nodes(&HashSet::new()));
+        assert_eq!(ready, vec!["a"]);
+    }
+
+    #[test]
+    fn ready_nodes_unlocks_children_after_parent_completes() {
+        // a → b → c
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![leaf("a"), node("b", &["a"]), node("c", &["b"])],
+        )
+        .unwrap();
+
+        let done: HashSet<NodeId> = [NodeId("a".into())].into();
+        let ready = ids(g.ready_nodes(&done));
+        assert_eq!(ready, vec!["b"]);
+    }
+
+    #[test]
+    fn ready_nodes_requires_all_deps_to_complete() {
+        // a, b → merge
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![leaf("a"), leaf("b"), node("merge", &["a", "b"])],
+        )
+        .unwrap();
+
+        // Only "a" done — "merge" still blocked, "b" is newly ready.
+        let done: HashSet<NodeId> = [NodeId("a".into())].into();
+        let ready = ids(g.ready_nodes(&done));
+        assert_eq!(ready, vec!["b"]);
+
+        // Both done — "merge" is ready.
+        let done: HashSet<NodeId> = [NodeId("a".into()), NodeId("b".into())].into();
+        let ready = ids(g.ready_nodes(&done));
+        assert_eq!(ready, vec!["merge"]);
+    }
+
+    #[test]
+    fn ready_nodes_returns_empty_when_all_completed() {
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![leaf("a"), node("b", &["a"])],
+        )
+        .unwrap();
+        let done: HashSet<NodeId> = [NodeId("a".into()), NodeId("b".into())].into();
+        assert!(g.ready_nodes(&done).is_empty());
+    }
+
+    // ------------------------------------------------------------------
+    // validate_tool_allowlist
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn validate_tool_allowlist_passes_when_all_tools_known() {
+        let catalog = vec![ToolDefinition {
+            name: "search".into(),
+            description: None,
+            input_schema: None,
+            title: None,
+        }];
+        let mut n = leaf("a");
+        n.tool_allowlist = vec!["search".into()];
+        let g = TaskGraph::new("g".into(), HitlMode::None, vec![n]).unwrap();
+        assert!(g.validate_tool_allowlist(&catalog).is_ok());
+    }
+
+    #[test]
+    fn validate_tool_allowlist_rejects_unknown_tool() {
+        let catalog = vec![ToolDefinition {
+            name: "search".into(),
+            description: None,
+            input_schema: None,
+            title: None,
+        }];
+        let mut n = leaf("a");
+        n.tool_allowlist = vec!["unknown_tool".into()];
+        let g = TaskGraph::new("g".into(), HitlMode::None, vec![n]).unwrap();
+        assert!(matches!(
+            g.validate_tool_allowlist(&catalog),
+            Err(TaskGraphError::UnknownTool { .. })
+        ));
+    }
+
+    // ------------------------------------------------------------------
+    // total_node_count
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn total_node_count_flat_graph() {
+        let g = TaskGraph::new(
+            "g".into(),
+            HitlMode::None,
+            vec![leaf("a"), leaf("b"), node("c", &["a", "b"])],
+        )
+        .unwrap();
+        assert_eq!(g.total_node_count(), 3);
+    }
+
+    #[test]
+    fn total_node_count_with_team_subgraph() {
+        // Build subgraph: researcher → writer (2 nodes).
+        let subgraph = TaskGraph::new(
+            "department".into(),
+            HitlMode::None,
+            vec![leaf("researcher"), node("writer", &["researcher"])],
+        )
+        .unwrap();
+
+        // Top-level: team_node + synthesizer (2 nodes at top level).
+        // total = 2 (top) + 2 (subgraph) = 4.
+        let team_node = TaskNode {
+            id: NodeId("dept".into()),
+            goal: "Run department".into(),
+            depends_on: vec![],
+            tool_allowlist: vec![],
+            kind: TaskNodeKind::Team {
+                subgraph: Box::new(subgraph),
+            },
+            role: None,
+            status: NodeStatus::Pending,
+            output: None,
+            compacted_output: None,
+            error: None,
+        };
+        let synth = leaf("synthesize");
+        // Build with raw map to bypass node-count limits at this level.
+        let mut nodes = HashMap::new();
+        nodes.insert(team_node.id.clone(), team_node);
+        nodes.insert(synth.id.clone(), synth);
+        let g = TaskGraph {
+            goal: "top".into(),
+            hitl_mode: HitlMode::None,
+            nodes,
+        };
+        assert_eq!(g.total_node_count(), 4);
+    }
+
+    // ------------------------------------------------------------------
+    // Team subgraph validation
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn team_subgraph_cycle_is_detected() {
+        // Build a subgraph with a cycle: x → y → x.
+        let mut sub_nodes = HashMap::new();
+        for (id, dep) in [("x", "y"), ("y", "x")] {
+            sub_nodes.insert(
+                NodeId(id.into()),
+                TaskNode {
+                    id: NodeId(id.into()),
+                    goal: id.into(),
+                    depends_on: vec![NodeId(dep.into())],
+                    tool_allowlist: vec![],
+                    kind: TaskNodeKind::Leaf,
+                    role: None,
+                    status: NodeStatus::Pending,
+                    output: None,
+                    compacted_output: None,
+                    error: None,
+                },
+            );
+        }
+        let cyclic_subgraph = TaskGraph {
+            goal: "sub".into(),
+            hitl_mode: HitlMode::None,
+            nodes: sub_nodes,
+        };
+
+        // Wrap in a team node at the top level.
+        let team_node = TaskNode {
+            id: NodeId("team".into()),
+            goal: "team".into(),
+            depends_on: vec![],
+            tool_allowlist: vec![],
+            kind: TaskNodeKind::Team {
+                subgraph: Box::new(cyclic_subgraph),
+            },
+            role: None,
+            status: NodeStatus::Pending,
+            output: None,
+            compacted_output: None,
+            error: None,
+        };
+        let mut top_nodes = HashMap::new();
+        top_nodes.insert(team_node.id.clone(), team_node);
+        let g = TaskGraph {
+            goal: "top".into(),
+            hitl_mode: HitlMode::None,
+            nodes: top_nodes,
+        };
+        assert!(matches!(
+            g.validate_acyclic(),
+            Err(TaskGraphError::Cycle(_))
+        ));
+    }
+
+    #[test]
+    fn team_subgraph_per_subgraph_node_cap_is_independent() {
+        // A top-level graph with 8 nodes is valid even if a Team node's
+        // subgraph also has 8 nodes (per-subgraph caps, not global).
+        let sub_nodes: Vec<TaskNode> = (0..MAX_NODES).map(|i| leaf(&format!("sub_{i}"))).collect();
+        let subgraph = TaskGraph::new("sub".into(), HitlMode::None, sub_nodes).unwrap();
+        // Top-level has just 1 Team node — well under MAX_NODES.
+        let team_node = TaskNode {
+            id: NodeId("team".into()),
+            goal: "run dept".into(),
+            depends_on: vec![],
+            tool_allowlist: vec![],
+            kind: TaskNodeKind::Team {
+                subgraph: Box::new(subgraph),
+            },
+            role: None,
+            status: NodeStatus::Pending,
+            output: None,
+            compacted_output: None,
+            error: None,
+        };
+        let result = TaskGraph::new("top".into(), HitlMode::None, vec![team_node]);
+        assert!(result.is_ok(), "per-subgraph cap must not be global");
+    }
+
+    // ------------------------------------------------------------------
+    // Phase F regression fixture
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn phase_f_fixture_deserializes_and_validates() {
+        let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/orchestrator/phase_f_baseline.json");
+        let json = std::fs::read_to_string(&fixture_path)
+            .unwrap_or_else(|e| panic!("could not read fixture {}: {e}", fixture_path.display()));
+        let graph: TaskGraph =
+            serde_json::from_str(&json).expect("fixture must deserialize without error");
+        graph
+            .validate_acyclic()
+            .expect("fixture must pass validate_acyclic");
+        // Flat Phase F plan — all nodes are leaves.
+        assert!(
+            graph
+                .nodes
+                .values()
+                .all(|n| matches!(n.kind, TaskNodeKind::Leaf)),
+            "Phase F fixture must contain only Leaf nodes"
+        );
+        // Aggregate count equals top-level count (no subgraphs).
+        assert_eq!(graph.total_node_count(), graph.nodes.len());
+    }
+
+    // ------------------------------------------------------------------
+    // TaskNodeKind serde round-trip
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn task_node_kind_leaf_is_default_when_absent() {
+        // Old-format JSON node without a `kind` field must deserialise as Leaf.
+        let json = r#"{
+            "id": "x",
+            "goal": "do something",
+            "depends_on": [],
+            "tool_allowlist": [],
+            "status": "pending"
+        }"#;
+        let node: TaskNode = serde_json::from_str(json).unwrap();
+        assert!(matches!(node.kind, TaskNodeKind::Leaf));
+        assert!(node.role.is_none());
+    }
+}

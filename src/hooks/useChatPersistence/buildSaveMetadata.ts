@@ -25,9 +25,9 @@ export function buildSaveMetadata(
   const hasContent = parts.length > 0 || thinking !== null;
 
   // Extract orchestrator run id if present on the message
-  const orchestratorRunId = (m.metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.orchestratorRunId;
+  const councilRunId = (m.metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.councilRunId;
 
-  if (!hasContent && !orchestratorRunId) return null;
+  if (!hasContent && !councilRunId) return null;
 
   const meta: ChatMessageMetadata = {};
   if (parts.length > 0) meta.contentParts = parts;
@@ -39,8 +39,8 @@ export function buildSaveMetadata(
   }
 
   // Persist orchestrator run id
-  if (orchestratorRunId) {
-    meta.orchestratorRunId = orchestratorRunId;
+  if (councilRunId) {
+    meta.councilRunId = councilRunId;
   }
 
   return meta;

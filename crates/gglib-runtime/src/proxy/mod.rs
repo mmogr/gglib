@@ -24,18 +24,18 @@ use std::sync::{Arc, Mutex as StdMutex};
 use async_trait::async_trait;
 use tokio::sync::oneshot;
 
-use crate::orchestrator_runner::OrchestratorRunnerAdapter;
+use crate::council_runner::CouncilRunnerAdapter;
 use crate::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use crate::process::ProcessManager;
-use gglib_core::domain::orchestrator::run::{
-    OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus,
+use gglib_core::domain::council::run::{
+    CouncilRun, CouncilRunEvent, CouncilRunStatus,
 };
 use gglib_core::ports::{
-    ApprovalDecision, ModelCatalogPort, ModelRepository, OrchestratorApprovalRegistryPort,
-    OrchestratorRepositoryPort, RepositoryError,
+    ApprovalDecision, ModelCatalogPort, ModelRepository, CouncilApprovalRegistryPort,
+    CouncilRepositoryPort, RepositoryError,
 };
 use gglib_mcp::McpService;
-use gglib_proxy::OrchestratorDeps;
+use gglib_proxy::CouncilDeps;
 
 // =============================================================================
 // Standalone in-memory orchestrator services
@@ -57,7 +57,7 @@ impl InMemoryApprovalRegistry {
     }
 }
 
-impl OrchestratorApprovalRegistryPort for InMemoryApprovalRegistry {
+impl CouncilApprovalRegistryPort for InMemoryApprovalRegistry {
     fn register(&self, approval_id: String, sender: oneshot::Sender<ApprovalDecision>) {
         self.pending
             .lock()
@@ -91,11 +91,11 @@ impl OrchestratorApprovalRegistryPort for InMemoryApprovalRegistry {
 ///
 /// Stores run records in memory only; no SQLite dep required.
 /// Interactive-mode state persists for the lifetime of the proxy process.
-struct InMemoryOrchestratorRepository {
-    runs: StdMutex<HashMap<String, OrchestratorRun>>,
+struct InMemoryCouncilRepository {
+    runs: StdMutex<HashMap<String, CouncilRun>>,
 }
 
-impl InMemoryOrchestratorRepository {
+impl InMemoryCouncilRepository {
     fn new() -> Self {
         Self {
             runs: StdMutex::new(HashMap::new()),
@@ -104,8 +104,8 @@ impl InMemoryOrchestratorRepository {
 }
 
 #[async_trait]
-impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
-    async fn create_run(&self, run: OrchestratorRun) -> Result<(), RepositoryError> {
+impl CouncilRepositoryPort for InMemoryCouncilRepository {
+    async fn create_run(&self, run: CouncilRun) -> Result<(), RepositoryError> {
         self.runs
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -116,7 +116,7 @@ impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
     async fn update_run_status(
         &self,
         run_id: &str,
-        status: OrchestratorRunStatus,
+        status: CouncilRunStatus,
     ) -> Result<(), RepositoryError> {
         if let Some(run) = self
             .runs
@@ -141,12 +141,12 @@ impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
         Ok(())
     }
 
-    async fn append_event(&self, _event: OrchestratorRunEvent) -> Result<(), RepositoryError> {
+    async fn append_event(&self, _event: CouncilRunEvent) -> Result<(), RepositoryError> {
         // Event log not needed for standalone proxy.
         Ok(())
     }
 
-    async fn get_run(&self, run_id: &str) -> Result<Option<OrchestratorRun>, RepositoryError> {
+    async fn get_run(&self, run_id: &str) -> Result<Option<CouncilRun>, RepositoryError> {
         Ok(self
             .runs
             .lock()
@@ -157,10 +157,10 @@ impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
 
     async fn list_runs(
         &self,
-        status_filter: Option<OrchestratorRunStatus>,
-    ) -> Result<Vec<OrchestratorRun>, RepositoryError> {
+        status_filter: Option<CouncilRunStatus>,
+    ) -> Result<Vec<CouncilRun>, RepositoryError> {
         let guard = self.runs.lock().unwrap_or_else(|p| p.into_inner());
-        let runs: Vec<OrchestratorRun> = guard
+        let runs: Vec<CouncilRun> = guard
             .values()
             .filter(|r| status_filter.as_ref().is_none_or(|s| &r.status == s))
             .cloned()
@@ -171,7 +171,7 @@ impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
     async fn list_events(
         &self,
         _run_id: &str,
-    ) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> {
+    ) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -192,8 +192,8 @@ impl OrchestratorRepositoryPort for InMemoryOrchestratorRepository {
             .unwrap_or_else(|p| p.into_inner())
             .values_mut()
         {
-            if run.status == OrchestratorRunStatus::Running {
-                run.status = OrchestratorRunStatus::Interrupted;
+            if run.status == CouncilRunStatus::Running {
+                run.status = CouncilRunStatus::Interrupted;
                 count += 1;
             }
         }
@@ -244,24 +244,24 @@ pub async fn start_proxy_standalone(
     let runtime_port: Arc<dyn gglib_core::ports::ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
 
-    // Build OrchestratorDeps with in-memory backends.
+    // Build CouncilDeps with in-memory backends.
     let http_client = reqwest::Client::builder()
         .pool_max_idle_per_host(10)
         .build()
         .map_err(|e| anyhow!("failed to build HTTP client: {e}"))?;
 
-    let orchestrator_runner = Arc::new(OrchestratorRunnerAdapter::new(
+    let council_runner = Arc::new(CouncilRunnerAdapter::new(
         Arc::clone(&runtime_port),
         Arc::clone(&catalog_port),
         http_client,
         Arc::clone(&mcp),
     ));
-    let orchestrator_deps = OrchestratorDeps {
-        runner: orchestrator_runner as Arc<dyn gglib_proxy::OrchestratorRunnerPort>,
+    let orchestrator_deps = CouncilDeps {
+        runner: council_runner as Arc<dyn gglib_proxy::CouncilRunnerPort>,
         approval_registry: Arc::new(InMemoryApprovalRegistry::new())
-            as Arc<dyn OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::new(InMemoryOrchestratorRepository::new())
-            as Arc<dyn OrchestratorRepositoryPort>,
+            as Arc<dyn CouncilApprovalRegistryPort>,
+        council_repo: Arc::new(InMemoryCouncilRepository::new())
+            as Arc<dyn CouncilRepositoryPort>,
     };
 
     // Create supervisor

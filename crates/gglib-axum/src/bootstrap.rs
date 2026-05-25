@@ -13,15 +13,15 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, OrchestratorApprovalRegistry,
+    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, CouncilApprovalRegistry,
     ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, HfClientPort, ModelRepository, OrchestratorRepositoryPort, ProcessRunner,
+    AppEventEmitter, HfClientPort, ModelRepository, CouncilRepositoryPort, ProcessRunner,
 };
 use gglib_core::services::AppCore;
-use gglib_db::SqliteOrchestratorRepository;
+use gglib_db::SqliteCouncilRepository;
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
 use reqwest::Client;
@@ -136,9 +136,9 @@ pub struct AxumContext {
     /// consume LLM inference time and tool I/O.
     pub agent_semaphore: Arc<tokio::sync::Semaphore>,
     /// Process-local registry for HITL approval gates.
-    pub approval_registry: Arc<OrchestratorApprovalRegistry>,
+    pub approval_registry: Arc<CouncilApprovalRegistry>,
     /// Repository for persisting orchestrator run records and events.
-    pub orchestrator_repo: Arc<SqliteOrchestratorRepository>,
+    pub council_repo: Arc<SqliteCouncilRepository>,
     /// Per-run queues for conversational steering notes (keyed by run_id).
     #[allow(clippy::type_complexity)]
     pub steering_note_queues:
@@ -244,11 +244,11 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
 
     // Create orchestrator repos early so we can share them between ProxyOps
     // (virtual model routing) and AxumContext (REST API handlers).
-    let orchestrator_repo = Arc::new(SqliteOrchestratorRepository::new(pool.clone()));
-    if let Err(e) = orchestrator_repo.mark_interrupted_runs().await {
-        tracing::warn!("orchestrator: failed to mark interrupted runs on startup: {e}");
+    let council_repo = Arc::new(SqliteCouncilRepository::new(pool.clone()));
+    if let Err(e) = council_repo.mark_interrupted_runs().await {
+        tracing::warn!("council: failed to mark interrupted runs on startup: {e}");
     }
-    let approval_registry = Arc::new(OrchestratorApprovalRegistry::new());
+    let approval_registry = Arc::new(CouncilApprovalRegistry::new());
 
     let proxy = Arc::new(ProxyOps::new(ProxyDeps {
         supervisor: proxy_supervisor,
@@ -256,9 +256,9 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         mcp: mcp.clone(),
         core: Arc::clone(&core),
         approval_registry: Arc::clone(&approval_registry)
-            as Arc<dyn gglib_core::ports::OrchestratorApprovalRegistryPort>,
-        orchestrator_repo: Arc::clone(&orchestrator_repo)
-            as Arc<dyn gglib_core::ports::OrchestratorRepositoryPort>,
+            as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
+        council_repo: Arc::clone(&council_repo)
+            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
     }));
 
     let setup = Arc::new(SetupOps::new(SetupDeps {
@@ -309,7 +309,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
             config.max_concurrent_agent_loops,
         )),
         approval_registry,
-        orchestrator_repo,
+        council_repo,
         steering_note_queues: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
     })
 }

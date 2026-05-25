@@ -70,15 +70,15 @@ export type GglibMessageCustom = {
   thinkingDurationSeconds?: number | null;
   /**
    * When `true`, the submit is intercepted and routed to the embedded
-   * `OrchestratorThread` instead of the normal chat flow.
+   * `CouncilThread` instead of the normal chat flow.
    */
-  isOrchestratorMode?: boolean;
+  isCouncilMode?: boolean;
   /**
    * The orchestrator run ID associated with this assistant message.
-   * Set on completion of an orchestrator run; triggers `HistoricalOrchestratorThread`
+   * Set on completion of an orchestrator run; triggers `HistoricalCouncilThread`
    * rendering when the message is loaded from persistence.
    */
-  orchestratorRunId?: string;
+  councilRunId?: string;
 };
 
 /**

@@ -179,9 +179,9 @@ pub enum Commands {
         context: ContextArgs,
     },
 
-    /// Plan and execute a Director/Worker task graph end-to-end
+    /// Plan and execute a Council of Director/Worker agents end-to-end
     #[command(display_order = 14)]
-    Orchestrate {
+    Council {
         /// High-level goal to plan and execute
         goal: Option<String>,
         /// Model name or ID (uses default model when omitted)

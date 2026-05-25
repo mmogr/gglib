@@ -20,8 +20,8 @@ mod common;
 use std::sync::Arc;
 
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
-use gglib_agent::orchestrator::planner;
-use gglib_core::domain::orchestrator::task_graph::{HitlMode, TaskNodeKind};
+use gglib_agent::council::planner;
+use gglib_core::domain::council::task_graph::{HitlMode, TaskNodeKind};
 
 // =============================================================================
 // Helpers
@@ -136,7 +136,7 @@ async fn hierarchical_plan_three_departments_twelve_leaves() {
     // Synthesizer leaf.
     let synth = graph
         .nodes
-        .get(&gglib_core::domain::orchestrator::task_graph::NodeId(
+        .get(&gglib_core::domain::council::task_graph::NodeId(
             "synthesizer".into(),
         ))
         .expect("synthesizer node must exist");
@@ -154,7 +154,7 @@ async fn hierarchical_plan_three_departments_twelve_leaves() {
         synth
             .role
             .as_ref()
-            .map(gglib_core::domain::orchestrator::RoleId::as_str),
+            .map(gglib_core::domain::council::RoleId::as_str),
         Some("synthesizer"),
         "synthesizer node must have role=synthesizer"
     );

@@ -20,9 +20,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use common::mock_llm::{MockLlmPort, MockLlmResponse};
-use gglib_agent::orchestrator::{OrchestratorConfig, execute};
-use gglib_core::domain::orchestrator::events::OrchestratorEvent;
-use gglib_core::domain::orchestrator::task_graph::HitlMode;
+use gglib_agent::council::{CouncilConfig, execute};
+use gglib_core::domain::council::events::CouncilEvent;
+use gglib_core::domain::council::task_graph::HitlMode;
 use gglib_core::ports::EmptyToolExecutor;
 use tokio::sync::mpsc;
 
@@ -98,7 +98,7 @@ fn director_json(prefix: &str) -> String {
 /// 2. `TeamSynthesized` is emitted for each team before the top-level
 ///    synthesizer `NodeStarted` event (i.e. the downstream synthesizer does
 ///    not start until all teams are done).
-/// 3. The run completes with `OrchestratorComplete`.
+/// 3. The run completes with `CouncilComplete`.
 #[tokio::test]
 async fn hierarchical_run_three_departments_twelve_leaves() {
     // Planning: 1 CoS + 3 Directors.
@@ -118,9 +118,9 @@ async fn hierarchical_run_three_departments_twelve_leaves() {
 
     let tool_executor = Arc::new(EmptyToolExecutor);
 
-    let (tx, mut rx) = mpsc::channel::<OrchestratorEvent>(4096);
+    let (tx, mut rx) = mpsc::channel::<CouncilEvent>(4096);
 
-    let config = OrchestratorConfig {
+    let config = CouncilConfig {
         hitl_mode: HitlMode::None,
         max_replans: 0,
         ..Default::default()
@@ -139,7 +139,7 @@ async fn hierarchical_run_three_departments_twelve_leaves() {
     });
 
     // Collect all events.
-    let mut events: Vec<OrchestratorEvent> = Vec::new();
+    let mut events: Vec<CouncilEvent> = Vec::new();
     while let Some(ev) = rx.recv().await {
         events.push(ev);
     }
@@ -148,13 +148,13 @@ async fn hierarchical_run_three_departments_twelve_leaves() {
     let result = run_handle.await.expect("task did not panic");
     assert!(result.is_ok(), "execute should succeed: {result:?}");
 
-    // ── Verify OrchestratorComplete is the last event ─────────────────────────
+    // ── Verify CouncilComplete is the last event ─────────────────────────
     assert!(
         matches!(
             events.last(),
-            Some(OrchestratorEvent::OrchestratorComplete { .. })
+            Some(CouncilEvent::CouncilComplete { .. })
         ),
-        "last event should be OrchestratorComplete"
+        "last event should be CouncilComplete"
     );
 
     // ── Build index: event position for each event type ───────────────────────
@@ -166,13 +166,13 @@ async fn hierarchical_run_three_departments_twelve_leaves() {
 
     for (pos, ev) in events.iter().enumerate() {
         match ev {
-            OrchestratorEvent::TeamStarted { team_id, .. } => {
+            CouncilEvent::TeamStarted { team_id, .. } => {
                 team_started_pos.entry(team_id.clone()).or_insert(pos);
             }
-            OrchestratorEvent::TeamSynthesized { team_id, .. } => {
+            CouncilEvent::TeamSynthesized { team_id, .. } => {
                 team_synthesized_pos.entry(team_id.clone()).or_insert(pos);
             }
-            OrchestratorEvent::NodeStarted { node_id, .. } => {
+            CouncilEvent::NodeStarted { node_id, .. } => {
                 node_started_pos.entry(node_id.clone()).or_insert(pos);
             }
             _ => {}

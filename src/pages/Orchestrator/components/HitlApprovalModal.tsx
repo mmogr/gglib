@@ -21,7 +21,7 @@ import type {
   ApprovalDecisionPayload,
   TaskGraph,
 } from '../../../types/orchestrator';
-import type { RunCostEstimate } from '../../../contexts/OrchestratorContext';
+import type { RunCostEstimate } from '../../../contexts/CouncilContext';
 import SteeringPanel from './SteeringPanel';
 
 interface HitlApprovalModalProps {

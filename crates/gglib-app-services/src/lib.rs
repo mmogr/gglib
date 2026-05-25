@@ -19,7 +19,7 @@ mod error;
 mod downloads;
 mod mcp;
 mod models;
-pub mod orchestrator_approvals;
+pub mod council_approvals;
 mod proxy;
 mod servers;
 mod settings;
@@ -28,7 +28,7 @@ pub mod types;
 
 // Primary exports
 pub use error::GuiError;
-pub use orchestrator_approvals::OrchestratorApprovalRegistry;
+pub use council_approvals::CouncilApprovalRegistry;
 
 // Domain ops + their Deps
 pub use downloads::{DownloadDeps, DownloadOps};

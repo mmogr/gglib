@@ -117,7 +117,7 @@ fn main() {
                 http_client: reqwest::Client::new(),
                 agent_semaphore: Arc::new(tokio::sync::Semaphore::new(4)),
                 approval_registry: ctx.approval_registry.clone(),
-                orchestrator_repo: ctx.orchestrator_repo.clone(),
+                council_repo: ctx.council_repo.clone(),
                 steering_note_queues: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
             };
 

@@ -1,7 +1,7 @@
 /**
  * RunsList — Sidebar entry showing resumable orchestrator runs.
  *
- * Lists runs from GET /api/orchestrator/runs, with status filter tabs.
+ * Lists runs from GET /api/council/runs, with status filter tabs.
  * Clicking a run fires onSelectRun so the parent page can resume it.
  */
 
@@ -10,13 +10,13 @@ import { RefreshCw } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import { Button } from '../../../components/ui/Button';
 import { Icon } from '../../../components/ui/Icon';
-import type { OrchestratorRun, OrchestratorRunStatus } from '../../../types/orchestrator';
+import type { CouncilRun, OrchestratorRunStatus } from '../../../types/orchestrator';
 
 interface RunsListProps {
-  runs: OrchestratorRun[];
+  runs: CouncilRun[];
   loading: boolean;
   onRefresh: () => void;
-  onSelectRun: (run: OrchestratorRun) => void;
+  onSelectRun: (run: CouncilRun) => void;
 }
 
 const STATUS_FILTERS: Array<{ label: string; value: OrchestratorRunStatus | 'all' }> = [

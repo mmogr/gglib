@@ -14,10 +14,10 @@
  * @module types/graph-diff
  */
 
-import type { TaskGraph, TaskNode } from './orchestrator';
+import type { TaskGraph, TaskNode } from './council';
 
 // Re-export the backend-aligned union for convenience.
-export type { GraphDiff } from './orchestrator';
+export type { GraphDiff } from './council';
 
 // ─── Named op interfaces ──────────────────────────────────────────────────────
 // Individual arms of GraphDiff extracted for use in typed helper functions

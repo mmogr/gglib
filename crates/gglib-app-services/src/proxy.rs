@@ -11,14 +11,14 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use gglib_core::ports::{
-    ModelCatalogPort, ModelRepository, ModelRuntimePort, OrchestratorApprovalRegistryPort,
-    OrchestratorRepositoryPort,
+    ModelCatalogPort, ModelRepository, ModelRuntimePort, CouncilApprovalRegistryPort,
+    CouncilRepositoryPort,
 };
 use gglib_core::services::AppCore;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use gglib_mcp::McpService;
-use gglib_proxy::OrchestratorDeps;
-use gglib_runtime::OrchestratorRunnerAdapter;
+use gglib_proxy::CouncilDeps;
+use gglib_runtime::CouncilRunnerAdapter;
 use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use gglib_runtime::process::ProcessManager;
 use gglib_runtime::proxy::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
@@ -69,9 +69,9 @@ pub struct ProxyDeps {
     pub mcp: Arc<McpService>,
     pub core: Arc<AppCore>,
     /// Shared approval registry for HITL gates (shared with Axum orchestrator handler).
-    pub approval_registry: Arc<dyn OrchestratorApprovalRegistryPort>,
+    pub approval_registry: Arc<dyn CouncilApprovalRegistryPort>,
     /// Shared run repository for interactive-mode persistence.
-    pub orchestrator_repo: Arc<dyn OrchestratorRepositoryPort>,
+    pub council_repo: Arc<dyn CouncilRepositoryPort>,
 }
 
 /// Proxy operations facade.
@@ -83,8 +83,8 @@ pub struct ProxyOps {
     model_repo: Arc<dyn ModelRepository>,
     mcp: Arc<McpService>,
     core: Arc<AppCore>,
-    approval_registry: Arc<dyn OrchestratorApprovalRegistryPort>,
-    orchestrator_repo: Arc<dyn OrchestratorRepositoryPort>,
+    approval_registry: Arc<dyn CouncilApprovalRegistryPort>,
+    council_repo: Arc<dyn CouncilRepositoryPort>,
 }
 
 impl ProxyOps {
@@ -96,7 +96,7 @@ impl ProxyOps {
             mcp: deps.mcp,
             core: deps.core,
             approval_registry: deps.approval_registry,
-            orchestrator_repo: deps.orchestrator_repo,
+            council_repo: deps.council_repo,
         }
     }
 
@@ -140,23 +140,23 @@ impl ProxyOps {
         // Create runtime port wrapping the process manager
         let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::new(process_manager));
 
-        // Create OrchestratorDeps — shares approval_registry and orchestrator_repo
+        // Create CouncilDeps — shares approval_registry and council_repo
         // with the main Axum server so interactive-mode runs appear in
-        // GET /api/orchestrator/runs and can be approved via the Axum API.
+        // GET /api/council/runs and can be approved via the Axum API.
         let http_client = reqwest::Client::builder()
             .pool_max_idle_per_host(10)
             .build()
             .map_err(|e| GuiError::Internal(format!("Failed to build HTTP client: {e}")))?;
-        let orch_runner = Arc::new(OrchestratorRunnerAdapter::new(
+        let orch_runner = Arc::new(CouncilRunnerAdapter::new(
             Arc::clone(&runtime),
             Arc::clone(&catalog),
             http_client,
             Arc::clone(&self.mcp),
         ));
-        let orchestrator = OrchestratorDeps {
-            runner: orch_runner as Arc<dyn gglib_proxy::OrchestratorRunnerPort>,
+        let orchestrator = CouncilDeps {
+            runner: orch_runner as Arc<dyn gglib_proxy::CouncilRunnerPort>,
             approval_registry: Arc::clone(&self.approval_registry),
-            orchestrator_repo: Arc::clone(&self.orchestrator_repo),
+            council_repo: Arc::clone(&self.council_repo),
         };
 
         // Start the proxy

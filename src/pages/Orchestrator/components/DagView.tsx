@@ -14,7 +14,7 @@ import { FC, useState, useCallback, useEffect } from 'react';
 import { CheckCircle, Circle, Loader, AlertCircle, Clock, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import type { TaskGraph, TaskNodeKind } from '../../../types/orchestrator';
-import type { NodeState, NodePhase } from '../../../contexts/OrchestratorContext';
+import type { NodeState, NodePhase } from '../../../contexts/CouncilContext';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

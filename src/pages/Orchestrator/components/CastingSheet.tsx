@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../utils/cn';
 import type { TaskGraph, TaskNode, TaskNodeKind } from '../../../types/orchestrator';
-import type { NodeState, NodePhase } from '../../../contexts/OrchestratorContext';
+import type { NodeState, NodePhase } from '../../../contexts/CouncilContext';
 
 // ─── Role icon map ────────────────────────────────────────────────────────────
 

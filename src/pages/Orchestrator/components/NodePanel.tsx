@@ -19,7 +19,7 @@ import {
   RefreshCcw,
 } from 'lucide-react';
 import { cn } from '../../../utils/cn';
-import type { NodeState, NodePhase } from '../../../contexts/OrchestratorContext';
+import type { NodeState, NodePhase } from '../../../contexts/CouncilContext';
 import type { TaskGraph, TaskNode } from '../../../types/orchestrator';
 import type { GraphDiff } from '../../../types/orchestrator';
 
@@ -134,7 +134,7 @@ const NodePanel: FC<NodePanelProps> = ({
       try {
         if (runId) {
           // Active run: inject steering note (fire-and-forget)
-          const res = await fetch(`/api/orchestrator/runs/${runId}/note`, {
+          const res = await fetch(`/api/council/runs/${runId}/note`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ instruction }),
@@ -148,7 +148,7 @@ const NodePanel: FC<NodePanelProps> = ({
           }
         } else {
           // No active run: propose a diff via steer
-          const res = await fetch('/api/orchestrator/steer', {
+          const res = await fetch('/api/council/steer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ graph, instruction, port, ...(model ? { model } : {}) }),

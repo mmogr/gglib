@@ -2,7 +2,7 @@
  * SteeringPanel — chat-style input for conversational graph steering.
  *
  * Accepts a natural-language instruction, sends it to
- * `POST /api/orchestrator/steer` for a diff preview, renders the diff with
+ * `POST /api/council/steer` for a diff preview, renders the diff with
  * visual encoding (green = add, red = remove, amber = reroute/modify), and
  * provides an "Apply diff" button that calls `onGraphChange`.
  *
@@ -224,7 +224,7 @@ const SteeringPanel: FC<SteeringPanelProps> = ({ graph, port, model, onGraphChan
     setPendingDiff(null);
 
     try {
-      const res = await fetch('/api/orchestrator/steer', {
+      const res = await fetch('/api/council/steer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ graph, instruction: trimmed, port, model }),

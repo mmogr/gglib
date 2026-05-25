@@ -7,9 +7,9 @@
 //! Covered:
 //!
 //! * `GET /v1/models` — all three virtual models appear in the listing.
-//! * `POST /v1/chat/completions` with `gglib-orchestrator:native` → HTTP 400.
-//! * Auto mode (`gglib-orchestrator`) — events are translated to markdown SSE.
-//! * Interactive mode (`gglib-orchestrator:interactive`) — stream ends with the
+//! * `POST /v1/chat/completions` with `gglib-council:native` → HTTP 400.
+//! * Auto mode (`gglib-council`) — events are translated to markdown SSE.
+//! * Interactive mode (`gglib-council:interactive`) — stream ends with the
 //!   `<!-- gglib-run-id:… approval_id:… -->` sentinel on `AwaitingApproval`.
 
 use std::sync::Arc;
@@ -23,21 +23,21 @@ use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::domain::orchestrator::events::{ApprovalKind, OrchestratorEvent};
-use gglib_core::domain::orchestrator::run::{
-    OrchestratorRun, OrchestratorRunEvent, OrchestratorRunStatus,
+use gglib_core::domain::council::events::{ApprovalKind, CouncilEvent};
+use gglib_core::domain::council::run::{
+    CouncilRun, CouncilRunEvent, CouncilRunStatus,
 };
-use gglib_core::domain::orchestrator::task_graph::{
+use gglib_core::domain::council::task_graph::{
     HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
 };
 use gglib_core::ports::{
     ApprovalDecision, CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
-    ModelRuntimePort, ModelSummary, OrchestratorApprovalRegistryPort, OrchestratorRepositoryPort,
+    ModelRuntimePort, ModelSummary, CouncilApprovalRegistryPort, CouncilRepositoryPort,
     RepositoryError, RunningTarget,
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
 use gglib_mcp::McpService;
-use gglib_proxy::{OrchestratorDeps, OrchestratorRunParams, OrchestratorRunnerPort};
+use gglib_proxy::{CouncilDeps, CouncilRunParams, CouncilRunnerPort};
 
 // =============================================================================
 // Minimal mock ports (runtime / catalog / MCP)
@@ -110,28 +110,28 @@ impl McpServerRepository for EmptyMcpRepo {
 }
 
 // =============================================================================
-// Scripted runner — emits a fixed sequence of OrchestratorEvents
+// Scripted runner — emits a fixed sequence of CouncilEvents
 // =============================================================================
 
 /// A mock runner that emits a pre-configured sequence of events.
 #[derive(Debug)]
 struct ScriptedRunner {
-    events: Vec<OrchestratorEvent>,
+    events: Vec<CouncilEvent>,
 }
 
 impl ScriptedRunner {
-    fn new(events: Vec<OrchestratorEvent>) -> Self {
+    fn new(events: Vec<CouncilEvent>) -> Self {
         Self { events }
     }
 }
 
 #[async_trait]
-impl OrchestratorRunnerPort for ScriptedRunner {
+impl CouncilRunnerPort for ScriptedRunner {
     async fn run(
         &self,
         _goal: &str,
-        _params: OrchestratorRunParams,
-        tx: mpsc::Sender<OrchestratorEvent>,
+        _params: CouncilRunParams,
+        tx: mpsc::Sender<CouncilEvent>,
         _cancel: CancellationToken,
     ) -> anyhow::Result<()> {
         for event in &self.events {
@@ -147,7 +147,7 @@ impl OrchestratorRunnerPort for ScriptedRunner {
 
 struct NoopApprovalRegistry;
 
-impl OrchestratorApprovalRegistryPort for NoopApprovalRegistry {
+impl CouncilApprovalRegistryPort for NoopApprovalRegistry {
     fn register(&self, _: String, _: oneshot::Sender<ApprovalDecision>) {}
     fn resolve(&self, _: &str, _: ApprovalDecision) -> bool {
         false
@@ -160,33 +160,33 @@ impl OrchestratorApprovalRegistryPort for NoopApprovalRegistry {
 struct NoopOrchestratorRepo;
 
 #[async_trait]
-impl OrchestratorRepositoryPort for NoopOrchestratorRepo {
-    async fn create_run(&self, _: OrchestratorRun) -> Result<(), RepositoryError> {
+impl CouncilRepositoryPort for NoopOrchestratorRepo {
+    async fn create_run(&self, _: CouncilRun) -> Result<(), RepositoryError> {
         Ok(())
     }
     async fn update_run_status(
         &self,
         _: &str,
-        _: OrchestratorRunStatus,
+        _: CouncilRunStatus,
     ) -> Result<(), RepositoryError> {
         Ok(())
     }
     async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {
         Ok(())
     }
-    async fn append_event(&self, _: OrchestratorRunEvent) -> Result<(), RepositoryError> {
+    async fn append_event(&self, _: CouncilRunEvent) -> Result<(), RepositoryError> {
         Ok(())
     }
-    async fn get_run(&self, _: &str) -> Result<Option<OrchestratorRun>, RepositoryError> {
+    async fn get_run(&self, _: &str) -> Result<Option<CouncilRun>, RepositoryError> {
         Ok(None)
     }
     async fn list_runs(
         &self,
-        _: Option<OrchestratorRunStatus>,
-    ) -> Result<Vec<OrchestratorRun>, RepositoryError> {
+        _: Option<CouncilRunStatus>,
+    ) -> Result<Vec<CouncilRun>, RepositoryError> {
         Ok(vec![])
     }
-    async fn list_events(&self, _: &str) -> Result<Vec<OrchestratorRunEvent>, RepositoryError> {
+    async fn list_events(&self, _: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
         Ok(vec![])
     }
     async fn truncate_events_after_wave(&self, _: &str, _: u32) -> Result<(), RepositoryError> {
@@ -201,7 +201,7 @@ impl OrchestratorRepositoryPort for NoopOrchestratorRepo {
 // Proxy harness
 // =============================================================================
 
-async fn spawn_proxy_with(runner: Arc<dyn OrchestratorRunnerPort>) -> (String, CancellationToken) {
+async fn spawn_proxy_with(runner: Arc<dyn CouncilRunnerPort>) -> (String, CancellationToken) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
@@ -209,10 +209,10 @@ async fn spawn_proxy_with(runner: Arc<dyn OrchestratorRunnerPort>) -> (String, C
         Arc::new(EmptyMcpRepo),
         Arc::new(NoopEmitter::new()),
     ));
-    let orchestrator = OrchestratorDeps {
+    let orchestrator = CouncilDeps {
         runner,
         approval_registry: Arc::new(NoopApprovalRegistry),
-        orchestrator_repo: Arc::new(NoopOrchestratorRepo),
+        council_repo: Arc::new(NoopOrchestratorRepo),
     };
 
     let cancel = CancellationToken::new();
@@ -308,19 +308,19 @@ async fn test_models_endpoint_includes_virtual_models() {
         .filter_map(|m| m["id"].as_str())
         .collect();
 
-    assert!(ids.contains(&"gglib-orchestrator"), "missing auto model");
+    assert!(ids.contains(&"gglib-council"), "missing auto model");
     assert!(
-        ids.contains(&"gglib-orchestrator:interactive"),
+        ids.contains(&"gglib-council:interactive"),
         "missing interactive model"
     );
     assert!(
-        ids.contains(&"gglib-orchestrator:native"),
+        ids.contains(&"gglib-council:native"),
         "missing native model"
     );
     cancel.cancel();
 }
 
-/// `POST /v1/chat/completions` with `gglib-orchestrator:native` → HTTP 400.
+/// `POST /v1/chat/completions` with `gglib-council:native` → HTTP 400.
 #[tokio::test]
 async fn test_native_mode_returns_400() {
     let runner = Arc::new(ScriptedRunner::new(vec![]));
@@ -329,7 +329,7 @@ async fn test_native_mode_returns_400() {
     let resp = Client::new()
         .post(format!("{base}/v1/chat/completions"))
         .json(&json!({
-            "model": "gglib-orchestrator:native",
+            "model": "gglib-council:native",
             "messages": [{"role": "user", "content": "hi"}],
         }))
         .send()
@@ -340,39 +340,39 @@ async fn test_native_mode_returns_400() {
     let body: Value = resp.json().await.unwrap();
     let msg = body["error"]["message"].as_str().unwrap_or("");
     assert!(
-        msg.contains("/api/orchestrator/run"),
+        msg.contains("/api/council/run"),
         "expected redirect hint in 400 body, got: {msg}"
     );
     cancel.cancel();
 }
 
 /// Auto mode: `PlanProposed` + `NodeStarted` + `NodeTextDelta` + `SynthesisStart`
-/// + `SynthesisTextDelta` + `OrchestratorComplete` produce the expected markdown
+/// + `SynthesisTextDelta` + `CouncilComplete` produce the expected markdown
 /// structure in the SSE stream.
 #[tokio::test]
 async fn test_auto_mode_streams_events_as_markdown() {
     let events = vec![
-        OrchestratorEvent::PlanProposed {
+        CouncilEvent::PlanProposed {
             graph: test_graph(),
         },
-        OrchestratorEvent::PlanApproved,
-        OrchestratorEvent::NodeStarted {
+        CouncilEvent::PlanApproved,
+        CouncilEvent::NodeStarted {
             node_id: "n1".into(),
             goal: "step one".into(),
         },
-        OrchestratorEvent::NodeTextDelta {
+        CouncilEvent::NodeTextDelta {
             node_id: "n1".into(),
             delta: "worker output".into(),
         },
-        OrchestratorEvent::NodeComplete {
+        CouncilEvent::NodeComplete {
             node_id: "n1".into(),
             output_preview: "worker output".into(),
         },
-        OrchestratorEvent::SynthesisStart,
-        OrchestratorEvent::SynthesisTextDelta {
+        CouncilEvent::SynthesisStart,
+        CouncilEvent::SynthesisTextDelta {
             delta: "final answer".into(),
         },
-        OrchestratorEvent::OrchestratorComplete {
+        CouncilEvent::CouncilComplete {
             answer: "final answer".into(),
         },
     ];
@@ -383,7 +383,7 @@ async fn test_auto_mode_streams_events_as_markdown() {
     let resp = Client::new()
         .post(format!("{base}/v1/chat/completions"))
         .json(&json!({
-            "model": "gglib-orchestrator",
+            "model": "gglib-council",
             "stream": true,
             "messages": [{"role": "user", "content": "do the thing"}],
         }))
@@ -454,10 +454,10 @@ async fn test_auto_mode_streams_events_as_markdown() {
 #[tokio::test]
 async fn test_interactive_mode_embeds_sentinel_on_awaiting_approval() {
     let events = vec![
-        OrchestratorEvent::PlanProposed {
+        CouncilEvent::PlanProposed {
             graph: test_graph(),
         },
-        OrchestratorEvent::AwaitingApproval {
+        CouncilEvent::AwaitingApproval {
             approval_id: "test-approval-id".into(),
             kind: ApprovalKind::Plan,
         },
@@ -469,7 +469,7 @@ async fn test_interactive_mode_embeds_sentinel_on_awaiting_approval() {
     let resp = Client::new()
         .post(format!("{base}/v1/chat/completions"))
         .json(&json!({
-            "model": "gglib-orchestrator:interactive",
+            "model": "gglib-council:interactive",
             "stream": true,
             "messages": [{"role": "user", "content": "plan something"}],
         }))
@@ -515,7 +515,7 @@ async fn test_auto_mode_rejects_empty_messages() {
     let resp = Client::new()
         .post(format!("{base}/v1/chat/completions"))
         .json(&json!({
-            "model": "gglib-orchestrator",
+            "model": "gglib-council",
             "messages": [{"role": "system", "content": "you are helpful"}],
         }))
         .send()

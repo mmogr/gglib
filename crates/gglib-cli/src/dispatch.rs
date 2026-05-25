@@ -141,7 +141,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             handlers::plan::execute(ctx, &goal, port, model, context.ctx_size, max_replans).await?;
         }
 
-        Commands::Orchestrate {
+        Commands::Council {
             goal,
             model,
             port,
@@ -150,7 +150,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             resume,
             context,
         } => {
-            handlers::orchestrate::execute_command(
+            handlers::council::execute_command(
                 ctx,
                 goal.as_deref(),
                 port,

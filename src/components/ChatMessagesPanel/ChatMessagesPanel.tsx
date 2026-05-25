@@ -40,8 +40,8 @@ import { useCouncil } from '../../hooks/useCouncil';
 import type { GglibMessageCustom } from '../../types/messages';
 import type { SerializableCouncilSession } from '../../types/council';
 import { toSerializableSession } from '../../types/council';
-import { OrchestratorToggle } from '../OrchestratorToggle';
-import OrchestratorThread from '../Orchestrator/Thread/OrchestratorThread';
+import { CouncilToggle } from '../CouncilToggle';
+import CouncilThread from '../Council/Thread/CouncilThread';
 
 
 interface ChatMessagesPanelProps {
@@ -70,14 +70,14 @@ interface ChatMessagesPanelProps {
   /** Detected tool-calling format, e.g. "hermes" or "llama3". */
   toolFormat?: string | null;
   /** Ref filled by this component; called when the user submits in orchestrator mode. */
-  orchestratorSubmitRef?: React.MutableRefObject<((text: string) => void) | null>;
+  councilSubmitRef?: React.MutableRefObject<((text: string) => void) | null>;
   /** Set one-shot metadata on the next user message. */
   setNextMessageMeta?: (meta: Partial<GglibMessageCustom>) => void;
   /**
    * Called when an orchestrator run reaches a terminal phase.
    * Receives the draft run ID, the original goal text, and the final answer.
    */
-  onOrchestratorRunComplete?: (runId: string, goal: string, finalAnswer: string | null) => void;
+  onCouncilRunComplete?: (runId: string, goal: string, finalAnswer: string | null) => void;
 }
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
@@ -100,40 +100,40 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   currentStreamingAssistantMessageId,
   supportsToolCalls,
   toolFormat,
-  orchestratorSubmitRef,
+  councilSubmitRef,
   setNextMessageMeta,
-  onOrchestratorRunComplete,
+  onCouncilRunComplete,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
   const isThreadRunning = threadState?.isRunning ?? false;
 
   // Orchestrator mode toggle state
-  const [isOrchestratorMode, setIsOrchestratorMode] = useState(false);
+  const [isCouncilMode, setIsOrchestratorMode] = useState(false);
 
-  // Ref that OrchestratorThread fills so we can imperatively start a run.
-  const orchestratorStartRef = React.useRef<((goal: string, hitlMode?: string) => void) | null>(null);
+  // Ref that CouncilThread fills so we can imperatively start a run.
+  const councilStartRef = React.useRef<((goal: string, hitlMode?: string) => void) | null>(null);
   // Track the most-recently-submitted goal for the completion callback.
   const pendingOrchestratorGoalRef = React.useRef<string>('');
 
   // Register the orchestrator submit callback so the parent runtime can call it on submit.
   useEffect(() => {
-    if (orchestratorSubmitRef) {
-      orchestratorSubmitRef.current = (text: string) => {
+    if (councilSubmitRef) {
+      councilSubmitRef.current = (text: string) => {
         pendingOrchestratorGoalRef.current = text;
-        orchestratorStartRef.current?.(text);
+        councilStartRef.current?.(text);
         setIsOrchestratorMode(false); // Reset toggle after submit
       };
-      return () => { orchestratorSubmitRef.current = null; };
+      return () => { councilSubmitRef.current = null; };
     }
-  }, [orchestratorSubmitRef]);
+  }, [councilSubmitRef]);
 
   // Sync orchestrator mode flag to message metadata before each submission.
   useEffect(() => {
     if (setNextMessageMeta) {
-      setNextMessageMeta(isOrchestratorMode ? { isOrchestratorMode: true } : {});
+      setNextMessageMeta(isCouncilMode ? { isCouncilMode: true } : {});
     }
-  }, [isOrchestratorMode, setNextMessageMeta]);
+  }, [isCouncilMode, setNextMessageMeta]);
 
   // Shared ticker for live timer updates (only runs while streaming)
   // Note: Updating tick triggers provider re-render, but messageComponents is stable
@@ -540,11 +540,11 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       components={messageComponents}
                     />
                     {/* Orchestrator runs embedded in the thread viewport */}
-                    <OrchestratorThread
+                    <CouncilThread
                       serverPort={serverPort}
-                      startRunRef={orchestratorStartRef}
+                      startRunRef={councilStartRef}
                       onRunComplete={(runId, finalAnswer) => {
-                        onOrchestratorRunComplete?.(
+                        onCouncilRunComplete?.(
                           runId,
                           pendingOrchestratorGoalRef.current,
                           finalAnswer,
@@ -565,15 +565,15 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       className="flex-1 py-sm px-md border border-border rounded-base bg-surface text-text text-sm font-[inherit] resize-none min-h-[40px] max-h-[150px] focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                       placeholder={
                         isServerConnected
-                          ? isOrchestratorMode
+                          ? isCouncilMode
                             ? 'Describe the goal for the orchestrator…'
                             : 'Type your message. Shift + Enter for newline'
                           : 'Server not connected'
                       }
                       disabled={!isServerConnected}
                     />
-                    <OrchestratorToggle
-                      active={isOrchestratorMode}
+                    <CouncilToggle
+                      active={isCouncilMode}
                       onToggle={() => setIsOrchestratorMode((prev) => !prev)}
                       disabled={!isServerConnected}
                     />
