@@ -37,6 +37,7 @@ import {
   orchestratorReducer,
   type CouncilSession,
 } from '../../../contexts/CouncilContext';
+import { councilEventToAction } from '../../../utils/councilEventToAction';
 import {
   getCouncilRun,
 } from '../../../services/clients/council';
@@ -46,78 +47,7 @@ import CompactRunCard from '../CompactRunCard';
 import CollapsibleCastingSheet from '../CollapsibleCastingSheet';
 import CollapsibleDagView from '../CollapsibleDagView';
 
-// ─── Event replay ─────────────────────────────────────────────────────────────
-
-/**
- * Map a raw persisted CouncilEvent to an OrchestratorAction.
- * Returns null for purely informational events that have no reducer effect.
- *
- * This is the same translation used by `useCouncilRunStream` — copied
- * here to keep this file self-contained (no cross-module dependency on the
- * streaming hook; it will be factored into a shared utility in Phase 7).
- */
-import type { OrchestratorAction } from '../../../contexts/CouncilContext';
-
-function eventToAction(event: CouncilEvent): OrchestratorAction | null {
-  switch (event.type) {
-    case 'plan_proposed':
-      return { type: 'PLAN_PROPOSED', graph: event.graph };
-    case 'run_cost_estimate':
-      return {
-        type: 'SET_COST_ESTIMATE',
-        nodeCount: event.node_count,
-        estTokens: event.est_tokens,
-        estWallSeconds: event.est_wall_seconds,
-      };
-    case 'plan_approved':
-      return { type: 'PLAN_APPROVED' };
-    case 'plan_rejected':
-      return { type: 'PLAN_REJECTED', reason: event.reason };
-    case 'replan_attempt':
-      return { type: 'REPLAN_ATTEMPT', attempt: event.attempt, reason: event.reason };
-    case 'awaiting_approval':
-      return { type: 'AWAITING_APPROVAL', approvalId: event.approval_id, kind: event.kind };
-    case 'node_started':
-      return { type: 'NODE_STARTED', nodeId: event.node_id, goal: event.goal };
-    case 'node_text_delta':
-      return { type: 'NODE_TEXT_DELTA', nodeId: event.node_id, delta: event.delta };
-    case 'node_tool_call_start':
-      return {
-        type: 'NODE_TOOL_CALL_START',
-        nodeId: event.node_id,
-        displayName: event.display_name,
-        argsSummary: event.args_summary,
-      };
-    case 'node_tool_call_complete':
-      return {
-        type: 'NODE_TOOL_CALL_COMPLETE',
-        nodeId: event.node_id,
-        toolName: event.tool_name,
-        displayName: event.display_name,
-        durationDisplay: event.duration_display,
-      };
-    case 'node_compacting':
-      return { type: 'NODE_COMPACTING', nodeId: event.node_id };
-    case 'node_complete':
-      return { type: 'NODE_COMPLETE', nodeId: event.node_id, outputPreview: event.output_preview };
-    case 'node_failed':
-      return { type: 'NODE_FAILED', nodeId: event.node_id, error: event.error };
-    case 'synthesis_start':
-      return { type: 'SYNTHESIS_START' };
-    case 'synthesis_text_delta':
-      return { type: 'SYNTHESIS_TEXT_DELTA', delta: event.delta };
-    case 'synthesis_complete':
-      return { type: 'SYNTHESIS_COMPLETE', content: event.content };
-    case 'orchestrator_complete':
-      return { type: 'ORCHESTRATOR_COMPLETE', answer: event.answer };
-    case 'orchestrator_error':
-      return { type: 'ORCHESTRATOR_ERROR', message: event.message };
-    case 'steering_applied':
-      return { type: 'SET_PENDING_DIFF', diff: event.diff };
-    default:
-      return null;
-  }
-}
+// ─── Event replay ───────────────────────────────────────────────
 
 /**
  * Replay a list of serialised run events through the orchestrator reducer to
@@ -148,7 +78,7 @@ function replayEvents(eventJsonStrings: string[]): CouncilSession {
     } catch {
       continue; // skip malformed stored events
     }
-    const action = eventToAction(event);
+    const action = councilEventToAction(event);
     if (action) {
       session = orchestratorReducer(session, action);
     }
