@@ -29,6 +29,7 @@ import CastingSheet from './components/CastingSheet';
 import HitlApprovalModal from './components/HitlApprovalModal';
 import RunsList from './components/RunsList';
 import WaveScrubber from './components/WaveScrubber';
+import OrchestratorThread from '../../components/Orchestrator/Thread/OrchestratorThread';
 
 const HITL_MODE_OPTIONS = [
   { value: 'none', label: 'No approval' },
@@ -115,6 +116,36 @@ export default function OrchestratorPage({ onBack, hasRunningServers = false }: 
   }, [session.phase]);
 
   const nodeIds = session.graph ? Object.keys(session.graph.nodes) : [];
+
+  // ── Thread preview mode (?thread=1) ──────────────────────────────────────
+  // Read once on mount — not reactive. Add ?thread=1 to the orchestrator URL
+  // to preview the new OrchestratorThread component in isolation.
+  const [threadPreview] = useState(
+    () => new URLSearchParams(window.location.search).get('thread') === '1',
+  );
+
+  if (threadPreview) {
+    return (
+      <div className="flex h-full overflow-hidden bg-background">
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div className="flex items-center gap-sm px-md py-sm border-b border-border shrink-0">
+            {onBack && (
+              <Button variant="ghost" size="sm" onClick={onBack} className="md:hidden -ml-xs" iconOnly title="Back">
+                <Icon icon={ArrowLeft} size={14} />
+              </Button>
+            )}
+            <h1 className="text-lg font-semibold text-text flex-1">Orchestrator</h1>
+            <span className="text-xs font-medium px-xs py-[2px] rounded-sm bg-primary/10 text-primary">
+              Thread Preview
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-md scrollbar-thin">
+            <OrchestratorThread serverPort={serverPort} />
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full overflow-hidden bg-background">

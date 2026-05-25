@@ -18,6 +18,7 @@ import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
 import OrchestratorPage from "./pages/Orchestrator";
 import { OrchestratorProvider } from "./contexts/OrchestratorContext";
+import { OrchestratorRegistryProvider } from "./contexts/OrchestratorRegistry";
 
 /**
  * Inner app component that consumes ToastContext.
@@ -259,7 +260,9 @@ function App() {
   return (
     <ToastProvider>
       <ConfirmProvider>
-        <AppContent />
+        <OrchestratorRegistryProvider>
+          <AppContent />
+        </OrchestratorRegistryProvider>
       </ConfirmProvider>
     </ToastProvider>
   );
