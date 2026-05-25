@@ -41,6 +41,8 @@ import { useCouncil } from '../../hooks/useCouncil';
 import type { GglibMessageCustom } from '../../types/messages';
 import type { SerializableCouncilSession } from '../../types/council';
 import { toSerializableSession } from '../../types/council';
+import { useSettingsContext } from '../../contexts/SettingsContext';
+import OrchestratorThread from '../Orchestrator/Thread/OrchestratorThread';
 
 
 interface ChatMessagesPanelProps {
@@ -74,6 +76,11 @@ interface ChatMessagesPanelProps {
   setNextMessageMeta?: (meta: Partial<GglibMessageCustom>) => void;
   /** Called when a council session completes (for persistence). */
   onCouncilComplete?: (topic: string, synthesisText: string, session: SerializableCouncilSession) => void;
+  /**
+   * Called when a v2 orchestrator run reaches a terminal phase.
+   * Receives the draft run ID, the original goal text, and the final answer.
+   */
+  onOrchestratorRunComplete?: (runId: string, goal: string, finalAnswer: string | null) => void;
 }
 
 const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
@@ -99,6 +106,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   councilSubmitRef,
   setNextMessageMeta,
   onCouncilComplete,
+  onOrchestratorRunComplete,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
@@ -112,21 +120,37 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   // Council hook — wired to context
   const council = useCouncil({ serverPort });
 
+  // Engine preference — read once from settings; defaults to 'legacy'.
+  const { settings } = useSettingsContext();
+  const councilEngine = settings?.council_engine ?? 'legacy';
+
+  // Ref that OrchestratorThread fills so we can imperatively start a run.
+  const orchestratorStartRef = React.useRef<((goal: string, hitlMode?: string) => void) | null>(null);
+  // Track the most-recently-submitted goal for the completion callback.
+  const pendingOrchestratorGoalRef = React.useRef<string>('');
+
   // Register the council suggest/refine callback so ChatPage can call it on submit.
   // During `setup` phase, follow-up messages refine the existing suggestion.
   useEffect(() => {
     if (councilSubmitRef) {
       councilSubmitRef.current = (text: string) => {
-        if (council.session.phase === 'setup') {
-          council.refine(text);
+        if (councilEngine === 'v2') {
+          // V2 engine: start an orchestrator run via the embedded thread.
+          pendingOrchestratorGoalRef.current = text;
+          orchestratorStartRef.current?.(text);
         } else {
-          council.suggest(text);
+          // Legacy engine: route through the council session.
+          if (council.session.phase === 'setup') {
+            council.refine(text);
+          } else {
+            council.suggest(text);
+          }
         }
         setIsCouncilMode(false); // Reset toggle after submit
       };
       return () => { councilSubmitRef.current = null; };
     }
-  }, [councilSubmitRef, council]);
+  }, [councilSubmitRef, council, councilEngine]);
 
   // Keep council-mode active while the session is in a non-idle phase
   // so that follow-up messages in the composer are routed through the
@@ -573,6 +597,20 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       onAddAgent={council.addAgent}
                       onFillAgent={council.fillAgent}
                     />
+                    {/* V2 engine: inline OrchestratorThread (hosted mode). */}
+                    {councilEngine === 'v2' && (
+                      <OrchestratorThread
+                        serverPort={serverPort}
+                        startRunRef={orchestratorStartRef}
+                        onRunComplete={(runId, finalAnswer) => {
+                          onOrchestratorRunComplete?.(
+                            runId,
+                            pendingOrchestratorGoalRef.current,
+                            finalAnswer,
+                          );
+                        }}
+                      />
+                    )}
                   <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center py-xs px-md bg-primary text-white border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                     Jump to latest
                   </ThreadPrimitive.ScrollToBottom>
@@ -601,6 +639,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       active={isCouncilMode}
                       onToggle={() => setIsCouncilMode((prev) => !prev)}
                       disabled={!isServerConnected || council.isStreaming}
+                      engine={councilEngine}
                     />
                     <div className="flex gap-sm shrink-0">
                       {isThreadRunning && (

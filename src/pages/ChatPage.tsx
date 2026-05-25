@@ -140,6 +140,28 @@ export default function ChatPage({
     [setMessages],
   );
 
+  const handleOrchestratorRunComplete = useCallback(
+    (runId: string, goal: string, finalAnswer: string | null) => {
+      const userMsg = mkUserMessage(
+        [{ type: 'text' as const, text: goal }],
+        // Reuse isCouncilMode flag so the message is not re-routed as a normal
+        // chat submission when the conversation is reloaded.
+        { isCouncilMode: true },
+      );
+      const assistantMsg = mkAssistantMessage({
+        timingFinalized: true,
+        orchestratorRunId: runId,
+      });
+      if (finalAnswer) {
+        (assistantMsg.content as Array<{ type: string; text: string }>).push(
+          { type: 'text', text: finalAnswer },
+        );
+      }
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    },
+    [setMessages],
+  );
+
   // Server state from registry - derives isServerRunning reactively
   // Note: If serverState is null (no event received yet), we assume running
   // because ChatPage is only opened when a server is already running
@@ -426,6 +448,7 @@ export default function ChatPage({
               councilSubmitRef={councilSubmitRef}
               setNextMessageMeta={setNextMessageMeta}
               onCouncilComplete={handleCouncilComplete}
+              onOrchestratorRunComplete={handleOrchestratorRunComplete}
             />
           }
         />

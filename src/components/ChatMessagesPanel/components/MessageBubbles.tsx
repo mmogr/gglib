@@ -20,6 +20,7 @@ import { extractReasoningText } from '../../../utils/messages';
 
 import { cn } from '../../../utils/cn';
 import { HistoricalCouncilThread } from '../../Council/Messages/HistoricalCouncilThread';
+import { HistoricalOrchestratorThread } from '../../Orchestrator/Thread/HistoricalOrchestratorThread';
 
 /** Shared styling for small action buttons in message bubble footers. */
 const ACTION_BTN =
@@ -36,6 +37,23 @@ export const AssistantMessageBubble: React.FC = () => {
     hour: '2-digit',
     minute: '2-digit',
   }).format(message.createdAt ?? new Date());
+
+  // Detect persisted orchestrator run (v2 engine) — render HistoricalOrchestratorThread.
+  const orchestratorRunId = custom?.orchestratorRunId;
+  if (orchestratorRunId) {
+    return (
+      <MessagePrimitive.Root className="group flex flex-col gap-sm p-md rounded-base bg-surface border border-border phone:mr-xl">
+        <div className="flex items-center gap-sm mb-sm">
+          <div className="font-medium text-sm">Orchestrator</div>
+          <div className="text-xs text-text-muted">{timestamp}</div>
+        </div>
+        <HistoricalOrchestratorThread runId={orchestratorRunId} />
+        <ActionBarPrimitive.Root className="flex gap-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <ActionBarPrimitive.Copy />
+        </ActionBarPrimitive.Root>
+      </MessagePrimitive.Root>
+    );
+  }
 
   // Detect persisted council session — render historical thread instead of standard bubble
   const custom = (message as any)?.metadata?.custom as GglibMessageCustom | undefined;

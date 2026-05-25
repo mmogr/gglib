@@ -46,6 +46,7 @@ import {
   useState,
   type FormEvent,
   type FC,
+  type MutableRefObject,
 } from 'react';
 import { AlertTriangle, Play, RotateCcw, Square } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
@@ -65,6 +66,7 @@ import CompactRunCard from '../CompactRunCard';
 import CollapsibleCastingSheet from '../CollapsibleCastingSheet';
 import CollapsibleDagView from '../CollapsibleDagView';
 import { useOrchestratorRunStream } from './useOrchestratorRunStream';
+import PlanEditor from '../PlanEditor/PlanEditor';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -84,6 +86,21 @@ export interface OrchestratorThreadProps {
   model?: string;
   /** Optional className for the outermost container. */
   className?: string;
+
+  // ── Hosted / composer-embedded mode ────────────────────────────────────────
+  /**
+   * When provided the thread operates in **hosted mode**:
+   * - The internal goal form is hidden (the parent composer drives submission).
+   * - The parent calls `startRunRef.current(goal, hitlMode?)` to begin a run.
+   * - A plan-kind HITL approval renders as an inline `PlanEditor` rather than
+   *   a full-screen modal, so it fits naturally inside the chat thread.
+   */
+  startRunRef?: MutableRefObject<((goal: string, hitlMode?: string) => void) | null>;
+  /**
+   * Called once when the run reaches a terminal phase (`complete` or `error`).
+   * Receives the current draft run ID and the final answer string (or `null`).
+   */
+  onRunComplete?: (runId: string, finalAnswer: string | null) => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -103,6 +120,8 @@ const OrchestratorThread: FC<OrchestratorThreadProps> = ({
   serverPort,
   model,
   className,
+  startRunRef,
+  onRunComplete,
 }) => {
   // ── Run ID management ──────────────────────────────────────────────────────
   // Initialise once with a draft ID. The draft ID stays for the lifetime of
@@ -145,6 +164,39 @@ const OrchestratorThread: FC<OrchestratorThreadProps> = ({
   const [hitlMode, setHitlMode] = useState<string>('none');
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Whether this thread is operating in composer-hosted mode.
+  const isHosted = startRunRef !== undefined;
+
+  // ── Hosted mode: fill the startRunRef with the programmatic start callback ─
+  useEffect(() => {
+    if (!startRunRef) return;
+    startRunRef.current = (goalText: string, hitlModeOverride?: string) => {
+      setGoal(goalText);
+      setHitlMode(hitlModeOverride ?? 'none');
+      void startRun(goalText, hitlModeOverride ?? 'none');
+    };
+    return () => {
+      startRunRef.current = null;
+    };
+  }, [startRunRef, startRun]);
+
+  // ── Notify parent when the run reaches a terminal phase ────────────────────
+  const onRunCompleteRef = useRef(onRunComplete);
+  onRunCompleteRef.current = onRunComplete;
+  const completionFiredRef = useRef(false);
+  useEffect(() => {
+    if (
+      (session.phase === 'complete' || session.phase === 'error') &&
+      !completionFiredRef.current
+    ) {
+      completionFiredRef.current = true;
+      onRunCompleteRef.current?.(runId, session.finalAnswer ?? null);
+    }
+    if (session.phase === 'idle') {
+      completionFiredRef.current = false;
+    }
+  }, [session.phase, runId, session.finalAnswer]);
 
   // Auto-expand as soon as the run goes active.
   const prevPhaseRef = useRef(session.phase);
@@ -215,6 +267,11 @@ const OrchestratorThread: FC<OrchestratorThreadProps> = ({
   }, []);
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  // Determine whether a plan approval is pending so we can render the
+  // PlanEditor inline instead of falling through to HitlApprovalModal.
+  const isPlanApproval =
+    session.pendingApproval?.kind.kind === 'plan' && session.graph !== null;
+
   return (
     <div
       className={cn('flex flex-col gap-sm', className)}
@@ -222,8 +279,8 @@ const OrchestratorThread: FC<OrchestratorThreadProps> = ({
       data-run-id={runId}
       data-phase={session.phase}
     >
-      {/* ── Idle: goal input form ──────────────────────────────────────────── */}
-      {session.phase === 'idle' && (
+      {/* ── Idle: goal input form (hidden in hosted mode) ───────────────────── */}
+      {session.phase === 'idle' && !isHosted && (
         <form onSubmit={handleSubmit} className="flex flex-col gap-sm">
           <div className="flex gap-sm">
             <Input
@@ -392,8 +449,8 @@ const OrchestratorThread: FC<OrchestratorThreadProps> = ({
         </div>
       )}
 
-      {/* ── Terminal: "New run" reset button ──────────────────────────────── */}
-      {isTerminal && (
+      {/* ── Terminal: "New run" reset button (hidden in hosted mode) ─────── */}
+      {isTerminal && !isHosted && (
         <div className="flex">
           <Button
             type="button"
@@ -408,8 +465,20 @@ const OrchestratorThread: FC<OrchestratorThreadProps> = ({
         </div>
       )}
 
-      {/* ── HITL approval modal ────────────────────────────────────────────── */}
-      {session.pendingApproval && (
+      {/* ── Plan approval: inline PlanEditor ──────────────────────────────── */}
+      {isPlanApproval && session.graph && (
+        <PlanEditor
+          graph={session.graph}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          costEstimate={session.costEstimate}
+          submitting={session.pendingApproval!.submitting}
+          className="mt-sm rounded-base border border-border overflow-hidden"
+        />
+      )}
+
+      {/* ── HITL approval modal (non-plan kinds only) ──────────────────────── */}
+      {session.pendingApproval && !isPlanApproval && (
         <HitlApprovalModal
           open={true}
           kind={session.pendingApproval.kind}

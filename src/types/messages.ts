@@ -73,6 +73,12 @@ export type GglibMessageCustom = {
   isCouncilMode?: boolean;
   /** Persisted council session data (set on the assistant message that holds the synthesis). */
   councilSession?: SerializableCouncilSession;
+  /**
+   * The orchestrator run ID associated with this assistant message.
+   * Set on completion of a v2 engine run; triggers `HistoricalOrchestratorThread`
+   * rendering when the message is loaded from persistence.
+   */
+  orchestratorRunId?: string;
 };
 
 /**
