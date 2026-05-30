@@ -33,7 +33,7 @@ use gglib_core::domain::council::events::{ApprovalKind, CouncilEvent};
 use gglib_core::domain::council::task_graph::{
     HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
 };
-use gglib_core::ports::{ApprovalDecision, EmptyToolExecutor, CouncilApprovalRegistryPort};
+use gglib_core::ports::{ApprovalDecision, CouncilApprovalRegistryPort, EmptyToolExecutor};
 use tokio::sync::{mpsc, oneshot};
 
 // =============================================================================
@@ -223,10 +223,7 @@ async fn spawn_subteam_auto_approve() {
 
     // ── Verify run completed ──────────────────────────────────────────────────
     assert!(
-        matches!(
-            events.last(),
-            Some(CouncilEvent::CouncilComplete { .. })
-        ),
+        matches!(events.last(), Some(CouncilEvent::CouncilComplete { .. })),
         "last event should be CouncilComplete"
     );
 }
@@ -354,10 +351,7 @@ async fn spawn_subteam_hitl_requires_approval() {
 
     // ── Verify run completed ──────────────────────────────────────────────────
     assert!(
-        matches!(
-            events.last(),
-            Some(CouncilEvent::CouncilComplete { .. })
-        ),
+        matches!(events.last(), Some(CouncilEvent::CouncilComplete { .. })),
         "last event should be CouncilComplete"
     );
 }

@@ -107,19 +107,13 @@ pub(crate) fn api_routes() -> Router<AppState> {
         )
         // Orchestrator (director planning + full execution)
         .route("/council/plan", post(handlers::council::plan_sse))
-        .route(
-            "/council/run",
-            post(handlers::council::run::run_sse),
-        )
+        .route("/council/run", post(handlers::council::run::run_sse))
         // Orchestrator Phase D: HITL approvals + run records + resume
         .route(
             "/council/approve/{approval_id}",
             post(handlers::council::approve::approve),
         )
-        .route(
-            "/council/runs",
-            get(handlers::council::runs::list_runs),
-        )
+        .route("/council/runs", get(handlers::council::runs::list_runs))
         .route(
             "/council/runs/{run_id}",
             get(handlers::council::runs::get_run),
@@ -133,10 +127,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
             post(handlers::council::rewind::rewind_run),
         )
         // Orchestrator Phase K: conversational steering
-        .route(
-            "/council/steer",
-            post(handlers::council::steer::steer),
-        )
+        .route("/council/steer", post(handlers::council::steer::steer))
         .route(
             "/council/runs/{run_id}/note",
             post(handlers::council::note::post_note),

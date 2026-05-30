@@ -210,15 +210,12 @@ async fn single_node_happy_path_ends_with_complete() {
     let has_complete = events
         .iter()
         .any(|e| matches!(e, CouncilEvent::CouncilComplete { .. }));
-    assert!(
-        has_complete,
-        "must have CouncilComplete; got: {events:?}"
-    );
+    assert!(has_complete, "must have CouncilComplete; got: {events:?}");
 
     // NodeStarted for 'answer' must appear.
-    let has_node_started = events.iter().any(
-        |e| matches!(e, CouncilEvent::NodeStarted { node_id, .. } if node_id == "answer"),
-    );
+    let has_node_started = events
+        .iter()
+        .any(|e| matches!(e, CouncilEvent::NodeStarted { node_id, .. } if node_id == "answer"));
     assert!(has_node_started, "must have NodeStarted for 'answer'");
 }
 
@@ -272,9 +269,9 @@ async fn two_node_topological_order() {
     let research_complete = events.iter().position(
         |e| matches!(e, CouncilEvent::NodeComplete { node_id, .. } if node_id == "research"),
     );
-    let write_started = events.iter().position(
-        |e| matches!(e, CouncilEvent::NodeStarted { node_id, .. } if node_id == "write"),
-    );
+    let write_started = events
+        .iter()
+        .position(|e| matches!(e, CouncilEvent::NodeStarted { node_id, .. } if node_id == "write"));
 
     assert!(research_started.is_some(), "NodeStarted(research) missing");
     assert!(

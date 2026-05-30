@@ -27,12 +27,10 @@ use tokio::sync::oneshot;
 use crate::council_runner::CouncilRunnerAdapter;
 use crate::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use crate::process::ProcessManager;
-use gglib_core::domain::council::run::{
-    CouncilRun, CouncilRunEvent, CouncilRunStatus,
-};
+use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::ports::{
-    ApprovalDecision, ModelCatalogPort, ModelRepository, CouncilApprovalRegistryPort,
-    CouncilRepositoryPort, RepositoryError,
+    ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
+    ModelRepository, RepositoryError,
 };
 use gglib_mcp::McpService;
 use gglib_proxy::CouncilDeps;
@@ -168,10 +166,7 @@ impl CouncilRepositoryPort for InMemoryCouncilRepository {
         Ok(runs)
     }
 
-    async fn list_events(
-        &self,
-        _run_id: &str,
-    ) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
+    async fn list_events(&self, _run_id: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
         Ok(Vec::new())
     }
 
@@ -260,8 +255,7 @@ pub async fn start_proxy_standalone(
         runner: council_runner as Arc<dyn gglib_proxy::CouncilRunnerPort>,
         approval_registry: Arc::new(InMemoryApprovalRegistry::new())
             as Arc<dyn CouncilApprovalRegistryPort>,
-        council_repo: Arc::new(InMemoryCouncilRepository::new())
-            as Arc<dyn CouncilRepositoryPort>,
+        council_repo: Arc::new(InMemoryCouncilRepository::new()) as Arc<dyn CouncilRepositoryPort>,
     };
 
     // Create supervisor

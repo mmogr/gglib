@@ -16,15 +16,14 @@ pub mod utils;
 // Re-export commonly used types for convenience
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentConfigError, AgentEvent, AgentMessage,
-    ApprovalKind, AssistantContent, ChatMessage, Conversation, ConversationUpdate,
+    ApprovalKind, AssistantContent, ChatMessage, Conversation, ConversationUpdate, CouncilEvent,
     DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS, DEFAULT_MAX_STAGNATION_STEPS, HitlMode,
     LlmStreamEvent, MAX_DEPTH, MAX_ITERATIONS_CEILING, MAX_NODES, MAX_PARALLEL_TOOLS_CEILING,
     MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS, MIN_TOOL_TIMEOUT_MS, McpEnvEntry,
     McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
     McpToolResult, Message, MessageRole, Model, ModelCapabilities, ModelFilterOptions,
-    NewConversation, NewMcpServer, NewMessage, NewModel, NodeId, NodeStatus, CouncilEvent,
-    RangeValues, TaskGraph, TaskGraphError, TaskNode, ToolCall, ToolDefinition, ToolResult,
-    UpdateMcpServer,
+    NewConversation, NewMcpServer, NewMessage, NewModel, NodeId, NodeStatus, RangeValues,
+    TaskGraph, TaskGraphError, TaskNode, ToolCall, ToolDefinition, ToolResult, UpdateMcpServer,
     infer_from_chat_template, transform_messages_for_capabilities,
 };
 pub use download::{

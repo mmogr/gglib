@@ -16,11 +16,11 @@
 pub mod agent_chat;
 pub mod completions;
 pub mod config;
+pub mod council;
 pub mod gui;
 pub mod history;
 pub mod inference;
 pub mod mcp_cli;
 pub mod model;
-pub mod council;
 pub mod plan;
 pub mod web;

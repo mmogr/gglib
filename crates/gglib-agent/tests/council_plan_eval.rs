@@ -46,10 +46,7 @@ struct EvalResult {
 }
 
 /// Check that the task graph meets structural and semantic coherence criteria.
-fn check_coherence(
-    goal: &str,
-    graph: &gglib_core::domain::council::task_graph::TaskGraph,
-) -> bool {
+fn check_coherence(goal: &str, graph: &gglib_core::domain::council::task_graph::TaskGraph) -> bool {
     if graph.nodes.is_empty() {
         return false;
     }

@@ -11,8 +11,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use gglib_core::ports::{
-    ModelCatalogPort, ModelRepository, ModelRuntimePort, CouncilApprovalRegistryPort,
-    CouncilRepositoryPort,
+    CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort, ModelRepository,
+    ModelRuntimePort,
 };
 use gglib_core::services::AppCore;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};

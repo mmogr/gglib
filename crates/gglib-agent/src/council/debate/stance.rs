@@ -169,10 +169,7 @@ fn gather_claim_pairs(state: &DebateState) -> Vec<ClaimPair> {
 fn format_claims_block(pairs: &[ClaimPair]) -> String {
     let mut out = String::new();
     for p in pairs {
-        let _ = std::fmt::write(
-            &mut out,
-            format_args!("Agent: {}\n", p.agent_name),
-        );
+        let _ = std::fmt::write(&mut out, format_args!("Agent: {}\n", p.agent_name));
         match &p.initial {
             Some(c) => {
                 let _ = std::fmt::write(&mut out, format_args!("  Initial claim: \"{c}\"\n"));
@@ -205,7 +202,10 @@ fn parse_stances(
     for line in raw.lines() {
         if let Some((name, trajectory)) = extract_stance_line(line) {
             // Find matching agent name (case-insensitive).
-            if let Some(matched) = agent_names.iter().find(|n| n.to_lowercase() == name.to_lowercase()) {
+            if let Some(matched) = agent_names
+                .iter()
+                .find(|n| n.to_lowercase() == name.to_lowercase())
+            {
                 let agent_id = name_to_id.get(*matched).copied().unwrap_or("").to_owned();
                 let outcome = trajectory;
                 results.push(AgentStance { agent_id, outcome });
@@ -263,8 +263,9 @@ mod tests {
     #[test]
     fn parse_all_trajectories() {
         let names = ["Alice", "Bob", "Carol"];
-        let name_to_id: HashMap<&str, &str> =
-            [("Alice", "a"), ("Bob", "b"), ("Carol", "c")].into_iter().collect();
+        let name_to_id: HashMap<&str, &str> = [("Alice", "a"), ("Bob", "b"), ("Carol", "c")]
+            .into_iter()
+            .collect();
         let raw = "STANCE(Alice): Held\nSTANCE(Bob): Shifted\nSTANCE(Carol): Conceded";
         let stances = parse_stances(raw, &names, &name_to_id);
         assert_eq!(stances.len(), 3);

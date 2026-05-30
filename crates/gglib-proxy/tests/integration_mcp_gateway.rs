@@ -11,9 +11,7 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::domain::council::{
-    CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus,
-};
+use gglib_core::domain::council::{CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::ports::{
     ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
 };
@@ -56,11 +54,7 @@ impl CouncilRepositoryPort for NoopOrchestratorRepo {
     async fn create_run(&self, _: CouncilRun) -> Result<(), RepositoryError> {
         Ok(())
     }
-    async fn update_run_status(
-        &self,
-        _: &str,
-        _: CouncilRunStatus,
-    ) -> Result<(), RepositoryError> {
+    async fn update_run_status(&self, _: &str, _: CouncilRunStatus) -> Result<(), RepositoryError> {
         Ok(())
     }
     async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {

@@ -25,10 +25,10 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use gglib_core::AgentConfig;
 use gglib_core::domain::council::events::CouncilEvent;
 use gglib_core::domain::council::task_graph::DebateConfig;
 use gglib_core::ports::{LlmCompletionPort, ToolExecutorPort};
-use gglib_core::AgentConfig;
 
 use round::RoundContext;
 
@@ -160,15 +160,7 @@ pub async fn run_debate_node(
         // ── Optional compaction (keep context manageable in long debates) ─
         // Only compact when there are enough rounds that it matters.
         if total_rounds > 3 {
-            compaction::compact_round(
-                node_id,
-                round,
-                &mut state,
-                &llm,
-                &tool_executor,
-                tx,
-            )
-            .await;
+            compaction::compact_round(node_id, round, &mut state, &llm, &tool_executor, tx).await;
         }
 
         // Advance state round pointer.

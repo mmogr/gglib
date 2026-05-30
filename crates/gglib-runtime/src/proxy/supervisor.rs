@@ -364,13 +364,12 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use gglib_core::NoopEmitter;
-    use gglib_core::domain::mcp::{McpServer, NewMcpServer};
     use gglib_core::domain::council::{
         CouncilEvent, CouncilRun, CouncilRunEvent, CouncilRunStatus,
     };
+    use gglib_core::domain::mcp::{McpServer, NewMcpServer};
     use gglib_core::ports::{
-        ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort,
-        RepositoryError,
+        ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, RepositoryError,
     };
     use gglib_core::ports::{
         CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,

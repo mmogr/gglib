@@ -38,8 +38,8 @@ use gglib_app_services::CouncilApprovalRegistry;
 use gglib_core::domain::council::events::CouncilEvent;
 use gglib_core::domain::council::task_graph::HitlMode;
 use gglib_core::ports::{
-    ApprovalDecision, EmptyToolExecutor, LlmCompletionPort, CouncilApprovalRegistryPort,
-    CouncilRepositoryPort, ResponseFormat, ToolExecutorPort,
+    ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, EmptyToolExecutor,
+    LlmCompletionPort, ResponseFormat, ToolExecutorPort,
 };
 use gglib_core::{AgentMessage, LlmStreamEvent, ToolDefinition};
 use gglib_db::repositories::SqliteCouncilRepository;
@@ -179,9 +179,7 @@ async fn hitl_approve_plan_continues_execution() {
             tool_executor,
             CouncilConfig {
                 hitl_mode: HitlMode::ApprovePlan,
-                approval_registry: Some(
-                    registry_clone as Arc<dyn CouncilApprovalRegistryPort>,
-                ),
+                approval_registry: Some(registry_clone as Arc<dyn CouncilApprovalRegistryPort>),
                 repository: Some(repo as Arc<dyn CouncilRepositoryPort>),
                 ..CouncilConfig::default()
             },
@@ -225,10 +223,7 @@ async fn hitl_approve_plan_continues_execution() {
     let has_complete = remaining
         .iter()
         .any(|e| matches!(e, CouncilEvent::CouncilComplete { .. }));
-    assert!(
-        has_complete,
-        "CouncilComplete missing; got: {remaining:?}"
-    );
+    assert!(has_complete, "CouncilComplete missing; got: {remaining:?}");
 }
 
 /// Gate: `ApprovePlan` — reject → `execute()` returns `PlanRejected` error.
@@ -255,9 +250,7 @@ async fn hitl_reject_plan_aborts_run() {
             tool_executor,
             CouncilConfig {
                 hitl_mode: HitlMode::ApprovePlan,
-                approval_registry: Some(
-                    registry_clone as Arc<dyn CouncilApprovalRegistryPort>,
-                ),
+                approval_registry: Some(registry_clone as Arc<dyn CouncilApprovalRegistryPort>),
                 ..CouncilConfig::default()
             },
             tx_clone,

@@ -11,9 +11,7 @@
 
 use async_trait::async_trait;
 
-use crate::domain::council::run::{
-    CouncilRun, CouncilRunEvent, CouncilRunStatus,
-};
+use crate::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use crate::ports::RepositoryError;
 
 // =============================================================================
@@ -64,8 +62,7 @@ pub trait CouncilRepositoryPort: Send + Sync + 'static {
     ) -> Result<Vec<CouncilRun>, RepositoryError>;
 
     /// Return all events for a run in sequence order.
-    async fn list_events(&self, run_id: &str)
-    -> Result<Vec<CouncilRunEvent>, RepositoryError>;
+    async fn list_events(&self, run_id: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError>;
 
     /// Mark all runs currently in [`CouncilRunStatus::Running`] as
     /// [`CouncilRunStatus::Interrupted`].

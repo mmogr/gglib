@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 
 use gglib_core::ports::{LlmCompletionPort, ToolExecutorPort};
 use gglib_core::{
-    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, NodeId, CouncilEvent,
+    AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, CouncilEvent, NodeId,
     TaskGraph,
 };
 
@@ -128,9 +128,7 @@ pub(super) async fn run_synthesis(
         match event {
             AgentEvent::TextDelta { content: delta } => {
                 has_streamed = true;
-                let _ = tx
-                    .send(CouncilEvent::SynthesisTextDelta { delta })
-                    .await;
+                let _ = tx.send(CouncilEvent::SynthesisTextDelta { delta }).await;
             }
             AgentEvent::PromptProgress {
                 processed,

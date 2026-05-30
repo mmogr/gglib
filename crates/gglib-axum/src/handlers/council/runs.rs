@@ -4,9 +4,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 
-use gglib_core::domain::council::run::{
-    CouncilRun, CouncilRunEvent, CouncilRunStatus,
-};
+use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::ports::CouncilRepositoryPort;
 
 use crate::error::HttpError;

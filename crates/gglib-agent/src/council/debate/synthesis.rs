@@ -89,8 +89,7 @@ pub(super) async fn run_synthesis(
     };
 
     // Bridge synthesis events — map TextDelta → DebateSynthesisTextDelta.
-    let synth_content =
-        bridge_synthesis_events(node_id, synth_agent_rx, council_tx).await;
+    let synth_content = bridge_synthesis_events(node_id, synth_agent_rx, council_tx).await;
 
     let _ = synth_handle.await;
 

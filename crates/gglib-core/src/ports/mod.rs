@@ -12,6 +12,8 @@
 
 pub mod agent;
 pub mod chat_history;
+pub mod council_approvals;
+pub mod council_repository;
 pub mod download;
 pub mod download_event_emitter;
 pub mod download_manager;
@@ -27,8 +29,6 @@ pub mod model_catalog;
 pub mod model_registrar;
 pub mod model_repository;
 pub mod model_runtime;
-pub mod council_approvals;
-pub mod council_repository;
 pub mod process_runner;
 pub mod server_health;
 pub mod server_log_sink;
@@ -52,6 +52,8 @@ pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT
 
 // Re-export repository traits for convenience
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
+pub use council_approvals::{ApprovalDecision, CouncilApprovalRegistryPort};
+pub use council_repository::CouncilRepositoryPort;
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
 pub use download_event_emitter::{AppEventBridge, DownloadEventEmitterPort, NoopDownloadEmitter};
 pub use download_manager::{DownloadManagerConfig, DownloadManagerPort, DownloadRequest};
@@ -70,8 +72,6 @@ pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSu
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
-pub use council_approvals::{ApprovalDecision, CouncilApprovalRegistryPort};
-pub use council_repository::CouncilRepositoryPort;
 pub use process_runner::{ProcessHandle, ProcessRunner, ServerConfig, ServerHealth};
 pub use server_health::ServerHealthStatus;
 pub use server_log_sink::ServerLogSinkPort;

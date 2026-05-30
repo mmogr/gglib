@@ -87,13 +87,7 @@ async fn run_agent_turn(
         .await;
 
     // Build messages.
-    let messages = build_agent_messages(
-        agent,
-        topic,
-        round,
-        ctx.config.rounds,
-        state,
-    );
+    let messages = build_agent_messages(agent, topic, round, ctx.config.rounds, state);
 
     // Build agent loop.
     let agent_loop = AgentLoop::build(

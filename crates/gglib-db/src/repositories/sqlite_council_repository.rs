@@ -3,9 +3,7 @@
 use async_trait::async_trait;
 use sqlx::{Row, SqlitePool};
 
-use gglib_core::domain::council::run::{
-    CouncilRun, CouncilRunEvent, CouncilRunStatus,
-};
+use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::ports::{CouncilRepositoryPort, RepositoryError};
 
 /// `SQLite` implementation of [`CouncilRepositoryPort`].
@@ -237,10 +235,7 @@ impl CouncilRepositoryPort for SqliteCouncilRepository {
         Ok(runs)
     }
 
-    async fn list_events(
-        &self,
-        run_id: &str,
-    ) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
+    async fn list_events(&self, run_id: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
         let rows = sqlx::query(
             r#"
             SELECT run_id, seq, event_json, created_at, wave_index

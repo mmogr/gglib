@@ -21,13 +21,11 @@ use tracing::{debug, error, info};
 use gglib_core::ports::{ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
 use gglib_mcp::McpService;
 
+use crate::council_proxy::{CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info};
 use crate::forward::forward_chat_completion;
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::mcp::session::SessionManager;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse, ModelInfo, ModelsResponse};
-use crate::council_proxy::{
-    CouncilDeps, VIRTUAL_MODELS, handle_virtual_model, virtual_model_info,
-};
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]

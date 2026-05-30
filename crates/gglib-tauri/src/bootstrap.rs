@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, CouncilApprovalRegistry,
+    CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps,
     ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
@@ -312,8 +312,7 @@ pub fn bootstrap_with(
         core: Arc::clone(&app),
         approval_registry: Arc::clone(&approval_registry_w)
             as Arc<dyn gglib_core::ports::CouncilApprovalRegistryPort>,
-        council_repo: Arc::clone(&orch_repo_w)
-            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
+        council_repo: Arc::clone(&orch_repo_w) as Arc<dyn gglib_core::ports::CouncilRepositoryPort>,
     }));
     let setup_ops = Arc::new(SetupOps::new(SetupDeps {
         core: Arc::clone(&app),

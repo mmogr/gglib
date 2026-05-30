@@ -56,9 +56,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use gglib_core::domain::council::events::{
-    COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent,
-};
+use gglib_core::domain::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_core::domain::council::run::CouncilRunStatus;
 use gglib_core::domain::council::task_graph::{HitlMode, NodeStatus, TaskGraph};
 use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};

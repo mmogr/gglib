@@ -24,15 +24,13 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::domain::council::events::{ApprovalKind, CouncilEvent};
-use gglib_core::domain::council::run::{
-    CouncilRun, CouncilRunEvent, CouncilRunStatus,
-};
+use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::domain::council::task_graph::{
     HitlMode, NodeId, NodeStatus, TaskGraph, TaskNode, TaskNodeKind,
 };
 use gglib_core::ports::{
-    ApprovalDecision, CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
-    ModelRuntimePort, ModelSummary, CouncilApprovalRegistryPort, CouncilRepositoryPort,
+    ApprovalDecision, CatalogError, CouncilApprovalRegistryPort, CouncilRepositoryPort,
+    ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, ModelRuntimePort, ModelSummary,
     RepositoryError, RunningTarget,
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer, NoopEmitter};
@@ -164,11 +162,7 @@ impl CouncilRepositoryPort for NoopOrchestratorRepo {
     async fn create_run(&self, _: CouncilRun) -> Result<(), RepositoryError> {
         Ok(())
     }
-    async fn update_run_status(
-        &self,
-        _: &str,
-        _: CouncilRunStatus,
-    ) -> Result<(), RepositoryError> {
+    async fn update_run_status(&self, _: &str, _: CouncilRunStatus) -> Result<(), RepositoryError> {
         Ok(())
     }
     async fn update_graph(&self, _: &str, _: &str) -> Result<(), RepositoryError> {

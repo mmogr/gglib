@@ -227,8 +227,16 @@ mod tests {
         let agent_a = make_agent("a1", "Alice");
         let agent_b = make_agent("b1", "Bob");
         let mut state = DebateState::new();
-        state.push(make_contribution(agent_a.clone(), "Alice round 0 argument.", 0));
-        state.push(make_contribution(agent_b.clone(), "Bob round 0 argument.", 0));
+        state.push(make_contribution(
+            agent_a.clone(),
+            "Alice round 0 argument.",
+            0,
+        ));
+        state.push(make_contribution(
+            agent_b.clone(),
+            "Bob round 0 argument.",
+            0,
+        ));
 
         let prompt = build_agent_system_prompt(&agent_a, "Topic", 1, 2, &state);
         assert!(prompt.contains("DEBATE HISTORY"));

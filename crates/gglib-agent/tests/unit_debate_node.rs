@@ -21,7 +21,7 @@ use futures_util::stream;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use gglib_agent::council::debate::{run_debate_node, DebateError};
+use gglib_agent::council::debate::{DebateError, run_debate_node};
 use gglib_core::domain::council::events::CouncilEvent;
 use gglib_core::domain::council::task_graph::{DebateAgent, DebateConfig};
 use gglib_core::ports::{EmptyToolExecutor, LlmCompletionPort, ResponseFormat, ToolExecutorPort};
@@ -198,7 +198,10 @@ async fn debate_two_agents_one_round_emits_expected_events() {
 
     // Synthesis text should be non-empty.
     let synthesis_text = result.unwrap();
-    assert!(!synthesis_text.is_empty(), "synthesis text should not be empty");
+    assert!(
+        !synthesis_text.is_empty(),
+        "synthesis text should not be empty"
+    );
 }
 
 /// Agent turns carry the correct round number (1-based).

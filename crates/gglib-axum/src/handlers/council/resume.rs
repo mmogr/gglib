@@ -16,9 +16,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 use gglib_agent::council::{CouncilConfig, execute};
-use gglib_core::domain::council::events::{
-    COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent,
-};
+use gglib_core::domain::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_core::domain::council::run::CouncilRunStatus;
 use gglib_core::domain::council::task_graph::NodeStatus;
 use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
@@ -126,8 +124,9 @@ pub async fn resume_run(
         approval_registry: Some(
             Arc::clone(&state.approval_registry) as Arc<dyn CouncilApprovalRegistryPort>
         ),
-        repository: Some(Arc::clone(&state.council_repo)
-            as Arc<dyn gglib_core::ports::CouncilRepositoryPort>),
+        repository: Some(
+            Arc::clone(&state.council_repo) as Arc<dyn gglib_core::ports::CouncilRepositoryPort>
+        ),
         run_id: Some(run_id.clone()),
         graph_override: Some(graph),
         ..CouncilConfig::default()

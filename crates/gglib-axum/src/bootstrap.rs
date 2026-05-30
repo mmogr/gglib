@@ -13,12 +13,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_app_services::{
-    DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps, CouncilApprovalRegistry,
+    CouncilApprovalRegistry, DownloadDeps, DownloadOps, McpDeps, McpOps, ModelDeps, ModelOps,
     ProxyDeps, ProxyOps, ServerDeps, ServerOps, SettingsDeps, SettingsOps, SetupDeps, SetupOps,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, HfClientPort, ModelRepository, CouncilRepositoryPort, ProcessRunner,
+    AppEventEmitter, CouncilRepositoryPort, HfClientPort, ModelRepository, ProcessRunner,
 };
 use gglib_core::services::AppCore;
 use gglib_db::SqliteCouncilRepository;

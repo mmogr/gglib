@@ -27,9 +27,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 use gglib_agent::council::{CouncilConfig, execute};
-use gglib_core::domain::council::events::{
-    COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent,
-};
+use gglib_core::domain::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_core::domain::council::run::{CouncilRun, CouncilRunStatus};
 use gglib_core::domain::council::task_graph::HitlMode;
 use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
@@ -119,9 +117,7 @@ pub async fn run_sse(
         approval_registry: Some(
             Arc::clone(&state.approval_registry) as Arc<dyn CouncilApprovalRegistryPort>
         ),
-        repository: Some(
-            Arc::clone(&state.council_repo) as Arc<dyn CouncilRepositoryPort>
-        ),
+        repository: Some(Arc::clone(&state.council_repo) as Arc<dyn CouncilRepositoryPort>),
         ..CouncilConfig::default()
     };
 

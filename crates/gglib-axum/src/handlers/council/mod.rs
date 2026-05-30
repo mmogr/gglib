@@ -37,9 +37,7 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use gglib_agent::council::estimator::estimate_run_cost;
 use gglib_agent::council::plan;
-use gglib_core::domain::council::events::{
-    COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent,
-};
+use gglib_core::domain::council::events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
 use gglib_core::domain::council::task_graph::HitlMode;
 use gglib_runtime::compose_council_ports;
 

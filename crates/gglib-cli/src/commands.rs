@@ -8,7 +8,6 @@
 use clap::Subcommand;
 use clap_complete::Shell;
 
-
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
@@ -23,7 +22,6 @@ pub enum ChatCommand {
         #[arg(short = 'n', long, default_value = "20")]
         limit: usize,
     },
-
 }
 
 /// Top-level commands for the GGUF library management tool.

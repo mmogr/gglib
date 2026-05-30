@@ -43,15 +43,13 @@ use tokio::sync::{Semaphore, mpsc};
 use tokio::task::JoinSet;
 
 use gglib_core::domain::council::events::{ApprovalKind, CouncilEvent};
-use gglib_core::domain::council::run::{
-    CouncilRun, CouncilRunEvent, CouncilRunStatus,
-};
+use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
 use gglib_core::domain::council::task_graph::{
     HitlMode, NodeBudget, NodeId, TaskGraph, TaskNodeKind,
 };
 use gglib_core::ports::{
-    AgentLoopPort, ApprovalDecision, LlmCompletionPort, CouncilApprovalRegistryPort,
-    CouncilRepositoryPort, ToolExecutorPort,
+    AgentLoopPort, ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort,
+    LlmCompletionPort, ToolExecutorPort,
 };
 use gglib_core::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, ToolDefinition,
@@ -583,9 +581,7 @@ async fn run_wave_loop(
                                     .await;
                             }
                             Err(e) => {
-                                tracing::warn!(
-                                    "council: steering diff invalid, skipping: {e}"
-                                );
+                                tracing::warn!("council: steering diff invalid, skipping: {e}");
                             }
                         },
                         Err(e) => {
@@ -768,8 +764,7 @@ async fn run_wave_loop(
                 _ => unreachable!("expected Debate node"),
             };
 
-            let predecessor_context =
-                build_predecessor_context(debate_id, graph, &compacted);
+            let predecessor_context = build_predecessor_context(debate_id, graph, &compacted);
 
             let sem_clone = Arc::clone(&sem);
             let llm_clone = Arc::clone(&llm);
@@ -889,11 +884,10 @@ async fn run_wave_loop(
 
                     let event = CouncilEvent::AwaitingApproval {
                         approval_id: approval_id.clone(),
-                        kind:
-                            gglib_core::domain::council::events::ApprovalKind::SpawnSubteam {
-                                node_id: parent_node_id.0.clone(),
-                                suggested_roles: spawn_req.suggested_roles.clone(),
-                            },
+                        kind: gglib_core::domain::council::events::ApprovalKind::SpawnSubteam {
+                            node_id: parent_node_id.0.clone(),
+                            suggested_roles: spawn_req.suggested_roles.clone(),
+                        },
                     };
                     let _ = tx.send(event).await;
 

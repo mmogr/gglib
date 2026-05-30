@@ -16,9 +16,7 @@ use gglib_core::domain::council::events::{
     ApprovalKind, COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent,
 };
 use gglib_core::domain::council::task_graph::{HitlMode, NodeStatus};
-use gglib_core::ports::{
-    ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort,
-};
+use gglib_core::ports::{ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort};
 use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;

@@ -4,10 +4,10 @@
 pub mod assistant_ui;
 mod command;
 pub mod compose;
+pub mod council_runner;
 mod health;
 pub mod health_monitor;
 pub mod llama;
-pub mod council_runner;
 pub mod pidfile;
 pub mod ports_impl;
 pub mod process;

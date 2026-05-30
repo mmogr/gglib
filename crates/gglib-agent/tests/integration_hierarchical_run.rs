@@ -150,10 +150,7 @@ async fn hierarchical_run_three_departments_twelve_leaves() {
 
     // ── Verify CouncilComplete is the last event ─────────────────────────
     assert!(
-        matches!(
-            events.last(),
-            Some(CouncilEvent::CouncilComplete { .. })
-        ),
+        matches!(events.last(), Some(CouncilEvent::CouncilComplete { .. })),
         "last event should be CouncilComplete"
     );
 
