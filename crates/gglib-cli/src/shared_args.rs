@@ -54,6 +54,22 @@ impl SamplingArgs {
     }
 }
 
+/// MTP (Multi-Token Prediction) speculative-decoding overrides for the `serve` command.
+#[derive(Args, Debug, Clone, Default)]
+pub struct MtpArgs {
+    /// Number of MTP speculative draft tokens (auto-enabled when model has 'mtp' tag).
+    ///
+    /// Set to 0 to explicitly disable MTP even when the model supports it.
+    #[arg(long)]
+    pub mtp_draft_n_max: Option<u32>,
+    /// Minimum acceptance probability for MTP draft tokens (default: 0.75).
+    ///
+    /// Only used when MTP is enabled. Lower values increase speed at the
+    /// cost of output quality. Recommended range: 0.5–0.95.
+    #[arg(long)]
+    pub mtp_draft_p_min: Option<f32>,
+}
+
 /// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)
 /// from CLI argument groups.
 ///

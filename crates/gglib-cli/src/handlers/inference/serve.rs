@@ -7,7 +7,7 @@ use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
-use crate::shared_args::{ContextArgs, SamplingArgs};
+use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs};
 use gglib_runtime::llama::{
     ContextInput, LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size,
     resolve_llama_server, resolve_mtp_args,
@@ -28,8 +28,7 @@ pub async fn execute(
     jinja_flag: bool,
     port: u16,
     sampling: SamplingArgs,
-    mtp_draft_n_max: Option<u32>,
-    mtp_draft_p_min: Option<f32>,
+    mtp: MtpArgs,
 ) -> Result<()> {
     // Ensure llama.cpp is installed
     ensure_llama_initialized().await?;
@@ -76,7 +75,7 @@ pub async fn execute(
     }
 
     // Resolve MTP speculative decoding
-    let mtp = resolve_mtp_args(mtp_draft_n_max, mtp_draft_p_min, &model.tags);
+    let mtp = resolve_mtp_args(mtp.mtp_draft_n_max, mtp.mtp_draft_p_min, &model.tags);
     if mtp.enabled {
         eprintln!(
             "  MTP speculative decoding: enabled (n-max={}, p-min={:.2}, source={:?})",
