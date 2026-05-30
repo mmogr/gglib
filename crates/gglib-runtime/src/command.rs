@@ -263,6 +263,8 @@ mod tests {
             gpu_layers: None,
             jinja: false,
             reasoning_format: None,
+            spec_draft_n_max: None,
+            spec_draft_p_min: None,
             inference_config: None,
             extra_args: vec![],
         };
