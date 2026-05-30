@@ -50,6 +50,9 @@ struct RunningServer {
 pub struct McpManager {
     /// Running servers indexed by server ID
     servers: Arc<RwLock<HashMap<i64, RunningServer>>>,
+    /// Per-server start locks: serialise concurrent lazy starts for the same server.
+    /// Prevents double-spawn when multiple requests hit the same unstarted server.
+    start_locks: Arc<RwLock<HashMap<i64, Arc<tokio::sync::Mutex<()>>>>>,
 }
 
 impl McpManager {
@@ -57,7 +60,44 @@ impl McpManager {
     pub fn new() -> Self {
         Self {
             servers: Arc::new(RwLock::new(HashMap::new())),
+            start_locks: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Start an MCP server, deduplicating concurrent calls for the same server ID.
+    ///
+    /// Unlike `start_server`, this is safe to call from multiple tasks simultaneously.
+    /// The per-server mutex ensures only one spawn happens regardless of concurrency.
+    /// If the server is already running when the lock is acquired, returns its current
+    /// tools without spawning a new process.
+    pub async fn ensure_started(&self, server: McpServer) -> Result<Vec<McpTool>, McpManagerError> {
+        let server_id = server.id;
+
+        // Get or create the per-server start lock (fast read path first).
+        let lock = {
+            let locks = self.start_locks.read().await;
+            if let Some(l) = locks.get(&server_id) {
+                Arc::clone(l)
+            } else {
+                drop(locks);
+                let mut locks = self.start_locks.write().await;
+                Arc::clone(
+                    locks
+                        .entry(server_id)
+                        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
+                )
+            }
+        };
+
+        // Serialise concurrent starts for this specific server.
+        let _guard = lock.lock().await;
+
+        // Double-check: another waiter may have just started it.
+        if self.is_running(server_id).await {
+            return Ok(self.get_tools(server_id).await.unwrap_or_default());
+        }
+
+        self.start_server(server).await
     }
 
     /// Start an MCP server.

@@ -5,6 +5,49 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Startup lifecycle policy for an MCP server.
+///
+/// Controls when gglib automatically starts the server process.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum McpLifecycle {
+    /// Start the server at host initialisation (proxy startup, GUI launch, web server boot).
+    /// Use for servers that are always needed or have a slow cold start.
+    Eager,
+    /// Start the server on first tool use; keep it running until the host exits.
+    /// This is the default: no background process until something actually needs the server.
+    #[default]
+    Lazy,
+    /// Never start automatically. The server must be started explicitly via the
+    /// CLI (`gglib mcp start`), the REST API, or the GUI.
+    Manual,
+}
+
+impl std::fmt::Display for McpLifecycle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Eager => write!(f, "eager"),
+            Self::Lazy => write!(f, "lazy"),
+            Self::Manual => write!(f, "manual"),
+        }
+    }
+}
+
+impl std::str::FromStr for McpLifecycle {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "eager" => Ok(Self::Eager),
+            "lazy" => Ok(Self::Lazy),
+            "manual" => Ok(Self::Manual),
+            other => Err(format!(
+                "unknown lifecycle '{other}'; expected eager, lazy, or manual"
+            )),
+        }
+    }
+}
+
 /// Type of MCP server connection.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -189,8 +232,8 @@ pub struct McpServer {
     /// Whether tools from this server are included in chat.
     pub enabled: bool,
 
-    /// Whether to start this server when gglib launches.
-    pub auto_start: bool,
+    /// Startup lifecycle policy: when this server is automatically started.
+    pub lifecycle: McpLifecycle,
 
     /// Environment variables for the server process.
     pub env: Vec<McpEnvEntry>,
@@ -229,8 +272,8 @@ pub struct NewMcpServer {
     /// Whether tools from this server are included in chat.
     pub enabled: bool,
 
-    /// Whether to start this server when gglib launches.
-    pub auto_start: bool,
+    /// Startup lifecycle policy: when this server is automatically started.
+    pub lifecycle: McpLifecycle,
 
     /// Environment variables for the server process.
     pub env: Vec<McpEnvEntry>,
@@ -250,7 +293,7 @@ impl NewMcpServer {
             server_type: McpServerType::Stdio,
             config: McpServerConfig::stdio(exe_path, args, None, path_extra),
             enabled: true,
-            auto_start: false,
+            lifecycle: McpLifecycle::Lazy,
             env: Vec::new(),
         }
     }
@@ -263,7 +306,7 @@ impl NewMcpServer {
             server_type: McpServerType::Sse,
             config: McpServerConfig::sse(url),
             enabled: true,
-            auto_start: false,
+            lifecycle: McpLifecycle::Lazy,
             env: Vec::new(),
         }
     }
@@ -282,10 +325,10 @@ impl NewMcpServer {
         self
     }
 
-    /// Set auto-start.
+    /// Set the startup lifecycle policy.
     #[must_use]
-    pub const fn with_auto_start(mut self, auto_start: bool) -> Self {
-        self.auto_start = auto_start;
+    pub const fn with_lifecycle(mut self, lifecycle: McpLifecycle) -> Self {
+        self.lifecycle = lifecycle;
         self
     }
 
@@ -318,9 +361,9 @@ pub struct UpdateMcpServer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
 
-    /// Whether to start this server when gglib launches.
+    /// Startup lifecycle policy: when this server is automatically started.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub auto_start: Option<bool>,
+    pub lifecycle: Option<McpLifecycle>,
 
     /// Environment variables for the server process.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -423,7 +466,7 @@ mod tests {
             None,
         )
         .with_env("API_KEY", "secret123")
-        .with_auto_start(true);
+        .with_lifecycle(McpLifecycle::Eager);
 
         assert_eq!(server.name, "Test Server");
         assert_eq!(server.server_type, McpServerType::Stdio);
@@ -431,7 +474,7 @@ mod tests {
         assert_eq!(server.env.len(), 1);
         assert_eq!(server.env[0].key, "API_KEY");
         assert_eq!(server.env[0].value, "secret123");
-        assert!(server.auto_start);
+        assert_eq!(server.lifecycle, McpLifecycle::Eager);
     }
 
     #[test]

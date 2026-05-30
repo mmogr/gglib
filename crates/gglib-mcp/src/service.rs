@@ -6,8 +6,8 @@
 use crate::manager::McpManager;
 use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
 use gglib_core::{
-    AppEvent, AppEventEmitter, McpErrorInfo, McpServer, McpServerRepository, McpServerStatus,
-    McpServiceError, McpTool, McpToolResult, NewMcpServer,
+    AppEvent, AppEventEmitter, McpErrorInfo, McpLifecycle, McpServer, McpServerRepository,
+    McpServerStatus, McpServiceError, McpTool, McpToolResult, NewMcpServer,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,32 +47,65 @@ impl McpService {
         }
     }
 
-    /// Initialize the MCP service (starts auto-start servers).
+    /// Initialize the MCP service: validates all servers and starts `Eager` ones.
+    ///
+    /// `Lazy` servers start on first tool use (see `ensure_started_for_call`).
+    /// `Manual` servers are never started automatically.
+    /// For one-shot commands that need all tools available immediately, call
+    /// `prewarm_lazy` immediately after this.
     pub async fn initialize(&self) -> Result<(), McpServiceError> {
         // First, validate all servers and update their status
         self.validate_all_servers().await?;
 
-        // Then start auto-start servers (skipping invalid ones)
+        // Start only Eager servers (Lazy: on-demand, Manual: never).
         let servers = self.repository.list().await?;
         for server in servers {
-            if server.auto_start && server.enabled && server.is_valid {
+            if server.lifecycle == McpLifecycle::Eager && server.enabled && server.is_valid {
                 if let Err(e) = self.start_server(server.id).await {
                     tracing::warn!(
                         server_name = %server.name,
                         error = %e,
-                        "Failed to auto-start MCP server"
+                        "Failed to start eager MCP server"
                     );
                 }
-            } else if server.auto_start && server.enabled && !server.is_valid {
+            } else if server.lifecycle == McpLifecycle::Eager && server.enabled && !server.is_valid
+            {
                 tracing::info!(
                     server_name = %server.name,
                     error = ?server.last_error,
-                    "Skipping auto-start for invalid MCP server"
+                    "Skipping eager start for invalid MCP server"
                 );
             }
         }
 
         Ok(())
+    }
+
+    /// Pre-warm all `Lazy` servers.
+    ///
+    /// One-shot CLI commands (`gglib q`, orchestrate, plan, council) call this
+    /// right after `initialize` so that tools are ready before generation begins,
+    /// avoiding per-tool spawn latency mid-stream.
+    pub async fn prewarm_lazy(&self) {
+        let servers = match self.repository.list().await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to list servers for lazy prewarm");
+                return;
+            }
+        };
+
+        for server in servers {
+            if server.lifecycle == McpLifecycle::Lazy && server.enabled && server.is_valid {
+                if let Err(e) = self.start_server(server.id).await {
+                    tracing::warn!(
+                        server_name = %server.name,
+                        error = %e,
+                        "Failed to prewarm lazy MCP server"
+                    );
+                }
+            }
+        }
     }
 
     /// Validate all MCP servers and update their `is_valid/last_error` status.
@@ -629,16 +662,62 @@ impl McpService {
     }
 
     /// Call a tool on a server.
+    ///
+    /// For `Lazy` servers that are not yet running, this triggers an automatic start
+    /// (deduplicated across concurrent callers via a per-server mutex in the manager).
+    /// For `Manual` servers that are not running, this returns a tool-level error so
+    /// the model can recover gracefully rather than receiving a transport failure.
     pub async fn call_tool(
         &self,
         server_id: i64,
         tool_name: &str,
         arguments: HashMap<String, serde_json::Value>,
     ) -> Result<McpToolResult, McpServiceError> {
+        // Ensure the server is running, honouring its lifecycle policy.
+        // Manual servers return a soft tool-level error; all other failures
+        // (repo lookup, start failure) propagate as Err so callers see them.
+        match self.ensure_started_for_call(server_id).await {
+            Ok(()) => {}
+            Err(McpServiceError::NotRunning(msg)) => {
+                return Ok(McpToolResult {
+                    success: false,
+                    data: None,
+                    error: Some(msg),
+                });
+            }
+            Err(e) => return Err(e),
+        }
+
         self.manager
             .call_tool(server_id, tool_name, arguments)
             .await
             .map_err(|e| McpServiceError::ToolError(e.to_string()))
+    }
+
+    /// Ensure a server is running before a tool call, honouring its lifecycle policy.
+    ///
+    /// - Already running → no-op.
+    /// - `Eager` or `Lazy`, not running → attempt to start (via `McpManager::ensure_started`).
+    /// - `Manual`, not running → return an error (caller converts to a tool-level error).
+    async fn ensure_started_for_call(&self, server_id: i64) -> Result<(), McpServiceError> {
+        if self.manager.is_running(server_id).await {
+            return Ok(());
+        }
+
+        let server = self.repository.get_by_id(server_id).await?;
+
+        match server.lifecycle {
+            McpLifecycle::Manual => Err(McpServiceError::NotRunning(format!(
+                "Server '{}' is configured as manual and must be started explicitly",
+                server.name
+            ))),
+            McpLifecycle::Eager | McpLifecycle::Lazy => self
+                .manager
+                .ensure_started(server)
+                .await
+                .map(|_| ())
+                .map_err(|e| McpServiceError::StartFailed(e.to_string())),
+        }
     }
 
     // =========================================================================
@@ -662,7 +741,7 @@ impl McpService {
             server_type: new_server.server_type,
             config: new_server.config,
             enabled: new_server.enabled,
-            auto_start: new_server.auto_start,
+            lifecycle: new_server.lifecycle,
             env: new_server.env,
             created_at: chrono::Utc::now(),
             last_connected_at: None,
@@ -724,7 +803,7 @@ mod tests {
                 server_type: new_server.server_type,
                 config: new_server.config,
                 enabled: new_server.enabled,
-                auto_start: new_server.auto_start,
+                lifecycle: new_server.lifecycle,
                 env: new_server.env,
                 created_at: chrono::Utc::now(),
                 last_connected_at: None,

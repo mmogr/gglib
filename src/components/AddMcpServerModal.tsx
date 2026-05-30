@@ -38,7 +38,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   const [pathExtra, setPathExtra] = useState("");
   const [url, setUrl] = useState("");
   const [envVars, setEnvVars] = useState<[string, string][]>([]);
-  const [autoStart, setAutoStart] = useState(false);
+  const [lifecycle, setLifecycle] = useState<'eager' | 'lazy' | 'manual'>('lazy');
   const [enabled, setEnabled] = useState(true);
 
   const [saving, setSaving] = useState(false);
@@ -58,7 +58,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         setPathExtra(srv.config.path_extra || "");
         setUrl(srv.config.url || "");
         setEnvVars(srv.env.map(e => [e.key, e.value] as [string, string]));
-        setAutoStart(srv.auto_start);
+        setLifecycle(srv.lifecycle);
         setEnabled(srv.enabled);
       } else {
         // Reset for new server
@@ -70,7 +70,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         setPathExtra("");
         setUrl("");
         setEnvVars([]);
-        setAutoStart(false);
+        setLifecycle('lazy');
         setEnabled(true);
       }
       setError(null);
@@ -139,7 +139,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         name: name.trim(),
         server_type: serverType,
         enabled,
-        auto_start: autoStart,
+        lifecycle,
         env: envVars
           .filter(([key]) => key.trim())
           .map(([key, value]): McpEnvEntry => ({ key, value })),
@@ -165,7 +165,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         setSaving(false);
       }
     },
-    [name, serverType, command, args, workingDir, pathExtra, url, envVars, autoStart, enabled, onSave, onClose]
+    [name, serverType, command, args, workingDir, pathExtra, url, envVars, lifecycle, enabled, onSave, onClose]
   );
 
   if (!isOpen) return null;
@@ -251,15 +251,20 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
 
             {/* Options */}
             <Stack gap="xs">
-              <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:w-4 [&>input]:h-4 [&>input]:accent-primary">
-                <input
-                  type="checkbox"
-                  checked={autoStart}
-                  onChange={(e) => setAutoStart(e.target.checked)}
-                  disabled={saving}
-                />
-                <span>Auto-start when app launches</span>
+              <label className="text-sm font-semibold text-text" htmlFor="mcp-lifecycle">
+                Lifecycle
               </label>
+              <select
+                id="mcp-lifecycle"
+                value={lifecycle}
+                onChange={(e) => setLifecycle(e.target.value as 'eager' | 'lazy' | 'manual')}
+                disabled={saving}
+                className="rounded-base border border-input-border bg-input px-sm py-xs text-sm text-text focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="lazy">Lazy — start on first tool use</option>
+                <option value="eager">Eager — start when app launches</option>
+                <option value="manual">Manual — never auto-spawn</option>
+              </select>
               <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:w-4 [&>input]:h-4 [&>input]:accent-primary">
                 <input
                   type="checkbox"

@@ -280,7 +280,19 @@ pub async fn start_proxy_standalone(
     }
 
     // Gather MCP counts for banner
-    let server_count = mcp.list_servers().await.map(|s| s.len()).unwrap_or(0);
+    let servers = mcp.list_servers().await.unwrap_or_default();
+    let eager_count = servers
+        .iter()
+        .filter(|s| s.lifecycle == gglib_core::McpLifecycle::Eager)
+        .count();
+    let lazy_count = servers
+        .iter()
+        .filter(|s| s.lifecycle == gglib_core::McpLifecycle::Lazy)
+        .count();
+    let manual_count = servers
+        .iter()
+        .filter(|s| s.lifecycle == gglib_core::McpLifecycle::Manual)
+        .count();
     let tools = mcp.list_all_tools().await;
     let tool_count: usize = tools.iter().map(|(_, v)| v.len()).sum();
 
@@ -292,8 +304,14 @@ pub async fn start_proxy_standalone(
     println!("  Port:            {}", port);
     println!("  Llama base port: {}", llama_base_port);
     println!("  Default context: {}", default_context);
-    println!("  MCP servers:     {}", server_count);
-    println!("  MCP tools:       {}", tool_count);
+    println!(
+        "  MCP servers:     {} (eager: {}, lazy: {}, manual: {})",
+        servers.len(),
+        eager_count,
+        lazy_count,
+        manual_count
+    );
+    println!("  MCP tools:       {} (eager-started)", tool_count);
     println!();
 
     let addr = supervisor

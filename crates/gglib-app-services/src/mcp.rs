@@ -53,7 +53,7 @@ impl McpOps {
                 url: server.config.url.clone(),
             },
             enabled: server.enabled,
-            auto_start: server.auto_start,
+            lifecycle: server.lifecycle,
             env: server
                 .env
                 .iter()
@@ -132,7 +132,7 @@ impl McpOps {
                 })
                 .collect(),
             enabled: true,
-            auto_start: req.auto_start,
+            lifecycle: req.lifecycle,
         };
 
         let server = self
@@ -192,8 +192,8 @@ impl McpOps {
         if let Some(enabled) = req.enabled {
             server.enabled = enabled;
         }
-        if let Some(auto_start) = req.auto_start {
-            server.auto_start = auto_start;
+        if let Some(lifecycle) = req.lifecycle {
+            server.lifecycle = lifecycle;
         }
 
         self.mcp
@@ -285,6 +285,7 @@ impl McpOps {
 mod tests {
     use std::sync::Arc;
 
+    use gglib_core::McpLifecycle;
     use gglib_core::ports::NoopEmitter;
     use gglib_db::CoreFactory;
 
@@ -308,7 +309,7 @@ mod tests {
             path_extra: None,
             url: None,
             env: vec![],
-            auto_start: false,
+            lifecycle: McpLifecycle::Lazy,
         }
     }
 
