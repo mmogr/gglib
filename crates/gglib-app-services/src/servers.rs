@@ -217,7 +217,11 @@ impl ServerOps {
         }
 
         // Resolve MTP speculative decoding (auto-enabled by "mtp" tag, overrideable)
-        let mtp = resolve_mtp_args(request.mtp_draft_n_max, request.mtp_draft_p_min, &model.tags);
+        let mtp = resolve_mtp_args(
+            request.mtp_draft_n_max,
+            request.mtp_draft_p_min,
+            &model.tags,
+        );
         if mtp.enabled {
             debug!(
                 n_max = mtp.draft_n_max,

@@ -85,7 +85,10 @@ mod tests {
 
     #[test]
     fn absent_key_returns_not_supported() {
-        let m = meta(&[("llama.context_length", "4096"), ("general.name", "MyModel")]);
+        let m = meta(&[
+            ("llama.context_length", "4096"),
+            ("general.name", "MyModel"),
+        ]);
         let det = detect_mtp_support(&m);
         assert!(!det.supported);
         assert_eq!(det.layer_count, 0);
@@ -114,6 +117,9 @@ mod tests {
             ("llama.context_length", "32768"),
         ]);
         let det = detect_mtp_support(&m);
-        assert!(!det.supported, "name heuristics must not trigger MTP detection");
+        assert!(
+            !det.supported,
+            "name heuristics must not trigger MTP detection"
+        );
     }
 }
