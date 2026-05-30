@@ -85,6 +85,34 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **Capability Detection** — Identifies chat template, vocabulary size, embedding dimensions
 - **Efficient Parsing** — Streams metadata without loading full tensor data
 
+## Capability Tags
+
+Model capabilities are detected from GGUF metadata and stored as string tags.
+These tags drive automatic llama-server flag selection at serve time.
+
+| Tag | Detection trigger | Effect at runtime |
+|-----|-------------------|-------------------|
+| `"agent"` | Chat template contains tool-calling syntax | `--jinja` auto-enabled |
+| `"reasoning"` | Chat template contains `<think>` / DeepSeek reasoning tokens | `--reasoning-format deepseek` auto-enabled |
+| `"mtp"` | `{arch}.nextn_predict_layers > 0` in GGUF metadata | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` auto-enabled |
+| `"vision"` | Multi-modal clip projection keys present | Informational only (future) |
+| `"moe"` | `{arch}.expert_count > 0` | Informational only |
+
+### MTP tag details
+
+The `"mtp"` tag is set when the GGUF file contains the key
+`{arch}.nextn_predict_layers` (e.g. `qwen3_5_mtp.nextn_predict_layers`) with a
+value strictly greater than zero.  This key is written by llama.cpp when MTP
+draft head tensors are bundled into the same file.
+
+**Detection is intentionally strict**: model names or filenames containing
+`"MTP"` are ignored.  A model whose MTP heads have been stripped during
+quantisation will NOT receive the tag, preventing llama-server from being
+launched with `--spec-type draft-mtp` against a file that cannot support it.
+
+CLI escape hatch: `gglib serve <id> --mtp-draft-n-max 0` explicitly disables
+MTP even on a tagged model.
+
 ## Usage
 
 ```rust,no_run
