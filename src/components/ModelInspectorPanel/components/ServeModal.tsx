@@ -17,12 +17,19 @@ interface ServeModalProps {
   jinjaOverride: boolean | null;
   isServing: boolean;
   hasAgentTag: boolean;
+  hasMtpTag: boolean;
+  /** null = auto from tag; 0 = disable; >0 = explicit count */
+  mtpNMaxOverride: number | null;
+  /** null = use default 0.75 */
+  mtpPMinOverride: number | null;
   inferenceParams: InferenceConfig | undefined;
   // Handlers
   onContextChange: (value: string) => void;
   onPortChange: (value: string) => void;
   onJinjaChange: (value: boolean) => void;
   onJinjaReset: () => void;
+  onMtpNMaxChange: (value: number | null) => void;
+  onMtpPMinChange: (value: number | null) => void;
   onInferenceParamsChange: (params: InferenceConfig) => void;
   onClose: () => void;
   onStart: () => void;
@@ -39,17 +46,26 @@ export const ServeModal: FC<ServeModalProps> = ({
   jinjaOverride,
   isServing,
   hasAgentTag,
+  hasMtpTag,
+  mtpNMaxOverride,
+  mtpPMinOverride,
   inferenceParams,
   onContextChange,
   onPortChange,
   onJinjaChange,
   onJinjaReset,
+  onMtpNMaxChange,
+  onMtpPMinChange,
   onInferenceParamsChange,
   onClose,
   onStart,
 }) => {
   const effectiveJinjaEnabled = jinjaOverride === null ? hasAgentTag : jinjaOverride;
   const isAutoJinja = jinjaOverride === null && hasAgentTag;
+
+  // MTP: auto-enabled when tag present and no explicit override
+  const effectiveMtpEnabled = mtpNMaxOverride !== null ? mtpNMaxOverride > 0 : hasMtpTag;
+  const isAutoMtp = mtpNMaxOverride === null && hasMtpTag;
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Check if any inference params are set (for visual indicator)
@@ -190,6 +206,107 @@ export const ServeModal: FC<ServeModalProps> = ({
               </p>
             </div>
           </div>
+        </div>
+
+        {/* MTP Speculative Decoding section (shown for all models; auto-banner when tagged) */}
+        {hasMtpTag && (
+          <div className="flex flex-col gap-sm py-sm px-md rounded-md border border-border bg-primary-subtle text-text text-sm mb-md" role="status">
+            <div className="font-semibold">MTP speculative decoding detected</div>
+            <p>
+              {mtpNMaxOverride === 0
+                ? 'Speculative decoding would normally be auto-enabled for this model, but you have disabled it for this launch.'
+                : 'This model contains embedded MTP draft heads. Speculative decoding will be enabled automatically (n-max=2, p-min=0.75).'}
+            </p>
+            {mtpNMaxOverride !== null && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => { onMtpNMaxChange(null); onMtpPMinChange(null); }}
+                disabled={isServing}
+              >
+                Reset to auto-detect
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div className="mb-lg">
+          <div className="flex items-center justify-between gap-sm">
+            <label className="block mb-0 font-medium text-text">MTP Speculative Decoding</label>
+            <span className="text-sm text-text-muted">
+              {isAutoMtp
+                ? 'Auto (mtp tag)'
+                : (mtpNMaxOverride === null
+                  ? 'Disabled'
+                  : (mtpNMaxOverride === 0 ? 'Disabled manually' : `Enabled (n=${mtpNMaxOverride})`))}
+            </span>
+          </div>
+          <div className="flex gap-md items-start mt-sm">
+            <input
+              id="mtp-toggle"
+              type="checkbox"
+              checked={effectiveMtpEnabled}
+              onChange={(e) => {
+                if (!e.target.checked) {
+                  onMtpNMaxChange(0);
+                } else {
+                  // Restore to auto (tag) or default explicit n=2
+                  onMtpNMaxChange(hasMtpTag ? null : 2);
+                }
+              }}
+              disabled={isServing}
+            />
+            <div className="flex-1 text-sm text-text-secondary">
+              <p className="m-0">
+                Enable <code>--spec-type draft-mtp</code> speculative decoding for MTP models.
+                Requires bundled draft heads in the GGUF file.
+              </p>
+            </div>
+          </div>
+          {effectiveMtpEnabled && (
+            <div className="flex gap-md mt-md">
+              <div className="flex-1">
+                <label htmlFor="mtp-n-max" className="block mb-sm text-sm font-medium text-text">
+                  Draft tokens (n-max)
+                </label>
+                <Input
+                  id="mtp-n-max"
+                  type="number"
+                  className="w-full p-md bg-background-input border border-border rounded-base text-text text-base"
+                  placeholder={isAutoMtp ? 'Auto (2)' : '2'}
+                  value={mtpNMaxOverride !== null && mtpNMaxOverride > 0 ? String(mtpNMaxOverride) : ''}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    onMtpNMaxChange(v === '' ? null : Math.max(1, parseInt(v) || 1));
+                  }}
+                  disabled={isServing}
+                  min="1"
+                  max="8"
+                />
+              </div>
+              <div className="flex-1">
+                <label htmlFor="mtp-p-min" className="block mb-sm text-sm font-medium text-text">
+                  Min probability (p-min)
+                </label>
+                <Input
+                  id="mtp-p-min"
+                  type="number"
+                  className="w-full p-md bg-background-input border border-border rounded-base text-text text-base"
+                  placeholder={isAutoMtp ? 'Auto (0.75)' : '0.75'}
+                  value={mtpPMinOverride !== null ? String(mtpPMinOverride) : ''}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    onMtpPMinChange(v === '' ? null : parseFloat(v));
+                  }}
+                  disabled={isServing}
+                  min="0"
+                  max="1"
+                  step="0.05"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Advanced: Inference Parameters */}

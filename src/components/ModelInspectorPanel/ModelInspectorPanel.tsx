@@ -109,6 +109,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   // Compute derived state
   const combinedTags = tags.modelTags.length > 0 ? tags.modelTags : (model?.tags || []);
   const hasAgentTag = combinedTags.some(tag => tag.toLowerCase() === 'agent');
+  const hasMtpTag = combinedTags.some(tag => tag.toLowerCase() === 'mtp');
 
   // Server actions hook
   const serverActions = useServerActions({
@@ -123,6 +124,9 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     customPort: serveModal.customPort,
     jinjaOverride: serveModal.jinjaOverride,
     hasAgentTag,
+    hasMtpTag,
+    mtpNMaxOverride: serveModal.mtpNMaxOverride,
+    mtpPMinOverride: serveModal.mtpPMinOverride,
     inferenceParams: serveModal.inferenceParams,
     onStopServer,
     onRemoveModel,
@@ -291,11 +295,16 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           jinjaOverride={serveModal.jinjaOverride}
           isServing={serveModal.isServing}
           hasAgentTag={hasAgentTag}
+          hasMtpTag={hasMtpTag}
+          mtpNMaxOverride={serveModal.mtpNMaxOverride}
+          mtpPMinOverride={serveModal.mtpPMinOverride}
           inferenceParams={serveModal.inferenceParams}
           onContextChange={serveModal.setCustomContext}
           onPortChange={serveModal.setCustomPort}
           onJinjaChange={serveModal.setJinjaOverride}
           onJinjaReset={() => serveModal.setJinjaOverride(null)}
+          onMtpNMaxChange={serveModal.setMtpNMaxOverride}
+          onMtpPMinChange={serveModal.setMtpPMinOverride}
           onInferenceParamsChange={serveModal.setInferenceParams}
           onClose={serveModal.closeServeModal}
           onStart={serverActions.handleStartServer}
