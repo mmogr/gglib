@@ -93,7 +93,7 @@ These tags drive automatic llama-server flag selection at serve time.
 | Tag | Detection trigger | Effect at runtime |
 |-----|-------------------|-------------------|
 | `"agent"` | Chat template contains tool-calling syntax | `--jinja` auto-enabled |
-| `"reasoning"` | Chat template contains `<think>` / DeepSeek reasoning tokens | `--reasoning-format deepseek` auto-enabled |
+| `"reasoning"` | Chat template contains `<think>` / `DeepSeek` reasoning tokens | `--reasoning-format deepseek` auto-enabled |
 | `"mtp"` | `{arch}.nextn_predict_layers > 0` in GGUF metadata | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` auto-enabled |
 | `"vision"` | Multi-modal clip projection keys present | Informational only (future) |
 | `"moe"` | `{arch}.expert_count > 0` | Informational only |
