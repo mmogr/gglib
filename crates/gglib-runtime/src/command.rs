@@ -136,6 +136,15 @@ pub fn build_and_spawn(
         cmd.arg("--reasoning-format").arg(format);
     }
 
+    // Add MTP speculative decoding flags if enabled
+    if let Some(n) = config.spec_draft_n_max {
+        cmd.arg("--spec-type").arg("draft-mtp");
+        cmd.arg("--spec-draft-n-max").arg(n.to_string());
+        if let Some(p) = config.spec_draft_p_min {
+            cmd.arg("--spec-draft-p-min").arg(p.to_string());
+        }
+    }
+
     // Add inference parameters if specified
     if let Some(ref inference) = config.inference_config {
         for arg in inference.to_cli_args() {
