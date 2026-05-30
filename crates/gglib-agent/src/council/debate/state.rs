@@ -88,13 +88,13 @@ impl DebateState {
     }
 
     /// Advance to the next round.
-    pub fn advance_round(&mut self) {
+    pub const fn advance_round(&mut self) {
         self.current_round += 1;
     }
 
     /// Current round number (zero-indexed).
     #[must_use]
-    pub fn current_round(&self) -> u32 {
+    pub const fn current_round(&self) -> u32 {
         self.current_round
     }
 
@@ -219,7 +219,7 @@ mod tests {
             round: 0,
         });
         state.push(AgentContribution {
-            agent: agent.clone(),
+            agent,
             content: "Round 1 text".into(),
             core_claim: None,
             round: 1,

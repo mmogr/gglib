@@ -275,7 +275,7 @@ pub struct DebateJudgeConfig {
     pub min_rounds_before_stop: u32,
 }
 
-fn default_min_rounds_before_stop() -> u32 {
+const fn default_min_rounds_before_stop() -> u32 {
     1
 }
 
@@ -308,9 +308,10 @@ pub struct DebateConfig {
 // TaskNodeKind
 // =============================================================================
 
-/// Determines whether a [`TaskNode`] is an isolated leaf worker, a sub-team
-/// that executes its own nested [`TaskGraph`], or a debate node where multiple
-/// agents argue a contested goal across structured rounds.
+/// Execution kind for a [`TaskNode`]: leaf worker, nested sub-team, or multi-agent debate.
+///
+/// A leaf runs a single agent; a team executes its own nested [`TaskGraph`];
+/// a debate node runs multiple agents arguing a contested goal across rounds.
 ///
 /// Existing (Phase A–F) nodes all default to `Leaf` when deserialized from
 /// JSON that does not carry a `kind` field.

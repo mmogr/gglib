@@ -232,11 +232,7 @@ mod tests {
             "Alice round 0 argument.",
             0,
         ));
-        state.push(make_contribution(
-            agent_b.clone(),
-            "Bob round 0 argument.",
-            0,
-        ));
+        state.push(make_contribution(agent_b, "Bob round 0 argument.", 0));
 
         let prompt = build_agent_system_prompt(&agent_a, "Topic", 1, 2, &state);
         assert!(prompt.contains("DEBATE HISTORY"));
@@ -266,7 +262,7 @@ mod tests {
         let agent_b = make_agent("b1", "Bob");
         let mut state = DebateState::new();
         state.push(make_contribution(agent_a.clone(), "Full text", 0));
-        state.push(make_contribution(agent_b.clone(), "Full text B", 0));
+        state.push(make_contribution(agent_b, "Full text B", 0));
         state.set_compacted(0, "[Alice]: short. [Bob]: short.".into());
 
         let prompt = build_agent_system_prompt(&agent_a, "Topic", 1, 3, &state);

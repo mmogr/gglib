@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn parse_case_insensitive_trajectory() {
         let names = ["Alice"];
-        let name_to_id: HashMap<&str, &str> = [("Alice", "a")].into_iter().collect();
+        let name_to_id: HashMap<&str, &str> = std::iter::once(("Alice", "a")).collect();
         let raw = "STANCE(Alice): HELD";
         let stances = parse_stances(raw, &names, &name_to_id);
         assert_eq!(stances.len(), 1);
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn unknown_agent_name_skipped() {
         let names = ["Alice"];
-        let name_to_id: HashMap<&str, &str> = [("Alice", "a")].into_iter().collect();
+        let name_to_id: HashMap<&str, &str> = std::iter::once(("Alice", "a")).collect();
         let raw = "STANCE(Attacker): Held";
         let stances = parse_stances(raw, &names, &name_to_id);
         assert_eq!(stances.len(), 0);
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn markdown_wrapped_stance() {
         let names = ["Skeptic"];
-        let name_to_id: HashMap<&str, &str> = [("Skeptic", "s")].into_iter().collect();
+        let name_to_id: HashMap<&str, &str> = std::iter::once(("Skeptic", "s")).collect();
         let raw = "**STANCE(Skeptic):** Shifted";
         let stances = parse_stances(raw, &names, &name_to_id);
         assert_eq!(stances.len(), 1);

@@ -28,6 +28,7 @@ use super::state::DebateState;
 /// `DebateSynthesisTextDelta` / `DebateSynthesisComplete`.
 ///
 /// Returns the synthesis text, or an empty string on failure.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn run_synthesis(
     node_id: &str,
     topic: &str,

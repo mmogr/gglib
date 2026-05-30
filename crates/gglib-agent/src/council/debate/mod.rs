@@ -65,7 +65,7 @@ pub enum DebateError {
 /// - `config` — debate configuration from [`TaskNodeKind::Debate`].
 /// - `llm` — shared LLM completion port.
 /// - `tool_executor` — shared tool executor port.
-/// - `agent_config` — base agent config (max_iterations, etc.).
+/// - `agent_config` — base agent config (`max_iterations`, etc.).
 /// - `tx` — the council event sender.
 /// - `cancel` — cancellation token; checked between every agent turn and
 ///   after every round to allow prompt abort on GPU-constrained hardware.
@@ -74,6 +74,7 @@ pub enum DebateError {
 ///
 /// `Ok(synthesis_text)` on success, `Err(DebateError)` on cancellation or
 /// hard failure.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_debate_node(
     node_id: &str,
     topic: &str,
@@ -150,9 +151,8 @@ pub async fn run_debate_node(
 
             // `early_stop_recommended` is already encoded in the emitted event;
             // here we use it locally to decide whether to break.
-            verdict.map_or(false, |v| {
-                v.consensus_reached && round >= judge_cfg.min_rounds_before_stop
-            })
+            verdict
+                .is_some_and(|v| v.consensus_reached && round >= judge_cfg.min_rounds_before_stop)
         } else {
             false
         };

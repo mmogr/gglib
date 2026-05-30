@@ -130,11 +130,11 @@ async fn collect_events(mut rx: mpsc::Receiver<CouncilEvent>) -> Vec<CouncilEven
 ///   3. Synthesis                 → plain text
 ///
 /// Expected events (minimum):
-///   DebateRoundStarted × 1
-///   DebateAgentTurnStarted × 2
-///   DebateAgentTurnComplete × 2
-///   DebateSynthesisStarted × 1
-///   DebateSynthesisComplete × 1
+///   `DebateRoundStarted` × 1
+///   `DebateAgentTurnStarted` × 2
+///   `DebateAgentTurnComplete` × 2
+///   `DebateSynthesisStarted` × 1
+///   `DebateSynthesisComplete` × 1
 #[tokio::test]
 async fn debate_two_agents_one_round_emits_expected_events() {
     let llm = StubLlm::new(vec![

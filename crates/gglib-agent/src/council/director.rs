@@ -150,7 +150,7 @@ pub struct DebateAgentWire {
     pub color: String,
 }
 
-fn default_contentiousness() -> f32 {
+const fn default_contentiousness() -> f32 {
     0.5
 }
 
@@ -169,7 +169,7 @@ pub struct DebateConfigWire {
     pub judge: bool,
 }
 
-fn default_debate_rounds() -> u32 {
+const fn default_debate_rounds() -> u32 {
     2
 }
 
@@ -377,19 +377,19 @@ pub async fn plan(
                 // Resolve node kind; fall back to Leaf on any debate
                 // misconfiguration so a bad LLM response never hard-panics.
                 let kind = if n.kind == "debate" {
-                    match n.debate_config.clone() {
-                        Some(wire_cfg) => TaskNodeKind::Debate {
-                            config: wire_to_debate_config(wire_cfg),
-                        },
-                        None => {
+                    n.debate_config.clone().map_or_else(
+                        || {
                             tracing::warn!(
                                 node_id = %n.id,
                                 "director: kind='debate' but no debate_config supplied; \
                                  falling back to Leaf"
                             );
                             TaskNodeKind::Leaf
-                        }
-                    }
+                        },
+                        |wire_cfg| TaskNodeKind::Debate {
+                            config: wire_to_debate_config(wire_cfg),
+                        },
+                    )
                 } else {
                     TaskNodeKind::Leaf
                 };

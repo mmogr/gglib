@@ -86,11 +86,10 @@ pub async fn bridge_agent_events(
             }
 
             // Iteration boundaries are internal to the agent loop.
-            AgentEvent::IterationComplete { .. } => continue,
-
             // Progress/warning events — not part of the debate wire format.
-            AgentEvent::PromptProgress { .. } => continue,
-            AgentEvent::SystemWarning { .. } => continue,
+            AgentEvent::IterationComplete { .. }
+            | AgentEvent::PromptProgress { .. }
+            | AgentEvent::SystemWarning { .. } => continue,
 
             // Agent-level errors are logged but don't terminate the debate.
             AgentEvent::Error { message } => {
