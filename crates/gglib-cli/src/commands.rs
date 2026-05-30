@@ -96,6 +96,17 @@ pub enum Commands {
         port: u16,
         #[command(flatten)]
         sampling: SamplingArgs,
+        /// Number of MTP speculative draft tokens (auto-enabled when model has 'mtp' tag).
+        ///
+        /// Set to 0 to explicitly disable MTP even when the model supports it.
+        #[arg(long)]
+        mtp_draft_n_max: Option<u32>,
+        /// Minimum acceptance probability for MTP draft tokens (default: 0.75).
+        ///
+        /// Only used when MTP is enabled. Lower values increase speed at the
+        /// cost of output quality. Recommended range: 0.5–0.95.
+        #[arg(long)]
+        mtp_draft_p_min: Option<f32>,
     },
 
     /// Chat with a model interactively, or manage chat history

@@ -10,7 +10,7 @@ use crate::presentation::style;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 use gglib_runtime::llama::{
     ContextInput, LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size,
-    resolve_llama_server,
+    resolve_llama_server, resolve_mtp_args,
 };
 
 use super::shared::{
@@ -28,6 +28,8 @@ pub async fn execute(
     jinja_flag: bool,
     port: u16,
     sampling: SamplingArgs,
+    mtp_draft_n_max: Option<u32>,
+    mtp_draft_p_min: Option<f32>,
 ) -> Result<()> {
     // Ensure llama.cpp is installed
     ensure_llama_initialized().await?;
@@ -73,6 +75,15 @@ pub async fn execute(
         eprintln!("  Jinja templates: enabled");
     }
 
+    // Resolve MTP speculative decoding
+    let mtp = resolve_mtp_args(mtp_draft_n_max, mtp_draft_p_min, &model.tags);
+    if mtp.enabled {
+        eprintln!(
+            "  MTP speculative decoding: enabled (n-max={}, p-min={:.2}, source={:?})",
+            mtp.draft_n_max, mtp.draft_p_min, mtp.source
+        );
+    }
+
     eprintln!("  Server will be available on http://localhost:{}", port);
     style::print_banner_close();
 
@@ -85,6 +96,13 @@ pub async fn execute(
 
     if jinja_flag {
         builder = builder.flag("--jinja");
+    }
+
+    if mtp.enabled {
+        builder = builder
+            .arg_with_value("--spec-type", "draft-mtp".to_string())
+            .arg_with_value("--spec-draft-n-max", mtp.draft_n_max.to_string())
+            .arg_with_value("--spec-draft-p-min", mtp.draft_p_min.to_string());
     }
 
     let mut cmd = builder.build();
