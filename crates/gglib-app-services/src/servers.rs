@@ -19,7 +19,7 @@ use gglib_core::ports::{
     ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
-use gglib_runtime::llama::args::resolve_reasoning_format;
+use gglib_runtime::llama::args::{resolve_mtp_args, resolve_reasoning_format};
 
 use crate::error::GuiError;
 use crate::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
@@ -214,6 +214,20 @@ impl ServerOps {
 
         if let Some(ref params) = request.inference_params {
             config = config.with_inference_config(params.clone());
+        }
+
+        // Resolve MTP speculative decoding (auto-enabled by "mtp" tag, overrideable)
+        let mtp = resolve_mtp_args(request.mtp_draft_n_max, request.mtp_draft_p_min, &model.tags);
+        if mtp.enabled {
+            debug!(
+                n_max = mtp.draft_n_max,
+                p_min = mtp.draft_p_min,
+                source = ?mtp.source,
+                "Enabling MTP speculative decoding"
+            );
+            config = config
+                .with_spec_draft_n_max(mtp.draft_n_max)
+                .with_spec_draft_p_min(mtp.draft_p_min);
         }
 
         config
