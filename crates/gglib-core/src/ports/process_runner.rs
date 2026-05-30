@@ -131,7 +131,7 @@ impl ServerConfig {
     /// Has no effect unless `spec_draft_n_max` is also set.  Recommended
     /// value is `0.75`; lower values trade quality for speed.
     #[must_use]
-    pub fn with_spec_draft_p_min(mut self, p: f32) -> Self {
+    pub const fn with_spec_draft_p_min(mut self, p: f32) -> Self {
         self.spec_draft_p_min = Some(p);
         self
     }
