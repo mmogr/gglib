@@ -7,10 +7,10 @@ use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
-use crate::shared_args::{ContextArgs, SamplingArgs};
+use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use gglib_runtime::llama::{
     ContextInput, LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size,
-    resolve_llama_server,
+    resolve_llama_server, resolve_mtp_args,
 };
 
 use super::shared::{
@@ -25,9 +25,10 @@ pub async fn execute(
     ctx: &CliContext,
     id: u32,
     context: ContextArgs,
-    jinja_flag: bool,
-    port: u16,
+    options: ServeOptions,
     sampling: SamplingArgs,
+    mtp: MtpArgs,
+    verbose: bool,
 ) -> Result<()> {
     // Ensure llama.cpp is installed
     ensure_llama_initialized().await?;
@@ -69,11 +70,23 @@ pub async fn execute(
     log_inference_info(&inference_config);
 
     // Handle Jinja flag
-    if jinja_flag {
+    if options.jinja {
         eprintln!("  Jinja templates: enabled");
     }
 
-    eprintln!("  Server will be available on http://localhost:{}", port);
+    // Resolve MTP speculative decoding
+    let mtp = resolve_mtp_args(mtp.mtp_draft_n_max, mtp.mtp_draft_p_min, &model.tags);
+    if mtp.enabled {
+        eprintln!(
+            "  MTP speculative decoding: enabled (n-max={}, p-min={:.2}, source={:?})",
+            mtp.draft_n_max, mtp.draft_p_min, mtp.source
+        );
+    }
+
+    eprintln!(
+        "  Server will be available on http://localhost:{}",
+        options.port
+    );
     style::print_banner_close();
 
     // Build llama-server command
@@ -81,11 +94,23 @@ pub async fn execute(
         .context_resolution(context_resolution)
         .mlock(context.mlock)
         .inference_config(inference_config)
-        .arg_with_value("--port", port.to_string());
+        .arg_with_value("--port", options.port.to_string());
 
-    if jinja_flag {
+    if options.jinja {
         builder = builder.flag("--jinja");
     }
+
+    if mtp.enabled {
+        builder = builder
+            .arg_with_value("--spec-type", "draft-mtp".to_string())
+            .arg_with_value("--spec-draft-n-max", mtp.draft_n_max.to_string())
+            .arg_with_value("--spec-draft-p-min", mtp.draft_p_min.to_string());
+    }
+
+    // Suppress llama-server's own INFO-level startup chatter unless --verbose.
+    // -lv 1 = errors only; -lv 3 = INFO (llama-server default).
+    let log_verbosity = if verbose { "3" } else { "1" };
+    builder = builder.arg_with_value("-lv", log_verbosity.to_string());
 
     let mut cmd = builder.build();
 

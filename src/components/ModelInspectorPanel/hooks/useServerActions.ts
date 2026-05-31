@@ -19,6 +19,9 @@ export interface ServerActionsConfig {
   customPort: string;
   jinjaOverride: boolean | null;
   hasAgentTag: boolean;
+  hasMtpTag: boolean;
+  mtpNMaxOverride: number | null;
+  mtpPMinOverride: number | null;
   inferenceParams: InferenceConfig | undefined;
   // Callbacks
   onStopServer: (modelId: number) => Promise<void>;
@@ -62,6 +65,9 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     customPort,
     jinjaOverride,
     hasAgentTag,
+    hasMtpTag,
+    mtpNMaxOverride,
+    mtpPMinOverride,
     inferenceParams,
     onStopServer,
     onRemoveModel,
@@ -116,6 +122,9 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         port,
         mlock: false,
         jinja: jinjaOverride === null ? (hasAgentTag ? true : undefined) : jinjaOverride,
+        // MTP: null = auto-detect from tag; 0 = disable; >0 = explicit token count
+        specDraftNMax: mtpNMaxOverride !== null ? mtpNMaxOverride : (hasMtpTag ? undefined : undefined),
+        specDraftPMin: mtpPMinOverride !== null ? mtpPMinOverride : undefined,
         // Inference parameters for this session
         temperature: inferenceParams?.temperature,
         topP: inferenceParams?.topP,
@@ -158,7 +167,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsServing(false);
     }
-  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled]);
+  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled]);
 
   const handleToggleServer = useCallback(async () => {
     if (!model?.id) return;

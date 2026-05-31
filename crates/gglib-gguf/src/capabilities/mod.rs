@@ -9,6 +9,7 @@
 //! - `tool_calling` - Tool/function calling detection
 //! - `patterns` - Pattern constants shared across detection modules
 
+mod mtp;
 mod patterns;
 mod reasoning;
 pub mod tool_calling;
@@ -18,6 +19,7 @@ use std::collections::HashMap;
 use gglib_core::GgufCapabilities;
 use gglib_core::domain::gguf::CapabilityFlags;
 
+use mtp::detect_mtp_support;
 use reasoning::detect_reasoning_support;
 use tool_calling::detect_tool_support;
 
@@ -39,6 +41,12 @@ pub fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities {
     let tool_calling = detect_tool_support(metadata);
     if tool_calling.supports_tool_calling {
         flags |= CapabilityFlags::TOOL_CALLING;
+    }
+
+    // Detect MTP (Multi-Token Prediction) draft heads
+    let mtp = detect_mtp_support(metadata);
+    if mtp.supported {
+        flags |= CapabilityFlags::MTP;
     }
 
     // Surface the detected dialect as a `format:*` extension tag so the

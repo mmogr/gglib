@@ -27,6 +27,11 @@ bitflags::bitflags! {
         const CODE = 0b0000_1000;
         /// Model is a mixture-of-experts architecture.
         const MOE = 0b0001_0000;
+        /// Model contains embedded MTP (Multi-Token Prediction) draft heads.
+        ///
+        /// Detected via the `{arch}.nextn_predict_layers > 0` GGUF metadata key.
+        /// Enables `--spec-type draft-mtp` speculative decoding in llama-server.
+        const MTP = 0b0010_0000;
     }
 }
 
@@ -70,6 +75,12 @@ impl GgufCapabilities {
         self.flags.contains(CapabilityFlags::VISION)
     }
 
+    /// Check if MTP (Multi-Token Prediction) draft heads are present.
+    #[must_use]
+    pub const fn has_mtp(&self) -> bool {
+        self.flags.contains(CapabilityFlags::MTP)
+    }
+
     /// Convert capabilities to tag strings for model metadata.
     ///
     /// Returns tags like "reasoning", "agent" (for tool calling), etc.
@@ -92,6 +103,10 @@ impl GgufCapabilities {
         }
         if self.flags.contains(CapabilityFlags::MOE) {
             tags.push("moe".to_string());
+        }
+        if self.has_mtp() {
+            // "mtp" tag triggers --spec-type draft-mtp auto-enable
+            tags.push("mtp".to_string());
         }
 
         // Add extension tags

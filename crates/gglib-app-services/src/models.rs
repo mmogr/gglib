@@ -294,7 +294,8 @@ mod tests {
         };
 
         let added = ops.add(req).await.expect("add should succeed");
-        assert_eq!(added.file_path, gguf_path.to_str().unwrap());
+        let canonical = std::fs::canonicalize(&gguf_path).unwrap();
+        assert_eq!(added.file_path, canonical.to_str().unwrap());
 
         let models = ops.list().await.unwrap();
         assert_eq!(models.len(), 1);
