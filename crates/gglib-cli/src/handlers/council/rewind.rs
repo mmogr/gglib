@@ -160,6 +160,7 @@ pub async fn execute(
     };
 
     let mut last_graph = None;
+    let mut thinking_nodes = HashSet::new();
     while let Some(event) = rx.recv().await {
         render_event(
             &event,
@@ -168,6 +169,7 @@ pub async fn execute(
             &approve_opts,
             false, // json_mode not supported for rewind in this phase
             &mut input_rx,
+            &mut thinking_nodes,
         )
         .await;
     }

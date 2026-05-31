@@ -1,6 +1,7 @@
 //! `gglib council resume <run-id>` — continue an interrupted or
 //! awaiting-approval run from its saved graph.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, anyhow};
@@ -95,6 +96,7 @@ pub async fn execute(
     };
 
     let mut last_graph = None;
+    let mut thinking_nodes = HashSet::new();
     while let Some(event) = rx.recv().await {
         render_event(
             &event,
@@ -103,6 +105,7 @@ pub async fn execute(
             &approve_opts,
             json_mode,
             &mut input_rx,
+            &mut thinking_nodes,
         )
         .await;
     }

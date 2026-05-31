@@ -3,6 +3,7 @@
 //! Exported to sibling modules (`run`, `resume`) via `pub(crate)`.
 //! Approval prompts live in [`super::approve`].
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use gglib_app_services::CouncilApprovalRegistry;
@@ -31,6 +32,7 @@ pub(crate) async fn render_event(
     opts: &ApproveOpts,
     json_mode: bool,
     input_rx: &mut mpsc::UnboundedReceiver<String>,
+    thinking_nodes: &mut HashSet<String>,
 ) {
     if json_mode {
         match serde_json::to_string(event) {
@@ -102,17 +104,23 @@ pub(crate) async fn render_event(
                 node_goal
             );
         }
-        CouncilEvent::NodeTextDelta { delta, .. } => {
+        CouncilEvent::NodeTextDelta { node_id, delta } => {
+            if thinking_nodes.remove(node_id.as_str()) {
+                eprintln!();
+            }
             eprint!("{delta}");
         }
         CouncilEvent::NodeReasoningDelta { node_id, delta } => {
-            eprint!(
-                "{}[{node_id}]{}<think>{} {delta}{}",
-                dag::node_color(node_id),
-                style::RESET,
-                style::DIM,
-                style::RESET
-            );
+            if thinking_nodes.insert(node_id.clone()) {
+                eprintln!(
+                    "{}[{node_id}]{} {}(thinking…){}",
+                    dag::node_color(node_id),
+                    style::RESET,
+                    style::DIM,
+                    style::RESET
+                );
+            }
+            eprint!("{}{delta}{}", style::DIM, style::RESET);
         }
         CouncilEvent::NodeToolCallStart {
             node_id,
