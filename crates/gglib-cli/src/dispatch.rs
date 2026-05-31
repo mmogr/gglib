@@ -142,26 +142,73 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
             handlers::plan::execute(ctx, &goal, port, model, context.ctx_size, max_replans).await?;
         }
 
-        Commands::Council {
-            goal,
-            model,
-            port,
-            max_replans,
-            hitl,
-            resume,
-            context,
-        } => {
-            handlers::council::execute_command(
-                ctx,
-                goal.as_deref(),
-                port,
-                model,
-                context.ctx_size,
-                max_replans,
-                hitl.as_deref(),
-                resume.as_deref(),
-            )
-            .await?;
+        Commands::Council { cmd } => {
+            use crate::commands::CouncilCmd;
+            match cmd {
+                CouncilCmd::Run {
+                    goal,
+                    model,
+                    port,
+                    max_replans,
+                    hitl,
+                    context,
+                } => {
+                    handlers::council::run::execute(
+                        ctx,
+                        &goal,
+                        port,
+                        model,
+                        context.ctx_size,
+                        max_replans,
+                        hitl.as_deref(),
+                    )
+                    .await?;
+                }
+                CouncilCmd::List { status } => {
+                    handlers::council::list::execute(ctx, status.as_deref()).await?;
+                }
+                CouncilCmd::Show { run_id } => {
+                    handlers::council::show::execute(ctx, &run_id).await?;
+                }
+                CouncilCmd::Resume {
+                    run_id,
+                    model,
+                    port,
+                    max_replans,
+                    hitl,
+                    context,
+                } => {
+                    handlers::council::resume::execute(
+                        ctx,
+                        &run_id,
+                        port,
+                        model,
+                        context.ctx_size,
+                        max_replans,
+                        hitl.as_deref(),
+                    )
+                    .await?;
+                }
+                CouncilCmd::Rewind {
+                    run_id,
+                    wave,
+                    note,
+                    model,
+                    port,
+                    context,
+                } => {
+                    handlers::council::rewind::execute(
+                        ctx,
+                        &run_id,
+                        wave,
+                        note.as_deref(),
+                        port,
+                        model,
+                        context.ctx_size,
+                    )
+                    .await?;
+                }
+            }
         }
 
         Commands::Gui { dev } => {

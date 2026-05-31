@@ -13,6 +13,91 @@ use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
 use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 
+/// Subcommands available under `gglib council`.
+#[derive(Subcommand)]
+pub enum CouncilCmd {
+    /// Plan and execute a task graph for the given goal
+    #[command(display_order = 1)]
+    Run {
+        /// High-level goal to plan and execute
+        goal: String,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum replan attempts after the first
+        #[arg(long, default_value = "2")]
+        max_replans: u32,
+        /// Enable human-in-the-loop approval gates (none, plan, node, tools)
+        ///
+        /// Pauses at the specified boundaries and prompts
+        /// `[y]es / [n]o` before proceeding.
+        #[arg(long, value_name = "MODE", default_value = "none")]
+        hitl: Option<String>,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+
+    /// List past orchestrator runs
+    #[command(display_order = 2)]
+    List {
+        /// Filter by status (running, awaiting_approval, interrupted, completed, failed)
+        #[arg(long, short)]
+        status: Option<String>,
+    },
+
+    /// Show the details and event timeline for a run
+    #[command(display_order = 3)]
+    Show {
+        /// ID of the run to inspect
+        run_id: String,
+    },
+
+    /// Resume an interrupted or awaiting-approval run
+    #[command(display_order = 4)]
+    Resume {
+        /// ID of the run to resume
+        run_id: String,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum replan attempts after the first
+        #[arg(long, default_value = "2")]
+        max_replans: u32,
+        /// Enable human-in-the-loop approval gates (none, plan, node, tools)
+        #[arg(long, value_name = "MODE", default_value = "none")]
+        hitl: Option<String>,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+
+    /// Rewind a run to a previous wave and re-execute (Phase 5)
+    #[command(display_order = 5)]
+    Rewind {
+        /// ID of the run to rewind
+        run_id: String,
+        /// Zero-based wave index to rewind to (inclusive)
+        #[arg(long, short)]
+        wave: u32,
+        /// Optional steering note to inject at the rewind point
+        #[arg(long)]
+        note: Option<String>,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+}
+
 /// Subcommands available under `gglib chat`.
 #[derive(Subcommand)]
 pub enum ChatCommand {
@@ -178,31 +263,8 @@ pub enum Commands {
     /// Plan and execute a Council of Director/Worker agents end-to-end
     #[command(display_order = 14)]
     Council {
-        /// High-level goal to plan and execute
-        goal: Option<String>,
-        /// Model name or ID (uses default model when omitted)
-        #[arg(short, long)]
-        model: Option<String>,
-        /// Reuse an already-running llama-server on this port (skips auto-start)
-        #[arg(long)]
-        port: Option<u16>,
-        /// Maximum replan attempts after the first
-        #[arg(long, default_value = "2")]
-        max_replans: u32,
-        /// Enable human-in-the-loop approval gates for plan and node execution.
-        ///
-        /// When set, the CLI will pause at plan and/or node boundaries and
-        /// prompt `[y]es / [n]o / [e]dit` before proceeding.
-        #[arg(long, value_name = "MODE", default_value = "none")]
-        hitl: Option<String>,
-        /// Resume an interrupted or awaiting-approval run by its ID.
-        ///
-        /// When provided, `goal` is ignored and the run is loaded from the
-        /// database and re-executed from the last checkpoint.
-        #[arg(long, value_name = "RUN_ID")]
-        resume: Option<String>,
-        #[command(flatten)]
-        context: ContextArgs,
+        #[command(subcommand)]
+        cmd: CouncilCmd,
     },
 
     // ── Interfaces ──────────────────────────────────────────────────────
