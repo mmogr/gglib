@@ -4,8 +4,8 @@
 //! progress events, and the shared sliding-window speed estimator used by
 //! all display paths.
 
-pub(crate) mod rate;
+pub mod rate;
 mod throttle;
 
-pub(crate) use rate::{SlidingWindowRate, format_eta};
+pub use rate::{SlidingWindowRate, format_eta};
 pub use throttle::ProgressThrottle;

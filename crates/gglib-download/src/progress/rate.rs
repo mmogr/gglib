@@ -28,7 +28,7 @@ use std::time::{Duration, Instant};
 /// Wide enough to absorb short TCP-level bursts; narrow enough to track
 /// genuine speed changes within a few seconds. Matches the typical display
 /// window used by `wget` and `aria2`.
-pub(crate) const SPEED_WINDOW: Duration = Duration::from_secs(8);
+pub const SPEED_WINDOW: Duration = Duration::from_secs(8);
 
 // ─── Internal sample type ─────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ struct Sample {
 ///
 /// Not `Send` or `Sync` on its own — callers hold it behind a `Mutex` or in
 /// a single async task (the bridge spawns one per download).
-pub(crate) struct SlidingWindowRate {
+pub struct SlidingWindowRate {
     /// Recent samples within the sliding window.
     samples: VecDeque<Sample>,
     /// The first sample ever recorded; used as the warm-up fallback reference.
@@ -68,7 +68,7 @@ pub(crate) struct SlidingWindowRate {
 
 impl SlidingWindowRate {
     /// Create a new, empty estimator.
-    pub(crate) fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             samples: VecDeque::new(),
             start: None,
@@ -79,7 +79,7 @@ impl SlidingWindowRate {
     ///
     /// Evicts samples older than [`SPEED_WINDOW`] before appending, so the
     /// deque always represents at most the last 8 seconds of history.
-    pub(crate) fn record(&mut self, now: Instant, bytes: u64) {
+    pub fn record(&mut self, now: Instant, bytes: u64) {
         // Evict samples that have aged out of the window.
         while let Some(front) = self.samples.front() {
             if now.duration_since(front.time) > SPEED_WINDOW {
@@ -104,7 +104,7 @@ impl SlidingWindowRate {
     /// timestamps. Falls back to the overall average (bytes since the first
     /// [`record`](SlidingWindowRate::record) call) during the warm-up period.
     /// Returns `0.0` before any samples are recorded.
-    pub(crate) fn speed_bps(&self) -> f64 {
+    pub fn speed_bps(&self) -> f64 {
         let (oldest, newest) = match (self.samples.front(), self.samples.back()) {
             (Some(o), Some(n)) => (*o, *n),
             _ => return 0.0,
@@ -141,7 +141,8 @@ impl SlidingWindowRate {
     ///
     /// Use when a download restarts or is replaced so stale history does not
     /// contaminate the new download's speed display.
-    pub(crate) fn reset(&mut self) {
+    #[allow(dead_code)]
+    pub fn reset(&mut self) {
         self.samples.clear();
         self.start = None;
     }
@@ -160,10 +161,11 @@ impl SlidingWindowRate {
 /// | `≤ 0.0`, `NaN`, or infinite | `"--:--"` |
 /// | `< 3600.0` | `"M:SS"` |
 /// | `≥ 3600.0` | `"H:MM:SS"` |
-pub(crate) fn format_eta(secs: f64) -> String {
+pub fn format_eta(secs: f64) -> String {
     if secs <= 0.0 || !secs.is_finite() {
         return "--:--".to_string();
     }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let total = secs as u64;
     let h = total / 3600;
     let m = (total % 3600) / 60;
@@ -233,7 +235,7 @@ mod tests {
     #[test]
     fn speed_zero_before_any_samples() {
         let rate = SlidingWindowRate::new();
-        assert_eq!(rate.speed_bps(), 0.0);
+        assert!(rate.speed_bps() == 0.0);
     }
 
     #[test]
@@ -241,7 +243,7 @@ mod tests {
         let mut rate = SlidingWindowRate::new();
         rate.record(Instant::now(), 0);
         // Only one distinct timestamp — falls back to overall avg; elapsed = 0
-        assert_eq!(rate.speed_bps(), 0.0);
+        assert!(rate.speed_bps() == 0.0);
     }
 
     #[test]
@@ -289,6 +291,6 @@ mod tests {
         rate.record(t0 + Duration::from_secs(1), 1_000_000);
         assert!(rate.speed_bps() > 0.0);
         rate.reset();
-        assert_eq!(rate.speed_bps(), 0.0);
+        assert!(rate.speed_bps() == 0.0);
     }
 }

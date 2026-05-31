@@ -131,6 +131,7 @@ impl FancyProgress {
         } else {
             f64::INFINITY
         };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         self.bar.set_prefix(format!(
             "{}/s  eta {}",
             HumanBytes(speed as u64),

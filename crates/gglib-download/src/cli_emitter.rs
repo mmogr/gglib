@@ -110,6 +110,7 @@ impl Default for CliDownloadEventEmitter {
 }
 
 impl DownloadEventEmitterPort for CliDownloadEventEmitter {
+    #[allow(clippy::too_many_lines)]
     fn emit(&self, event: DownloadEvent) {
         match event {
             DownloadEvent::DownloadStarted {
@@ -168,6 +169,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                         } else {
                             f64::INFINITY
                         };
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                         bar.set_prefix(format!(
                             "{}/s  eta {}",
                             HumanBytes(speed as u64),
@@ -203,6 +205,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                         } else {
                             f64::INFINITY
                         };
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                         bar.set_prefix(format!(
                             "{}/s  eta {}",
                             HumanBytes(speed as u64),
