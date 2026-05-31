@@ -153,6 +153,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     hitl,
                     approval_timeout,
                     approval_timeout_action,
+                    json,
                     context,
                 } => {
                     handlers::council::run::execute(
@@ -165,6 +166,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         hitl.as_deref(),
                         approval_timeout,
                         &approval_timeout_action,
+                        json,
                     )
                     .await?;
                 }
@@ -182,6 +184,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     hitl,
                     approval_timeout,
                     approval_timeout_action,
+                    json,
                     context,
                 } => {
                     handlers::council::resume::execute(
@@ -194,6 +197,7 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         hitl.as_deref(),
                         approval_timeout,
                         &approval_timeout_action,
+                        json,
                     )
                     .await?;
                 }

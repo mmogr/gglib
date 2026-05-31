@@ -13,16 +13,30 @@ use crate::presentation::{dag, style};
 
 use super::approve::{self, ApproveOpts};
 
-/// Render a single [`CouncilEvent`] to the terminal.
+/// Render a single [`CouncilEvent`] to the terminal (or as JSONL when
+/// `json_mode` is `true`).
 ///
 /// `last_graph` is updated whenever a `PlanProposed` event arrives so that
 /// `AwaitingApproval` handlers can offer the `[e]dit` option.
+///
+/// In `json_mode` the event is serialised as a JSON line to **stdout** and
+/// the function returns immediately — no ASCII art, colors, or interactive
+/// prompts are emitted.  All other diagnostic output already goes to
+/// **stderr**, so stdout remains clean JSONL.
 pub(crate) async fn render_event(
     event: &CouncilEvent,
     approval_registry: &Arc<CouncilApprovalRegistry>,
     last_graph: &mut Option<TaskGraph>,
     opts: &ApproveOpts,
+    json_mode: bool,
 ) {
+    if json_mode {
+        match serde_json::to_string(event) {
+            Ok(line) => println!("{line}"),
+            Err(e) => eprintln!("warn: failed to serialise event: {e}"),
+        }
+        return;
+    }
     match event {
         CouncilEvent::PlanProposed { graph } => {
             *last_graph = Some(graph.clone());

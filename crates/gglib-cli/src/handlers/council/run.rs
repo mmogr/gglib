@@ -26,7 +26,11 @@ pub async fn execute(
     hitl: Option<&str>,
     approval_timeout: Option<u64>,
     approval_timeout_action: &str,
+    json_mode: bool,
 ) -> Result<()> {
+    if json_mode && hitl.is_some_and(|h| h != "none") {
+        anyhow::bail!("--json output requires --hitl none");
+    }
     let hitl_mode = parse_hitl_mode(hitl)?;
     let timeout_action = approve::parse_timeout_action(approval_timeout_action)?;
     let approve_opts = approve::ApproveOpts {
@@ -59,7 +63,7 @@ pub async fn execute(
 
     let mut last_graph = None;
     while let Some(event) = rx.recv().await {
-        render_event(&event, &approval_registry, &mut last_graph, &approve_opts).await;
+        render_event(&event, &approval_registry, &mut last_graph, &approve_opts, json_mode).await;
     }
 
     stop_server(ctx, &handle).await;

@@ -42,6 +42,12 @@ pub enum CouncilCmd {
         /// Action when an approval prompt times out (reject | approve)
         #[arg(long, value_name = "ACTION", default_value = "reject")]
         approval_timeout_action: String,
+        /// Output events as newline-delimited JSON (JSONL) to stdout.
+        ///
+        /// Requires --hitl none (the default). Incompatible with interactive
+        /// approval prompts — all non-JSON output is suppressed from stdout.
+        #[arg(long)]
+        json: bool,
         #[command(flatten)]
         context: ContextArgs,
     },
@@ -84,6 +90,11 @@ pub enum CouncilCmd {
         /// Action when an approval prompt times out (reject | approve)
         #[arg(long, value_name = "ACTION", default_value = "reject")]
         approval_timeout_action: String,
+        /// Output events as newline-delimited JSON (JSONL) to stdout.
+        ///
+        /// Requires --hitl none. Incompatible with interactive approval prompts.
+        #[arg(long)]
+        json: bool,
         #[command(flatten)]
         context: ContextArgs,
     },
