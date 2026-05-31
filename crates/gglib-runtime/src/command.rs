@@ -157,6 +157,11 @@ pub fn build_and_spawn(
         cmd.arg(arg);
     }
 
+    // Log the full command line at debug level before spawning.
+    // tokio::process::Command doesn't expose get_args, so we rebuild
+    // a human-readable string from the config fields.
+    debug!("spawning llama-server: {:?}", cmd);
+
     // Use piped stdio for log streaming
     cmd.stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
