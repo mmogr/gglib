@@ -29,6 +29,7 @@ pub async fn execute(
     port: u16,
     sampling: SamplingArgs,
     mtp: MtpArgs,
+    verbose: bool,
 ) -> Result<()> {
     // Ensure llama.cpp is installed
     ensure_llama_initialized().await?;
@@ -103,6 +104,11 @@ pub async fn execute(
             .arg_with_value("--spec-draft-n-max", mtp.draft_n_max.to_string())
             .arg_with_value("--spec-draft-p-min", mtp.draft_p_min.to_string());
     }
+
+    // Suppress llama-server's own INFO-level startup chatter unless --verbose.
+    // -lv 1 = errors only; -lv 3 = INFO (llama-server default).
+    let log_verbosity = if verbose { "3" } else { "1" };
+    builder = builder.arg_with_value("-lv", log_verbosity.to_string());
 
     let mut cmd = builder.build();
 
