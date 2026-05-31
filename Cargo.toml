@@ -22,7 +22,7 @@ members = [
 
 # Shared package metadata for all workspace crates
 [workspace.package]
-version = "0.7.6"
+version = "0.8.0-beta"
 edition = "2024"
 license = "AGPL-3.0"
 repository = "https://github.com/mmogr/gglib"

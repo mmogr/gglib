@@ -1,158 +1,265 @@
 /**
- * Council of Agents — frontend domain types.
+ * Orchestrator — frontend domain types.
  *
- * Mirrors the Rust `council::events::CouncilEvent` discriminated union
- * and defines UI-layer state for the council session lifecycle.
+ * Mirrors the Rust `orchestrator::events::CouncilEvent` discriminated
+ * union and the `task_graph::{TaskGraph, TaskNode, HitlMode}` types.
  *
- * Wire types (`CouncilAgent`, `CouncilConfig`, `SuggestedCouncil`) live in
- * `services/clients/council.ts` alongside the HTTP/SSE client.
+ * Serde configuration on the Rust side:
+ *   - `#[serde(tag = "type", rename_all = "snake_case")]` on CouncilEvent
+ *   - `#[serde(rename_all = "snake_case")]` on HitlMode / NodeStatus
  *
- * @module types/council
+ * @module types/orchestrator
  */
 
-// Re-export wire types so consumers have a single import path.
-export type {
-  CouncilAgent,
-  CouncilConfig,
-  SuggestedCouncil,
-} from '../services/clients/council';
+// ─── Task graph domain types ─────────────────────────────────────────────────
 
-// Import locally for use within this file.
-import type { CouncilAgent } from '../services/clients/council';
+export type HitlMode = 'none' | 'approve_plan' | 'approve_each_node' | 'approve_tools';
+
+/**
+ * Advisory node-count budget.  Mirrors `task_graph::NodeBudget` (Rust).
+ *
+ * The `kind` field is produced by `#[serde(tag = "kind", rename_all =
+ * "snake_case")]`.
+ */
+export type NodeBudget =
+  | { kind: 'solo' }
+  | { kind: 'small_team' }
+  | { kind: 'task_force' }
+  | { kind: 'department' }
+  | { kind: 'custom'; value: number };
+
+// ─── Debate config domain types ──────────────────────────────────────────────
+
+/** Mirrors `task_graph::DebateAgent` (Rust). */
+export interface DebateAgent {
+  id: string;
+  name: string;
+  /** Hex colour code, e.g. `"#4CAF50"`. */
+  color: string;
+  /** Concise descriptor of this agent's persona/style. */
+  persona: string;
+  /** Statement of the position this agent will argue. */
+  perspective: string;
+  /** 0.0–1.0 scale mapping to LLM temperature. */
+  contentiousness: number;
+  /** If set, restricts the agent to a single tool by name. */
+  tool_filter?: string | null;
+}
+
+/** Mirrors `task_graph::DebateJudgeConfig` (Rust). */
+export interface DebateJudgeConfig {
+  /** Minimum rounds before the judge may stop early. Defaults to 1. */
+  min_rounds_before_stop: number;
+}
+
+/** Mirrors `task_graph::DebateConfig` (Rust). */
+export interface DebateConfig {
+  agents: DebateAgent[];
+  /** Total number of debate rounds. 1–3, defaults to 2. */
+  rounds: number;
+  /** When set, a judge LLM evaluates each round and may stop early. */
+  judge?: DebateJudgeConfig | null;
+  /** Optional free-text guidance to the synthesis step. */
+  synthesis_guidance?: string | null;
+}
+
+/**
+ * Mirrors `task_graph::TaskNodeKind` (Rust).
+ *
+ * - `"leaf"` — a standard single-worker node (default for v1 plans).
+ * - `{ team: { subgraph } }` — a compound node that encapsulates a nested
+ *   TaskGraph executed as a sub-team.
+ * - `{ debate: { config } }` — a multi-agent debate node.
+ */
+export type TaskNodeKind =
+  | 'leaf'
+  | { team: { subgraph: TaskGraph } }
+  | { debate: { config: DebateConfig } };
+
+export interface TaskNode {
+  id: string;
+  goal: string;
+  depends_on: string[];
+  tool_allowlist: string[];
+  status: string;
+  /** Node kind — absent/`"leaf"` for all Phase A–F plans. */
+  kind?: TaskNodeKind | null;
+  /** Specialist role id, e.g. `"researcher"` or `"critic"`. */
+  role?: string | null;
+  output?: string | null;
+  error?: string | null;
+}
+
+export interface TaskGraph {
+  goal: string;
+  hitl_mode: HitlMode;
+  /** Map from node id to TaskNode */
+  nodes: Record<string, TaskNode>;
+}
 
 // ─── SSE Event discriminated union ──────────────────────────────────────────
 
 /**
- * Mirrors `council::events::CouncilEvent` (Rust).
+ * Mirrors `orchestrator::events::CouncilEvent` (Rust).
  *
- * The `type` field is `serde(tag = "type", rename_all = "snake_case")` on the
- * Rust side, so every JSON event carries `"type": "agent_turn_start"` etc.
+ * The `type` field is produced by `#[serde(tag = "type", rename_all =
+ * "snake_case")]`, so every JSON event carries e.g. `"type":
+ * "plan_proposed"`.
  */
 export type CouncilEvent =
-  | AgentTurnStartEvent
-  | AgentTextDeltaEvent
-  | AgentReasoningDeltaEvent
-  | AgentToolCallStartEvent
-  | AgentToolCallCompleteEvent
-  | AgentSystemWarningEvent
-  | AgentTurnCompleteEvent
-  | RoundSeparatorEvent
-  | JudgeStartEvent
-  | JudgeTextDeltaEvent
-  | JudgeSummaryEvent
-  | RoundCompactedEvent
-  | StanceMapEvent
+  | PlanProposedEvent
+  | PlanApprovedEvent
+  | PlanRejectedEvent
+  | ReplanAttemptEvent
+  | RunCostEstimateEvent
+  | SteeringAppliedEvent
+  | WaveCompletedEvent
+  | AwaitingApprovalEvent
+  | NodeStartedEvent
+  | NodeTextDeltaEvent
+  | NodeReasoningDeltaEvent
+  | NodeProgressEvent
+  | NodeToolCallStartEvent
+  | NodeToolCallCompleteEvent
+  | NodeSystemWarningEvent
+  | NodeCompactingEvent
+  | NodeCompleteEvent
+  | NodeFailedEvent
   | SynthesisStartEvent
   | SynthesisProgressEvent
-  | AgentProgressEvent
   | SynthesisTextDeltaEvent
   | SynthesisCompleteEvent
+  | CouncilCompleteEvent
   | CouncilErrorEvent
-  | CouncilCompleteEvent;
+  | TeamStartedEvent
+  | TeamSynthesizedEvent
+  | SubteamSpawnedEvent
+  // Debate events (Phase N)
+  | DebateRoundStartedEvent
+  | DebateAgentTurnStartedEvent
+  | DebateAgentTextDeltaEvent
+  | DebateAgentReasoningDeltaEvent
+  | DebateAgentToolCallStartEvent
+  | DebateAgentToolCallCompleteEvent
+  | DebateAgentTurnCompleteEvent
+  | DebateJudgeStartedEvent
+  | DebateJudgeTextDeltaEvent
+  | DebateJudgeSummaryEvent
+  | DebateRoundCompactedEvent
+  | DebateStanceMapEvent
+  | DebateSynthesisStartedEvent
+  | DebateSynthesisTextDeltaEvent
+  | DebateSynthesisCompleteEvent;
 
-export interface AgentTurnStartEvent {
-  type: 'agent_turn_start';
-  agent_id: string;
-  agent_name: string;
-  color: string;
-  round: number;
-  contentiousness: number;
+// ─── Planning events ─────────────────────────────────────────────────────────
+
+export interface PlanProposedEvent {
+  type: 'plan_proposed';
+  graph: TaskGraph;
 }
 
-export interface AgentTextDeltaEvent {
-  type: 'agent_text_delta';
-  agent_id: string;
-  delta: string;
+export interface PlanApprovedEvent {
+  type: 'plan_approved';
 }
 
-export interface AgentReasoningDeltaEvent {
-  type: 'agent_reasoning_delta';
-  agent_id: string;
-  delta: string;
+export interface PlanRejectedEvent {
+  type: 'plan_rejected';
+  reason?: string | null;
 }
 
-export interface AgentToolCallStartEvent {
-  type: 'agent_tool_call_start';
-  agent_id: string;
-  tool_call: { name: string; arguments: string };
-  display_name: string;
-  args_summary?: string;
+export interface ReplanAttemptEvent {
+  type: 'replan_attempt';
+  attempt: number;
+  reason: string;
 }
 
-export interface AgentToolCallCompleteEvent {
-  type: 'agent_tool_call_complete';
-  agent_id: string;
-  tool_name: string;
-  result: { content: string; is_error: boolean };
-  display_name: string;
-  duration_display: string;
-}
+// ─── Cost estimate event ─────────────────────────────────────────────────────
 
 /**
- * Non-fatal warning surfaced by the agent loop during a turn.
+ * Warn-only cost estimate emitted immediately after `plan_proposed`.
  *
- * Mirrors `CouncilEvent::AgentSystemWarning` (Rust).  Currently emitted when
- * the model requests more parallel tool calls than the configured limit and
- * the loop auto-recovers by feeding a synthetic error back to the model.
- *
- * Render this prominently (e.g. as a banner attached to the agent's bubble);
- * the council deliberation continues normally.
+ * Mirrors `orchestrator::events::CouncilEvent::RunCostEstimate`.
  */
-export interface AgentSystemWarningEvent {
-  type: 'agent_system_warning';
-  agent_id: string;
-  message: string;
-  /** Optional actionable hint (e.g. a CLI command to raise a limit). */
-  suggested_action?: string;
+export interface RunCostEstimateEvent {
+  type: 'run_cost_estimate';
+  /** Total aggregate node count across all subgraphs. */
+  node_count: number;
+  /** Rough token estimate (input + output) for the entire run. */
+  est_tokens: number;
+  /** Estimated wall-clock seconds at 50 tokens/second. */
+  est_wall_seconds: number;
 }
 
-export interface AgentTurnCompleteEvent {
-  type: 'agent_turn_complete';
-  agent_id: string;
-  content: string;
-  round: number;
-  core_claim?: string;
+// ─── Node lifecycle events ───────────────────────────────────────────────────
+
+export interface NodeStartedEvent {
+  type: 'node_started';
+  node_id: string;
+  goal: string;
 }
 
-export interface RoundSeparatorEvent {
-  type: 'round_separator';
-  round: number;
-}
-
-export interface JudgeStartEvent {
-  type: 'judge_start';
-  round: number;
-}
-
-export interface JudgeTextDeltaEvent {
-  type: 'judge_text_delta';
+export interface NodeTextDeltaEvent {
+  type: 'node_text_delta';
+  node_id: string;
   delta: string;
 }
 
-export interface JudgeSummaryEvent {
-  type: 'judge_summary';
-  round: number;
-  summary: string;
-  consensus_reached: boolean;
+export interface NodeReasoningDeltaEvent {
+  type: 'node_reasoning_delta';
+  node_id: string;
+  delta: string;
 }
 
-export interface RoundCompactedEvent {
-  type: 'round_compacted';
-  round: number;
-  summary: string;
+export interface NodeProgressEvent {
+  type: 'node_progress';
+  node_id: string;
+  processed: number;
+  total: number;
+  cached: number;
+  time_ms: number;
 }
 
-export type StanceTrajectory = 'held' | 'shifted' | 'conceded';
-
-export interface AgentStance {
-  agent_name: string;
-  trajectory: StanceTrajectory;
+export interface NodeToolCallStartEvent {
+  type: 'node_tool_call_start';
+  node_id: string;
+  display_name: string;
+  args_summary: string;
 }
 
-export interface StanceMapEvent {
-  type: 'stance_map';
-  stances: AgentStance[];
+export interface NodeToolCallCompleteEvent {
+  type: 'node_tool_call_complete';
+  node_id: string;
+  tool_name: string;
+  display_name: string;
+  duration_display: string;
+  result: unknown;
 }
+
+export interface NodeSystemWarningEvent {
+  type: 'node_system_warning';
+  node_id: string;
+  message: string;
+  suggested_action?: string | null;
+}
+
+export interface NodeCompactingEvent {
+  type: 'node_compacting';
+  node_id: string;
+}
+
+export interface NodeCompleteEvent {
+  type: 'node_complete';
+  node_id: string;
+  output_preview: string;
+}
+
+export interface NodeFailedEvent {
+  type: 'node_failed';
+  node_id: string;
+  error: string;
+}
+
+// ─── Synthesis events ─────────────────────────────────────────────────────────
 
 export interface SynthesisStartEvent {
   type: 'synthesis_start';
@@ -160,15 +267,6 @@ export interface SynthesisStartEvent {
 
 export interface SynthesisProgressEvent {
   type: 'synthesis_progress';
-  processed: number;
-  total: number;
-  cached: number;
-  time_ms: number;
-}
-
-export interface AgentProgressEvent {
-  type: 'agent_progress';
-  agent_id: string;
   processed: number;
   total: number;
   cached: number;
@@ -185,205 +283,233 @@ export interface SynthesisCompleteEvent {
   content: string;
 }
 
+// ─── Terminal events ──────────────────────────────────────────────────────────
+
+export interface CouncilCompleteEvent {
+  type: 'orchestrator_complete';
+  answer: string;
+}
+
 export interface CouncilErrorEvent {
-  type: 'council_error';
+  type: 'orchestrator_error';
   message: string;
 }
 
-export interface CouncilCompleteEvent {
-  type: 'council_complete';
+// ─── Team events (Phase G / Phase I) ─────────────────────────────────────────
+
+export interface TeamStartedEvent {
+  type: 'team_started';
+  team_id: string;
+  role?: string | null;
 }
 
-// ─── UI session state ───────────────────────────────────────────────────────
+export interface TeamSynthesizedEvent {
+  type: 'team_synthesized';
+  team_id: string;
+  compacted_output: string;
+}
 
-/** Completed contribution from a single agent turn. */
-export interface AgentContribution {
-  agentId: string;
-  agentName: string;
+export interface SubteamSpawnedEvent {
+  type: 'subteam_spawned';
+  parent_node_id: string;
+  child_graph_summary: string;
+}
+
+// ─── Debate events (Phase N) ──────────────────────────────────────────────────
+
+/** Stance outcome for a single agent at the end of all debate rounds. */
+export type StanceOutcome = 'held' | 'shifted' | 'conceded';
+
+export interface AgentStance {
+  agent_id: string;
+  outcome: StanceOutcome;
+}
+
+export interface DebateRoundStartedEvent {
+  type: 'debate_round_started';
+  node_id: string;
+  /** 1-based round number. */
+  round: number;
+}
+
+export interface DebateAgentTurnStartedEvent {
+  type: 'debate_agent_turn_started';
+  node_id: string;
+  agent_id: string;
+  agent_name: string;
   color: string;
+  round: number;
   contentiousness: number;
-  content: string;
-  coreClaim?: string;
+}
+
+export interface DebateAgentTextDeltaEvent {
+  type: 'debate_agent_text_delta';
+  node_id: string;
+  agent_id: string;
+  delta: string;
+}
+
+export interface DebateAgentReasoningDeltaEvent {
+  type: 'debate_agent_reasoning_delta';
+  node_id: string;
+  agent_id: string;
+  delta: string;
+}
+
+export interface DebateAgentToolCallStartEvent {
+  type: 'debate_agent_tool_call_start';
+  node_id: string;
+  agent_id: string;
+  display_name: string;
+  args_summary?: string | null;
+}
+
+export interface DebateAgentToolCallCompleteEvent {
+  type: 'debate_agent_tool_call_complete';
+  node_id: string;
+  agent_id: string;
+  display_name: string;
+  duration_display: string;
+}
+
+export interface DebateAgentTurnCompleteEvent {
+  type: 'debate_agent_turn_complete';
+  node_id: string;
+  agent_id: string;
+  round: number;
+  final_text: string;
+}
+
+export interface DebateJudgeStartedEvent {
+  type: 'debate_judge_started';
+  node_id: string;
   round: number;
 }
 
-/** Tool call in progress or completed. */
-export interface AgentToolCall {
-  agentId: string;
-  toolName: string;
-  displayName: string;
-  argsSummary?: string;
-  result?: { content: string; isError: boolean };
-  durationDisplay?: string;
+export interface DebateJudgeTextDeltaEvent {
+  type: 'debate_judge_text_delta';
+  node_id: string;
+  delta: string;
 }
 
-/** Judge assessment for a single round. */
-export interface JudgeAssessment {
+export interface DebateJudgeSummaryEvent {
+  type: 'debate_judge_summary';
+  node_id: string;
+  round: number;
+  consensus_reached: boolean;
+  early_stop_recommended: boolean;
+  assessment_text: string;
+}
+
+export interface DebateRoundCompactedEvent {
+  type: 'debate_round_compacted';
+  node_id: string;
   round: number;
   summary: string;
-  consensusReached: boolean;
 }
 
-/** Summary of a compacted round. */
-export interface CompactedRound {
-  round: number;
-  summary: string;
-}
-
-/** Session lifecycle phases. */
-export type CouncilPhase =
-  | 'idle'
-  | 'suggesting'
-  | 'setup'
-  | 'deliberating'
-  | 'judging'
-  | 'synthesizing'
-  | 'complete'
-  | 'error';
-
-/** Accumulated state for a single council session. */
-export interface CouncilSession {
-  phase: CouncilPhase;
-  topic: string;
-  /** Agents returned by the suggestion step. */
-  suggestedAgents: CouncilAgent[];
-  /** Recommended rounds from suggestion. */
-  suggestedRounds: number;
-  /** Optional synthesis guidance from suggestion. */
-  suggestedSynthesisGuidance?: string;
-  currentRound: number;
-  totalRounds: number;
-  /** Agent currently speaking (streaming). */
-  activeAgentId: string | null;
-  /** Name of the currently speaking agent. */
-  activeAgentName: string;
-  /** Hex color of the currently speaking agent. */
-  activeAgentColor: string;
-  /** Contentiousness of the currently speaking agent. */
-  activeAgentContentiousness: number;
-  /** Text accumulated for the active agent's current turn. */
-  activeAgentText: string;
-  /** Reasoning text accumulated for the active agent's current turn. */
-  activeAgentReasoning: string;
-  /** Active tool calls for the current agent turn. */
-  activeToolCalls: AgentToolCall[];
-  /** All completed contributions across rounds. */
-  contributions: AgentContribution[];
-  /** Judge assessments, one per evaluated round. */
-  judgeAssessments: JudgeAssessment[];
-  /** Judge text accumulated during current evaluation (streamed). */
-  activeJudgeText: string;
-  /** Round currently being evaluated by the judge. */
-  activeJudgeRound: number;
-  /** Stance trajectories from the post-debate evaluation. */
+export interface DebateStanceMapEvent {
+  type: 'debate_stance_map';
+  node_id: string;
   stances: AgentStance[];
-  /** Compacted round summaries. */
-  compactedRounds: CompactedRound[];
-  /** Synthesis text (streamed incrementally). */
-  synthesisText: string;
-  /** Pre-fill progress during synthesis (null when not in pre-fill). */
-  synthesisProgress: { processed: number; total: number; cached: number; timeMs: number } | null;
-  /** Error message if phase === 'error'. */
-  error: string | null;
 }
 
-// ─── Contentiousness → colour mapping ───────────────────────────────────────
+export interface DebateSynthesisStartedEvent {
+  type: 'debate_synthesis_started';
+  node_id: string;
+}
+
+export interface DebateSynthesisTextDeltaEvent {
+  type: 'debate_synthesis_text_delta';
+  node_id: string;
+  delta: string;
+}
+
+export interface DebateSynthesisCompleteEvent {
+  type: 'debate_synthesis_complete';
+  node_id: string;
+  final_text: string;
+}
+
+// ─── GraphDiff (Phase K) ─────────────────────────────────────────────────────
 
 /**
- * Maps contentiousness float [0.0, 1.0] to a hex colour for ambient UI tinting.
+ * Mirrors `task_graph::GraphDiff` (Rust).
  *
- * Tiers match the Rust `prompts.rs` behavioural descriptions and the CLI
- * ANSI-256 palette in `council.rs`:
- *
- * | Range     | Label           | Hex       |
- * |-----------|-----------------|-----------|
- * | 0.0–0.2   | Collaborative   | `#2d8d8d` |
- * | 0.2–0.4   | Constructive    | `#00af5f` |
- * | 0.4–0.6   | Balanced        | `#b2b2b2` |
- * | 0.6–0.8   | Adversarial     | `#ffaf00` |
- * | 0.8–1.0   | Devil's Advocate| `#ff0000` |
+ * Produced by `#[serde(tag = "op", rename_all = "snake_case")]`.
  */
-export function contentiousnessColor(c: number): string {
-  if (c < 0.2) return '#2d8d8d';
-  if (c < 0.4) return '#00af5f';
-  if (c < 0.6) return '#b2b2b2';
-  if (c < 0.8) return '#ffaf00';
-  return '#ff0000';
+export type GraphDiff =
+  | { op: 'add_node'; node: TaskNode }
+  | { op: 'remove_node'; id: string }
+  | { op: 'split_node'; id: string; into: TaskNode[] }
+  | { op: 'reroute_edge'; node_id: string; old_dep: string; new_dep: string }
+  | { op: 'set_role'; id: string; role: string | null }
+  | { op: 'set_tools'; id: string; tool_allowlist: string[] }
+  | { op: 'wrap_in_team'; ids: string[]; team_id: string; team_goal: string };
+
+export interface SteeringAppliedEvent {
+  type: 'steering_applied';
+  diff: GraphDiff;
+  applied_at_wave: number;
 }
 
-/** Human-readable label for the contentiousness tier. */
-export function contentiousnessLabel(c: number): string {
-  if (c < 0.2) return 'Collaborative';
-  if (c < 0.4) return 'Constructive';
-  if (c < 0.6) return 'Balanced';
-  if (c < 0.8) return 'Adversarial';
-  return "Devil's Advocate";
-}
-
-// ─── Serializable subset for DB persistence ────────────────────────────────
+// ─── Wave lifecycle (Phase M) ─────────────────────────────────────────────────
 
 /**
- * Subset of CouncilSession stored in the DB metadata column.
+ * Emitted once after all nodes in a topological wave complete.
  *
- * Strips transient streaming fields (activeAgent*, phase) to keep the
- * payload lean. Everything needed to render a historical council thread
- * is included.
+ * Used by WaveScrubber to render rewind waypoints.
  */
-export interface SerializableCouncilSession {
-  topic: string;
-  totalRounds: number;
-  contributions: AgentContribution[];
-  synthesisText: string;
-  /** Judge assessments, one per evaluated round. */
-  judgeAssessments?: JudgeAssessment[];
-  /** Stance trajectories from the post-debate evaluation. */
-  stances?: AgentStance[];
-  /** Compacted round summaries. */
-  compactedRounds?: CompactedRound[];
-  /** Non-null only for sessions that ended in error. */
-  error?: string | null;
+export interface WaveCompletedEvent {
+  type: 'wave_completed';
+  wave_index: number;
+  node_count: number;
 }
 
-/** Extract the persistable subset from a live session. */
-export function toSerializableSession(s: CouncilSession): SerializableCouncilSession {
-  return {
-    topic: s.topic,
-    totalRounds: s.totalRounds,
-    contributions: s.contributions,
-    synthesisText: s.synthesisText,
-    ...(s.judgeAssessments.length > 0 ? { judgeAssessments: s.judgeAssessments } : {}),
-    ...(s.stances.length > 0 ? { stances: s.stances } : {}),
-    ...(s.compactedRounds.length > 0 ? { compactedRounds: s.compactedRounds } : {}),
-    ...(s.error ? { error: s.error } : {}),
-  };
+// ─── HITL / approval types ───────────────────────────────────────────────────
+
+export type ApprovalKind =
+  | { kind: 'plan' }
+  | { kind: 'node'; node_id: string }
+  | { kind: 'tool'; node_id: string; tool_name: string }
+  | { kind: 'spawn_subteam'; node_id: string; suggested_roles: string[] };
+
+export interface AwaitingApprovalEvent {
+  type: 'awaiting_approval';
+  approval_id: string;
+  kind: ApprovalKind;
 }
 
-// ─── Factory ────────────────────────────────────────────────────────────────
+export type ApprovalDecisionPayload =
+  | { decision: 'approve' }
+  | { decision: 'approve_with_edits'; edited_graph: TaskGraph }
+  | { decision: 'reject'; reason?: string };
 
-/** Create a fresh idle session. */
-export function createEmptySession(): CouncilSession {
-  return {
-    phase: 'idle',
-    topic: '',
-    suggestedAgents: [],
-    suggestedRounds: 3,
-    currentRound: 0,
-    totalRounds: 0,
-    activeAgentId: null,
-    activeAgentName: '',
-    activeAgentColor: '',
-    activeAgentContentiousness: 0,
-    activeAgentText: '',
-    activeAgentReasoning: '',
-    activeToolCalls: [],
-    contributions: [],
-    judgeAssessments: [],
-    activeJudgeText: '',
-    activeJudgeRound: 0,
-    stances: [],
-    compactedRounds: [],
-    synthesisText: '',
-    synthesisProgress: null,
-    error: null,
-  };
+// ─── Run persistence types ───────────────────────────────────────────────────
+
+export type OrchestratorRunStatus =
+  | 'running'
+  | 'awaiting_approval'
+  | 'interrupted'
+  | 'completed'
+  | 'failed';
+
+export interface CouncilRun {
+  id: string;
+  goal: string;
+  graph_json?: string | null;
+  status: OrchestratorRunStatus;
+  hitl_mode: HitlMode;
+  conversation_id?: number | null;
+  created_at: string;
+  updated_at: string;
 }
+
+export interface OrchestratorRunEvent {
+  run_id: string;
+  seq: number;
+  event_json: string;
+  created_at: string;
+  wave_index: number;
+}
+

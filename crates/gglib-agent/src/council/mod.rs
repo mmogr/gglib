@@ -1,49 +1,37 @@
-//! Council of Agents — multi-agent deliberation with structured debate.
+//! Orchestrator Director — decompose goals into task graphs.
 //!
-//! This module orchestrates multiple LLM-backed agents through rounds of
-//! debate on a user's topic, then produces a synthesised answer.  Each
-//! agent runs via the existing [`AgentLoop`](crate::AgentLoop) — this
-//! module adds orchestration, not a new loop implementation.
+//! This module contains the director agent that translates a high-level goal
+//! into a validated [`gglib_core::domain::council::task_graph::TaskGraph`]
+//! of worker nodes.
 //!
-//! # Module layout
+//! # Modules
 //!
-//! | File              | Responsibility                                      |
-//! |-------------------|-----------------------------------------------------|
-//! | `config.rs`       | `CouncilConfig`, `CouncilAgent`, `SuggestedCouncil` |
-//! | `events.rs`       | `CouncilEvent` SSE enum (wire format)               |
-//! | `prompts.rs`      | Prompt templates + contentiousness mapping          |
-//! | `state.rs`        | Round/contribution accumulator                      |
-//! | `history.rs`      | Per-turn context builder (identity + transcript + directed rebuttals) |
-//! | `stream_bridge.rs`| `AgentEvent` → `CouncilEvent` mapper                |
-//! | `round.rs`        | Sequential round execution (per-agent turn driver)  |
-//! | `synthesis.rs`    | Synthesis pass (transcript → unified answer)        |
-//! | `judge.rs`        | Post-round judge + adaptive early stopping          |
-//! | `compaction.rs`   | LLM-driven round summarisation for context control  |
-//! | `stance.rs`       | Post-debate stance tracking (Held/Shifted/Conceded)  |
-//! | `orchestrator.rs` | Slim coordinator (rounds → compaction → judge → stance → synthesis) |
-//! | `suggest.rs`      | `suggest_council()` — shared suggest orchestration  |
-//! | `tool_filter_parser.rs` | `parse_tool_filter()` — shared tool-filter expression parser |
+//! | Module | Contents |
+//! |--------|----------|
+//! | [`chief_of_staff`] | [`chief_of_staff::brief`] — decompose goal into department briefs |
+//! | [`director`] | [`director::plan`] — flat director planning, [`director::PlanError`] |
+//! | [`planner`] | [`planner::plan`] — hierarchical two-tier planning entry point |
+//! | [`prompts`]  | System prompt templates, few-shot examples, JSON Schemas |
+//!
+//! # Phase H scope
+//!
+//! Phase H replaces the flat single-shot director with a two-tier hierarchical
+//! planner.  The executor's external call signature is unchanged — it calls
+//! [`planner::plan`] which internally runs Chief of Staff → N × Director.
 
-mod compaction;
-pub mod config;
-pub mod events;
-pub mod history;
-mod judge;
-pub mod orchestrator;
+pub mod chief_of_staff;
+pub(crate) mod compaction;
+pub mod debate;
+pub mod director;
+pub mod estimator;
+pub mod executor;
+pub mod planner;
 pub mod prompts;
-mod round;
-pub mod stance;
-pub mod state;
-pub mod stream_bridge;
-pub mod suggest;
-mod synthesis;
-pub mod tool_filter_parser;
+pub mod spawn;
+pub mod steering;
+pub(crate) mod synthesis;
 
-pub use config::{CouncilAgent, CouncilConfig, JudgeConfig, SuggestedCouncil};
-pub use events::{COUNCIL_EVENT_CHANNEL_CAPACITY, CouncilEvent};
-pub use orchestrator::run as run_council;
-pub use prompts::{contentiousness_tier_label, contentiousness_to_instruction};
-pub use state::{AgentContribution, CouncilState, extract_core_claim};
-pub use stream_bridge::{bridge_agent_events, emit_turn_complete};
-pub use suggest::suggest_council;
-pub use tool_filter_parser::parse_tool_filter;
+pub use director::{DirectorNode, DirectorPlan, PlanError};
+pub use executor::{CouncilConfig, ExecuteError, execute};
+pub use planner::plan;
+pub use steering::NoteQueue;

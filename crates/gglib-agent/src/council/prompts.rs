@@ -1,354 +1,627 @@
-//! Prompt templates and contentiousness mapping for council deliberations.
+//! Prompt templates and JSON Schema for the orchestrator director.
 //!
-//! All prompts are plain string constants with `{placeholder}` markers that
-//! callers fill via [`format!`].  The contentiousness float is mapped to a
-//! discrete behavioural instruction via [`contentiousness_to_instruction`] so
-//! that small models receive an unambiguous directive rather than a raw number.
+//! The director prompt instructs the model to decompose a high-level goal into
+//! a flat list of [`TaskNode`]-shaped objects.  A simpler intermediate format
+//! (array of nodes) is used instead of a `HashMap` so the schema and few-shot
+//! examples stay unambiguous for small models.
 //!
-//! # Research references
+//! # Format contract
 //!
-//! - `SocraSynth` (Stanford) — contentiousness parameter, Socratic method
-//! - MAD / Multi-Agent Debate — structured debate topologies
-//! - UT Austin — explicit stance-forcing to prevent summarisation collapse
-//! - Debate-to-Write — persona → debate → synthesis pipeline
+//! The LLM must emit exactly:
+//!
+//! ```json
+//! {
+//!   "goal": "...",
+//!   "nodes": [
+//!     { "id": "...", "goal": "...", "depends_on": [...], "tool_allowlist": [...] },
+//!     ...
+//!   ]
+//! }
+//! ```
+//!
+//! The director function ([`super::director::plan`]) validates and converts
+//! this into a fully-checked [`gglib_core::domain::council::task_graph::TaskGraph`].
+//!
+//! The Chief of Staff prompt instructs the model to decompose a goal into
+//! 1–5 departments, each with a mission statement and suggested specialist roles.
 
-// ─── council designer ────────────────────────────────────────────────────────
+// =============================================================================
+// Director system prompt
+// =============================================================================
 
-/// System prompt for the `/api/council/suggest` endpoint.
+/// System prompt injected for the director planning pass.
 ///
-/// Placeholders: `{agent_count}`, `{user_topic}`.
-pub const COUNCIL_DESIGNER_PROMPT: &str = "\
-You are a council architect. Given a user's question or topic, design a council \
-of approximately {agent_count} agents who will deliberate on it from diverse perspectives.
+/// Placeholders: `{tool_catalog}`, `{role_catalog}`.
+///
+/// `{tool_catalog}` is rendered as `"- name: description"` lines so the model
+/// knows which tool names it may use in `tool_allowlist` entries.
+/// `{role_catalog}` is rendered as `"- id: display_name — fragment"` lines
+/// summarising the available specialist roles; inject `"(none)"` when absent.
+pub const DIRECTOR_SYSTEM_PROMPT: &str = "\
+You are the Director Agent. Given a high-level goal (and optionally a department \
+mission), decompose it into a directed acyclic task graph (DAG) of worker nodes \
+that together achieve the goal.
 
-For each agent, provide:
-- id: A short kebab-case identifier (e.g., \"devils-advocate\", \"domain-expert\")
-- name: A concise role title (e.g., \"Devil's Advocate\", \"Domain Expert\", \"Pragmatist\")
-- persona: 2-3 sentences defining their worldview, expertise, and argumentative style
-- contentiousness: A number 0.0-1.0 (0.0 = fully collaborative, 1.0 = maximally adversarial)
-- perspective: One sentence describing what unique angle they bring
+TOOL CATALOG (only these tool names may appear in tool_allowlist):
+{tool_catalog}
 
-Rules:
-- Agents MUST have genuinely different perspectives, not just different phrasings of agreement
-- At least one agent should be skeptical/adversarial (contentiousness >= 0.7)
-- At least one agent should be constructive/solution-oriented (contentiousness <= 0.4)
-- Personas should be specific enough that a small language model can consistently role-play them
+SPECIALIST ROLES (optionally assign one role per node using the role field):
+{role_catalog}
 
-Also suggest:
-- rounds: How many debate rounds (typically 2-4; more for complex/controversial topics)
-- synthesis_guidance: A brief note on what the final synthesis should prioritize
-
+OUTPUT FORMAT:
 Respond with ONLY the JSON object below — no explanation, no markdown fences, \
 no surrounding text:
-{{ \"agents\": [...], \"rounds\": N, \"synthesis_guidance\": \"...\" }}
+{ \"goal\": \"...\", \"nodes\": [...] }
 
-Topic: \"{user_topic}\"";
+Each node must have:
+- id: short, unique kebab-case identifier (e.g. \"research-llama\", \"write-draft\")
+- goal: one sentence the worker agent should achieve
+- depends_on: array of node ids whose output this node needs (empty [] for root nodes)
+- tool_allowlist: array of tool names from the TOOL CATALOG the worker may use
+- kind: \"leaf\" (default) or \"debate\" — see NODE KINDS below
 
-/// Addendum appended to the designer system prompt during refinement.
-///
-/// Instructs the LLM to make minimal, targeted changes and preserve
-/// stable agent IDs so the frontend can diff old vs new suggestions.
-pub const COUNCIL_REFINEMENT_ADDENDUM: &str = "\n\n\
-IMPORTANT — you are REFINING a previous suggestion based on user feedback.\n\
-- Make MINIMAL changes. Preserve agents the user does not mention.\n\
-- Keep the `id` field IDENTICAL for agents you do not modify.\n\
-- Only add, remove, or modify agents the user specifically requests.\n\
-- You may adjust the agent count freely — ignore the original count guidance.\n\
-- Respond with the COMPLETE updated JSON (all agents, not just changes).";
+CONSTRAINTS:
+- At most 8 nodes total
+- Dependency depth ≤ 3 (longest chain of depends_on links)
+- Each node may depend on at most 4 other nodes
+- All ids in depends_on must be ids of other nodes in the same list
+- tool_allowlist entries must be names from the TOOL CATALOG above (or empty [])
+- Node ids must be unique within the plan
+- Do NOT include execution state fields (status, output, error)
 
-// ─── agent turn ──────────────────────────────────────────────────────────────
+NODE KINDS:
 
-/// System prompt injected at the start of every agent turn.
-///
-/// Placeholders: `{agent_name}`, `{agent_persona}`, `{topic}`,
-/// `{perspective}`, `{contentiousness}`, `{contentiousness_instruction}`.
-///
-/// The debate history and final-round blocks are appended separately by
-/// [`crate::council::history::build_agent_system_prompt`].
-pub const AGENT_TURN_SYSTEM_PROMPT: &str = "\
-You are {agent_name}. {agent_persona}
+\"leaf\" (DEFAULT — use for almost every node):
+  A single worker agent runs the goal using its tool_allowlist.
+  Use leaf for analysis, research, coding, writing, summarization, review,
+  data processing, and any task a single expert can handle well.
+  When in doubt, use leaf.
 
-IDENTITY: You are participating in a structured council debate on the topic: \"{topic}\"
-YOUR ROLE: {agent_name} — {perspective}
-{contentiousness_instruction}
+\"debate\" (rare — genuine strategic tradeoffs only):
+  Multiple agents argue competing positions over several rounds, followed
+  by a synthesis pass. Use debate only when the task requires choosing
+  between fundamentally different strategic directions where reasonable
+  experts with different values would genuinely disagree — and where
+  surfacing those competing perspectives improves the final answer.
+  Execution, factual, and analytical tasks are always leaf.
 
-RULES:
-- You MUST take a clear position consistent with your role. Do NOT summarize or present \"both sides.\"
-- Reference and respond to specific points from other agents when relevant.
-- If you have access to tools (web search, etc.), use them to find evidence supporting your position.
-- Be concise and substantive. Avoid filler and repetition.
-- If you genuinely cannot form a position on some aspect, say \"I lack sufficient information on [X]\" rather than guessing.
-- End your response with a single-sentence summary of your core claim on its own line, \
-prefixed with \"CORE CLAIM:\" (e.g., \"CORE CLAIM: Microservices add more operational cost \
-than they save for teams under 20 engineers.\"). If you cannot form a single claim, omit this line.";
+  When kind is \"debate\", you MUST supply a \"debate_config\" object:
+    agents: array of 2–4 agents, each with:
+      - name: short display name (e.g. \"Alex\", \"Jordan\")
+      - perspective: specific viewpoint to argue (e.g. \"user-experience-first\")
+      - contentiousness: float 0.0–1.0 (0.4–0.6 is typical)
+    rounds: integer 1–3 (2 is typical)
+    judge: true to enable an early-stop judge (recommended when rounds > 1)
 
-/// Appended when prior rounds exist.
-///
-/// Lets the agent autonomously choose which argument to rebut based on
-/// genuine conflict rather than a mechanically-assigned target.
-pub const GUIDED_REBUTTAL_CUE: &str = "\n\n\
-Review the previous round's core claims. Identify the argument that most \
-directly conflicts with your perspective and construct a focused rebuttal \
-against it. Strengthen, revise, or concede specific points.";
+DECOMPOSITION RULES:
+- Prefer parallel subtasks at the same depth when they are independent
+- Each node goal must be specific and achievable in a single agent turn
+- Root nodes (depends_on: []) run first, concurrently; later nodes consume their outputs
+- Synthesis or review nodes should depend on the nodes they integrate
+- Default to leaf for all nodes unless debate is explicitly warranted
 
-/// Appended to the system prompt in the last debate round.
-pub const FINAL_ROUND_SUFFIX: &str = "\n\n\
-FINAL ROUND: This is the last debate round. Make your strongest, most refined argument. \
-Acknowledge valid points from others where appropriate, but maintain your position unless \
-genuinely convinced otherwise.";
+EXAMPLES:
 
-// ─── synthesis ───────────────────────────────────────────────────────────────
-
-/// System prompt for the post-debate synthesis pass.
-///
-/// Placeholders: `{agent_count}`, `{topic}`, `{transcript}`,
-/// `{synthesis_guidance}`.
-pub const SYNTHESIS_PROMPT: &str = "\
-You are the Council Synthesizer. You have observed a structured debate between \
-{agent_count} agents on the topic: \"{topic}\"
-
-Your task: Produce a comprehensive, balanced synthesis that:
-1. Identifies the key points of agreement across agents
-2. Maps the genuine disagreements and their strongest arguments on each side
-3. Highlights evidence or reasoning that was particularly compelling
-4. Provides a clear, actionable conclusion or recommendation
-5. Notes any unresolved questions or areas needing further investigation
-
-FULL DEBATE TRANSCRIPT:
-{transcript}
-
-{synthesis_guidance}
-
-Write the synthesis as a well-structured response. Do NOT simply list each agent's position. \
-Integrate and analyze the arguments to produce a genuinely higher-quality answer than any \
-single agent could provide alone.";
-
-// ─── round compaction ────────────────────────────────────────────────────────
-
-/// System prompt for the round-compaction pass.
-///
-/// Placeholders: `{round}`, `{transcript}`.
-///
-/// Each agent's contribution must be summarised with a
-/// `SUMMARY(agent_name): ...` line.  The parser in `compaction.rs` uses
-/// robust, case-insensitive matching to tolerate markdown wrapping and
-/// extra whitespace.
-pub const COMPACTION_PROMPT: &str = "\
-You are a concise note-taker for a multi-agent debate. Your job is to compress \
-a single round of debate into a brief summary that preserves each agent's core \
-position and key evidence.
-
-ROUND {round} TRANSCRIPT:
-{transcript}
-
-YOUR TASK:
-For each agent who spoke in this round, write exactly one line:
-SUMMARY(Agent Name): 1-2 sentence summary of their position and key evidence.
-
-Rules:
-- Preserve each agent's distinct position — do NOT merge or reconcile views.
-- Include any specific evidence, data points, or examples they cited.
-- Keep each summary to 1-2 sentences maximum.
-- Do NOT add any commentary, analysis, or additional text.
-- Use the exact agent name as it appears in the transcript.";
-
-// ─── judge ───────────────────────────────────────────────────────────────────
-
-/// System prompt for the post-round judge evaluation.
-///
-/// Placeholders: `{topic}`, `{round}`, `{total_rounds}`, `{transcript}`.
-///
-/// The judge must end with a `CONSENSUS_REACHED:` line.  The parser in
-/// `judge.rs` uses robust, case-insensitive matching to tolerate markdown
-/// wrapping, extra whitespace, or conversational filler.
-pub const JUDGE_PROMPT: &str = "\
-You are a neutral judge evaluating a structured multi-agent debate on the topic: \"{topic}\"
-
-This is the end of round {round} (of a maximum of {total_rounds}).
-
-DEBATE TRANSCRIPT SO FAR:
-{transcript}
-
-YOUR TASK:
-1. Summarise the current state of the debate in 2-4 sentences: what are the key positions, \
-where do agents agree, and what genuine disagreements remain?
-2. Determine whether consensus has been reached. Consensus means the agents' core positions \
-have converged to a shared conclusion — not that they agree on every detail, but that there \
-is a clear dominant answer with no substantive opposition remaining.
-
-IMPORTANT: You MUST end your response with exactly one of these two lines:
-CONSENSUS_REACHED: true
-CONSENSUS_REACHED: false
-
-Do NOT add any text after the CONSENSUS_REACHED line.";
-
-// ─── stance evaluation ───────────────────────────────────────────────────────
-
-/// System prompt for the post-debate stance evaluation pass.
-///
-/// Placeholders: `{topic}`, `{claims}`.
-///
-/// The parser in `stance.rs` expects one `STANCE(Agent Name): Held|Shifted|Conceded`
-/// line per agent.  Parsing is case-insensitive, whitespace-tolerant, and
-/// strips markdown formatting artefacts.
-pub const STANCE_PROMPT: &str = "\
-You are an impartial analyst reviewing a multi-agent debate on the topic: \"{topic}\"
-
-For each agent below you are given their INITIAL core claim (from round 1) \
-and their FINAL core claim (from the last round). Your task is to classify \
-how each agent's position evolved during the debate.
-
-{claims}
-
-For each agent, output exactly one line:
-STANCE(Agent Name): <trajectory>
-
-Where <trajectory> is one of:
-- Held — the agent's final position is substantively the same as their initial position
-- Shifted — the agent materially changed their position but did not fully adopt an opposing view
-- Conceded — the agent abandoned their initial position and adopted a substantially different or opposing view
-
-Rules:
-- Compare the MEANING of the claims, not the exact wording. Minor rephrasing is \"Held\".
-- If the initial or final claim is missing, classify as \"Held\" (insufficient evidence to judge movement).
-- Output ONLY the STANCE lines — no explanation, no commentary, no additional text.";
-
-// ─── filesystem context ──────────────────────────────────────────────────────
-
-/// Appended to the agent system prompt when a working directory is available,
-/// informing the agent about filesystem tools.
-///
-/// The `"\n\nWorking directory: {cwd}"` line is appended separately by the
-/// caller so this constant stays format-arg-free.
-///
-/// Phrasing mirrors `agent_question::SYSTEM_PROMPT` to keep tool descriptions
-/// consistent across CLI entry-points.
-pub const FILESYSTEM_TOOLS_CONTEXT: &str = "\n\n\
-You have access to filesystem tools (read_file, list_directory, grep_search) \
-scoped to the user's working directory. Use them to find evidence supporting \
-your position.";
-
-// ─── contentiousness mapping ─────────────────────────────────────────────────
-
-/// Map a contentiousness float to a discrete behavioural instruction string.
-///
-/// Small models cannot interpret a raw float like `0.7`.  This function maps
-/// the `[0.0, 1.0]` range into one of five instruction tiers that give the
-/// model an unambiguous behavioural directive.
-#[must_use]
-pub fn contentiousness_to_instruction(value: f32) -> &'static str {
-    match value {
-        v if v < 0.2 => {
-            "You are highly collaborative. Build on others' ideas. \
-             Seek common ground. Only disagree when you have strong evidence."
-        }
-        v if v < 0.4 => {
-            "You are constructive but independent. Offer your own perspective. \
-             Agree when warranted, but push back on weak reasoning."
-        }
-        v if v < 0.6 => {
-            "You are balanced. Evaluate each argument on its merits. \
-             Challenge unsupported claims. Credit strong points from others."
-        }
-        v if v < 0.8 => {
-            "You are a rigorous critic. Actively look for flaws, assumptions, \
-             and gaps in others' arguments. Demand evidence for claims."
-        }
-        _ => {
-            "You are a devil's advocate. Systematically challenge every argument. \
-             Assume the opposing position. Force others to defend their reasoning \
-             under pressure."
-        }
+# Example 1 — Research and write (all leaf nodes)
+Goal: \"Research the history of llama.cpp and write a summary\"
+Response:
+{
+  \"goal\": \"Research the history of llama.cpp and write a summary\",
+  \"nodes\": [
+    {
+      \"id\": \"research\",
+      \"goal\": \"Research the history and development of llama.cpp, covering its origins, key milestones, and community growth.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [\"web_search\"],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"write-summary\",
+      \"goal\": \"Write a clear, comprehensive summary of llama.cpp's history based on the research findings.\",
+      \"depends_on\": [\"research\"],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     }
+  ]
 }
 
-/// Return the human-readable tier label for a contentiousness value.
-///
-/// Useful for UI display alongside the slider.
-#[must_use]
-pub fn contentiousness_tier_label(value: f32) -> &'static str {
-    match value {
-        v if v < 0.2 => "Collaborative",
-        v if v < 0.4 => "Constructive",
-        v if v < 0.6 => "Balanced",
-        v if v < 0.8 => "Adversarial",
-        _ => "Devil's Advocate",
+# Example 2 — Writing pipeline (all leaf nodes)
+Goal: \"Write a blog post about the benefits of open-source AI models\"
+Response:
+{
+  \"goal\": \"Write a blog post about the benefits of open-source AI models\",
+  \"nodes\": [
+    {
+      \"id\": \"outline\",
+      \"goal\": \"Create a detailed outline for a blog post about open-source AI model benefits.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"draft\",
+      \"goal\": \"Write a full blog post draft based on the outline.\",
+      \"depends_on\": [\"outline\"],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"polish\",
+      \"goal\": \"Review and polish the draft: fix grammar, improve flow, strengthen the introduction and conclusion.\",
+      \"depends_on\": [\"draft\"],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     }
+  ]
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn contentiousness_boundaries() {
-        assert!(contentiousness_to_instruction(0.0).contains("collaborative"));
-        assert!(contentiousness_to_instruction(0.19).contains("collaborative"));
-        assert!(contentiousness_to_instruction(0.2).contains("constructive"));
-        assert!(contentiousness_to_instruction(0.4).contains("balanced"));
-        assert!(contentiousness_to_instruction(0.6).contains("rigorous critic"));
-        assert!(contentiousness_to_instruction(0.8).contains("devil's advocate"));
-        assert!(contentiousness_to_instruction(1.0).contains("devil's advocate"));
+# Example 3 — Parallel security review (all leaf nodes)
+Goal: \"Review a Python file for security vulnerabilities and suggest fixes\"
+Response:
+{
+  \"goal\": \"Review a Python file for security vulnerabilities and suggest fixes\",
+  \"nodes\": [
+    {
+      \"id\": \"scan-input\",
+      \"goal\": \"Analyse input validation in the codebase: check for SQL injection, command injection, and untrusted data handling.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [\"read_file\", \"grep_search\"],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"scan-auth\",
+      \"goal\": \"Review authentication and authorisation patterns: check for hardcoded secrets, weak hashing, and privilege escalation risks.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [\"read_file\", \"grep_search\"],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"report\",
+      \"goal\": \"Combine the security scan results into a prioritised vulnerability report with specific fix recommendations.\",
+      \"depends_on\": [\"scan-input\", \"scan-auth\"],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
     }
+  ]
+}
 
-    #[test]
-    fn tier_labels() {
-        assert_eq!(contentiousness_tier_label(0.0), "Collaborative");
-        assert_eq!(contentiousness_tier_label(0.3), "Constructive");
-        assert_eq!(contentiousness_tier_label(0.5), "Balanced");
-        assert_eq!(contentiousness_tier_label(0.7), "Adversarial");
-        assert_eq!(contentiousness_tier_label(0.9), "Devil's Advocate");
+# Example 4 — Architecture decision with genuine tradeoff (debate node)
+Goal: \"Decide whether to use a monolithic or microservices architecture for a \
+new internal tool used by 10 engineers\"
+Response:
+{
+  \"goal\": \"Decide whether to use a monolithic or microservices architecture for a new internal tool used by 10 engineers\",
+  \"nodes\": [
+    {
+      \"id\": \"gather-constraints\",
+      \"goal\": \"Gather the team's deployment environment, operational maturity, scaling expectations, and time-to-first-value constraints.\",
+      \"depends_on\": [],
+      \"tool_allowlist\": [],
+      \"kind\": \"leaf\"
+    },
+    {
+      \"id\": \"architecture-debate\",
+      \"goal\": \"Debate the monolith vs microservices tradeoff given the gathered constraints and produce a recommended architecture decision with rationale.\",
+      \"depends_on\": [\"gather-constraints\"],
+      \"tool_allowlist\": [],
+      \"kind\": \"debate\",
+      \"debate_config\": {
+        \"agents\": [
+          { \"name\": \"Alex\", \"perspective\": \"monolith-first: simplicity and speed of delivery\", \"contentiousness\": 0.5 },
+          { \"name\": \"Jordan\", \"perspective\": \"microservices: scalability and team autonomy\", \"contentiousness\": 0.5 }
+        ],
+        \"rounds\": 2,
+        \"judge\": true
+      }
     }
+  ]
+}";
 
-    #[test]
-    fn designer_prompt_has_placeholders() {
-        assert!(COUNCIL_DESIGNER_PROMPT.contains("{agent_count}"));
-        assert!(COUNCIL_DESIGNER_PROMPT.contains("{user_topic}"));
-    }
+// =============================================================================
+// JSON Schema for DirectorPlan
+// =============================================================================
 
-    #[test]
-    fn agent_turn_prompt_has_placeholders() {
-        assert!(AGENT_TURN_SYSTEM_PROMPT.contains("{agent_name}"));
-        assert!(AGENT_TURN_SYSTEM_PROMPT.contains("{agent_persona}"));
-        assert!(AGENT_TURN_SYSTEM_PROMPT.contains("{topic}"));
-        assert!(AGENT_TURN_SYSTEM_PROMPT.contains("{contentiousness_instruction}"));
-    }
+/// Build the JSON Schema for [`super::director::DirectorPlan`].
+///
+/// Returns a fresh [`serde_json::Value`] representing the schema.  Passed to
+/// [`crate::structured_output::get_structured`] as the `ResponseFormat::JsonSchema`
+/// constraint so the LLM backend can enforce the shape at the grammar level
+/// when supported.
+///
+/// # Schema shape
+///
+/// ```json
+/// {
+///   "type": "object",
+///   "properties": {
+///     "goal": { "type": "string" },
+///     "nodes": {
+///       "type": "array",
+///       "items": {
+///         "type": "object",
+///         "properties": { "id": ..., "goal": ..., "depends_on": ..., "tool_allowlist": ... },
+///         "required": ["id", "goal", "depends_on", "tool_allowlist"]
+///       }
+///     }
+///   },
+///   "required": ["goal", "nodes"]
+/// }
+/// ```
+pub fn director_plan_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "goal": {
+                "type": "string",
+                "description": "The high-level goal being decomposed."
+            },
+            "nodes": {
+                "type": "array",
+                "description": "Flat list of all task nodes in the plan.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "Short, unique kebab-case node identifier."
+                        },
+                        "goal": {
+                            "type": "string",
+                            "description": "One-sentence goal for the worker agent."
+                        },
+                        "depends_on": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Ids of prerequisite nodes (empty for root nodes)."
+                        },
+                        "tool_allowlist": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Tool names the worker may call (empty = no tools)."
+                        },
+                        "kind": {
+                            "type": "string",
+                            "enum": ["leaf", "debate"],
+                            "description": "Node execution kind. Omit or use 'leaf' for the vast majority of nodes. Only use 'debate' for genuine strategic tradeoff decisions."
+                        },
+                        "debate_config": {
+                            "type": "object",
+                            "description": "Required when kind is 'debate'. Omit entirely for leaf nodes.",
+                            "properties": {
+                                "agents": {
+                                    "type": "array",
+                                    "description": "2–4 debate agents with distinct perspectives.",
+                                    "minItems": 2,
+                                    "maxItems": 4,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "description": "Short display name (e.g. 'Alex')."
+                                            },
+                                            "perspective": {
+                                                "type": "string",
+                                                "description": "Specific viewpoint the agent argues."
+                                            },
+                                            "contentiousness": {
+                                                "type": "number",
+                                                "minimum": 0.0,
+                                                "maximum": 1.0,
+                                                "description": "Debate intensity 0.0–1.0 (0.4–0.6 typical)."
+                                            }
+                                        },
+                                        "required": ["name", "perspective"],
+                                        "additionalProperties": false
+                                    }
+                                },
+                                "rounds": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 3,
+                                    "description": "Number of debate rounds (2 is typical)."
+                                },
+                                "judge": {
+                                    "type": "boolean",
+                                    "description": "Enable post-round judge for early stopping. Recommended when rounds > 1."
+                                }
+                            },
+                            "required": ["agents", "rounds"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "required": ["id", "goal", "depends_on", "tool_allowlist"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": ["goal", "nodes"],
+        "additionalProperties": false
+    })
+}
 
-    #[test]
-    fn synthesis_prompt_has_placeholders() {
-        assert!(SYNTHESIS_PROMPT.contains("{agent_count}"));
-        assert!(SYNTHESIS_PROMPT.contains("{topic}"));
-        assert!(SYNTHESIS_PROMPT.contains("{transcript}"));
-        assert!(SYNTHESIS_PROMPT.contains("{synthesis_guidance}"));
-    }
+// =============================================================================
+// Worker compaction prompt
+// =============================================================================
 
-    #[test]
-    fn negative_contentiousness_treated_as_collaborative() {
-        assert!(contentiousness_to_instruction(-0.5).contains("collaborative"));
-    }
+/// System prompt for the post-worker compaction pass.
+///
+/// Placeholders: `{goal}`, `{output}`.
+///
+/// The compaction agent receives the full worker output and produces a
+/// compact summary (≤ 250 words) preserving facts, results, and conclusions
+/// that downstream nodes may need as context.
+pub const WORKER_COMPACTION_PROMPT: &str = "\
+You are a precise summarizer. A worker agent was given the following goal:
 
-    #[test]
-    fn judge_prompt_has_placeholders() {
-        assert!(JUDGE_PROMPT.contains("{topic}"));
-        assert!(JUDGE_PROMPT.contains("{round}"));
-        assert!(JUDGE_PROMPT.contains("{total_rounds}"));
-        assert!(JUDGE_PROMPT.contains("{transcript}"));
-    }
+GOAL: {goal}
 
-    #[test]
-    fn guided_rebuttal_cue_is_non_empty() {
-        assert!(GUIDED_REBUTTAL_CUE.contains("conflicts with your perspective"));
-    }
+The worker produced the following output:
 
-    #[test]
-    fn compaction_prompt_has_placeholders() {
-        assert!(COMPACTION_PROMPT.contains("{round}"));
-        assert!(COMPACTION_PROMPT.contains("{transcript}"));
-    }
+---
+{output}
+---
 
-    #[test]
-    fn stance_prompt_has_placeholders() {
-        assert!(STANCE_PROMPT.contains("{topic}"));
-        assert!(STANCE_PROMPT.contains("{claims}"));
+Produce a concise summary (at most 250 words) that:
+- Preserves all key facts, results, conclusions, and any actionable data.
+- Is written in third-person past tense (e.g. \"The agent found...\").
+- Omits conversational filler, tool call traces, and internal reasoning.
+- Retains specific values (numbers, names, paths, URLs) that downstream agents need.
+
+Output ONLY the summary text. No preamble, no title, no markdown fences.";
+
+// =============================================================================
+// Orchestrator synthesis prompt
+// =============================================================================
+
+/// System prompt for the final orchestrator synthesis pass.
+///
+/// Placeholders: `{goal}`, `{results}`.
+///
+/// The synthesiser receives compacted outputs from every leaf node and
+/// produces a single unified answer addressing the original goal.
+pub const ORCHESTRATOR_SYNTHESIS_PROMPT: &str = "\
+You are synthesizing the output of a multi-agent task graph.
+
+ORIGINAL GOAL: {goal}
+
+The following are the results from the completed worker agents:
+
+{results}
+
+Produce a clear, direct, and complete answer to the original goal that integrates \
+all agent outputs. Be concise and actionable. Do not repeat the goal or introduce \
+each section with agent names — write a unified response as if you produced it yourself.";
+
+// =============================================================================
+// Chief of Staff system prompt
+// =============================================================================
+
+/// System prompt for the Chief of Staff structured-output call.
+///
+/// Placeholders: `{role_catalog}`.
+///
+/// The Chief of Staff receives the user goal and returns 1–5 `DepartmentBrief`
+/// objects (name, mission, `suggested_roles`).  The planner fans out one
+/// [`super::director::plan`] call per department in parallel.
+///
+/// # Expected output shape
+///
+/// ```json
+/// {
+///   "departments": [
+///     {
+///       "name": "research",
+///       "mission": "Gather all factual evidence about llama.cpp's history.",
+///       "suggested_roles": ["researcher", "fact-checker"]
+///     },
+///     {
+///       "name": "writing",
+///       "mission": "Produce and polish the final written summary.",
+///       "suggested_roles": ["writer", "editor"]
+///     }
+///   ]
+/// }
+/// ```
+pub const CHIEF_OF_STAFF_SYSTEM_PROMPT: &str = "\
+You are the Chief of Staff. Your job is to decompose a complex goal into 1–5 \
+focused departments. Each department will be handed to a specialist Director \
+who will further decompose it into individual worker tasks.
+
+AVAILABLE SPECIALIST ROLES:
+{role_catalog}
+
+OUTPUT FORMAT:
+Respond with ONLY the JSON object below — no explanation, no markdown fences, \
+no surrounding text:
+{ \"departments\": [...] }
+
+Each department must have:
+- name: short, unique kebab-case identifier (e.g. \"research\", \"risk-review\")
+- mission: one or two sentences describing what this department must accomplish
+- suggested_roles: array of role ids from AVAILABLE SPECIALIST ROLES (may be empty [])
+
+CONSTRAINTS:
+- 1 to 5 departments maximum
+- Department names must be unique (after trimming and lower-casing)
+- Each department mission must be distinct from the others
+- Do not create a department whose entire scope is covered by another department
+- suggested_roles entries must be ids from AVAILABLE SPECIALIST ROLES (or empty [])
+
+DECOMPOSITION RULES:
+- Decompose by area of expertise, not by execution order
+- Departments run in parallel; do not create explicit dependencies between them
+- A single-discipline goal (e.g. \"summarise this article\") should produce exactly
+  one department — do not over-engineer
+
+EXAMPLES:
+
+# Example 1 — Single department (simple goal)
+Goal: \"Summarise this article about climate change\"
+Response:
+{
+  \"departments\": [
+    {
+      \"name\": \"summarisation\",
+      \"mission\": \"Read the article and produce a concise, accurate summary of its key claims and evidence.\",
+      \"suggested_roles\": [\"researcher\", \"writer\"]
     }
+  ]
+}
+
+# Example 2 — Multi-department (launch plan)
+Goal: \"Write a product launch plan with marketing, engineering, and risk review\"
+Response:
+{
+  \"departments\": [
+    {
+      \"name\": \"marketing\",
+      \"mission\": \"Develop the go-to-market strategy, messaging, and channel plan for the product launch.\",
+      \"suggested_roles\": [\"writer\", \"critic\"]
+    },
+    {
+      \"name\": \"engineering\",
+      \"mission\": \"Define the technical readiness checklist, release sequencing, and rollback plan.\",
+      \"suggested_roles\": [\"researcher\", \"fact-checker\"]
+    },
+    {
+      \"name\": \"risk-review\",
+      \"mission\": \"Identify launch risks across marketing, engineering, and operations, and propose mitigations.\",
+      \"suggested_roles\": [\"red-team\", \"critic\"]
+    }
+  ]
+}";
+
+// =============================================================================
+// JSON Schema for ChiefOfStaffPlan
+// =============================================================================
+
+/// Build the JSON Schema for [`super::chief_of_staff::ChiefOfStaffPlan`].
+///
+/// Passed to [`crate::structured_output::get_structured`] as the
+/// `ResponseFormat::JsonSchema` constraint.
+///
+/// # Schema shape
+///
+/// ```json
+/// {
+///   "type": "object",
+///   "properties": {
+///     "departments": {
+///       "type": "array",
+///       "items": {
+///         "type": "object",
+///         "properties": {
+///           "name": { "type": "string" },
+///           "mission": { "type": "string" },
+///           "suggested_roles": { "type": "array", "items": { "type": "string" } }
+///         },
+///         "required": ["name", "mission", "suggested_roles"]
+///       }
+///     }
+///   },
+///   "required": ["departments"]
+/// }
+/// ```
+pub fn chief_of_staff_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "departments": {
+                "type": "array",
+                "description": "List of 1–5 departments the goal is decomposed into.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Short, unique kebab-case department identifier."
+                        },
+                        "mission": {
+                            "type": "string",
+                            "description": "One or two sentences describing the department's scope."
+                        },
+                        "suggested_roles": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Specialist role ids suggested for this department's nodes."
+                        }
+                    },
+                    "required": ["name", "mission", "suggested_roles"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": ["departments"],
+        "additionalProperties": false
+    })
+}
+
+// =============================================================================
+// Steering prompt + schema (Phase K)
+// =============================================================================
+
+/// System prompt for the steering LLM call.
+///
+/// The placeholder `<GRAPH_JSON>` is replaced with the current task graph
+/// serialised as pretty-printed JSON before the call is made.
+pub const STEERING_SYSTEM_PROMPT: &str = "\
+You are a task-graph planner assistant.
+The user will describe one change to make to the current execution plan.
+Respond with exactly one JSON object that conforms to the GraphDiff schema.
+
+Current task graph (JSON):
+<GRAPH_JSON>
+
+Available operations (use exactly one):
+  add_node      — add a new node.
+                  Fields: op, node (object with id, goal, depends_on, tool_allowlist, kind, status)
+  remove_node   — remove an existing node and its edges.
+                  Fields: op, id
+  split_node    — replace one node with multiple nodes.
+                  Fields: op, id, into (array of node objects)
+  reroute_edge  — change one dependency edge.
+                  Fields: op, node_id, old_dep, new_dep
+  set_role      — set or clear a node's specialist role.
+                  Fields: op, id, role (string or null)
+  set_tools     — replace a node's tool allowlist.
+                  Fields: op, id, tool_allowlist (array of strings)
+  wrap_in_team  — wrap several nodes into a new Team node.
+                  Fields: op, ids (array), team_id, team_goal
+
+Rules:
+- All node ids must be short, unique, lowercase identifiers (e.g. \"research\", \"review\").
+- The op field must be exactly one of the names listed above.
+- Return only the JSON object, no prose.
+";
+
+/// JSON Schema for a single [`gglib_core::domain::council::task_graph::GraphDiff`].
+///
+/// Deliberately flat (no `oneOf` / discriminated union) so that small models
+/// can satisfy the constraint reliably.  The `op` field acts as a discriminant.
+pub fn graph_diff_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "op": {
+                "type": "string",
+                "enum": [
+                    "add_node", "remove_node", "split_node",
+                    "reroute_edge", "set_role", "set_tools", "wrap_in_team"
+                ]
+            },
+            "node":           { "type": "object" },
+            "id":             { "type": "string" },
+            "into":           { "type": "array", "items": { "type": "object" } },
+            "node_id":        { "type": "string" },
+            "old_dep":        { "type": "string" },
+            "new_dep":        { "type": "string" },
+            "role":           {},
+            "tool_allowlist": { "type": "array", "items": { "type": "string" } },
+            "ids":            { "type": "array", "items": { "type": "string" } },
+            "team_id":        { "type": "string" },
+            "team_goal":      { "type": "string" }
+        },
+        "required": ["op"]
+    })
 }

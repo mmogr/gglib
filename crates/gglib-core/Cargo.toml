@@ -27,7 +27,6 @@ mockall = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 tokio-test = { workspace = true }
-serial_test = "3.2"
 
 [lints]
 workspace = true

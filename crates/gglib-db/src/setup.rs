@@ -304,6 +304,82 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Create orchestrator_runs table for persistent council run records.
+    // Table name: orchestrator_runs — historical name, kept for schema compatibility.
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS orchestrator_runs ( -- historical name
+            id TEXT PRIMARY KEY NOT NULL,
+            goal TEXT NOT NULL,
+            graph_json TEXT,
+            status TEXT NOT NULL,
+            hitl_mode TEXT NOT NULL,
+            conversation_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Index to allow efficient listing by status.
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_orchestrator_runs_status ON orchestrator_runs(status)",
+    )
+    .execute(pool)
+    .await?;
+
+    // Index to allow efficient ordering by creation time.
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_orchestrator_runs_created ON orchestrator_runs(created_at)",
+    )
+    .execute(pool)
+    .await?;
+
+    // Create orchestrator_events table for the append-only council event log.
+    // Table name: orchestrator_events — historical name, kept for schema compatibility.
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS orchestrator_events ( -- historical name
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL,
+            seq INTEGER NOT NULL,
+            event_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            wave_index INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (run_id) REFERENCES orchestrator_runs(id) ON DELETE CASCADE,
+            UNIQUE (run_id, seq)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Phase M migration: add wave_index to existing databases created before
+    // this column existed.  Must run before any index that references the
+    // column so that the CREATE INDEX below succeeds on old databases.
+    // This is a no-op on fresh databases (column already present).
+    let _ = sqlx::query(
+        "ALTER TABLE orchestrator_events ADD COLUMN wave_index INTEGER NOT NULL DEFAULT 0",
+    )
+    .execute(pool)
+    .await; // intentionally ignore the error (column already exists)
+
+    // Index to allow efficient event retrieval per run.
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_orchestrator_events_run ON orchestrator_events(run_id, seq)",
+    )
+    .execute(pool)
+    .await?;
+
+    // Index to allow efficient rewind lookups per run + wave.
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_orchestrator_events_wave ON orchestrator_events(run_id, wave_index)",
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 

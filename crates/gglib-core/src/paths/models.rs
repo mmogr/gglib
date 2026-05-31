@@ -81,10 +81,9 @@ pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution,
 }
 
 #[cfg(test)]
-#[allow(unsafe_code)]
 mod tests {
     use super::*;
-    use serial_test::serial;
+    use crate::paths::test_utils::{ENV_LOCK, EnvVarGuard};
 
     #[test]
     fn test_default_models_dir_platform_path() {
@@ -112,40 +111,20 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_resolve_models_dir_prefers_explicit() {
-        let prev = env::var("GGLIB_MODELS_DIR").ok();
-        unsafe {
-            env::set_var("GGLIB_MODELS_DIR", "/tmp/env-value");
-        }
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = EnvVarGuard::set("GGLIB_MODELS_DIR", "/tmp/env-value");
         let resolved = resolve_models_dir(Some("/tmp/explicit")).unwrap();
         assert_eq!(resolved.source, ModelsDirSource::Explicit);
         assert!(resolved.path.ends_with("explicit"));
-        restore_env("GGLIB_MODELS_DIR", prev);
     }
 
     #[test]
-    #[serial]
     fn test_resolve_models_dir_env_value() {
-        let prev = env::var("GGLIB_MODELS_DIR").ok();
-        unsafe {
-            env::set_var("GGLIB_MODELS_DIR", "/tmp/from-env");
-        }
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = EnvVarGuard::set("GGLIB_MODELS_DIR", "/tmp/from-env");
         let resolved = resolve_models_dir(None).unwrap();
         assert_eq!(resolved.source, ModelsDirSource::EnvVar);
         assert!(resolved.path.ends_with("from-env"));
-        restore_env("GGLIB_MODELS_DIR", prev);
-    }
-
-    fn restore_env(key: &str, previous: Option<String>) {
-        if let Some(value) = previous {
-            unsafe {
-                env::set_var(key, value);
-            }
-        } else {
-            unsafe {
-                env::remove_var(key);
-            }
-        }
     }
 }

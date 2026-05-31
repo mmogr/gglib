@@ -12,10 +12,12 @@ path = "src/main.rs"
 
 [dependencies]
 gglib-agent = { path = "../gglib-agent" }
+gglib-app-services = { path = "../gglib-app-services" }
 gglib-axum = { path = "../gglib-axum" }
 gglib-bootstrap = { path = "../gglib-bootstrap" }
 gglib-build-info = { path = "../gglib-build-info" }
 gglib-core = { path = "../gglib-core" }
+gglib-db = { path = "../gglib-db" }
 gglib-download = { path = "../gglib-download" }
 gglib-hf = { path = "../gglib-hf" }
 gglib-mcp = { path = "../gglib-mcp" }

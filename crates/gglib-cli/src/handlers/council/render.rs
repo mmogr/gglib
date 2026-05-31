@@ -1,101 +1,363 @@
-//! Static ANSI rendering for council summary and agent cards.
+//! Terminal rendering for [`CouncilEvent`] variants.
 //!
-//! Renders a scannable table of agents with colour-coded contentiousness
-//! and an optional synthesis guidance line.
+//! Exported to sibling modules (`run`, `resume`) via `pub(crate)`.
+//! Approval prompts live in [`super::approve`].
 
-use gglib_agent::council::config::{CouncilAgent, CouncilConfig, SuggestedCouncil};
+use std::collections::HashSet;
+use std::sync::Arc;
 
-use crate::presentation::style::{BOLD, DIM, RESET};
+use gglib_app_services::CouncilApprovalRegistry;
+use gglib_core::domain::council::events::CouncilEvent;
+use gglib_core::domain::council::task_graph::TaskGraph;
+use tokio::sync::mpsc;
 
-use super::stream::temperature_fg;
+use crate::presentation::{dag, style};
 
-// ─── Public API ─────────────────────────────────────────────────────────────
+use super::approve::{self, ApproveOpts};
 
-/// Print a colour-coded summary table for a suggested council.
-pub fn render_suggested(council: &SuggestedCouncil) {
-    eprintln!(
-        "\n{BOLD}Council Suggestion  ({} agents, {} rounds){RESET}",
-        council.agents.len(),
-        council.rounds
-    );
-    render_agent_table(&council.agents);
-    if let Some(ref guidance) = council.synthesis_guidance {
-        eprintln!("  {DIM}Synthesis:{RESET} {guidance}");
+/// Render a single [`CouncilEvent`] to the terminal (or as JSONL when
+/// `json_mode` is `true`).
+///
+/// `last_graph` is updated whenever a `PlanProposed` event arrives so that
+/// `AwaitingApproval` handlers can offer the `[e]dit` option.
+///
+/// In `json_mode` the event is serialised as a JSON line to **stdout** and
+/// the function returns immediately — no ASCII art, colors, or interactive
+/// prompts are emitted.  All other diagnostic output already goes to
+/// **stderr**, so stdout remains clean JSONL.
+pub(crate) async fn render_event(
+    event: &CouncilEvent,
+    approval_registry: &Arc<CouncilApprovalRegistry>,
+    last_graph: &mut Option<TaskGraph>,
+    opts: &ApproveOpts,
+    json_mode: bool,
+    input_rx: &mut mpsc::UnboundedReceiver<String>,
+    thinking_nodes: &mut HashSet<String>,
+) {
+    if json_mode {
+        match serde_json::to_string(event) {
+            Ok(line) => println!("{line}"),
+            Err(e) => eprintln!("warn: failed to serialise event: {e}"),
+        }
+        return;
     }
-    eprintln!();
-}
-
-/// Print a colour-coded summary table for a loaded council config.
-pub fn render_config(config: &CouncilConfig) {
-    eprintln!(
-        "\n{BOLD}Council Config  ({} agents, {} rounds){RESET}",
-        config.agents.len(),
-        config.rounds
-    );
-    eprintln!("  {DIM}Topic:{RESET} {}", config.topic);
-    render_agent_table(&config.agents);
-    if let Some(ref guidance) = config.synthesis_guidance {
-        eprintln!("  {DIM}Synthesis:{RESET} {guidance}");
+    match event {
+        CouncilEvent::PlanProposed { graph } => {
+            *last_graph = Some(graph.clone());
+            style::print_info_banner("Orchestrate", "\u{1f5fa}\u{fe0f}");
+            eprintln!(
+                "  {}Plan proposed:{} {} node(s) for goal: {}",
+                style::BOLD,
+                style::RESET,
+                graph.nodes.len(),
+                graph.goal
+            );
+            style::print_banner_close();
+            dag::render_tree(graph, &mut std::io::stderr());
+            eprintln!();
+        }
+        CouncilEvent::ReplanAttempt { attempt, reason } => {
+            eprintln!(
+                "{}  ↻ Replanning (attempt {attempt}): {reason}{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::PlanApproved => {
+            eprintln!(
+                "{}  ✓ Plan approved — starting execution{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::PlanRejected { reason } => {
+            eprintln!(
+                "{}  ✗ Plan rejected{}{}",
+                style::DANGER,
+                reason
+                    .as_deref()
+                    .map(|r| format!(": {r}"))
+                    .unwrap_or_default(),
+                style::RESET
+            );
+        }
+        CouncilEvent::AwaitingApproval { approval_id, kind } => {
+            approve::prompt_and_resolve(
+                approval_id,
+                kind,
+                approval_registry,
+                last_graph.as_ref(),
+                opts,
+                input_rx,
+            )
+            .await;
+        }
+        CouncilEvent::NodeStarted {
+            node_id,
+            goal: node_goal,
+        } => {
+            eprintln!(
+                "\n{}[{}]{} {}",
+                dag::node_color(node_id),
+                node_id,
+                style::RESET,
+                node_goal
+            );
+        }
+        CouncilEvent::NodeTextDelta { node_id, delta } => {
+            if thinking_nodes.remove(node_id.as_str()) {
+                eprintln!();
+            }
+            eprint!("{delta}");
+        }
+        CouncilEvent::NodeReasoningDelta { node_id, delta } => {
+            if thinking_nodes.insert(node_id.clone()) {
+                eprintln!(
+                    "{}[{node_id}]{} {}(thinking…){}",
+                    dag::node_color(node_id),
+                    style::RESET,
+                    style::DIM,
+                    style::RESET
+                );
+            }
+            eprint!("{}{delta}{}", style::DIM, style::RESET);
+        }
+        CouncilEvent::NodeToolCallStart {
+            node_id,
+            display_name,
+            args_summary,
+            ..
+        } => {
+            eprintln!(
+                "\n{}[{node_id}]{} {}⚙ {}  {}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                display_name,
+                args_summary.as_deref().unwrap_or(""),
+                style::RESET
+            );
+        }
+        CouncilEvent::NodeToolCallComplete {
+            node_id,
+            display_name,
+            duration_display,
+            ..
+        } => {
+            eprintln!(
+                "{}[{node_id}]{} {}✓ {}  {}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                display_name,
+                duration_display,
+                style::RESET
+            );
+        }
+        CouncilEvent::NodeSystemWarning {
+            node_id, message, ..
+        } => {
+            eprintln!(
+                "{}[{node_id}]{} {}⚠ {}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::WARNING,
+                message,
+                style::RESET
+            );
+        }
+        CouncilEvent::NodeCompacting { node_id } => {
+            eprintln!(
+                "\n{}[{node_id}]{} {}compacting output…{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::NodeComplete { node_id, .. } => {
+            eprintln!(
+                "{}[{node_id}]{} {}✓ complete{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::SUCCESS,
+                style::RESET
+            );
+        }
+        CouncilEvent::NodeFailed { node_id, error } => {
+            eprintln!(
+                "{}[{node_id}]{} {}✗ failed: {error}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DANGER,
+                style::RESET
+            );
+        }
+        CouncilEvent::SynthesisStart => {
+            eprintln!("\n{}─── Synthesis ───{}", style::BOLD, style::RESET);
+        }
+        CouncilEvent::SynthesisTextDelta { delta } => {
+            eprint!("{delta}");
+        }
+        CouncilEvent::SynthesisComplete { .. } => {
+            eprintln!();
+        }
+        CouncilEvent::CouncilComplete { answer } => {
+            eprintln!("\n{}─── Final Answer ───{}", style::BOLD, style::RESET);
+            println!("{answer}");
+        }
+        CouncilEvent::CouncilError { message } => {
+            eprintln!("{}Error: {message}{}", style::DANGER, style::RESET);
+        }
+        CouncilEvent::TeamStarted { team_id, .. } => {
+            eprintln!("{}[{team_id}] ▶ team started{}", style::DIM, style::RESET);
+        }
+        CouncilEvent::TeamSynthesized { team_id, .. } => {
+            eprintln!(
+                "{}[{team_id}] ✓ team synthesized{}",
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::NodeProgress { .. }
+        | CouncilEvent::SynthesisProgress { .. }
+        | CouncilEvent::RunCostEstimate { .. }
+        | CouncilEvent::SubteamSpawned { .. }
+        | CouncilEvent::WaveCompleted { .. } => {}
+        CouncilEvent::SteeringApplied {
+            applied_at_wave,
+            diff,
+        } => {
+            let diff_str = serde_json::to_string(diff).unwrap_or_else(|_| format!("{diff:?}"));
+            eprintln!(
+                "{}  ↩  Steering applied at wave {applied_at_wave}:{} {diff_str}",
+                style::INFO,
+                style::RESET,
+            );
+        }
+        CouncilEvent::DebateRoundStarted { node_id, round } => {
+            eprintln!(
+                "{}[{node_id}]{} {}◆ debate round {round}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentTurnStarted {
+            node_id,
+            agent_name,
+            round,
+            ..
+        } => {
+            eprintln!(
+                "\n{}[{node_id}]{} {}[{agent_name}] round {round}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentTextDelta { delta, .. } => {
+            eprint!("{delta}");
+        }
+        CouncilEvent::DebateAgentReasoningDelta { node_id, delta, .. } => {
+            eprint!(
+                "{}[{node_id}]{}<think>{} {delta}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentToolCallStart {
+            node_id,
+            display_name,
+            args_summary,
+            ..
+        } => {
+            eprintln!(
+                "\n{}[{node_id}]{} {}⚙ {}  {}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                display_name,
+                args_summary.as_deref().unwrap_or(""),
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentToolCallComplete {
+            node_id,
+            display_name,
+            duration_display,
+            ..
+        } => {
+            eprintln!(
+                "{}[{node_id}]{} {}✓ {}  {}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                display_name,
+                duration_display,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateAgentTurnComplete { .. } => {}
+        CouncilEvent::DebateJudgeStarted { node_id, round } => {
+            eprint!(
+                "\n{}[{node_id}]{} {}⚖ judging round {round}…{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateJudgeTextDelta { delta, .. } => {
+            eprint!("{delta}");
+        }
+        CouncilEvent::DebateJudgeSummary {
+            node_id,
+            round,
+            consensus_reached,
+            ..
+        } => {
+            let verdict = if *consensus_reached {
+                "consensus reached"
+            } else {
+                "continuing"
+            };
+            eprintln!(
+                "\n{}[{node_id}]{} {}⚖ round {round}: {verdict}{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateRoundCompacted { .. } => {}
+        CouncilEvent::DebateStanceMap { node_id, .. } => {
+            eprintln!(
+                "{}[{node_id}]{} {}stances recorded{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::DIM,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateSynthesisStarted { node_id } => {
+            eprintln!(
+                "\n{}[{node_id}]{} {}─── Debate Synthesis ───{}",
+                dag::node_color(node_id),
+                style::RESET,
+                style::BOLD,
+                style::RESET
+            );
+        }
+        CouncilEvent::DebateSynthesisTextDelta { delta, .. } => {
+            eprint!("{delta}");
+        }
+        CouncilEvent::DebateSynthesisComplete { .. } => {
+            eprintln!();
+        }
     }
-    eprintln!();
-}
-
-// ─── Internals ──────────────────────────────────────────────────────────────
-
-fn render_agent_table(agents: &[gglib_agent::council::config::CouncilAgent]) {
-    // Header
-    eprintln!(
-        "  {DIM}{:<4}  {:<20}  {:<6}  {:<12}  Tools{RESET}",
-        "#", "Name", "Cont.", "Perspective"
-    );
-    eprintln!("  {DIM}{}{RESET}", "─".repeat(68));
-
-    for (i, agent) in agents.iter().enumerate() {
-        let color = temperature_fg(agent.contentiousness);
-        let tools = match &agent.tool_filter {
-            Some(list) if !list.is_empty() => list.join(", "),
-            _ => "all".into(),
-        };
-        // Truncate perspective to 12 chars for the table
-        let perspective: String = agent.perspective.chars().take(12).collect();
-        eprintln!(
-            "  {color}{:<4}{RESET}  {BOLD}{:<20}{RESET}  {color}{:<6.2}{RESET}  {DIM}{:<12}{RESET}  {DIM}{tools}{RESET}",
-            i + 1,
-            agent.name,
-            agent.contentiousness,
-            perspective,
-        );
-    }
-}
-
-/// Print a coloured before/after diff for the three AI-filled fields of an agent.
-pub fn render_agent_diff(idx: usize, old: &CouncilAgent, new: &CouncilAgent) {
-    let color = temperature_fg(new.contentiousness);
-    eprintln!("\n  {BOLD}Agent #{} \"{}\"{RESET}", idx + 1, new.name,);
-
-    if old.persona != new.persona {
-        eprintln!("  {DIM}persona:{RESET}");
-        eprintln!("    \x1b[31m- {}{RESET}", old.persona);
-        eprintln!("    \x1b[32m+ {}{RESET}", new.persona);
-    }
-    if old.perspective != new.perspective {
-        eprintln!("  {DIM}perspective:{RESET}");
-        eprintln!("    \x1b[31m- {}{RESET}", old.perspective);
-        eprintln!("    \x1b[32m+ {}{RESET}", new.perspective);
-    }
-    if (old.contentiousness - new.contentiousness).abs() > f32::EPSILON {
-        let old_color = temperature_fg(old.contentiousness);
-        eprintln!(
-            "  {DIM}contentiousness:{RESET}  {old_color}{:.2}{RESET} → {color}{:.2}{RESET}",
-            old.contentiousness, new.contentiousness,
-        );
-    }
-
-    if old.persona == new.persona
-        && old.perspective == new.perspective
-        && (old.contentiousness - new.contentiousness).abs() <= f32::EPSILON
-    {
-        eprintln!("  {DIM}(no changes){RESET}");
-    }
-    eprintln!();
 }

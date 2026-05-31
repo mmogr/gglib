@@ -1,74 +1,59 @@
 /**
- * Council service client.
+ * Orchestrator service client.
  *
- * Provides `suggestCouncil()` (JSON request/response) and `runCouncil()`
- * (SSE stream consumer) against the `/api/council/*` Axum endpoints.
+ * Provides:
+ * - `planOrchestrator()` — SSE stream for `POST /api/council/plan`
+ * - `runOrchestrator()`  — SSE stream for `POST /api/council/run`
  *
  * Uses `getAuthenticatedFetchConfig()` so it works in both Web and Tauri
- * modes transparently.
+ * modes transparently (HTTP transport — no tauri::command).
  *
- * @module services/clients/council
+ * @module services/clients/orchestrator
  */
 
 import { getAuthenticatedFetchConfig } from '../transport/api/client';
+import type {
+  ApprovalDecisionPayload,
+  CouncilEvent,
+  CouncilRun,
+  OrchestratorRunEvent,
+  OrchestratorRunStatus,
+} from '../../types/council';
 
-// ─── Types (mirrors Rust council::config + council::events) ─────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-export interface CouncilAgent {
-  id: string;
-  name: string;
-  color: string;
-  persona: string;
-  perspective: string;
-  contentiousness: number;
-  tool_filter?: string[];
-}
-
-export interface JudgeConfig {
-  min_rounds_before_stop?: number;
-}
-
-export interface CouncilConfig {
-  agents: CouncilAgent[];
-  topic: string;
-  rounds: number;
-  synthesis_guidance?: string;
-  judge?: JudgeConfig;
-}
-
-export interface SuggestedCouncil {
-  agents: CouncilAgent[];
-  rounds: number;
-  synthesis_guidance?: string;
-  judge?: JudgeConfig;
-}
-
-// ─── Suggest ────────────────────────────────────────────────────────────────
-
-export interface SuggestCouncilParams {
+export interface PlanOrchestratorParams {
+  goal: string;
   port: number;
-  topic: string;
-  agent_count?: number;
   model?: string;
-  /** Previous suggestion to refine (multi-turn suggest). */
-  previous_suggestion?: SuggestedCouncil;
-  /** User's follow-up requesting changes to the prior suggestion. */
-  refinement?: string;
+  max_replans?: number;
 }
+
+export interface RunOrchestratorParams {
+  goal: string;
+  port: number;
+  model?: string;
+  max_replans?: number;
+  max_worker_concurrency?: number;
+  hitl_mode?: string;
+}
+
+// ─── Client ──────────────────────────────────────────────────────────────────
 
 /**
- * Ask the LLM to design a council for the given topic.
+ * Call `POST /api/council/plan` and consume the SSE stream, calling
+ * `onEvent` for each parsed `CouncilEvent`.
  *
- * Returns a `SuggestedCouncil` with agents, rounds, and optional
- * synthesis guidance.
+ * Resolves when the stream ends; throws on HTTP errors.
  */
-export async function suggestCouncil(
-  params: SuggestCouncilParams,
+export async function planOrchestrator(
+  params: PlanOrchestratorParams,
+  onEvent: (event: CouncilEvent) => void,
   signal?: AbortSignal,
-): Promise<SuggestedCouncil> {
+): Promise<void> {
   const { baseUrl, headers } = await getAuthenticatedFetchConfig();
 
-  const response = await fetch(`${baseUrl}/api/council/suggest`, {
+  const response = await fetch(`${baseUrl}/api/council/plan`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -80,36 +65,55 @@ export async function suggestCouncil(
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error ?? `Council suggest failed: ${response.status}`);
+    throw new Error(
+      (body as { error?: string }).error ?? `Orchestrator plan failed: ${response.status}`,
+    );
   }
 
-  return response.json();
-}
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body for orchestrator SSE stream');
 
-// ─── Run (SSE stream) ───────────────────────────────────────────────────────
+  const decoder = new TextDecoder();
+  let buffer = '';
 
-export interface RunCouncilParams {
-  port: number;
-  council: CouncilConfig;
-  model?: string;
-  config?: {
-    max_iterations?: number;
-    max_parallel_tools?: number;
-    tool_timeout_ms?: number;
-  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE events are separated by double newlines.
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() ?? '';
+
+    for (const part of parts) {
+      for (const line of part.split('\n')) {
+        if (line.startsWith('data:')) {
+          const json = line.slice(5).trim();
+          if (json) {
+            try {
+              onEvent(JSON.parse(json) as CouncilEvent);
+            } catch {
+              // skip malformed events
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
- * Start a council deliberation and stream `CouncilEvent`s via SSE.
+ * Call `POST /api/council/run` and consume the SSE stream, calling
+ * `onEvent` for each parsed `CouncilEvent`.
  *
- * @param params  - Council run configuration.
- * @param onEvent - Called for each parsed `CouncilEvent`.
- * @param signal  - Optional abort signal to cancel the stream.
- * @returns A promise that resolves when the stream ends.
+ * This drives the full Director/Worker pipeline: planning, worker execution,
+ * compaction, and synthesis.  Resolves when the stream ends (after
+ * `orchestrator_complete` or `orchestrator_error`); throws on HTTP errors.
  */
-export async function runCouncil(
-  params: RunCouncilParams,
-  onEvent: (event: Record<string, unknown>) => void,
+export async function runOrchestrator(
+  params: RunOrchestratorParams,
+  onEvent: (event: CouncilEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const { baseUrl, headers } = await getAuthenticatedFetchConfig();
@@ -126,11 +130,13 @@ export async function runCouncil(
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error ?? `Council run failed: ${response.status}`);
+    throw new Error(
+      (body as { error?: string }).error ?? `Orchestrator run failed: ${response.status}`,
+    );
   }
 
   const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body for council SSE stream');
+  if (!reader) throw new Error('No response body for orchestrator SSE stream');
 
   const decoder = new TextDecoder();
   let buffer = '';
@@ -141,7 +147,6 @@ export async function runCouncil(
 
     buffer += decoder.decode(value, { stream: true });
 
-    // SSE events are separated by double newlines
     const parts = buffer.split('\n\n');
     buffer = parts.pop() ?? '';
 
@@ -151,7 +156,210 @@ export async function runCouncil(
           const json = line.slice(5).trim();
           if (json) {
             try {
-              onEvent(JSON.parse(json));
+              onEvent(JSON.parse(json) as CouncilEvent);
+            } catch {
+              // skip malformed events
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// ─── Phase D: HITL + Runs ────────────────────────────────────────────────────
+
+/**
+ * POST /api/council/approve/{approvalId}
+ *
+ * Resolve a pending HITL approval gate.
+ */
+export async function approveOrchestrator(
+  approvalId: string,
+  payload: ApprovalDecisionPayload,
+): Promise<void> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(
+    `${baseUrl}/api/council/approve/${encodeURIComponent(approvalId)}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers as Record<string, string>),
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ?? `Approve request failed: ${response.status}`,
+    );
+  }
+}
+
+/**
+ * GET /api/council/runs[?status=<status>]
+ *
+ * List orchestrator runs, optionally filtered by status.
+ */
+export async function listOrchestratorRuns(
+  status?: OrchestratorRunStatus,
+): Promise<CouncilRun[]> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const url = status
+    ? `${baseUrl}/api/council/runs?status=${encodeURIComponent(status)}`
+    : `${baseUrl}/api/council/runs`;
+  const response = await fetch(url, { headers: headers as Record<string, string> });
+  if (!response.ok) {
+    throw new Error(`List runs failed: ${response.status}`);
+  }
+  const data = (await response.json()) as { runs: CouncilRun[] };
+  return data.runs;
+}
+
+/**
+ * GET /api/council/runs/{id}
+ *
+ * Get a single run with its events.
+ */
+export async function getCouncilRun(
+  id: string,
+): Promise<{ run: CouncilRun; events: OrchestratorRunEvent[] }> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(
+    `${baseUrl}/api/council/runs/${encodeURIComponent(id)}`,
+    { headers: headers as Record<string, string> },
+  );
+  if (!response.ok) {
+    throw new Error(`Get run failed: ${response.status}`);
+  }
+  return response.json() as Promise<{ run: CouncilRun; events: OrchestratorRunEvent[] }>;
+}
+
+/**
+ * POST /api/council/runs/{id}/resume
+ *
+ * Resume a previously interrupted or awaiting-approval run as an SSE stream.
+ */
+export async function resumeCouncilRun(
+  id: string,
+  port: number,
+  model?: string,
+  onEvent?: (event: CouncilEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(
+    `${baseUrl}/api/council/runs/${encodeURIComponent(id)}/resume`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers as Record<string, string>),
+      },
+      body: JSON.stringify({ port, model }),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ?? `Resume failed: ${response.status}`,
+    );
+  }
+  if (!onEvent) return;
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body for resume SSE stream');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() ?? '';
+    for (const part of parts) {
+      for (const line of part.split('\n')) {
+        if (line.startsWith('data:')) {
+          const json = line.slice(5).trim();
+          if (json) {
+            try {
+              onEvent(JSON.parse(json) as CouncilEvent);
+            } catch {
+              // skip malformed events
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// ─── Phase M: Rewind ─────────────────────────────────────────────────────────
+
+export interface RewindOrchestratorParams {
+  port: number;
+  model?: string;
+  wave_index: number;
+  steering_note?: string;
+}
+
+/**
+ * POST /api/council/runs/{id}/rewind
+ *
+ * Rewind a run to a previous wave and re-execute from there.
+ * Streams new events via SSE.
+ */
+export async function rewindCouncilRun(
+  id: string,
+  params: RewindOrchestratorParams,
+  onEvent?: (event: CouncilEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
+  const response = await fetch(
+    `${baseUrl}/api/council/runs/${encodeURIComponent(id)}/rewind`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(headers as Record<string, string>),
+      },
+      body: JSON.stringify(params),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      (body as { error?: string }).error ?? `Rewind failed: ${response.status}`,
+    );
+  }
+  if (!onEvent) return;
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body for rewind SSE stream');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() ?? '';
+    for (const part of parts) {
+      for (const line of part.split('\n')) {
+        if (line.startsWith('data:')) {
+          const json = line.slice(5).trim();
+          if (json) {
+            try {
+              onEvent(JSON.parse(json) as CouncilEvent);
             } catch {
               // skip malformed events
             }

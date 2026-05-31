@@ -8,12 +8,118 @@
 use clap::Subcommand;
 use clap_complete::Shell;
 
-use std::path::PathBuf;
-
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
 use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
+
+/// Subcommands available under `gglib council`.
+#[derive(Subcommand)]
+pub enum CouncilCmd {
+    /// Plan and execute a task graph for the given goal
+    #[command(display_order = 1)]
+    Run {
+        /// High-level goal to plan and execute
+        goal: String,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum replan attempts after the first
+        #[arg(long, default_value = "2")]
+        max_replans: u32,
+        /// Enable human-in-the-loop approval gates (none, plan, node, tools)
+        ///
+        /// Pauses at the specified boundaries and prompts
+        /// `[y]es / [n]o / [e]dit` before proceeding.
+        #[arg(long, value_name = "MODE", default_value = "none")]
+        hitl: Option<String>,
+        /// Auto-resolve approval prompts after this many seconds
+        #[arg(long, value_name = "SECS")]
+        approval_timeout: Option<u64>,
+        /// Action when an approval prompt times out (reject | approve)
+        #[arg(long, value_name = "ACTION", default_value = "reject")]
+        approval_timeout_action: String,
+        /// Output events as newline-delimited JSON (JSONL) to stdout.
+        ///
+        /// Requires --hitl none (the default). Incompatible with interactive
+        /// approval prompts — all non-JSON output is suppressed from stdout.
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+
+    /// List past orchestrator runs
+    #[command(display_order = 2)]
+    List {
+        /// Filter by status (running, awaiting_approval, interrupted, completed, failed)
+        #[arg(long, short)]
+        status: Option<String>,
+    },
+
+    /// Show the details and event timeline for a run
+    #[command(display_order = 3)]
+    Show {
+        /// ID of the run to inspect
+        run_id: String,
+    },
+
+    /// Resume an interrupted or awaiting-approval run
+    #[command(display_order = 4)]
+    Resume {
+        /// ID of the run to resume
+        run_id: String,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum replan attempts after the first
+        #[arg(long, default_value = "2")]
+        max_replans: u32,
+        /// Enable human-in-the-loop approval gates (none, plan, node, tools)
+        #[arg(long, value_name = "MODE", default_value = "none")]
+        hitl: Option<String>,
+        /// Auto-resolve approval prompts after this many seconds
+        #[arg(long, value_name = "SECS")]
+        approval_timeout: Option<u64>,
+        /// Action when an approval prompt times out (reject | approve)
+        #[arg(long, value_name = "ACTION", default_value = "reject")]
+        approval_timeout_action: String,
+        /// Output events as newline-delimited JSON (JSONL) to stdout.
+        ///
+        /// Requires --hitl none. Incompatible with interactive approval prompts.
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+
+    /// Rewind a run to a previous wave and re-execute from that point
+    #[command(display_order = 5)]
+    Rewind {
+        /// ID of the run to rewind
+        run_id: String,
+        /// Zero-based wave index to rewind to (inclusive)
+        #[arg(long, short)]
+        wave: u32,
+        /// Optional steering note to inject at the rewind point
+        #[arg(long)]
+        note: Option<String>,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+}
 
 /// Subcommands available under `gglib chat`.
 #[derive(Subcommand)]
@@ -23,35 +129,6 @@ pub enum ChatCommand {
         /// Maximum number of conversations to show
         #[arg(short = 'n', long, default_value = "20")]
         limit: usize,
-    },
-
-    /// Run a council of agents that deliberate on a topic
-    ///
-    /// Use --suggest to have the LLM design a council for your topic,
-    /// or --config to run a deliberation with a pre-built council config.
-    Council {
-        /// Topic for the council to deliberate on
-        topic: String,
-        /// Generate a council config instead of running one
-        #[arg(long)]
-        suggest: bool,
-        /// Open the interactive editor before running
-        #[arg(long)]
-        edit: bool,
-        /// Path to a council config JSON file (required unless --suggest)
-        #[arg(long)]
-        config: Option<PathBuf>,
-        /// Number of agents to suggest (only with --suggest)
-        #[arg(long, default_value = "4")]
-        agent_count: u32,
-        /// Model name or ID (uses default model when omitted)
-        #[arg(short, long)]
-        model: Option<String>,
-        /// Reuse an already-running llama-server on this port (skips auto-start)
-        #[arg(long)]
-        port: Option<u16>,
-        #[command(flatten)]
-        context: ContextArgs,
     },
 }
 
@@ -186,6 +263,31 @@ pub enum Commands {
         /// Maximum number of tools executed in parallel per iteration
         #[arg(long = "max-parallel")]
         max_parallel: Option<usize>,
+    },
+
+    /// Decompose a goal into a validated task graph (planning only, no execution)
+    #[command(display_order = 13)]
+    Plan {
+        /// High-level goal to decompose into a task graph
+        goal: String,
+        /// Model name or ID (uses default model when omitted)
+        #[arg(short, long)]
+        model: Option<String>,
+        /// Reuse an already-running llama-server on this port (skips auto-start)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Maximum replan attempts after the first
+        #[arg(long, default_value = "2")]
+        max_replans: u32,
+        #[command(flatten)]
+        context: ContextArgs,
+    },
+
+    /// Plan and execute a Council of Director/Worker agents end-to-end
+    #[command(display_order = 14)]
+    Council {
+        #[command(subcommand)]
+        cmd: CouncilCmd,
     },
 
     // ── Interfaces ──────────────────────────────────────────────────────

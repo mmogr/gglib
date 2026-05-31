@@ -21,9 +21,11 @@ pub fn pids_dir() -> Result<PathBuf, PathError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paths::test_utils::ENV_LOCK;
 
     #[test]
     fn pids_dir_is_under_data_root() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let pids = pids_dir().expect("pids_dir failed");
         let data = data_root().expect("data_root failed");
         assert!(pids.starts_with(&data));

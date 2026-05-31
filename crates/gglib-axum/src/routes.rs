@@ -105,9 +105,33 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/agent/chat",
             post(handlers::agent::chat).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
         )
-        // Council (multi-agent deliberation)
-        .route("/council/suggest", post(handlers::council::suggest))
-        .route("/council/run", post(handlers::council::run))
+        // Orchestrator (director planning + full execution)
+        .route("/council/plan", post(handlers::council::plan_sse))
+        .route("/council/run", post(handlers::council::run::run_sse))
+        // Orchestrator Phase D: HITL approvals + run records + resume
+        .route(
+            "/council/approve/{approval_id}",
+            post(handlers::council::approve::approve),
+        )
+        .route("/council/runs", get(handlers::council::runs::list_runs))
+        .route(
+            "/council/runs/{run_id}",
+            get(handlers::council::runs::get_run),
+        )
+        .route(
+            "/council/runs/{run_id}/resume",
+            post(handlers::council::resume::resume_run),
+        )
+        .route(
+            "/council/runs/{run_id}/rewind",
+            post(handlers::council::rewind::rewind_run),
+        )
+        // Orchestrator Phase K: conversational steering
+        .route("/council/steer", post(handlers::council::steer::steer))
+        .route(
+            "/council/runs/{run_id}/note",
+            post(handlers::council::note::post_note),
+        )
         // Chat routes (merged without prefix since we're already building /api)
         .merge(chat_routes_no_prefix())
 }

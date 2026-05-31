@@ -15,7 +15,9 @@ path = "src/lib.rs"
 # Composition (wiring LlmCompletionAdapter + McpToolExecutorAdapter into
 # AgentLoop) is performed by each entrypoint crate (gglib-axum, gglib-cli).
 gglib-core   = { path = "../gglib-core" }
+thiserror    = { workspace = true }
 tokio        = { workspace = true }
+tokio-util   = { version = "0.7", features = ["rt"] }
 futures-util = { workspace = true }
 futures-core = { workspace = true }
 async-trait  = { workspace = true }
@@ -23,6 +25,15 @@ anyhow       = { workspace = true }
 tracing      = { workspace = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
+uuid         = { version = "1.10", features = ["v4"] }
+chrono       = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+gglib-runtime       = { path = "../gglib-runtime" }
+gglib-app-services  = { path = "../gglib-app-services" }
+gglib-db            = { path = "../gglib-db", features = ["test-utils"] }
+reqwest             = { workspace = true }
+tokio               = { workspace = true, features = ["rt-multi-thread", "macros"] }

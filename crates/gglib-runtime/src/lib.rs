@@ -4,6 +4,7 @@
 pub mod assistant_ui;
 mod command;
 pub mod compose;
+pub mod council_runner;
 mod health;
 pub mod health_monitor;
 pub mod llama;
@@ -45,3 +46,6 @@ pub use compose::{
 
 // Re-export system probe implementation
 pub use system::DefaultSystemProbe;
+
+// Re-export orchestrator runner adapter for proxy injection
+pub use council_runner::CouncilRunnerAdapter;

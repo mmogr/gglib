@@ -17,13 +17,188 @@ pub mod supervisor;
 pub use supervisor::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
 
 use anyhow::{Result, anyhow};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
+use async_trait::async_trait;
+use tokio::sync::oneshot;
+
+use crate::council_runner::CouncilRunnerAdapter;
 use crate::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use crate::process::ProcessManager;
-use gglib_core::ports::{ModelCatalogPort, ModelRepository};
+use gglib_core::domain::council::run::{CouncilRun, CouncilRunEvent, CouncilRunStatus};
+use gglib_core::ports::{
+    ApprovalDecision, CouncilApprovalRegistryPort, CouncilRepositoryPort, ModelCatalogPort,
+    ModelRepository, RepositoryError,
+};
 use gglib_mcp::McpService;
+use gglib_proxy::CouncilDeps;
+
+// =============================================================================
+// Standalone in-memory orchestrator services
+// =============================================================================
+
+/// Minimal in-memory approval registry for standalone proxy usage.
+///
+/// Uses `std::sync::Mutex` so no extra crate dependencies are required.
+/// Interactive-mode approval gates work for the lifetime of the proxy process.
+struct InMemoryApprovalRegistry {
+    pending: StdMutex<HashMap<String, oneshot::Sender<ApprovalDecision>>>,
+}
+
+impl InMemoryApprovalRegistry {
+    fn new() -> Self {
+        Self {
+            pending: StdMutex::new(HashMap::new()),
+        }
+    }
+}
+
+impl CouncilApprovalRegistryPort for InMemoryApprovalRegistry {
+    fn register(&self, approval_id: String, sender: oneshot::Sender<ApprovalDecision>) {
+        self.pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(approval_id, sender);
+    }
+
+    fn resolve(&self, approval_id: &str, decision: ApprovalDecision) -> bool {
+        let sender = self
+            .pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(approval_id);
+        if let Some(tx) = sender {
+            let _ = tx.send(decision);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_pending(&self, approval_id: &str) -> bool {
+        self.pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .contains_key(approval_id)
+    }
+}
+
+/// Minimal in-memory orchestrator repository for standalone proxy usage.
+///
+/// Stores run records in memory only; no SQLite dep required.
+/// Interactive-mode state persists for the lifetime of the proxy process.
+struct InMemoryCouncilRepository {
+    runs: StdMutex<HashMap<String, CouncilRun>>,
+}
+
+impl InMemoryCouncilRepository {
+    fn new() -> Self {
+        Self {
+            runs: StdMutex::new(HashMap::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl CouncilRepositoryPort for InMemoryCouncilRepository {
+    async fn create_run(&self, run: CouncilRun) -> Result<(), RepositoryError> {
+        self.runs
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(run.id.clone(), run);
+        Ok(())
+    }
+
+    async fn update_run_status(
+        &self,
+        run_id: &str,
+        status: CouncilRunStatus,
+    ) -> Result<(), RepositoryError> {
+        if let Some(run) = self
+            .runs
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_mut(run_id)
+        {
+            run.status = status;
+        }
+        Ok(())
+    }
+
+    async fn update_graph(&self, run_id: &str, graph_json: &str) -> Result<(), RepositoryError> {
+        if let Some(run) = self
+            .runs
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_mut(run_id)
+        {
+            run.graph_json = Some(graph_json.to_string());
+        }
+        Ok(())
+    }
+
+    async fn append_event(&self, _event: CouncilRunEvent) -> Result<(), RepositoryError> {
+        // Event log not needed for standalone proxy.
+        Ok(())
+    }
+
+    async fn get_run(&self, run_id: &str) -> Result<Option<CouncilRun>, RepositoryError> {
+        Ok(self
+            .runs
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(run_id)
+            .cloned())
+    }
+
+    async fn list_runs(
+        &self,
+        status_filter: Option<CouncilRunStatus>,
+    ) -> Result<Vec<CouncilRun>, RepositoryError> {
+        let guard = self.runs.lock().unwrap_or_else(|p| p.into_inner());
+        let runs: Vec<CouncilRun> = guard
+            .values()
+            .filter(|r| status_filter.as_ref().is_none_or(|s| &r.status == s))
+            .cloned()
+            .collect();
+        Ok(runs)
+    }
+
+    async fn list_events(&self, _run_id: &str) -> Result<Vec<CouncilRunEvent>, RepositoryError> {
+        Ok(Vec::new())
+    }
+
+    async fn truncate_events_after_wave(
+        &self,
+        _run_id: &str,
+        _wave_index: u32,
+    ) -> Result<(), RepositoryError> {
+        // In-memory repository: no-op.
+        Ok(())
+    }
+
+    async fn mark_interrupted_runs(&self) -> Result<u64, RepositoryError> {
+        let mut count = 0u64;
+        for run in self
+            .runs
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .values_mut()
+        {
+            if run.status == CouncilRunStatus::Running {
+                run.status = CouncilRunStatus::Interrupted;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+}
+
+// =============================================================================
+// start_proxy_standalone
+// =============================================================================
 
 /// Start the OpenAI-compatible proxy as a standalone server (CLI usage).
 ///
@@ -63,6 +238,25 @@ pub async fn start_proxy_standalone(
     // Create runtime port
     let runtime_port: Arc<dyn gglib_core::ports::ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
+
+    // Build CouncilDeps with in-memory backends.
+    let http_client = reqwest::Client::builder()
+        .pool_max_idle_per_host(10)
+        .build()
+        .map_err(|e| anyhow!("failed to build HTTP client: {e}"))?;
+
+    let council_runner = Arc::new(CouncilRunnerAdapter::new(
+        Arc::clone(&runtime_port),
+        Arc::clone(&catalog_port),
+        http_client,
+        Arc::clone(&mcp),
+    ));
+    let orchestrator_deps = CouncilDeps {
+        runner: council_runner as Arc<dyn gglib_proxy::CouncilRunnerPort>,
+        approval_registry: Arc::new(InMemoryApprovalRegistry::new())
+            as Arc<dyn CouncilApprovalRegistryPort>,
+        council_repo: Arc::new(InMemoryCouncilRepository::new()) as Arc<dyn CouncilRepositoryPort>,
+    };
 
     // Create supervisor
     let supervisor = ProxySupervisor::new();
@@ -115,7 +309,7 @@ pub async fn start_proxy_standalone(
     println!();
 
     let addr = supervisor
-        .start(config, runtime_port, catalog_port, mcp)
+        .start(config, runtime_port, catalog_port, mcp, orchestrator_deps)
         .await
         .map_err(|e| anyhow!("{e}"))?;
     tracing::info!("Proxy started on {addr}");

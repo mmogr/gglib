@@ -288,6 +288,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let gguf_path = dir.path().join("model.gguf");
         fs::write(&gguf_path, b"placeholder").await.unwrap();
+        // Canonicalize to resolve macOS /var → /private/var symlinks so the
+        // comparison matches the path the service stores after canonicalization.
+        let gguf_path = gguf_path.canonicalize().unwrap();
 
         let req = AddModelRequest {
             file_path: gguf_path.to_str().unwrap().to_string(),

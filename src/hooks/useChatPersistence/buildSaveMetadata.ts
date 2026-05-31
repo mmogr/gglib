@@ -24,10 +24,10 @@ export function buildSaveMetadata(
 
   const hasContent = parts.length > 0 || thinking !== null;
 
-  // Extract council session payload if present on the message
-  const councilSession = (m.metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.councilSession;
+  // Extract orchestrator run id if present on the message
+  const councilRunId = (m.metadata as { custom?: GglibMessageCustom } | undefined)?.custom?.councilRunId;
 
-  if (!hasContent && !councilSession) return null;
+  if (!hasContent && !councilRunId) return null;
 
   const meta: ChatMessageMetadata = {};
   if (parts.length > 0) meta.contentParts = parts;
@@ -38,9 +38,9 @@ export function buildSaveMetadata(
     }
   }
 
-  // Persist council session payload
-  if (councilSession) {
-    meta.councilSession = councilSession;
+  // Persist orchestrator run id
+  if (councilRunId) {
+    meta.councilRunId = councilRunId;
   }
 
   return meta;

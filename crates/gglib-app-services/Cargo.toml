@@ -17,9 +17,11 @@ gglib-core = { path = "../gglib-core" }
 gglib-download = { path = "../gglib-download" }
 gglib-mcp = { path = "../gglib-mcp" }
 gglib-hf = { path = "../gglib-hf" }
+gglib-proxy = { path = "../gglib-proxy" }
 gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
 
 # Shared deps
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -31,6 +33,9 @@ tokio = { workspace = true }
 async-trait = "0.1"
 tokio-util = "0.7"
 futures-util = "0.3"
+
+# Approval registry
+dashmap = "6"
 
 [dev-dependencies]
 tokio-test = { workspace = true }

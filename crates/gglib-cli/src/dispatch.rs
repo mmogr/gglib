@@ -69,60 +69,6 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     crate::commands::ChatCommand::History { limit } => {
                         handlers::history::execute(ctx, limit).await?;
                     }
-                    crate::commands::ChatCommand::Council {
-                        topic,
-                        suggest,
-                        edit,
-                        config,
-                        agent_count,
-                        model,
-                        port,
-                        context,
-                    } => {
-                        if suggest {
-                            handlers::council::execute_suggest(
-                                ctx,
-                                &topic,
-                                port,
-                                agent_count,
-                                model,
-                                context.ctx_size.clone(),
-                            )
-                            .await?;
-                        } else if let Some(config_path) = config {
-                            if edit {
-                                handlers::council::execute_edit(
-                                    ctx,
-                                    &config_path,
-                                    &topic,
-                                    port,
-                                    model,
-                                    context.ctx_size.clone(),
-                                )
-                                .await?;
-                            } else {
-                                handlers::council::execute_run(
-                                    ctx,
-                                    &config_path,
-                                    &topic,
-                                    port,
-                                    model,
-                                    context.ctx_size.clone(),
-                                )
-                                .await?;
-                            }
-                        } else {
-                            handlers::council::execute_interactive(
-                                ctx,
-                                &topic,
-                                port,
-                                agent_count,
-                                model,
-                                context.ctx_size,
-                            )
-                            .await?;
-                        }
-                    }
                 }
             } else {
                 let args = handlers::inference::chat::ChatArgs {
@@ -186,6 +132,97 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         }
 
         // ── GUI / web interfaces ────────────────────────────────────────────
+        Commands::Plan {
+            goal,
+            model,
+            port,
+            max_replans,
+            context,
+        } => {
+            handlers::plan::execute(ctx, &goal, port, model, context.ctx_size, max_replans).await?;
+        }
+
+        Commands::Council { cmd } => {
+            use crate::commands::CouncilCmd;
+            match cmd {
+                CouncilCmd::Run {
+                    goal,
+                    model,
+                    port,
+                    max_replans,
+                    hitl,
+                    approval_timeout,
+                    approval_timeout_action,
+                    json,
+                    context,
+                } => {
+                    handlers::council::run::execute(
+                        ctx,
+                        &goal,
+                        port,
+                        model,
+                        context.ctx_size,
+                        max_replans,
+                        hitl.as_deref(),
+                        approval_timeout,
+                        &approval_timeout_action,
+                        json,
+                    )
+                    .await?;
+                }
+                CouncilCmd::List { status } => {
+                    handlers::council::list::execute(ctx, status.as_deref()).await?;
+                }
+                CouncilCmd::Show { run_id } => {
+                    handlers::council::show::execute(ctx, &run_id).await?;
+                }
+                CouncilCmd::Resume {
+                    run_id,
+                    model,
+                    port,
+                    max_replans,
+                    hitl,
+                    approval_timeout,
+                    approval_timeout_action,
+                    json,
+                    context,
+                } => {
+                    handlers::council::resume::execute(
+                        ctx,
+                        &run_id,
+                        port,
+                        model,
+                        context.ctx_size,
+                        max_replans,
+                        hitl.as_deref(),
+                        approval_timeout,
+                        &approval_timeout_action,
+                        json,
+                    )
+                    .await?;
+                }
+                CouncilCmd::Rewind {
+                    run_id,
+                    wave,
+                    note,
+                    model,
+                    port,
+                    context,
+                } => {
+                    handlers::council::rewind::execute(
+                        ctx,
+                        &run_id,
+                        wave,
+                        note.as_deref(),
+                        port,
+                        model,
+                        context.ctx_size,
+                    )
+                    .await?;
+                }
+            }
+        }
+
         Commands::Gui { dev } => {
             handlers::gui::execute(dev)?;
         }

@@ -16,6 +16,7 @@ mod test_support;
 
 mod error;
 
+pub mod council_approvals;
 mod downloads;
 mod mcp;
 mod models;
@@ -26,6 +27,7 @@ pub mod setup;
 pub mod types;
 
 // Primary exports
+pub use council_approvals::CouncilApprovalRegistry;
 pub use error::GuiError;
 
 // Domain ops + their Deps
