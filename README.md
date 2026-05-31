@@ -217,6 +217,24 @@ Dialect selection is driven entirely by **system tags** in the `format:*` namesp
 | `format:qwen-xml` | `QwenXmlParser` | Model name contains `qwen` and the chat template emits `<tool_call>` markup |
 | `format:hermes` | `StandardJsonParser` | Hermes/ChatML-style tool-calling templates |
 
+In addition to `format:*` tags, gglib detects the following **capability tags** at import
+time from GGUF metadata, which drive automatic flag selection at serve time:
+
+| Tag | Detection trigger | Effect |
+|-----|-------------------|--------|
+| `agent` | Chat template contains tool-calling syntax | `--jinja` auto-enabled |
+| `reasoning` | Chat template contains `<think>` / DeepSeek reasoning tokens | `--reasoning-format deepseek` auto-enabled |
+| `mtp` | `{arch}.nextn_predict_layers > 0` in GGUF metadata | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` auto-enabled |
+
+Override MTP from the CLI:
+```bash
+# Disable MTP on a tagged model
+gglib serve <id> --mtp-draft-n-max 0
+
+# Explicit settings (4 draft tokens, 80% p-min)
+gglib serve <id> --mtp-draft-n-max 4 --mtp-draft-p-min 0.8
+```
+
 These tags are **auto-detected at import time** by `gglib-gguf::capabilities::detect_all` and persisted by `ModelService::import_from_file`. They are protected as system tags: `gglib model remove-tag` will reject any attempt to remove a `format:*` tag (use the `_force` service path for admin operations).
 
 #### Backfilling tags on existing catalogs

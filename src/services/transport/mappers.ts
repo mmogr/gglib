@@ -18,6 +18,10 @@ export interface StartServerRequest {
   mlock: boolean;
   jinja?: boolean;
   reasoningFormat?: string;
+  /** Number of MTP draft tokens. undefined = auto; 0 = disable. Matches Rust mtp_draft_n_max. */
+  mtpDraftNMax?: number;
+  /** Minimum acceptance probability for MTP draft tokens. Matches Rust mtp_draft_p_min. */
+  mtpDraftPMin?: number;
   // Inference parameters as nested object (matches Rust's inference_params field)
   inferenceParams?: {
     temperature?: number;
@@ -89,6 +93,8 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     jinja: config.jinja,
     // reasoning_format is auto-detected from model tags on backend when omitted
     reasoningFormat: undefined,
+    mtpDraftNMax: config.specDraftNMax,
+    mtpDraftPMin: config.specDraftPMin,
     inferenceParams,
   };
 }

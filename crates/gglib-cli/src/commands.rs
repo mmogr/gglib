@@ -11,7 +11,7 @@ use clap_complete::Shell;
 use crate::config_commands::ConfigCommand;
 use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
-use crate::shared_args::{ContextArgs, SamplingArgs};
+use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 
 /// Subcommands available under `gglib chat`.
 #[derive(Subcommand)]
@@ -57,14 +57,12 @@ pub enum Commands {
         id: u32,
         #[command(flatten)]
         context: ContextArgs,
-        /// Force-enable Jinja template parsing for chat templates
-        #[arg(long)]
-        jinja: bool,
-        /// Port to serve on
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
+        #[command(flatten)]
+        options: ServeOptions,
         #[command(flatten)]
         sampling: SamplingArgs,
+        #[command(flatten)]
+        mtp: MtpArgs,
     },
 
     /// Chat with a model interactively, or manage chat history

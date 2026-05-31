@@ -36,6 +36,18 @@ pub struct ServerConfig {
     pub jinja: bool,
     /// Reasoning format override (e.g., `"deepseek"`, `"none"`).
     pub reasoning_format: Option<String>,
+    /// Number of MTP draft tokens to speculate ahead (`--spec-draft-n-max`).
+    ///
+    /// `None` means MTP speculative decoding is disabled.  When `Some(n)`,
+    /// `--spec-type draft-mtp` and `--spec-draft-n-max n` are passed to
+    /// llama-server.  Recommended value: `2` (Unsloth default).
+    pub spec_draft_n_max: Option<u32>,
+    /// Minimum acceptance probability for MTP draft tokens (`--spec-draft-p-min`).
+    ///
+    /// Only meaningful when `spec_draft_n_max` is `Some`.  Skipping low-confidence
+    /// draft tokens is especially important on Apple Silicon (Metal) to avoid
+    /// throughput regression.  Recommended value: `0.75`.
+    pub spec_draft_p_min: Option<f32>,
     /// Inference sampling parameters (temperature, `top_p`, etc.).
     pub inference_config: Option<InferenceConfig>,
     /// Additional server-specific options (escape hatch).
@@ -61,6 +73,8 @@ impl ServerConfig {
             gpu_layers: None,
             jinja: false,
             reasoning_format: None,
+            spec_draft_n_max: None,
+            spec_draft_p_min: None,
             inference_config: None,
             extra_args: Vec::new(),
         }
@@ -98,6 +112,27 @@ impl ServerConfig {
     #[must_use]
     pub fn with_reasoning_format(mut self, format: String) -> Self {
         self.reasoning_format = Some(format);
+        self
+    }
+
+    /// Enable MTP speculative decoding with the given draft token count.
+    ///
+    /// This causes `--spec-type draft-mtp` and `--spec-draft-n-max n` to be
+    /// passed to llama-server.  Call [`Self::with_spec_draft_p_min`] to also
+    /// set the acceptance probability threshold (defaults to 0.75).
+    #[must_use]
+    pub const fn with_spec_draft_n_max(mut self, n: u32) -> Self {
+        self.spec_draft_n_max = Some(n);
+        self
+    }
+
+    /// Set the minimum acceptance probability for MTP draft tokens.
+    ///
+    /// Has no effect unless `spec_draft_n_max` is also set.  Recommended
+    /// value is `0.75`; lower values trade quality for speed.
+    #[must_use]
+    pub const fn with_spec_draft_p_min(mut self, p: f32) -> Self {
+        self.spec_draft_p_min = Some(p);
         self
     }
 

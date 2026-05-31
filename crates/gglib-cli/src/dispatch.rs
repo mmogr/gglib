@@ -41,11 +41,12 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
         Commands::Serve {
             id,
             context,
-            jinja,
-            port,
+            options,
             sampling,
+            mtp,
         } => {
-            handlers::inference::serve::execute(ctx, id, context, jinja, port, sampling).await?;
+            handlers::inference::serve::execute(ctx, id, context, options, sampling, mtp, verbose)
+                .await?;
         }
         Commands::Chat {
             identifier,

@@ -100,10 +100,21 @@ Serve a model with llama-server.
 - `--mlock`: Enable memory lock
 - `--jinja`: Force-enable Jinja template parsing for llama-server chat templates
 - `--port <PORT>`, `-p`: Port to serve on (default: 8080)
+- `--mtp-draft-n-max <N>`: MTP speculative decoding draft token count.
+  Auto-enabled with `n=2` when the model has the `mtp` tag.
+  Set to `0` to explicitly disable MTP even on a tagged model.
+- `--mtp-draft-p-min <P>`: Minimum acceptance probability for MTP draft tokens (default: `0.75`).
+  Lower values improve throughput at the cost of quality. Recommended range: `0.5`–`0.95`.
 
 **Example:**
 ```bash
 gglib serve 1 --ctx-size max --mlock
+
+# Explicitly enable MTP with custom settings (even without tag)
+gglib serve 1 --mtp-draft-n-max 4 --mtp-draft-p-min 0.8
+
+# Disable MTP even though the model has the mtp tag
+gglib serve 1 --mtp-draft-n-max 0
 ```
 
 #### `chat <identifier> [OPTIONS]`

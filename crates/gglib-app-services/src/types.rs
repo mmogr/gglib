@@ -197,6 +197,17 @@ pub struct StartServerRequest {
     pub jinja: Option<bool>,
     #[serde(default)]
     pub reasoning_format: Option<String>,
+    /// Number of MTP draft tokens (`--spec-draft-n-max`).
+    ///
+    /// `None` = auto-detect from model tags.  `Some(0)` = explicitly disabled.
+    /// `Some(n > 0)` = explicitly enable with n tokens.
+    #[serde(default)]
+    pub mtp_draft_n_max: Option<u32>,
+    /// Minimum acceptance probability for MTP draft tokens (`--spec-draft-p-min`).
+    ///
+    /// Only meaningful when `mtp_draft_n_max` is `Some`.  Defaults to `0.75`.
+    #[serde(default)]
+    pub mtp_draft_p_min: Option<f32>,
     /// Inference parameters for this serve session (overrides model/global defaults).
     #[serde(default)]
     pub inference_params: Option<gglib_core::domain::InferenceConfig>,

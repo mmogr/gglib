@@ -61,6 +61,10 @@ export interface ServeConfig {
   mlock?: boolean;
   port?: number;
   jinja?: boolean;
+  /** Number of MTP draft tokens. undefined = auto-detect from tags; 0 = disable. */
+  specDraftNMax?: number;
+  /** Minimum acceptance probability for MTP draft tokens (default 0.75). */
+  specDraftPMin?: number;
   // Inference parameters for this serve session
   temperature?: number;
   topP?: number;

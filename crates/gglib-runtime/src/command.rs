@@ -6,11 +6,11 @@
 use crate::llama::{LlamaServerError, resolve_llama_server};
 use crate::process::spawn_stream_reader;
 use gglib_core::ports::{ServerConfig, ServerLogSinkPort};
-use gglib_core::utils::process::async_cmd;
+use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::process::Child;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Select the llama-server path to use.
 ///
@@ -107,7 +107,7 @@ pub fn build_and_spawn(
             }
         })?;
 
-    let mut cmd = async_cmd(validated_path);
+    let mut cmd = cmd(validated_path);
     cmd.arg("-m")
         .arg(&config.model_path)
         .arg("--host")
@@ -136,6 +136,15 @@ pub fn build_and_spawn(
         cmd.arg("--reasoning-format").arg(format);
     }
 
+    // Add MTP speculative decoding flags if enabled
+    if let Some(n) = config.spec_draft_n_max {
+        cmd.arg("--spec-type").arg("draft-mtp");
+        cmd.arg("--spec-draft-n-max").arg(n.to_string());
+        if let Some(p) = config.spec_draft_p_min {
+            cmd.arg("--spec-draft-p-min").arg(p.to_string());
+        }
+    }
+
     // Add inference parameters if specified
     if let Some(ref inference) = config.inference_config {
         for arg in inference.to_cli_args() {
@@ -148,7 +157,19 @@ pub fn build_and_spawn(
         cmd.arg(arg);
     }
 
-    // Use piped stdio for log streaming
+    // Log the full invocation. std::process::Command exposes get_program/get_args,
+    // so we log before converting to tokio::process::Command.
+    info!(
+        "spawning llama-server: {} {}",
+        cmd.get_program().to_string_lossy(),
+        cmd.get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    // Convert to async command and attach piped stdio for log streaming.
+    let mut cmd = tokio::process::Command::from(cmd);
     cmd.stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
@@ -254,6 +275,8 @@ mod tests {
             gpu_layers: None,
             jinja: false,
             reasoning_format: None,
+            spec_draft_n_max: None,
+            spec_draft_p_min: None,
             inference_config: None,
             extra_args: vec![],
         };
