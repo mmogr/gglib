@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, anyhow};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::mpsc;
 
 use gglib_app_services::CouncilApprovalRegistry;
 use gglib_core::domain::council::events::ApprovalKind;
@@ -103,6 +103,7 @@ pub(crate) async fn prompt_and_resolve(
     registry: &Arc<CouncilApprovalRegistry>,
     last_graph: Option<&TaskGraph>,
     opts: &ApproveOpts,
+    input_rx: &mut mpsc::UnboundedReceiver<String>,
 ) {
     let description = match kind {
         ApprovalKind::Plan => "the proposed plan".to_owned(),
@@ -139,7 +140,7 @@ pub(crate) async fn prompt_and_resolve(
     }
     eprint!("  Decision: ");
 
-    let input = read_line_with_timeout(opts.timeout_secs).await;
+    let input = read_line_with_timeout(opts.timeout_secs, input_rx).await;
 
     let decision = match input.as_deref().map(str::trim) {
         // Timed out
@@ -156,7 +157,7 @@ pub(crate) async fn prompt_and_resolve(
         // Reject
         Some("n" | "no" | "reject") => {
             eprint!("  Rejection reason (optional, Enter to skip): ");
-            let reason = read_line_async().await;
+            let reason = read_line_async(input_rx).await;
             let reason = reason.trim().to_owned();
             let msg = if reason.is_empty() {
                 "rejected by user".to_owned()
@@ -197,39 +198,32 @@ pub(crate) async fn prompt_and_resolve(
 // Async stdin helpers
 // =============================================================================
 
-/// Read one line from stdin, optionally timing out.
+/// Read one line from the shared input receiver, optionally timing out.
 ///
-/// Returns `Some(line)` when the user presses Enter, `None` on timeout.
-///
-/// Uses `tokio::io::stdin()` + [`AsyncBufReadExt::read_line`] so the future
-/// is a proper tokio async future that `tokio::time::timeout` can cancel.
-async fn read_line_with_timeout(timeout_secs: Option<u64>) -> Option<String> {
-    let read_fut = async {
-        let stdin = tokio::io::stdin();
-        let mut reader = BufReader::new(stdin);
-        let mut line = String::new();
-        let _ = reader.read_line(&mut line).await;
-        line
-    };
-
+/// Returns `Some(line)` when a line arrives, `None` on timeout or channel
+/// close.  The line was already read from stdin by the background input
+/// router task in [`crate::presentation::input`], so this function never
+/// touches stdin directly — there is no executor-blocking risk.
+async fn read_line_with_timeout(
+    timeout_secs: Option<u64>,
+    input_rx: &mut mpsc::UnboundedReceiver<String>,
+) -> Option<String> {
+    let recv_fut = input_rx.recv();
     match timeout_secs {
-        None => Some(read_fut.await),
-        Some(secs) => tokio::time::timeout(Duration::from_secs(secs), read_fut)
+        None => recv_fut.await,
+        Some(secs) => tokio::time::timeout(Duration::from_secs(secs), recv_fut)
             .await
-            .ok(),
+            .ok()
+            .flatten(),
     }
 }
 
-/// Read one line from stdin without a timeout.
+/// Read one line from the shared input receiver without a timeout.
 ///
-/// Used for follow-up prompts where the user has already committed to an
-/// action (e.g. rejection reason), so no timeout is needed.
-async fn read_line_async() -> String {
-    let stdin = tokio::io::stdin();
-    let mut reader = BufReader::new(stdin);
-    let mut line = String::new();
-    let _ = reader.read_line(&mut line).await;
-    line
+/// Used for follow-up prompts (e.g. rejection reason) where the user has
+/// already committed to an action and no timeout is appropriate.
+async fn read_line_async(input_rx: &mut mpsc::UnboundedReceiver<String>) -> String {
+    input_rx.recv().await.unwrap_or_default()
 }
 
 // =============================================================================

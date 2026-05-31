@@ -8,6 +8,7 @@ use std::sync::Arc;
 use gglib_app_services::CouncilApprovalRegistry;
 use gglib_core::domain::council::events::CouncilEvent;
 use gglib_core::domain::council::task_graph::TaskGraph;
+use tokio::sync::mpsc;
 
 use crate::presentation::{dag, style};
 
@@ -29,6 +30,7 @@ pub(crate) async fn render_event(
     last_graph: &mut Option<TaskGraph>,
     opts: &ApproveOpts,
     json_mode: bool,
+    input_rx: &mut mpsc::UnboundedReceiver<String>,
 ) {
     if json_mode {
         match serde_json::to_string(event) {
@@ -78,7 +80,7 @@ pub(crate) async fn render_event(
             );
         }
         CouncilEvent::AwaitingApproval { approval_id, kind } => {
-            approve::prompt_and_resolve(approval_id, kind, approval_registry, last_graph.as_ref(), opts).await;
+            approve::prompt_and_resolve(approval_id, kind, approval_registry, last_graph.as_ref(), opts, input_rx).await;
         }
         CouncilEvent::NodeStarted {
             node_id,
@@ -210,10 +212,11 @@ pub(crate) async fn render_event(
             applied_at_wave,
             diff,
         } => {
+            let diff_str = serde_json::to_string(diff)
+                .unwrap_or_else(|_| format!("{diff:?}"));
             eprintln!(
-                "{}[wave {applied_at_wave}] ↩ steering applied: {:?}{}",
-                style::DIM,
-                diff,
+                "{}  ↩  Steering applied at wave {applied_at_wave}:{} {diff_str}",
+                style::INFO,
                 style::RESET,
             );
         }

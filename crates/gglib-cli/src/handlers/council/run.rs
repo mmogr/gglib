@@ -5,11 +5,12 @@ use std::sync::Arc;
 use anyhow::{Result, anyhow};
 use tokio::sync::mpsc;
 
-use gglib_agent::council::{CouncilConfig, execute as engine_execute};
+use gglib_agent::council::{CouncilConfig, NoteQueue, execute as engine_execute};
 use gglib_core::domain::council::events::COUNCIL_EVENT_CHANNEL_CAPACITY;
 use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
 
 use crate::bootstrap::CliContext;
+use crate::presentation::input::spawn_input_router;
 
 use super::{approve, init_session, parse_hitl_mode, stop_server};
 use super::render::render_event;
@@ -40,6 +41,9 @@ pub async fn execute(
 
     let (ports, handle) = init_session(ctx, port, model, ctx_size).await?;
 
+    let note_queue: NoteQueue = Arc::new(tokio::sync::Mutex::new(vec![]));
+    let mut input_rx = spawn_input_router(Arc::clone(&note_queue));
+
     let config = CouncilConfig {
         max_replans,
         hitl_mode,
@@ -47,6 +51,7 @@ pub async fn execute(
             Arc::clone(&ctx.approval_registry) as Arc<dyn CouncilApprovalRegistryPort>
         ),
         repository: Some(Arc::clone(&ctx.council_repo) as Arc<dyn CouncilRepositoryPort>),
+        note_queue: Some(note_queue),
         ..CouncilConfig::default()
     };
 
@@ -63,7 +68,7 @@ pub async fn execute(
 
     let mut last_graph = None;
     while let Some(event) = rx.recv().await {
-        render_event(&event, &approval_registry, &mut last_graph, &approve_opts, json_mode).await;
+        render_event(&event, &approval_registry, &mut last_graph, &approve_opts, json_mode, &mut input_rx).await;
     }
 
     stop_server(ctx, &handle).await;
