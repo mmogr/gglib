@@ -7,7 +7,7 @@ use std::process::Stdio;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
-use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs};
+use crate::shared_args::{ContextArgs, MtpArgs, SamplingArgs, ServeOptions};
 use gglib_runtime::llama::{
     ContextInput, LlamaCommandBuilder, ensure_llama_initialized, resolve_context_size,
     resolve_llama_server, resolve_mtp_args,
@@ -25,8 +25,7 @@ pub async fn execute(
     ctx: &CliContext,
     id: u32,
     context: ContextArgs,
-    jinja_flag: bool,
-    port: u16,
+    options: ServeOptions,
     sampling: SamplingArgs,
     mtp: MtpArgs,
     verbose: bool,
@@ -71,7 +70,7 @@ pub async fn execute(
     log_inference_info(&inference_config);
 
     // Handle Jinja flag
-    if jinja_flag {
+    if options.jinja {
         eprintln!("  Jinja templates: enabled");
     }
 
@@ -84,7 +83,7 @@ pub async fn execute(
         );
     }
 
-    eprintln!("  Server will be available on http://localhost:{}", port);
+    eprintln!("  Server will be available on http://localhost:{}", options.port);
     style::print_banner_close();
 
     // Build llama-server command
@@ -92,9 +91,9 @@ pub async fn execute(
         .context_resolution(context_resolution)
         .mlock(context.mlock)
         .inference_config(inference_config)
-        .arg_with_value("--port", port.to_string());
+        .arg_with_value("--port", options.port.to_string());
 
-    if jinja_flag {
+    if options.jinja {
         builder = builder.flag("--jinja");
     }
 

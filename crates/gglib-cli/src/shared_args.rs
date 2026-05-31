@@ -70,6 +70,23 @@ pub struct MtpArgs {
     pub mtp_draft_p_min: Option<f32>,
 }
 
+/// Serve-command options that don't belong to another group.
+#[derive(Args, Debug, Clone)]
+pub struct ServeOptions {
+    /// Force-enable Jinja template parsing for chat templates
+    #[arg(long)]
+    pub jinja: bool,
+    /// Port to serve on
+    #[arg(short, long, default_value = "8080")]
+    pub port: u16,
+}
+
+impl Default for ServeOptions {
+    fn default() -> Self {
+        Self { jinja: false, port: 8080 }
+    }
+}
+
 /// Builder for [`ConversationSettings`](gglib_core::domain::chat::ConversationSettings)
 /// from CLI argument groups.
 ///
