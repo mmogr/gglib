@@ -29,16 +29,16 @@ use crate::presentation::style;
 /// colours in [`style`] (DANGER = red, SUCCESS = green, INFO = blue).
 /// All entries are readable against both dark and light terminal backgrounds.
 const NODE_PALETTE: &[&str] = &[
-    "\x1b[36m",  // Cyan
-    "\x1b[35m",  // Magenta
-    "\x1b[33m",  // Yellow
-    "\x1b[94m",  // Bright Blue
-    "\x1b[96m",  // Bright Cyan
-    "\x1b[95m",  // Bright Magenta
-    "\x1b[93m",  // Bright Yellow
-    "\x1b[92m",  // Bright Green
-    "\x1b[91m",  // Bright Red
-    "\x1b[97m",  // Bright White
+    "\x1b[36m", // Cyan
+    "\x1b[35m", // Magenta
+    "\x1b[33m", // Yellow
+    "\x1b[94m", // Bright Blue
+    "\x1b[96m", // Bright Cyan
+    "\x1b[95m", // Bright Magenta
+    "\x1b[93m", // Bright Yellow
+    "\x1b[92m", // Bright Green
+    "\x1b[91m", // Bright Red
+    "\x1b[97m", // Bright White
 ];
 
 /// Return a stable ANSI foreground-colour escape for a given node id string.
@@ -65,14 +65,24 @@ pub fn node_color(node_id: &str) -> &'static str {
 ///    └── [write-summary] Write a clear, comprehensive… (needs: research)
 /// ```
 pub fn render_tree(graph: &TaskGraph, out: &mut impl Write) {
-    let _ = writeln!(out, "{}── goal:{} {}", style::BOLD, style::RESET, graph.goal);
+    let _ = writeln!(
+        out,
+        "{}── goal:{} {}",
+        style::BOLD,
+        style::RESET,
+        graph.goal
+    );
 
     let ordered = topological_order(graph);
     let last = ordered.len().saturating_sub(1);
 
     for (i, id) in ordered.iter().enumerate() {
         let node = &graph.nodes[id];
-        let connector = if i == last { "   └──" } else { "   ├──" };
+        let connector = if i == last {
+            "   └──"
+        } else {
+            "   ├──"
+        };
         let color = node_color(&id.0);
         let deps = if node.depends_on.is_empty() {
             String::new()

@@ -136,7 +136,10 @@ pub(crate) async fn prompt_and_resolve(
             timeout_hint
         );
     } else {
-        eprintln!("  [y] approve  [n] reject  (Enter = approve){}", timeout_hint);
+        eprintln!(
+            "  [y] approve  [n] reject  (Enter = approve){}",
+            timeout_hint
+        );
     }
     eprint!("  Decision: ");
 
@@ -232,8 +235,7 @@ async fn read_line_async(input_rx: &mut mpsc::UnboundedReceiver<String>) -> Stri
 
 /// Serialise `graph` to a temp file, open `$EDITOR`, then parse the result.
 async fn open_editor_for_graph(graph: &TaskGraph) -> Result<TaskGraph> {
-    let tmp_path =
-        std::env::temp_dir().join(format!("gglib-plan-{}.json", std::process::id()));
+    let tmp_path = std::env::temp_dir().join(format!("gglib-plan-{}.json", std::process::id()));
 
     let json = serde_json::to_string_pretty(graph).context("serialising graph to JSON")?;
     tokio::fs::write(&tmp_path, &json)

@@ -31,8 +31,8 @@ use crate::bootstrap::CliContext;
 use crate::presentation::input::spawn_input_router;
 use crate::presentation::style;
 
-use super::{approve, init_session, stop_server};
 use super::render::render_event;
+use super::{approve, init_session, stop_server};
 
 /// Rewind run `run_id` to `wave` and re-execute from that point.
 #[allow(clippy::too_many_arguments)]
@@ -180,4 +180,3 @@ pub async fn execute(
         Ok(Ok(())) => Ok(()),
     }
 }
-

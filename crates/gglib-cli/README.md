@@ -118,8 +118,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `search <query>` | Search HuggingFace Hub for models |
 | `config settings show` | Show current configuration |
 | `config default <id>` | Set/show/clear the default model |
-| `chat council <topic>` | Interactive council: suggest → edit → run |
-| `chat council --suggest <topic>` | Suggest a council and print JSON |
+| `council run "<goal>"` | Plan and execute a DAG task graph |
+| `council list [--status]` | List past orchestrator runs |
+| `council show <id>` | Show run details + event timeline |
+| `council resume <id>` | Continue an interrupted run |
+| `council rewind <id> --wave N` | Roll back to a previous wave and re-execute |
 | `verify <id>` | Verify model integrity via SHA256 hash comparison |
 | `repair <id>` | Re-download corrupt shards for a model |
 | `completions <shell>` | Print a shell completion script to stdout |
@@ -237,56 +240,103 @@ text reaches stdout. This works regardless of rendering mode.
 gglib config default 1
 ```
 
-### Council Command
+### Orchestrator (council)
 
-The `chat council` command lets you compose a multi-agent debate panel:
+The `council` command family runs a DAG-structured task graph using a local
+llama-server.  The director LLM decomposes your goal into parallel worker
+nodes; each node is executed with optional human-in-the-loop (HITL) gates.
 
 ```bash
-# Interactive mode: suggest → edit → run
-gglib chat council "Should we use microservices?"
+# Basic run — director plans, workers execute, synthesis produces final answer
+gglib council run "Audit the codebase for security issues"
 
-# Suggest-only: print the designed council as JSON
-gglib chat council --suggest "Pros and cons of Rust"
+# With a specific model and custom context window
+gglib council run "Write a blog post on Rust async" --model llama3 --ctx-size 8192
 
-# Load a saved config, edit, then run
-gglib chat council --config council.json --edit "My topic"
+# Approve the plan before execution starts
+gglib council run "Refactor the auth module" --hitl plan
+
+# Approve every node before it executes
+gglib council run "Deploy staging" --hitl node
+
+# Auto-reject approval gates after 30 seconds
+gglib council run "Summarise docs" --hitl plan \
+  --approval-timeout 30 --approval-timeout-action reject
+
+# Auto-approve after 60 seconds (unattended CI run with a human fallback window)
+gglib council run "Summarise docs" --hitl plan \
+  --approval-timeout 60 --approval-timeout-action approve
+
+# Machine-readable JSONL output — every CouncilEvent as one JSON line on stdout
+# (requires --hitl none, which is the default)
+gglib council run "Summarise logs" --json | jq 'select(.type == "council_complete")'
+
+# List all runs
+gglib council list
+
+# Filter by status
+gglib council list --status awaiting_approval
+
+# Inspect a run's graph + full event timeline
+gglib council show 01j2kxw3...
+
+# Resume an interrupted or awaiting-approval run
+gglib council resume 01j2kxw3...
+
+# Rewind to wave 2 and re-execute from there
+gglib council rewind 01j2kxw3... --wave 2
+
+# Rewind and inject a steering note at the rewind point
+gglib council rewind 01j2kxw3... --wave 2 --note "Focus on the authentication module"
 ```
 
-The interactive REPL editor supports these commands:
+#### HITL Approval Modes
 
-| Command | Description |
-|---------|-------------|
-| `show` | Re-display the council summary |
-| `persona <N>` | Edit agent N's persona |
-| `cont <N>` | Edit agent N's contentiousness (0.0–1.0) |
-| `tools <N>` | Edit agent N's tool filter |
-| `rounds <N>` | Set number of deliberation rounds |
-| `remove <N>` | Remove agent N |
-| `refine <msg>` | Ask the LLM to revise the council |
-| `save <path>` | Save config to a JSON file |
-| `run` | Accept and run the council |
-| `quit` | Abort without running |
+| Mode | `--hitl` value | What triggers a prompt |
+|------|---------------|------------------------|
+| None (default) | `none` | Never — fully automatic |
+| Plan gate | `plan` | Once, after the director produces the initial task graph |
+| Node gate | `node` | Before each worker node starts |
+| Tool gate | `tools` | Before each tool call inside any node |
 
-The `tools <N>` command accepts a rich filter expression:
+At each prompt you can type:
 
-| Expression | Meaning |
-|------------|---------|
-| `all` | All available tools (clears the filter) |
-| `5` | Tool at position 5 in the numbered list |
-| `5:9` | Tools at positions 5 through 9 (inclusive) |
-| `name` | Tool whose name matches exactly |
-| `!6` | All tools *except* position 6 |
-| `!5:9` | All tools *except* positions 5–9 |
-| `!name` | All tools *except* the named one |
-| `5:9,!6` | Positions 5–9, excluding 6 → gives 5, 7, 8, 9 |
+| Input | Action |
+|-------|--------|
+| `y` / Enter | Approve and continue |
+| `n` | Reject (prompts for an optional reason) |
+| `e` | Edit the plan JSON in `$EDITOR` (Plan gates only) |
+| *(timeout)* | Auto-resolve with `--approval-timeout-action` |
 
-Tokens are comma-separated; inclusion and exclusion tokens can be freely mixed.
-When only exclusions are given (e.g. `!6`), the implicit inclusion set is
-all available tools.
+#### Live Steering
 
-The `refine` command sends your instruction to the LLM along with the current
-council as context, producing a targeted revision that preserves stable agent
-IDs and makes minimal changes. You can refine multiple times before running.
+While a `council run`, `resume`, or `rewind` is executing you can type `/note`
+lines directly into stdin.  The background input router forwards them into the
+executor's `NoteQueue`; at each wave boundary the steering LLM converts each
+queued note into a `GraphDiff` and applies it to the live task graph.
+
+```
+/note focus only on the authentication module, skip the UI layer
+/note add a node to write a summary report at the end
+```
+
+Any line that does **not** start with `/note ` is interpreted as a response to
+the current HITL approval prompt.
+
+#### JSON Output
+
+Passing `--json` redirects every [`CouncilEvent`] to stdout as a
+newline-delimited JSON object.  No ANSI colour, DAG trees, or progress output
+reaches stdout — only valid JSONL.  All diagnostic text goes to stderr.
+
+```bash
+gglib council run "Summarise" --json 2>/dev/null | while IFS= read -r line; do
+  echo "$line" | jq -r 'select(.type=="council_complete") | .answer'
+done
+```
+
+Each line has a `"type"` field matching the [`CouncilEvent`] variant name in
+`snake_case` (e.g. `node_started`, `node_complete`, `council_complete`).
 
 ## Usage
 

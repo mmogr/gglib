@@ -99,7 +99,7 @@ pub enum CouncilCmd {
         context: ContextArgs,
     },
 
-    /// Rewind a run to a previous wave and re-execute (Phase 5)
+    /// Rewind a run to a previous wave and re-execute from that point
     #[command(display_order = 5)]
     Rewind {
         /// ID of the run to rewind

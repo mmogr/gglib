@@ -80,7 +80,15 @@ pub(crate) async fn render_event(
             );
         }
         CouncilEvent::AwaitingApproval { approval_id, kind } => {
-            approve::prompt_and_resolve(approval_id, kind, approval_registry, last_graph.as_ref(), opts, input_rx).await;
+            approve::prompt_and_resolve(
+                approval_id,
+                kind,
+                approval_registry,
+                last_graph.as_ref(),
+                opts,
+                input_rx,
+            )
+            .await;
         }
         CouncilEvent::NodeStarted {
             node_id,
@@ -212,8 +220,7 @@ pub(crate) async fn render_event(
             applied_at_wave,
             diff,
         } => {
-            let diff_str = serde_json::to_string(diff)
-                .unwrap_or_else(|_| format!("{diff:?}"));
+            let diff_str = serde_json::to_string(diff).unwrap_or_else(|_| format!("{diff:?}"));
             eprintln!(
                 "{}  ↩  Steering applied at wave {applied_at_wave}:{} {diff_str}",
                 style::INFO,

@@ -129,11 +129,9 @@ fn milestone_line(event: &CouncilEvent) -> Option<String> {
             style::DANGER,
             style::RESET
         )),
-        CouncilEvent::CouncilComplete { .. } => Some(format!(
-            "{}run complete{}",
-            style::SUCCESS,
-            style::RESET
-        )),
+        CouncilEvent::CouncilComplete { .. } => {
+            Some(format!("{}run complete{}", style::SUCCESS, style::RESET))
+        }
         CouncilEvent::CouncilError { message } => {
             Some(format!("{}error:{} {message}", style::DANGER, style::RESET))
         }

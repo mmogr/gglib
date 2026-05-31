@@ -15,8 +15,8 @@ use crate::bootstrap::CliContext;
 use crate::presentation::input::spawn_input_router;
 use crate::presentation::style;
 
-use super::{approve, init_session, parse_hitl_mode, stop_server};
 use super::render::render_event;
+use super::{approve, init_session, parse_hitl_mode, stop_server};
 
 /// Resume run `run_id` from its last saved graph.
 #[allow(clippy::too_many_arguments)]
@@ -96,7 +96,15 @@ pub async fn execute(
 
     let mut last_graph = None;
     while let Some(event) = rx.recv().await {
-        render_event(&event, &approval_registry, &mut last_graph, &approve_opts, json_mode, &mut input_rx).await;
+        render_event(
+            &event,
+            &approval_registry,
+            &mut last_graph,
+            &approve_opts,
+            json_mode,
+            &mut input_rx,
+        )
+        .await;
     }
 
     stop_server(ctx, &handle).await;

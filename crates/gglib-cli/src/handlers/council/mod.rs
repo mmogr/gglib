@@ -1,11 +1,50 @@
 //! `gglib council` subcommand group.
 //!
-//! Organised as a directory module; each subcommand lives in its own file:
-//! - [`run`]    — `council run "<goal>"`
-//! - [`resume`] — `council resume <run-id>`
-//! - [`list`]   — `council list [--status]`
-//! - [`show`]   — `council show <run-id>`
-//! - [`rewind`] — `council rewind <run-id> --wave N` (Phase 5 stub)
+//! Organised as a directory module; each subcommand lives in its own file.
+//!
+//! # Subcommands
+//!
+//! | File | Subcommand | Purpose |
+//! |------|------------|---------|
+//! | [`run`]    | `council run "<goal>"` | Plan and execute a new task graph |
+//! | [`list`]   | `council list [--status]` | List past orchestrator runs |
+//! | [`show`]   | `council show <id>` | Detailed event timeline for a run |
+//! | [`resume`] | `council resume <id>` | Continue an interrupted run |
+//! | [`rewind`] | `council rewind <id> --wave N` | Roll back to a previous wave and re-execute |
+//!
+//! # Shared helpers (private to the module)
+//!
+//! | Symbol | Purpose |
+//! |--------|---------|
+//! | [`parse_hitl_mode`] | Parse `--hitl` string → [`HitlMode`] |
+//! | [`init_session`]    | Spin up (or reuse) a llama-server, compose [`CouncilPorts`] |
+//! | [`resolve_port`]    | Select an explicit port or auto-allocate one |
+//! | [`stop_server`]     | Gracefully stop an auto-started llama-server |
+//!
+//! # Internal architecture
+//!
+//! ```text
+//!   stdin
+//!     │
+//!     ▼
+//! presentation::input::spawn_input_router
+//!     ├── /note <text>  ──►  NoteQueue  ──►  CouncilConfig  ──►  executor
+//!     └── other line   ──►  mpsc::UnboundedReceiver<String>
+//!                                │
+//!                                ▼
+//!                       approve::prompt_and_resolve
+//!                       (tokio::time::timeout around recv())
+//!                                │
+//!                                ▼
+//!                       CouncilApprovalRegistry::resolve
+//! ```
+//!
+//! The event loop in `run` / `resume` / `rewind` receives [`CouncilEvent`]s
+//! from the engine over a [`tokio::sync::mpsc`] channel and dispatches them
+//! to [`render::render_event`], which either serialises them as JSONL
+//! (`--json` mode) or renders them to the terminal with ANSI colour.
+//!
+//! [`CouncilEvent`]: gglib_core::domain::council::events::CouncilEvent
 
 pub mod approve;
 pub mod list;
