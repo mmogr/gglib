@@ -7,6 +7,7 @@
 //! - [`show`]   — `council show <run-id>`
 //! - [`rewind`] — `council rewind <run-id> --wave N` (Phase 5 stub)
 
+pub mod approve;
 pub mod list;
 pub mod render;
 pub mod resume;

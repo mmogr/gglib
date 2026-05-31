@@ -33,9 +33,15 @@ pub enum CouncilCmd {
         /// Enable human-in-the-loop approval gates (none, plan, node, tools)
         ///
         /// Pauses at the specified boundaries and prompts
-        /// `[y]es / [n]o` before proceeding.
+        /// `[y]es / [n]o / [e]dit` before proceeding.
         #[arg(long, value_name = "MODE", default_value = "none")]
         hitl: Option<String>,
+        /// Auto-resolve approval prompts after this many seconds
+        #[arg(long, value_name = "SECS")]
+        approval_timeout: Option<u64>,
+        /// Action when an approval prompt times out (reject | approve)
+        #[arg(long, value_name = "ACTION", default_value = "reject")]
+        approval_timeout_action: String,
         #[command(flatten)]
         context: ContextArgs,
     },
@@ -72,6 +78,12 @@ pub enum CouncilCmd {
         /// Enable human-in-the-loop approval gates (none, plan, node, tools)
         #[arg(long, value_name = "MODE", default_value = "none")]
         hitl: Option<String>,
+        /// Auto-resolve approval prompts after this many seconds
+        #[arg(long, value_name = "SECS")]
+        approval_timeout: Option<u64>,
+        /// Action when an approval prompt times out (reject | approve)
+        #[arg(long, value_name = "ACTION", default_value = "reject")]
+        approval_timeout_action: String,
         #[command(flatten)]
         context: ContextArgs,
     },

@@ -14,10 +14,11 @@ use gglib_core::ports::{CouncilApprovalRegistryPort, CouncilRepositoryPort};
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
 
-use super::{init_session, parse_hitl_mode, stop_server};
+use super::{approve, init_session, parse_hitl_mode, stop_server};
 use super::render::render_event;
 
 /// Resume run `run_id` from its last saved graph.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     ctx: &CliContext,
     run_id: &str,
@@ -26,8 +27,15 @@ pub async fn execute(
     ctx_size: Option<String>,
     max_replans: u32,
     hitl: Option<&str>,
+    approval_timeout: Option<u64>,
+    approval_timeout_action: &str,
 ) -> Result<()> {
     let hitl_mode = parse_hitl_mode(hitl)?;
+    let timeout_action = approve::parse_timeout_action(approval_timeout_action)?;
+    let approve_opts = approve::ApproveOpts {
+        timeout_secs: approval_timeout,
+        timeout_action,
+    };
 
     let run = ctx
         .council_repo
@@ -78,8 +86,9 @@ pub async fn execute(
         })
     };
 
+    let mut last_graph = None;
     while let Some(event) = rx.recv().await {
-        render_event(&event, &approval_registry).await;
+        render_event(&event, &approval_registry, &mut last_graph, &approve_opts).await;
     }
 
     stop_server(ctx, &handle).await;

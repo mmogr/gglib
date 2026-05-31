@@ -151,6 +151,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     port,
                     max_replans,
                     hitl,
+                    approval_timeout,
+                    approval_timeout_action,
                     context,
                 } => {
                     handlers::council::run::execute(
@@ -161,6 +163,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         context.ctx_size,
                         max_replans,
                         hitl.as_deref(),
+                        approval_timeout,
+                        &approval_timeout_action,
                     )
                     .await?;
                 }
@@ -176,6 +180,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                     port,
                     max_replans,
                     hitl,
+                    approval_timeout,
+                    approval_timeout_action,
                     context,
                 } => {
                     handlers::council::resume::execute(
@@ -186,6 +192,8 @@ pub async fn dispatch(ctx: &CliContext, command: Commands, verbose: bool) -> Res
                         context.ctx_size,
                         max_replans,
                         hitl.as_deref(),
+                        approval_timeout,
+                        &approval_timeout_action,
                     )
                     .await?;
                 }

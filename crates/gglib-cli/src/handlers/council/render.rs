@@ -1,25 +1,31 @@
-//! Terminal rendering for [`CouncilEvent`] and HITL approval prompts.
+//! Terminal rendering for [`CouncilEvent`] variants.
 //!
 //! Exported to sibling modules (`run`, `resume`) via `pub(crate)`.
+//! Approval prompts live in [`super::approve`].
 
 use std::sync::Arc;
 
 use gglib_app_services::CouncilApprovalRegistry;
-use gglib_core::domain::council::events::{ApprovalKind, CouncilEvent};
-use gglib_core::ports::{ApprovalDecision, CouncilApprovalRegistryPort as _};
+use gglib_core::domain::council::events::CouncilEvent;
+use gglib_core::domain::council::task_graph::TaskGraph;
 
 use crate::presentation::{dag, style};
 
+use super::approve::{self, ApproveOpts};
+
 /// Render a single [`CouncilEvent`] to the terminal.
 ///
-/// For `AwaitingApproval` events, prompts the user interactively and
-/// resolves the approval via the registry.
+/// `last_graph` is updated whenever a `PlanProposed` event arrives so that
+/// `AwaitingApproval` handlers can offer the `[e]dit` option.
 pub(crate) async fn render_event(
     event: &CouncilEvent,
     approval_registry: &Arc<CouncilApprovalRegistry>,
+    last_graph: &mut Option<TaskGraph>,
+    opts: &ApproveOpts,
 ) {
     match event {
         CouncilEvent::PlanProposed { graph } => {
+            *last_graph = Some(graph.clone());
             style::print_info_banner("Orchestrate", "\u{1f5fa}\u{fe0f}");
             eprintln!(
                 "  {}Plan proposed:{} {} node(s) for goal: {}",
@@ -58,7 +64,7 @@ pub(crate) async fn render_event(
             );
         }
         CouncilEvent::AwaitingApproval { approval_id, kind } => {
-            prompt_and_resolve(approval_id, kind, approval_registry).await;
+            approve::prompt_and_resolve(approval_id, kind, approval_registry, last_graph.as_ref(), opts).await;
         }
         CouncilEvent::NodeStarted {
             node_id,
@@ -322,56 +328,4 @@ pub(crate) async fn render_event(
             eprintln!();
         }
     }
-}
-
-/// Prompt the user for an approval decision and resolve it in the registry.
-pub(crate) async fn prompt_and_resolve(
-    approval_id: &str,
-    kind: &ApprovalKind,
-    registry: &Arc<CouncilApprovalRegistry>,
-) {
-    let description = match kind {
-        ApprovalKind::Plan => "the proposed plan".to_owned(),
-        ApprovalKind::Node { node_id } => format!("node '{node_id}'"),
-        ApprovalKind::Tool { node_id, tool_name } => {
-            format!("tool call '{tool_name}' in node '{node_id}'")
-        }
-        ApprovalKind::SpawnSubteam { node_id, .. } => {
-            format!("spawn subteam requested by node '{node_id}'")
-        }
-    };
-
-    eprintln!(
-        "\n{}  ⏸  Awaiting approval for {description}{}",
-        style::WARNING,
-        style::RESET
-    );
-    eprintln!("  [y] approve  [n] reject  (Enter = approve)");
-    eprint!("  Decision: ");
-
-    let input = tokio::task::spawn_blocking(|| {
-        let mut buf = String::new();
-        let _ = std::io::stdin().read_line(&mut buf);
-        buf.trim().to_lowercase()
-    })
-    .await
-    .unwrap_or_default();
-
-    let decision = match input.as_str() {
-        "n" | "no" | "reject" => {
-            eprint!("  Rejection reason (optional): ");
-            let reason = tokio::task::spawn_blocking(|| {
-                let mut buf = String::new();
-                let _ = std::io::stdin().read_line(&mut buf);
-                buf.trim().to_owned()
-            })
-            .await
-            .unwrap_or_default();
-            let reason = if reason.is_empty() { None } else { Some(reason) };
-            ApprovalDecision::Reject(reason.unwrap_or_else(|| "rejected by user".to_owned()))
-        }
-        _ => ApprovalDecision::Approve,
-    };
-
-    registry.resolve(approval_id, decision);
 }
