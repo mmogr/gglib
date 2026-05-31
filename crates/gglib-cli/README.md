@@ -315,7 +315,7 @@ lines directly into stdin.  The background input router forwards them into the
 executor's `NoteQueue`; at each wave boundary the steering LLM converts each
 queued note into a `GraphDiff` and applies it to the live task graph.
 
-```
+```text
 /note focus only on the authentication module, skip the UI layer
 /note add a node to write a summary report at the end
 ```
