@@ -6,7 +6,7 @@
 use crate::llama::{LlamaServerError, resolve_llama_server};
 use crate::process::spawn_stream_reader;
 use gglib_core::ports::{ServerConfig, ServerLogSinkPort};
-use gglib_core::utils::process::async_cmd;
+use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::process::Child;
@@ -107,7 +107,7 @@ pub fn build_and_spawn(
             }
         })?;
 
-    let mut cmd = async_cmd(validated_path);
+    let mut cmd = cmd(validated_path);
     cmd.arg("-m")
         .arg(&config.model_path)
         .arg("--host")
@@ -157,43 +157,19 @@ pub fn build_and_spawn(
         cmd.arg(arg);
     }
 
-    // Log the full command line at info level before spawning.
-    // tokio::process::Command doesn't expose get_args, so we reconstruct
-    // a readable summary from the config fields.
-    {
-        let mut log_args = vec![
-            "-m".to_string(),
-            config.model_path.display().to_string(),
-            "--host".to_string(), "127.0.0.1".to_string(),
-            "--port".to_string(), port.to_string(),
-            "--metrics".to_string(),
-        ];
-        if let Some(ctx) = config.context_size {
-            log_args.extend(["-c".to_string(), ctx.to_string()]);
-        }
-        if let Some(layers) = config.gpu_layers {
-            log_args.extend(["-ngl".to_string(), layers.to_string()]);
-        }
-        if config.jinja {
-            log_args.push("--jinja".to_string());
-        }
-        if let Some(ref fmt) = config.reasoning_format {
-            log_args.extend(["--reasoning-format".to_string(), fmt.clone()]);
-        }
-        if let Some(n) = config.spec_draft_n_max {
-            log_args.extend([
-                "--spec-type".to_string(), "draft-mtp".to_string(),
-                "--spec-draft-n-max".to_string(), n.to_string(),
-            ]);
-            if let Some(p) = config.spec_draft_p_min {
-                log_args.extend(["--spec-draft-p-min".to_string(), p.to_string()]);
-            }
-        }
-        log_args.extend(config.extra_args.iter().cloned());
-        info!("spawning llama-server: {}", log_args.join(" "));
-    }
+    // Log the full invocation. std::process::Command exposes get_program/get_args,
+    // so we log before converting to tokio::process::Command.
+    info!(
+        "spawning llama-server: {} {}",
+        cmd.get_program().to_string_lossy(),
+        cmd.get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
 
-    // Use piped stdio for log streaming
+    // Convert to async command and attach piped stdio for log streaming.
+    let mut cmd = tokio::process::Command::from(cmd);
     cmd.stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
