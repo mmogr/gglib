@@ -78,6 +78,7 @@ impl XetPoller {
         let handle = tokio::spawn(async move {
             let mut tick = tokio::time::interval(POLL_INTERVAL);
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut baseline_bytes: Option<u64> = None;
             // The first tick fires immediately — skip it so we don't race the
             // child process to its first byte on disk.
             tick.tick().await;
@@ -89,7 +90,13 @@ impl XetPoller {
                     continue;
                 }
 
-                let downloaded = sum_sizes(&targets).await;
+                let downloaded_raw = sum_sizes(&targets).await;
+                let baseline = baseline_bytes.get_or_insert(downloaded_raw);
+                let mut downloaded = downloaded_raw.saturating_sub(*baseline);
+                if total > 0 {
+                    downloaded = downloaded.min(total);
+                }
+
                 if downloaded == 0 {
                     // Nothing on disk yet — wait for the next tick.
                     continue;
@@ -154,7 +161,8 @@ async fn is_stale(last_real: &Arc<Mutex<Instant>>) -> bool {
 /// Each target may be either a file or a directory:
 /// * **File** — its length is added directly. Missing files contribute zero
 ///   (they may simply not have been created yet).
-/// * **Directory** — every regular file beneath it is summed recursively.
+/// * **Directory** — every in-flight temp file (`*.incomplete`) beneath it is
+///   summed recursively.
 ///   This is required for the hf-xet path because `huggingface_hub` writes
 ///   bytes to `<dest>/.cache/huggingface/download/<filename>.incomplete`
 ///   while the transfer is in flight and only renames to `<dest>/<filename>`
@@ -175,7 +183,7 @@ async fn sum_sizes(targets: &[PathBuf]) -> u64 {
     total
 }
 
-/// Recursively sum the sizes of every regular file under `dir`.
+/// Recursively sum the sizes of in-flight `*.incomplete` files under `dir`.
 ///
 /// Symlinks are followed for size accounting only when the entry's metadata
 /// reports `is_file()` (i.e. the symlink points at a regular file). Errors
@@ -193,7 +201,13 @@ async fn sum_dir_size(dir: &Path) -> u64 {
                 continue;
             };
             if metadata.is_file() {
-                total = total.saturating_add(metadata.len());
+                if entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| name.ends_with(".incomplete"))
+                {
+                    total = total.saturating_add(metadata.len());
+                }
             } else if metadata.is_dir() {
                 stack.push(entry.path());
             }
@@ -344,8 +358,86 @@ mod tests {
 
         let entries = log.lock().unwrap().clone();
         assert!(
-            entries.iter().any(|(d, t)| *d == 6144 && *t == 8192),
-            "expected synthetic event with downloaded=6144 total=8192, got {entries:?}"
+            entries.iter().any(|(d, t)| *d == 2048 && *t == 8192),
+            "expected baseline-relative event with downloaded=2048 total=8192, got {entries:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn ignores_non_incomplete_files_in_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join(".cache/huggingface/download");
+        tokio::fs::create_dir_all(&cache).await.unwrap();
+
+        // Final files and metadata should not count toward synthetic progress.
+        tokio::fs::write(cache.join("model.gguf"), vec![0u8; 8192])
+            .await
+            .unwrap();
+        tokio::fs::write(cache.join("model.gguf.metadata"), b"meta")
+            .await
+            .unwrap();
+
+        // Only `.incomplete` bytes should be observed.
+        let temp_file = cache.join("model.gguf.incomplete");
+        tokio::fs::write(&temp_file, vec![0u8; 2048]).await.unwrap();
+
+        let (cb, log) = recording_callback();
+        let poller = XetPoller::spawn(vec![dir.path().to_path_buf()], Some(8192), cb);
+
+        tokio::time::sleep(STALE_AFTER + Duration::from_millis(50)).await;
+
+        let mut f = tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(&temp_file)
+            .await
+            .unwrap();
+        f.write_all(&[0u8; 512]).await.unwrap();
+        f.flush().await.unwrap();
+        drop(f);
+
+        tokio::time::sleep(POLL_INTERVAL * 3).await;
+        poller.shutdown();
+
+        let entries = log.lock().unwrap().clone();
+        assert!(
+            entries.iter().any(|(d, _)| *d == 512),
+            "expected only .incomplete growth bytes to be counted, got {entries:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn subtracts_startup_baseline_for_directory_targets() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join(".cache/huggingface/download");
+        tokio::fs::create_dir_all(&cache).await.unwrap();
+        let temp_file = cache.join("model.gguf.incomplete");
+
+        // Simulate stale pre-existing temp bytes from earlier work.
+        tokio::fs::write(&temp_file, vec![0u8; 4096]).await.unwrap();
+
+        let (cb, log) = recording_callback();
+        let poller = XetPoller::spawn(vec![dir.path().to_path_buf()], Some(8192), cb);
+
+        tokio::time::sleep(STALE_AFTER + Duration::from_millis(50)).await;
+
+        // New progress should be reported relative to baseline (1024),
+        // not absolute directory size (5120).
+        let mut f = tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(&temp_file)
+            .await
+            .unwrap();
+        f.write_all(&[0u8; 1024]).await.unwrap();
+        f.flush().await.unwrap();
+        drop(f);
+
+        tokio::time::sleep(POLL_INTERVAL * 3).await;
+        poller.shutdown();
+
+        let entries = log.lock().unwrap().clone();
+        assert!(
+            entries.iter().any(|(d, t)| *d == 1024 && *t == 8192),
+            "expected baseline-relative synthetic event (1024/8192), got {entries:?}"
         );
     }
 }
