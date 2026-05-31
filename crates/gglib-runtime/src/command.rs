@@ -10,7 +10,7 @@ use gglib_core::utils::process::async_cmd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::process::Child;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Select the llama-server path to use.
 ///
@@ -157,10 +157,41 @@ pub fn build_and_spawn(
         cmd.arg(arg);
     }
 
-    // Log the full command line at debug level before spawning.
-    // tokio::process::Command doesn't expose get_args, so we rebuild
-    // a human-readable string from the config fields.
-    debug!("spawning llama-server: {:?}", cmd);
+    // Log the full command line at info level before spawning.
+    // tokio::process::Command doesn't expose get_args, so we reconstruct
+    // a readable summary from the config fields.
+    {
+        let mut log_args = vec![
+            "-m".to_string(),
+            config.model_path.display().to_string(),
+            "--host".to_string(), "127.0.0.1".to_string(),
+            "--port".to_string(), port.to_string(),
+            "--metrics".to_string(),
+        ];
+        if let Some(ctx) = config.context_size {
+            log_args.extend(["-c".to_string(), ctx.to_string()]);
+        }
+        if let Some(layers) = config.gpu_layers {
+            log_args.extend(["-ngl".to_string(), layers.to_string()]);
+        }
+        if config.jinja {
+            log_args.push("--jinja".to_string());
+        }
+        if let Some(ref fmt) = config.reasoning_format {
+            log_args.extend(["--reasoning-format".to_string(), fmt.clone()]);
+        }
+        if let Some(n) = config.spec_draft_n_max {
+            log_args.extend([
+                "--spec-type".to_string(), "draft-mtp".to_string(),
+                "--spec-draft-n-max".to_string(), n.to_string(),
+            ]);
+            if let Some(p) = config.spec_draft_p_min {
+                log_args.extend(["--spec-draft-p-min".to_string(), p.to_string()]);
+            }
+        }
+        log_args.extend(config.extra_args.iter().cloned());
+        info!("spawning llama-server: {}", log_args.join(" "));
+    }
 
     // Use piped stdio for log streaming
     cmd.stdout(std::process::Stdio::piped())
