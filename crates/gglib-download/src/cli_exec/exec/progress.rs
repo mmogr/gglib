@@ -1,12 +1,15 @@
 //! CLI progress rendering for downloads.
 //!
 //! Pure sync, presentation-only module — no knowledge of Python or protocol.
-//! Provides terminal and non-terminal progress display with EWA speed calculation.
+//! Provides terminal and non-terminal progress display with 8-second sliding
+//! window speed+ETA estimation via `SlidingWindowRate`.
 
 use std::io::{self, IsTerminal, Write};
 use std::time::{Duration, Instant};
 
 use indicatif::{HumanBytes, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
+
+use crate::progress::{SlidingWindowRate, format_eta};
 
 // ============================================================================
 // Constants
@@ -15,9 +18,6 @@ use indicatif::{HumanBytes, ProgressBar, ProgressDrawTarget, ProgressState, Prog
 const KIB: u64 = 1024;
 const MIB: u64 = KIB * 1024;
 const GIB: u64 = MIB * 1024;
-
-/// Smoothing factor for exponentially weighted average speed calculation.
-const EWA_SMOOTHING: f64 = 0.02;
 
 // ============================================================================
 // CLI Progress Printer
@@ -78,6 +78,7 @@ struct FancyProgress {
     bar: ProgressBar,
     saw_length: bool,
     last_label: Option<String>,
+    rate: SlidingWindowRate,
 }
 
 impl FancyProgress {
@@ -90,6 +91,7 @@ impl FancyProgress {
             bar,
             saw_length: false,
             last_label: None,
+            rate: SlidingWindowRate::new(),
         }
     }
 
@@ -121,6 +123,15 @@ impl FancyProgress {
         }
 
         self.bar.set_position(downloaded.min(total));
+        self.rate.record(Instant::now(), downloaded);
+        let speed = self.rate.speed_bps();
+        #[allow(clippy::cast_precision_loss)]
+        let eta_secs = if speed > 0.0 && downloaded < total {
+            (total.saturating_sub(downloaded)) as f64 / speed
+        } else {
+            f64::INFINITY
+        };
+        self.bar.set_prefix(format!("{}/s  eta {}", HumanBytes(speed as u64), format_eta(eta_secs)));
     }
 
     fn finish(&self) {
@@ -133,7 +144,7 @@ impl FancyProgress {
 
     fn bar_style() -> ProgressStyle {
         ProgressStyle::with_template(
-            "⚡ {msg} {bar:28.cyan/blue} {human_bytes:>9} / {human_total:>9} ({percent:>5.1}%) @ {binary_bytes_per_sec}/s ETA {eta}"
+            "⚡ {msg} {bar:28.cyan/blue} {human_bytes:>9} / {human_total:>9} ({percent:>5.1}%) @ {prefix}"
         )
         .unwrap()
         .with_key("human_bytes", |state: &ProgressState, w: &mut dyn std::fmt::Write| {
@@ -166,21 +177,18 @@ impl FancyProgress {
 
 struct PlainProgress {
     last_emit: Instant,
-    last_bytes: u64,
     last_line_len: usize,
     printed: bool,
-    /// Exponentially weighted average speed in bytes/sec
-    ewa_speed: f64,
+    rate: SlidingWindowRate,
 }
 
 impl PlainProgress {
     fn new() -> Self {
         Self {
             last_emit: Instant::now(),
-            last_bytes: 0,
             last_line_len: 0,
             printed: false,
-            ewa_speed: 0.0,
+            rate: SlidingWindowRate::new(),
         }
     }
 
@@ -194,28 +202,13 @@ impl PlainProgress {
             return;
         }
 
-        // Calculate instantaneous speed for this interval
-        let elapsed_secs = elapsed_since_last.as_secs_f64();
-        let bytes_delta = downloaded.saturating_sub(self.last_bytes);
-        #[allow(clippy::cast_precision_loss)]
-        let instant_speed = if elapsed_secs > 0.0 {
-            bytes_delta as f64 / elapsed_secs
-        } else {
-            0.0
-        };
-
-        // Update EWA speed
-        if self.printed {
-            self.ewa_speed =
-                EWA_SMOOTHING.mul_add(instant_speed, (1.0 - EWA_SMOOTHING) * self.ewa_speed);
-        } else {
-            self.ewa_speed = instant_speed;
-        }
+        // Update speed via sliding window
+        self.rate.record(now, downloaded);
+        let speed = self.rate.speed_bps();
 
         self.last_emit = now;
-        self.last_bytes = downloaded;
 
-        let speed_mib = self.ewa_speed / (1024.0 * 1024.0);
+        let speed_mib = speed / (1024.0 * 1024.0);
 
         let (down_div, down_unit) = pick_display_unit(downloaded);
         let (total_div, total_unit) = pick_display_unit(total);
@@ -243,9 +236,16 @@ impl PlainProgress {
             if downloaded == 0 {
                 let _ = write!(line, ": Preparing... ({total_str} {total_unit})");
             } else {
+                #[allow(clippy::cast_precision_loss)]
+                let eta_secs = if speed > 0.0 && downloaded < total {
+                    (total.saturating_sub(downloaded)) as f64 / speed
+                } else {
+                    f64::INFINITY
+                };
+                let eta_str = format_eta(eta_secs);
                 let _ = write!(
                     line,
-                    ": {downloaded_str} {down_unit} / {total_str} {total_unit} ({percent:5.1}%) @ {speed_mib:5.1} MiB/s"
+                    ": {downloaded_str} {down_unit} / {total_str} {total_unit} ({percent:5.1}%) @ {speed_mib:5.1} MiB/s  eta {eta_str}"
                 );
             }
         } else {
