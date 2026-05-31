@@ -94,7 +94,17 @@ impl XetPoller {
                     // Nothing on disk yet — wait for the next tick.
                     continue;
                 }
-                if downloaded == last_bytes.load(Ordering::Relaxed) {
+
+                let last = last_bytes.load(Ordering::Relaxed);
+                if downloaded <= last {
+                    if downloaded < last {
+                        // Bytes decreased (e.g. an `.incomplete` file was renamed
+                        // out of the scan tree as part of a transfer completing).
+                        // Reset the high-water mark so the next genuine increase
+                        // triggers a callback and the rate estimator can continue
+                        // tracking without a spurious backwards jump.
+                        last_bytes.store(0, Ordering::Relaxed);
+                    }
                     continue;
                 }
 

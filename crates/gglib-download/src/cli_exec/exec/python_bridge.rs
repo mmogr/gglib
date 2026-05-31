@@ -194,16 +194,27 @@ async fn run_download_process(
         buf
     });
 
-    // Scoped poller targets: per-file final paths (covers already-renamed
-    // shards) plus the .cache subdir (covers in-flight .incomplete temp files
-    // written by huggingface_hub during hf-xet transfers). Avoids counting
-    // unrelated files that happen to share the same destination directory.
-    let poller_targets: Vec<_> = request
-        .files
-        .iter()
-        .map(|f| request.destination.join(f))
-        .chain(std::iter::once(request.destination.join(".cache")))
-        .collect();
+    // XetPoller scan targets:
+    //
+    // 1. `dest/.cache` — huggingface_hub stages `.incomplete` files here
+    //    (`<dest>/.cache/huggingface/download/<file>.incomplete`) while a
+    //    transfer is in flight; this is the primary target for the local
+    //    download path.
+    //
+    // 2. Global HF hub blob dir for this repo — when `hf_xet` uses the
+    //    system-wide blob store (`~/.cache/huggingface/hub/…/blobs/`)
+    //    instead of the local dest, the `.incomplete` blob grows there.
+    //    Without this target the poller sees 0 bytes until the rename
+    //    completes and the file appears at its final path.
+    //
+    // Note: The final per-file destination paths are intentionally *not*
+    // included.  Files reach those paths via an atomic rename from the temp
+    // location, which makes the full file size appear in a single 250 ms
+    // tick and produces a bogus speed spike. Omitting them avoids that
+    // problem; the poller simply goes quiet once the rename fires, which
+    // is fine because the download is finished by then.
+    let mut poller_targets = vec![request.destination.join(".cache")];
+    poller_targets.push(hf_hub_blob_dir(request.repo_id));
 
     // Always spawn the xet stat-fallback poller — it stays dormant while real
     // tqdm events flow, then emits synthetic progress from on-disk byte counts
@@ -353,4 +364,39 @@ fn finish_progress(printer: Option<&Arc<Mutex<CliProgressPrinter>>>) {
             g.finish();
         }
     }
+}
+
+/// Resolve the `huggingface_hub` blob directory for a repository.
+///
+/// When `hf_xet` is active, `huggingface_hub` may download blobs to the
+/// system-wide hub cache (`~/.cache/huggingface/hub/models--owner--repo/blobs/`)
+/// instead of the local destination's `.cache` sub-directory. Adding this
+/// path to the [`XetPoller`] targets ensures we can track the growing
+/// `.incomplete` blob regardless of which cache location is used.
+///
+/// Checks the same environment variables as the Python `huggingface_hub`
+/// library, in priority order:
+/// 1. `HF_HUB_CACHE`
+/// 2. `HUGGINGFACE_HUB_CACHE`
+/// 3. `HF_HOME/hub`
+/// 4. `$HOME/.cache/huggingface/hub` (default)
+fn hf_hub_blob_dir(repo_id: &str) -> std::path::PathBuf {
+    use std::path::PathBuf;
+
+    let hub_cache = std::env::var("HF_HUB_CACHE")
+        .map(PathBuf::from)
+        .or_else(|_| std::env::var("HUGGINGFACE_HUB_CACHE").map(PathBuf::from))
+        .or_else(|_| std::env::var("HF_HOME").map(|h| PathBuf::from(h).join("hub")))
+        .unwrap_or_else(|_| {
+            // Default: $HOME/.cache/huggingface/hub
+            let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/nonexistent"));
+            PathBuf::from(home)
+                .join(".cache")
+                .join("huggingface")
+                .join("hub")
+        });
+
+    // Convert "owner/repo" to "models--owner--repo" (HF hub cache dir format)
+    let dir_name = format!("models--{}", repo_id.replace('/', "--"));
+    hub_cache.join(dir_name).join("blobs")
 }
