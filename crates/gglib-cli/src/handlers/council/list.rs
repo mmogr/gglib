@@ -38,7 +38,7 @@ pub async fn execute(ctx: &CliContext, status: Option<&str>) -> Result<()> {
         println!(
             "{:<36}  {}{:<20}{}  {:<12}  {}",
             run.id,
-            status_color(&run.status),
+            super::status_color(&run.status),
             run.status,
             style::RESET,
             created,
@@ -60,15 +60,5 @@ fn parse_status(s: &str) -> Result<CouncilRunStatus> {
             "unknown status: '{other}'. \
              Valid values: running, awaiting_approval, interrupted, completed, failed"
         )),
-    }
-}
-
-fn status_color(status: &CouncilRunStatus) -> &'static str {
-    match status {
-        CouncilRunStatus::Running => style::INFO,
-        CouncilRunStatus::AwaitingApproval => style::WARNING,
-        CouncilRunStatus::Completed => style::SUCCESS,
-        CouncilRunStatus::Failed => style::DANGER,
-        CouncilRunStatus::Interrupted => style::DIM,
     }
 }

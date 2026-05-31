@@ -6,7 +6,6 @@
 use anyhow::{Result, anyhow};
 
 use gglib_core::domain::council::events::CouncilEvent;
-use gglib_core::domain::council::run::CouncilRunStatus;
 use gglib_core::ports::CouncilRepositoryPort as _;
 
 use crate::bootstrap::CliContext;
@@ -31,7 +30,7 @@ pub async fn execute(ctx: &CliContext, run_id: &str) -> Result<()> {
         "  {}Status:{}  {}{}{}",
         style::BOLD,
         style::RESET,
-        status_color(&run.status),
+        super::status_color(&run.status),
         run.status,
         style::RESET
     );
@@ -81,16 +80,6 @@ pub async fn execute(ctx: &CliContext, run_id: &str) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn status_color(status: &CouncilRunStatus) -> &'static str {
-    match status {
-        CouncilRunStatus::Running => style::INFO,
-        CouncilRunStatus::AwaitingApproval => style::WARNING,
-        CouncilRunStatus::Completed => style::SUCCESS,
-        CouncilRunStatus::Failed => style::DANGER,
-        CouncilRunStatus::Interrupted => style::DIM,
-    }
 }
 
 /// Returns a one-line summary for milestone events; `None` for noise.

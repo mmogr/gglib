@@ -68,8 +68,23 @@ use gglib_runtime::llama::args::{
     ContextInput, resolve_context_size, resolve_jinja_flag, resolve_reasoning_format,
 };
 
+use gglib_core::domain::council::run::CouncilRunStatus;
+
 use crate::bootstrap::CliContext;
 use crate::presentation::style;
+
+/// Map a [`CouncilRunStatus`] to a stable ANSI colour constant.
+///
+/// Shared by [`list`] and [`show`]; avoids duplicating the match arm.
+pub(crate) fn status_color(status: &CouncilRunStatus) -> &'static str {
+    match status {
+        CouncilRunStatus::Running => style::INFO,
+        CouncilRunStatus::AwaitingApproval => style::WARNING,
+        CouncilRunStatus::Completed => style::SUCCESS,
+        CouncilRunStatus::Failed => style::DANGER,
+        CouncilRunStatus::Interrupted => style::DIM,
+    }
+}
 
 pub(crate) fn parse_hitl_mode(hitl: Option<&str>) -> Result<HitlMode> {
     match hitl.unwrap_or("none") {

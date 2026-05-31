@@ -154,7 +154,7 @@ pub fn render_mermaid(graph: &TaskGraph, out: &mut impl Write) {
 /// Uses Kahn's algorithm. Nodes at the same depth level are sorted
 /// alphabetically so the output is deterministic regardless of the
 /// underlying map order.
-pub fn topological_order(graph: &TaskGraph) -> Vec<&NodeId> {
+fn topological_order(graph: &TaskGraph) -> Vec<&NodeId> {
     let mut in_degree: HashMap<&NodeId, usize> = graph.nodes.keys().map(|id| (id, 0)).collect();
     let mut dependents: HashMap<&NodeId, Vec<&NodeId>> = HashMap::new();
 
