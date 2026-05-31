@@ -25,7 +25,7 @@ use gglib_runtime::llama::args::{
 };
 
 use crate::bootstrap::CliContext;
-use crate::presentation::style;
+use crate::presentation::{dag, style};
 
 // ─── Execute ────────────────────────────────────────────────────────────────
 
@@ -193,6 +193,8 @@ async fn render_event(
                 graph.goal
             );
             style::print_banner_close();
+            dag::render_tree(graph, &mut std::io::stderr());
+            eprintln!();
         }
         CouncilEvent::ReplanAttempt { attempt, reason } => {
             eprintln!(
@@ -228,7 +230,7 @@ async fn render_event(
         } => {
             eprintln!(
                 "\n{}[{}]{} {}",
-                style::INFO,
+                dag::node_color(node_id),
                 node_id,
                 style::RESET,
                 node_goal
@@ -238,7 +240,7 @@ async fn render_event(
             eprint!("{delta}");
         }
         CouncilEvent::NodeReasoningDelta { node_id, delta } => {
-            eprint!("{}[{node_id}]<think> {delta}{}", style::DIM, style::RESET);
+            eprint!("{}[{node_id}]{}<think>{} {delta}{}", dag::node_color(node_id), style::RESET, style::DIM, style::RESET);
         }
         CouncilEvent::NodeToolCallStart {
             node_id,
@@ -247,7 +249,9 @@ async fn render_event(
             ..
         } => {
             eprintln!(
-                "\n{}[{node_id}] ⚙ {}  {}{}",
+                "\n{}[{node_id}]{} {}⚙ {}  {}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 display_name,
                 args_summary.as_deref().unwrap_or(""),
@@ -261,7 +265,9 @@ async fn render_event(
             ..
         } => {
             eprintln!(
-                "{}[{node_id}] ✓ {}  {}{}",
+                "{}[{node_id}]{} {}✓ {}  {}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 display_name,
                 duration_display,
@@ -272,7 +278,9 @@ async fn render_event(
             node_id, message, ..
         } => {
             eprintln!(
-                "{}[{node_id}] ⚠ {}{}",
+                "{}[{node_id}]{} {}⚠ {}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::WARNING,
                 message,
                 style::RESET
@@ -280,17 +288,21 @@ async fn render_event(
         }
         CouncilEvent::NodeCompacting { node_id } => {
             eprintln!(
-                "\n{}[{node_id}] compacting output…{}",
+                "\n{}[{node_id}]{} {}compacting output…{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 style::RESET
             );
         }
         CouncilEvent::NodeComplete { node_id, .. } => {
-            eprintln!("{}[{node_id}] ✓ complete{}", style::SUCCESS, style::RESET);
+            eprintln!("{}[{node_id}]{} {}✓ complete{}", dag::node_color(node_id), style::RESET, style::SUCCESS, style::RESET);
         }
         CouncilEvent::NodeFailed { node_id, error } => {
             eprintln!(
-                "{}[{node_id}] ✗ failed: {error}{}",
+                "{}[{node_id}]{} {}✗ failed: {error}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DANGER,
                 style::RESET
             );
@@ -339,7 +351,9 @@ async fn render_event(
         }
         CouncilEvent::DebateRoundStarted { node_id, round } => {
             eprintln!(
-                "{}[{node_id}] ◆ debate round {round}{}",
+                "{}[{node_id}]{} {}◆ debate round {round}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 style::RESET
             );
@@ -351,7 +365,9 @@ async fn render_event(
             ..
         } => {
             eprintln!(
-                "\n{}[{node_id}][{agent_name}] round {round}{}",
+                "\n{}[{node_id}]{} {}[{agent_name}] round {round}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 style::RESET
             );
@@ -360,7 +376,7 @@ async fn render_event(
             eprint!("{delta}");
         }
         CouncilEvent::DebateAgentReasoningDelta { node_id, delta, .. } => {
-            eprint!("{}[{node_id}]<think> {delta}{}", style::DIM, style::RESET);
+            eprint!("{}[{node_id}]{}<think>{} {delta}{}", dag::node_color(node_id), style::RESET, style::DIM, style::RESET);
         }
         CouncilEvent::DebateAgentToolCallStart {
             node_id,
@@ -369,7 +385,9 @@ async fn render_event(
             ..
         } => {
             eprintln!(
-                "\n{}[{node_id}] ⚙ {}  {}{}",
+                "\n{}[{node_id}]{} {}⚙ {}  {}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 display_name,
                 args_summary.as_deref().unwrap_or(""),
@@ -383,7 +401,9 @@ async fn render_event(
             ..
         } => {
             eprintln!(
-                "{}[{node_id}] ✓ {}  {}{}",
+                "{}[{node_id}]{} {}✓ {}  {}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 display_name,
                 duration_display,
@@ -393,7 +413,9 @@ async fn render_event(
         CouncilEvent::DebateAgentTurnComplete { .. } => {}
         CouncilEvent::DebateJudgeStarted { node_id, round } => {
             eprint!(
-                "\n{}[{node_id}] ⚖ judging round {round}…{}",
+                "\n{}[{node_id}]{} {}⚖ judging round {round}…{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 style::RESET
             );
@@ -413,18 +435,22 @@ async fn render_event(
                 "continuing"
             };
             eprintln!(
-                "\n{}[{node_id}] ⚖ round {round}: {verdict}{}",
+                "\n{}[{node_id}]{} {}⚖ round {round}: {verdict}{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::DIM,
                 style::RESET
             );
         }
         CouncilEvent::DebateRoundCompacted { .. } => {}
         CouncilEvent::DebateStanceMap { node_id, .. } => {
-            eprintln!("{}[{node_id}] stances recorded{}", style::DIM, style::RESET);
+            eprintln!("{}[{node_id}]{} {}stances recorded{}", dag::node_color(node_id), style::RESET, style::DIM, style::RESET);
         }
         CouncilEvent::DebateSynthesisStarted { node_id } => {
             eprintln!(
-                "\n{}[{node_id}] ─── Debate Synthesis ───{}",
+                "\n{}[{node_id}]{} {}─── Debate Synthesis ───{}",
+                dag::node_color(node_id),
+                style::RESET,
                 style::BOLD,
                 style::RESET
             );

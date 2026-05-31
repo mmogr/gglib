@@ -11,7 +11,7 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result, anyhow};
 
 use gglib_agent::council::plan;
-use gglib_core::domain::council::task_graph::{HitlMode, NodeId, TaskGraph};
+use gglib_core::domain::council::task_graph::HitlMode;
 use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_runtime::CouncilPorts;
 use gglib_runtime::compose_council_ports;
@@ -20,7 +20,7 @@ use gglib_runtime::llama::args::{
 };
 
 use crate::bootstrap::CliContext;
-use crate::presentation::style;
+use crate::presentation::{dag, style};
 
 // ─── Execute ────────────────────────────────────────────────────────────────
 
@@ -46,152 +46,11 @@ pub async fn execute(
 
     let graph = res.map_err(|e| anyhow!("{e}"))?;
 
-    render_tree(&graph);
+    dag::render_tree(&graph, &mut std::io::stdout());
     println!();
-    render_mermaid(&graph);
+    dag::render_mermaid(&graph, &mut std::io::stdout());
 
     Ok(())
-}
-
-// ─── Rendering ──────────────────────────────────────────────────────────────
-
-/// Render the task graph as an indented tree to stdout.
-///
-/// # Format
-///
-/// ```text
-/// ── goal: Research the history of llama.cpp and write a summary
-///    ├── [research] Research the history and development…
-///    └── [write-summary] Write a clear, comprehensive… (needs: research)
-/// ```
-fn render_tree(graph: &TaskGraph) {
-    println!("{}── goal:{} {}", style::BOLD, style::RESET, graph.goal);
-
-    // Topological order: roots first, then nodes that depend on completed ones.
-    let ordered = topological_order(graph);
-    let last = ordered.len().saturating_sub(1);
-
-    for (i, id) in ordered.iter().enumerate() {
-        let node = &graph.nodes[id];
-        let is_last = i == last;
-        let connector = if is_last {
-            "   └──"
-        } else {
-            "   ├──"
-        };
-        let deps = if node.depends_on.is_empty() {
-            String::new()
-        } else {
-            let dep_ids: Vec<&str> = node.depends_on.iter().map(|d| d.0.as_str()).collect();
-            format!(
-                " {}(needs: {}){}",
-                style::DIM,
-                dep_ids.join(", "),
-                style::RESET
-            )
-        };
-        println!(
-            "{} {}[{}]{} {}{}",
-            connector,
-            style::INFO,
-            id,
-            style::RESET,
-            node.goal,
-            deps,
-        );
-    }
-}
-
-/// Render the task graph as a Mermaid flowchart diagram to stdout.
-///
-/// # Format
-///
-/// ```text
-/// ```mermaid
-/// flowchart LR
-///     research["Research the history…"]
-///     write-summary["Write a clear…"]
-///     research --> write-summary
-/// ```
-/// ```
-fn render_mermaid(graph: &TaskGraph) {
-    println!("```mermaid");
-    println!("flowchart LR");
-
-    // Node definitions.
-    for (id, node) in &graph.nodes {
-        // Truncate long goals to 50 chars for readability.
-        let label = if node.goal.len() > 50 {
-            format!("{}…", &node.goal[..50])
-        } else {
-            node.goal.clone()
-        };
-        // Escape double-quotes inside labels.
-        let label = label.replace('"', "'");
-        println!("    {}[\"{}\"]", id, label);
-    }
-
-    // Edges.
-    for (id, node) in &graph.nodes {
-        for dep in &node.depends_on {
-            println!("    {} --> {}", dep, id);
-        }
-    }
-
-    println!("```");
-}
-
-/// Return node ids in a topological (dependency-first) order.
-fn topological_order(graph: &TaskGraph) -> Vec<&NodeId> {
-    use std::collections::{HashMap, HashSet, VecDeque};
-
-    let mut in_degree: HashMap<&NodeId, usize> = graph.nodes.keys().map(|id| (id, 0)).collect();
-    let mut dependents: HashMap<&NodeId, Vec<&NodeId>> = HashMap::new();
-
-    for (id, node) in &graph.nodes {
-        for dep in &node.depends_on {
-            *in_degree.entry(id).or_insert(0) += 1;
-            dependents.entry(dep).or_default().push(id);
-        }
-    }
-
-    let mut queue: VecDeque<&NodeId> = in_degree
-        .iter()
-        .filter(|(_, d)| **d == 0)
-        .map(|(&id, _)| id)
-        .collect();
-
-    // Stable sort within the same depth level.
-    let mut queue_vec: Vec<&NodeId> = queue.drain(..).collect();
-    queue_vec.sort_by_key(|id| &id.0);
-    let mut queue: VecDeque<&NodeId> = queue_vec.into_iter().collect();
-
-    let mut result = Vec::new();
-    let mut visited: HashSet<&NodeId> = HashSet::new();
-
-    while let Some(id) = queue.pop_front() {
-        if visited.contains(id) {
-            continue;
-        }
-        visited.insert(id);
-        result.push(id);
-
-        if let Some(children) = dependents.get(id) {
-            let mut children: Vec<&NodeId> = children.clone();
-            children.sort_by_key(|id| &id.0);
-            for child in children {
-                let entry = in_degree.entry(child).or_insert(0);
-                if *entry > 0 {
-                    *entry -= 1;
-                }
-                if *entry == 0 && !visited.contains(child) {
-                    queue.push_back(child);
-                }
-            }
-        }
-    }
-
-    result
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
