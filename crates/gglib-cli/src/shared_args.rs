@@ -83,7 +83,10 @@ pub struct ServeOptions {
 
 impl Default for ServeOptions {
     fn default() -> Self {
-        Self { jinja: false, port: 8080 }
+        Self {
+            jinja: false,
+            port: 8080,
+        }
     }
 }
 

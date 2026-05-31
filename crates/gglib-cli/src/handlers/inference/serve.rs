@@ -83,7 +83,10 @@ pub async fn execute(
         );
     }
 
-    eprintln!("  Server will be available on http://localhost:{}", options.port);
+    eprintln!(
+        "  Server will be available on http://localhost:{}",
+        options.port
+    );
     style::print_banner_close();
 
     // Build llama-server command
