@@ -131,7 +131,11 @@ impl FancyProgress {
         } else {
             f64::INFINITY
         };
-        self.bar.set_prefix(format!("{}/s  eta {}", HumanBytes(speed as u64), format_eta(eta_secs)));
+        self.bar.set_prefix(format!(
+            "{}/s  eta {}",
+            HumanBytes(speed as u64),
+            format_eta(eta_secs)
+        ));
     }
 
     fn finish(&self) {

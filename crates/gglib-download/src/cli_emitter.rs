@@ -34,7 +34,8 @@ use gglib_core::ports::{AppEventEmitter, DownloadEventEmitterPort};
 // The unified template renders fine even when the bar's length is unknown
 // (the bar widget appears empty until `set_length` is called with a real
 // total) and avoids the mid-stream style switch entirely.
-const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes} @ {prefix}";
+const BAR_TEMPLATE: &str =
+    "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes} @ {prefix}";
 const TICK_INTERVAL: Duration = Duration::from_millis(120);
 
 // ─── CliDownloadEventEmitter ─────────────────────────────────────────────────
@@ -167,7 +168,11 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                         } else {
                             f64::INFINITY
                         };
-                        bar.set_prefix(format!("{}/s  eta {}", HumanBytes(speed as u64), format_eta(eta_secs)));
+                        bar.set_prefix(format!(
+                            "{}/s  eta {}",
+                            HumanBytes(speed as u64),
+                            format_eta(eta_secs)
+                        ));
                         bar.set_position(downloaded);
                         bar.set_message(format!("{id} {}", HumanBytes(downloaded)));
                     }
@@ -198,7 +203,11 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                         } else {
                             f64::INFINITY
                         };
-                        bar.set_prefix(format!("{}/s  eta {}", HumanBytes(speed as u64), format_eta(eta_secs)));
+                        bar.set_prefix(format!(
+                            "{}/s  eta {}",
+                            HumanBytes(speed as u64),
+                            format_eta(eta_secs)
+                        ));
                         bar.set_position(aggregate_downloaded);
                         bar.set_message(format!(
                             "{id} [shard {}/{total_shards}] {}",
