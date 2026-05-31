@@ -1,8 +1,11 @@
-//! Progress tracking and throttling.
+//! Progress tracking, throttling, and speed estimation.
 //!
-//! This module handles progress aggregation and rate-limiting for download
-//! progress events.
+//! This module handles progress aggregation, rate-limiting for download
+//! progress events, and the shared sliding-window speed estimator used by
+//! all display paths.
 
+pub(crate) mod rate;
 mod throttle;
 
+pub(crate) use rate::{SlidingWindowRate, format_eta};
 pub use throttle::ProgressThrottle;
