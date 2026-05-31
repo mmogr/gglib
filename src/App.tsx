@@ -16,8 +16,6 @@ import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { startProxy, stopProxy } from "./services/clients/servers";
 import { getSetupStatus } from "./services/transport/api/setup";
 import { syncBuiltinTools } from "./services/tools";
-import CouncilPage from "./pages/Council";
-import { CouncilProvider } from "./contexts/CouncilContext";
 import { CouncilRegistryProvider } from "./contexts/CouncilRegistry";
 
 /**
@@ -27,17 +25,6 @@ import { CouncilRegistryProvider } from "./contexts/CouncilRegistry";
 function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
-  const [showCouncilPage, setShowCouncilPage] = useState(
-    () => window.location.hash === '#council'
-  );
-
-  useEffect(() => {
-    const onHashChange = () => {
-      setShowCouncilPage(window.location.hash === '#council');
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
   // Sidebar visibility (for menu toggle, currently not visually implemented)
   const [, setIsSidebarVisible] = useState(true);
   const { servers, loadServers, stopServer } = useServers();
@@ -174,34 +161,18 @@ function AppContent() {
       <div className="flex flex-col h-screen overflow-hidden">
         <Header
           onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenOrchestrator={() => {
-            window.location.hash = '#council';
-            setShowCouncilPage(true);
-          }}
           servers={servers}
           onStopServer={stopServer}
           onSelectModel={handleSelectModelFromHeader}
           onRefreshServers={loadServers}
         />
         <div className="flex-1 min-h-0 overflow-hidden flex">
-          {showCouncilPage ? (
-            <CouncilProvider>
-              <CouncilPage
-                hasRunningServers={servers.length > 0}
-                onBack={() => {
-                  window.location.hash = '';
-                  setShowCouncilPage(false);
-                }}
-              />
-            </CouncilProvider>
-          ) : (
-            <ModelControlCenterPage
-              servers={servers}
-              loadServers={loadServers}
-              stopServer={stopServer}
-              onRegisterMenuActions={registerMenuActions}
-            />
-          )}
+          <ModelControlCenterPage
+            servers={servers}
+            loadServers={loadServers}
+            stopServer={stopServer}
+            onRegisterMenuActions={registerMenuActions}
+          />
         </div>
         {isSettingsOpen && (
           <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
