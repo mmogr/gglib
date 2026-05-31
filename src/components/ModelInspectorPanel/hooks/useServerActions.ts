@@ -167,7 +167,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsServing(false);
     }
-  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled]);
+  }, [model, settings, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled]);
 
   const handleToggleServer = useCallback(async () => {
     if (!model?.id) return;

@@ -278,7 +278,12 @@ export const ServeModal: FC<ServeModalProps> = ({
                   value={mtpNMaxOverride !== null && mtpNMaxOverride > 0 ? String(mtpNMaxOverride) : ''}
                   onChange={(e) => {
                     const v = e.target.value.trim();
-                    onMtpNMaxChange(v === '' ? null : Math.max(1, parseInt(v) || 1));
+                    if (v === '') {
+                      onMtpNMaxChange(null);
+                    } else {
+                      const parsed = parseInt(v, 10);
+                      onMtpNMaxChange(Number.isFinite(parsed) ? Math.min(8, Math.max(1, parsed)) : 1);
+                    }
                   }}
                   disabled={isServing}
                   min="1"
@@ -297,7 +302,12 @@ export const ServeModal: FC<ServeModalProps> = ({
                   value={mtpPMinOverride !== null ? String(mtpPMinOverride) : ''}
                   onChange={(e) => {
                     const v = e.target.value.trim();
-                    onMtpPMinChange(v === '' ? null : parseFloat(v));
+                    if (v === '') {
+                      onMtpPMinChange(null);
+                    } else {
+                      const parsed = parseFloat(v);
+                      onMtpPMinChange(Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : null);
+                    }
                   }}
                   disabled={isServing}
                   min="0"
