@@ -44,6 +44,7 @@ use gglib_core::ports::{
     ResolvedFile,
 };
 
+use crate::progress::SlidingWindowRate;
 use crate::quant_selector::QuantizationSelector;
 use crate::queue::{DownloadQueue, QueuedItem};
 use crate::resolver::HfQuantizationResolver;
@@ -52,9 +53,6 @@ use shard_group_tracker::{GroupMetadata, ShardGroupTracker};
 
 pub use paths::DownloadDestination;
 pub use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
-
-/// EWA smoothing factor for speed calculation (2% of instant speed, 98% of previous).
-const EWA_SMOOTHING: f64 = 0.02;
 
 /// Lease ID for tracking active downloads.
 ///
@@ -954,10 +952,7 @@ impl DownloadManagerImpl {
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             let mut last_emitted = ProgressUpdate::default();
-            let mut last_bytes = 0u64;
-            let mut last_time = Instant::now();
-            let mut ewa_speed = 0.0f64;
-            let mut first_update = true;
+            let mut rate = SlidingWindowRate::new();
 
             loop {
                 tokio::select! {
@@ -974,15 +969,19 @@ impl DownloadManagerImpl {
                             let final_progress = rx.borrow().clone();
                             if final_progress.seq > last_emitted.seq {
                                 let now = Instant::now();
-                                let (speed, eta) = calculate_speed_eta(
-                                    final_progress.downloaded,
-                                    final_progress.total,
-                                    last_bytes,
-                                    last_time,
-                                    now,
-                                    ewa_speed,
-                                    first_update,
-                                );
+                                rate.record(now, final_progress.downloaded);
+                                let speed = rate.speed_bps();
+                                #[allow(clippy::cast_precision_loss)]
+                                let eta = if speed > 0.0
+                                    && final_progress.downloaded < final_progress.total
+                                {
+                                    let remaining = final_progress
+                                        .total
+                                        .saturating_sub(final_progress.downloaded);
+                                    remaining as f64 / speed
+                                } else {
+                                    0.0
+                                };
                                 emit_progress(
                                     &event_emitter,
                                     &id_str,
@@ -1001,33 +1000,13 @@ impl DownloadManagerImpl {
                         let current = rx.borrow().clone();
                         if current.seq > last_emitted.seq {
                             let now = Instant::now();
-                            let elapsed = now.duration_since(last_time).as_secs_f64();
+                            rate.record(now, current.downloaded);
+                            let speed = rate.speed_bps();
 
-                            if elapsed > 0.0 {
-                                let bytes_delta = current.downloaded.saturating_sub(last_bytes);
-                                #[allow(clippy::cast_precision_loss)]
-                                let instant_speed = bytes_delta as f64 / elapsed;
-
-                                // Update EWA speed
-                                if first_update {
-                                    ewa_speed = instant_speed;
-                                    first_update = false;
-                                } else {
-                                    ewa_speed = EWA_SMOOTHING.mul_add(
-                                        instant_speed,
-                                        (1.0 - EWA_SMOOTHING) * ewa_speed
-                                    );
-                                }
-
-                                last_bytes = current.downloaded;
-                                last_time = now;
-                            }
-
-                            // Calculate ETA
                             #[allow(clippy::cast_precision_loss)]
-                            let eta = if ewa_speed > 0.0 && current.downloaded < current.total {
+                            let eta = if speed > 0.0 && current.downloaded < current.total {
                                 let remaining = current.total.saturating_sub(current.downloaded);
-                                remaining as f64 / ewa_speed
+                                remaining as f64 / speed
                             } else {
                                 0.0
                             };
@@ -1037,7 +1016,7 @@ impl DownloadManagerImpl {
                                 &id_str,
                                 shard_info.as_ref(),
                                 &current,
-                                ewa_speed,
+                                speed,
                                 eta,
                             );
                             last_emitted = current;
@@ -1269,43 +1248,6 @@ impl DownloadManagerImpl {
                 CompletionKind::Cancelled => (d, f, c + 1),
             })
     }
-}
-
-/// Helper to calculate speed and ETA from progress deltas.
-fn calculate_speed_eta(
-    downloaded: u64,
-    total: u64,
-    last_bytes: u64,
-    last_time: std::time::Instant,
-    now: std::time::Instant,
-    ewa_speed: f64,
-    first_update: bool,
-) -> (f64, f64) {
-    let elapsed = now.duration_since(last_time).as_secs_f64();
-
-    if elapsed <= 0.0 {
-        return (ewa_speed, 0.0);
-    }
-
-    let bytes_delta = downloaded.saturating_sub(last_bytes);
-    #[allow(clippy::cast_precision_loss)]
-    let instant_speed = bytes_delta as f64 / elapsed;
-
-    let speed = if first_update {
-        instant_speed
-    } else {
-        EWA_SMOOTHING.mul_add(instant_speed, (1.0 - EWA_SMOOTHING) * ewa_speed)
-    };
-
-    #[allow(clippy::cast_precision_loss)]
-    let eta = if speed > 0.0 && downloaded < total {
-        let remaining = total.saturating_sub(downloaded);
-        remaining as f64 / speed
-    } else {
-        0.0
-    };
-
-    (speed, eta)
 }
 
 /// Emit a progress event.
