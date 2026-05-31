@@ -11,8 +11,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use std::time::Instant;
 
 use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressStyle};
+
+use crate::progress::{SlidingWindowRate, format_eta};
 
 use gglib_core::download::DownloadEvent;
 use gglib_core::events::AppEvent;
@@ -31,7 +34,7 @@ use gglib_core::ports::{AppEventEmitter, DownloadEventEmitterPort};
 // The unified template renders fine even when the bar's length is unknown
 // (the bar widget appears empty until `set_length` is called with a real
 // total) and avoids the mid-stream style switch entirely.
-const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes} @ {bytes_per_sec} eta {eta}";
+const BAR_TEMPLATE: &str = "{spinner:.cyan} {wide_msg} [{bar:30.cyan/blue}] {bytes}/{total_bytes} @ {prefix}";
 const TICK_INTERVAL: Duration = Duration::from_millis(120);
 
 // ─── CliDownloadEventEmitter ─────────────────────────────────────────────────
@@ -47,7 +50,7 @@ const TICK_INTERVAL: Duration = Duration::from_millis(120);
 /// can suspend rendering while collecting user input without tearing the display.
 pub struct CliDownloadEventEmitter {
     multi_progress: Arc<MultiProgress>,
-    bars: Mutex<HashMap<String, ProgressBar>>,
+    bars: Mutex<HashMap<String, (ProgressBar, SlidingWindowRate)>>,
 }
 
 impl CliDownloadEventEmitter {
@@ -81,7 +84,7 @@ impl CliDownloadEventEmitter {
     /// first and [`Self::resume_animation`] when done.
     pub fn pause_animation(&self) {
         if let Ok(bars) = self.bars.lock() {
-            for bar in bars.values() {
+            for (bar, _) in bars.values() {
                 bar.disable_steady_tick();
             }
         }
@@ -92,7 +95,7 @@ impl CliDownloadEventEmitter {
     /// Pairs with [`Self::pause_animation`].
     pub fn resume_animation(&self) {
         if let Ok(bars) = self.bars.lock() {
-            for bar in bars.values() {
+            for (bar, _) in bars.values() {
                 bar.enable_steady_tick(TICK_INTERVAL);
             }
         }
@@ -136,7 +139,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 bar.set_message(label);
 
                 if let Ok(mut bars) = self.bars.lock() {
-                    bars.insert(id, bar);
+                    bars.insert(id, (bar, SlidingWindowRate::new()));
                 }
             }
 
@@ -148,14 +151,23 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 eta_seconds: _,
                 percentage: _,
             } => {
-                if let Ok(bars) = self.bars.lock() {
-                    if let Some(bar) = bars.get(&id) {
+                if let Ok(mut bars) = self.bars.lock() {
+                    if let Some((bar, rate)) = bars.get_mut(&id) {
                         // First time we see a real total, set length. No
                         // set_style — the unified template is already in
                         // place from DownloadStarted.
                         if total > 0 && bar.length().unwrap_or(0) == 0 {
                             bar.set_length(total);
                         }
+                        rate.record(Instant::now(), downloaded);
+                        let speed = rate.speed_bps();
+                        #[allow(clippy::cast_precision_loss)]
+                        let eta_secs = if speed > 0.0 && downloaded < total {
+                            (total.saturating_sub(downloaded)) as f64 / speed
+                        } else {
+                            f64::INFINITY
+                        };
+                        bar.set_prefix(format!("{}/s  eta {}", HumanBytes(speed as u64), format_eta(eta_secs)));
                         bar.set_position(downloaded);
                         bar.set_message(format!("{id} {}", HumanBytes(downloaded)));
                     }
@@ -170,14 +182,23 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 aggregate_total,
                 ..
             } => {
-                if let Ok(bars) = self.bars.lock() {
-                    if let Some(bar) = bars.get(&id) {
+                if let Ok(mut bars) = self.bars.lock() {
+                    if let Some((bar, rate)) = bars.get_mut(&id) {
                         // Update length on first real total or whenever the
                         // total changes (e.g. final shard size resolved).
                         // No set_style — unified template stays in place.
                         if aggregate_total > 0 && bar.length().unwrap_or(0) != aggregate_total {
                             bar.set_length(aggregate_total);
                         }
+                        rate.record(Instant::now(), aggregate_downloaded);
+                        let speed = rate.speed_bps();
+                        #[allow(clippy::cast_precision_loss)]
+                        let eta_secs = if speed > 0.0 && aggregate_downloaded < aggregate_total {
+                            (aggregate_total.saturating_sub(aggregate_downloaded)) as f64 / speed
+                        } else {
+                            f64::INFINITY
+                        };
+                        bar.set_prefix(format!("{}/s  eta {}", HumanBytes(speed as u64), format_eta(eta_secs)));
                         bar.set_position(aggregate_downloaded);
                         bar.set_message(format!(
                             "{id} [shard {}/{total_shards}] {}",
@@ -190,7 +211,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
 
             DownloadEvent::DownloadCompleted { id, .. } => {
                 if let Ok(mut bars) = self.bars.lock() {
-                    if let Some(bar) = bars.remove(&id) {
+                    if let Some((bar, _)) = bars.remove(&id) {
                         bar.finish_with_message(format!("✓ {id}"));
                     }
                 }
@@ -198,7 +219,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
 
             DownloadEvent::DownloadFailed { id, error } => {
                 if let Ok(mut bars) = self.bars.lock() {
-                    if let Some(bar) = bars.remove(&id) {
+                    if let Some((bar, _)) = bars.remove(&id) {
                         bar.abandon_with_message(format!("✗ {id}: {error}"));
                     }
                 }
@@ -206,7 +227,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
 
             DownloadEvent::DownloadCancelled { id } => {
                 if let Ok(mut bars) = self.bars.lock() {
-                    if let Some(bar) = bars.remove(&id) {
+                    if let Some((bar, _)) = bars.remove(&id) {
                         bar.abandon_with_message(format!("✗ {id}: cancelled"));
                     }
                 }
@@ -218,7 +239,7 @@ impl DownloadEventEmitterPort for CliDownloadEventEmitter {
                 // work is still happening between "100% downloaded" and
                 // the final completion event.
                 if let Ok(bars) = self.bars.lock() {
-                    if let Some(bar) = bars.get(&id) {
+                    if let Some((bar, _)) = bars.get(&id) {
                         bar.set_message(format!("{id} — {}…", status.label()));
                     }
                 }
