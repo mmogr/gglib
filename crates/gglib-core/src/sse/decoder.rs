@@ -58,10 +58,7 @@ impl SseStreamDecoder {
         self.buf.push_str(text);
         let mut events = Vec::new();
 
-        loop {
-            let Some(newline_pos) = self.buf.find('\n') else {
-                break;
-            };
+        while let Some(newline_pos) = self.buf.find('\n') {
             let line = self.buf[..newline_pos].trim_end_matches('\r').to_owned();
             self.buf.drain(..=newline_pos);
 

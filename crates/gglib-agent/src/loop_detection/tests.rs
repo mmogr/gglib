@@ -287,7 +287,7 @@ fn obs_batch(name: &str) -> Vec<ToolCall> {
 }
 
 fn patterns(list: &[&str]) -> Vec<String> {
-    list.iter().map(|s| s.to_string()).collect()
+    list.iter().map(|s| (*s).to_string()).collect()
 }
 
 #[test]

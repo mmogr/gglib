@@ -15,7 +15,7 @@
 //! Observation-only tools (e.g. browser snapshots, page screenshots) take no
 //! meaningful arguments, so every call hashes to the same signature regardless
 //! of the page content returned.  With a strict threshold this causes false
-//! positives on legitimate ReAct *observe → act → observe* cycles.
+//! positives on legitimate `ReAct` *observe → act → observe* cycles.
 //!
 //! The detector therefore applies **two thresholds**:
 //!
@@ -166,7 +166,7 @@ fn batch_signature(calls: &[ToolCall]) -> String {
 /// An empty `calls` slice returns `true` (vacuous truth), but the caller
 /// ([`LoopDetector::check`]) is never invoked with an empty batch — the
 /// agent loop skips loop detection when there are no tool calls.
-pub(crate) fn is_observation_batch(calls: &[ToolCall], patterns: &[String]) -> bool {
+pub fn is_observation_batch(calls: &[ToolCall], patterns: &[String]) -> bool {
     if patterns.is_empty() {
         return false;
     }
