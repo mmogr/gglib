@@ -117,8 +117,8 @@ fn loop_not_detected_within_limit() {
         arguments: json!({}),
     }];
     // max_strikes = 2: first two calls must succeed
-    assert!(det.check(&calls, 2).is_ok());
-    assert!(det.check(&calls, 2).is_ok());
+    assert!(det.check(&calls, 2, &[], None).is_ok());
+    assert!(det.check(&calls, 2, &[], None).is_ok());
 }
 
 #[test]
@@ -129,9 +129,9 @@ fn loop_detected_on_third_identical_batch_with_max_strikes_2() {
         name: "t".into(),
         arguments: json!({}),
     }];
-    assert!(det.check(&calls, 2).is_ok());
-    assert!(det.check(&calls, 2).is_ok());
-    let err = det.check(&calls, 2).unwrap_err();
+    assert!(det.check(&calls, 2, &[], None).is_ok());
+    assert!(det.check(&calls, 2, &[], None).is_ok());
+    let err = det.check(&calls, 2, &[], None).unwrap_err();
     assert!(matches!(err, AgentError::LoopDetected { .. }));
 }
 
@@ -153,22 +153,22 @@ fn different_batches_do_not_trigger_loop() {
     // max_strikes = 10: each may appear 10 times
     for _ in 0..10 {
         assert!(
-            det.check(&a, 10).is_ok(),
+            det.check(&a, 10, &[], None).is_ok(),
             "batch a should not trigger within limit"
         );
         assert!(
-            det.check(&b, 10).is_ok(),
+            det.check(&b, 10, &[], None).is_ok(),
             "batch b should not trigger within limit"
         );
     }
     // 11th appearance of `a` should fire (count 11 > 10)
     assert!(
-        det.check(&a, 10).is_err(),
+        det.check(&a, 10, &[], None).is_err(),
         "batch a should trigger on 11th occurrence"
     );
     // `b` is still at count 10 — one more must fire
     assert!(
-        det.check(&b, 10).is_err(),
+        det.check(&b, 10, &[], None).is_err(),
         "batch b should trigger on 11th occurrence"
     );
 }
@@ -183,7 +183,7 @@ fn loop_error_signature_matches_batch_sig() {
     let expected_sig = batch_signature(&calls);
     // max_strikes = 0 → first occurrence triggers immediately.
     let mut det = LoopDetector::default();
-    let err = det.check(&calls, 0).unwrap_err();
+    let err = det.check(&calls, 0, &[], None).unwrap_err();
     if let AgentError::LoopDetected { signature } = err {
         assert_eq!(signature, expected_sig);
     }
@@ -201,7 +201,7 @@ fn same_name_different_args_do_not_trigger_loop() {
             arguments: json!({ "q": i }),
         }];
         assert!(
-            det.check(&calls, 2).is_ok(),
+            det.check(&calls, 2, &[], None).is_ok(),
             "distinct arguments should not trigger loop detection (i={i})"
         );
     }
@@ -218,7 +218,7 @@ fn max_strikes_zero_triggers_on_first_occurrence() {
         arguments: json!({}),
     }];
     let err = det
-        .check(&calls, 0)
+        .check(&calls, 0, &[], None)
         .expect_err("max_strikes=0 must reject the first occurrence");
     assert!(
         matches!(err, AgentError::LoopDetected { .. }),
@@ -272,5 +272,130 @@ fn stable_repr_below_max_depth_produces_full_output() {
     assert!(
         !repr.contains("\"...\""),
         "stable_repr at depth=MAX_REPR_DEPTH-1 must not sentinel; got: {repr}",
+    );
+}
+
+// ---- is_observation_batch ---------------------------------------------------
+
+/// Build a single-call batch with the given tool name (no args).
+fn obs_batch(name: &str) -> Vec<ToolCall> {
+    vec![ToolCall {
+        id: "c1".into(),
+        name: name.into(),
+        arguments: serde_json::json!({}),
+    }]
+}
+
+fn patterns(list: &[&str]) -> Vec<String> {
+    list.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn is_observation_batch_ends_with_match() {
+    // `playwright_mcp_browser_snapshot` ends_with `snapshot` → true.
+    let calls = obs_batch("playwright_mcp_browser_snapshot");
+    assert!(
+        is_observation_batch(&calls, &patterns(&["snapshot"])),
+        "ends_with match should return true"
+    );
+}
+
+#[test]
+fn is_observation_batch_contains_match() {
+    // `take_screenshot_full` contains `screenshot` → true.
+    let calls = obs_batch("take_screenshot_full");
+    assert!(
+        is_observation_batch(&calls, &patterns(&["screenshot"])),
+        "contains match should return true"
+    );
+}
+
+#[test]
+fn is_observation_batch_case_insensitive() {
+    // `BROWSER_SNAPSHOT` uppercased must still match pattern `snapshot`.
+    let calls = obs_batch("BROWSER_SNAPSHOT");
+    assert!(
+        is_observation_batch(&calls, &patterns(&["snapshot"])),
+        "matching should be case-insensitive"
+    );
+}
+
+#[test]
+fn is_observation_batch_mixed_returns_false() {
+    // A batch containing both an observation tool and a non-observation tool
+    // must return false — the whole batch falls back to the standard threshold.
+    let calls = vec![
+        ToolCall {
+            id: "c1".into(),
+            name: "browser_snapshot".into(),
+            arguments: serde_json::json!({}),
+        },
+        ToolCall {
+            id: "c2".into(),
+            name: "do_thing".into(),
+            arguments: serde_json::json!({}),
+        },
+    ];
+    assert!(
+        !is_observation_batch(&calls, &patterns(&["snapshot"])),
+        "mixed batch (snapshot + do_thing) should return false"
+    );
+}
+
+#[test]
+fn is_observation_batch_empty_patterns_always_false() {
+    // An empty pattern list means no tools are ever classified as
+    // observation-only — the standard threshold always applies.
+    let calls = obs_batch("browser_snapshot");
+    assert!(
+        !is_observation_batch(&calls, &[]),
+        "empty pattern list should always return false"
+    );
+}
+
+#[test]
+fn loop_detector_observation_batch_uses_higher_threshold() {
+    // With max_strikes=2 and max_observation_steps=5, an observation-only
+    // batch must be allowed up to 5 repetitions without triggering.
+    let mut det = LoopDetector::default();
+    let calls = obs_batch("playwright_mcp_browser_snapshot");
+    let obs_patterns = patterns(&["snapshot"]);
+    for _ in 0..5 {
+        assert!(
+            det.check(&calls, 2, &obs_patterns, Some(5)).is_ok(),
+            "observation batch must not trigger within max_observation_steps"
+        );
+    }
+    // 6th occurrence (count = 6 > 5) must fire.
+    assert!(
+        det.check(&calls, 2, &obs_patterns, Some(5)).is_err(),
+        "observation batch must trigger on 6th occurrence"
+    );
+}
+
+#[test]
+fn loop_detector_mixed_batch_uses_standard_threshold() {
+    // A mixed batch (snapshot + do_thing) must use max_strikes=2, not the
+    // higher observation threshold, even though snapshot is in the list.
+    let mut det = LoopDetector::default();
+    let mixed = vec![
+        ToolCall {
+            id: "c1".into(),
+            name: "browser_snapshot".into(),
+            arguments: serde_json::json!({}),
+        },
+        ToolCall {
+            id: "c2".into(),
+            name: "do_thing".into(),
+            arguments: serde_json::json!({}),
+        },
+    ];
+    let obs_patterns = patterns(&["snapshot"]);
+    assert!(det.check(&mixed, 2, &obs_patterns, Some(10)).is_ok());
+    assert!(det.check(&mixed, 2, &obs_patterns, Some(10)).is_ok());
+    // 3rd occurrence (count = 3 > 2) must fire — standard threshold applies.
+    assert!(
+        det.check(&mixed, 2, &obs_patterns, Some(10)).is_err(),
+        "mixed batch must use standard threshold (max_strikes=2)"
     );
 }
