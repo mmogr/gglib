@@ -193,7 +193,6 @@ pub struct AgentConfig {
     // observation tool, preventing false-positive loop aborts during ReAct
     // observation cycles while still eventually catching a genuinely confused
     // agent.
-
     /// Substring/suffix patterns used to classify tools as "observation-only".
     ///
     /// A tool call whose **lowercased** name satisfies
@@ -257,11 +256,7 @@ impl Default for AgentConfig {
             max_stagnation_steps: Some(DEFAULT_MAX_STAGNATION_STEPS),
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
-            observation_tools: vec![
-                "snapshot".into(),
-                "screenshot".into(),
-                "read_page".into(),
-            ],
+            observation_tools: vec!["snapshot".into(), "screenshot".into(), "read_page".into()],
             max_observation_steps: Some(DEFAULT_MAX_OBSERVATION_STEPS),
         }
     }
@@ -509,8 +504,7 @@ mod tests {
     #[test]
     fn from_user_params_clamps_extremes() {
         // Zero iterations → clamped to 1.
-        let cfg =
-            AgentConfig::from_user_params(Some(0), Some(0), Some(0), None, None).unwrap();
+        let cfg = AgentConfig::from_user_params(Some(0), Some(0), Some(0), None, None).unwrap();
         assert_eq!(cfg.max_iterations, 1);
         assert_eq!(cfg.max_parallel_tools, 1);
         assert_eq!(cfg.tool_timeout_ms, MIN_TOOL_TIMEOUT_MS);
@@ -554,15 +548,13 @@ mod tests {
     #[test]
     fn from_user_params_empty_observation_tools_disables_classification() {
         // Some([]) disables observation classification — no tools ever match.
-        let cfg =
-            AgentConfig::from_user_params(None, None, None, Some(vec![]), None).unwrap();
+        let cfg = AgentConfig::from_user_params(None, None, None, Some(vec![]), None).unwrap();
         assert!(cfg.observation_tools.is_empty());
     }
 
     #[test]
     fn from_user_params_observation_steps_clamped_to_ceiling() {
-        let cfg =
-            AgentConfig::from_user_params(None, None, None, None, Some(usize::MAX)).unwrap();
+        let cfg = AgentConfig::from_user_params(None, None, None, None, Some(usize::MAX)).unwrap();
         assert_eq!(
             cfg.max_observation_steps,
             Some(MAX_OBSERVATION_STEPS_CEILING),

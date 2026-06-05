@@ -93,7 +93,7 @@ pub async fn run_repl_with_prior(
         Some(args.observation_tools.clone()).filter(|v| !v.is_empty()),
         args.max_observation_steps,
     )
-    .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;;
+    .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
 
     let messages = if prior_messages.is_empty() {
         // Fresh session: optionally prepend system prompt.

@@ -533,8 +533,8 @@ async fn test_observation_tool_fires_at_higher_threshold() {
 #[tokio::test]
 async fn test_mixed_batch_uses_standard_threshold() {
     // Each LLM response emits two tool calls: one observation, one action.
-    let llm = Arc::new(MockLlmPort::new().push_many((0..10).map(|i| {
-        MockLlmResponse {
+    let llm = Arc::new(
+        MockLlmPort::new().push_many((0..10).map(|i| MockLlmResponse {
             reasoning: None,
             content: None,
             tool_calls: vec![
@@ -550,8 +550,8 @@ async fn test_mixed_batch_uses_standard_threshold() {
                 },
             ],
             finish_reason: "tool_calls".into(),
-        }
-    })));
+        })),
+    );
 
     let executor = MockToolExecutorPort::new()
         .with_tool(
