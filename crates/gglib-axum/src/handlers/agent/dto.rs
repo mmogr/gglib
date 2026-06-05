@@ -36,6 +36,8 @@ impl From<AgentRequestConfig> for AgentConfig {
             req.max_iterations,
             req.max_parallel_tools,
             req.tool_timeout_ms,
+            None, // observation_tools — wired in Phase 4
+            None, // max_observation_steps — wired in Phase 4
         )
         .expect("clamped AgentConfig must pass validation")
     }

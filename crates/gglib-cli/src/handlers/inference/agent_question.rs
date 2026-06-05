@@ -111,7 +111,13 @@ pub async fn execute(
     let resolved_max_iterations = resolve_max_iterations(max_iterations, &settings);
 
     let config =
-        AgentConfig::from_user_params(Some(resolved_max_iterations), max_parallel, tool_timeout_ms)
+        AgentConfig::from_user_params(
+            Some(resolved_max_iterations),
+            max_parallel,
+            tool_timeout_ms,
+            None, // observation_tools — wired in Phase 5
+            None, // max_observation_steps — wired in Phase 5
+        )
             .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
     // Build messages

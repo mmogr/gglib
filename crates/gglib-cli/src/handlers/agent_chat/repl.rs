@@ -89,6 +89,8 @@ pub async fn run_repl_with_prior(
         ),
         args.max_parallel,
         args.tool_timeout_ms,
+        None, // observation_tools — wired in Phase 5
+        None, // max_observation_steps — wired in Phase 5
     )
     .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
 

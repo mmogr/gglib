@@ -71,6 +71,25 @@ pub const DEFAULT_MAX_PARALLEL_TOOLS: usize = 25;
 /// than this many times, preventing infinite stagnant output.
 pub const DEFAULT_MAX_STAGNATION_STEPS: usize = 5;
 
+/// Hard ceiling on [`AgentConfig::max_observation_steps`] accepted from
+/// external callers.
+///
+/// Prevents an API or CLI caller from setting `max_observation_steps` to an
+/// arbitrarily large value, which would silently neutralise the observation
+/// guard and allow a confused agent to call observation tools indefinitely.
+/// 100 observation-only iterations is far more than any legitimate browsing
+/// task requires.
+pub const MAX_OBSERVATION_STEPS_CEILING: usize = 100;
+
+/// Default value for [`AgentConfig::max_observation_steps`].
+///
+/// An observation-only batch (every call matches a pattern in
+/// [`AgentConfig::observation_tools`]) may repeat up to this many times
+/// before loop detection fires.  10 is generous for multi-page browsing
+/// tasks while still catching a genuinely confused agent within a
+/// reasonable token budget.
+pub const DEFAULT_MAX_OBSERVATION_STEPS: usize = 10;
+
 /// Configuration that governs a single agentic loop run.
 ///
 /// All fields have sensible defaults via [`Default`] that match the historical
@@ -160,6 +179,71 @@ pub struct AgentConfig {
     /// Same rationale as [`Self::prune_keep_tool_messages`].
     #[serde(skip)]
     pub prune_keep_tail_messages: usize,
+
+    // -------------------------------------------------------------------------
+    // Dual-threshold observation guard
+    // -------------------------------------------------------------------------
+    //
+    // Standard loop detection (max_repeated_batch_steps) hashes tool names and
+    // arguments to detect stuck cycles.  Observation-only tools (e.g. browser
+    // snapshots, screenshots) legitimately repeat with identical signatures
+    // because they take no meaningful arguments, yet return completely different
+    // page content on each call.  These two fields allow a separate, higher
+    // threshold to be applied when every tool in a batch is classified as an
+    // observation tool, preventing false-positive loop aborts during ReAct
+    // observation cycles while still eventually catching a genuinely confused
+    // agent.
+
+    /// Substring/suffix patterns used to classify tools as "observation-only".
+    ///
+    /// A tool call whose **lowercased** name satisfies
+    /// `name.ends_with(pattern) || name.contains(pattern)` for any pattern in
+    /// this list is classified as an observation tool.  When **every** call in
+    /// a batch matches, [`Self::max_observation_steps`] is applied as the loop
+    /// detection threshold instead of [`Self::max_repeated_batch_steps`].
+    ///
+    /// **Matching semantics** — substring/suffix rather than exact string — are
+    /// intentional: MCP servers routinely prepend namespace prefixes to tool
+    /// names (e.g. `playwright_mcp_browser_snapshot`), so exact matching would
+    /// require users to enumerate every vendor variant.  The pattern `"snapshot"`
+    /// matches all of: `snapshot`, `browser_snapshot`,
+    /// `playwright_mcp_browser_snapshot`.
+    ///
+    /// **BYO-MCP:** users connecting custom MCP servers should extend or replace
+    /// this list via [`AgentConfig::from_user_params`] to include their own
+    /// observation-only tool name fragments (e.g. `"get_dom"`, `"fetch_page"`).
+    ///
+    /// An empty list means no tools are ever classified as observation-only;
+    /// the standard [`Self::max_repeated_batch_steps`] threshold applies to all
+    /// batches.
+    ///
+    /// Default: `["snapshot", "screenshot", "read_page"]`.
+    pub observation_tools: Vec<String>,
+
+    /// Maximum number of times an observation-only batch may repeat before
+    /// loop detection fires.
+    ///
+    /// Applied **instead of** [`Self::max_repeated_batch_steps`] when every
+    /// tool call in the current batch matches a pattern in
+    /// [`Self::observation_tools`].  A higher value (default: 10) gives the
+    /// agent room to perform legitimate multi-page observation cycles (e.g.
+    /// browsing through search results) while still eventually aborting a
+    /// genuinely confused agent before it exhausts the token budget.
+    ///
+    /// **Mixed batches** (at least one non-observation tool alongside an
+    /// observation tool) always fall back to [`Self::max_repeated_batch_steps`]
+    /// — the conservative choice, since the non-observation call may be making
+    /// meaningful side-effectful progress.
+    ///
+    /// Clamped to [`MAX_OBSERVATION_STEPS_CEILING`] when supplied via
+    /// [`AgentConfig::from_user_params`] to prevent API callers from providing
+    /// a value large enough to neutralise the guard.
+    ///
+    /// Set to `None` to disable the elevated threshold entirely; observation
+    /// batches then use [`Self::max_repeated_batch_steps`] like any other batch.
+    ///
+    /// Default: `Some(10)`.
+    pub max_observation_steps: Option<usize>,
 }
 
 impl Default for AgentConfig {
@@ -173,6 +257,12 @@ impl Default for AgentConfig {
             max_stagnation_steps: Some(DEFAULT_MAX_STAGNATION_STEPS),
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
+            observation_tools: vec![
+                "snapshot".into(),
+                "screenshot".into(),
+                "read_page".into(),
+            ],
+            max_observation_steps: Some(DEFAULT_MAX_OBSERVATION_STEPS),
         }
     }
 }
@@ -213,12 +303,24 @@ pub enum AgentConfigError {
 impl AgentConfig {
     /// Build an `AgentConfig` from user-supplied overrides.
     ///
-    /// Each `Some` value is clamped to the safe `[floor, ceiling]` range
-    /// before assignment; `None` fields retain their [`Default`] values.
+    /// Each `Some` numeric value is clamped to the safe `[floor, ceiling]`
+    /// range before assignment; `None` fields retain their [`Default`] values.
     /// The result is validated before returning.
     ///
-    /// This is the **single entry-point** for both HTTP and CLI callers,
+    /// This is the **single entry-point** for HTTP, Tauri, and CLI callers,
     /// eliminating duplicated clamping logic at every call site.
+    ///
+    /// # Observation-tool parameters
+    ///
+    /// - `observation_tools: Some(vec)` — **replaces** the default pattern list
+    ///   entirely.  Pass the complete list you want, including any defaults you
+    ///   wish to preserve.  `Some(vec![])` disables observation classification
+    ///   (standard threshold applies to all batches).  `None` keeps the
+    ///   built-in defaults (`["snapshot", "screenshot", "read_page"]`).
+    ///
+    /// - `max_observation_steps: Some(n)` — clamped to
+    ///   `[1, MAX_OBSERVATION_STEPS_CEILING]`.  `None` keeps the built-in
+    ///   default of `Some(10)`.
     ///
     /// # Errors
     ///
@@ -228,6 +330,8 @@ impl AgentConfig {
         max_iterations: Option<usize>,
         max_parallel_tools: Option<usize>,
         tool_timeout_ms: Option<u64>,
+        observation_tools: Option<Vec<String>>,
+        max_observation_steps: Option<usize>,
     ) -> Result<Self, AgentConfigError> {
         let mut cfg = Self::default();
         if let Some(n) = max_iterations {
@@ -238,6 +342,12 @@ impl AgentConfig {
         }
         if let Some(ms) = tool_timeout_ms {
             cfg.tool_timeout_ms = ms.clamp(MIN_TOOL_TIMEOUT_MS, MAX_TOOL_TIMEOUT_MS_CEILING);
+        }
+        if let Some(tools) = observation_tools {
+            cfg.observation_tools = tools;
+        }
+        if let Some(n) = max_observation_steps {
+            cfg.max_observation_steps = Some(n.clamp(1, MAX_OBSERVATION_STEPS_CEILING));
         }
         cfg.validated()
     }
@@ -251,7 +361,7 @@ impl AgentConfig {
     /// # Errors
     ///
     /// Returns `Err(AgentConfigError)` if any field violates its invariant.
-    pub const fn validated(self) -> Result<Self, AgentConfigError> {
+    pub fn validated(self) -> Result<Self, AgentConfigError> {
         if self.max_iterations < 1 {
             return Err(AgentConfigError::MaxIterationsZero(self.max_iterations));
         }
@@ -291,6 +401,16 @@ mod tests {
         );
         assert_eq!(cfg.prune_keep_tool_messages, 10);
         assert_eq!(cfg.prune_keep_tail_messages, 12);
+        assert_eq!(
+            cfg.observation_tools,
+            vec!["snapshot", "screenshot", "read_page"],
+            "default observation patterns must cover common Playwright/Puppeteer MCP tool names"
+        );
+        assert_eq!(
+            cfg.max_observation_steps,
+            Some(DEFAULT_MAX_OBSERVATION_STEPS),
+            "must match DEFAULT_MAX_OBSERVATION_STEPS"
+        );
     }
 
     #[test]
@@ -379,7 +499,8 @@ mod tests {
     #[test]
     fn from_user_params_clamps_and_validates() {
         // All values within range → accepted as-is.
-        let cfg = AgentConfig::from_user_params(Some(10), Some(3), Some(5_000)).unwrap();
+        let cfg =
+            AgentConfig::from_user_params(Some(10), Some(3), Some(5_000), None, None).unwrap();
         assert_eq!(cfg.max_iterations, 10);
         assert_eq!(cfg.max_parallel_tools, 3);
         assert_eq!(cfg.tool_timeout_ms, 5_000);
@@ -388,7 +509,8 @@ mod tests {
     #[test]
     fn from_user_params_clamps_extremes() {
         // Zero iterations → clamped to 1.
-        let cfg = AgentConfig::from_user_params(Some(0), Some(0), Some(0)).unwrap();
+        let cfg =
+            AgentConfig::from_user_params(Some(0), Some(0), Some(0), None, None).unwrap();
         assert_eq!(cfg.max_iterations, 1);
         assert_eq!(cfg.max_parallel_tools, 1);
         assert_eq!(cfg.tool_timeout_ms, MIN_TOOL_TIMEOUT_MS);
@@ -396,8 +518,14 @@ mod tests {
 
     #[test]
     fn from_user_params_clamps_above_ceiling() {
-        let cfg = AgentConfig::from_user_params(Some(usize::MAX), Some(usize::MAX), Some(u64::MAX))
-            .unwrap();
+        let cfg = AgentConfig::from_user_params(
+            Some(usize::MAX),
+            Some(usize::MAX),
+            Some(u64::MAX),
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(cfg.max_iterations, MAX_ITERATIONS_CEILING);
         assert_eq!(cfg.max_parallel_tools, MAX_PARALLEL_TOOLS_CEILING);
         assert_eq!(cfg.tool_timeout_ms, MAX_TOOL_TIMEOUT_MS_CEILING);
@@ -405,10 +533,52 @@ mod tests {
 
     #[test]
     fn from_user_params_none_keeps_defaults() {
-        let cfg = AgentConfig::from_user_params(None, None, None).unwrap();
+        let cfg = AgentConfig::from_user_params(None, None, None, None, None).unwrap();
         let def = AgentConfig::default();
         assert_eq!(cfg.max_iterations, def.max_iterations);
         assert_eq!(cfg.max_parallel_tools, def.max_parallel_tools);
         assert_eq!(cfg.tool_timeout_ms, def.tool_timeout_ms);
+        assert_eq!(cfg.observation_tools, def.observation_tools);
+        assert_eq!(cfg.max_observation_steps, def.max_observation_steps);
+    }
+
+    #[test]
+    fn from_user_params_observation_tools_replaces_defaults() {
+        // A non-None observation_tools list replaces the built-in defaults.
+        let custom = vec!["get_dom".into(), "fetch_page".into()];
+        let cfg =
+            AgentConfig::from_user_params(None, None, None, Some(custom.clone()), None).unwrap();
+        assert_eq!(cfg.observation_tools, custom);
+    }
+
+    #[test]
+    fn from_user_params_empty_observation_tools_disables_classification() {
+        // Some([]) disables observation classification — no tools ever match.
+        let cfg =
+            AgentConfig::from_user_params(None, None, None, Some(vec![]), None).unwrap();
+        assert!(cfg.observation_tools.is_empty());
+    }
+
+    #[test]
+    fn from_user_params_observation_steps_clamped_to_ceiling() {
+        let cfg =
+            AgentConfig::from_user_params(None, None, None, None, Some(usize::MAX)).unwrap();
+        assert_eq!(
+            cfg.max_observation_steps,
+            Some(MAX_OBSERVATION_STEPS_CEILING),
+        );
+    }
+
+    #[test]
+    fn from_user_params_observation_steps_clamped_to_floor() {
+        // Zero would mean fire on the very first occurrence — clamp to 1.
+        let cfg = AgentConfig::from_user_params(None, None, None, None, Some(0)).unwrap();
+        assert_eq!(cfg.max_observation_steps, Some(1));
+    }
+
+    #[test]
+    fn from_user_params_observation_steps_within_range_unchanged() {
+        let cfg = AgentConfig::from_user_params(None, None, None, None, Some(15)).unwrap();
+        assert_eq!(cfg.max_observation_steps, Some(15));
     }
 }
