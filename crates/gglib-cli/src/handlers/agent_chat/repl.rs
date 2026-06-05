@@ -89,10 +89,11 @@ pub async fn run_repl_with_prior(
         ),
         args.max_parallel,
         args.tool_timeout_ms,
-        None, // observation_tools — wired in Phase 5
-        None, // max_observation_steps — wired in Phase 5
+        // Some(vec) replaces defaults; empty vec passes None to preserve defaults.
+        Some(args.observation_tools.clone()).filter(|v| !v.is_empty()),
+        args.max_observation_steps,
     )
-    .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
+    .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;;
 
     let messages = if prior_messages.is_empty() {
         // Fresh session: optionally prepend system prompt.
