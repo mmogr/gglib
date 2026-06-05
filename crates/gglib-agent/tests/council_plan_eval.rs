@@ -224,5 +224,5 @@ async fn eval_canonical_acceptance_prompt() {
         r.error
     );
     assert!(r.coherent, "canonical prompt produced an incoherent graph");
-    assert!(r.node_count >= 2, "expected ≥2 nodes, got {}", r.node_count,);
+    assert!(r.node_count >= 2, "expected ≥2 nodes, got {}", r.node_count);
 }
