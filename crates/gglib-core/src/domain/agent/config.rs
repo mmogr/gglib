@@ -83,12 +83,12 @@ pub const MAX_OBSERVATION_STEPS_CEILING: usize = 100;
 
 /// Default value for [`AgentConfig::max_observation_steps`].
 ///
-/// An observation-only batch (every call matches a pattern in
+/// An exploratory-tool-only batch (every call matches a pattern in
 /// [`AgentConfig::observation_tools`]) may repeat up to this many times
-/// before loop detection fires.  10 is generous for multi-page browsing
-/// tasks while still catching a genuinely confused agent within a
-/// reasonable token budget.
-pub const DEFAULT_MAX_OBSERVATION_STEPS: usize = 10;
+/// before loop detection fires.  15 is generous for multi-page browsing,
+/// multi-directory walking, and paginated API tasks while still catching
+/// a genuinely confused agent within a reasonable token budget.
+pub const DEFAULT_MAX_OBSERVATION_STEPS: usize = 15;
 
 /// Configuration that governs a single agentic loop run.
 ///
@@ -190,58 +190,63 @@ pub struct AgentConfig {
     // because they take no meaningful arguments, yet return completely different
     // page content on each call.  These two fields allow a separate, higher
     // threshold to be applied when every tool in a batch is classified as an
-    // observation tool, preventing false-positive loop aborts during ReAct
-    // observation cycles while still eventually catching a genuinely confused
-    // agent.
-    /// Substring/suffix patterns used to classify tools as "observation-only".
+    // exploratory tool, preventing false-positive loop aborts during ReAct
+    // observation and navigation cycles while still eventually catching a
+    // genuinely confused agent.
+    /// Substring/suffix patterns used to classify tools as **exploratory**.
+    ///
+    /// "Exploratory" tools are those that drive progress by repeatedly
+    /// querying or traversing a stateful source — page snapshots, navigation,
+    /// clicks, file reads, directory listings, API pagination calls, etc.
+    /// Their repeated invocation with identical arguments is a legitimate
+    /// ReAct pattern, not a stuck loop.
     ///
     /// A tool call whose **lowercased** name satisfies
     /// `name.ends_with(pattern) || name.contains(pattern)` for any pattern in
-    /// this list is classified as an observation tool.  When **every** call in
-    /// a batch matches, [`Self::max_observation_steps`] is applied as the loop
+    /// this list is classified as exploratory.  When **every** call in a batch
+    /// matches, [`Self::max_observation_steps`] is applied as the loop
     /// detection threshold instead of [`Self::max_repeated_batch_steps`].
     ///
     /// **Matching semantics** — substring/suffix rather than exact string — are
     /// intentional: MCP servers routinely prepend namespace prefixes to tool
     /// names (e.g. `playwright_mcp_browser_snapshot`), so exact matching would
-    /// require users to enumerate every vendor variant.  The pattern `"snapshot"`
-    /// matches all of: `snapshot`, `browser_snapshot`,
-    /// `playwright_mcp_browser_snapshot`.
+    /// require users to enumerate every vendor variant.  The pattern `"navigate"`
+    /// matches `browser_navigate`, `db_navigate`, `fs_navigate`, etc.
     ///
     /// **BYO-MCP:** users connecting custom MCP servers should extend or replace
     /// this list via [`AgentConfig::from_user_params`] to include their own
-    /// observation-only tool name fragments (e.g. `"get_dom"`, `"fetch_page"`).
+    /// exploratory tool name fragments (e.g. `"get_dom"`, `"fetch_page"`,
+    /// `"list_dir"`).
     ///
-    /// An empty list means no tools are ever classified as observation-only;
+    /// An empty list means no tools are ever classified as exploratory;
     /// the standard [`Self::max_repeated_batch_steps`] threshold applies to all
     /// batches.
     ///
-    /// Default: `["snapshot", "screenshot", "read_page"]`.
+    /// Default: `["snapshot", "screenshot", "read_page", "navigate", "click"]`.
     pub observation_tools: Vec<String>,
 
-    /// Maximum number of times an observation-only batch may repeat before
-    /// loop detection fires.
+    /// Maximum number of times an exploratory-tool-only batch may repeat
+    /// before loop detection fires.
     ///
     /// Applied **instead of** [`Self::max_repeated_batch_steps`] when every
     /// tool call in the current batch matches a pattern in
-    /// [`Self::observation_tools`].  A higher value (default: 10) gives the
-    /// agent room to perform legitimate multi-page observation cycles (e.g.
-    /// browsing through search results) while still eventually aborting a
-    /// genuinely confused agent before it exhausts the token budget.
+    /// [`Self::observation_tools`].  A higher value (default: 15) gives the
+    /// agent room to browse multiple pages, walk directory trees, or paginate
+    /// through API results while still eventually aborting a genuinely confused
+    /// agent before it exhausts the token budget.
     ///
-    /// **Mixed batches** (at least one non-observation tool alongside an
-    /// observation tool) always fall back to [`Self::max_repeated_batch_steps`]
-    /// — the conservative choice, since the non-observation call may be making
-    /// meaningful side-effectful progress.
+    /// **Mixed batches** (at least one non-exploratory tool alongside an
+    /// exploratory one) always fall back to [`Self::max_repeated_batch_steps`]
+    /// — the conservative choice.
     ///
     /// Clamped to [`MAX_OBSERVATION_STEPS_CEILING`] when supplied via
     /// [`AgentConfig::from_user_params`] to prevent API callers from providing
     /// a value large enough to neutralise the guard.
     ///
-    /// Set to `None` to disable the elevated threshold entirely; observation
+    /// Set to `None` to disable the elevated threshold entirely; exploratory
     /// batches then use [`Self::max_repeated_batch_steps`] like any other batch.
     ///
-    /// Default: `Some(10)`.
+    /// Default: `Some(15)`.
     pub max_observation_steps: Option<usize>,
 }
 
@@ -256,7 +261,13 @@ impl Default for AgentConfig {
             max_stagnation_steps: Some(DEFAULT_MAX_STAGNATION_STEPS),
             prune_keep_tool_messages: 10,
             prune_keep_tail_messages: 12,
-            observation_tools: vec!["snapshot".into(), "screenshot".into(), "read_page".into()],
+            observation_tools: vec![
+                "snapshot".into(),
+                "screenshot".into(),
+                "read_page".into(),
+                "navigate".into(),
+                "click".into(),
+            ],
             max_observation_steps: Some(DEFAULT_MAX_OBSERVATION_STEPS),
         }
     }
@@ -398,8 +409,8 @@ mod tests {
         assert_eq!(cfg.prune_keep_tail_messages, 12);
         assert_eq!(
             cfg.observation_tools,
-            vec!["snapshot", "screenshot", "read_page"],
-            "default observation patterns must cover common Playwright/Puppeteer MCP tool names"
+            vec!["snapshot", "screenshot", "read_page", "navigate", "click"],
+            "default exploratory patterns must cover common snapshot, navigation, and click tools"
         );
         assert_eq!(
             cfg.max_observation_steps,
