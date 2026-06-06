@@ -450,7 +450,9 @@ impl gglib_core::ports::ToolExecutorPort for StubToolExecutor {
         &self,
         _call: &gglib_core::ToolCall,
     ) -> Result<gglib_core::ToolResult, anyhow::Error> {
-        Err(anyhow!("StubToolExecutor: execute not expected in this test"))
+        Err(anyhow!(
+            "StubToolExecutor: execute not expected in this test"
+        ))
     }
 }
 
@@ -522,7 +524,10 @@ async fn worker_fails_immediately_on_missing_tool() {
     );
 
     // execute() must return Err.
-    assert!(result.is_err(), "execute() must return Err; got: {result:?}");
+    assert!(
+        result.is_err(),
+        "execute() must return Err; got: {result:?}"
+    );
 
     // CouncilComplete must NOT be emitted.
     let has_complete = events

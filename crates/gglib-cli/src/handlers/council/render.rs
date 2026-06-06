@@ -169,13 +169,7 @@ pub(crate) async fn render_event(
             if thinking_nodes.remove(node_id.as_str()) {
                 eprintln!();
             }
-            buffer_delta(
-                line_buf,
-                node_id,
-                dag::node_color(node_id),
-                delta,
-                false,
-            );
+            buffer_delta(line_buf, node_id, dag::node_color(node_id), delta, false);
         }
         CouncilEvent::NodeReasoningDelta { node_id, delta } => {
             if thinking_nodes.insert(node_id.clone()) {
@@ -187,13 +181,7 @@ pub(crate) async fn render_event(
                     style::RESET
                 );
             }
-            buffer_delta(
-                line_buf,
-                node_id,
-                dag::node_color(node_id),
-                delta,
-                true,
-            );
+            buffer_delta(line_buf, node_id, dag::node_color(node_id), delta, true);
         }
         CouncilEvent::NodeToolCallStart {
             node_id,
