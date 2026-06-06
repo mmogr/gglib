@@ -718,9 +718,10 @@ pub fn transform_messages_for_capabilities(
             if msg.role == "system" {
                 msg.role = "user".to_string();
                 if let Some(content) = msg.content.take() {
-                    msg.content = Some(MessageContent::Text(
-                        format!("[System]: {}", content.into_string()),
-                    ));
+                    msg.content = Some(MessageContent::Text(format!(
+                        "[System]: {}",
+                        content.into_string()
+                    )));
                 }
             }
         }
@@ -774,12 +775,16 @@ mod transform_tests {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: Some(MessageContent::Text("You are a helpful assistant.".to_string())),
+                content: Some(MessageContent::Text(
+                    "You are a helpful assistant.".to_string(),
+                )),
                 tool_calls: None,
             },
             ChatMessage {
                 role: "system".to_string(),
-                content: Some(MessageContent::Text("WORKING_MEMORY:\n- task1 (ok): done".to_string())),
+                content: Some(MessageContent::Text(
+                    "WORKING_MEMORY:\n- task1 (ok): done".to_string(),
+                )),
                 tool_calls: None,
             },
             ChatMessage {
@@ -1016,7 +1021,9 @@ mod transform_tests {
         // Content should be merged
         assert_eq!(
             result[1].content,
-            Some(MessageContent::Text("Let me check...\n\nAnd the time...".to_string()))
+            Some(MessageContent::Text(
+                "Let me check...\n\nAnd the time...".to_string()
+            ))
         );
 
         // Tool calls should be concatenated
