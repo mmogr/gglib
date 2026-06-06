@@ -371,6 +371,17 @@ pub enum Commands {
     ///
     /// Serves /v1 chat completions and /mcp (MCP Streamable HTTP) from a single port.
     /// Configure OpenWebUI with the /v1 base URL and connect MCP tools via /mcp.
+    ///
+    /// When a request arrives for a model that is not yet running, the proxy
+    /// auto-starts a llama-server and automatically enables the appropriate
+    /// flags based on the model's capability tags:
+    ///
+    /// - `"mtp"` tag  → MTP speculative decoding (--spec-type draft-mtp)
+    /// - `"reasoning"` tag → reasoning format extraction (--reasoning-format)
+    /// - `"agent"` tag → Jinja template support (--jinja)
+    ///
+    /// This is identical to the behaviour when starting a model from the GUI or
+    /// CLI — all surfaces go through the same canonical config builder.
     #[command(display_order = 22)]
     Proxy {
         /// Host to bind to

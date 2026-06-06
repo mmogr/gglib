@@ -15,11 +15,10 @@ use tracing::{debug, warn};
 use gglib_core::domain::Model;
 use gglib_core::events::{AppEvent, ServerSummary};
 use gglib_core::ports::{
-    AppEventEmitter, ProcessHandle, ProcessRunner, ServerConfig, ServerHealthStatus,
-    ToolSupportDetectorPort,
+    AppEventEmitter, ProcessHandle, ProcessRunner, ServerHealthStatus, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
-use gglib_runtime::llama::args::{resolve_mtp_args, resolve_reasoning_format};
+use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
 
 use crate::error::GuiError;
 use crate::types::{ServerInfo, StartServerRequest, StartServerResponse, ToolSupportResponse};
@@ -168,6 +167,9 @@ impl ServerOps {
 
     /// Build a [`ServerConfig`] from a model and GUI request.
     ///
+    /// Delegates to [`build_server_config`] so that this path generates
+    /// identical llama-server arguments to every other launch surface.
+    ///
     /// Context size precedence: explicit request field → global settings
     /// default → llama-server built-in default.
     fn build_config(
@@ -175,66 +177,23 @@ impl ServerOps {
         request: &StartServerRequest,
         base_port: u16,
         default_context_size: Option<u64>,
-    ) -> ServerConfig {
-        let mut config = ServerConfig::new(
+    ) -> gglib_core::ports::ServerConfig {
+        build_server_config(
             model.id,
             model.name.clone(),
             model.file_path.clone(),
             base_port,
-        );
-
-        if let Some(ctx) = request.context_length.or(default_context_size) {
-            config = config.with_context_size(ctx);
-        }
-
-        if let Some(port) = request.port {
-            config = config.with_port(port);
-        }
-
-        if let Some(true) = request.jinja {
-            config = config.with_jinja();
-        }
-
-        if let Some(ref format) = request.reasoning_format
-            && format != "none"
-        {
-            config = config.with_reasoning_format(format.clone());
-        } else if request.reasoning_format.is_none() {
-            // Auto-detect reasoning format from model tags when frontend doesn't specify
-            let reasoning = resolve_reasoning_format(None, &model.tags);
-            if let Some(format) = reasoning.format {
-                debug!(
-                    format = %format,
-                    source = ?reasoning.source,
-                    "Auto-detected reasoning format from model tags"
-                );
-                config = config.with_reasoning_format(format);
-            }
-        }
-
-        if let Some(ref params) = request.inference_params {
-            config = config.with_inference_config(params.clone());
-        }
-
-        // Resolve MTP speculative decoding (auto-enabled by "mtp" tag, overrideable)
-        let mtp = resolve_mtp_args(
-            request.mtp_draft_n_max,
-            request.mtp_draft_p_min,
             &model.tags,
-        );
-        if mtp.enabled {
-            debug!(
-                n_max = mtp.draft_n_max,
-                p_min = mtp.draft_p_min,
-                source = ?mtp.source,
-                "Enabling MTP speculative decoding"
-            );
-            config = config
-                .with_spec_draft_n_max(mtp.draft_n_max)
-                .with_spec_draft_p_min(mtp.draft_p_min);
-        }
-
-        config
+            ServerConfigOptions {
+                context_size: request.context_length.or(default_context_size),
+                port: request.port,
+                jinja: request.jinja,
+                reasoning_format: request.reasoning_format.clone(),
+                mtp_draft_n_max: request.mtp_draft_n_max,
+                mtp_draft_p_min: request.mtp_draft_p_min,
+                inference_params: request.inference_params.clone(),
+            },
+        )
     }
 
     /// Start serving a model.

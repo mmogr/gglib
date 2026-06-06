@@ -14,6 +14,7 @@ pub mod process;
 mod process_core;
 pub mod proxy;
 mod runner;
+pub mod server_config;
 pub mod system;
 
 // Re-export the main ProcessRunner implementation
@@ -49,3 +50,6 @@ pub use system::DefaultSystemProbe;
 
 // Re-export orchestrator runner adapter for proxy injection
 pub use council_runner::CouncilRunnerAdapter;
+
+// Re-export canonical ServerConfig builder for all launch surfaces
+pub use server_config::{ServerConfigOptions, build_server_config};

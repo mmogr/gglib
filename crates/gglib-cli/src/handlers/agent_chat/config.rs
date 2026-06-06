@@ -10,12 +10,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
+use gglib_core::ProcessHandle;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
-use gglib_core::{ProcessHandle, ServerConfig};
 use gglib_runtime::compose_agent_loop_with_sampling;
-use gglib_runtime::llama::args::{resolve_jinja_flag, resolve_reasoning_format};
 use gglib_runtime::llama::{ContextInput, resolve_context_size};
+use gglib_runtime::server_config::{ServerConfigOptions, build_server_config};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
@@ -169,28 +169,17 @@ async fn resolve_port(
         settings_default: settings.default_context_size,
     })?;
 
-    let mut server_config = ServerConfig::new(
+    let server_config = build_server_config(
         model.id,
         model.name.clone(),
         model.file_path.clone(),
         ctx.base_port,
+        &model.tags,
+        ServerConfigOptions {
+            context_size: context_resolution.value.map(u64::from),
+            ..Default::default()
+        },
     );
-    if let Some(ctx_size) = context_resolution.value {
-        server_config = server_config.with_context_size(u64::from(ctx_size));
-    }
-
-    // Auto-detect jinja and reasoning format from model tags
-    let jinja = resolve_jinja_flag(None, &model.tags);
-    if jinja.enabled {
-        tracing::debug!(source = ?jinja.source, "auto-enabling --jinja");
-        server_config = server_config.with_jinja();
-    }
-
-    let reasoning = resolve_reasoning_format(None, &model.tags);
-    if let Some(format) = reasoning.format {
-        tracing::debug!(source = ?reasoning.source, format = %format, "auto-enabling --reasoning-format");
-        server_config = server_config.with_reasoning_format(format);
-    }
 
     if !banner.quiet {
         style::print_info_banner("Info", "\u{2139}\u{fe0f}");
