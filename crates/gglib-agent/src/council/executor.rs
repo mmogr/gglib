@@ -1098,7 +1098,7 @@ async fn run_wave_loop(
 ///
 /// Emits [`NodeStarted`], then bridges the agent's event stream, and finishes
 /// with [`NodeCompacting`] → [`NodeComplete`] or [`NodeFailed`].
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 async fn run_worker(
     node_id: &NodeId,
     node_goal: &str,
