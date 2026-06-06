@@ -1125,31 +1125,39 @@ async fn run_worker(
     // against the requested allowlist.
     if let Some(ref filter) = tool_filter {
         if !filter.is_empty() {
-            let available: std::collections::HashSet<String> = tool_executor
-                .list_tools()
-                .await
-                .into_iter()
-                .map(|t| t.name)
+            let live = tool_executor.list_tools().await;
+            // Accept both exact qualified names ("2:browser_navigate") and bare
+            // names ("browser_navigate") so the Director can emit either form.
+            let available_exact: std::collections::HashSet<&str> =
+                live.iter().map(|t| t.name.as_str()).collect();
+            let available_bare: std::collections::HashSet<&str> = live
+                .iter()
+                .map(|t| {
+                    t.name
+                        .find(':')
+                        .map_or(t.name.as_str(), |pos| &t.name[pos + 1..])
+                })
                 .collect();
             let missing: Vec<String> = filter
                 .iter()
-                .filter(|name| !available.contains(*name))
+                .filter(|name| {
+                    !available_exact.contains(name.as_str())
+                        && !available_bare.contains(name.as_str())
+                })
                 .cloned()
                 .collect();
             if !missing.is_empty() {
                 let mut sorted = missing.clone();
                 sorted.sort_unstable();
                 let missing_list = sorted.join(", ");
+                let mut av: Vec<&str> = available_exact.iter().copied().collect();
+                av.sort_unstable();
                 let error_msg = format!(
                     "tool allowlist contains {count} unregistered tool(s): [{missing_list}]. \
                      Check that the required MCP server is running and the tool names are correct. \
                      Available tools: [{available_list}]",
                     count = sorted.len(),
-                    available_list = {
-                        let mut av: Vec<&String> = available.iter().collect();
-                        av.sort_unstable();
-                        av.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
-                    }
+                    available_list = av.join(", "),
                 );
                 let _ = tx
                     .send(CouncilEvent::NodeFailed {
