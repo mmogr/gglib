@@ -46,8 +46,13 @@ pub async fn execute(
 
     let (ports, handle) = init_session(ctx, port, model, ctx_size, {
         let cfg = sampling.into_inference_config();
-        if cfg == Default::default() { None } else { Some(cfg) }
-    }).await?;
+        if cfg == Default::default() {
+            None
+        } else {
+            Some(cfg)
+        }
+    })
+    .await?;
 
     let settings = ctx
         .app
