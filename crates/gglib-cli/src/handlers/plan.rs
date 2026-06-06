@@ -80,6 +80,7 @@ async fn init_session(
         tags,
         Arc::clone(&ctx.mcp),
         cwd,
+        None,
     );
     Ok((ports, handle))
 }
